@@ -26,5 +26,12 @@
     <ClInclude Include="ConvertStringClass.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="Vector4.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Object3d.VS.hlsl" />
+    <FxCompile Include="Object3d.PS.hlsl" />
   </ItemGroup>
 </Project>
