@@ -51,6 +51,8 @@ IDxcBlob* CompileShader(
 
 ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes);
 
+Matrix4x4 MakeIdentity4x4();
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 	// メッセージに応じてゲーム固有の処理を行う
@@ -394,15 +396,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameterを作成。PixelShaderのMaterialとVertexShaderのTransform-------------ここは動かすとき変える-------
-	D3D12_ROOT_PARAMETER rootParameters[1] = {};
-	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;    // CBVを使う。PSのb0のb
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使う
-	rootParameters[0].Descriptor.ShaderRegister = 0;                    // レジスタ番号0。PSのb0の0
-	//rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;    // CBVを使う。PSのb0のb
-	//rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // VertexShaderで使う
-	//rootParameters[1].Descriptor.ShaderRegister = 0;                    // レジスタ番号0。VSのb0の0
-	descriptionRootSignature.pParameters = rootParameters;              // ルートパラメータ配列へのポイント
-	descriptionRootSignature.NumParameters = _countof(rootParameters);  // 配列の長さ
+	D3D12_ROOT_PARAMETER rootParameters[2] = {};
+	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う。PSのb0のb
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
+	rootParameters[0].Descriptor.ShaderRegister = 0;                     // レジスタ番号0。PSのb0の0
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う。VSのb0のb
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使う
+	rootParameters[1].Descriptor.ShaderRegister = 0;                     // レジスタ番号0。VSのb0の0
+	descriptionRootSignature.pParameters = rootParameters;               // ルートパラメータ配列へのポイント
+	descriptionRootSignature.NumParameters = _countof(rootParameters);   // 配列の長さ
 	
 	// シリアライズしてバイナリにする
 	ID3DBlob* signatureBlob = nullptr;
@@ -506,6 +508,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 今回は赤を書き込んでみる
 	*materialDate = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+
+	//============================================
+	// TransformationMatrix用のResourceの作成
+	//============================================
+	// WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+
+	// データを書き込む
+	Matrix4x4* wvpDate = nullptr;
+
+	// 書き込むためのアドレスを取得
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpDate));
+
+	// 単位行列を書き込む
+	*wvpDate = MakeIdentity4x4();
 
 	//===================================
 	// VertexBufferViewの作成
@@ -626,8 +643,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
+			// wvp用のCBufferの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+
 			// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
-			commandList->DrawInstanced(3, 1, 0, 0);//ここ---------------------------------------------
+			commandList->DrawInstanced(3, 1, 0, 0);
 
 			// 描画処理終了、状態遷移
 			// 今回はRenderTrigerからPresentにする
@@ -687,6 +707,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 解放処理
 	//=============
 	// 生成と逆順に行う
+	wvpResource->Release();
 	materialResource->Release();
 	vertexResource->Release();
 	graphicsPipelineState->Release();
@@ -860,7 +881,7 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes){
 
 	// バッファリソース。テクスチャの場合はまた別の設定をする
 	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	vertexResourceDesc.Width = sizeof(Vector4) * 3;// リソースのサイズ。今回はVector4を3頂点分
+	vertexResourceDesc.Width = sizeInBytes;// リソースのサイズ。
 
 	// バッファの場合はこれらを1にする決まり
 	vertexResourceDesc.Height = 1;
@@ -881,4 +902,28 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes){
 	assert(SUCCEEDED(hr));
 
 	return vertexResource;
+}
+
+Matrix4x4 MakeIdentity4x4()
+{
+	Matrix4x4 identityMatrix4x4;
+
+	identityMatrix4x4.m[0][0] = 1.0f;
+	identityMatrix4x4.m[0][1] = 0.0f;
+	identityMatrix4x4.m[0][2] = 0.0f;
+	identityMatrix4x4.m[0][3] = 0.0f;
+	identityMatrix4x4.m[1][0] = 0.0f;
+	identityMatrix4x4.m[1][1] = 1.0f;
+	identityMatrix4x4.m[1][2] = 0.0f;
+	identityMatrix4x4.m[1][3] = 0.0f;
+	identityMatrix4x4.m[2][0] = 0.0f;
+	identityMatrix4x4.m[2][1] = 0.0f;
+	identityMatrix4x4.m[2][2] = 1.0f;
+	identityMatrix4x4.m[2][3] = 0.0f;
+	identityMatrix4x4.m[3][0] = 0.0f;
+	identityMatrix4x4.m[3][1] = 0.0f;
+	identityMatrix4x4.m[3][2] = 0.0f;
+	identityMatrix4x4.m[3][3] = 1.0f;
+
+	return identityMatrix4x4;
 }
