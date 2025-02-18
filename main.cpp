@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <format>
 #include <string>
+#include <math.h>
 
 // DirectX12
 #include <d3d12.h>
@@ -20,7 +21,12 @@
 #include "ConvertStringClass.h"
 #include "Vector3.h"
 #include "Vector4.h"
+#include "Transform.h"
 #include "Matrix4x4.h"
+
+//============================
+// 関数の宣言
+//============================
 
 // string->wstring
 std::wstring ConvertString(const std::string& str);
@@ -51,7 +57,34 @@ IDxcBlob* CompileShader(
 
 ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes);
 
+//===================================
+// MT3でも使う関数の宣言
+//===================================
+
+Matrix4x4 Multiply(Matrix4x4& matrix1, Matrix4x4& matrix2);
+
+/// <summary>
+/// 4x4単位行列作成関数
+/// </summary>
+/// <returns>4x4単位行列</returns>
 Matrix4x4 MakeIdentity4x4();
+
+/// <summary>
+/// 座標系変換関数
+/// </summary>
+/// <param name="vector3"></param>
+/// <param name="matrix4x4"></param>
+/// <returns>デカルト座標系</returns>
+Vector3 TransformCoordinate(const Vector3& vector3, const Matrix4x4& matrix4x4);
+
+/// <summary>
+/// アフィン行列作成関数
+/// </summary>
+/// <param name="scale">縮尺</param>
+/// <param name="rotate">thetaを求めるための数値</param>
+/// <param name="translate">三次元座標でのx,y,zの移動量</param>
+/// <returns></returns>
+Matrix4x4 MakeAffineMatrix(Transform& transform);
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
@@ -299,7 +332,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	swapChainDesc.SampleDesc.Count = 1;                          // マルチサンプルしない
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // 描画のターゲットとして利用する
 	swapChainDesc.BufferCount = 2;                               // ダブルバッファ
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;         // モニタに映したら中身を破棄
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;    // モニタに映したら中身を破棄
 
 	// コマンドキュー、ウィンドウハンドル、設定を譲渡して生成
 	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr,
@@ -580,6 +613,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRect.top = 0;
 	scissorRect.bottom = kClientHeight;
 
+	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+
 	MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -589,6 +624,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			DispatchMessage(&msg);
 		} else {
 			// ゲームの処理
+			transform.rotate.y += 0.03f;
+			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
+			*wvpDate = worldMatrix;
 
 			// これから書き込むバックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -754,6 +792,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	return 0;
 }
 
+//============================
+// 関数の定義
+//============================
+
 std::wstring ConvertString(const std::string& str)
 {
 	if (str.empty()) {
@@ -904,6 +946,37 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes){
 	return vertexResource;
 }
 
+Matrix4x4 Multiply(Matrix4x4& matrix1, Matrix4x4& matrix2)
+{
+	Matrix4x4 resoultMatrix4x4;
+
+	resoultMatrix4x4.m[0][0] = matrix1.m[0][0] * matrix2.m[0][0] + matrix1.m[0][1] * matrix2.m[1][0] + matrix1.m[0][2] * matrix2.m[2][0] + matrix1.m[0][3] * matrix2.m[3][0];
+	resoultMatrix4x4.m[0][1] = matrix1.m[0][0] * matrix2.m[0][1] + matrix1.m[0][1] * matrix2.m[1][1] + matrix1.m[0][2] * matrix2.m[2][1] + matrix1.m[0][3] * matrix2.m[3][1];
+	resoultMatrix4x4.m[0][2] = matrix1.m[0][0] * matrix2.m[0][2] + matrix1.m[0][1] * matrix2.m[1][2] + matrix1.m[0][2] * matrix2.m[2][2] + matrix1.m[0][3] * matrix2.m[3][2];
+	resoultMatrix4x4.m[0][3] = matrix1.m[0][0] * matrix2.m[0][3] + matrix1.m[0][1] * matrix2.m[1][3] + matrix1.m[0][2] * matrix2.m[2][3] + matrix1.m[0][3] * matrix2.m[3][3];
+
+	resoultMatrix4x4.m[1][0] = matrix1.m[1][0] * matrix2.m[0][0] + matrix1.m[1][1] * matrix2.m[1][0] + matrix1.m[1][2] * matrix2.m[2][0] + matrix1.m[1][3] * matrix2.m[3][0];
+	resoultMatrix4x4.m[1][1] = matrix1.m[1][0] * matrix2.m[0][1] + matrix1.m[1][1] * matrix2.m[1][1] + matrix1.m[1][2] * matrix2.m[2][1] + matrix1.m[1][3] * matrix2.m[3][1];
+	resoultMatrix4x4.m[1][2] = matrix1.m[1][0] * matrix2.m[0][2] + matrix1.m[1][1] * matrix2.m[1][2] + matrix1.m[1][2] * matrix2.m[2][2] + matrix1.m[1][3] * matrix2.m[3][2];
+	resoultMatrix4x4.m[1][3] = matrix1.m[1][0] * matrix2.m[0][3] + matrix1.m[1][1] * matrix2.m[1][3] + matrix1.m[1][2] * matrix2.m[2][3] + matrix1.m[1][3] * matrix2.m[3][3];
+
+	resoultMatrix4x4.m[2][0] = matrix1.m[2][0] * matrix2.m[0][0] + matrix1.m[2][1] * matrix2.m[1][0] + matrix1.m[2][2] * matrix2.m[2][0] + matrix1.m[2][3] * matrix2.m[3][0];
+	resoultMatrix4x4.m[2][1] = matrix1.m[2][0] * matrix2.m[0][1] + matrix1.m[2][1] * matrix2.m[1][1] + matrix1.m[2][2] * matrix2.m[2][1] + matrix1.m[2][3] * matrix2.m[3][1];
+	resoultMatrix4x4.m[2][2] = matrix1.m[2][0] * matrix2.m[0][2] + matrix1.m[2][1] * matrix2.m[1][2] + matrix1.m[2][2] * matrix2.m[2][2] + matrix1.m[2][3] * matrix2.m[3][2];
+	resoultMatrix4x4.m[2][3] = matrix1.m[2][0] * matrix2.m[0][3] + matrix1.m[2][1] * matrix2.m[1][3] + matrix1.m[2][2] * matrix2.m[2][3] + matrix1.m[2][3] * matrix2.m[3][3];
+
+	resoultMatrix4x4.m[3][0] = matrix1.m[3][0] * matrix2.m[0][0] + matrix1.m[3][1] * matrix2.m[1][0] + matrix1.m[3][2] * matrix2.m[2][0] + matrix1.m[3][3] * matrix2.m[3][0];
+	resoultMatrix4x4.m[3][1] = matrix1.m[3][0] * matrix2.m[0][1] + matrix1.m[3][1] * matrix2.m[1][1] + matrix1.m[3][2] * matrix2.m[2][1] + matrix1.m[3][3] * matrix2.m[3][1];
+	resoultMatrix4x4.m[3][2] = matrix1.m[3][0] * matrix2.m[0][2] + matrix1.m[3][1] * matrix2.m[1][2] + matrix1.m[3][2] * matrix2.m[2][2] + matrix1.m[3][3] * matrix2.m[3][2];
+	resoultMatrix4x4.m[3][3] = matrix1.m[3][0] * matrix2.m[0][3] + matrix1.m[3][1] * matrix2.m[1][3] + matrix1.m[3][2] * matrix2.m[2][3] + matrix1.m[3][3] * matrix2.m[3][3];
+
+	return resoultMatrix4x4;
+}
+
+//===============================
+// MT3でも使う関数
+//===============================
+
 Matrix4x4 MakeIdentity4x4()
 {
 	Matrix4x4 identityMatrix4x4;
@@ -926,4 +999,161 @@ Matrix4x4 MakeIdentity4x4()
 	identityMatrix4x4.m[3][3] = 1.0f;
 
 	return identityMatrix4x4;
+}
+
+Vector3 TransformCoordinate(const Vector3& vector3, const Matrix4x4& matrix4x4)
+{
+	Vector3 resoultVector3;
+
+	resoultVector3.x = vector3.x * matrix4x4.m[0][0] + vector3.y * matrix4x4.m[1][0] + vector3.z * matrix4x4.m[2][0] + 1.0f * matrix4x4.m[3][0];
+	resoultVector3.y = vector3.x * matrix4x4.m[0][1] + vector3.y * matrix4x4.m[1][1] + vector3.z * matrix4x4.m[2][1] + 1.0f * matrix4x4.m[3][1];
+	resoultVector3.z = vector3.x * matrix4x4.m[0][2] + vector3.y * matrix4x4.m[1][2] + vector3.z * matrix4x4.m[2][2] + 1.0f * matrix4x4.m[3][2];
+
+	float w = vector3.x * matrix4x4.m[0][3] + vector3.y * matrix4x4.m[1][3] + vector3.z * matrix4x4.m[2][3] + 1.0f * matrix4x4.m[3][3];
+	assert(w != 0.0f);// ベクトルに対して基本的な操作を行う行列でwが0になることはありえないので0なら停止
+
+	resoultVector3.x /= w;
+	resoultVector3.y /= w;
+	resoultVector3.z /= w;
+
+	return resoultVector3;
+}
+
+Matrix4x4 MakeAffineMatrix(Transform& transform)
+{
+	//====================
+	// 拡縮の行列の作成
+	//====================
+	Matrix4x4 scaleMatrix4x4;
+	scaleMatrix4x4.m[0][0] = transform.scale.x;
+	scaleMatrix4x4.m[0][1] = 0.0f;
+	scaleMatrix4x4.m[0][2] = 0.0f;
+	scaleMatrix4x4.m[0][3] = 0.0f;
+
+	scaleMatrix4x4.m[1][0] = 0.0f;
+	scaleMatrix4x4.m[1][1] = transform.scale.y;
+	scaleMatrix4x4.m[1][2] = 0.0f;
+	scaleMatrix4x4.m[1][3] = 0.0f;
+
+	scaleMatrix4x4.m[2][0] = 0.0f;
+	scaleMatrix4x4.m[2][1] = 0.0f;
+	scaleMatrix4x4.m[2][2] = transform.scale.z;
+	scaleMatrix4x4.m[2][3] = 0.0f;
+
+	scaleMatrix4x4.m[3][0] = 0.0f;
+	scaleMatrix4x4.m[3][1] = 0.0f;
+	scaleMatrix4x4.m[3][2] = 0.0f;
+	scaleMatrix4x4.m[3][3] = 1.0f;
+
+	//===================
+	// 回転の行列の作成
+	//===================
+	// Xの回転行列
+	Matrix4x4 rotateMatrixX;
+	rotateMatrixX.m[0][0] = 1.0f;
+	rotateMatrixX.m[0][1] = 0.0f;
+	rotateMatrixX.m[0][2] = 0.0f;
+	rotateMatrixX.m[0][3] = 0.0f;
+
+	rotateMatrixX.m[1][0] = 0.0f;
+	rotateMatrixX.m[1][1] = cosf(transform.rotate.x);
+	rotateMatrixX.m[1][2] = sinf(transform.rotate.x);
+	rotateMatrixX.m[1][3] = 0.0f;
+
+	rotateMatrixX.m[2][0] = 0.0f;
+	rotateMatrixX.m[2][1] = -sinf(transform.rotate.x);
+	rotateMatrixX.m[2][2] = cosf(transform.rotate.x);
+	rotateMatrixX.m[2][3] = 0.0f;
+
+	rotateMatrixX.m[3][0] = 0.0f;
+	rotateMatrixX.m[3][1] = 0.0f;
+	rotateMatrixX.m[3][2] = 0.0f;
+	rotateMatrixX.m[3][3] = 1.0f;
+
+	// Yの回転行列
+	Matrix4x4 rotateMatrixY;
+	rotateMatrixY.m[0][0] = cosf(transform.rotate.y);
+	rotateMatrixY.m[0][1] = 0.0f;
+	rotateMatrixY.m[0][2] = -sinf(transform.rotate.y);
+	rotateMatrixY.m[0][3] = 0.0f;
+
+	rotateMatrixY.m[1][0] = 0.0f;
+	rotateMatrixY.m[1][1] = 1.0f;
+	rotateMatrixY.m[1][2] = 0.0f;
+	rotateMatrixY.m[1][3] = 0.0f;
+
+	rotateMatrixY.m[2][0] = sinf(transform.rotate.y);
+	rotateMatrixY.m[2][1] = 0.0f;
+	rotateMatrixY.m[2][2] = cosf(transform.rotate.y);
+	rotateMatrixY.m[2][3] = 0.0f;
+
+	rotateMatrixY.m[3][0] = 0.0f;
+	rotateMatrixY.m[3][1] = 0.0f;
+	rotateMatrixY.m[3][2] = 0.0f;
+	rotateMatrixY.m[3][3] = 1.0f;
+
+	// Zの回転行列
+	Matrix4x4 rotateMatrixZ;
+	rotateMatrixZ.m[0][0] = cosf(transform.rotate.z);
+	rotateMatrixZ.m[0][1] = sinf(transform.rotate.z);
+	rotateMatrixZ.m[0][2] = 0.0f;
+	rotateMatrixZ.m[0][3] = 0.0f;
+
+	rotateMatrixZ.m[1][0] = -sinf(transform.rotate.z);
+	rotateMatrixZ.m[1][1] = cosf(transform.rotate.z);
+	rotateMatrixZ.m[1][2] = 0.0f;
+	rotateMatrixZ.m[1][3] = 0.0f;
+
+	rotateMatrixZ.m[2][0] = 0.0f;
+	rotateMatrixZ.m[2][1] = 0.0f;
+	rotateMatrixZ.m[2][2] = 1.0f;
+	rotateMatrixZ.m[2][3] = 0.0f;
+
+	rotateMatrixZ.m[3][0] = 0.0f;
+	rotateMatrixZ.m[3][1] = 0.0f;
+	rotateMatrixZ.m[3][2] = 0.0f;
+	rotateMatrixZ.m[3][3] = 1.0f;
+
+	// 回転行列の作成
+	Matrix4x4 rotateMatrix4x4;
+	Matrix4x4 rotateMatrixYxZ;
+
+	rotateMatrixYxZ = Multiply(rotateMatrixY, rotateMatrixZ);
+	rotateMatrix4x4 = Multiply(rotateMatrixX, rotateMatrixYxZ);
+
+	//==================
+	// 移動の行列の作成
+	//==================
+	Matrix4x4 translateMatrix4x4;
+	translateMatrix4x4.m[0][0] = 1.0f;
+	translateMatrix4x4.m[0][1] = 0.0f;
+	translateMatrix4x4.m[0][2] = 0.0f;
+	translateMatrix4x4.m[0][3] = 0.0f;
+
+	translateMatrix4x4.m[1][0] = 0.0f;
+	translateMatrix4x4.m[1][1] = 1.0f;
+	translateMatrix4x4.m[1][2] = 0.0f;
+	translateMatrix4x4.m[1][3] = 0.0f;
+
+	translateMatrix4x4.m[2][0] = 0.0f;
+	translateMatrix4x4.m[2][1] = 0.0f;
+	translateMatrix4x4.m[2][2] = 1.0f;
+	translateMatrix4x4.m[2][3] = 0.0f;
+
+	translateMatrix4x4.m[3][0] = transform.translate.x;
+	translateMatrix4x4.m[3][1] = transform.translate.y;
+	translateMatrix4x4.m[3][2] = transform.translate.z;
+	translateMatrix4x4.m[3][3] = 1.0f;
+
+	//====================
+	// アフィン行列の作成
+	//====================
+	// 上で作った行列からアフィン行列を作る
+	Matrix4x4 affineMatrix4x4;
+	Matrix4x4 rotatextranslate;
+
+	rotatextranslate = Multiply(rotateMatrix4x4, translateMatrix4x4);
+	affineMatrix4x4 = Multiply(scaleMatrix4x4,rotatextranslate);
+
+	return  affineMatrix4x4;
 }
