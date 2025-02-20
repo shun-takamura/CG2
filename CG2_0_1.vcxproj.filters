@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="InGUI">
+      <UniqueIdentifier>{e289b9c0-c80e-4bee-8075-cbc447f31306}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -20,6 +23,27 @@
     </ClCompile>
     <ClCompile Include="ConvertStringClass.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_demo.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_draw.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_impl_dx12.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_impl_win32.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_tables.cpp">
+      <Filter>InGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGUI\imgui_widgets.cpp">
+      <Filter>InGUI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -38,9 +62,38 @@
     <ClInclude Include="Transform.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="externals\ImGUI\imconfig.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imgui.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imgui_impl_dx12.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imgui_impl_win32.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imgui_internal.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imstb_rectpack.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imstb_textedit.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="externals\ImGUI\imstb_truetype.h">
+      <Filter>InGUI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Object3d.VS.hlsl" />
     <FxCompile Include="Object3d.PS.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="externals\ImGUI\LICENSE.txt">
+      <Filter>InGUI</Filter>
+    </Text>
   </ItemGroup>
 </Project>
