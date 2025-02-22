@@ -86,6 +86,9 @@
     <ClInclude Include="externals\ImGUI\imstb_truetype.h">
       <Filter>InGUI</Filter>
     </ClInclude>
+    <ClInclude Include="VertexData.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Object3d.VS.hlsl" />
@@ -95,5 +98,8 @@
     <Text Include="externals\ImGUI\LICENSE.txt">
       <Filter>InGUI</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Object3d.hlsli" />
   </ItemGroup>
 </Project>

@@ -30,6 +30,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Transform.h"
+#include "VertexData.h"
 #include "Matrix4x4.h"
 
 //============================
@@ -416,6 +417,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 生成が上手くできなかったので起動できない
 	assert(SUCCEEDED(hr));
 	
+	// Textureを読み込んで転送
+	DirectX::ScratchImage mipImages = LoadTexture("Resources/images/uvChecker.png");
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
+	UploadTextureData(textureResource, mipImages);
+
 	//=========================
 	// DescriptorHeapを生成する
 	//=========================
@@ -428,6 +435,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// SRV用のヒープでディスクリプタの数は128。SRVはShader内で使うのでShaderVisibleはtrue
 	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+
+	// metaDataを基にSRVの設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	srvDesc.Format = metadata.format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
+	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+	// SRVを作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+
+	// 先頭はImGUIが使用するのでその次を使う
+	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// SRVの生成
+	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
 	if (FAILED(hr)) {
 		std::cerr << "CreateSwapChainForHwnd failed: " << hr << std::endl; // エラーコードを出力
@@ -538,11 +563,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(SUCCEEDED(hr));
 
 	// InputLayoutの設定
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[1] = {};
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
 	inputElementDescs[0].SemanticIndex = 0;
 	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+	inputElementDescs[1].SemanticName = "TEXCOORD";
+	inputElementDescs[1].SemanticIndex = 0;
+	inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;
 	inputLayoutDesc.NumElements = _countof(inputElementDescs);
@@ -606,7 +635,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//=========================
 	// VertexResourceを生成
 	//=========================
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
 
 	//=============================
 	// Material用のResourceの作成
@@ -648,34 +677,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
 	// 使用するリソースのサイズは頂点3つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
 
 	// 1頂点当たりのサイズ
-	vertexBufferView.StrideInBytes = sizeof(Vector4);
+	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	//============================
 	// Resourceにデータを書き込む
 	//============================
-	// 頂点にソースにデータを書き込む
-	Vector4* vertexDate = nullptr;
+	// 頂点リソースにデータを書き込む
+	VertexData* vertexDate = nullptr;
 
 	// 書き込むためのアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexDate));
 
 	// 左下
-	vertexDate[0] = { -0.5f,-0.5f,0.0f,1.0f };
+	vertexDate[0].pos = { -0.5f,-0.5f,0.0f,1.0f };
+	vertexDate[0].texcoord = { 0.0f,1.0f };
 
 	// 上
-	vertexDate[1] = { 0.0f,0.5f,0.0f,1.0f };
+	vertexDate[1].pos = { 0.0f,0.5f,0.0f,1.0f };
+	vertexDate[1].texcoord = { 0.5f,0.0f };
 
 	// 右下
-	vertexDate[2] = { 0.5f,-0.5f,0.0f,1.0f };
-
-	// Textureを読み込んで転送
-	DirectX::ScratchImage mipImages = LoadTexture("Resources/images/uvChecker.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
-	UploadTextureData(textureResource, mipImages);
+	vertexDate[2].pos = { 0.5f,-0.5f,0.0f,1.0f };
+	vertexDate[2].texcoord = { 1.0f,1.0f };
 
 	//=========================
 	// ViewportとScissor
