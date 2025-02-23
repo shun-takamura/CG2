@@ -1,5 +1,5 @@
-struct VertecShaderOutput
+struct VertexShaderOutput
 {
     float4 position : SV_Position;
-    float4 texcoord : TEXCOORD0;
+    float2 texcoord : TEXCOORD0;
 };

@@ -15,8 +15,14 @@ struct PixelShaderOutput{
     float4 color : SV_TARGET0;
 };
 
-PixelShaderOutput main(VertecShaderOutput){
+Texture2D<float4> gTexture : register(t0); // SRVはt
+SamplerState gSumpler : register(s0); // Sumplerはs
+
+PixelShaderOutput main(VertexShaderOutput input){
+    
+    float4 textureColor = gTexture.Sample(gSumpler, input.texcoord);
+    
     PixelShaderOutput output;
-    output.color = gMaterial.color;
+    output.color = gMaterial.color * textureColor;
     return output;
 }
