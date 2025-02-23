@@ -180,15 +180,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// COMの初期化
-	CoInitializeEx(0, COINIT_MULTITHREADED);
+	//CoInitializeEx(0, COINIT_MULTITHREADED);
 
 	//--------ここ資料と違うけど警告出るから変更してる------------------------------------
-	//HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-	//if (FAILED(hr)) {
-	//	std::cerr << "COM initialization failed: " << hr << std::endl;
-	//	return -1;  // エラー時に適切に終了する
-	//}
-
+	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+	assert(SUCCEEDED(hr));
 
 	// クラスの生成
 	ConvertStringClass* convertStringClass = new ConvertStringClass;
@@ -266,7 +262,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	IDXGIFactory7* dxgiFactory = nullptr;
 
 	// HRESULTはWindows系のエラーコードであり、関数が成功したかどうかをSUCCEEDECマクロで判断できる
-	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
+	hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
 	// 初期化の根本的な部分でエラーが出た場合はプログラムが間違っているかどうにもできない場合が多いのでassertにしておく
 	assert(SUCCEEDED(hr));
