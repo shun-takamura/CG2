@@ -98,8 +98,10 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 /// <param name="mipImages"></param>
 void UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages);
 
-[[nodiscard]]
+[[nodiscard]] 
 ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device, ID3D12GraphicsCommandList* commandList);
+
+ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t width, int32_t height);
 
 //===================================
 // MT3でも使う関数の宣言
@@ -433,6 +435,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	UploadTextureData(textureResource, mipImages, device, commandList);
 	//UploadTextureData(textureResource, mipImages);
 
+	// DepthStencilTextureをウィンドウサイズで作成
+	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
+
 	//=========================
 	// DescriptorHeapを生成する
 	//=========================
@@ -668,7 +673,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//=========================
 	// VertexResourceを生成
 	//=========================
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
+	// 三角形を2つ配置するため*6にする
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
 
 	//=============================
 	// Material用のResourceの作成
@@ -709,8 +715,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// リソースの先頭アドレスから使用
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
-	// 使用するリソースのサイズは頂点3つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
+	// 使用するリソースのサイズは頂点6つ分のサイズ
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
 
 	// 1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
@@ -719,22 +725,36 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// Resourceにデータを書き込む
 	//============================
 	// 頂点リソースにデータを書き込む
-	VertexData* vertexDate = nullptr;
+	VertexData* vertexData = nullptr;
 
 	// 書き込むためのアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexDate));
+	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
 	// 左下
-	vertexDate[0].pos = { -0.5f,-0.5f,0.0f,1.0f };
-	vertexDate[0].texcoord = { 0.0f,1.0f };
+	vertexData[0].pos = { -0.5f,-0.5f,0.0f,1.0f };
+	vertexData[0].texcoord = { 0.0f,1.0f };
 
 	// 上
-	vertexDate[1].pos = { 0.0f,0.5f,0.0f,1.0f };
-	vertexDate[1].texcoord = { 0.5f,0.0f };
+	vertexData[1].pos = { 0.0f,0.5f,0.0f,1.0f };
+	vertexData[1].texcoord = { 0.5f,0.0f };
 
 	// 右下
-	vertexDate[2].pos = { 0.5f,-0.5f,0.0f,1.0f };
-	vertexDate[2].texcoord = { 1.0f,1.0f };
+	vertexData[2].pos = { 0.5f,-0.5f,0.0f,1.0f };
+	vertexData[2].texcoord = { 1.0f,1.0f };
+
+	// 三角形2枚目の頂点
+	// 左下2
+	vertexData[3].pos = { -0.5f,-0.5f,0.5f,1.0f };
+	vertexData[3].texcoord = { 0.0f,1.0f, };
+	
+	// 上2
+	vertexData[4].pos = { 0.0f,0.0f,0.0f,1.0f };
+	vertexData[4].texcoord = { 0.5f,0.0f, };
+
+	// 右下2
+	vertexData[5].pos = { 0.5f,-0.5f,-0.5f,1.0f };
+	vertexData[5].texcoord = { 1.0f,1.0f, };
+
 
 	//=========================
 	// ViewportとScissor
@@ -876,7 +896,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
-			commandList->DrawInstanced(3, 1, 0, 0);
+			// 1つ目の引数は頂点の数 2枚作りたいので6
+			commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1275,6 +1296,47 @@ ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::Scratc
 	return intermediateResource;
 }
 
+ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t width, int32_t height)
+{
+	// 生成するResourceの設定
+	D3D12_RESOURCE_DESC resourceDesc{};
+	resourceDesc.Width = width;                                   // Textureの横幅
+	resourceDesc.Height = height;                                 // Textureの縦幅
+	resourceDesc.MipLevels = 1;                                   // mipMapの数
+	resourceDesc.DepthOrArraySize = 1;                            // 奥行or配列Textureの配列数
+	resourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;          // DepthStencilとして利用可能なフォーマット
+	resourceDesc.SampleDesc.Count = 1;                            // サンプリングカウント。1固定
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;  // 2次元
+	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL; // DepthStencilとして使う通知
+
+	// 利用するHeapの設定
+	D3D12_HEAP_PROPERTIES heapPropertis{};
+	heapPropertis.Type = D3D12_HEAP_TYPE_DEFAULT; // VRAM上に作成
+
+	// 深度のクリア設定
+	D3D12_CLEAR_VALUE depthClearValue{};
+	depthClearValue.DepthStencil.Depth = 1.0f;              // 1.0f(最大値)でクリア
+	depthClearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // ResourceDescと同じにする
+
+	// Resourceの生成
+	ID3D12Resource* resource = nullptr;
+	HRESULT hr = device->CreateCommittedResource(
+		&heapPropertis,                   // Heapの設定
+		D3D12_HEAP_FLAG_NONE,             // Heapの特殊な設定。無し
+		&resourceDesc,                    // Resourceの設定
+		D3D12_RESOURCE_STATE_DEPTH_WRITE, // 鮮度を書き込む状態にする
+		&depthClearValue,                 // Clear最適値
+		IID_PPV_ARGS(&resource));         // 作成するResourceポインタへのポインタ
+
+	assert(SUCCEEDED(hr));
+
+	return resource;
+}
+
+
+//===============================
+// MT3でも使う関数
+//===============================
 Matrix4x4 Multiply(Matrix4x4 matrix1, Matrix4x4 matrix2)
 {
 	Matrix4x4 resoultMatrix4x4;
@@ -1301,10 +1363,6 @@ Matrix4x4 Multiply(Matrix4x4 matrix1, Matrix4x4 matrix2)
 
 	return resoultMatrix4x4;
 }
-
-//===============================
-// MT3でも使う関数
-//===============================
 
 Matrix4x4 MakeIdentity4x4()
 {
