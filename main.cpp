@@ -156,6 +156,18 @@ Matrix4x4 MakeAffineMatrix(Transform& transform);
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip);
 
 /// <summary>
+/// 正射影行列作関数
+/// </summary>
+/// <param name="left">左側の座標</param>
+/// <param name="top">上側の座標</param>
+/// <param name="right">右側の座標</param>
+/// <param name="bottom">下側の座標</param>
+/// <param name="nearClip">近平面への距離</param>
+/// <param name="farClip">遠平面への距離</param>
+/// <returns>正射影行列</returns>
+Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
+
+/// <summary>
 /// 4x4逆行列を求める関数
 /// </summary>
 /// <param name="matrix4x4">逆行列を求めたい行列</param>
@@ -700,6 +712,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 三角形を2つ配置するため*6(頂点の数)にする
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
 
+	// sprite用の頂点リソースを作る
+	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
+
 	//=============================
 	// Material用のResourceの作成
 	//=============================
@@ -714,6 +729,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 白で書き込む
 	*materialDate = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+
+	// データを書き込む
+	Matrix4x4* transformationMatrixDataSprite = nullptr;
+
+	// 書き込むためのアドレスを取得
+	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
+
+	// 単位行列を書き込んでおく
+	*transformationMatrixDataSprite = MakeIdentity4x4();
 
 	//============================================
 	// TransformationMatrix用のResourceの作成
@@ -744,6 +771,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
+
+	// sprite用の頂点バッファビューを作成
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
+
+	// リソースの先頭アドレスから使用
+	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
+
+	// 使用するリソースのサイズは頂点6つ分のサイズ
+	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
+
+	// 1頂点あたりのサイズ
+	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
 	//============================
 	// Resourceにデータを書き込む
@@ -779,6 +818,36 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexData[5].pos = { 0.5f,-0.5f,-0.5f,1.0f };
 	vertexData[5].texcoord = { 1.0f,1.0f, };
 
+	// sprite用の頂点データ
+	VertexData* vertexDataSprite = nullptr;
+	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
+
+	//　今回は三角形2枚で矩形にするので2枚分のデータを設定
+	// 1枚目の三角形
+	// 左下
+	vertexDataSprite[0].pos = { 0.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[0].texcoord = { 0.0f,1.0f };
+
+	// 左上
+	vertexDataSprite[1].pos = { 0.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[1].texcoord = { 0.0f,0.0f };
+
+	// 右下
+	vertexDataSprite[2].pos = { 640.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[2].texcoord = { 1.0f,1.0f };
+
+	// 2枚目の三角形
+	// 左上
+	vertexDataSprite[3].pos = { 0.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[3].texcoord = { 0.0f,0.0f };
+
+	// 右上
+	vertexDataSprite[4].pos = { 640.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[4].texcoord = { 1.0f,0.0f };
+
+	// 右下
+	vertexDataSprite[5].pos = { 640.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
 
 	//=========================
 	// ViewportとScissor
@@ -805,6 +874,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-5.0f} };
+	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 	//================
 	// ImGUIの初期化
@@ -842,6 +912,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::ShowDemoWindow();
 
 			transform.rotate.y += 0.03f;
+
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -849,6 +920,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			*wvpDate = worldViewProjectionMatrix;
 			
+			// sprite用のworldViewProjectionMatrixを作る
+			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
+			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
+			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, kClientWidth, kClientHeight, 0.0f, 100.0f);
+			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
+			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
+
 			///
 			// ここまでゲームの処理
 			///
@@ -908,6 +986,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetPipelineState(graphicsPipelineState);     // PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
 
+
 			// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -925,6 +1004,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
 			// 1つ目の引数は頂点の数 2枚作りたいので6
+			commandList->DrawInstanced(6, 1, 0, 0);
+
+			// spriteの描画。変更が必要なものだけ変更する。
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+
+			// spriteの描画
 			commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
@@ -1598,6 +1684,33 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 	perspectiveFovMatrix.m[3][3] = 0.0f;
 
 	return perspectiveFovMatrix;
+}
+
+Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip)
+{
+	Matrix4x4 orthographicMatrix;
+
+	orthographicMatrix.m[0][0] = 2.0f / (right - left);
+	orthographicMatrix.m[0][1] = 0.0f;
+	orthographicMatrix.m[0][2] = 0.0f;
+	orthographicMatrix.m[0][3] = 0.0f;
+
+	orthographicMatrix.m[1][0] = 0.0f;
+	orthographicMatrix.m[1][1] = 2.0f / (top - bottom);
+	orthographicMatrix.m[1][2] = 0.0f;
+	orthographicMatrix.m[1][3] = 0.0f;
+
+	orthographicMatrix.m[2][0] = 0.0f;
+	orthographicMatrix.m[2][1] = 0.0f;
+	orthographicMatrix.m[2][2] = 1.0f / (farClip - nearClip);
+	orthographicMatrix.m[2][3] = 0.0f;
+
+	orthographicMatrix.m[3][0] = (left + right) / (left - right);
+	orthographicMatrix.m[3][1] = (top + bottom) / (bottom - top);
+	orthographicMatrix.m[3][2] = (nearClip) / (nearClip - farClip);
+	orthographicMatrix.m[3][3] = 1.0f;
+
+	return orthographicMatrix;
 }
 
 Matrix4x4 Inverse(Matrix4x4 matrix4x4)
