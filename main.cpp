@@ -423,6 +423,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 画面の色を変えよう
 	//===========================
 	// スワップチェーンを生成する
+	assert(hwnd != nullptr); // ウィンドウハンドルがnullでないことを確認
+
 	IDXGISwapChain4* swapChain = nullptr;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
 	swapChainDesc.Width = kClientWidth;                          // 画面の幅
@@ -444,7 +446,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	DirectX::ScratchImage mipImages = LoadTexture("Resources/images/uvChecker.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
-	UploadTextureData(textureResource, mipImages, device, commandList);
+	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
+	//UploadTextureData(textureResource, mipImages, device, commandList);
 	//UploadTextureData(textureResource, mipImages);
 
 	// DepthStencilTextureをウィンドウサイズで作成
@@ -1084,34 +1087,74 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
+	// 自作リソース
+	transformationMatrixResourceSprite->Release();
+	vertexResourceSprite->Release();
 	wvpResource->Release();
 	materialResource->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
 	textureResource->Release();
+	intermediateResource->Release();
+
+	// パイプライン関連
 	graphicsPipelineState->Release();
 	signatureBlob->Release();
-	if (errorBlob) {
-		errorBlob->Release();
-	}
+	if (errorBlob) { errorBlob->Release(); }
 	rootSignature->Release();
 	pixelShaderBlob->Release();
 	vertexShaderBlob->Release();
 
+	// dxc関連
+	includeHandler->Release();
+	dxcCompiler->Release();
+	dxcUtils->Release();
+
+	// Fence関連
 	CloseHandle(fenceEvent);
 	fence->Release();
+
+	// ヒープ
 	dsvDescriptorHeap->Release();
 	srvDescriptorHeap->Release();
 	rtvDescriptorHeap->Release();
+	rtvDescriptorHeap = nullptr;
+
+	// SwapChain
 	swapChainResources[0]->Release();
 	swapChainResources[1]->Release();
 	swapChain->Release();
+
+	// コマンド
 	commandList->Release();
+	commandList = nullptr;
+
 	commandAllocator->Release();
+
 	commandQueue->Release();
+	commandQueue = nullptr;
+	
+	assert(commandList == nullptr);
+	assert(commandQueue == nullptr);
+	assert(rtvDescriptorHeap == nullptr);
+	// 他にも必要なリソースがあれば確認
+
+	// Device
 	device->Release();
+
+	// Adapter
 	useAdapter->Release();
+
+	// Factory
 	dxgiFactory->Release();
+
+	// Debug
+#ifdef _DEBUG
+	debugController->Release();
+#endif
+
+	CloseWindow(hwnd);
+
 #ifdef _DEBUG
 	debugController->Release();
 #endif // _DEBUG
