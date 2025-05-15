@@ -201,6 +201,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// COMの初期化
 	//CoInitializeEx(0, COINIT_MULTITHREADED);
 
+	// WinMain の先頭あたりに追加
+    // CPU 側で保持する色 (RGBA)
+	static float triangleColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
 	//--------ここ資料と違うけど警告出るから変更してる------------------------------------
 	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
 	assert(SUCCEEDED(hr));
@@ -724,14 +728,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
 
+	// materialResource を作った直後に Map してポインタだけキープ
 	// マテリアルにデータを書き込む
 	Vector4* materialDate = nullptr;
 
 	// 書き込むためのアドレスを取得
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialDate));
 
-	// 白で書き込む
-	*materialDate = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+	// 色を書き込む
+	*materialDate = Vector4(triangleColor[0], triangleColor[1], triangleColor[2], triangleColor[3]);
 
 	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
@@ -911,8 +916,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			///
 
 			// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
-			// 今はデモ版
-			ImGui::ShowDemoWindow();
+			
+			// ImGui フレーム開始直後
+			ImGui::Begin("Triangle Settings");
+			// カラーピッカーで RGBA をいじれるように
+			if (ImGui::ColorEdit4("Triangle Color", triangleColor)) {
+				// ユーザーが色を変えたら、マテリアル用定数バッファを書き換え
+				*materialDate = Vector4(triangleColor[0], triangleColor[1], triangleColor[2], triangleColor[3]);
+			}
+			ImGui::End();
 
 			transform.rotate.y += 0.03f;
 
@@ -989,7 +1001,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetPipelineState(graphicsPipelineState);     // PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
 
-
 			// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -1013,8 +1024,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			// spriteの描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			// spriteの描画今回は描画しない
+			//commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
