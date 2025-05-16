@@ -919,14 +919,39 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			
 			// ImGui フレーム開始直後
 			ImGui::Begin("Triangle Settings");
+
+			ImGui::SetWindowSize(ImVec2(400, 300)); // 幅400, 高さ300（お好みで変更）
+
+
 			// カラーピッカーで RGBA をいじれるように
 			if (ImGui::ColorEdit4("Triangle Color", triangleColor)) {
 				// ユーザーが色を変えたら、マテリアル用定数バッファを書き換え
 				*materialDate = Vector4(triangleColor[0], triangleColor[1], triangleColor[2], triangleColor[3]);
 			}
+
+			// 位置変更
+			ImGui::SliderFloat3("Position", &transform.translate.x, -5.0f, 5.0f);
+
+			// スケール変更
+			ImGui::SliderFloat3("Scale", &transform.scale.x, 0.1f, 5.0f);
+
+			// 回転角度
+			ImGui::SliderFloat("Rotation Angle", &transform.rotateAngle, -180.0f, 180.0f);
+
+			// 回転軸の選択（X=0, Y=1, Z=2）
+			static int selectedAxis = 1; // 初期値: Y軸
+			const char* axisNames[] = { "X Axis", "Y Axis", "Z Axis" };
+			ImGui::Combo("Rotation Axis", &selectedAxis, axisNames, IM_ARRAYSIZE(axisNames));
+
+			// 軸に応じて回転ベクトルを更新
+			transform.rotate = { 0.0f, 0.0f, 0.0f };
+			if (selectedAxis == 0) transform.rotate.x = transform.rotateAngle;
+			if (selectedAxis == 1) transform.rotate.y = transform.rotateAngle;
+			if (selectedAxis == 2) transform.rotate.z = transform.rotateAngle;
+
 			ImGui::End();
 
-			transform.rotate.y += 0.03f;
+			//transform.rotate.y += 0.03f;
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
