@@ -179,6 +179,10 @@ void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjec
 
 Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix);
 
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
@@ -447,13 +451,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 生成が上手くできなかったので起動できない
 	assert(SUCCEEDED(hr));
 
-	// Textureを読み込んで転送
-	DirectX::ScratchImage mipImages = LoadTexture("Resources/images/uvChecker.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
-	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
-	//UploadTextureData(textureResource, mipImages, device, commandList);
-	//UploadTextureData(textureResource, mipImages);
+	// Textureを2枚読み込んで転送
+	DirectX::ScratchImage mipImages[2] = {
+		LoadTexture("Resources/images/uvChecker.png"),
+		LoadTexture("Resources/images/monsterBall.png") };
+
+	const DirectX::TexMetadata& metadata = mipImages[0].GetMetadata();
+	const DirectX::TexMetadata& metadata2 = mipImages[1].GetMetadata();
+
+	ID3D12Resource* textureResource[2] = {
+		CreateTextureResource(device, metadata),
+		CreateTextureResource(device, metadata2) };
+
+	ID3D12Resource* intermediateResource[2] = {
+		UploadTextureData(textureResource[0], mipImages[0], device, commandList),
+		UploadTextureData(textureResource[1], mipImages[1], device, commandList) };
+
 
 	// DepthStencilTextureをウィンドウサイズで作成
 	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
@@ -471,11 +484,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
 
 	// metaDataを基にSRVの設定
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = metadata.format;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc[2]{};
+	srvDesc[0].Format = metadata.format;
+	srvDesc[0].Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc[0].ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
+	srvDesc[0].Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+	srvDesc[1].Format = metadata2.format;
+	srvDesc[1].Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc[1].ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
+	srvDesc[1].Texture2D.MipLevels = UINT(metadata2.mipLevels);
 
 	// DSVの設定
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
@@ -490,6 +508,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 	// 比較関数はLessEqual。つまり、近ければ描画される。変更したい場合は3_1の22ページを参照
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	// SRVを作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU[2] = {
+		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	};
+
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU[2] = {
+		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	};
+
 
 	// SRVを作成するDescriptorHeapの場所を決める
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -2062,3 +2096,23 @@ Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix)
 
 	return resultVector3;
 }
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index)
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE handleCPU;
+
+	handleCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	handleCPU.ptr += (descriptorSize * index);
+
+	return handleCPU;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index)
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE handleGPU;
+
+	handleGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	handleGPU.ptr += (descriptorSize * index);
+
+	return handleGPU;
+}
+
