@@ -98,7 +98,7 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 /// <param name="mipImages"></param>
 void UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages);
 
-[[nodiscard]] 
+[[nodiscard]]
 ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device, ID3D12GraphicsCommandList* commandList);
 
 ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t width, int32_t height);
@@ -174,6 +174,10 @@ Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float botto
 /// <returns>4x4逆行列</returns>
 Matrix4x4 Inverse(Matrix4x4 matrix4x4);
 
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
@@ -202,7 +206,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//CoInitializeEx(0, COINIT_MULTITHREADED);
 
 	// WinMain の先頭あたりに追加
-    // CPU 側で保持する色 (RGBA)
+	// CPU 側で保持する色 (RGBA)
 	static float triangleColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	//--------ここ資料と違うけど警告出るから変更してる------------------------------------
@@ -445,14 +449,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 生成が上手くできなかったので起動できない
 	assert(SUCCEEDED(hr));
-	
-	// Textureを読み込んで転送
-	DirectX::ScratchImage mipImages = LoadTexture("Resources/images/uvChecker.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
-	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
-	//UploadTextureData(textureResource, mipImages, device, commandList);
-	//UploadTextureData(textureResource, mipImages);
+
+	// Textureを2枚読み込んで転送
+	DirectX::ScratchImage mipImages[2] = {
+		LoadTexture("Resources/images/uvChecker.png"),
+		LoadTexture("Resources/images/monsterBall.png") };
+
+	const DirectX::TexMetadata& metadata = mipImages[0].GetMetadata();
+	const DirectX::TexMetadata& metadata2 = mipImages[1].GetMetadata();
+
+	ID3D12Resource* textureResource[2] = {
+		CreateTextureResource(device, metadata),
+		CreateTextureResource(device, metadata2) };
+
+	ID3D12Resource* intermediateResource[2] = {
+		UploadTextureData(textureResource[0], mipImages[0], device, commandList),
+		UploadTextureData(textureResource[1], mipImages[1], device, commandList) };
 
 	// DepthStencilTextureをウィンドウサイズで作成
 	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
@@ -470,12 +482,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
 
 	// metaDataを基にSRVの設定
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = metadata.format;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
-	
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc[2]{};
+	srvDesc[0].Format = metadata.format;
+	srvDesc[0].Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc[0].ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
+	srvDesc[0].Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+	srvDesc[1].Format = metadata2.format;
+	srvDesc[1].Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc[1].ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;// 2Dテクスチャ
+	srvDesc[1].Texture2D.MipLevels = UINT(metadata2.mipLevels);
+
 	// DSVの設定
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
 	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;// Format。基本的にはResourceに合わせる
@@ -490,16 +507,38 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 比較関数はLessEqual。つまり、近ければ描画される。変更したい場合は3_1の22ページを参照
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
+	// ここ関数化
 	// SRVを作成するDescriptorHeapの場所を決める
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	//D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	//D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 
-	// 先頭はImGUIが使用するのでその次を使う
-	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	// SRVを作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU[2] = {
+		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	};
+
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU[2] = {
+		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	};
+
+	// 先頭はImGUIが使用するのでその次から使う
+	// 1枚目
+	textureSrvHandleCPU[0].ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	textureSrvHandleGPU[0].ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// 2枚目
+	textureSrvHandleCPU[1].ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 2;
+	textureSrvHandleGPU[1].ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 2;
 
 	// SRVの生成
-	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+	device->CreateShaderResourceView(textureResource[0], &srvDesc[0], textureSrvHandleCPU[0]);
+	device->CreateShaderResourceView(textureResource[1], &srvDesc[1], textureSrvHandleCPU[1]);
 
 	// DSVHeapの先頭にDSVを作る
 	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
@@ -594,7 +633,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParameters[1].Descriptor.ShaderRegister = 0;                     // レジスタ番号0。VSのb0の0
 	descriptionRootSignature.pParameters = rootParameters;               // ルートパラメータ配列へのポイント
 	descriptionRootSignature.NumParameters = _countof(rootParameters);   // 配列の長さ
-	
+
 	// DescriptorRange
 	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
 	descriptorRange[0].BaseShaderRegister = 0;                      // 0から始まる
@@ -817,7 +856,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 左下2
 	vertexData[3].pos = { -0.5f,-0.5f,0.5f,1.0f };
 	vertexData[3].texcoord = { 0.0f,1.0f, };
-	
+
 	// 上2
 	vertexData[4].pos = { 0.0f,0.0f,0.0f,1.0f };
 	vertexData[4].texcoord = { 0.5f,0.0f, };
@@ -898,6 +937,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
+	bool useMonsterBall = true;
+
 	MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -916,7 +957,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			///
 
 			// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
-			
+
 			// ImGui フレーム開始直後
 			ImGui::Begin("Triangle Settings");
 
@@ -949,6 +990,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (selectedAxis == 1) transform.rotate.y = transform.rotateAngle;
 			if (selectedAxis == 2) transform.rotate.z = transform.rotateAngle;
 
+			// テクスチャ変更のチェックボックス
+			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+
 			ImGui::End();
 
 			//transform.rotate.y += 0.03f;
@@ -959,7 +1003,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			*wvpDate = worldViewProjectionMatrix;
-			
+
 			// sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
@@ -1036,7 +1080,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU[1] : textureSrvHandleGPU[0]);
 
 			// 指定した深度で画面全体をクリアする
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -1048,6 +1092,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// spriteの描画。変更が必要なものだけ変更する。
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU[0]);
 
 			// spriteの描画今回は描画しない
 			//commandList->DrawInstanced(6, 1, 0, 0);
@@ -1087,7 +1132,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// Fenceの値が指定したSignal値にたどり着いているか確認する
 			// GetCompletedValueの初期値はFence作成時に渡した初期値
 			if (fence->GetCompletedValue() < fenceValue) {
-				
+
 				//指定したSignalにたどり着いていないのでたどり着くまで待つようにイベントを設定
 				fence->SetEventOnCompletion(fenceValue, fenceEvent);
 
@@ -1130,8 +1175,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialResource->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
-	textureResource->Release();
-	intermediateResource->Release();
+	textureResource[0]->Release();
+	textureResource[1]->Release();
+	intermediateResource[0]->Release();
+	intermediateResource[1]->Release();
 
 	// パイプライン関連
 	graphicsPipelineState->Release();
@@ -1169,7 +1216,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	commandQueue->Release();
 	commandQueue = nullptr;
-	
+
 	assert(commandList == nullptr);
 	assert(commandQueue == nullptr);
 	assert(rtvDescriptorHeap == nullptr);
@@ -1207,9 +1254,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
 		debug->Release();
 	}
-
-	// 警告時に止まる
-	infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+#ifdef _DEBUG
+	if (infoQueue) infoQueue->Release(); // nullチェックも忘れずに
+#endif
 
 	return 0;
 }
@@ -1338,10 +1385,10 @@ IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile, ID
 
 	// 実行用のバイナリを返却
 	return shaderBlob;
-	
+
 }
 
-ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes){
+ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
 	//=========================
 	// VertexResourceを生成
 	//=========================
@@ -1367,7 +1414,7 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes){
 
 	// 実際に頂点リソースを作る
 	ID3D12Resource* vertexResource = nullptr;
-	
+
 	HRESULT hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
 		&vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
 		IID_PPV_ARGS(&vertexResource));
@@ -1700,7 +1747,7 @@ Matrix4x4 MakeAffineMatrix(Transform& transform)
 
 	// 回転行列の作成
 	Matrix4x4 rotateMatrix4x4;
-	
+
 	rotateMatrix4x4 = Multiply(rotateMatrixX, Multiply(rotateMatrixY, rotateMatrixZ));
 
 	//==================
@@ -1732,7 +1779,7 @@ Matrix4x4 MakeAffineMatrix(Transform& transform)
 	//====================
 	// 上で作った行列からアフィン行列を作る
 	Matrix4x4 affineMatrix4x4;
-	
+
 	affineMatrix4x4 = Multiply(translateMatrix4x4, Multiply(rotateMatrix4x4, scaleMatrix4x4));
 
 	return  affineMatrix4x4;
@@ -1833,7 +1880,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[1][1] * matrix4x4.m[2][3] * matrix4x4.m[3][2]));
 
 	resoultMatrix.m[0][1] = 1.0f / bottom * (
-		- (matrix4x4.m[0][1] * matrix4x4.m[2][2] * matrix4x4.m[3][3])
+		-(matrix4x4.m[0][1] * matrix4x4.m[2][2] * matrix4x4.m[3][3])
 		- (matrix4x4.m[0][2] * matrix4x4.m[2][3] * matrix4x4.m[3][1])
 		- (matrix4x4.m[0][3] * matrix4x4.m[2][1] * matrix4x4.m[3][2])
 		+ (matrix4x4.m[0][3] * matrix4x4.m[2][2] * matrix4x4.m[3][1])
@@ -1849,7 +1896,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][1] * matrix4x4.m[1][3] * matrix4x4.m[3][2]));
 
 	resoultMatrix.m[0][3] = 1.0f / bottom * (
-		- (matrix4x4.m[0][1] * matrix4x4.m[1][2] * matrix4x4.m[2][3])
+		-(matrix4x4.m[0][1] * matrix4x4.m[1][2] * matrix4x4.m[2][3])
 		- (matrix4x4.m[0][2] * matrix4x4.m[1][3] * matrix4x4.m[2][1])
 		- (matrix4x4.m[0][3] * matrix4x4.m[1][1] * matrix4x4.m[2][2])
 		+ (matrix4x4.m[0][3] * matrix4x4.m[1][2] * matrix4x4.m[2][1])
@@ -1858,7 +1905,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 
 	// 2行目
 	resoultMatrix.m[1][0] = 1.0f / bottom * (
-		- (matrix4x4.m[1][0] * matrix4x4.m[2][2] * matrix4x4.m[3][3])
+		-(matrix4x4.m[1][0] * matrix4x4.m[2][2] * matrix4x4.m[3][3])
 		- (matrix4x4.m[1][2] * matrix4x4.m[2][3] * matrix4x4.m[3][0])
 		- (matrix4x4.m[1][3] * matrix4x4.m[2][0] * matrix4x4.m[3][2])
 		+ (matrix4x4.m[1][3] * matrix4x4.m[2][2] * matrix4x4.m[3][0])
@@ -1874,7 +1921,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][0] * matrix4x4.m[2][3] * matrix4x4.m[3][2]));
 
 	resoultMatrix.m[1][2] = 1.0f / bottom * (
-		- (matrix4x4.m[0][0] * matrix4x4.m[1][2] * matrix4x4.m[3][3])
+		-(matrix4x4.m[0][0] * matrix4x4.m[1][2] * matrix4x4.m[3][3])
 		- (matrix4x4.m[0][2] * matrix4x4.m[1][3] * matrix4x4.m[3][0])
 		- (matrix4x4.m[0][3] * matrix4x4.m[1][0] * matrix4x4.m[3][2])
 		+ (matrix4x4.m[0][3] * matrix4x4.m[1][2] * matrix4x4.m[3][0])
@@ -1899,7 +1946,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[1][0] * matrix4x4.m[2][3] * matrix4x4.m[3][1]));
 
 	resoultMatrix.m[2][1] = 1.0f / bottom * (
-		- (matrix4x4.m[0][0] * matrix4x4.m[2][1] * matrix4x4.m[3][3])
+		-(matrix4x4.m[0][0] * matrix4x4.m[2][1] * matrix4x4.m[3][3])
 		- (matrix4x4.m[0][1] * matrix4x4.m[2][3] * matrix4x4.m[3][0])
 		- (matrix4x4.m[0][3] * matrix4x4.m[2][0] * matrix4x4.m[3][1])
 		+ (matrix4x4.m[0][3] * matrix4x4.m[2][1] * matrix4x4.m[3][0])
@@ -1915,7 +1962,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][0] * matrix4x4.m[1][3] * matrix4x4.m[3][1]));
 
 	resoultMatrix.m[2][3] = 1.0f / bottom * (
-		- (matrix4x4.m[0][0] * matrix4x4.m[1][1] * matrix4x4.m[2][3])
+		-(matrix4x4.m[0][0] * matrix4x4.m[1][1] * matrix4x4.m[2][3])
 		- (matrix4x4.m[0][1] * matrix4x4.m[1][3] * matrix4x4.m[2][0])
 		- (matrix4x4.m[0][3] * matrix4x4.m[1][0] * matrix4x4.m[2][1])
 		+ (matrix4x4.m[0][3] * matrix4x4.m[1][1] * matrix4x4.m[2][0])
@@ -1924,7 +1971,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 
 	// 4行目
 	resoultMatrix.m[3][0] = 1.0f / bottom * (
-		- (matrix4x4.m[1][0] * matrix4x4.m[2][1] * matrix4x4.m[3][2])
+		-(matrix4x4.m[1][0] * matrix4x4.m[2][1] * matrix4x4.m[3][2])
 		- (matrix4x4.m[1][1] * matrix4x4.m[2][2] * matrix4x4.m[3][0])
 		- (matrix4x4.m[1][2] * matrix4x4.m[2][0] * matrix4x4.m[3][1])
 		+ (matrix4x4.m[1][2] * matrix4x4.m[2][1] * matrix4x4.m[3][0])
@@ -1940,7 +1987,7 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][0] * matrix4x4.m[2][2] * matrix4x4.m[3][1]));
 
 	resoultMatrix.m[3][2] = 1.0f / bottom * (
-		- (matrix4x4.m[0][0] * matrix4x4.m[1][1] * matrix4x4.m[3][2])
+		-(matrix4x4.m[0][0] * matrix4x4.m[1][1] * matrix4x4.m[3][2])
 		- (matrix4x4.m[0][1] * matrix4x4.m[1][2] * matrix4x4.m[3][0])
 		- (matrix4x4.m[0][2] * matrix4x4.m[1][0] * matrix4x4.m[3][1])
 		+ (matrix4x4.m[0][2] * matrix4x4.m[1][1] * matrix4x4.m[3][0])
@@ -1956,4 +2003,24 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][0] * matrix4x4.m[1][2] * matrix4x4.m[2][1]));
 
 	return resoultMatrix;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index)
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE handleCPU;
+
+	handleCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	handleCPU.ptr += (descriptorSize * index);
+
+	return handleCPU;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index)
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE handleGPU;
+
+	handleGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	handleGPU.ptr += (descriptorSize * index);
+
+	return handleGPU;
 }
