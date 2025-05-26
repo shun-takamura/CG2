@@ -1208,8 +1208,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialResource->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
-	textureResource->Release();
-	intermediateResource->Release();
+	textureResource[0]->Release();
+	textureResource[1]->Release();
+	intermediateResource[0]->Release();
+	intermediateResource[1]->Release();
 
 	// パイプライン関連
 	graphicsPipelineState->Release();
