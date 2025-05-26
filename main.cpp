@@ -1002,6 +1002,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
+	bool useMonsterBall = true;
+
 	MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1020,8 +1022,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			///
 
 			// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
-			// 今はデモ版
-			ImGui::ShowDemoWindow();
+			// ImGui フレーム開始直後
+			ImGui::Begin("Triangle Settings");
+
+			ImGui::SetWindowSize(ImVec2(400, 300)); // 幅400, 高さ300（お好みで変更）
+
+			// テクスチャ変更のチェックボックス
+			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+
+			ImGui::End();
 
 			transform.rotate.y += 0.03f;
 
