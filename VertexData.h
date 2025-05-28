@@ -4,4 +4,5 @@
 struct VertexData {
 	Vector4 pos;
 	Vector4 texcoord;
+	Vector3 normal;
 };
