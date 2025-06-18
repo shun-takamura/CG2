@@ -2,6 +2,6 @@
 #include "Matrix4x4.h"
 
 typedef struct TransformationMatrix {
-	Matrix4x4 wvp;
-	Matrix4x4 world;
+	Matrix4x4 WVP;
+	Matrix4x4 World;
 }TransformationMatrix;
