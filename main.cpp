@@ -801,7 +801,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSprite->enableLighting = false;
 
 	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4) + 64);
 
 	// データを書き込む
 	Matrix4x4* transformationMatrixDataSprite = nullptr;
@@ -895,6 +895,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start].pos.y = sinf(lat);
 			vertexData[start].pos.z = cosf(lat) * sinf(lon);
 			vertexData[start].pos.w = 1.0f;
+			vertexData[start].normal.x = vertexData[start].pos.x;
+			vertexData[start].normal.y = vertexData[start].pos.y;
+			vertexData[start].normal.z = vertexData[start].pos.z;
 			vertexData[start].texcoord = { u,v };
 
 			// b
@@ -902,6 +905,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 1].pos.y = sinf(lat + kLatEvery);
 			vertexData[start + 1].pos.z = cosf(lat + kLatEvery) * sinf(lon);
 			vertexData[start + 1].pos.w = 1.0f;
+			vertexData[start + 1].normal.x = vertexData[start + 1].pos.x;
+			vertexData[start + 1].normal.y = vertexData[start + 1].pos.y;
+			vertexData[start + 1].normal.z = vertexData[start + 1].pos.z;
 			vertexData[start + 1].texcoord = { u,v1 };
 
 			// c
@@ -909,6 +915,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 2].pos.y = sinf(lat);
 			vertexData[start + 2].pos.z = cosf(lat) * sinf(lon + kLonEvery);
 			vertexData[start + 2].pos.w = 1.0f;
+			vertexData[start + 2].normal.x = vertexData[start + 2].pos.x;
+			vertexData[start + 2].normal.y = vertexData[start + 2].pos.y;
+			vertexData[start + 2].normal.z = vertexData[start + 2].pos.z;
 			vertexData[start + 2].texcoord = { u1,v };
 
 			// b
@@ -916,6 +925,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 3].pos.y = sinf(lat + kLatEvery);
 			vertexData[start + 3].pos.z = cosf(lat + kLatEvery) * sinf(lon);
 			vertexData[start + 3].pos.w = 1.0f;
+			vertexData[start + 3].normal.x = vertexData[start + 3].pos.x;
+			vertexData[start + 3].normal.y = vertexData[start + 3].pos.y;
+			vertexData[start + 3].normal.z = vertexData[start + 3].pos.z;
 			vertexData[start + 3].texcoord = { u,v1 };
 
 			// d
@@ -923,6 +935,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 4].pos.y = sinf(lat + kLatEvery);
 			vertexData[start + 4].pos.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
 			vertexData[start + 4].pos.w = 1.0f;
+			vertexData[start + 4].normal.x = vertexData[start + 4].pos.x;
+			vertexData[start + 4].normal.y = vertexData[start + 4].pos.y;
+			vertexData[start + 4].normal.z = vertexData[start + 4].pos.z;
 			vertexData[start + 4].texcoord = { u1,v1 };
 
 			// c
@@ -930,13 +945,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 5].pos.y = sinf(lat);
 			vertexData[start + 5].pos.z = cosf(lat) * sinf(lon + kLonEvery);
 			vertexData[start + 5].pos.w = 1.0f;
+			vertexData[start + 5].normal.x = vertexData[start + 5].pos.x;
+			vertexData[start + 5].normal.y = vertexData[start + 5].pos.y;
+			vertexData[start + 5].normal.z = vertexData[start + 5].pos.z;
 			vertexData[start + 5].texcoord = { u1,v };
 
-			for (int i = 0; i < 6; ++i) {
+			/*for (int i = 0; i < 6; ++i) {
 				vertexData[start + i].normal.x = vertexData[start + i].pos.x;
 				vertexData[start + i].normal.y = vertexData[start + i].pos.y;
 				vertexData[start + i].normal.z = vertexData[start + i].pos.z;
-			}
+			}*/
 		}
 	}
 
@@ -1071,6 +1089,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// テクスチャ変更のチェックボックス
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
+			ImGui::DragFloat4("lightcolor", &directionalLightData->color.x, 0.01f);
+			ImGui::DragFloat3("lightDirection", &directionalLightData->direction.x, 0.01f);
+			ImGui::DragFloat("lightIntensity", &directionalLightData->intensity, 0.01f);
+
+			// カメラ操作
+			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f);
+			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, -10.0f, 10.0f);
+
 			ImGui::End();
 
 			transform.rotate.y += 0.03f;
@@ -1148,19 +1174,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetPipelineState(graphicsPipelineState);     // PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
 
-
 			// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			// wvp用のCBufferの場所を設定
-			//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-
 			// 指定した深度で画面全体をクリアする
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-			
+
 			// マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
+			// wvp用のCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]。useMonsterBallでテクスチャを切り替え
@@ -1179,7 +1202,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画
-			//commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1254,9 +1277,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 自作リソース
 	transformationMatrixResourceSprite->Release();
+	materialResourceSprite->Release();
 	vertexResourceSprite->Release();
 	wvpResource->Release();
 	materialResource->Release();
+	directionalLightResource->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
 	textureResource[0]->Release();
@@ -2174,4 +2199,3 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 
 	return handleGPU;
 }
-

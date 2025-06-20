@@ -12,7 +12,7 @@ struct TransformationMatrix
     float4x4 World;
 };
 
-//ConstantBuffer<TransformationMatrix> gTransformatMatrix : register(b0);
+//ConstantBuffer<TransformationMatrix> gTransformationMatrix : register(b0);
 
 cbuffer TransformationMatrixBuffer : register(b0)
 {
