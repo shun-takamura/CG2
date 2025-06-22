@@ -960,12 +960,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 3].texcoord = { u1,v1 };
 
 			// 球体のインデックスリソースにデータを書き込む
-			indexDataSphere[indexStart + 0] = indexStart + 0;
-			indexDataSphere[indexStart + 1] = indexStart + 1;
-			indexDataSphere[indexStart + 2] = indexStart + 2;
-			indexDataSphere[indexStart + 3] = indexStart + 1;
-			indexDataSphere[indexStart + 4] = indexStart + 3;
-			indexDataSphere[indexStart + 5] = indexStart + 2;
+			indexDataSphere[indexStart + 0] = start + 0;
+			indexDataSphere[indexStart + 1] = start + 1;
+			indexDataSphere[indexStart + 2] = start + 2;
+			indexDataSphere[indexStart + 3] = start + 1;
+			indexDataSphere[indexStart + 4] = start + 3;
+			indexDataSphere[indexStart + 5] = start + 2;
 
 		}
 	}
