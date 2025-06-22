@@ -773,7 +773,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1024);
 
 	// 球のindexResource
-	ID3D12Resource* indexResourceSphre = CreateBufferResource(device, sizeof(uint32_t) * 1536);
+	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * 1536);
 
 	// sprite用の頂点リソースを作る
 	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 4);
@@ -856,7 +856,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// Spere用のindexバッファビューを作る
 	D3D12_INDEX_BUFFER_VIEW indexBufferViewSphere{};
-	indexBufferViewSphere.BufferLocation = indexResourceSphre->GetGPUVirtualAddress();
+	indexBufferViewSphere.BufferLocation = indexResourceSphere->GetGPUVirtualAddress();
 	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * 1536;
 	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT;
 
@@ -892,7 +892,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// インデックスリソースにデータを書き込む
 	uint32_t* indexDataSphere = nullptr;
-	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSphere));
+	indexResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSphere));
 
 	const float kSubdivision = 16.0f;
 
@@ -968,14 +968,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		}
 	}
-
-	//// 球体のインデックスリソースにデータを書き込む
-	//indexDataSphere[0] = 0;
-	//indexDataSphere[1] = 1;
-	//indexDataSphere[2] = 2;
-	//indexDataSphere[3] = 1;
-	//indexDataSphere[4] = 3;
-	//indexDataSphere[5] = 2;
 
 	// sprite用の頂点データ
 	VertexData* vertexDataSprite = nullptr;
@@ -1202,7 +1194,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// sprite用のCBufferの場所の設定
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			// spriteの描画。vertexは4だけど格納したインデックスは6でインデックスで描画
+			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
@@ -1284,7 +1276,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	wvpResource->Release();
 	materialResource->Release();
 	directionalLightResource->Release();
-	indexResourceSphre->Release();
+	indexResourceSphere->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
 	textureResource[0]->Release();
