@@ -773,10 +773,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1536);
 
 	// sprite用の頂点リソースを作る
-	//ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
-
-	// sprite用の頂点インデックスを作成
-	ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
+	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
 
 	//=============================
 	// Material用のResourceの作成
@@ -848,17 +845,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
-	// sprite用のインデックスバッファビューを作成
-	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
+	// sprite用の頂点バッファビューを作成
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
 
-	// リソースの先頭のアドレスから使用
-	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
+	// リソースの先頭アドレスから使用
+	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
 
-	//使用するリソースのサイズはインデックスの６つ分のサイズ
-	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
+	// 使用するリソースのサイズは頂点6個のサイズ
+	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
 
-	// インデックスはuint32_tとする
-	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
+	// 1頂点あたりのサイズ
+	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
 	//============================
 	// Resourceにデータを書き込む
@@ -953,18 +950,75 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 5].normal.z = vertexData[start + 5].pos.z;
 			vertexData[start + 5].texcoord = { u1,v };
 
+			/*for (int i = 0; i < 6; ++i) {
+				vertexData[start + i].normal.x = vertexData[start + i].pos.x;
+				vertexData[start + i].normal.y = vertexData[start + i].pos.y;
+				vertexData[start + i].normal.z = vertexData[start + i].pos.z;
+			}*/
 		}
 	}
 
-	// インデックスリソースにデータを書き込む
-	uint32_t* indexDataSprite = nullptr;
-	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
-	indexDataSprite[0] = 0;// 左下
-	indexDataSprite[1] = 1;// 左上
-	indexDataSprite[2] = 2;// 右下
-	indexDataSprite[3] = 1;// 左上
-	indexDataSprite[4] = 3;// 右上
-	indexDataSprite[5] = 2;// 右下
+	//// 左下
+	//vertexData[0].pos = { -0.5f,-0.5f,0.0f,1.0f };
+	//vertexData[0].texcoord = { 0.0f,1.0f };
+
+	//// 上
+	//vertexData[1].pos = { 0.0f,0.5f,0.0f,1.0f };
+	//vertexData[1].texcoord = { 0.5f,0.0f };
+
+	//// 右下
+	//vertexData[2].pos = { 0.5f,-0.5f,0.0f,1.0f };
+	//vertexData[2].texcoord = { 1.0f,1.0f };
+
+	//// 三角形2枚目の頂点
+	//// 左下2
+	//vertexData[3].pos = { -0.5f,-0.5f,0.5f,1.0f };
+	//vertexData[3].texcoord = { 0.0f,1.0f, };
+
+	//// 上2
+	//vertexData[4].pos = { 0.0f,0.0f,0.0f,1.0f };
+	//vertexData[4].texcoord = { 0.5f,0.0f, };
+
+	//// 右下2
+	//vertexData[5].pos = { 0.5f,-0.5f,-0.5f,1.0f };
+	//vertexData[5].texcoord = { 1.0f,1.0f, };
+
+	// sprite用の頂点データ
+	VertexData* vertexDataSprite = nullptr;
+	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
+
+	//　今回は三角形2枚で矩形にするので2枚分のデータを設定
+	// 1枚目の三角形
+	// 左下
+	vertexDataSprite[0].pos = { 0.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[0].texcoord = { 0.0f,1.0f };
+	vertexDataSprite[0].normal = { 0.0f,0.0f,-1.0f };
+
+	// 左上
+	vertexDataSprite[1].pos = { 0.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[1].texcoord = { 0.0f,0.0f };
+	vertexDataSprite[1].normal = { 0.0f,0.0f,-1.0f };
+
+	// 右下
+	vertexDataSprite[2].pos = { 640.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[2].texcoord = { 1.0f,1.0f };
+	vertexDataSprite[2].normal = { 0.0f,0.0f,-1.0f };
+
+	// 2枚目の三角形
+	// 左上
+	vertexDataSprite[3].pos = { 0.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[3].texcoord = { 0.0f,0.0f };
+	vertexDataSprite[3].normal = { 0.0f,0.0f,-1.0f };
+
+	// 右上
+	vertexDataSprite[4].pos = { 640.0f,0.0f,0.0f,1.0f };
+	vertexDataSprite[4].texcoord = { 1.0f,0.0f };
+	vertexDataSprite[4].normal = { 0.0f,0.0f,-1.0f };
+
+	// 右下
+	vertexDataSprite[5].pos = { 640.0f,360.0f,0.0f,1.0f };
+	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
+	vertexDataSprite[5].normal = { 0.0f,0.0f,-1.0f };
 
 	//=========================
 	// ViewportとScissor
@@ -1146,13 +1200,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画。変更が必要なものだけ変更する。
-			// IndexBufferViewを設定
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);
-
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1228,7 +1280,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 自作リソース
 	transformationMatrixResourceSprite->Release();
 	materialResourceSprite->Release();
-	indexResourceSprite->Release();
+	vertexResourceSprite->Release();
 	wvpResource->Release();
 	materialResource->Release();
 	directionalLightResource->Release();
