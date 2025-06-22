@@ -769,8 +769,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//=========================
 	// VertexResourceを生成
 	//=========================
-	// 球を配置するため*1536(頂点の数)にする
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1536);
+	// 球を配置するため*1024(頂点の数)にする
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1024);
+
+	// 球のindexResource
+	ID3D12Resource* indexResourceSphre = CreateBufferResource(device, sizeof(uint32_t) * 1536);
 
 	// sprite用の頂点リソースを作る
 	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 4);
@@ -804,7 +807,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSprite->enableLighting = false;
 
 	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4) + 64);
+	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4) * 2);
 
 	// データを書き込む
 	Matrix4x4* transformationMatrixDataSprite = nullptr;
@@ -842,14 +845,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// リソースの先頭アドレスから使用
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
-	// 使用するリソースのサイズは頂点1536個のサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 1536;
+	// 使用するリソースのサイズは頂点1024個のサイズ
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 1024;
 
 	// 1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	// sprite用の頂点バッファビューを作成
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
+
+	// Spere用のindexバッファビューを作る
+	D3D12_INDEX_BUFFER_VIEW indexBufferViewSphere{};
+	indexBufferViewSphere.BufferLocation = indexResourceSphre->GetGPUVirtualAddress();
+	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * 1536;
+	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT;
 
 	// リソースの先頭アドレスから使用
 	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
@@ -865,7 +874,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// リソースの先頭アドレスから使う
 	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
-	
+
 	// 使用するリソースのサイズはインデックスの6つ分のサイズ
 	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
 
@@ -881,6 +890,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 書き込むためのアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
+	// インデックスリソースにデータを書き込む
+	uint32_t* indexDataSphere = nullptr;
+	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSphere));
+
 	const float kSubdivision = 16.0f;
 
 	// 経度分割1つ分の角度φd
@@ -895,7 +908,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 経度の方向に分割しながら線を描く
 		for (int lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			uint32_t start = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 6;
+			uint32_t start = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 4;
 			float lon = lonIndex * kLonEvery;// φ
 
 			// 画像のUVを計算(画像の縦横の場所)
@@ -935,35 +948,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 2].normal.z = vertexData[start + 2].pos.z;
 			vertexData[start + 2].texcoord = { u1,v };
 
-			// b
-			vertexData[start + 3].pos.x = cosf(lat + kLatEvery) * cosf(lon);
+			// d
+			vertexData[start + 3].pos.x = cosf(lat + kLatEvery) * cosf(lon + kLonEvery);
 			vertexData[start + 3].pos.y = sinf(lat + kLatEvery);
-			vertexData[start + 3].pos.z = cosf(lat + kLatEvery) * sinf(lon);
+			vertexData[start + 3].pos.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
 			vertexData[start + 3].pos.w = 1.0f;
 			vertexData[start + 3].normal.x = vertexData[start + 3].pos.x;
 			vertexData[start + 3].normal.y = vertexData[start + 3].pos.y;
 			vertexData[start + 3].normal.z = vertexData[start + 3].pos.z;
-			vertexData[start + 3].texcoord = { u,v1 };
+			vertexData[start + 3].texcoord = { u1,v1 };
 
-			// d
-			vertexData[start + 4].pos.x = cosf(lat + kLatEvery) * cosf(lon + kLonEvery);
-			vertexData[start + 4].pos.y = sinf(lat + kLatEvery);
-			vertexData[start + 4].pos.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
-			vertexData[start + 4].pos.w = 1.0f;
-			vertexData[start + 4].normal.x = vertexData[start + 4].pos.x;
-			vertexData[start + 4].normal.y = vertexData[start + 4].pos.y;
-			vertexData[start + 4].normal.z = vertexData[start + 4].pos.z;
-			vertexData[start + 4].texcoord = { u1,v1 };
-
-			// c
-			vertexData[start + 5].pos.x = cosf(lat) * cosf(lon + kLonEvery);
-			vertexData[start + 5].pos.y = sinf(lat);
-			vertexData[start + 5].pos.z = cosf(lat) * sinf(lon + kLonEvery);
-			vertexData[start + 5].pos.w = 1.0f;
-			vertexData[start + 5].normal.x = vertexData[start + 5].pos.x;
-			vertexData[start + 5].normal.y = vertexData[start + 5].pos.y;
-			vertexData[start + 5].normal.z = vertexData[start + 5].pos.z;
-			vertexData[start + 5].texcoord = { u1,v };
+			// 球体のインデックスリソースにデータを書き込む
+			indexDataSphere[start] = start;
+			indexDataSphere[start + 1] = start + 1;
+			indexDataSphere[start + 2] = start + 2;
+			indexDataSphere[start + 3] = start + 1;
+			indexDataSphere[start + 4] = start + 3;
+			indexDataSphere[start + 5] = start + 2;
 
 		}
 	}
@@ -1156,6 +1157,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState);     // PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
+			commandList->IASetIndexBuffer(&indexBufferViewSphere);    // IBVを設定
 
 			// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1177,7 +1179,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
 			// 1つ目の引数は頂点の数 球は1536
-			commandList->DrawInstanced(1536, 1, 0, 0);
+			//commandList->DrawInstanced(1536, 1, 0, 0);
+			commandList->DrawIndexedInstanced(1536, 1, 0, 0, 0);
 
 			// マテリアルCBufferの場所を設定.Spriteの前に設定しなおす
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
@@ -1273,6 +1276,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	wvpResource->Release();
 	materialResource->Release();
 	directionalLightResource->Release();
+	indexResourceSphre->Release();
 	vertexResource->Release();
 	depthStencilResource->Release();
 	textureResource[0]->Release();
