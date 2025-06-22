@@ -909,6 +909,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 経度の方向に分割しながら線を描く
 		for (int lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
 			uint32_t start = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 4;
+			uint32_t indexStart = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 6;
 			float lon = lonIndex * kLonEvery;// φ
 
 			// 画像のUVを計算(画像の縦横の場所)
@@ -959,12 +960,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			vertexData[start + 3].texcoord = { u1,v1 };
 
 			// 球体のインデックスリソースにデータを書き込む
-			indexDataSphere[start] = start;
-			indexDataSphere[start + 1] = start + 1;
-			indexDataSphere[start + 2] = start + 2;
-			indexDataSphere[start + 3] = start + 1;
-			indexDataSphere[start + 4] = start + 3;
-			indexDataSphere[start + 5] = start + 2;
+			indexDataSphere[indexStart + 0] = indexStart + 0;
+			indexDataSphere[indexStart + 1] = indexStart + 1;
+			indexDataSphere[indexStart + 2] = indexStart + 2;
+			indexDataSphere[indexStart + 3] = indexStart + 1;
+			indexDataSphere[indexStart + 4] = indexStart + 3;
+			indexDataSphere[indexStart + 5] = indexStart + 2;
 
 		}
 	}
@@ -1195,7 +1196,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
