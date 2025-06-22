@@ -969,6 +969,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 	}
 
+	//// 球体のインデックスリソースにデータを書き込む
+	//indexDataSphere[0] = 0;
+	//indexDataSphere[1] = 1;
+	//indexDataSphere[2] = 2;
+	//indexDataSphere[3] = 1;
+	//indexDataSphere[4] = 3;
+	//indexDataSphere[5] = 2;
+
 	// sprite用の頂点データ
 	VertexData* vertexDataSprite = nullptr;
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
