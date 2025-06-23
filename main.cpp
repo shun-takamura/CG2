@@ -178,6 +178,15 @@ Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float botto
 /// <returns>4x4逆行列</returns>
 Matrix4x4 Inverse(Matrix4x4 matrix4x4);
 
+// Scale行列作成関数
+Matrix4x4 MakeScaleMatrix(Transform transform);
+
+// Z回転行列作成関数
+Matrix4x4 MakeRotateZMatrix(Transform transform);
+
+// 移動行列作成関数
+Matrix4x4 MakeTranslateMatrix(Transform transform);
+
 void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);
 
 Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix);
@@ -806,6 +815,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->enableLighting = true;
 	materialDataSprite->enableLighting = false;
 
+	// UVTransformに単位行列を書き込む
+	materialData->uvTransform = MakeIdentity4x4();
+	materialDataSprite->uvTransform = MakeIdentity4x4();
+
 	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4) * 2);
 
@@ -1031,6 +1044,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	Transform uvTransformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 	//================
 	// ImGUIの初期化
@@ -1079,8 +1093,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat("lightIntensity", &directionalLightData->intensity, 0.01f);
 
 			// カメラ操作
-			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, -10.0f, 10.0f);
+			ImGui::DragFloat3("CameraRotate", &cameraTransform.rotate.x, 0.01f);
+			ImGui::SliderFloat3("CameraTranslate", &cameraTransform.translate.x, -10.0f, 10.0f);
+
+			// UVTransform
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
 
 			ImGui::End();
 
@@ -1099,6 +1118,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, kClientWidth, kClientHeight, 0.0f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
+
+			//UVTransform
+			Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite);
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite));
+			materialDataSprite->uvTransform = uvTransformMatrix;
 
 			///
 			// ここまでゲームの処理
@@ -1196,7 +1221,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
-			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
@@ -2108,6 +2133,88 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 		- (matrix4x4.m[0][0] * matrix4x4.m[1][2] * matrix4x4.m[2][1]));
 
 	return resoultMatrix;
+}
+
+Matrix4x4 MakeScaleMatrix(Transform transform)
+{
+	Matrix4x4 scaleMatrix4x4;
+	scaleMatrix4x4.m[0][0] = transform.scale.x;
+	scaleMatrix4x4.m[0][1] = 0.0f;
+	scaleMatrix4x4.m[0][2] = 0.0f;
+	scaleMatrix4x4.m[0][3] = 0.0f;
+
+	scaleMatrix4x4.m[1][0] = 0.0f;
+	scaleMatrix4x4.m[1][1] = transform.scale.y;
+	scaleMatrix4x4.m[1][2] = 0.0f;
+	scaleMatrix4x4.m[1][3] = 0.0f;
+
+	scaleMatrix4x4.m[2][0] = 0.0f;
+	scaleMatrix4x4.m[2][1] = 0.0f;
+	scaleMatrix4x4.m[2][2] = transform.scale.z;
+	scaleMatrix4x4.m[2][3] = 0.0f;
+
+	scaleMatrix4x4.m[3][0] = 0.0f;
+	scaleMatrix4x4.m[3][1] = 0.0f;
+	scaleMatrix4x4.m[3][2] = 0.0f;
+	scaleMatrix4x4.m[3][3] = 1.0f;
+
+	return scaleMatrix4x4;
+}
+
+Matrix4x4 MakeRotateZMatrix(Transform transform)
+{
+	// Zの回転行列
+	Matrix4x4 rotateMatrixZ;
+	rotateMatrixZ.m[0][0] = cosf(transform.rotate.z);
+	rotateMatrixZ.m[0][1] = sinf(transform.rotate.z);
+	rotateMatrixZ.m[0][2] = 0.0f;
+	rotateMatrixZ.m[0][3] = 0.0f;
+
+	rotateMatrixZ.m[1][0] = -sinf(transform.rotate.z);
+	rotateMatrixZ.m[1][1] = cosf(transform.rotate.z);
+	rotateMatrixZ.m[1][2] = 0.0f;
+	rotateMatrixZ.m[1][3] = 0.0f;
+
+	rotateMatrixZ.m[2][0] = 0.0f;
+	rotateMatrixZ.m[2][1] = 0.0f;
+	rotateMatrixZ.m[2][2] = 1.0f;
+	rotateMatrixZ.m[2][3] = 0.0f;
+
+	rotateMatrixZ.m[3][0] = 0.0f;
+	rotateMatrixZ.m[3][1] = 0.0f;
+	rotateMatrixZ.m[3][2] = 0.0f;
+	rotateMatrixZ.m[3][3] = 1.0f;
+
+	return rotateMatrixZ;
+}
+
+Matrix4x4 MakeTranslateMatrix(Transform transform)
+{
+	//==================
+	// 移動の行列の作成
+	//==================
+	Matrix4x4 translateMatrix4x4;
+	translateMatrix4x4.m[0][0] = 1.0f;
+	translateMatrix4x4.m[0][1] = 0.0f;
+	translateMatrix4x4.m[0][2] = 0.0f;
+	translateMatrix4x4.m[0][3] = 0.0f;
+
+	translateMatrix4x4.m[1][0] = 0.0f;
+	translateMatrix4x4.m[1][1] = 1.0f;
+	translateMatrix4x4.m[1][2] = 0.0f;
+	translateMatrix4x4.m[1][3] = 0.0f;
+
+	translateMatrix4x4.m[2][0] = 0.0f;
+	translateMatrix4x4.m[2][1] = 0.0f;
+	translateMatrix4x4.m[2][2] = 1.0f;
+	translateMatrix4x4.m[2][3] = 0.0f;
+
+	translateMatrix4x4.m[3][0] = transform.translate.x;
+	translateMatrix4x4.m[3][1] = transform.translate.y;
+	translateMatrix4x4.m[3][2] = transform.translate.z;
+	translateMatrix4x4.m[3][3] = 1.0f;
+
+	return translateMatrix4x4;
 }
 
 void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color)
