@@ -77,7 +77,7 @@ struct ChunkHeader
 };
 
 // RIFFヘッダチャンク
-struct RiffHeader 
+struct RiffHeader
 {
 	ChunkHeader chunk; // RIFF
 	char type[4]; // WAVE
@@ -114,7 +114,7 @@ struct ModelData {
 };
 
 // リリースチェック
-struct D3DResourceLeakCheker{
+struct D3DResourceLeakCheker {
 	~D3DResourceLeakCheker() {
 		// リソースリークチェック
 		Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
@@ -448,7 +448,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 適切なアダプタが見つから無かったので起動できない
 	assert(useAdapter != nullptr);
-	
+
 	Microsoft::WRL::ComPtr<ID3D12Device> device = nullptr;
 
 	// 機能レベルとログ出力用の文字列
@@ -574,7 +574,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// IXAudio2MasteringVoiceはReleaseが無いからComPtr使えない
 	// masterVoiceはxAudio2と一緒に解放される
-	IXAudio2MasteringVoice* masterVoice; 
+	IXAudio2MasteringVoice* masterVoice;
 
 	// 音声読み込み
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
@@ -769,8 +769,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 排他制御レベルのセット
 	hr = keyboard->SetCooperativeLevel(
 		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
-	    // DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
-	    // DISCL_NOWINKEY : Windowsキーを無効化
+		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
+		// DISCL_NOWINKEY : Windowsキーを無効化
 		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
 	);
 
@@ -1068,7 +1068,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 書き込むためのアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
-	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size());
+	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 
 	// sprite用の頂点データ
 	VertexData* vertexDataSprite = nullptr;
@@ -1152,6 +1152,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool useMonsterBall = true;
+	int isUseDebugCamera = true;
+
+	// 全キーの入力状態を取得
+	BYTE keys[256] = {}; // 0番~255番のキーまである
+	BYTE preKeys[256] = {};
 
 	MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
@@ -1173,8 +1178,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// キーボード情報の取得開始
 			keyboard->Acquire();
 
-			// 全キーの入力状態を取得
-			BYTE keys[256] = {}; // 0番~255番のキーまである
 			// 例えばENTERキーを押しているときkeys[DIK_RETURN]に0x80が代入される。押してないときは0x00
 			keyboard->GetDeviceState(sizeof(keys), keys);
 
@@ -1220,8 +1223,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
-			//Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-			Matrix4x4 viewMatrix = debugCamera->GetViewMatrix();
+
+			Matrix4x4 viewMatrix;
+			if (isUseDebugCamera) {
+				viewMatrix = debugCamera->GetViewMatrix();
+
+				if (keys[DIK_SPACE] && !preKeys[DIK_SPACE]) {
+					isUseDebugCamera = false;
+				}
+			} else {
+				viewMatrix = Inverse(cameraMatrix);
+
+				if (keys[DIK_SPACE] && !preKeys[DIK_SPACE]) {
+					isUseDebugCamera = true;
+				}
+			}
+
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			wvpDate->WVP = worldViewProjectionMatrix;
@@ -1238,6 +1255,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite));
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite));
 			materialDataSprite->uvTransform = uvTransformMatrix;
+
+			// 前フレームのキーとの比較用に現在フレームのキー入力を保存しておく
+			keyboard->GetDeviceState(sizeof(preKeys), preKeys);
 
 			///
 			// ここまでゲームの処理
@@ -1354,7 +1374,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			assert(SUCCEEDED(hr));
 
 			// GPUにコマンドリストの実行を行わせる
-			ID3D12CommandList* commandLists[] = { commandList.Get()};
+			ID3D12CommandList* commandLists[] = { commandList.Get() };
 			commandQueue->ExecuteCommandLists(1, commandLists);
 
 			// GPUとOSに画面の交換をするように通知する
@@ -1429,13 +1449,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// Debug
 #ifdef _DEBUG
-	
+
 #endif
 
 	CloseWindow(hwnd);
 
 #ifdef _DEBUG
-	
+
 #endif // _DEBUG
 	CloseWindow(hwnd);
 
@@ -1832,7 +1852,7 @@ SoundData SoundLoadWave(const char* filename)
 	if (strncmp(data.id, "JUNK", 4) == 0) {
 		// 読み取り位置をJUNKチャンクの終わりまで進める
 		file.seekg(data.size, std::ios_base::cur);
-		
+
 		// 再読み込み
 		file.read((char*)&data, sizeof(data));
 	}
@@ -1914,7 +1934,7 @@ ModelData LoadObjFile(const std::string& directorPath, const std::string& filena
 	//==========================================
 	// 実際にファイルを読み、ModelDataを構築していく
 	//==========================================
-	while (std::getline(file,line)){
+	while (std::getline(file, line)) {
 		std::string identifier;
 		std::istringstream s(line);
 		s >> identifier; // 先頭の識別子を読む
@@ -2009,7 +2029,7 @@ MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const st
 	//============================================
 	// 実際にファイルを読み,MaterialDataを構築していく
 	//============================================
-	while (std::getline(file,line)){
+	while (std::getline(file, line)) {
 		std::string identifier;
 		std::istringstream s(line);
 		s >> identifier;
