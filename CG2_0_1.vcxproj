@@ -89,6 +89,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ConvertStringClass.cpp" />
+    <ClCompile Include="DebugCamera.cpp" />
     <ClCompile Include="externals\ImGUI\imgui.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_demo.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_draw.cpp" />
@@ -101,6 +102,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConvertStringClass.h" />
+    <ClInclude Include="DebugCamera.h" />
     <ClInclude Include="DirectionalLight.h" />
     <ClInclude Include="externals\ImGUI\imconfig.h" />
     <ClInclude Include="externals\ImGUI\imgui.h" />
