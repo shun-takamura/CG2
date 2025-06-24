@@ -16,6 +16,12 @@
 #pragma comment(lib,"xaudio2.lib")
 // もう入ってるけどfstreamも必要だからね
 
+// 入力デバイス
+#define DIRECTINPUT_VERSION 0x0800 // Directinputのバージョン指定
+#include <dinput.h> // 必ずバージョン指定後にインクルード
+#pragma comment(lib,"dinput8.lib")
+#pragma comment(lib,"dxguid.lib")
+
 // DirectX12
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -737,6 +743,36 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// ここDirectX初期化終了位置
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	//==============================
+	// DirectInputの初期化
+	//==============================
+	IDirectInput8* directInput = nullptr;
+	hr = DirectInput8Create(
+		wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
+		(void**)&directInput, nullptr);
+	assert(SUCCEEDED(hr));
+
+	// キーボードデバイスの生成
+	IDirectInputDevice8* keyboard = nullptr;
+	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
+	assert(SUCCEEDED(hr));
+
+	// 入力データ形式のセット
+	hr = keyboard->SetDataFormat(&c_dfDIKeyboard); // 標準形式。入力デバイスによっては複数用意されていたりする
+	assert(SUCCEEDED(hr));
+
+	// 排他制御レベルのセット
+	hr = keyboard->SetCooperativeLevel(
+		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
+	    // DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
+	    // DISCL_NOWINKEY : Windowsキーを無効化
+		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
+	);
+
 	//==============================
 	// XAudio2の初期化
 	//==============================
@@ -1033,86 +1069,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size());
 
-	//// インデックスリソースにデータを書き込む
-	//uint32_t* indexDataSphere = nullptr;
-	//indexResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSphere));
-
-	//const float kSubdivision = 16.0f;
-
-	//// 経度分割1つ分の角度φd
-	//const float kLonEvery = static_cast<float>(M_PI) * 2.0f / kSubdivision;
-
-	//// 緯度分割1つ分の角度θd
-	//const float kLatEvery = static_cast<float>(M_PI) / kSubdivision;
-
-	//// 緯度の方向に分割
-	//for (int latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-	//	float lat = static_cast<float>(-M_PI) / 2.0f + kLatEvery * latIndex;// θ
-
-	//	// 経度の方向に分割しながら線を描く
-	//	for (int lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-	//		uint32_t start = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 4;
-	//		uint32_t indexStart = (latIndex * static_cast<int>(kSubdivision) + lonIndex) * 6;
-	//		float lon = lonIndex * kLonEvery;// φ
-
-	//		// 画像のUVを計算(画像の縦横の場所)
-	//		float u = static_cast<float>(lonIndex) / static_cast<float>(kSubdivision);
-	//		float v = 1.0f - static_cast<float>(latIndex) / static_cast<float>(kSubdivision);
-
-	//		float u1 = static_cast<float>(lonIndex + 1) / static_cast<float>(kSubdivision);
-	//		float v1 = 1.0f - static_cast<float>(latIndex + 1) / static_cast<float>(kSubdivision);
-
-	//		// 頂点にデータを入力する。基準点a
-	//		vertexData[start].pos.x = cosf(lat) * cosf(lon);
-	//		vertexData[start].pos.y = sinf(lat);
-	//		vertexData[start].pos.z = cosf(lat) * sinf(lon);
-	//		vertexData[start].pos.w = 1.0f;
-	//		vertexData[start].normal.x = vertexData[start].pos.x;
-	//		vertexData[start].normal.y = vertexData[start].pos.y;
-	//		vertexData[start].normal.z = vertexData[start].pos.z;
-	//		vertexData[start].texcoord = { u,v };
-
-	//		// b
-	//		vertexData[start + 1].pos.x = cosf(lat + kLatEvery) * cosf(lon);
-	//		vertexData[start + 1].pos.y = sinf(lat + kLatEvery);
-	//		vertexData[start + 1].pos.z = cosf(lat + kLatEvery) * sinf(lon);
-	//		vertexData[start + 1].pos.w = 1.0f;
-	//		vertexData[start + 1].normal.x = vertexData[start + 1].pos.x;
-	//		vertexData[start + 1].normal.y = vertexData[start + 1].pos.y;
-	//		vertexData[start + 1].normal.z = vertexData[start + 1].pos.z;
-	//		vertexData[start + 1].texcoord = { u,v1 };
-
-	//		// c
-	//		vertexData[start + 2].pos.x = cosf(lat) * cosf(lon + kLonEvery);
-	//		vertexData[start + 2].pos.y = sinf(lat);
-	//		vertexData[start + 2].pos.z = cosf(lat) * sinf(lon + kLonEvery);
-	//		vertexData[start + 2].pos.w = 1.0f;
-	//		vertexData[start + 2].normal.x = vertexData[start + 2].pos.x;
-	//		vertexData[start + 2].normal.y = vertexData[start + 2].pos.y;
-	//		vertexData[start + 2].normal.z = vertexData[start + 2].pos.z;
-	//		vertexData[start + 2].texcoord = { u1,v };
-
-	//		// d
-	//		vertexData[start + 3].pos.x = cosf(lat + kLatEvery) * cosf(lon + kLonEvery);
-	//		vertexData[start + 3].pos.y = sinf(lat + kLatEvery);
-	//		vertexData[start + 3].pos.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
-	//		vertexData[start + 3].pos.w = 1.0f;
-	//		vertexData[start + 3].normal.x = vertexData[start + 3].pos.x;
-	//		vertexData[start + 3].normal.y = vertexData[start + 3].pos.y;
-	//		vertexData[start + 3].normal.z = vertexData[start + 3].pos.z;
-	//		vertexData[start + 3].texcoord = { u1,v1 };
-
-	//		// 球体のインデックスリソースにデータを書き込む
-	//		indexDataSphere[indexStart + 0] = start + 0;
-	//		indexDataSphere[indexStart + 1] = start + 1;
-	//		indexDataSphere[indexStart + 2] = start + 2;
-	//		indexDataSphere[indexStart + 3] = start + 1;
-	//		indexDataSphere[indexStart + 4] = start + 3;
-	//		indexDataSphere[indexStart + 5] = start + 2;
-
-	//	}
-	//}
-
 	// sprite用の頂点データ
 	VertexData* vertexDataSprite = nullptr;
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
@@ -1212,6 +1168,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			///
 			// ここからゲームの処理
 			///
+
+			// キーボード情報の取得開始
+			keyboard->Acquire();
+
+			// 全キーの入力状態を取得
+			BYTE keys[256] = {}; // 0番~255番のキーまである
+			// 例えばENTERキーを押しているときkeys[DIK_RETURN]に0x80が代入される。押してないときは0x00
+			keyboard->GetDeviceState(sizeof(keys), keys);
+
+			// 数字の0のキーが押されていたら
+			if (keys[DIK_0]) {
+				OutputDebugStringA("pressing [0]\n"); // 出力ウィンドウにpressing [0]と表示
+			}
 
 			// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
 			// ImGui フレーム開始直後
