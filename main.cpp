@@ -55,7 +55,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "TransformationMatrix.h"
 #include "DirectionalLight.h"
 #include "ResourceObject.h"
-
+#include "DebugCamera.h"
 
 // string->wstring
 std::wstring ConvertString(const std::string& str);
@@ -337,6 +337,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// クラスの生成
 	ConvertStringClass* convertStringClass = new ConvertStringClass;
+	DebugCamera* debugCamera = new DebugCamera;
 
 	//====================
 	// ウィンドウクラスの登録
@@ -1213,11 +1214,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			ImGui::End();
 
+			debugCamera->Update(keys);
+
 			//transform.rotate.y += 0.03f;
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
-			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			//Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 viewMatrix = debugCamera->GetViewMatrix();
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			wvpDate->WVP = worldViewProjectionMatrix;
@@ -1434,6 +1438,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	
 #endif // _DEBUG
 	CloseWindow(hwnd);
+
+	delete debugCamera;
 
 	//======================
 	// ReportLiveObjects
