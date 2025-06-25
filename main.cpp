@@ -580,7 +580,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
 
 	// モデル読み込み
-	ModelData modelData = LoadObjFile("Resources", "plane_ex.obj");
+	ModelData modelData = LoadObjFile("Resources", "axis.obj");
 
 	// Textureを2枚読み込んで転送
 	DirectX::ScratchImage mipImages[2] = {
@@ -1004,14 +1004,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device, transformationMatrixSize);
 
 	// データを書き込む
-	TransformationMatrix* wvpDate = nullptr;
+	TransformationMatrix* transformationMatrix = nullptr;
 
 	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpDate));
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrix));
 
 	// 単位行列を書き込む
-	wvpDate->WVP = MakeIdentity4x4();
-	wvpDate->World = MakeIdentity4x4();
+	transformationMatrix->WVP = MakeIdentity4x4();
+	transformationMatrix->World = MakeIdentity4x4();
 
 	//===================================
 	// BufferViewの作成
@@ -1241,7 +1241,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			wvpDate->WVP = worldViewProjectionMatrix;
+			transformationMatrix->World = worldMatrix;
+			transformationMatrix->WVP = worldViewProjectionMatrix;
 
 			// sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
