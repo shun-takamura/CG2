@@ -821,14 +821,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource* wvpResource = CreateBufferResource(device, transformationMatrixSize);
 
 	// データを書き込む
-	TransformationMatrix* wvpDate = nullptr;
+	TransformationMatrix* transformationMatrix = nullptr;
 
 	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpDate));
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrix));
 
 	// 単位行列を書き込む
-	wvpDate->WVP = MakeIdentity4x4();
-	wvpDate->World = MakeIdentity4x4();
+	transformationMatrix->WVP = MakeIdentity4x4();
+	transformationMatrix->World = MakeIdentity4x4();
 
 	//===================================
 	// VertexBufferViewの作成
@@ -1106,7 +1106,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			wvpDate->WVP = worldViewProjectionMatrix;
+			transformationMatrix->World = worldMatrix;
+			transformationMatrix->WVP = worldViewProjectionMatrix;
 
 			// sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
@@ -1114,6 +1115,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, kClientWidth, kClientHeight, 0.0f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
+
+
 
 			///
 			// ここまでゲームの処理
@@ -1204,7 +1207,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			//commandList->DrawInstanced(6, 1, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
