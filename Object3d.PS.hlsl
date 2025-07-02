@@ -14,6 +14,7 @@ struct DirectionalLight
     float4 color;
     float3 direction;
     float intensity;
+    int isUseHalfLambert;
 };
 
 cbuffer gTransformationMatrix : register(b0)
@@ -54,13 +55,19 @@ PixelShaderOutput main(VertexShaderOutput input){
     float4 textureColor = gTexture.Sample(gSumpler, transformedUV.xy);
     
     if (gMaterial.enableLighting != 0){
-        // LambertianReflectance
-        //float cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
         
-        // HalfLambert
-        float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
+        float cos = 0.0f;
         
+        if (gDirectionalLight.isUseHalfLambert){
+            // HalfLambert
+            float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
+            cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
+        }
+        else{
+            // LambertianReflectance
+            cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+        }
+       
         output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
     
     }else{

@@ -423,7 +423,7 @@ void DebugCamera::Update(BYTE* keys)
 		matRotDelta = Multiply(matRotDelta, MakeRotateZMatrix({ 0,0,roll }));
 	}
 
-	if (keys[DIK_L]) {
+	if (keys[DIK_O]) {
 		matRotDelta = Multiply(matRotDelta, MakeRotateZMatrix({ 0,0,-roll }));
 	}
 

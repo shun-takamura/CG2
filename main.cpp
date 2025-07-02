@@ -634,7 +634,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// DepthStencilStateの設定
 	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
-	// Depthの昨日を有効化する
+	// Depthの機能を有効化する
 	depthStencilDesc.DepthEnable = true;
 	// 書き込む
 	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
@@ -1153,6 +1153,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	bool useMonsterBall = true;
 	int isUseDebugCamera = true;
+	int isUseHalfLambert = true;
 
 	// 全キーの入力状態を取得
 	BYTE keys[256] = {}; // 0番~255番のキーまである
@@ -1198,45 +1199,51 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// テクスチャ変更のチェックボックス
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-			// transform
+			// modelTransform
+			ImGui::DragFloat3("ModelTransformScale", &transform.scale.x, 0.01f);
 			ImGui::DragFloat3("ModelTransformRotate", &transform.rotate.x, 0.01f);
+			ImGui::DragFloat3("ModelTransformTranslate", &transform.translate.x, 1.0f);
 
-			// Light
-			ImGui::DragFloat4("lightcolor", &directionalLightData->color.x, 0.01f);
-			ImGui::DragFloat3("lightDirection", &directionalLightData->direction.x, 0.01f);
-			ImGui::DragFloat("lightIntensity", &directionalLightData->intensity, 0.01f);
-
-			// カメラ操作
-			ImGui::DragFloat3("CameraRotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::SliderFloat3("CameraTranslate", &cameraTransform.translate.x, -10.0f, 10.0f);
+			// textureTransform
+			ImGui::DragFloat3("TextureTransformScale", &transformSprite.scale.x, 0.01f);
+			ImGui::DragFloat3("TextureTransformRotate", &transformSprite.rotate.x, 0.01f);
+			ImGui::DragFloat2("TextureTransformTranslate", &transformSprite.translate.x, 1.0f);
 
 			// UVTransform
 			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
 
+			// カメラ操作
+			ImGui::DragFloat3("CameraRotate", &cameraTransform.rotate.x, 0.01f);
+			ImGui::SliderFloat3("CameraTranslate", &cameraTransform.translate.x, -10.0f, 10.0f);
+			ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
+
+
+			// Light
+			ImGui::DragFloat4("lightcolor", &directionalLightData->color.x, 0.01f);
+			ImGui::DragFloat3("lightDirection", &directionalLightData->direction.x, 0.01f);
+			ImGui::DragFloat("lightIntensity", &directionalLightData->intensity, 0.01f);
+			ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
+
 			ImGui::End();
 
 			debugCamera->Update(keys);
 
-			//transform.rotate.y += 0.03f;
+			// PSにどちらのライティング方式を使用するかを送る
+			directionalLightData->isUseHalfLambert = isUseHalfLambert;
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
-
 			Matrix4x4 viewMatrix;
+
+			// デバッグカメラと通常カメラの切り替え
 			if (isUseDebugCamera) {
 				viewMatrix = debugCamera->GetViewMatrix();
 
-				if (keys[DIK_SPACE] && !preKeys[DIK_SPACE]) {
-					isUseDebugCamera = false;
-				}
 			} else {
 				viewMatrix = Inverse(cameraMatrix);
 
-				if (keys[DIK_SPACE] && !preKeys[DIK_SPACE]) {
-					isUseDebugCamera = true;
-				}
 			}
 
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
@@ -1261,7 +1268,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			keyboard->GetDeviceState(sizeof(preKeys), keys);
 
 			// ESCAPEキーのトリガー入力で終了
-			if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+			if (keys[DIK_ESCAPE] && !preKeys[DIK_ESCAPE]) {
 				PostQuitMessage(0);
 			}
 
@@ -1412,7 +1419,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
 
-			
+
 
 		}
 	}
