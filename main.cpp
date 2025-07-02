@@ -1258,7 +1258,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			materialDataSprite->uvTransform = uvTransformMatrix;
 
 			// 前フレームのキーとの比較用に現在フレームのキー入力を保存しておく
-			keyboard->GetDeviceState(sizeof(preKeys), preKeys);
+			keyboard->GetDeviceState(sizeof(preKeys), keys);
+
+			// ESCAPEキーのトリガー入力で終了
+			if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+				PostQuitMessage(0);
+			}
 
 			///
 			// ここまでゲームの処理
@@ -1356,7 +1361,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
-			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1406,6 +1411,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			assert(SUCCEEDED(hr));
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
+
+			
 
 		}
 	}
