@@ -1200,37 +1200,43 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// ImGui フレーム開始直後
 			ImGui::Begin("Triangle Settings");
 
-			ImGui::SetWindowSize(ImVec2(400, 300)); // 幅400, 高さ300（お好みで変更）
+			//ImGui::SetWindowSize(ImVec2(400, 300)); // 幅400, 高さ300（お好みで変更）
 
 			// テクスチャ変更のチェックボックス
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
 			// modelTransform
-			ImGui::DragFloat3("ModelTransformScale", &transform.scale.x, 0.01f);
-			ImGui::DragFloat3("ModelTransformRotate", &transform.rotate.x, 0.01f);
-			ImGui::DragFloat3("ModelTransformTranslate", &transform.translate.x, 1.0f);
+			ImGui::Text("ModelTransform");
+			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
+			ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
+			ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
 
 			// textureTransform
-			ImGui::DragFloat3("TextureTransformScale", &transformSprite.scale.x, 0.01f);
-			ImGui::DragFloat3("TextureTransformRotate", &transformSprite.rotate.x, 0.01f);
-			ImGui::DragFloat2("TextureTransformTranslate", &transformSprite.translate.x, 1.0f);
+			ImGui::Text("TextureTransform");
+			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f);
+			ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.01f);
+			ImGui::DragFloat2("Translate", &transformSprite.translate.x, 1.0f);
 
 			// UVTransform
-			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			ImGui::Text("UVTransform");
+			ImGui::DragFloat2("Scale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("Rotate", &uvTransformSprite.rotate.z);
+			ImGui::DragFloat2("Translate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 
 			// カメラ操作
-			ImGui::DragFloat3("CameraRotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::SliderFloat3("CameraTranslate", &cameraTransform.translate.x, -10.0f, 10.0f);
+			ImGui::Text("DebugCamera");
 			ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
 
+			ImGui::Text("NormalCamera");
+			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f);
+			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, -10.0f, 10.0f);
 
 			// Light
-			ImGui::DragFloat4("lightcolor", &directionalLightData->color.x, 0.01f);
-			ImGui::DragFloat3("lightDirection", &directionalLightData->direction.x, 0.01f);
-			ImGui::DragFloat("lightIntensity", &directionalLightData->intensity, 0.01f);
+			ImGui::Text("Light");
 			ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
+			ImGui::ColorEdit4("Color", &directionalLightData->color.x);
+			ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
+			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
 
 			ImGui::End();
 
