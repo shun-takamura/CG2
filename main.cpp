@@ -289,8 +289,14 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4);
 // Scale行列作成関数
 Matrix4x4 MakeScaleMatrix(Transform transform);
 
+// X回転行列作成関数
+Matrix4x4 MakeRotateXMatrix(Vector3 rotate);
+
+// Y回転行列作成関数
+Matrix4x4 MakeRotateYMatrix(Vector3 rotate);
+
 // Z回転行列作成関数
-Matrix4x4 MakeRotateZMatrix(Transform transform);
+Matrix4x4 MakeRotateZMatrix(Vector3 rotate);
 
 // 移動行列作成関数
 Matrix4x4 MakeTranslateMatrix(Transform transform);
@@ -1260,7 +1266,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//UVTransform
 			Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite);
-			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate));
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite));
 			materialDataSprite->uvTransform = uvTransformMatrix;
 
@@ -2524,17 +2530,71 @@ Matrix4x4 MakeScaleMatrix(Transform transform)
 	return scaleMatrix4x4;
 }
 
-Matrix4x4 MakeRotateZMatrix(Transform transform)
+Matrix4x4 MakeRotateXMatrix(Vector3 rotate)
+{
+	// Xの回転行列
+	Matrix4x4 rotateMatrixX;
+	rotateMatrixX.m[0][0] = 1.0f;
+	rotateMatrixX.m[0][1] = 0.0f;
+	rotateMatrixX.m[0][2] = 0.0f;
+	rotateMatrixX.m[0][3] = 0.0f;
+
+	rotateMatrixX.m[1][0] = 0.0f;
+	rotateMatrixX.m[1][1] = cosf(rotate.x);
+	rotateMatrixX.m[1][2] = sinf(rotate.x);
+	rotateMatrixX.m[1][3] = 0.0f;
+
+	rotateMatrixX.m[2][0] = 0.0f;
+	rotateMatrixX.m[2][1] = -sinf(rotate.x);
+	rotateMatrixX.m[2][2] = cosf(rotate.x);
+	rotateMatrixX.m[2][3] = 0.0f;
+
+	rotateMatrixX.m[3][0] = 0.0f;
+	rotateMatrixX.m[3][1] = 0.0f;
+	rotateMatrixX.m[3][2] = 0.0f;
+	rotateMatrixX.m[3][3] = 1.0f;
+
+	return rotateMatrixX;
+}
+
+Matrix4x4 MakeRotateYMatrix(Vector3 rotate)
+{
+	// Yの回転行列
+	Matrix4x4 rotateMatrixY;
+	rotateMatrixY.m[0][0] = cosf(rotate.y);
+	rotateMatrixY.m[0][1] = 0.0f;
+	rotateMatrixY.m[0][2] = -sinf(rotate.y);
+	rotateMatrixY.m[0][3] = 0.0f;
+
+	rotateMatrixY.m[1][0] = 0.0f;
+	rotateMatrixY.m[1][1] = 1.0f;
+	rotateMatrixY.m[1][2] = 0.0f;
+	rotateMatrixY.m[1][3] = 0.0f;
+
+	rotateMatrixY.m[2][0] = sinf(rotate.y);
+	rotateMatrixY.m[2][1] = 0.0f;
+	rotateMatrixY.m[2][2] = cosf(rotate.y);
+	rotateMatrixY.m[2][3] = 0.0f;
+
+	rotateMatrixY.m[3][0] = 0.0f;
+	rotateMatrixY.m[3][1] = 0.0f;
+	rotateMatrixY.m[3][2] = 0.0f;
+	rotateMatrixY.m[3][3] = 1.0f;
+
+	return rotateMatrixY;
+}
+
+Matrix4x4 MakeRotateZMatrix(Vector3 rotate)
 {
 	// Zの回転行列
 	Matrix4x4 rotateMatrixZ;
-	rotateMatrixZ.m[0][0] = cosf(transform.rotate.z);
-	rotateMatrixZ.m[0][1] = sinf(transform.rotate.z);
+	rotateMatrixZ.m[0][0] = cosf(rotate.z);
+	rotateMatrixZ.m[0][1] = sinf(rotate.z);
 	rotateMatrixZ.m[0][2] = 0.0f;
 	rotateMatrixZ.m[0][3] = 0.0f;
 
-	rotateMatrixZ.m[1][0] = -sinf(transform.rotate.z);
-	rotateMatrixZ.m[1][1] = cosf(transform.rotate.z);
+	rotateMatrixZ.m[1][0] = -sinf(rotate.z);
+	rotateMatrixZ.m[1][1] = cosf(rotate.z);
 	rotateMatrixZ.m[1][2] = 0.0f;
 	rotateMatrixZ.m[1][3] = 0.0f;
 
