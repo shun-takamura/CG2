@@ -1205,23 +1205,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// テクスチャ変更のチェックボックス
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-			// modelTransform
+			// ModelTransform
 			ImGui::Text("ModelTransform");
 			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
 			ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
 			ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
 
-			// textureTransform
-			ImGui::Text("TextureTransform");
-			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f);
-			ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.01f);
-			ImGui::DragFloat2("Translate", &transformSprite.translate.x, 1.0f);
+			// SpriteTransform（Sprite自体の見た目位置など）
+			ImGui::Text("SpriteTransform");
+			ImGui::DragFloat3("Scale##Sprite", &transformSprite.scale.x, 0.01f);
+			ImGui::DragFloat3("Rotate##Sprite", &transformSprite.rotate.x, 0.01f);
+			ImGui::DragFloat3("Translate##Sprite", &transformSprite.translate.x, 1.0f);
 
-			// UVTransform
+			// UVTransform（テクスチャの位置・回転など）
 			ImGui::Text("UVTransform");
-			ImGui::DragFloat2("Scale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::SliderAngle("Rotate", &uvTransformSprite.rotate.z);
-			ImGui::DragFloat2("Translate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("Scale##UV", &uvTransformSprite.scale.x, 0.01f);
+			ImGui::SliderAngle("Rotate##UV", &uvTransformSprite.rotate.z);
+			ImGui::DragFloat2("Translate##UV", &uvTransformSprite.translate.x, 0.01f);
 
 			// カメラ操作
 			ImGui::Text("DebugCamera");
