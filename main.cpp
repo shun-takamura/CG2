@@ -66,6 +66,13 @@ std::string ConvertString(const std::wstring& str);
 //========================
 // 構造体の定義
 //========================
+// 
+enum class LightingMode {
+	None, // ライティング無し
+	Lambert, // ランバート反射
+	HalfLambert // 
+};
+
 // 音声データの構造体
 // ファイル構造によって色々ある
 
@@ -820,6 +827,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	directionalLightData->direction = { 0.0f,-1.0f,0.0f };
 	directionalLightData->intensity = 1.0f;
 
+	LightingMode lightingMode = LightingMode::None;
+	
+
 	// DescriptorRange
 	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
 	descriptorRange[0].BaseShaderRegister = 0;                      // 0から始まる
@@ -1158,8 +1168,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool useMonsterBall = true;
+	bool isSpriteVisible = true;
 	int isUseDebugCamera = true;
 	int isUseHalfLambert = true;
+	
 
 	// 全キーの入力状態を取得
 	BYTE keys[256] = {}; // 0番~255番のキーまである
@@ -1200,11 +1212,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// ImGui フレーム開始直後
 			ImGui::Begin("Triangle Settings");
 
-			//ImGui::SetWindowSize(ImVec2(400, 300)); // 幅400, 高さ300（お好みで変更）
-
-			// テクスチャ変更のチェックボックス
-			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-
 			// ModelTransform
 			ImGui::Text("ModelTransform");
 			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
@@ -1212,6 +1219,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
 
 			// SpriteTransform（Sprite自体の見た目位置など）
+			ImGui::Checkbox("Show Sprite", &isSpriteVisible);
 			ImGui::Text("SpriteTransform");
 			ImGui::DragFloat3("Scale##Sprite", &transformSprite.scale.x, 0.01f);
 			ImGui::DragFloat3("Rotate##Sprite", &transformSprite.rotate.x, 0.01f);
@@ -1227,23 +1235,50 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Text("DebugCamera");
 			ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
 
-			ImGui::Text("NormalCamera");
-			ImGui::DragFloat3("Rotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, -10.0f, 10.0f);
-
 			// Light
 			ImGui::Text("Light");
-			ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
+			
+			const char* lightingItems[] = { "None", "Lambert", "Half Lambert" };
+			int currentLightingIndex = static_cast<int>(lightingMode);
+			if (ImGui::Combo("Lighting", &currentLightingIndex, lightingItems, IM_ARRAYSIZE(lightingItems))) {
+				lightingMode = static_cast<LightingMode>(currentLightingIndex);
+			}
+
+			//ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
 			ImGui::ColorEdit4("Color", &directionalLightData->color.x);
 			ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
 			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
+			
+			ImGui::End();
+
+			//===================================
+			// デバッグカメラの操作説明(別ウィンドウ)
+			//===================================
+			ImGui::Begin("Debug Camera Controls");
+
+			ImGui::Text("=== Movement ===");
+			ImGui::BulletText("W : Zoom In");
+			ImGui::BulletText("S : Zoom Out");
+			ImGui::BulletText("A : Move Left");
+			ImGui::BulletText("D : Move Right");
+			ImGui::BulletText("Q : Move Down");
+			ImGui::BulletText("E : Move Up");
+
+			ImGui::Spacing();
+			ImGui::Text("=== Rotation ===");
+			ImGui::BulletText("Up Arrow    : Pitch Up");
+			ImGui::BulletText("Down Arrow  : Pitch Down");
+			ImGui::BulletText("Left Arrow  : Yaw Left");
+			ImGui::BulletText("Right Arrow : Yaw Right");
+			ImGui::BulletText("O : Roll -");
+			ImGui::BulletText("P : Roll +");
 
 			ImGui::End();
 
 			debugCamera->Update(keys);
 
-			// PSにどちらのライティング方式を使用するかを送る
-			directionalLightData->isUseHalfLambert = isUseHalfLambert;
+			// PSにどのライティング方式を使用するかを送る
+			directionalLightData->lightingType = static_cast<int>(lightingMode);
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform);
@@ -1367,20 +1402,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 			//commandList->DrawIndexedInstanced(1536, 1, 0, 0, 0);
 
-			// マテリアルCBufferの場所を設定.Spriteの前に設定しなおす
-			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
+			if (isSpriteVisible) {
 
-			// spriteの描画。変更が必要なものだけ変更する。
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+				// マテリアルCBufferの場所を設定.Spriteの前に設定しなおす
+				commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-			//IBVを設定
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);
+				// spriteの描画。変更が必要なものだけ変更する。
+				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 
-			// sprite用のCBufferの場所の設定
-			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+				//IBVを設定
+				commandList->IASetIndexBuffer(&indexBufferViewSprite);
 
-			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+				// sprite用のCBufferの場所の設定
+				commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+
+				// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
+				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			}
 
 			// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 			// 実際のCommandListのImGUIの描画コマンドを積む

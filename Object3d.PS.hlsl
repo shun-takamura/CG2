@@ -14,7 +14,7 @@ struct DirectionalLight
     float4 color;
     float3 direction;
     float intensity;
-    int isUseHalfLambert;
+    int lightingType;
 };
 
 cbuffer gTransformationMatrix : register(b0)
@@ -47,32 +47,44 @@ cbuffer DirectionalLightBuffer : register(b1)
 Texture2D<float4> gTexture : register(t0); // SRVはt
 SamplerState gSumpler : register(s0); // Sumplerはs
 
-PixelShaderOutput main(VertexShaderOutput input){
-    
+PixelShaderOutput main(VertexShaderOutput input)
+{
     PixelShaderOutput output;
-    
-    float4 transformedUV = mul(float4(input.texcoord,0.0f, 1.0f), gMaterial.uvTransform);
+
+    float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSumpler, transformedUV.xy);
-    
-    if (gMaterial.enableLighting != 0){
-        
-        float cos = 0.0f;
-        
-        if (gDirectionalLight.isUseHalfLambert){
-            // HalfLambert
-            float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
+
+    if (gMaterial.enableLighting != 0)
+    {
+        float cos = 1.0f; // 初期値（None用）
+
+        float3 normal = normalize(input.normal);
+        float3 lightDir = normalize(-gDirectionalLight.direction);
+
+        if (gDirectionalLight.lightingType == 1)
+        {
+            // Lambert
+            cos = saturate(dot(normal, lightDir));
+        }
+        else if (gDirectionalLight.lightingType == 2)
+        {
+            // Half-Lambert
+            float NdotL = dot(normal, lightDir);
             cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
         }
-        else{
-            // LambertianReflectance
-            cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+        else
+        {
+            // lightingType == 0 (None)
+            cos = 1.0f;
         }
-       
+
         output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
-    
-    }else{
+
+    }
+    else
+    {
         output.color = gMaterial.color * textureColor;
     }
-    
+
     return output;
 }
