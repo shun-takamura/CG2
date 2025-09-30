@@ -852,7 +852,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	directionalLightData->intensity = 1.0f;
 
 	LightingMode lightingMode = LightingMode::None;
-	
+
 
 	// DescriptorRange
 	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
@@ -919,15 +919,61 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// BlendStateの設定
 	D3D12_BLEND_DESC blendDesc{};
 
+	// ImGuiでブレンドモードの変更できるようにしてあるけど初期化時点でやりたいときはここでやる
+	BlendMode blendMode = kBlendModeNormal;
+
 	// 全ての色要素を書き込む
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
-	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;      // 基本ここをいじる
-	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
-	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA; // 基本ここをいじる
 	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;   // α値の設定だから基本使わない
 	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD; // α値の設定だから基本使わない
 	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO; // α値の設定だから基本使わない
+
+	// ここから条件分岐
+	switch (blendMode)
+	{
+	case kBlendModeNone:
+		break;
+	case kBlendModeNormal:
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;      // 基本ここをいじる
+		blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
+		blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA; // 基本ここをいじる
+
+		break;
+	case kBlendModeAdd:
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;      // 基本ここをいじる
+		blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
+		blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;           // 基本ここをいじる
+
+		break;
+	case kBlendModeSubtract:
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;      // 基本ここをいじる
+		blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT; // 基本ここをいじる
+		blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;           // 基本ここをいじる
+
+		break;
+	case kBlendModeMultily:
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;           // 基本ここをいじる
+		blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
+		blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;     // 基本ここをいじる
+
+		break;
+	case kBlendModeScreen:
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR; // 基本ここをいじる
+		blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
+		blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;           // 基本ここをいじる
+
+		break;
+	case kCountOfBlendMode:
+		break;
+	default:
+		break;
+	}
 
 	// ResiterzerStateの設定
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -1201,7 +1247,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	bool isSpriteVisible = true;
 	int isUseDebugCamera = true;
 	int isUseHalfLambert = true;
-	
+
 
 	// 全キーの入力状態を取得
 	BYTE keys[256] = {}; // 0番~255番のキーまである
@@ -1249,6 +1295,76 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
 			ImGui::ColorEdit4("ColorEdit", &materialData->color.x);
 
+			//==============================
+			// ここからブレンドモードの変更処理
+			//==============================
+			// BlendMode 選択 UI
+			const char* blendItems[] = {
+				"None",
+				"Normal",
+				"Add",
+				"Subtract",
+				"Multiply",
+				"Screen"
+			};
+			int currentBlendIndex = static_cast<int>(blendMode);
+			if (ImGui::Combo("Blend Mode", &currentBlendIndex, blendItems, IM_ARRAYSIZE(blendItems))) {
+				blendMode = static_cast<BlendMode>(currentBlendIndex);
+
+				// --- PSO 再生成 ---
+				D3D12_BLEND_DESC newBlendDesc{};
+				newBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+				newBlendDesc.RenderTarget[0].BlendEnable = TRUE;
+
+				switch (blendMode) {
+				case kBlendModeNone:
+					newBlendDesc.RenderTarget[0].BlendEnable = FALSE;
+					break;
+				case kBlendModeNormal:
+					newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+					newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+					break;
+				case kBlendModeAdd:
+					newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+					newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+					break;
+				case kBlendModeSubtract:
+					newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+					newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+					break;
+				case kBlendModeMultily:
+					newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
+					newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+					newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
+					break;
+				case kBlendModeScreen:
+					newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+					newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+					newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+					break;
+				}
+
+				newBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+				newBlendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+				newBlendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+
+				// PSO の設定をコピーして再作成
+				D3D12_GRAPHICS_PIPELINE_STATE_DESC newDesc = graphicsPipelineStateDesc;
+				newDesc.BlendState = newBlendDesc;
+
+				Microsoft::WRL::ComPtr<ID3D12PipelineState> newPSO;
+				HRESULT hr = device->CreateGraphicsPipelineState(&newDesc, IID_PPV_ARGS(&newPSO));
+				assert(SUCCEEDED(hr));
+				graphicsPipelineState = newPSO; // 新しいPSOに差し替え
+			}
+
+			//==============================
+		    // ここまでブレンドモードの変更処理
+		    //==============================
+
 			// SpriteTransform（Sprite自体の見た目位置など）
 			ImGui::Checkbox("Show Sprite", &isSpriteVisible);
 			ImGui::Text("SpriteTransform");
@@ -1268,7 +1384,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			// Light
 			ImGui::Text("Light");
-			
+
 			const char* lightingItems[] = { "None", "Lambert", "Half Lambert" };
 			int currentLightingIndex = static_cast<int>(lightingMode);
 			if (ImGui::Combo("Lighting", &currentLightingIndex, lightingItems, IM_ARRAYSIZE(lightingItems))) {
@@ -1279,7 +1395,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::ColorEdit4("Color", &directionalLightData->color.x);
 			ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
 			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
-			
+
 			ImGui::End();
 
 			//===================================
