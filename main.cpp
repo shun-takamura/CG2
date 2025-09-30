@@ -1530,7 +1530,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ReportLiveObjects
 	//======================
 	// 警告時に止まる
-	infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+	//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
 
 	return 0;
 }
@@ -1853,7 +1853,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> CreateDepthStencilTextureResource(Microso
 
 SoundData SoundLoadWave(const char* filename)
 {
-	HRESULT result;
+	//HRESULT result;
 
 	//===========================
 	// ファイルを開く
