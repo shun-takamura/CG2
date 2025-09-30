@@ -73,6 +73,30 @@ enum class LightingMode {
 	HalfLambert // 
 };
 
+// ブレンドモード
+enum BlendMode {
+	// ブレンド無し
+	kBlendModeNone,
+
+	// 通常αブレンド。デフォルト。Src*SrcA+Dest*(1-SrcA)
+	kBlendModeNormal,
+
+	// 加算 Src*SrcA+Dest*1
+	kBlendModeAdd,
+
+	// 減算 Dest*1-Src*SrcA
+	kBlendModeSubtract,
+
+	// 乗算 Src*0+Dest*Src
+	kBlendModeMultily,
+
+	// スクリーン Src*(1-Dest)+Dest*1
+	kBlendModeScreen,
+
+	// 利用してはいけない
+	kCountOfBlendMode
+};
+
 // 音声データの構造体
 // ファイル構造によって色々ある
 
@@ -896,8 +920,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_BLEND_DESC blendDesc{};
 
 	// 全ての色要素を書き込む
-	blendDesc.RenderTarget[0].RenderTargetWriteMask =
-		D3D12_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;      // 基本ここをいじる
+	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;          // 基本ここをいじる
+	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA; // 基本ここをいじる
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;   // α値の設定だから基本使わない
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD; // α値の設定だから基本使わない
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO; // α値の設定だから基本使わない
 
 	// ResiterzerStateの設定
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -1217,6 +1247,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
 			ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
 			ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
+			ImGui::ColorEdit4("ColorEdit", &materialData->color.x);
 
 			// SpriteTransform（Sprite自体の見た目位置など）
 			ImGui::Checkbox("Show Sprite", &isSpriteVisible);
