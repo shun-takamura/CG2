@@ -617,7 +617,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
 
 	// モデル読み込み
-	ModelData modelData = LoadObjFile("Resources", "axis.obj");
+	ModelData modelData = LoadObjFile("Resources", "fence.obj");
 
 	// Textureを2枚読み込んで転送
 	DirectX::ScratchImage mipImages[2] = {
