@@ -30,7 +30,8 @@ struct Material
     float4x4 uvTransform;
 };
 
-struct PixelShaderOutput{
+struct PixelShaderOutput
+{
     float4 color : SV_TARGET0;
 };
 
@@ -54,8 +55,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSumpler, transformedUV.xy);
 
-    if (gMaterial.enableLighting != 0)
-    {
+    if (gMaterial.enableLighting != 0){
         float cos = 1.0f; // 初期値（None用）
 
         float3 normal = normalize(input.normal);
@@ -82,11 +82,17 @@ PixelShaderOutput main(VertexShaderOutput input)
         output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
         output.color.a = gMaterial.color.a * textureColor.a;
 
-    }
-    else
-    {
+    }else{
         output.color = gMaterial.color * textureColor;
     }
 
+    if (textureColor.a == 0.0f){
+        discard;
+    }
+    
+    if (output.color.a == 0.0f){
+        discard;
+    }
+    
     return output;
 }
