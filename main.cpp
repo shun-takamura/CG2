@@ -16,11 +16,16 @@
 #pragma comment(lib,"xaudio2.lib")
 // もう入ってるけどfstreamも必要だからね
 
+// ============
 // 入力デバイス
+//=============
 #define DIRECTINPUT_VERSION 0x0800 // Directinputのバージョン指定
 #include <dinput.h> // 必ずバージョン指定後にインクルード
 #pragma comment(lib,"dinput8.lib")
 #pragma comment(lib,"dxguid.lib")
+
+#include <XInput.h> // xboxコントローラー使うから
+#pragma comment(lib,"xinput.lib")
 
 // DirectX12
 #include <d3d12.h>
@@ -788,6 +793,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//==============================
 	// DirectInputの初期化
 	//==============================
+	// ここはデバイスを増やしても1つでいい
 	IDirectInput8* directInput = nullptr;
 	hr = DirectInput8Create(
 		wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
@@ -799,17 +805,50 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
 	assert(SUCCEEDED(hr));
 
-	// 入力データ形式のセット
+	// キーボードの入力データ形式のセット
 	hr = keyboard->SetDataFormat(&c_dfDIKeyboard); // 標準形式。入力デバイスによっては複数用意されていたりする
 	assert(SUCCEEDED(hr));
 
-	// 排他制御レベルのセット
+	// キーボードの排他制御レベルのセット
 	hr = keyboard->SetCooperativeLevel(
 		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
 		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
 		// DISCL_NOWINKEY : Windowsキーを無効化
 		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
 	);
+
+	// マウスデバイスの生成
+	IDirectInputDevice8* mouse = nullptr;
+	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
+	assert(SUCCEEDED(hr));
+
+	// マウスの入力データ形式のセット
+	hr = mouse->SetDataFormat(&c_dfDIMouse); // 標準形式。入力デバイスによっては複数用意されていたりする
+	assert(SUCCEEDED(hr));
+
+	// マウスの排他制御レベルのセット
+	hr = mouse->SetCooperativeLevel(
+		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
+		hwnd, DISCL_NONEXCLUSIVE
+	);
+
+	// xboxコントローラーの初期化
+	XINPUT_STATE xinputState;
+
+	// デッドゾーンの設定
+	// 左スティック
+	SHORT lx = xinputState.Gamepad.sThumbLX;
+	SHORT ly = xinputState.Gamepad.sThumbLY;
+
+	if (abs(lx) < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE) lx = 0;
+	if (abs(ly) < DEADZONE_LEFT_THUMB) ly = 0;
+
+	// 右スティック
+	SHORT rx = xinputState.Gamepad.sThumbRX;
+	SHORT ry = xinputState.Gamepad.sThumbRY;
+
+	if (abs(rx) < DEADZONE_RIGHT_THUMB) rx = 0;
+	if (abs(ry) < DEADZONE_RIGHT_THUMB) ry = 0;
 
 	//==============================
 	// XAudio2の初期化
@@ -1270,6 +1309,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// ここからゲームの処理
 			///
 
+			//=========================
+			// キーボードの入力処理
+			//=========================
 			// キーボード情報の取得開始
 			keyboard->Acquire();
 
@@ -1280,6 +1322,46 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (keys[DIK_0]) {
 				OutputDebugStringA("pressing [0]\n"); // 出力ウィンドウにpressing [0]と表示
 			}
+
+			//=========================
+			// マウスの入力処理
+			//=========================
+
+			//=========================
+			// xboxコントローラーの入力処理
+			//=========================
+			// xboxコントローラーの入力情報を初期化
+			ZeroMemory(&xinputState, sizeof(xinputState));
+			
+			// xboxコントローラーの情報の取得開始
+			DWORD conResult = XInputGetState(0, &xinputState); // 0~3までの4つのコントローラーに対応可
+
+			// xboxコントローラー接続時
+			if (conResult == ERROR_SUCCESS) {
+
+				// ボタン
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_A) { /* Aボタンを押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_B) { /* Bボタンを押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_X) { /* Xボタンを押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_Y) { /* Yボタンを押したときの処理 */ }
+
+				// 十字キー
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP) { /* ↑を押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) { /* ↓を押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) { /* ←を押したときの処理 */ }
+				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) { /* →を押したときの処理 */ }
+
+				// 左右トリガー (0～255の範囲のアナログ値)
+				BYTE leftTrigger = xinputState.Gamepad.bLeftTrigger;   // 左トリガー
+				BYTE rightTrigger = xinputState.Gamepad.bRightTrigger;  // 右トリガー
+
+				// 左右スティック (−32768 ～ +32767 の範囲のアナログ値)
+				SHORT lX = xinputState.Gamepad.sThumbLX;  // 左スティック X
+				SHORT lY = xinputState.Gamepad.sThumbLY;  // 左スティック Y
+				SHORT rX = xinputState.Gamepad.sThumbRX;  // 右スティック X
+				SHORT rY = xinputState.Gamepad.sThumbRY;  // 右スティック Y
+			}
+
 			//======================================================================
 			// preKeysも作っておけ!!どうせ入れ物作ってフレームの最後にキー入力ぶち込むだけや
 			//======================================================================
@@ -1307,6 +1389,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				"Multiply",
 				"Screen"
 			};
+
 			int currentBlendIndex = static_cast<int>(blendMode);
 			if (ImGui::Combo("Blend Mode", &currentBlendIndex, blendItems, IM_ARRAYSIZE(blendItems))) {
 				blendMode = static_cast<BlendMode>(currentBlendIndex);
