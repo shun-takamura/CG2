@@ -149,6 +149,15 @@ struct ModelData {
 	MaterialData material;
 };
 
+// デッドゾーンの設定
+struct DeadZone {
+	SHORT leftThumb;
+	SHORT rightThumb;
+
+	BYTE leftTrigger;
+	BYTE rightTrigger;
+};
+
 // リリースチェック
 struct D3DResourceLeakCheker {
 	~D3DResourceLeakCheker() {
@@ -835,20 +844,29 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// xboxコントローラーの初期化
 	XINPUT_STATE xinputState;
 
-	// デッドゾーンの設定
-	// 左スティック
-	SHORT lx = xinputState.Gamepad.sThumbLX;
-	SHORT ly = xinputState.Gamepad.sThumbLY;
+	// xboxコントローラーの初期化
+	SHORT lX = 0;  // 左スティック X
+	SHORT lY = 0;  // 左スティック Y
+	SHORT rX = 0;  // 右スティック X
+	SHORT rY = 0;  // 右スティック Y
 
-	if (abs(lx) < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE) lx = 0;
-	if (abs(ly) < DEADZONE_LEFT_THUMB) ly = 0;
+	// 左右トリガー (0～255の範囲のアナログ値)
+	BYTE leftTrigger = 0;   // 左トリガー
+	BYTE rightTrigger = 0;  // 右トリガー
+	
+	// デッドゾーンの初期化(初期値はXInput標準値にしてある)
+	DeadZone deadZone = {
+		7849, // 左スティック
+		7849, // 右スティック
+		30,   // 左トリガー
+		30    // 左トリガー
+	};
 
-	// 右スティック
-	SHORT rx = xinputState.Gamepad.sThumbRX;
-	SHORT ry = xinputState.Gamepad.sThumbRY;
-
-	if (abs(rx) < DEADZONE_RIGHT_THUMB) rx = 0;
-	if (abs(ry) < DEADZONE_RIGHT_THUMB) ry = 0;
+	// xboxコントローラーのデッドゾーンのセッター(クラス化したら使う)
+	//void SetLeftThumbDeadZone(SHORT* val) { deadZone.leftThumb = val; }
+	//void SetRightThumbDeadZone(SHORT* val) { deadZone.rightThumb = val; }
+	//void SetLeftTriggerDeadZone(SHORT* val) { deadZone.leftTrigger = val; }
+	//void SetRightTriggerDeadZone(SHORT* val) { deadZone.rightTrigger = val; }
 
 	//==============================
 	// XAudio2の初期化
@@ -1351,15 +1369,91 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) { /* ←を押したときの処理 */ }
 				if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) { /* →を押したときの処理 */ }
 
-				// 左右トリガー (0～255の範囲のアナログ値)
-				BYTE leftTrigger = xinputState.Gamepad.bLeftTrigger;   // 左トリガー
-				BYTE rightTrigger = xinputState.Gamepad.bRightTrigger;  // 右トリガー
-
 				// 左右スティック (−32768 ～ +32767 の範囲のアナログ値)
-				SHORT lX = xinputState.Gamepad.sThumbLX;  // 左スティック X
-				SHORT lY = xinputState.Gamepad.sThumbLY;  // 左スティック Y
-				SHORT rX = xinputState.Gamepad.sThumbRX;  // 右スティック X
-				SHORT rY = xinputState.Gamepad.sThumbRY;  // 右スティック Y
+				lX = xinputState.Gamepad.sThumbLX;  // 左スティック X
+				lY = xinputState.Gamepad.sThumbLY;  // 左スティック Y
+				rX = xinputState.Gamepad.sThumbRX;  // 右スティック X
+				rY = xinputState.Gamepad.sThumbRY;  // 右スティック Y
+
+				// 左右トリガー (0～255の範囲のアナログ値)
+				leftTrigger = xinputState.Gamepad.bLeftTrigger;   // 左トリガー
+				rightTrigger = xinputState.Gamepad.bRightTrigger;  // 右トリガー
+
+				//=================================
+				// 円形デッドゾーンで補正（左スティック）
+				//=================================
+				{
+					// スティックの倒れ具合（ベクトルの長さ）を計算
+					float magnitude = std::sqrt(float(lX * lX + lY * lY));
+
+					// 正規化方向ベクトル（単位ベクトル）
+					float normalizedLX = 0.0f;
+					float normalizedLY = 0.0f;
+
+					// デッドゾーンを除いた後の正規化された大きさ（0.0～1.0）
+					float normalizedMagnitude = 0.0f;
+
+					// デッドゾーン外にある場合
+					if (magnitude > deadZone.leftThumb) {
+						// 最大値でクリップ（±32767）
+						if (magnitude > 32767.0f) magnitude = 32767.0f;
+
+						// デッドゾーン分を差し引く
+						magnitude -= deadZone.leftThumb;
+
+						// 0.0～1.0 に正規化
+						normalizedMagnitude = magnitude / (32767.0f - deadZone.leftThumb);
+
+						// 方向ベクトルを計算（magnitudeは0除算しないよう注意）
+						normalizedLX = lX / std::sqrt(float(lX * lX + lY * lY));
+						normalizedLY = lY / std::sqrt(float(lX * lX + lY * lY));
+					} else {
+						// デッドゾーン内は 0 扱い
+						magnitude = 0.0f;
+						normalizedMagnitude = 0.0f;
+						normalizedLX = 0.0f;
+						normalizedLY = 0.0f;
+					}
+
+					// ゲーム用の入力値として使える
+					// normalizedLX, normalizedLY : 方向ベクトル
+					// normalizedMagnitude        : 倒し具合（0.0～1.0）
+				}
+
+				//=================================
+				// 円形デッドゾーンで補正（右スティック）
+				//=================================
+				{
+					float magnitude = std::sqrt(float(rX * rX + rY * rY));
+					float normalizedRX = 0.0f;
+					float normalizedRY = 0.0f;
+					float normalizedMagnitude = 0.0f;
+
+					if (magnitude > deadZone.rightThumb) {
+						if (magnitude > 32767.0f) magnitude = 32767.0f;
+						magnitude -= deadZone.rightThumb;
+						normalizedMagnitude = magnitude / (32767.0f - deadZone.rightThumb);
+
+						normalizedRX = rX / std::sqrt(float(rX * rX + rY * rY));
+						normalizedRY = rY / std::sqrt(float(rX * rX + rY * rY));
+					} else {
+						magnitude = 0.0f;
+						normalizedMagnitude = 0.0f;
+						normalizedRX = 0.0f;
+						normalizedRY = 0.0f;
+					}
+
+					// ゲーム用の入力値として使える
+					// normalizedRX, normalizedRY : 方向ベクトル
+					// normalizedMagnitude        : 倒し具合（0.0～1.0）
+				}
+
+				//=========================
+				// トリガーのデッドゾーン補正
+				//=========================
+				if (leftTrigger < deadZone.leftTrigger)  leftTrigger = 0;
+				if (rightTrigger < deadZone.rightTrigger) rightTrigger = 0;
+
 			}
 
 			//======================================================================
