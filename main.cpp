@@ -260,6 +260,14 @@ ModelData LoadObjFile(const std::string& directorPath, const std::string& filena
 
 MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);
 
+//=======================
+// xboxコントローラーの関数
+//=======================
+void VibrateController(int controllerNum, WORD leftPower, WORD rightPower);
+
+// 振動停止
+void StopVibration(DWORD controllerNum);
+
 //===================================
 // MT3でも使う関数の宣言
 //===================================
@@ -853,7 +861,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 左右トリガー (0～255の範囲のアナログ値)
 	BYTE leftTrigger = 0;   // 左トリガー
 	BYTE rightTrigger = 0;  // 右トリガー
-	
+
 	// デッドゾーンの初期化(初期値はXInput標準値にしてある)
 	DeadZone deadZone = {
 		7849, // 左スティック
@@ -1350,7 +1358,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//=========================
 			// xboxコントローラーの入力情報を初期化
 			ZeroMemory(&xinputState, sizeof(xinputState));
-			
+
 			// xboxコントローラーの情報の取得開始
 			DWORD conResult = XInputGetState(0, &xinputState); // 0~3までの4つのコントローラーに対応可
 
@@ -1539,8 +1547,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			}
 
 			//==============================
-		    // ここまでブレンドモードの変更処理
-		    //==============================
+			// ここまでブレンドモードの変更処理
+			//==============================
 
 			// SpriteTransform（Sprite自体の見た目位置など）
 			ImGui::Checkbox("Show Sprite", &isSpriteVisible);
@@ -2442,6 +2450,24 @@ MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const st
 	//======================
 	return materialData;
 
+}
+
+void VibrateController(int controllerNum, WORD leftPower, WORD rightPower){
+	XINPUT_VIBRATION vibration;
+
+	// ゼロにクリア
+	ZeroMemory(&vibration, sizeof(vibration));
+
+	// 振動の強さを設定
+	vibration.wLeftMotorSpeed = leftPower; // 左モーター
+	vibration.wRightMotorSpeed = rightPower; // 右モーター
+
+	// コントローラーを指定して振動
+	XInputSetState(controllerNum, &vibration);
+}
+
+void StopVibration(DWORD controllerNum){
+	VibrateController(controllerNum, 0, 0); // 指定したコントローラーのモーターを止める
 }
 
 
