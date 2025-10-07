@@ -67,6 +67,7 @@
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -87,6 +88,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -117,6 +119,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <TreatWarningAsError>true</TreatWarningAsError>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -135,8 +138,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ConvertStringClass.cpp" />
-    <ClCompile Include="DebugCamera.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\DebugCamera.cpp" />
     <ClCompile Include="externals\ImGUI\imgui.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_demo.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_draw.cpp" />
@@ -144,16 +147,18 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="externals\ImGUI\imgui_impl_win32.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_tables.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_widgets.cpp" />
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="DirectXGame\main.cpp">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Development|x64'">MaxSpeed</Optimization>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</WholeProgramOptimization>
     </ClCompile>
-    <ClCompile Include="ResourceObject.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\ResourceObject.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\PathManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\ResourceManager.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ConvertStringClass.h" />
-    <ClInclude Include="DebugCamera.h" />
-    <ClInclude Include="DirectionalLight.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\DebugCamera.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
     <ClInclude Include="externals\ImGUI\imconfig.h" />
     <ClInclude Include="externals\ImGUI\imgui.h" />
     <ClInclude Include="externals\ImGUI\imgui_impl_dx12.h" />
@@ -162,25 +167,27 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="externals\ImGUI\imstb_rectpack.h" />
     <ClInclude Include="externals\ImGUI\imstb_textedit.h" />
     <ClInclude Include="externals\ImGUI\imstb_truetype.h" />
-    <ClInclude Include="Material.h" />
-    <ClInclude Include="Matrix3x3.h" />
-    <ClInclude Include="Matrix4x4.h" />
-    <ClInclude Include="ResourceObject.h" />
-    <ClInclude Include="Transform.h" />
-    <ClInclude Include="TransformationMatrix.h" />
-    <ClInclude Include="Vector3.h" />
-    <ClInclude Include="Vector4.h" />
-    <ClInclude Include="VertexData.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Material.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Matrix3x3.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Matrix4x4.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\ResourceObject.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Transform.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\TransformationMatrix.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector3.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector4.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Model\VertexData.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\PathManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\ResourceManager.h" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Object3d.PS.hlsl">
+    <FxCompile Include="Resources\Shaders\Object3d.PS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Pixel</ShaderType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="Object3d.VS.hlsl">
+    <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Vertex</ShaderType>
@@ -197,7 +204,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Object3d.hlsli" />
+    <None Include="Resources\Shaders\hlsli\Object3d.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -18,10 +18,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="DirectXGame\main.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="ConvertStringClass.cpp">
+    <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="externals\ImGUI\imgui.cpp">
@@ -45,27 +45,33 @@
     <ClCompile Include="externals\ImGUI\imgui_widgets.cpp">
       <Filter>InGUI</Filter>
     </ClCompile>
-    <ClCompile Include="ResourceObject.cpp">
+    <ClCompile Include="DirectXGame\GameEngine\Core\ResourceObject.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DebugCamera.cpp">
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\DebugCamera.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Core\PathManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Core\ResourceManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ConvertStringClass.h">
+    <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Vector4.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector4.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Vector3.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector3.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Matrix4x4.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\Matrix4x4.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Transform.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\Transform.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="externals\ImGUI\imconfig.h">
@@ -92,31 +98,37 @@
     <ClInclude Include="externals\ImGUI\imstb_truetype.h">
       <Filter>InGUI</Filter>
     </ClInclude>
-    <ClInclude Include="VertexData.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Model\VertexData.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Material.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Material.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="TransformationMatrix.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\TransformationMatrix.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectionalLight.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Matrix3x3.h">
+    <ClInclude Include="DirectXGame\GameEngine\Math\Matrix3x3.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="ResourceObject.h">
+    <ClInclude Include="DirectXGame\GameEngine\Core\ResourceObject.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DebugCamera.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\DebugCamera.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Core\PathManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Core\ResourceManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Object3d.VS.hlsl" />
-    <FxCompile Include="Object3d.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3d.PS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -124,6 +136,6 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Object3d.hlsli" />
+    <None Include="Resources\Shaders\hlsli\Object3d.hlsli" />
   </ItemGroup>
 </Project>
