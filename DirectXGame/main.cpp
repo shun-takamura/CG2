@@ -49,7 +49,9 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+//============================
 // 自作ヘッダーのインクルード
+//============================
 #include "ConvertStringClass.h"
 #include "Vector3.h"
 #include "Vector4.h"
@@ -64,6 +66,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "ResourceManager.h"
 
 #include "PathManager.h"
+
+// 入力デバイス
+#include "KeyboardInput.h"
 
 // string->wstring
 std::wstring ConvertString(const std::string& str);
@@ -803,22 +808,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		(void**)&directInput, nullptr);
 	assert(SUCCEEDED(hr));
 
-	// キーボードデバイスの生成
-	IDirectInputDevice8* keyboard = nullptr;
-	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
-	assert(SUCCEEDED(hr));
+	// キーボードインプットのポインタ
+	KeyboardInput* keyboardInput = nullptr;
 
-	// キーボードの入力データ形式のセット
-	hr = keyboard->SetDataFormat(&c_dfDIKeyboard); // 標準形式。入力デバイスによっては複数用意されていたりする
-	assert(SUCCEEDED(hr));
-
-	// キーボードの排他制御レベルのセット
-	hr = keyboard->SetCooperativeLevel(
-		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
-		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
-		// DISCL_NOWINKEY : Windowsキーを無効化
-		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
-	);
+	// 入力の初期化
+	keyboardInput = new KeyboardInput();
+	keyboardInput->Initialize(wc.hInstance, hwnd);
 
 	// マウスデバイスの生成
 	IDirectInputDevice8* mouse = nullptr;
@@ -1309,11 +1304,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	int isUseDebugCamera = true;
 	int isUseHalfLambert = true;
 
-
-	// 全キーの入力状態を取得
-	BYTE keys[256] = {}; // 0番~255番のキーまである
-	BYTE preKeys[256] = {};
-
 	MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1334,15 +1324,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//=========================
 			// キーボードの入力処理
 			//=========================
-			// キーボード情報の取得開始
-			keyboard->Acquire();
-
-			// 例えばENTERキーを押しているときkeys[DIK_RETURN]に0x80が代入される。押してないときは0x00
-			keyboard->GetDeviceState(sizeof(keys), keys);
+			// 更新
+			keyboardInput->Update();
 
 			// 数字の0のキーが押されていたら
-			if (keys[DIK_0]) {
-				OutputDebugStringA("pressing [0]\n"); // 出力ウィンドウにpressing [0]と表示
+			if (keyboardInput->TriggerKey(DIK_0)) {
+				OutputDebugStringA("trigger [0]\n");
 			}
 
 			//=========================
@@ -1603,7 +1590,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			ImGui::End();
 
-			debugCamera->Update(keys);
+			debugCamera->Update(keyboardInput->keys_);
 
 			// PSにどのライティング方式を使用するかを送る
 			directionalLightData->lightingType = static_cast<int>(lightingMode);
@@ -1639,11 +1626,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite));
 			materialDataSprite->uvTransform = uvTransformMatrix;
 
-			// 前フレームのキーとの比較用に現在フレームのキー入力を保存しておく
-			keyboard->GetDeviceState(sizeof(preKeys), keys);
-
 			// ESCAPEキーのトリガー入力で終了
-			if (keys[DIK_ESCAPE] && !preKeys[DIK_ESCAPE]) {
+			if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
 				PostQuitMessage(0);
 			}
 
@@ -1820,6 +1804,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
+
+	// 入力を解放
+	delete keyboardInput;
 
 	// XAudio2解放
 	xAudio2.Reset();
