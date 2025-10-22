@@ -142,6 +142,6 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\Shaders\hlsli\Object3d.hlsli" />
+    <None Include="Resources\Shaders\Object3d.hlsli" />
   </ItemGroup>
 </Project>

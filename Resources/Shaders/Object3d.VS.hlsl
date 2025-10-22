@@ -1,18 +1,10 @@
 #include "Object3d.hlsli"
 
-//cbuffer gTransformationMatrix : register(b0)
-//{
-//    float4x4 wvp;
-//    float4x4 world;
-//};
-
 struct TransformationMatrix
 {
     float4x4 WVP;
     float4x4 World;
 };
-
-//ConstantBuffer<TransformationMatrix> gTransformationMatrix : register(b0);
 
 cbuffer TransformationMatrixBuffer : register(b0)
 {

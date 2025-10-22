@@ -79,7 +79,6 @@ std::string ConvertString(const std::wstring& str);
 //========================
 // 構造体の定義
 //========================
-// 
 enum class LightingMode {
 	None, // ライティング無し
 	Lambert, // ランバート反射

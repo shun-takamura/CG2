@@ -67,13 +67,17 @@
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;C:\Users\sleon\source\repos\CG2_0_1\DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
     </Link>
+    <PostBuildEvent>
+      <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -88,7 +92,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;C:\Users\sleon\source\repos\CG2_0_1\DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -98,10 +102,7 @@
       <TreatLinkerWarningAsErrors>true</TreatLinkerWarningAsErrors>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"
-copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dxil.dll"
-
-</Command>
+      <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
@@ -119,7 +120,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <TreatWarningAsError>true</TreatWarningAsError>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;C:\Users\sleon\source\repos\CG2_0_1\DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -131,10 +132,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       </LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"
-copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dxil.dll"
-
-</Command>
+      <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -188,6 +186,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Pixel</ShaderType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
@@ -195,6 +194,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Vertex</ShaderType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -206,7 +206,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\Shaders\hlsli\Object3d.hlsli" />
+    <None Include="Resources\Shaders\Object3d.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

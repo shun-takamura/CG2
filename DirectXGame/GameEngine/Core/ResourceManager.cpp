@@ -28,6 +28,8 @@ ComPtr<IDxcBlob> ResourceManager::CompileShader(
     // =========================
     // 2. HLSLファイルを読み込む
     // =========================
+    OutputDebugStringW((L"❌ Failed to load shader file: " + filePath + L"\n").c_str());
+
     ComPtr<IDxcBlobEncoding> shaderSource = nullptr;
     HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
     if (FAILED(hr) || shaderSource == nullptr) {
@@ -51,7 +53,7 @@ ComPtr<IDxcBlob> ResourceManager::CompileShader(
         L"-Zi", L"-Qembed_debug",  // デバッグ情報を埋め込む
         L"-Od",                    // 最適化をオフにする（デバッグ用）
         L"-Zpr",                   // 行優先メモリレイアウト
-        L"-I", L"Resources/Shaders/hlsli"
+        L"-I", L"Resources/Shaders"
     };
 
     ComPtr<IDxcResult> shaderResult = nullptr;
@@ -75,8 +77,10 @@ ComPtr<IDxcBlob> ResourceManager::CompileShader(
     ComPtr<IDxcBlobUtf8> shaderError = nullptr;
     shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
     if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
-        std::cerr << shaderError->GetStringPointer() << std::endl;
-        assert(false);
+        OutputDebugStringA(shaderError->GetStringPointer());
+        OutputDebugStringA("\n");
+        //std::cerr << shaderError->GetStringPointer() << std::endl;
+        //assert(false);
         return nullptr;
     }
 
