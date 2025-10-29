@@ -1,0 +1,1 @@
+C:\Users\sleon\source\repos\CG2_0_1\Project\externals\DirectXTex\Bin\Desktop_2022_Win10\x64\Development\DirectXTex.lib
