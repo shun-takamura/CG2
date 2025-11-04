@@ -1,5 +1,5 @@
 #pragma once
-
+#include "WindowsApplication.h"
 #include <cassert>
 
 // ============
@@ -28,6 +28,7 @@ private:
 	// メンバ変数
     ComPtr<IDirectInput8> directInput_ = nullptr;
 	ComPtr<IDirectInputDevice8> keyboard_ = nullptr;
+	WindowsApplication* winApp_ = nullptr;
 
 public:
 
@@ -36,7 +37,7 @@ public:
 	BYTE preKeys_[256] = {};
 
 	// メンバ関数
-	void Initialize(HINSTANCE hInstance,HWND hwnd);
+	void Initialize(WindowsApplication* winApp);
 
 	void Update();
 

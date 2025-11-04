@@ -1,13 +1,16 @@
 #include "KeyboardInput.h"
 
-void KeyboardInput::Initialize(HINSTANCE hInstance, HWND hwnd) {
+void KeyboardInput::Initialize(WindowsApplication* winApp) {
+
+	// 借りてきたWinAppのインスタンスを記録
+	winApp_ = winApp;
 
 	//==============================
 	// DirectInputの初期化
 	//==============================
 	// ここはデバイスを増やしても1つでいい
 	HRESULT hr = DirectInput8Create(
-		hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
+		winApp->GetInstanceHandle(), DIRECTINPUT_VERSION, IID_IDirectInput8,
 		(void**)&directInput_, nullptr);
 	assert(SUCCEEDED(hr));
 
@@ -24,7 +27,7 @@ void KeyboardInput::Initialize(HINSTANCE hInstance, HWND hwnd) {
 		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
 		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
 		// DISCL_NOWINKEY : Windowsキーを無効化
-		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
+		winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
 	);
 
 }
