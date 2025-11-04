@@ -374,14 +374,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	WindowsApplication* winApp = new WindowsApplication();
 
 	//========================
-	// ウィンドウサイズを決める
+	// ウィンドウの初期化
 	//========================
-	// クライアント領域のサイズ
-	const int32_t kClientWidth = 1280;
-	const int32_t kClientHeight = 720;
-
-	// 初期化（タイトルとウィンドウサイズ）
-	winApp->Initialize(L"GE3", kClientWidth, kClientHeight);
+	// 初期化（タイトル）
+	winApp->Initialize(L"GE3");
 
 	//========================================
 	// ここにデバッグレイヤー デバックの時だけ出る
@@ -546,8 +542,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(winApp->GetHwnd() != nullptr); // ウィンドウハンドルがnullでないことを確認
 	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain = nullptr;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
-	swapChainDesc.Width = kClientWidth;                          // 画面の幅
-	swapChainDesc.Height = kClientHeight;                        // 画面の高さ
+	swapChainDesc.Width = WindowsApplication::kClientWidth;      // 画面の幅
+	swapChainDesc.Height = WindowsApplication::kClientHeight;    // 画面の高さ
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;           // 色の形式
 	swapChainDesc.SampleDesc.Count = 1;                          // マルチサンプルしない
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // 描画のターゲットとして利用する
@@ -555,7 +551,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;    // モニタに映したら中身を破棄
 
 	// コマンドキュー、ウィンドウハンドル、設定を譲渡して生成
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr,
+	hr = dxgiFactory->CreateSwapChainForHwnd(
+		commandQueue.Get(),
+		winApp->GetHwnd(),
+		&swapChainDesc, 
+		nullptr, 
+		nullptr,
 		reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
 
 	// 生成が上手くできなかったので起動できない
@@ -593,7 +594,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	// DepthStencilTextureをウィンドウサイズで作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
+	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, WindowsApplication::kClientWidth, WindowsApplication::kClientHeight);
 
 	//=========================
 	// DescriptorHeapを生成する
@@ -755,7 +756,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 入力の初期化
 	keyboardInput = new KeyboardInput();
-	keyboardInput->Initialize(winApp->GetInstanceHandle(), winApp->GetHwnd());
+	keyboardInput->Initialize(winApp);
 
 	// マウスデバイスの生成
 	IDirectInputDevice8* mouse = nullptr;
@@ -1211,8 +1212,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_VIEWPORT viewport{};
 
 	// クライアント領域のサイズと一緒にして画面全体に表示
-	viewport.Width = kClientWidth;
-	viewport.Height = kClientHeight;
+	viewport.Width = WindowsApplication::kClientWidth;
+	viewport.Height = WindowsApplication::kClientHeight;
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -1223,9 +1224,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 基本的にビューポートと同じ矩形が構成されるようにする
 	scissorRect.left = 0;
-	scissorRect.right = kClientWidth;
+	scissorRect.right = WindowsApplication::kClientWidth;
 	scissorRect.top = 0;
-	scissorRect.bottom = kClientHeight;
+	scissorRect.bottom = WindowsApplication::kClientHeight;
 
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
@@ -1563,7 +1564,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// sprite用のworldViewProjectionMatrixを作る
 		Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
 		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, kClientWidth, kClientHeight, 0.0f, 100.0f);
+		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, WindowsApplication::kClientWidth, WindowsApplication::kClientHeight, 0.0f, 100.0f);
 		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 		*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
 

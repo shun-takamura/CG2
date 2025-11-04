@@ -1,6 +1,6 @@
 #include "WindowsApplication.h"
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+LRESULT WindowsApplication::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
     if (msg == WM_DESTROY) {
         PostQuitMessage(0);
         return 0;
@@ -8,14 +8,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-void WindowsApplication::Initialize(const wchar_t* title, int32_t width, int32_t height){
+void WindowsApplication::Initialize(const wchar_t* title){
     wc_.lpfnWndProc = WindowProc;
     wc_.lpszClassName = L"CG2WindowClass";
     wc_.hInstance = GetModuleHandle(nullptr);
     wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
     RegisterClass(&wc_);
 
-    RECT wrc = { 0,0,width,height };
+    RECT wrc = { 0,0,kClientWidth,kClientHeight };
     AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
 
     hwnd_ = CreateWindow(
@@ -43,4 +43,5 @@ bool WindowsApplication::ProcessMessage(){
 
 void WindowsApplication::Finalize(){
     CloseWindow(hwnd_);
+    CoUninitialize();
 }
