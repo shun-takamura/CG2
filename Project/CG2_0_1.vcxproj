@@ -151,6 +151,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\DebugCamera.cpp" />
     <ClCompile Include="externals\ImGUI\imgui.cpp" />
@@ -171,6 +172,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Core\WindowsApplication.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\DebugCamera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
