@@ -450,6 +450,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// モデル読み込み
 	ModelData modelData = LoadObjFile("Resources", "fence.obj");
 
+	// 板ポリ
+	ModelData modelData2;
+	modelData2.vertices.push_back({ .pos = {  -1.0f,  1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左上
+	modelData2.vertices.push_back({ .pos = {  1.0f, 1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右上
+	modelData2.vertices.push_back({ .pos = { -1.0f,  -1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左下
+	modelData2.vertices.push_back({ .pos = { -1.0f,  -1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左下
+	modelData2.vertices.push_back({ .pos = { 1.0f, 1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右上
+	modelData2.vertices.push_back({ .pos = { 1.0f, -1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右下
+	modelData2.material.textureFilePath = "Resources/uvChecker.png";
+
+	uint32_t instanceCount = 10;
+
 	// Textureを2枚読み込んで転送
 	DirectX::ScratchImage mipImages[2] = {
 		LoadTexture("Resources/uvChecker.png"),
@@ -1002,6 +1014,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// インデックスはuint32_tとする
 	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
 
+	// 板ポリ頂点バッファを作成
+	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource2 =
+		CreateBufferResource(dxCore->GetDevice(), sizeof(VertexData) * modelData2.vertices.size());
+
+	// 頂点データ転送
+	VertexData* vertexData2 = nullptr;
+	vertexResource2->Map(0, nullptr, reinterpret_cast<void**>(&vertexData2));
+	std::memcpy(vertexData2, modelData2.vertices.data(), sizeof(VertexData)* modelData2.vertices.size());
+	vertexResource2->Unmap(0, nullptr);
+
+	// ビュー作成
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView2{};
+	vertexBufferView2.BufferLocation = vertexResource2->GetGPUVirtualAddress();
+	vertexBufferView2.SizeInBytes = UINT(sizeof(VertexData) * modelData2.vertices.size());
+	vertexBufferView2.StrideInBytes = sizeof(VertexData);
+
 	//============================
 	// Resourceにデータを書き込む
 	//============================
@@ -1467,25 +1495,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
 		// 1つ目の引数は頂点の数 球は1536
-		dxCore->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+		//dxCore->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 		//commandList->DrawIndexedInstanced(1536, 1, 0, 0, 0);
+
+		// 板ポリを使うようセット
+		dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView2);
+		// 板ポリ用の SRV（uvChecker.png の方）を設定
+		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU[0]); // ← uvChecker の方を明示的にセット
+
+		// 板ポリをインスタンシング描画
+		dxCore->GetCommandList()->DrawInstanced(UINT(modelData2.vertices.size()), instanceCount, 0, 0);
 
 		if (isSpriteVisible) {
 
-			// マテリアルCBufferの場所を設定.Spriteの前に設定しなおす
-			dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
+			//// マテリアルCBufferの場所を設定.Spriteの前に設定しなおす
+			//dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-			// spriteの描画。変更が必要なものだけ変更する。
-			dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//// spriteの描画。変更が必要なものだけ変更する。
+			//dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 
-			//IBVを設定
-			dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferViewSprite);
+			////IBVを設定
+			//dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferViewSprite);
 
-			// sprite用のCBufferの場所の設定
-			dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//// sprite用のCBufferの場所の設定
+			//dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
-			dxCore->GetCommandList()->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//// spriteの描画(drawCall/ドローコール)。vertexは4だけど格納したインデックスは6でインデックスで描画
+			//dxCore->GetCommandList()->DrawIndexedInstanced(6, 1, 0, 0, 0);
 		}
 
 		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
