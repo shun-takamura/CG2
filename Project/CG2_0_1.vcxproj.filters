@@ -147,6 +147,8 @@
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\Object3d.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle.VS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -155,5 +157,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\Shaders\Object3d.hlsli" />
+    <None Include="Resources\Shaders\Particle.hlsli" />
   </ItemGroup>
 </Project>
