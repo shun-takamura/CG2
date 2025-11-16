@@ -4,8 +4,12 @@
 #include <dxgi1_6.h>
 #include <cstdint>
 #include <cassert>
+#include <chrono>
+#include <thread>
 #include "ConvertStringClass.h"
 #include "WindowsApplication.h"
+
+#pragma comment(lib, "winmm.lib")
 
 /// <summary>
 /// DirectX12 の基盤クラス。
@@ -67,6 +71,12 @@ private:
 	void CreateRenderTargets();
 	void CreateDepthStencilView(int32_t width, int32_t height);
 	void CreateFenceObjects();
+	// FPS固定用
+	void InitializeFixFPS();
+	void UpdateFixFPS();
+
+	// 前回フレームの時刻
+	std::chrono::steady_clock::time_point reference_;
 
 private:
 	Microsoft::WRL::ComPtr<IDXGIFactory7> factory_;
