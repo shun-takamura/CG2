@@ -10,6 +10,9 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     assert(winApp != nullptr);
     winApp_ = winApp;
 
+    // システムタイマーの分解能を上げる
+    timeBeginPeriod(1);
+
     // ウィンドウサイズ取得
     int32_t width = WindowsApplication::kClientWidth;
     int32_t height = WindowsApplication::kClientHeight;
@@ -33,6 +36,10 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
 
     // 6. フェンスとイベント生成
     CreateFenceObjects();
+
+    // FPS固定初期化
+    InitializeFixFPS();
+
 }
 
 void DirectXCore::BeginDraw() {
@@ -103,6 +110,9 @@ void DirectXCore::EndDraw() {
     assert(SUCCEEDED(hr));
     hr = commandList_->Reset(commandAllocator_.Get(), nullptr);
     assert(SUCCEEDED(hr));
+
+    // 60fps固定処理
+    UpdateFixFPS();
 }
 
 void DirectXCore::Finalize() {
@@ -281,4 +291,36 @@ void DirectXCore::CreateFenceObjects() {
     fenceEvent_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     assert(fenceEvent_ != nullptr);
 
+}
+
+void DirectXCore::InitializeFixFPS(){
+    reference_ = std::chrono::steady_clock::now();
+}
+
+void DirectXCore::UpdateFixFPS(){
+    using namespace std::chrono;
+
+    // 現在時刻
+    steady_clock::time_point now = steady_clock::now();
+
+    // 前回からの経過時間（マイクロ秒）
+    microseconds elapsed =
+        duration_cast<microseconds>(now - reference_);
+
+    // 1/60秒
+    const microseconds kMinTime(uint64_t(1000000.0f / 60.0f));
+
+    // 1/60秒よりちょい短め（半端Hz対策）
+    const microseconds kMinCheckTime(uint64_t(1000000.0f / 65.0f));
+
+    // ここに “kMinCheckTime を使うバージョン” を入れる
+    if (elapsed < kMinCheckTime) {
+        // 1マイクロ秒スリープを繰り返す
+        while ((steady_clock::now() - reference_) < kMinTime) {
+            std::this_thread::sleep_for(microseconds(1));
+        }
+    }
+
+    // 時刻更新
+    reference_ = steady_clock::now();
 }
