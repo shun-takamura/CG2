@@ -552,6 +552,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// DSVHeapの先頭にDSVを作る
 	dxCore->GetDevice()->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
+
+
+
 	if (FAILED(hr)) {
 		std::cerr << "CreateSwapChainForHwnd failed: " << hr << std::endl; // エラーコードを出力
 		if (hr == DXGI_ERROR_INVALID_CALL) {
@@ -730,6 +733,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // Tableの中身の配列を指定
 	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // Tableで利用する数
 
+	// DescriptorRange
+	D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
+	descriptorRangeForInstancing[0].BaseShaderRegister = 0;                      // 0から始まる
+	descriptorRangeForInstancing[0].NumDescriptors = 1;                          // 数は1つ
+	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
+	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
+
+	// DescriptorTable
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // DescriptorTableを使用
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使用
+	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing; // Tableの中身の配列を指定
+	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); // Tableで利用する数
+
 	// Sumplerの設定。rootSignatureは532行付近にあると思う(上にコード追加してたら知らん)
 	// 基本の設定なので暫くはこれで問題ない
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
@@ -848,11 +864,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
 	// シェーダーをコンパイルする
-	IDxcBlob* vertexShaderBlob = CompileShader(L"Resources/Shaders/Object3d.VS.hlsl",
+	IDxcBlob* vertexShaderBlob = CompileShader(L"Resources/Shaders/Particle.VS.hlsl",
 		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
-	IDxcBlob* pixelShaderBlob = CompileShader(L"Resources/Shaders/Object3d.PS.hlsl",
+	IDxcBlob* pixelShaderBlob = CompileShader(L"Resources/Shaders/Particle.PS.hlsl",
 		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
@@ -953,20 +969,68 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//============================================
 	// TransformationMatrix用のResourceの作成
 	//============================================
-	UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
+	//UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
 
-	// WVP用のリソースを作る。
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(dxCore->GetDevice(), transformationMatrixSize);
+	//// WVP用のリソースを作る。
+	//Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(dxCore->GetDevice(), transformationMatrixSize);
 
-	// データを書き込む
-	TransformationMatrix* transformationMatrix = nullptr;
+	//// データを書き込む
+	//TransformationMatrix* transformationMatrix = nullptr;
+
+	//// 書き込むためのアドレスを取得
+	//wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrix));
+
+	//// 単位行列を書き込む
+	//transformationMatrix->WVP = MakeIdentity4x4();
+	//transformationMatrix->World = MakeIdentity4x4();
+
+	//=====================================
+	// Instancing用のResourceの作成
+	//=====================================
+
+	const uint32_t kNumInstance = 10;
+
+	// Instancing用のTransformationMatriResourceの作成
+	Microsoft::WRL::ComPtr<ID3D12Resource>instancingResource =
+		CreateBufferResource(dxCore->GetDevice(), sizeof(TransformationMatrix) * kNumInstance);
+
+	TransformationMatrix* gTransformationMatrice[10];
 
 	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrix));
+	TransformationMatrix* instancingData = nullptr;
+	instancingResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
 
 	// 単位行列を書き込む
-	transformationMatrix->WVP = MakeIdentity4x4();
-	transformationMatrix->World = MakeIdentity4x4();
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		instancingData[index].WVP = MakeIdentity4x4();
+		instancingData[index].World = MakeIdentity4x4();
+	}
+
+	//========================================
+    // Instancing用のSRVの作成
+    //========================================
+    // SRV（Shader Resource View）設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
+	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN; // 構造体のレイアウトは自由なので不明（UNKNOWN）
+	instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER; // StructuredBuffer用
+	instancingSrvDesc.Buffer.FirstElement = 0; // 最初の要素から
+	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE; // 固定
+	instancingSrvDesc.Buffer.NumElements = kNumInstance; // インスタンス数（アクセスする要素数）
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix); // 構造体1個のサイズ
+
+	// SRVハンドルを取得（Heapの3番目に作成している例、空いていれば他でも可）
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU =
+		GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU =
+		GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
+
+	// SRVの作成
+	dxCore->GetDevice()->CreateShaderResourceView(
+		instancingResource.Get(),
+		&instancingSrvDesc,
+		instancingSrvHandleCPU
+	);
 
 	//===================================
 	// BufferViewの作成
@@ -1021,7 +1085,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 頂点データ転送
 	VertexData* vertexData2 = nullptr;
 	vertexResource2->Map(0, nullptr, reinterpret_cast<void**>(&vertexData2));
-	std::memcpy(vertexData2, modelData2.vertices.data(), sizeof(VertexData)* modelData2.vertices.size());
+	std::memcpy(vertexData2, modelData2.vertices.data(), sizeof(VertexData) * modelData2.vertices.size());
 	vertexResource2->Unmap(0, nullptr);
 
 	// ビュー作成
@@ -1103,6 +1167,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform uvTransformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+
+	//=====================================
+	// Instancing用のTransformの作成と書き込み
+	//=====================================
+	Transform transforms[kNumInstance];
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		transforms[index].scale = { 1.0f,1.0f,1.0f };
+		transforms[index].rotate = { 0.0f,0.0f,0.0f };
+		transforms[index].translate = { index*0.1f,index * 0.1f,index * 0.1f };
+	}
 
 	// サウンドを再生
 	// キー入力ができるようになったらキー入力で再生とかの方が望ましい
@@ -1266,10 +1340,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		}
 
-		//======================================================================
-		// preKeysも作っておけ!!どうせ入れ物作ってフレームの最後にキー入力ぶち込むだけや
-		//======================================================================
-
 		// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
 		// ImGui フレーム開始直後
 		ImGui::Begin("Triangle Settings");
@@ -1429,8 +1499,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 16.0f / 9.0f, 0.1f, 100.0f);
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-		transformationMatrix->World = worldMatrix;
-		transformationMatrix->WVP = worldViewProjectionMatrix;
+		//transformationMatrix->World = worldMatrix;
+		//transformationMatrix->WVP = worldViewProjectionMatrix;
 
 		// sprite用のworldViewProjectionMatrixを作る
 		Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite);
@@ -1444,6 +1514,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate));
 		uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite));
 		materialDataSprite->uvTransform = uvTransformMatrix;
+
+		// Instancing
+		// WVP等を計算してResourceに書き込む
+		for (uint32_t index = 0; index < kNumInstance; ++index) {
+			// ワールド行列作成
+			Matrix4x4 worldMatrixInstancing = MakeAffineMatrix(transforms[index]);
+
+			Matrix4x4 viewMatrixInstancing;
+
+			if (isUseDebugCamera) {
+				viewMatrixInstancing = debugCamera->GetViewMatrix();
+
+			} else {
+				viewMatrixInstancing = Inverse(cameraMatrix);
+
+			}
+
+			Matrix4x4 viewProjectionMatrixInstancing = Multiply(viewMatrixInstancing, projectionMatrix);
+
+			// WVP行列作成
+			Matrix4x4 worldViewProjectionMatrixInstancing = Multiply(worldMatrixInstancing, viewProjectionMatrixInstancing);
+
+			// 書き込み
+			instancingData[index].WVP = worldViewProjectionMatrixInstancing;
+			instancingData[index].World = worldMatrixInstancing;
+		}
+
 
 		// ESCAPEキーのトリガー入力で終了
 		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
@@ -1485,7 +1582,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
 		// wvp用のCBufferの場所を設定
-		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+		// instancingResource は StructuredBuffer なので SRVテーブルとして設定する
+		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
+
+		//dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(1, instancingResource->GetGPUVirtualAddress());
 
 		// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]。useMonsterBallでテクスチャを切り替え
 		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU[1] : textureSrvHandleGPU[0]);
@@ -1500,11 +1600,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 板ポリを使うようセット
 		dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView2);
+
 		// 板ポリ用の SRV（uvChecker.png の方）を設定
-		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU[0]); // ← uvChecker の方を明示的にセット
+		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 
 		// 板ポリをインスタンシング描画
-		dxCore->GetCommandList()->DrawInstanced(UINT(modelData2.vertices.size()), instanceCount, 0, 0);
+		dxCore->GetCommandList()->DrawInstanced(UINT(modelData2.vertices.size()), kNumInstance, 0, 0);
 
 		if (isSpriteVisible) {
 

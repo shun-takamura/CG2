@@ -1,14 +1,5 @@
 #include "Object3d.hlsli"
 
-//ConstantBuffer<Material> gMaterial : register(b0);
-
-//cbuffer gDirectionalLight : register(b1)
-//{
-//    float4 color;
-//    float3 direction;
-//    float intensity;
-//};
-
 struct DirectionalLight
 {
     float4 color;
