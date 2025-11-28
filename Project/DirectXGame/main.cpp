@@ -3,7 +3,7 @@
 //#include <string>
 #include <math.h>
 #define _USE_MATH_DEFINES
-#include <vector>
+//#include <vector>
 #include <fstream>
 #include <sstream>
 
@@ -69,6 +69,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "Log.h"
 #include "ConvertString.h"
 #include "MathUtility.h"
+#include "BufferHelper.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -185,7 +186,7 @@ struct D3DResourceLeakCheker {
 
 IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile, IDxcUtils* dxcUtils, IDxcCompiler3* dxcCompiler, IDxcIncludeHandler* includeHandler);
 
-Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(Microsoft::WRL::ComPtr<ID3D12Device> device, size_t sizeInBytes);
+//Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(Microsoft::WRL::ComPtr<ID3D12Device> device, size_t sizeInBytes);
 
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>CreateDescriptorHeap(
 	Microsoft::WRL::ComPtr<ID3D12Device> device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptor, bool shaderVicible);
@@ -256,7 +257,7 @@ void VibrateController(int controllerNum, WORD leftPower, WORD rightPower);
 // 振動停止
 void StopVibration(DWORD controllerNum);
 
-void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);
+//void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);
 
 D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
@@ -360,9 +361,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore, dxcUtils, dxcCompiler, includeHandler);
 
-	// Spriteの個別部分の初期化
-	SpriteInstance* spriteInstance = new SpriteInstance();
-	spriteInstance->Initialize();
+	D3D12_GPU_DESCRIPTOR_HANDLE texHandle =
+		spriteManager->LoadTextureAndCreateSrv("Resources/uvChecker.png");
+
+	SpriteInstance* sprite = new SpriteInstance();
+	sprite->Initialize(spriteManager, texHandle);
 
 	// soundsの変数の宣言
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
@@ -1706,41 +1709,41 @@ IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile, ID
 
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(Microsoft::WRL::ComPtr<ID3D12Device> device, size_t sizeInBytes) {
-	//=========================
-	// VertexResourceを生成
-	//=========================
-	// 頂点リソース用のヒープ設定
-	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
-	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-	// 頂点リソースの設定
-	D3D12_RESOURCE_DESC vertexResourceDesc{};
-
-	// バッファリソース。テクスチャの場合はまた別の設定をする
-	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	vertexResourceDesc.Width = sizeInBytes;// リソースのサイズ。
-
-	// バッファの場合はこれらを1にする決まり
-	vertexResourceDesc.Height = 1;
-	vertexResourceDesc.DepthOrArraySize = 1;
-	vertexResourceDesc.MipLevels = 1;
-	vertexResourceDesc.SampleDesc.Count = 1;
-
-	// バッファの場合の儀式
-	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-	// 実際に頂点リソースを作る
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = nullptr;
-
-	HRESULT hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-		&vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-		IID_PPV_ARGS(&vertexResource));
-
-	assert(SUCCEEDED(hr));
-
-	return vertexResource;
-}
+//Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(Microsoft::WRL::ComPtr<ID3D12Device> device, size_t sizeInBytes) {
+//	//=========================
+//	// VertexResourceを生成
+//	//=========================
+//	// 頂点リソース用のヒープ設定
+//	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+//	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+//
+//	// 頂点リソースの設定
+//	D3D12_RESOURCE_DESC vertexResourceDesc{};
+//
+//	// バッファリソース。テクスチャの場合はまた別の設定をする
+//	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+//	vertexResourceDesc.Width = sizeInBytes;// リソースのサイズ。
+//
+//	// バッファの場合はこれらを1にする決まり
+//	vertexResourceDesc.Height = 1;
+//	vertexResourceDesc.DepthOrArraySize = 1;
+//	vertexResourceDesc.MipLevels = 1;
+//	vertexResourceDesc.SampleDesc.Count = 1;
+//
+//	// バッファの場合の儀式
+//	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+//
+//	// 実際に頂点リソースを作る
+//	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = nullptr;
+//
+//	HRESULT hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+//		&vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+//		IID_PPV_ARGS(&vertexResource));
+//
+//	assert(SUCCEEDED(hr));
+//
+//	return vertexResource;
+//}
 
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(Microsoft::WRL::ComPtr<ID3D12Device> device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptor, bool shaderVicible)
 {

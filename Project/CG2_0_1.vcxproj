@@ -155,6 +155,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\DebugCamera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\BufferHelper.cpp" />
     <ClCompile Include="externals\ImGUI\imgui.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_demo.cpp" />
     <ClCompile Include="externals\ImGUI\imgui_draw.cpp" />
@@ -181,7 +182,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\DebugCamera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteVertexData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\BufferHelper.h" />
     <ClInclude Include="externals\ImGUI\imconfig.h" />
     <ClInclude Include="externals\ImGUI\imgui.h" />
     <ClInclude Include="externals\ImGUI\imgui_impl_dx12.h" />

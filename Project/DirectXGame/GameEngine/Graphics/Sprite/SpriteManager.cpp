@@ -1,7 +1,9 @@
 #include "SpriteManager.h"
 #include "Log.h"
 #include "ConvertString.h"
+#include "BufferHelper.h"
 #include <cassert>
+#include "d3dx12.h"
 
 IDxcBlob* SpriteManager::CompileShader(const std::wstring& filePath, const wchar_t* profile, IDxcUtils* dxcUtils, IDxcCompiler3* dxcCompiler, IDxcIncludeHandler* includeHandler)
 {
@@ -97,6 +99,72 @@ void SpriteManager::Initialize(
 
     CreateRootSignature();
     CreateAllPipelineStates();
+    CreateSrvHeap();
+    nextSrvIndex_ = 0;
+}
+
+void SpriteManager::CreateSrvHeap()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc{};
+    srvHeapDesc.NumDescriptors = 128;
+    srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+    HRESULT hr = dxCore_->GetDevice()->CreateDescriptorHeap(
+        &srvHeapDesc,
+        IID_PPV_ARGS(&srvDescriptorHeap_)
+    );
+    assert(SUCCEEDED(hr));
+}
+
+uint32_t SpriteManager::LoadTextureToGPU(const std::string& filePath)
+{
+    // CPU側で画像読み込み
+    DirectX::ScratchImage mipImages = LoadTexture(filePath);
+    const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+
+    // GPUに TextureResource 作成
+    auto texture = CreateTextureResource(metadata);
+
+    // GPUへ画像データ転送
+    UploadTextureData(texture, mipImages,
+        dxCore_->GetDevice(), dxCore_->GetCommandList());
+
+    // SRV作成ハンドルを計算
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+        srvHeap_->GetCPUDescriptorHandleForHeapStart();
+    cpuHandle.ptr += srvDescriptorSize_ * nextSrvIndex_;
+
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle =
+        srvHeap_->GetGPUDescriptorHandleForHeapStart();
+    gpuHandle.ptr += srvDescriptorSize_ * nextSrvIndex_;
+
+    // SRV 設定
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Format = metadata.format;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = (UINT)metadata.mipLevels;
+
+    dxCore_->GetDevice()->CreateShaderResourceView(
+        texture.Get(), &srvDesc, cpuHandle);
+
+    // ハンドルを保存
+    TextureInfo info{};
+    info.resource = texture;
+    info.cpuHandle = cpuHandle;
+    info.gpuHandle = gpuHandle;
+
+    textures_.push_back(info);
+
+    nextSrvIndex_++;
+
+    return textures_.size() - 1;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE SpriteManager::GetTextureHandle(uint32_t textureID) const
+{
+    return textures_[textureID].gpuHandle;
 }
 
 void SpriteManager::CreateRootSignature()
@@ -179,6 +247,39 @@ void SpriteManager::CreateAllPipelineStates()
 
     // デフォルトの PSO を有効化するため
     pipelineState_ = pipelineStates_[blendMode_];
+}
+
+Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateBufferResource(size_t sizeInBytes)
+{
+    //=========================
+      // BUFFER 用のリソース生成
+      //=========================
+
+    D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+    uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    D3D12_RESOURCE_DESC bufferDesc{};
+    bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    bufferDesc.Width = sizeInBytes;
+    bufferDesc.Height = 1;
+    bufferDesc.DepthOrArraySize = 1;
+    bufferDesc.MipLevels = 1;
+    bufferDesc.SampleDesc.Count = 1;
+    bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource = nullptr;
+
+    HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
+        &uploadHeapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &bufferDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&resource)
+    );
+    assert(SUCCEEDED(hr));
+
+    return resource;
 }
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> SpriteManager::CreateGraphicsPipelineState(BlendMode mode)
@@ -289,12 +390,207 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> SpriteManager::CreateGraphicsPipelin
     HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pso));
     assert(SUCCEEDED(hr));
 
+    //vs->Release();
+    //ps->Release();
+
     return pso;
+}
+
+DirectX::ScratchImage SpriteManager::LoadTexture(const std::string& filePath)
+{
+    DirectX::ScratchImage mipImage{};
+    HRESULT hr = LoadFromWICFile(
+        ConvertString(filePath).c_str(),
+        DirectX::WIC_FLAGS_FORCE_SRGB,
+        nullptr,
+        mipImage);
+    assert(SUCCEEDED(hr));
+    return mipImage;
+}
+
+//Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, const DirectX::TexMetadata& metadata)
+//{
+//    // metadataを基にResourceの設定
+//    D3D12_RESOURCE_DESC resourceDesc{};
+//    resourceDesc.Width = UINT(metadata.width);                             // Textureの横幅
+//    resourceDesc.Height = UINT(metadata.height);                           // Textureの縦幅
+//    resourceDesc.MipLevels = UINT16(metadata.mipLevels);                   // mipmapの数
+//    resourceDesc.DepthOrArraySize = UINT16(metadata.arraySize);            // 奥行or配列Textureの配列数
+//    resourceDesc.Format = metadata.format;                                 // TextureのFormat
+//    resourceDesc.SampleDesc.Count = 1;                                     // サンプリングカウント。1固定
+//    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension); // Textureの次元数
+//
+//    // 利用するHeapの設定。非常に特殊な運用--------------------------------------------
+//    D3D12_HEAP_PROPERTIES heapProperties{};
+//    heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;                       // Heap設定をVRAM上に作成
+//    //heapProperties.Type = D3D12_HEAP_TYPE_CUSTOM;                        // 細かい設定を行う
+//    //heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK; // WriteBackポリシーでCPUアクセス可能
+//    //heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;          // プロセッサの近くに配置
+//
+//    // Resourceを生成
+//    Microsoft::WRL::ComPtr<ID3D12Resource> resource = nullptr;
+//    HRESULT hr = device->CreateCommittedResource(
+//        &heapProperties,                   // Heapの設定
+//        D3D12_HEAP_FLAG_NONE,              // Heapの特殊な設定。無し
+//        &resourceDesc,                     // Resourceの設定
+//        D3D12_RESOURCE_STATE_COPY_DEST,    // データ転送される設定
+//        nullptr,                           // Clear最適値。使わない
+//        IID_PPV_ARGS(&resource));          // 作成するResourceポインタへのポインタ
+//    assert(SUCCEEDED(hr));
+//
+//    return resource;
+//}
+
+Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateTextureResource(const DirectX::TexMetadata& metadata)
+{
+    auto device = dxCore_->GetDevice();
+
+    CD3DX12_HEAP_PROPERTIES heapProperties(D3D12_HEAP_TYPE_DEFAULT);
+    CD3DX12_RESOURCE_DESC textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(
+        metadata.format,
+        metadata.width,
+        (UINT)metadata.height,
+        (UINT16)metadata.arraySize,
+        (UINT16)metadata.mipLevels);
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> texture;
+    HRESULT hr = device->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &textureDesc,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr,
+        IID_PPV_ARGS(&texture));
+
+    assert(SUCCEEDED(hr));
+    return texture;
+}
+
+void SpriteManager::UploadTextureData(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::ScratchImage& mipImages)
+{
+    // Mate情報を取得
+    const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+
+    // 全MipMapについて
+    for (size_t mipLevel = 0; mipLevel < metadata.mipLevels; ++mipLevel) {
+
+        // MipLevelを指定して各Imageを取得
+        const DirectX::Image* img = mipImages.GetImage(mipLevel, 0, 0);
+
+        // Textureに転送
+        HRESULT hr = texture->WriteToSubresource(
+            UINT(mipLevel),
+            nullptr,              // 全領域へコピー
+            img->pixels,          // 元データアドレス
+            UINT(img->rowPitch),  // 1ラインのサイズ
+            UINT(img->slicePitch) // 1枚のサイズ
+        );
+
+        assert(SUCCEEDED(hr));
+    }
+}
+
+Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::UploadTextureData(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::ScratchImage& mipImages, Microsoft::WRL::ComPtr<ID3D12Device> device, ID3D12GraphicsCommandList* commandList)
+{
+    std::vector<D3D12_SUBRESOURCE_DATA> subresources;
+    DirectX::PrepareUpload(device.Get(), mipImages.GetImages(), mipImages.GetImageCount(), mipImages.GetMetadata(), subresources);
+    uint64_t intermediateSize = GetRequiredIntermediateSize(texture.Get(), 0, UINT(subresources.size()));
+    Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = CreateBufferResource(intermediateSize);
+    UpdateSubresources(commandList, texture.Get(), intermediateResource.Get(), 0, 0, UINT(subresources.size()), subresources.data());
+
+    // Textureへの転送後は利用できるよう、D3D12_RESOURCE_STATE_COPY_DESTからD3D12_RESOURCE_STATE_GENERIC_READへResourceStateを変更
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = texture.Get();
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    commandList->ResourceBarrier(1, &barrier);
+
+    return intermediateResource.Get();
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE SpriteManager::LoadTextureAndCreateSrv(const std::string& filePath)
+{
+    // 1. 読み込み
+    DirectX::ScratchImage mipImages = LoadTexture(filePath);
+    const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+
+    // 2. 空リソース作成
+    auto texture = CreateTextureResource(metadata);
+
+    // 3. GPUアップロード
+    UploadTextureData(texture, mipImages, dxCore_->GetDevice(), dxCore_->GetCommandList());
+
+    // 4. SRV 作成
+    UINT descriptorSize =
+        dxCore_->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+        srvHeap_->GetCPUDescriptorHandleForHeapStart();
+    cpuHandle.ptr += descriptorSize * nextSrvIndex_;
+
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle =
+        srvHeap_->GetGPUDescriptorHandleForHeapStart();
+    gpuHandle.ptr += descriptorSize * nextSrvIndex_;
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Format = metadata.format;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Texture2D.MipLevels = (UINT)metadata.mipLevels;
+
+    dxCore_->GetDevice()->CreateShaderResourceView(texture.Get(), &srvDesc, cpuHandle);
+
+    // 5. 保存
+    TextureEntry entry{};
+    entry.resource = texture;
+    entry.gpuHandle = gpuHandle;
+    textures_.push_back(entry);
+
+    return gpuHandle;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE SpriteManager::AllocateAndCreateSrv(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::TexMetadata& metadata)
+{
+    // ===== 1. SRV 1個ぶんのサイズ =====
+    UINT descriptorSize =
+        srvDescriptorSize_;   // ← CreateSrvHeap() で計算済み
+
+    // ===== 2. 現在の SRV スロット位置 =====
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+        srvHeap_->GetCPUDescriptorHandleForHeapStart();
+    cpuHandle.ptr += descriptorSize * nextSrvIndex_;
+
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle =
+        srvHeap_->GetGPUDescriptorHandleForHeapStart();
+    gpuHandle.ptr += descriptorSize * nextSrvIndex_;
+
+    // ===== 3. SRV 設定 =====
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Format = metadata.format;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+    dxCore_->GetDevice()->CreateShaderResourceView(
+        texture.Get(),
+        &srvDesc,
+        cpuHandle);
+
+    // 次のスロットへ
+    nextSrvIndex_++;
+
+    return gpuHandle;
 }
 
 void SpriteManager::CommonDrawSetting()
 {
     auto* cmd = dxCore_->GetCommandList();
+
+    ID3D12DescriptorHeap* heaps[] = { srvHeap_.Get() };
+    cmd->SetDescriptorHeaps(1, heaps);
 
     cmd->SetGraphicsRootSignature(rootSignature_.Get());
     cmd->SetPipelineState(pipelineState_.Get());

@@ -75,7 +75,7 @@ Vector3 TransformCoordinate(const Vector3& vector3, const Matrix4x4& matrix4x4)
 	return resoultVector3;
 }
 
-Matrix4x4 MakeAffineMatrix(Transform& transform)
+Matrix4x4 MakeAffineMatrix(const Transform& transform)
 {
 	//====================
 	// 拡縮の行列の作成

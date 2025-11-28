@@ -46,7 +46,7 @@ Vector3 TransformCoordinate(const Vector3& vector3, const Matrix4x4& matrix4x4);
 /// <param name="rotate">thetaを求めるための数値</param>
 /// <param name="translate">三次元座標でのx,y,zの移動量</param>
 /// <returns>アフィン行列</returns>
-Matrix4x4 MakeAffineMatrix(Transform& transform);
+Matrix4x4 MakeAffineMatrix(const Transform& transform);
 
 /// <summary>
 /// 投視投影行列作成関数
