@@ -81,9 +81,6 @@
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\GameEngine\Utility\BufferHelper.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h">
@@ -125,7 +122,7 @@
     <ClInclude Include="externals\ImGUI\imstb_truetype.h">
       <Filter>InGUI</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\GameEngine\Graphics\Model\VertexData.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\VertexData.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Material.h">
@@ -179,9 +176,6 @@
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\GameEngine\Utility\BufferHelper.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -189,6 +183,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

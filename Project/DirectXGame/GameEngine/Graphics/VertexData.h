@@ -4,7 +4,7 @@
 #include "Vector4.h"
 
 struct VertexData {
-	Vector4 pos;
+	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
 };

@@ -39,95 +39,45 @@ public:
 private:  
 
    DirectXCore* dxCore_ = nullptr;
-   // SRV 用 DescriptorHeap（ShaderVisible = true）
-   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap_;
-
-   // SRV の現在の書き込み位置（= 次に使うスロット index）
-   uint32_t currentSrvIndex_ = 0;
-
-   IDxcUtils* dxcUtils_ = nullptr;
-   IDxcCompiler3* dxcCompiler_ = nullptr;
-   IDxcIncludeHandler* includeHandler_ = nullptr;
-
-   Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
-   Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
+   
+   Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_ = nullptr;
+   Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_ = nullptr;
 
    // 全ブレンドモード分の PSO を保持する
    std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kCountOfBlendMode> pipelineStates_;
 
    int currentBlendMode_ = 0;
 
-   struct TextureEntry
-   {
-       Microsoft::WRL::ComPtr<ID3D12Resource> resource;  // GPU上のテクスチャ
-       D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;            // SRV の GPU ハンドル
-   };
+   // SRV用ヒープ
+   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvHeap_;
 
+   // 次に使うSRVのインデックス
+   uint32_t nextSrvIndex_ = 0;
+
+   // Texture データ保持
    struct TextureInfo {
        Microsoft::WRL::ComPtr<ID3D12Resource> resource;
-       D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle{};
-       D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle{};
+       D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;
    };
-
-   std::vector<TextureEntry> textures_;
+   std::vector<TextureInfo> textures_;
 
 public:  
 
-   IDxcBlob* CompileShader(  
-       const std::wstring& filePath,  
-       const wchar_t* profile,   
-       IDxcUtils* dxcUtils,  
-       IDxcCompiler3* dxcCompiler,  
-       IDxcIncludeHandler* includeHandler  
-   );  
-
-   void Initialize(  
-       DirectXCore* dxCore,  
-       IDxcUtils* dxcUtils,  
-       IDxcCompiler3* dxcCompiler,  
-       IDxcIncludeHandler* includeHandler  
-   );  
-
-   void CreateSrvHeap();
-
-   /// <summary>
-   /// Textureデータを読み込む関数
-   /// </summary>
-   /// <param name="filename">ファイルパス</param>
-   /// <returns>ミップマップ付きのデータ</returns>
-   DirectX::ScratchImage LoadTexture(const std::string& filePath);
-
-   /// <summary>
-   /// DirectX12のTetureResourceを作る関数
-   /// </summary>
-   /// <param name="device"></param>
-   /// <param name="metadata"></param>
-   /// <returns></returns>
-   Microsoft::WRL::ComPtr<ID3D12Resource>CreateTextureResource(const DirectX::TexMetadata& metadata);
-
-   /// <summary>
-   /// TextureResourceにデータを転送する関数
-   /// </summary>
-   /// <param name="texture"></param>
-   /// <param name="mipImages"></param>
-   void UploadTextureData(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::ScratchImage& mipImages);
-
-   [[nodiscard]]
-   Microsoft::WRL::ComPtr<ID3D12Resource> UploadTextureData(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::ScratchImage& mipImages, Microsoft::WRL::ComPtr<ID3D12Device> device, ID3D12GraphicsCommandList* commandList);
-
-
-   D3D12_GPU_DESCRIPTOR_HANDLE LoadTextureAndCreateSrv(const std::string& filePath);
-
-   D3D12_GPU_DESCRIPTOR_HANDLE AllocateAndCreateSrv(
-       Microsoft::WRL::ComPtr<ID3D12Resource> texture,
-       const DirectX::TexMetadata& metadata);
-
-   void CommonDrawSetting();  
+   void Initialize( DirectXCore* dxCore);  
+   void DrawSetting();  
    void SetBlendMode(BlendMode blendMode);
 
-   DirectXCore* GetDxCore() const { return dxCore_; }  
-   ID3D12RootSignature* GetRootSignature() const { return rootSignature_.Get(); }  
-   ID3D12PipelineState* GetPipelineState() const { return pipelineState_.Get(); }  
+   std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> intermediateResources_;
+   void ClearIntermediateResources();
+
+   /// <summary>
+   /// テクスチャをロードしてGPUに転送する関数
+   /// </summary>
+   /// <param name="filePath"></param>
+   /// <returns></returns>
+   D3D12_GPU_DESCRIPTOR_HANDLE LoadTextureToGPU(const std::string& filePath);
+
+   DirectXCore* GetDxCore() const { return dxCore_; }   
    BlendMode GetBlendMode() const { return blendMode_; }  
 
    // Releaseメソッドを追加  
@@ -139,21 +89,34 @@ public:
        }  
    }  
 
-  
-
-   // SRV用 DescriptorHeap
-   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvHeap_;
-   uint32_t srvDescriptorSize_ = 0;
-   uint32_t nextSrvIndex_ = 0;
-
-   // テクスチャ読み込み
-   uint32_t LoadTextureToGPU(const std::string& filePath);
-   D3D12_GPU_DESCRIPTOR_HANDLE GetTextureHandle(uint32_t textureID) const;
-   Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
-
 private:  
    void CreateRootSignature();  
-   void CreateAllPipelineStates();  
-   Microsoft::WRL::ComPtr<ID3D12PipelineState> CreateGraphicsPipelineState(BlendMode mode);  
+   void CreateGraphicsPipelineState(BlendMode mode);
+   void CreateDescriptorHeap();
+   
+   /// <summary>
+   /// テクスチャをロードする関数
+   /// </summary>
+   /// <param name="filePath"></param>
+   /// <returns></returns>
+   DirectX::ScratchImage LoadTexture(const std::string& filePath);
+
+   /// <summary>
+   /// DirectX12のTetureResourceを作る関数
+   /// </summary>
+   /// <param name="device"></param>
+   /// <param name="metadata"></param>
+   /// <returns></returns>
+   Microsoft::WRL::ComPtr<ID3D12Resource> CreateTextureResource(
+       Microsoft::WRL::ComPtr<ID3D12Device> device, 
+       const DirectX::TexMetadata& metadata
+   );
+
+   Microsoft::WRL::ComPtr<ID3D12Resource> UploadTextureData(
+       Microsoft::WRL::ComPtr<ID3D12Resource> texture,
+       const DirectX::ScratchImage& mipImages,
+       Microsoft::WRL::ComPtr<ID3D12Device> device, 
+       ID3D12GraphicsCommandList* commandList
+   );
 
 };

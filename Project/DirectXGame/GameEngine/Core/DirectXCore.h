@@ -9,6 +9,11 @@
 #include "ConvertStringClass.h"
 #include "WindowsApplication.h"
 
+#include "Log.h"
+#include "ConvertString.h"
+#include <d3d12.h>  
+#include <dxcapi.h>
+
 #pragma comment(lib, "winmm.lib")
 
 /// <summary>
@@ -60,6 +65,9 @@ public:
 	/// </summary>
 	DXGI_FORMAT GetRenderTargetFormat() const { return backBufferFormat_; }
 
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
+	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
+
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
 
@@ -90,6 +98,10 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers_[2];
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer_;
 	Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
+
+	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_ = nullptr;
+	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_ = nullptr;
+	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_ = nullptr;
 
 	HANDLE fenceEvent_ = nullptr;
 	UINT frameIndex_ = 0;
