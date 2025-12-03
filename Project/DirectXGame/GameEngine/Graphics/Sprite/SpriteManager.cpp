@@ -338,7 +338,9 @@ Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateTextureResource(Micr
     resourceDesc.DepthOrArraySize = UINT16(metadata.arraySize);            // 奥行or配列Textureの配列数
     resourceDesc.Format = metadata.format;                                 // TextureのFormat
     resourceDesc.SampleDesc.Count = 1;                                     // サンプリングカウント。1固定
-    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension); // Textureの次元数
+    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+    //resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension); // Textureの次元数
     resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 

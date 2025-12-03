@@ -65,7 +65,7 @@ void SpriteInstance::Update()
 
 void SpriteInstance::Draw()
 {
-    auto* commandList = spriteManager_->GetDxCore()->GetCommandList();
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList = spriteManager_->GetDxCore()->GetCommandList();
 
     // ===============================
     // 1. Vertex / Index Buffer を設定
