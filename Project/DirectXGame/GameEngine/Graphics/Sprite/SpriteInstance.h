@@ -66,6 +66,7 @@ public:
     void Initialize(SpriteManager* spriteManager, const std::string& filePath);
     void Update();
     void Draw();
+    ~SpriteInstance();
 
     // ゲッターロボ
     const Vector3& GetPosition()const { return position_; }

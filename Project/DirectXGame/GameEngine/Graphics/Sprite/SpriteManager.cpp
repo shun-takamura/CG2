@@ -328,6 +328,25 @@ D3D12_GPU_DESCRIPTOR_HANDLE SpriteManager::LoadTextureToGPU(const std::string& f
     return gpuHandle;
 }
 
+SpriteManager::~SpriteManager()
+{
+    // SRV ヒープの解放（ComPtr なので自動）
+    srvHeap_.Reset();
+
+    // RootSignature / PSO の解放（ComPtr なので自動）
+    rootSignature_.Reset();
+    pipelineState_.Reset();
+    for (auto& p : pipelineStates_) {
+        p.Reset();
+    }
+
+    // TextureInfo の ComPtr を解放
+    textures_.clear();
+
+    // アップロード用リソースもクリア
+    intermediateResources_.clear();
+}
+
 Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, const DirectX::TexMetadata& metadata)
 {
     // metadataを基にResourceの設定

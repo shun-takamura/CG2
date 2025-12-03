@@ -109,6 +109,29 @@ void SpriteInstance::Draw()
     );
 }
 
+SpriteInstance::~SpriteInstance()
+{
+    if (vertexResource_ && vertexData_) {
+        vertexResource_->Unmap(0, nullptr);
+        vertexData_ = nullptr;
+    }
+
+    if (indexResource_ && indexData_) {
+        indexResource_->Unmap(0, nullptr);
+        indexData_ = nullptr;
+    }
+
+    if (materialResource_ && materialData_) {
+        materialResource_->Unmap(0, nullptr);
+        materialData_ = nullptr;
+    }
+
+    if (transformationMatrixResource_ && transformationMatrixData_) {
+        transformationMatrixResource_->Unmap(0, nullptr);
+        transformationMatrixData_ = nullptr;
+    }
+}
+
 void SpriteInstance::CreateVertexBuffer()
 {
 

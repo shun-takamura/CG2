@@ -80,6 +80,8 @@ public:
    DirectXCore* GetDxCore() const { return dxCore_; }   
    BlendMode GetBlendMode() const { return blendMode_; }  
 
+   ~SpriteManager();
+
    // Releaseメソッドを追加  
    void Release() {  
        rootSignature_.Reset();  
