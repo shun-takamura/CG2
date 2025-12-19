@@ -1582,6 +1582,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 絶対にXAudio2を解放してから行うこと
 	SoundUnload(&soundData);
 
+	//
+
 	// スプライト解放
 	delete sprite;
 	delete spriteManager;
