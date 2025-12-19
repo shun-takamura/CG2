@@ -1,7 +1,6 @@
 #pragma once
 #include "Vector3.h"
 #include "Vector2.h"
-#include "Vector2Int.h"
 #include "SpriteManager.h"
 #include "Material.h"
 #include "VertexData.h"
@@ -13,9 +12,9 @@ class SpriteManager;
 
 class SpriteInstance {
 
-    Vector3 position_ = { 0.0f,0.0f,0.0f };
-    Vector3 rotation_ = { 0.0f,0.0f,0.0f };
-    Vector2Int size_ = { 320,180 };
+    Vector2 position_ = { 0.0f,0.0f };
+    float rotation_ = 0.0f;
+    Vector2 size_ = { 320.0f,180.0f };
 
     Transform transform{
         {1.0f,1.0f,1.0f},// s
@@ -69,15 +68,15 @@ public:
     ~SpriteInstance();
 
     // ゲッターロボ
-    const Vector3& GetPosition()const { return position_; }
-    const Vector3& GetRotation()const { return rotation_; }
+    const Vector2& GetPosition()const { return position_; }
+    const float& GetRotation()const { return rotation_; }
     const Vector4& GetColor()const { return materialData_->color; }
-    const Vector2Int& GetSize()const { return size_; }
+    const Vector2& GetSize()const { return size_; }
 
     // セッター
-    void SetPosition(const Vector3& position) { position_ = position; }
-    void SetRotation(const Vector3& rotation) { rotation_ = rotation; }
+    void SetPosition(const Vector2& position) { position_ = position; }
+    void SetRotation(const float& rotation) { rotation_ = rotation; }
     void SetColor(const Vector4& color) { materialData_->color = color; }
-    void SetSize(const Vector2Int& size) { size_ = size; }
+    void SetSize(const Vector2& size) { size_ = size; }
 };
 

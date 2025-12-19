@@ -1095,7 +1095,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// サウンドを再生
 	// キー入力ができるようになったらキー入力で再生とかの方が望ましい
-	SoundPlayWave(xAudio2.Get(), soundData);
+	//SoundPlayWave(xAudio2.Get(), soundData);
 
 	//================
 	// ImGUIの初期化
@@ -1455,6 +1455,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//	instancingData[index].WVP = worldViewProjectionMatrixInstancing;
 		//	instancingData[index].World = worldMatrixInstancing;
 		//}
+
+		// 回転テスト
+		/*float rotation = sprite->GetRotation();
+		rotation += 0.01f;
+		sprite->SetRotation(rotation);*/
+
+		// 移動テスト
+		/*Vector2 position = sprite->GetPosition();
+		position.x += 0.1f;
+		position.y += 0.1f;
+		sprite->SetPosition(position);*/
+
+		// 色変更テスト
+		/*Vector4 color = sprite->GetColor();
+		color.x += 0.01f;
+		if (color.x > 1.0f) {
+			color.x -= 1.0f;
+		}
+		sprite->SetColor(color);*/
+
+		// サイズ変更テスト
+		Vector2 size = sprite->GetSize();
+		size.x += 0.1f;
+		size.y += 0.1f;
+		sprite->SetSize(size);
 
 		sprite->Update();
 
