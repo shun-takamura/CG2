@@ -1,13 +1,12 @@
 #pragma once
+#include "Vector2.h"
+#include "Vector3.h"
 #include "Vector4.h"
 
-typedef struct Vector2 {
-	float x;
-	float y;
-}Vector2;
-
 struct VertexData {
-	Vector4 pos;
+	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
 };
+
+
