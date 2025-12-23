@@ -363,6 +363,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
 
+	// SpriteInstance を複数保持する
+	std::vector<SpriteInstance*> sprites;
+	
+	// 5枚生成
+	for (uint32_t i = 0; i < 5; ++i) {
+		SpriteInstance* sprite = new SpriteInstance();
+		sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+		sprite->SetSize({ 100.0f,100.0f });
+		sprite->SetPosition({0.0f+ i * 2.0f, 0.0f });
+
+		sprites.push_back(sprite);
+		Log("generateCount\n");
+	}
+
 	// soundsの変数の宣言
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
 
@@ -1462,10 +1477,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->SetRotation(rotation);*/
 
 		// 移動テスト
-		/*Vector2 position = sprite->GetPosition();
+		Vector2 position = sprite->GetPosition();
 		position.x += 0.1f;
 		position.y += 0.1f;
-		sprite->SetPosition(position);*/
+		sprite->SetPosition(position);
 
 		// 色変更テスト
 		/*Vector4 color = sprite->GetColor();
@@ -1476,12 +1491,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->SetColor(color);*/
 
 		// サイズ変更テスト
-		Vector2 size = sprite->GetSize();
+		/*Vector2 size = sprite->GetSize();
 		size.x += 0.1f;
 		size.y += 0.1f;
-		sprite->SetSize(size);
+		sprite->SetSize(size);*/
 
 		sprite->Update();
+
+		for (SpriteInstance* sprite : sprites) {
+			sprite->Update();
+			Log("updateCount\n");
+		}
 
 		// ESCAPEキーのトリガー入力で終了
 		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
@@ -1570,6 +1590,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		spriteManager->DrawSetting();
 		sprite->Draw();
 
+		for (SpriteInstance* sprite : sprites) {
+			Log("drawCount\n");
+			sprite->Draw();
+		}
+
 		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 		// 実際のCommandListのImGUIの描画コマンドを積む
 		//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCore->GetCommandList());
@@ -1610,6 +1635,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//
 
 	// スプライト解放
+	for (SpriteInstance* sprite : sprites) {
+		delete sprite;
+	}
+	sprites.clear();
 	delete sprite;
 	delete spriteManager;
 

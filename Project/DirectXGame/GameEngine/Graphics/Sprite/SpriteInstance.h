@@ -57,9 +57,7 @@ class SpriteInstance {
     void CreateVertexBuffer();
     void CreateMaterialBuffer();
     void CreateTransformationMatrixBuffer();
-    //DirectX::ScratchImage LoadTexture(const std::string& filePath);
    
-
 public:
 
     void Initialize(SpriteManager* spriteManager, const std::string& filePath);
