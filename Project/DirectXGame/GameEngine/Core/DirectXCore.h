@@ -65,11 +65,11 @@ public:
 	/// </summary>
 	DXGI_FORMAT GetRenderTargetFormat() const { return backBufferFormat_; }
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
-	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
-
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
+	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
 	// 最大テクスチャ枚数
 	static const uint32_t kMaxTextureCount;
