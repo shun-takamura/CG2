@@ -71,6 +71,15 @@ public:
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
 
+	// 最大テクスチャ枚数
+	static const uint32_t kMaxTextureCount;
+
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
+		Microsoft::WRL::ComPtr<ID3D12Device> device,
+		D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+		UINT numDescriptor,
+		bool shaderVicible);
+
 private:
 	void CreateFactory();
 	void CreateDevice();
@@ -93,6 +102,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue_;
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator_;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList_;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers_[2];

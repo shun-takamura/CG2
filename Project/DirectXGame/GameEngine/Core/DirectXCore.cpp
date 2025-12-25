@@ -5,6 +5,8 @@
 
 using Microsoft::WRL::ComPtr;
 
+const uint32_t DirectXCore::kMaxTextureCount = 512;
+
 void DirectXCore::Initialize(WindowsApplication* winApp) {
 
     assert(winApp != nullptr);
@@ -41,16 +43,16 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     InitializeFixFPS();
 
     // dxcCompilerを初期化
-   
     HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils_));
     assert(SUCCEEDED(hr));
     hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler_));
     assert(SUCCEEDED(hr));
 
     // 現時点でincludeはしないがincludeに対応するための設定を行う
-    
     hr = dxcUtils_->CreateDefaultIncludeHandler(&includeHandler_);
     assert(SUCCEEDED(hr));
+
+    srvDescriptorHeap_ = CreateDescriptorHeap(device_, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kMaxTextureCount, true);
 
 }
 
@@ -254,6 +256,23 @@ IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t
     // 実行用のバイナリを返却
     return shaderBlob;
 
+}
+
+Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DirectXCore::CreateDescriptorHeap(
+    Microsoft::WRL::ComPtr<ID3D12Device> device,
+    D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+    UINT numDescriptor,
+    bool shaderVicible)
+{
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = nullptr;
+    D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+    descriptorHeapDesc.Type = heapType;
+    descriptorHeapDesc.NumDescriptors = numDescriptor;
+    descriptorHeapDesc.Flags = shaderVicible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    HRESULT hr = device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&descriptorHeap));
+    assert(SUCCEEDED(hr));
+
+    return descriptorHeap;
 }
 
 void DirectXCore::CreateFactory() {

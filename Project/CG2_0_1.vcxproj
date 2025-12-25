@@ -175,6 +175,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.cpp" />
     <ClCompile Include="ParticleMatager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Sprite\TextureManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
@@ -212,6 +213,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="ParticleMatager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\TextureManager.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Particle.PS.hlsl">

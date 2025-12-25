@@ -69,6 +69,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "Log.h"
 #include "ConvertString.h"
 #include "MathUtility.h"
+#include "TextureManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -359,6 +360,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore);
+
+	// テクスチャマネージャの初期化
+	TextureManager::GetInstance()->Initialize();
 
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
@@ -1640,6 +1644,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	}
 	sprites.clear();
 	delete sprite;
+	// DirectXCoreよりも先に解放
+	TextureManager::GetInstance()->Finalize();
 	delete spriteManager;
 
 	// dxc関連
