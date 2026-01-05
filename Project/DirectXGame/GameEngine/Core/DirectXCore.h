@@ -30,6 +30,8 @@ public:
 	/// <param name="height">クライアント領域の高さ</param>
 	void Initialize(WindowsApplication* winApp);
 
+	//
+
 	/// <summary>
 	/// 描画コマンドの積み始め。
 	/// </summary>
