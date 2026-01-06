@@ -91,18 +91,6 @@ public:
        }  
    }  
 
-private:  
-   void CreateRootSignature();  
-   void CreateGraphicsPipelineState(BlendMode mode);
-   void CreateDescriptorHeap();
-   
-   /// <summary>
-   /// テクスチャをロードする関数
-   /// </summary>
-   /// <param name="filePath"></param>
-   /// <returns></returns>
-   DirectX::ScratchImage LoadTexture(const std::string& filePath);
-
    /// <summary>
    /// DirectX12のTetureResourceを作る関数
    /// </summary>
@@ -120,5 +108,17 @@ private:
        Microsoft::WRL::ComPtr<ID3D12Device> device, 
        ID3D12GraphicsCommandList* commandList
    );
+
+private:  
+   void CreateRootSignature();  
+   void CreateGraphicsPipelineState(BlendMode mode);
+   void CreateDescriptorHeap();
+   
+   /// <summary>
+   /// テクスチャをロードする関数
+   /// </summary>
+   /// <param name="filePath"></param>
+   /// <returns></returns>
+   DirectX::ScratchImage LoadTexture(const std::string& filePath);
 
 };

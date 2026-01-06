@@ -5,8 +5,17 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
 {
     spriteManager_ = spriteManager;
 
-    // ---- Texture を GPU にロードして SRV を取得 ----
+    // TextureをGPU にロードしてSRVを取得
     textureGpuHandle_ = spriteManager_->LoadTextureToGPU(filePath);
+
+    // テクスチャを読み込む（重複読み込みはTextureManager側で回避）
+    TextureManager::GetInstance()->LoadTexture(filePath);
+    
+    // ファイルパスからテクスチャ番号（SRVインデックス）を取得して保持
+    textureIndex_ = TextureManager::GetInstance()->GetTextureIndexByFilePath(filePath);
+    
+    // その番号からGPUハンドルを取得して保持
+    textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_);
 
     CreateVertexBuffer();
     CreateMaterialBuffer();
@@ -17,7 +26,7 @@ void SpriteInstance::Update()
 {
     // indexに格納するから同一頂点のデータをわざわざ用意する必要はない
     // 左下
-    vertexData_[0].position = { 0.0f,360.0f,0.0f,1.0f };
+    vertexData_[0].position = { 0.0f,1.0f,0.0f,1.0f };
     vertexData_[0].texcoord = { 0.0f,1.0f };
     vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
 
@@ -27,12 +36,12 @@ void SpriteInstance::Update()
     vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
 
     // 右下
-    vertexData_[2].position = { 640.0f,360.0f,0.0f,1.0f };
+    vertexData_[2].position = { 1.0f,1.0f,0.0f,1.0f };
     vertexData_[2].texcoord = { 1.0f,1.0f };
     vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
 
     // 右上
-    vertexData_[3].position = { 640.0f,0.0f,0.0f,1.0f };
+    vertexData_[3].position = { 1.0f,0.0f,0.0f,1.0f };
     vertexData_[3].texcoord = { 1.0f,0.0f };
     vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
 
@@ -44,8 +53,9 @@ void SpriteInstance::Update()
     indexData_[4] = 3;
     indexData_[5] = 2;
 
-    transform.rotate = rotation_;
-    transform.translate = position_;
+    transform.scale = { size_.x,size_.y,1.0f };
+    transform.rotate = { 0.0f,0.0f,rotation_ };
+    transform.translate = { position_.x,position_.y,0.0f };
 
     // 行列
     Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
@@ -94,7 +104,8 @@ void SpriteInstance::Draw()
     // ===================================
     commandList->SetGraphicsRootDescriptorTable(
         2,
-        textureGpuHandle_
+        TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_)
+        //textureGpuHandle_
     );
 
     // ===============================
@@ -192,23 +203,3 @@ void SpriteInstance::CreateTransformationMatrixBuffer()
     transformationMatrixData_->World = MakeIdentity4x4();
     transformationMatrixData_->WVP = MakeIdentity4x4();
 }
-
-//DirectX::ScratchImage SpriteInstance::LoadTexture(const std::string& filePath)
-//{
-//    // テクスチャファイルを読み込んでプログラムで扱えるようにする
-//    DirectX::ScratchImage image{};
-//    std::wstring filePathW = ConvertString(filePath);
-//    HRESULT hr = DirectX::LoadFromWICFile(
-//        filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
-//    assert(SUCCEEDED(hr));
-//
-//    // ミップマップの作成
-//    DirectX::ScratchImage mipImages{};
-//    hr = DirectX::GenerateMipMaps(
-//        image.GetImages(), image.GetImageCount(), image.GetMetadata(),
-//        DirectX::TEX_FILTER_SRGB, 0, mipImages);
-//    assert(SUCCEEDED(hr));
-//
-//    // ミップマップ付きのデータを返す
-//    return mipImages;
-//}

@@ -31,6 +31,18 @@ public:
 	void Initialize(WindowsApplication* winApp);
 
 	/// <summary>
+	/// SRV用ディスクリプタヒープの取得。
+	/// </summary>
+	ID3D12DescriptorHeap * GetSrvDescriptorHeap() const { return srvDescriptorHeap_.Get(); }
+	
+	/// <summary>
+	/// SRV(CBV/SRV/UAV) のディスクリプタサイズを取得。
+	/// </summary>
+	UINT GetSrvDescriptorSize() const {
+	assert(device_);
+	return device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);}
+
+	/// <summary>
 	/// 描画コマンドの積み始め。
 	/// </summary>
 	void BeginDraw();
@@ -65,11 +77,20 @@ public:
 	/// </summary>
 	DXGI_FORMAT GetRenderTargetFormat() const { return backBufferFormat_; }
 
+	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
+	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
-	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
-	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
+	// 最大テクスチャ枚数
+	static const uint32_t kMaxTextureCount;
+
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
+		Microsoft::WRL::ComPtr<ID3D12Device> device,
+		D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+		UINT numDescriptor,
+		bool shaderVicible);
 
 private:
 	void CreateFactory();
@@ -79,6 +100,7 @@ private:
 	void CreateRenderTargets();
 	void CreateDepthStencilView(int32_t width, int32_t height);
 	void CreateFenceObjects();
+
 	// FPS固定用
 	void InitializeFixFPS();
 	void UpdateFixFPS();
@@ -93,6 +115,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue_;
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator_;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList_;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers_[2];

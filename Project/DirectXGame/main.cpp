@@ -69,6 +69,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "Log.h"
 #include "ConvertString.h"
 #include "MathUtility.h"
+#include "TextureManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -360,8 +361,47 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore);
 
+	// テクスチャマネージャの初期化
+	TextureManager::GetInstance()->Initialize(spriteManager,dxCore);
+
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+	// SpriteInstance を複数保持する
+	std::vector<SpriteInstance*> sprites;
+
+	// 交互に使うテクスチャ
+	const std::string textures[2] = {
+		"Resources/uvChecker.png",
+		"Resources/monsterBall.png"
+	};
+
+	// 5枚生成
+	for (uint32_t i = 0; i < 5; ++i) {
+		SpriteInstance* sprite = new SpriteInstance();
+
+		// i が偶数なら 0、奇数なら 1
+		const std::string& texturePath = textures[i % 2];
+
+		sprite->Initialize(spriteManager, texturePath);
+
+		sprite->SetSize({ 100.0f, 100.0f });
+		sprite->SetPosition({ i * 2.0f, 0.0f });
+
+		sprites.push_back(sprite);
+	}
+	
+	// 5枚生成
+	/*for (uint32_t i = 0; i < 5; ++i) {
+		SpriteInstance* sprite = new SpriteInstance();
+		sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+		sprite->SetSize({ 100.0f,100.0f });
+		sprite->SetPosition({0.0f+ i * 2.0f, 0.0f });
+
+		sprites.push_back(sprite);
+		Log("generateCount\n");
+	}*/
 
 	// soundsの変数の宣言
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
@@ -1095,7 +1135,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// サウンドを再生
 	// キー入力ができるようになったらキー入力で再生とかの方が望ましい
-	SoundPlayWave(xAudio2.Get(), soundData);
+	//SoundPlayWave(xAudio2.Get(), soundData);
 
 	//================
 	// ImGUIの初期化
@@ -1456,7 +1496,37 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//	instancingData[index].World = worldMatrixInstancing;
 		//}
 
+		// 回転テスト
+		/*float rotation = sprite->GetRotation();
+		rotation += 0.01f;
+		sprite->SetRotation(rotation);*/
+
+		// 移動テスト
+		Vector2 position = sprite->GetPosition();
+		position.x += 0.1f;
+		position.y += 0.1f;
+		sprite->SetPosition(position);
+
+		// 色変更テスト
+		/*Vector4 color = sprite->GetColor();
+		color.x += 0.01f;
+		if (color.x > 1.0f) {
+			color.x -= 1.0f;
+		}
+		sprite->SetColor(color);*/
+
+		// サイズ変更テスト
+		/*Vector2 size = sprite->GetSize();
+		size.x += 0.1f;
+		size.y += 0.1f;
+		sprite->SetSize(size);*/
+
 		sprite->Update();
+
+		for (SpriteInstance* sprite : sprites) {
+			sprite->Update();
+			Log("updateCount\n");
+		}
 
 		// ESCAPEキーのトリガー入力で終了
 		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
@@ -1545,6 +1615,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		spriteManager->DrawSetting();
 		sprite->Draw();
 
+		for (SpriteInstance* sprite : sprites) {
+			Log("drawCount\n");
+			sprite->Draw();
+		}
+
 		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 		// 実際のCommandListのImGUIの描画コマンドを積む
 		//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCore->GetCommandList());
@@ -1585,7 +1660,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//
 
 	// スプライト解放
+	for (SpriteInstance* sprite : sprites) {
+		delete sprite;
+	}
+	sprites.clear();
 	delete sprite;
+	// DirectXCoreよりも先に解放
+	TextureManager::GetInstance()->Finalize();
 	delete spriteManager;
 
 	// dxc関連
