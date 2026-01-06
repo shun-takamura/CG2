@@ -49,14 +49,17 @@ void TextureManager::LoadTexture(const std::string& filePath)
 	textureData.metadata = mipImages.GetMetadata();
 
 	// テクスチャリソース生成
-	textureData.resource = DirectXCore::GetInstance()->CreateTextureResource(
+	textureData.resource = spriteManager_->CreateTextureResource(
+		dxCore_->GetDevice(),
 		textureData.metadata
 	);
 
 	// テクスチャデータ転送
-	UploadTextureData(
+	spriteManager_->UploadTextureData(
 		textureData.resource.Get(),
-		mipImages
+		mipImages,
+		dxCore_->GetDevice(),
+		dxCore_->GetCommandList()
 	);
 
 	// SRVインデックス計算
@@ -65,10 +68,10 @@ void TextureManager::LoadTexture(const std::string& filePath)
 
 	// SRVハンドル取得
 	ID3D12DescriptorHeap* srvHeap =
-		DirectXCore::GetSrvDescriptorHeap();
+		dxCore_->GetSrvDescriptorHeap();
 
 	UINT descriptorSize =
-		DirectXCore::GetSrvDescriptorSize();
+		dxCore_->GetSrvDescriptorSize();
 
 	textureData.srvHandleCPU =
 		srvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -89,7 +92,7 @@ void TextureManager::LoadTexture(const std::string& filePath)
 	srvDesc.Texture2D.MipLevels =
 		static_cast<UINT>(textureData.metadata.mipLevels);
 
-	DirectXCore::GetDevice()->CreateShaderResourceView(
+	dxCore_->GetDevice()->CreateShaderResourceView(
 		textureData.resource.Get(),
 		&srvDesc,
 		textureData.srvHandleCPU

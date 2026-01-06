@@ -4,7 +4,7 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <vector>
-
+#include "SpriteManager.h"
 #include "DirectXCore.h"
 
 class TextureManager
@@ -30,6 +30,9 @@ private:
 	~TextureManager() = default;
 	TextureManager(TextureManager&) = default;
 	TextureManager& operator = (TextureManager&) = default;
+
+	SpriteManager* spriteManager_;
+	DirectXCore* dxCore_;
 
 public:
 

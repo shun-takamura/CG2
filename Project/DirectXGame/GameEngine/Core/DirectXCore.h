@@ -30,7 +30,17 @@ public:
 	/// <param name="height">クライアント領域の高さ</param>
 	void Initialize(WindowsApplication* winApp);
 
-	//
+	/// <summary>
+	/// SRV用ディスクリプタヒープの取得。
+	/// </summary>
+	ID3D12DescriptorHeap * GetSrvDescriptorHeap() const { return srvDescriptorHeap_.Get(); }
+	
+	/// <summary>
+	/// SRV(CBV/SRV/UAV) のディスクリプタサイズを取得。
+	/// </summary>
+	UINT GetSrvDescriptorSize() const {
+	assert(device_);
+	return device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);}
 
 	/// <summary>
 	/// 描画コマンドの積み始め。
@@ -90,6 +100,7 @@ private:
 	void CreateRenderTargets();
 	void CreateDepthStencilView(int32_t width, int32_t height);
 	void CreateFenceObjects();
+
 	// FPS固定用
 	void InitializeFixFPS();
 	void UpdateFixFPS();
