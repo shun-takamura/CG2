@@ -14,7 +14,11 @@ void SpriteManager::Initialize(DirectXCore* dxCore)
 
 void SpriteManager::DrawSetting()
 {
-    ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap_.Get() };
+    //ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap_.Get() };
+
+    // TextureManager が DirectXCore の SRV ヒープに SRV を作っている前提なので、同じヒープをセットする
+    ID3D12DescriptorHeap * descriptorHeaps[] = { dxCore_->GetSrvDescriptorHeap() };
+
     dxCore_->GetCommandList()->SetDescriptorHeaps(1, descriptorHeaps);
 
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

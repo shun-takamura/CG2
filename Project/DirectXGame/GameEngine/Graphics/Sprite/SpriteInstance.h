@@ -6,6 +6,7 @@
 #include "VertexData.h"
 #include "Transform.h"
 #include "TransformationMatrix.h"
+#include "TextureManager.h"
 #include "ConvertString.h"
 
 class SpriteManager;
@@ -53,6 +54,9 @@ class SpriteInstance {
     // SRV の GPU ハンドル（PS の t0 に渡す用）
     D3D12_GPU_DESCRIPTOR_HANDLE textureGpuHandle_{};
     int textureNum_ = 0;
+
+    // テクスチャ番号（SRVインデックス）
+    uint32_t textureIndex_ = 0;
 
     void CreateVertexBuffer();
     void CreateMaterialBuffer();

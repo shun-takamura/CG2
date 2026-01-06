@@ -11,6 +11,9 @@ class TextureManager
 {
 private:
 
+	// SRVインデックスの開始番号(0番はImGui)
+	static uint32_t kSRVIndexTop;
+
 	// テクスチャ一枚分のデータ
 	struct TextureData{
 		std::string filePath; // 画像ファイルのパス
@@ -31,17 +34,25 @@ private:
 	TextureManager(TextureManager&) = default;
 	TextureManager& operator = (TextureManager&) = default;
 
-	SpriteManager* spriteManager_;
-	DirectXCore* dxCore_;
+	/*SpriteManager* spriteManager_;
+	DirectXCore* dxCore_;*/
+	SpriteManager* spriteManager_ = nullptr;
+	DirectXCore * dxCore_ = nullptr;
 
 public:
 
-	void Initialize();
+	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore);
 
 	void LoadTexture(const std::string& filePath);
 	
 	// シングルトンインスタンスの取得
 	static TextureManager* GetInstance();
+
+	// SRVインデックスの開始番号
+	uint32_t GetTextureIndexByFilePath(const std::string& filePath);
+
+	// テクスチャ番号からGPUハンドルを取得
+	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandleGPU(uint32_t textureIndex);
 
 	// 終了
 	void Finalize();

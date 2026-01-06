@@ -8,6 +8,15 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
     // TextureをGPU にロードしてSRVを取得
     textureGpuHandle_ = spriteManager_->LoadTextureToGPU(filePath);
 
+    // テクスチャを読み込む（重複読み込みはTextureManager側で回避）
+    TextureManager::GetInstance()->LoadTexture(filePath);
+    
+    // ファイルパスからテクスチャ番号（SRVインデックス）を取得して保持
+    textureIndex_ = TextureManager::GetInstance()->GetTextureIndexByFilePath(filePath);
+    
+    // その番号からGPUハンドルを取得して保持
+    textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_);
+
     CreateVertexBuffer();
     CreateMaterialBuffer();
     CreateTransformationMatrixBuffer();
@@ -95,7 +104,8 @@ void SpriteInstance::Draw()
     // ===================================
     commandList->SetGraphicsRootDescriptorTable(
         2,
-        textureGpuHandle_
+        TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_)
+        //textureGpuHandle_
     );
 
     // ===============================

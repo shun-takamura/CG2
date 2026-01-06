@@ -1,8 +1,12 @@
 #include "TextureManager.h"
 TextureManager* TextureManager::instance = nullptr;
 
-void TextureManager::Initialize()
+uint32_t TextureManager::kSRVIndexTop = 1;
+
+void TextureManager::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore)
 {
+	spriteManager_ = spriteManager;
+	dxCore_ = dxCore;
 	// SRVの数と同数
 	textureDatas.reserve(DirectXCore::kMaxTextureCount);
 }
@@ -17,6 +21,9 @@ void TextureManager::LoadTexture(const std::string& filePath)
 			return textureData.filePath == filePath;
 		}
 	);
+
+	// テクスチャ枚数上限チェック
+	assert(textureDatas.size() + kSRVIndexTop < DirectXCore::kMaxTextureCount);
 
 	if (it != textureDatas.end()) {
 		// 既に読み込み済みなので何もしない
@@ -63,8 +70,7 @@ void TextureManager::LoadTexture(const std::string& filePath)
 	);
 
 	// SRVインデックス計算
-	uint32_t srvIndex =
-		static_cast<uint32_t>(textureDatas.size() - 1);
+	uint32_t srvIndex =static_cast<uint32_t>(textureDatas.size() - 1) + kSRVIndexTop;
 
 	// SRVハンドル取得
 	ID3D12DescriptorHeap* srvHeap =
@@ -106,6 +112,46 @@ TextureManager* TextureManager::GetInstance()
 	}
 
 	return instance;
+}
+
+uint32_t TextureManager::GetTextureIndexByFilePath(const std::string& filePath)
+{
+	// 読み込み済みテクスチャを検索
+	auto it = std::find_if(
+		textureDatas.begin(),
+		textureDatas.end(),
+		[&](const TextureData& textureData) {
+			return textureData.filePath == filePath;
+		}
+	);
+
+	if (it != textureDatas.end()) {
+		// 読み込み済みなら要素番号を返す（LoadTextureと同じSRVIndex規則に合わせる）
+		uint32_t textureIndex =
+			static_cast<uint32_t>(std::distance(textureDatas.begin(), it));
+
+		return textureIndex + kSRVIndexTop;
+	}
+
+	// 見つからないなら事前に読み込みできていないので停止する
+	assert(0);
+	return 0;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(uint32_t textureIndex)
+{
+	// 範囲外指定速度チェック
+	// textureIndex は SRVヒープ上のインデックス（0番はImGui想定）
+	assert(textureIndex >= kSRVIndexTop);
+	assert(textureIndex < (kSRVIndexTop + textureDatas.size()));
+
+	// TextureData配列の添字へ変換
+	const uint32_t dataIndex = textureIndex - kSRVIndexTop;
+
+	// テクスチャデータの参照を取得
+	TextureData& textureData = textureDatas[dataIndex];
+
+	return textureData.srvHandleGPU;
 }
 
 void TextureManager::Finalize()
