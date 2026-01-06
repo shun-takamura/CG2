@@ -166,7 +166,7 @@ void SpriteManager::CreateGraphicsPipelineState(BlendMode blendMode)
 
     // Rasterizer
     D3D12_RASTERIZER_DESC rasterizer{};
-    rasterizer.CullMode = D3D12_CULL_MODE_NONE;  // 裏面(時計回り)を表示しない
+    rasterizer.CullMode = D3D12_CULL_MODE_NONE;  // 裏面も表示
     rasterizer.FillMode = D3D12_FILL_MODE_SOLID; // 三角形の中を塗りつぶす
 
     // BlendStateの設定

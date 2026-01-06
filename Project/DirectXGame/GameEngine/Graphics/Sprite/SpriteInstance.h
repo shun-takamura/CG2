@@ -14,6 +14,17 @@ class SpriteManager;
 class SpriteInstance {
 
     Vector2 position_ = { 0.0f,0.0f };
+    Vector2 anchorPoint_ = { 0.0f,0.0f };
+
+    // 左右フリップ
+    bool isFlipX_ = false;
+
+    // 上下フリップ
+    bool isFlipY_ = false;
+
+    Vector2 textureLeftTop_ = { 0.0f, 0.0f }; // テクスチャ左上座標（px）
+    Vector2 textureSize_ = { 100.0f, 100.0f }; // 切り出しサイズ（px）
+
     float rotation_ = 0.0f;
     Vector2 size_ = { 320.0f,180.0f };
 
@@ -71,14 +82,24 @@ public:
 
     // ゲッターロボ
     const Vector2& GetPosition()const { return position_; }
+    const Vector2& GetAnchorPoint()const { return anchorPoint_; }
     const float& GetRotation()const { return rotation_; }
     const Vector4& GetColor()const { return materialData_->color; }
     const Vector2& GetSize()const { return size_; }
+    const bool& GetIsFlipX()const { return isFlipX_; }
+    const bool& GetIsFlipY()const { return isFlipY_; }
+    const Vector2& GetTextureLeftTop()const { return textureLeftTop_; }
+    const Vector2& GetTextureSize()const { return textureSize_; }
 
     // セッター
     void SetPosition(const Vector2& position) { position_ = position; }
+    void SetAnchorPoint(const Vector2& anchorPoint) { anchorPoint_ = anchorPoint; }
     void SetRotation(const float& rotation) { rotation_ = rotation; }
     void SetColor(const Vector4& color) { materialData_->color = color; }
     void SetSize(const Vector2& size) { size_ = size; }
+    void SetIsFlipX(const bool& isFlipX) { isFlipX_ = isFlipX; }
+    void SetIsFlipY(const bool& isFlipY) { isFlipY_ = isFlipY; }
+    void SetTextureLeftTop(const Vector2& textureLeftTop) { textureLeftTop_ = textureLeftTop; }
+    void SetTextureSize(const Vector2& textureSize) { textureSize_ = textureSize; }
 };
 

@@ -24,24 +24,39 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
 
 void SpriteInstance::Update()
 {
+    float left = 0.0f - anchorPoint_.x;
+    float right = 1.0f - anchorPoint_.x;
+    float top= 0.0f - anchorPoint_.y;
+    float bottom = 1.0f - anchorPoint_.y;
+
+    if (isFlipX_) {
+        left = -left;
+        right = -right;
+    }
+
+    if (isFlipY_) {
+        top = -top;
+        bottom = -bottom;
+    }
+
     // indexに格納するから同一頂点のデータをわざわざ用意する必要はない
     // 左下
-    vertexData_[0].position = { 0.0f,1.0f,0.0f,1.0f };
+    vertexData_[0].position = { left,bottom,0.0f,1.0f };
     vertexData_[0].texcoord = { 0.0f,1.0f };
     vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
 
     // 左上
-    vertexData_[1].position = { 0.0f,0.0f,0.0f,1.0f };
+    vertexData_[1].position = { left,top,0.0f,1.0f };
     vertexData_[1].texcoord = { 0.0f,0.0f };
     vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
 
     // 右下
-    vertexData_[2].position = { 1.0f,1.0f,0.0f,1.0f };
+    vertexData_[2].position = { right,bottom,0.0f,1.0f };
     vertexData_[2].texcoord = { 1.0f,1.0f };
     vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
 
     // 右上
-    vertexData_[3].position = { 1.0f,0.0f,0.0f,1.0f };
+    vertexData_[3].position = { right,top,0.0f,1.0f };
     vertexData_[3].texcoord = { 1.0f,0.0f };
     vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
 
