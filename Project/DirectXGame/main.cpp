@@ -380,7 +380,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	for (uint32_t i = 0; i < 5; ++i) {
 		SpriteInstance* sprite = new SpriteInstance();
 
-		// i が偶数なら 0、奇数なら 1
+		// iが偶数なら0、奇数なら1
 		const std::string& texturePath = textures[i % 2];
 
 		sprite->Initialize(spriteManager, texturePath);
@@ -390,18 +390,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		sprites.push_back(sprite);
 	}
-	
-	// 5枚生成
-	/*for (uint32_t i = 0; i < 5; ++i) {
-		SpriteInstance* sprite = new SpriteInstance();
-		sprite->Initialize(spriteManager, "Resources/uvChecker.png");
-
-		sprite->SetSize({ 100.0f,100.0f });
-		sprite->SetPosition({0.0f+ i * 2.0f, 0.0f });
-
-		sprites.push_back(sprite);
-		Log("generateCount\n");
-	}*/
 
 	// soundsの変数の宣言
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
@@ -1525,7 +1513,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Update();
-			Log("updateCount\n");
 		}
 
 		// ESCAPEキーのトリガー入力で終了
@@ -1616,7 +1603,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->Draw();
 
 		for (SpriteInstance* sprite : sprites) {
-			Log("drawCount\n");
 			sprite->Draw();
 		}
 
