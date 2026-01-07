@@ -39,25 +39,32 @@ void SpriteInstance::Update()
         bottom = -bottom;
     }
 
+    const DirectX::TexMetadata& metadata =
+        TextureManager::GetInstance()->GetMetaData(textureIndex_);
+    float tex_left = textureLeftTop_.x / metadata.width;
+    float tex_right = (textureLeftTop_.x+ textureSize_.x) / metadata.width;
+    float tex_top = textureLeftTop_.y / metadata.height;
+    float tex_bottom = (textureLeftTop_.y + textureSize_.y) / metadata.height;
+
     // indexに格納するから同一頂点のデータをわざわざ用意する必要はない
     // 左下
     vertexData_[0].position = { left,bottom,0.0f,1.0f };
-    vertexData_[0].texcoord = { 0.0f,1.0f };
+    vertexData_[0].texcoord = { tex_left,tex_bottom };
     vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
 
     // 左上
     vertexData_[1].position = { left,top,0.0f,1.0f };
-    vertexData_[1].texcoord = { 0.0f,0.0f };
+    vertexData_[1].texcoord = { tex_left,tex_top };
     vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
 
     // 右下
     vertexData_[2].position = { right,bottom,0.0f,1.0f };
-    vertexData_[2].texcoord = { 1.0f,1.0f };
+    vertexData_[2].texcoord = { tex_right,tex_bottom };
     vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
 
     // 右上
     vertexData_[3].position = { right,top,0.0f,1.0f };
-    vertexData_[3].texcoord = { 1.0f,0.0f };
+    vertexData_[3].texcoord = { tex_right,tex_top };
     vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
 
     // インデックスリソースにデータを書き込む
@@ -156,6 +163,18 @@ SpriteInstance::~SpriteInstance()
         transformationMatrixResource_->Unmap(0, nullptr);
         transformationMatrixData_ = nullptr;
     }
+}
+
+void SpriteInstance::AdjustTextureSize()
+{
+    // テクスチャのメタデータを取得
+    const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(textureIndex_);
+
+    textureSize_.x = static_cast<float>(metadata.width);
+    textureSize_.y = static_cast<float>(metadata.height);
+
+    // 画像サイズをテクスチャサイズに合わせる
+    size_ = textureSize_;
 }
 
 void SpriteInstance::CreateVertexBuffer()

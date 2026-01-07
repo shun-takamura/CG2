@@ -25,6 +25,9 @@ class SpriteInstance {
     Vector2 textureLeftTop_ = { 0.0f, 0.0f }; // テクスチャ左上座標（px）
     Vector2 textureSize_ = { 100.0f, 100.0f }; // 切り出しサイズ（px）
 
+    // テクスチャサイズを元のイメージに合わせる
+    void AdjustTextureSize();
+
     float rotation_ = 0.0f;
     Vector2 size_ = { 320.0f,180.0f };
 
