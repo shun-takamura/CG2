@@ -1484,16 +1484,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//	instancingData[index].World = worldMatrixInstancing;
 		//}
 
+		sprite->SetAnchorPoint({ 0.5f,0.5f });
+		sprite->SetIsFlipX(true);
 		// 回転テスト
-		/*float rotation = sprite->GetRotation();
+		float rotation = sprite->GetRotation();
 		rotation += 0.01f;
-		sprite->SetRotation(rotation);*/
+		sprite->SetRotation(rotation);
 
 		// 移動テスト
-		Vector2 position = sprite->GetPosition();
+		/*Vector2 position = sprite->GetPosition();
 		position.x += 0.1f;
 		position.y += 0.1f;
-		sprite->SetPosition(position);
+		sprite->SetPosition(position);*/
 
 		// 色変更テスト
 		/*Vector4 color = sprite->GetColor();
