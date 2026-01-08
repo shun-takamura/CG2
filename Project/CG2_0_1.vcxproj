@@ -79,7 +79,7 @@
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -105,7 +105,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -134,7 +134,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <TreatWarningAsError>true</TreatWarningAsError>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Model;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -173,6 +173,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Core\WindowsApplication.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.cpp" />
     <ClCompile Include="ParticleMatager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Sprite\TextureManager.cpp" />
@@ -210,6 +212,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Core\WindowsApplication.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.h" />
     <ClInclude Include="ParticleMatager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />

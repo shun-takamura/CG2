@@ -66,6 +66,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "DirectXCore.h"
 #include "SpriteManager.h"
 #include "SpriteInstance.h"
+#include "Object3DManager.h"
+#include "Object3DInstance.h"
 #include "Log.h"
 #include "ConvertString.h"
 #include "MathUtility.h"
@@ -356,6 +358,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	IDxcIncludeHandler* includeHandler = nullptr;
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
+
+	// 3DObjectの共通部分の初期化
+	Object3DManager* object3DManager = new Object3DManager();
+	object3DManager->Initialize(dxCore);
+
+	// 3DObjectInstanceの初期化
+	Object3DInstance* object3DInstence = new Object3DInstance();
+	object3DInstence->Initialize();
 
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
@@ -1601,6 +1611,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//dxCore->GetCommandList()->DrawIndexedInstanced(6, 1, 0, 0, 0);
 		}
 
+		// 3Dオブジェクトの共通描画設定
+		object3DManager->DrawSetting();
+
 		spriteManager->DrawSetting();
 		sprite->Draw();
 
@@ -1656,6 +1669,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();
 	delete spriteManager;
+
+	delete object3DInstence;
+	delete object3DManager;
 
 	// dxc関連
 	includeHandler->Release();
