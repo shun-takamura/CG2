@@ -83,11 +83,11 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 //========================
 // 構造体の定義
 //========================
-enum class LightingMode {
-	None, // ライティング無し
-	Lambert, // ランバート反射
-	HalfLambert // 
-};
+//enum class LightingMode {
+//	None, // ライティング無し
+//	Lambert, // ランバート反射
+//	HalfLambert // 
+//};
 
 // ブレンドモード
 enum BlendMode {
@@ -150,15 +150,15 @@ struct SoundData
 	unsigned int bufferSize;
 };
 
-// モデルデータの構造体
-struct MaterialData {
-	std::string textureFilePath;
-};
-
-struct ModelData {
-	std::vector<VertexData> vertices;
-	MaterialData material;
-};
+//// モデルデータの構造体
+//struct MaterialData {
+//	std::string textureFilePath;
+//};
+//
+//struct ModelData {
+//	std::vector<VertexData> vertices;
+//	MaterialData material;
+//};
 
 // デッドゾーンの設定
 struct DeadZone {
@@ -359,14 +359,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
-	// 3DObjectの共通部分の初期化
-	Object3DManager* object3DManager = new Object3DManager();
-	object3DManager->Initialize(dxCore);
-
-	// 3DObjectInstanceの初期化
-	Object3DInstance* object3DInstence = new Object3DInstance();
-	object3DInstence->Initialize();
-
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore);
@@ -376,6 +368,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+	// 3DObjectの共通部分の初期化
+	Object3DManager* object3DManager = new Object3DManager();
+	object3DManager->Initialize(dxCore);
+
+	// 3DObjectInstanceの初期化
+	Object3DInstance* object3DInstence = new Object3DInstance();
+	object3DInstence->Initialize(object3DManager,dxCore);
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -429,7 +429,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// Textureを2枚読み込んで転送
 	DirectX::ScratchImage mipImages[2] = {
 		LoadTexture("Resources/uvChecker.png"),
-		LoadTexture(modelData.material.textureFilePath)
+		LoadTexture(modelData.materialData.textureFilePath)
 	};
 
 	const DirectX::TexMetadata& metadata = mipImages[0].GetMetadata();
@@ -1521,6 +1521,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		size.y += 0.1f;
 		sprite->SetSize(size);*/
 
+		object3DInstence->Update();
+
 		sprite->Update();
 
 		for (SpriteInstance* sprite : sprites) {
@@ -1613,6 +1615,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 3Dオブジェクトの共通描画設定
 		object3DManager->DrawSetting();
+		object3DInstence->Draw(dxCore);
+
 
 		spriteManager->DrawSetting();
 		sprite->Draw();
@@ -2203,7 +2207,7 @@ ModelData LoadObjFile(const std::string& directorPath, const std::string& filena
 			s >> materialFilename;
 
 			// 基本的にobjファイルと同一階層にmtlは存在するので、ディレクトリ名とファイル名を渡す
-			modelData.material = LoadMaterialTemplateFile(directorPath, materialFilename);
+			modelData.materialData = LoadMaterialTemplateFile(directorPath, materialFilename);
 
 		}
 

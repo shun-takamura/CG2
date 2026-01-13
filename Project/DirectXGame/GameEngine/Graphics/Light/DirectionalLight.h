@@ -8,3 +8,9 @@ typedef struct DirectionalLight {
 	float intensity; // 輝度
 	int lightingType; // ライティング方式
 }DirectionalLight;
+
+enum class LightingMode {
+	None, // ライティング無し
+	Lambert, // ランバート反射
+	HalfLambert // ハーフランバート
+};
