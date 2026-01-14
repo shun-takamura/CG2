@@ -13,6 +13,7 @@
 #include"Transform.h"
 #include"ModelCore.h"
 #include"ModelInstance.h"
+#include"ModelManager.h"
 
 class Object3DManager;
 
@@ -73,6 +74,7 @@ public:
 
 	// セッター
 	void SetModel(ModelInstance* modelInstance) { modelInstance_ = modelInstance; }
+	void SetModel(const std::string& filePath);
 
 	void SetScale(const Vector3& scele) { transform_.scale = scele; }
 	void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
@@ -83,13 +85,13 @@ public:
 	const Vector3& GetRotate()const { return transform_.rotate; }
 	const Vector3& GetTranslate()const { return transform_.translate; }
 
-	void Initialize(Object3DManager* object3DManager,DirectXCore* dxCore);
+	void Initialize(Object3DManager* object3DManager,DirectXCore* dxCore, const std::string& directorPath, const std::string& filename);
 
 	void Update();
 
 	void Draw(DirectXCore*dxCore);
 
-	~Object3DInstance();
+	//~Object3DInstance();
 
 };
 

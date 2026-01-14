@@ -378,8 +378,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	object3DManager->Initialize(dxCore);
 
 	// 3DObjectInstanceの初期化
-	Object3DInstance* object3DInstence = new Object3DInstance();
-	object3DInstence->Initialize(object3DManager,dxCore);
+	/*Object3DInstance* object3DInstance = new Object3DInstance();
+	object3DInstance->Initialize(object3DManager, dxCore, "Resources", "axis.obj");*/
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -403,6 +403,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->SetPosition({ i * 2.0f, 0.0f });
 
 		sprites.push_back(sprite);
+	}
+
+	// 3Dオブジェクトを配列で管理
+	std::vector<Object3DInstance*> object3DInstances;
+
+	// 複数のモデルを作成
+	const std::string modelFiles[] = { "axis.obj", "fence.obj", "plane.obj" };
+	for (int i = 0; i < 3; ++i) {
+		Object3DInstance* obj = new Object3DInstance();
+		obj->Initialize(object3DManager, dxCore, "Resources", modelFiles[i]);
+
+		// 位置を設定（横に並べる）
+		obj->SetTranslate({ i * 3.0f, 0.0f, 0.0f });
+
+		object3DInstances.push_back(obj);
 	}
 
 	// soundsの変数の宣言
@@ -1525,7 +1540,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		size.y += 0.1f;
 		sprite->SetSize(size);*/
 
-		object3DInstence->Update();
+		for (Object3DInstance* obj : object3DInstances) {
+			obj->Update();
+		}
 
 		sprite->Update();
 
@@ -1619,8 +1636,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 3Dオブジェクトの共通描画設定
 		object3DManager->DrawSetting();
-		object3DInstence->Draw(dxCore);
 
+		// 描画
+		object3DManager->DrawSetting();
+		for (Object3DInstance* obj : object3DInstances) {
+			obj->Draw(dxCore);
+		}
 
 		spriteManager->DrawSetting();
 		sprite->Draw();
@@ -1666,19 +1687,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 絶対にXAudio2を解放してから行うこと
 	SoundUnload(&soundData);
 
-	//
-
 	// スプライト解放
 	for (SpriteInstance* sprite : sprites) {
 		delete sprite;
 	}
 	sprites.clear();
 	delete sprite;
+
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();
 	delete spriteManager;
 
-	delete object3DInstence;
+	// 終了処理
+	for (Object3DInstance* obj : object3DInstances) {
+		delete obj;
+	}
+	object3DInstances.clear();
+
 	delete object3DManager;
 	ModelManager::GetInstance()->Finalize();
 

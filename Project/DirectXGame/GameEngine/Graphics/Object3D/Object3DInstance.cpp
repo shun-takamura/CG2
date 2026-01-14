@@ -1,14 +1,20 @@
 #include "Object3DInstance.h"
 
-void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore)
+void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, const std::string& directorPath, const std::string& filename)
 {
 	object3DManager_ = object3DManager;
 
-	ModelCore* modelCore = new ModelCore;
-	modelCore->Initialize(dxCore);
+	/*ModelCore* modelCore = new ModelCore;
+	modelCore->Initialize(dxCore);*/
 
-	modelInstance_ = new ModelInstance;
-	modelInstance_->Initialize(modelCore);
+	// ModelManagerからモデルをロード
+	ModelManager::GetInstance()->LoadModel(filename);
+
+	// ロードしたモデルを取得してセット
+	modelInstance_ = ModelManager::GetInstance()->FindModel(filename);
+
+	/*modelInstance_ = new ModelInstance;
+	modelInstance_->Initialize(modelCore,directorPath,filename);*/
 
 	// モデル読み込み
 	//modelData_ = LoadObjFile("Resources", "axis.obj");
@@ -85,12 +91,12 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
 	//dxCore->GetCommandList()->DrawInstanced(UINT(modelData_.vertices.size()), 1, 0, 0);
 
 }
-Object3DInstance::~Object3DInstance()
-{
-	if (modelInstance_) {
-		delete modelInstance_;
-	}
-}
+//Object3DInstance::~Object3DInstance()
+//{
+//	if (modelInstance_) {
+//		delete modelInstance_;
+//	}
+//}
 //
 //ModelData Object3DInstance::LoadObjFile(const std::string& directorPath, const std::string& filename)
 //{
@@ -314,4 +320,10 @@ void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
 
 	// ライトの方式の設定
 	LightingMode lightingMode = LightingMode::None;
+}
+
+void Object3DInstance::SetModel(const std::string& filePath)
+{
+	// モデルを検索してセット
+	modelInstance_ = ModelManager::GetInstance()->FindModel(filePath);
 }
