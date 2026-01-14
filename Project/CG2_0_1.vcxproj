@@ -176,6 +176,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelInstance.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.cpp" />
     <ClCompile Include="ParticleMatager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
@@ -217,6 +218,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
     <ClInclude Include="ParticleMatager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />

@@ -11,7 +11,7 @@
 #include"DirectionalLight.h"
 #include"TextureManager.h"
 #include"Transform.h"
-#include"ModelManager.h"
+#include"ModelCore.h"
 #include"ModelInstance.h"
 
 class Object3DManager;

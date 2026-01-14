@@ -72,6 +72,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "ConvertString.h"
 #include "MathUtility.h"
 #include "TextureManager.h"
+#include"ModelManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -368,6 +369,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+	// モデルマネージャーの初期化
+	ModelManager::GetInstance()->Initialize(dxCore);
 
 	// 3DObjectの共通部分の初期化
 	Object3DManager* object3DManager = new Object3DManager();
@@ -1676,6 +1680,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	delete object3DInstence;
 	delete object3DManager;
+	ModelManager::GetInstance()->Finalize();
 
 	// dxc関連
 	includeHandler->Release();

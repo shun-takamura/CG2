@@ -4,11 +4,11 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
 {
 	object3DManager_ = object3DManager;
 
-	ModelManager* modelManager = new ModelManager;
-	modelManager->Initialize(dxCore);
+	ModelCore* modelCore = new ModelCore;
+	modelCore->Initialize(dxCore);
 
 	modelInstance_ = new ModelInstance;
-	modelInstance_->Initialize(modelManager);
+	modelInstance_->Initialize(modelCore);
 
 	// モデル読み込み
 	//modelData_ = LoadObjFile("Resources", "axis.obj");

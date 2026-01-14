@@ -1,17 +1,17 @@
 #include "ModelInstance.h"
 
-void ModelInstance::Initialize(ModelManager* modelManager)
+void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
-	modelManager_ = modelManager;
+	modelCore_ = modelCore;
 
 	// モデル読み込み
-	modelData_ = LoadObjFile("Resources", "axis.obj");
+	modelData_ = LoadObjFile(directorPath, filename);
 
 	// 頂点データ作成
-	CreateVertexData(modelManager_->GetDXCore());
+	CreateVertexData(modelCore_->GetDXCore());
 
 	// マテリアルデータ作成
-	CreateMaterialData(modelManager_->GetDXCore());
+	CreateMaterialData(modelCore_->GetDXCore());
 
 	// objファイルの参照しているテクスチャファイルの読み込み
 	TextureManager::GetInstance()->LoadTexture(modelData_.materialData.textureFilePath);

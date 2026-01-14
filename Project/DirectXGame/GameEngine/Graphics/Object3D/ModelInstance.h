@@ -1,7 +1,7 @@
 #pragma once
 #include"DirectXCore.h"
 #include <wrl.h>
-#include"ModelManager.h"
+#include"ModelCore.h"
 #include"VertexData.h"
 #include "Material.h"
 #include <fstream>
@@ -22,7 +22,7 @@ class ModelInstance
 	//==============================
 	ModelData modelData_;
 
-	ModelManager* modelManager_;
+	ModelCore* modelCore_;
 
 	VertexData* vertexData_ = nullptr;
 	Material* material_ = nullptr;
@@ -37,7 +37,7 @@ class ModelInstance
 	// メンバ関数
 	//==============================
 public:
-	void Initialize(ModelManager* modelManager);
+	void Initialize(ModelCore* modelManager, const std::string& directorPath, const std::string& filename);
 
 	void Draw(DirectXCore* dxCore);
 
