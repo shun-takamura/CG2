@@ -73,6 +73,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "MathUtility.h"
 #include "TextureManager.h"
 #include"ModelManager.h"
+#include"Camera.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -360,6 +361,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
+
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore);
@@ -377,9 +379,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Object3DManager* object3DManager = new Object3DManager();
 	object3DManager->Initialize(dxCore);
 
-	// 3DObjectInstanceの初期化
-	/*Object3DInstance* object3DInstance = new Object3DInstance();
-	object3DInstance->Initialize(object3DManager, dxCore, "Resources", "axis.obj");*/
+	// カメラの生成
+	Camera* camera = new Camera();
+	camera->SetRotate({ 0.0f,0.0f,0.0f });
+	camera->SetTranslate({ 0.0f,0.0f,-20.0f });
+	object3DManager->SetDefaultCamera(camera);
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -1520,25 +1524,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		rotation += 0.01f;
 		sprite->SetRotation(rotation);
 
-		// 移動テスト
-		/*Vector2 position = sprite->GetPosition();
-		position.x += 0.1f;
-		position.y += 0.1f;
-		sprite->SetPosition(position);*/
-
-		// 色変更テスト
-		/*Vector4 color = sprite->GetColor();
-		color.x += 0.01f;
-		if (color.x > 1.0f) {
-			color.x -= 1.0f;
-		}
-		sprite->SetColor(color);*/
-
-		// サイズ変更テスト
-		/*Vector2 size = sprite->GetSize();
-		size.x += 0.1f;
-		size.y += 0.1f;
-		sprite->SetSize(size);*/
+		// カメラの更新は必ずオブジェクトの更新まえにやる
+		camera->Update();
 
 		for (Object3DInstance* obj : object3DInstances) {
 			obj->Update();

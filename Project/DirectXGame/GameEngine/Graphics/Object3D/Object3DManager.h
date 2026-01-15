@@ -6,8 +6,11 @@
 #include <array> 
 #include "Log.h"
 #include <cassert>
+#include"Camera.h"
 
 class Object3DManager{
+
+    Camera* defaultCamera_ = nullptr;
 
     // ブレンドモード
     enum BlendMode {
@@ -72,9 +75,13 @@ public:
         }
     }
 
+    // セッター
+    void SetDefaultCamera(Camera* camera) { defaultCamera_ = camera; }
+
 	// ゲッターロボ
 	DirectXCore* GetDxCore() const { return dxCore_; }
     BlendMode GetBlendMode() const { return blendMode_; }
+    Camera* GetDefaultCamera()const { return defaultCamera_; }
 
 };
 

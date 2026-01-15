@@ -14,14 +14,9 @@
 #include"ModelCore.h"
 #include"ModelInstance.h"
 #include"ModelManager.h"
+#include"Camera.h"
 
 class Object3DManager;
-
-//struct ModelData
-//{
-//	std::vector<VertexData>vertices;
-//	MaterialData materialData;
-//};
 
 class Object3DInstance{
 
@@ -29,20 +24,14 @@ class Object3DInstance{
 	// メンバ変数
 	//==============================
 	Object3DManager* object3DManager_ = nullptr;
-
 	ModelInstance* modelInstance_ = nullptr;
-
-	//ModelData modelData_;
+	Camera* camera_ = nullptr;
 
 	// バッファリソース
-	/*Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
-	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;*/
 	Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource_;
 
 	// バッファ内データへのCPU側ポインタ
-	/*VertexData* vertexData_ = nullptr;
-	Material* material_ = nullptr;*/
 	TransformationMatrix* transformationMatrixData_ = nullptr;
 	DirectionalLight* directionalLightData_ = nullptr;
 
@@ -55,15 +44,7 @@ class Object3DInstance{
 	//==============================
 	// メンバ関数
 	//==============================
-	/*static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
-	static MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);*/
-
-	// 頂点データ作成
-	//void CreateVertexData(DirectXCore* dxCore);
-
-	//// マテリアルデータ作成
-	//void CreateMaterialData(DirectXCore* dxCore);
-
+	
 	// 座標変換行列リソース作成
 	void CreateTransformationMatrixResource(DirectXCore* dxCore);
 
@@ -75,7 +56,7 @@ public:
 	// セッター
 	void SetModel(ModelInstance* modelInstance) { modelInstance_ = modelInstance; }
 	void SetModel(const std::string& filePath);
-
+	void SetCamera(Camera* camera) { camera_ = camera; }
 	void SetScale(const Vector3& scele) { transform_.scale = scele; }
 	void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
 	void SetTranslate(const Vector3& translate) { transform_.translate = translate; }
@@ -90,8 +71,6 @@ public:
 	void Update();
 
 	void Draw(DirectXCore*dxCore);
-
-	//~Object3DInstance();
 
 };
 
