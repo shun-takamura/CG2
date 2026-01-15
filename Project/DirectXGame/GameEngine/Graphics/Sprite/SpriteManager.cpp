@@ -4,10 +4,10 @@
 #include <cassert>
 #include "d3dx12.h"
 
-void SpriteManager::Initialize(DirectXCore* dxCore)
+void SpriteManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 {
     dxCore_ = dxCore;
-    CreateDescriptorHeap();
+    srvManager_ = srvManager;
     CreateRootSignature();
     CreateGraphicsPipelineState(kBlendModeNone);
 }
@@ -16,10 +16,10 @@ void SpriteManager::DrawSetting()
 {
     //ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap_.Get() };
 
-    // TextureManager が DirectXCore の SRV ヒープに SRV を作っている前提なので、同じヒープをセットする
-    ID3D12DescriptorHeap * descriptorHeaps[] = { dxCore_->GetSrvDescriptorHeap() };
+    // TextureManagerがDirectXCoreのSRV ヒープにSRVを作っている前提なので、同じヒープをセットする
+   /* ID3D12DescriptorHeap * descriptorHeaps[] = { dxCore_->GetSrvDescriptorHeap() };
 
-    dxCore_->GetCommandList()->SetDescriptorHeaps(1, descriptorHeaps);
+    dxCore_->GetCommandList()->SetDescriptorHeaps(1, descriptorHeaps);*/
 
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
@@ -255,25 +255,6 @@ void SpriteManager::CreateGraphicsPipelineState(BlendMode blendMode)
 
 }
 
-void SpriteManager::CreateDescriptorHeap()
-{
-    HRESULT hr;
-
-    // ディスクリプタヒープの設定
-    D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc{};
-    srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // CBV/SRV/UAVを扱う
-    // ※ SpriteManagerが扱うテクスチャの最大数を設定してください
-    srvHeapDesc.NumDescriptors = 128; // 例として128個分のディスクリプタを確保
-    srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // シェーダーから参照可能にする
-
-    // ヒープの作成
-    hr = dxCore_->GetDevice()->CreateDescriptorHeap(
-        &srvHeapDesc,
-        IID_PPV_ARGS(&srvHeap_)); // srvHeap_ (ComPtr<ID3D12DescriptorHeap>) に代入
-
-    assert(SUCCEEDED(hr));
-}
-
 DirectX::ScratchImage SpriteManager::LoadTexture(const std::string& filePath)
 {
     // テクスチャファイルを読み込んでプログラムで扱えるようにする
@@ -294,58 +275,14 @@ DirectX::ScratchImage SpriteManager::LoadTexture(const std::string& filePath)
     return mipImages;
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE SpriteManager::LoadTextureToGPU(const std::string& filePath)
-{
-    // --- 1) 画像読み込み ---
-    DirectX::ScratchImage mipImages = LoadTexture(filePath);
-    const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-
-    // --- 2) GPUリソース作成 ---
-    Microsoft::WRL::ComPtr<ID3D12Resource> texture = CreateTextureResource(dxCore_->GetDevice(), metadata);
-
-    // --- 3) データ転送 ---
-    UploadTextureData(texture, mipImages, dxCore_->GetDevice(), dxCore_->GetCommandList());
-
-    // --- 4) SRV 作成 ---
-    UINT descriptorSize =
-        dxCore_->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = srvHeap_->GetCPUDescriptorHandleForHeapStart();
-    cpuHandle.ptr += descriptorSize * nextSrvIndex_;
-
-    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = srvHeap_->GetGPUDescriptorHandleForHeapStart();
-    gpuHandle.ptr += descriptorSize * nextSrvIndex_;
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-    srvDesc.Format = metadata.format;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = (UINT)metadata.mipLevels;
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-    dxCore_->GetDevice()->CreateShaderResourceView(texture.Get(), &srvDesc, cpuHandle);
-
-    // --- 5) TextureInfo を登録 ---
-    textures_.push_back({ texture, gpuHandle });
-
-    nextSrvIndex_++;
-
-    return gpuHandle;
-}
-
 SpriteManager::~SpriteManager()
 {
-    // SRV ヒープの解放（ComPtr なので自動）
-    srvHeap_.Reset();
-
     // RootSignature / PSO の解放（ComPtr なので自動）
     rootSignature_.Reset();
     pipelineState_.Reset();
     for (auto& p : pipelineStates_) {
         p.Reset();
     }
-
-    // TextureInfo の ComPtr を解放
-    textures_.clear();
 
     // アップロード用リソースもクリア
     intermediateResources_.clear();

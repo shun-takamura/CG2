@@ -20,6 +20,8 @@ class ModelInstance
 	//==============================
 	// メンバ変数
 	//==============================
+	std::string textureFilePath_;  // テクスチャファイルパスを保持
+
 	ModelData modelData_;
 
 	ModelCore* modelCore_;

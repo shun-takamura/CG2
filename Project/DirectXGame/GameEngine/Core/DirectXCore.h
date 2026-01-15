@@ -14,6 +14,8 @@
 #include <d3d12.h>  
 #include <dxcapi.h>
 
+#include"SRVManager.h"
+
 #pragma comment(lib, "winmm.lib")
 
 /// <summary>
@@ -30,11 +32,6 @@ public:
 	/// <param name="height">クライアント領域の高さ</param>
 	void Initialize(WindowsApplication* winApp);
 
-	/// <summary>
-	/// SRV用ディスクリプタヒープの取得。
-	/// </summary>
-	ID3D12DescriptorHeap * GetSrvDescriptorHeap() const { return srvDescriptorHeap_.Get(); }
-	
 	/// <summary>
 	/// SRV(CBV/SRV/UAV) のディスクリプタサイズを取得。
 	/// </summary>
@@ -84,7 +81,7 @@ public:
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
 	// 最大テクスチャ枚数
-	static const uint32_t kMaxTextureCount;
+	//static const uint32_t kMaxTextureCount;
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
 		Microsoft::WRL::ComPtr<ID3D12Device> device,
@@ -115,7 +112,6 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue_;
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator_;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList_;
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers_[2];

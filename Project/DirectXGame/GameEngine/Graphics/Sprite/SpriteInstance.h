@@ -13,6 +13,8 @@ class SpriteManager;
 
 class SpriteInstance {
 
+    std::string textureFilePath_;  // テクスチャファイルパスを保持
+
     Vector2 position_ = { 0.0f,0.0f };
     Vector2 anchorPoint_ = { 0.0f,0.0f };
 

@@ -5,6 +5,7 @@
 #include "DirectXTex.h"
 #include <dxcapi.h>  
 #include <array>
+#include"SRVManager.h"
 
 class SpriteManager {  
 
@@ -39,6 +40,7 @@ public:
 private:  
 
    DirectXCore* dxCore_ = nullptr;
+   SRVManager* srvManager_ = nullptr;
    
    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_ = nullptr;
    Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_ = nullptr;
@@ -48,22 +50,15 @@ private:
 
    int currentBlendMode_ = 0;
 
-   // SRV用ヒープ
-   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvHeap_;
-
-   // 次に使うSRVのインデックス
-   uint32_t nextSrvIndex_ = 0;
-
    // Texture データ保持
    struct TextureInfo {
        Microsoft::WRL::ComPtr<ID3D12Resource> resource;
        D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;
    };
-   std::vector<TextureInfo> textures_;
 
 public:  
 
-   void Initialize( DirectXCore* dxCore);  
+   void Initialize( DirectXCore* dxCore, SRVManager* srvManager);
    void DrawSetting();  
    void SetBlendMode(BlendMode blendMode);
 
@@ -75,7 +70,7 @@ public:
    /// </summary>
    /// <param name="filePath"></param>
    /// <returns></returns>
-   D3D12_GPU_DESCRIPTOR_HANDLE LoadTextureToGPU(const std::string& filePath);
+   //D3D12_GPU_DESCRIPTOR_HANDLE LoadTextureToGPU(const std::string& filePath);
 
    DirectXCore* GetDxCore() const { return dxCore_; }   
    BlendMode GetBlendMode() const { return blendMode_; }  
@@ -112,7 +107,6 @@ public:
 private:  
    void CreateRootSignature();  
    void CreateGraphicsPipelineState(BlendMode mode);
-   void CreateDescriptorHeap();
    
    /// <summary>
    /// テクスチャをロードする関数

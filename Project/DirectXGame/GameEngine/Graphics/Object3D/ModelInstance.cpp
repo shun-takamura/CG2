@@ -14,16 +14,24 @@ void ModelInstance::Initialize(ModelCore* modelCore, const std::string& director
 	CreateMaterialData(modelCore_->GetDXCore());
 
 	// objファイルの参照しているテクスチャファイルの読み込み
-	TextureManager::GetInstance()->LoadTexture(modelData_.materialData.textureFilePath);
+	textureFilePath_ = modelData_.materialData.textureFilePath;
+
+	// デバッグ: ファイルパスが空でないか確認
+	assert(!textureFilePath_.empty() && "textureFilePath is empty!");
+
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	//ここで停止する原因はテクスチャマネージャーの生成順だったからちょっと資料と変えた
 
 	// 読み込んだテクスチャの番号を取得
-	modelData_.materialData.textureIndex =
-		TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData_.materialData.textureFilePath);
+	/*modelData_.materialData.textureIndex =
+		TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData_.materialData.textureFilePath);*/
 }
 
 void ModelInstance::Draw(DirectXCore* dxCore)
 {
+	// デバッグ: ファイルパスが空でないか確認
+	assert(!textureFilePath_.empty() && "textureFilePath is empty in Draw!");
+
 	// VBVを設定
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
@@ -34,7 +42,7 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 
 	// SRVのDescriptorTableの先頭を設定
 	dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-		2, TextureManager::GetInstance()->GetSrvHandleGPU(modelData_.materialData.textureIndex)
+		2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
 	);
 
 	// ドローコール
