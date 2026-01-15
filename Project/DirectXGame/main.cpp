@@ -42,11 +42,11 @@
 #pragma comment(lib,"dxcompiler.lib")
 
 //ImGUI
-#include "imgui.h"
-#include "imgui_impl_dx12.h"
-#include "imgui_impl_win32.h"
-
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+//#include "imgui.h"
+//#include "imgui_impl_dx12.h"
+//#include "imgui_impl_win32.h"
+//
+//extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 //============================
 // 自作ヘッダーのインクルード
@@ -74,6 +74,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "TextureManager.h"
 #include"ModelManager.h"
 #include"Camera.h"
+#include"SRVManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -294,6 +295,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	DirectXCore* dxCore = new DirectXCore();
 	dxCore->Initialize(winApp);
 
+	// SRVManagerの初期化
+	SRVManager* srvManager = new SRVManager();
+	srvManager->Initialize(dxCore);
+
 	//========================================
 	// ここにデバッグレイヤー デバックの時だけ出る
 	//========================================
@@ -364,10 +369,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
-	spriteManager->Initialize(dxCore);
+	spriteManager->Initialize(dxCore,srvManager);
 
 	// テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialize(spriteManager,dxCore);
+	TextureManager::GetInstance()->Initialize(spriteManager,dxCore,srvManager);
 
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
@@ -477,7 +482,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap = CreateDescriptorHeap(dxCore->GetDevice(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 
 	// SRV用のヒープでディスクリプタの数は128。SRVはShader内で使うのでShaderVisibleはtrue
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap = CreateDescriptorHeap(dxCore->GetDevice(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+	//Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap = CreateDescriptorHeap(dxCore->GetDevice(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
 	// DSV用のヒープでディスクリプタの数は1。DSVはShader内で触るものではないので、ShaderVisibleはfalse
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvDescriptorHeap = CreateDescriptorHeap(dxCore->GetDevice(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
@@ -513,15 +518,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const uint32_t descriptorSizeDSV = dxCore->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 	// SRVを作成するDescriptorHeapの場所を決める
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU[2] = {
-		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
-		GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
-	};
+	//D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU[2] = {
+	//	GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+	//	GetCPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	//};
 
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU[2] = {
-		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
-		GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
-	};
+	//D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU[2] = {
+	//	GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,1),
+	//	GetGPUDescriptorHandle(srvDescriptorHeap,descriptorSizeSRV,2)
+	//};
 
 	//// 先頭はImGUIが使用するのでその次から使う
 	//// 1枚目
@@ -533,8 +538,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//textureSrvHandleGPU[1].ptr += dxCore->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 2;
 
 	// SRVの生成
-	dxCore->GetDevice()->CreateShaderResourceView(textureResource[0].Get(), &srvDesc[0], textureSrvHandleCPU[0]);
-	dxCore->GetDevice()->CreateShaderResourceView(textureResource[1].Get(), &srvDesc[1], textureSrvHandleCPU[1]);
+	//dxCore->GetDevice()->CreateShaderResourceView(textureResource[0].Get(), &srvDesc[0], textureSrvHandleCPU[0]);
+	//dxCore->GetDevice()->CreateShaderResourceView(textureResource[1].Get(), &srvDesc[1], textureSrvHandleCPU[1]);
 
 	// DSVHeapの先頭にDSVを作る
 	dxCore->GetDevice()->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
@@ -1161,7 +1166,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//================
 	// ImGUIの初期化
 	//================
-	IMGUI_CHECKVERSION();
+	/*IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
 	ImGui_ImplWin32_Init(winApp->GetHwnd());
@@ -1170,7 +1175,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		rtvDesc.Format,
 		srvDescriptorHeap.Get(),
 		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());*/
 
 	bool useMonsterBall = true;
 	bool isSpriteVisible = true;
@@ -1182,13 +1187,37 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	while (/*msg.message != WM_QUIT*/winApp->ProcessMessage()) {
 
 		// ImGUIにここから始まることを通知
-		ImGui_ImplDX12_NewFrame();
+		/*ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
+		ImGui::NewFrame();*/
 
 		///
 		// ここからゲームの処理
 		///
+
+		//=================================
+		// ここから更新処理
+		//=================================
+
+		sprite->SetAnchorPoint({ 0.5f,0.5f });
+		sprite->SetIsFlipX(true);
+		// 回転テスト
+		float rotation = sprite->GetRotation();
+		rotation += 0.01f;
+		sprite->SetRotation(rotation);
+
+		// カメラの更新は必ずオブジェクトの更新まえにやる
+		camera->Update();
+
+		for (Object3DInstance* obj : object3DInstances) {
+			obj->Update();
+		}
+
+		sprite->Update();
+
+		for (SpriteInstance* sprite : sprites) {
+			sprite->Update();
+		}
 
 		//=========================
 		// キーボードの入力処理
@@ -1318,14 +1347,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
 		// ImGui フレーム開始直後
-		ImGui::Begin("Triangle Settings");
+		//ImGui::Begin("Triangle Settings");
 
-		// ModelTransform
-		ImGui::Text("ModelTransform");
-		ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
-		ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
-		ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
-		ImGui::ColorEdit4("ColorEdit", &materialData->color.x);
+		//// ModelTransform
+		//ImGui::Text("ModelTransform");
+		//ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
+		//ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
+		//ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
+		//ImGui::ColorEdit4("ColorEdit", &materialData->color.x);
 
 		//==============================
 		// ここからブレンドモードの変更処理
@@ -1341,100 +1370,100 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		};
 
 		int currentBlendIndex = static_cast<int>(blendMode);
-		if (ImGui::Combo("Blend Mode", &currentBlendIndex, blendItems, IM_ARRAYSIZE(blendItems))) {
-			blendMode = static_cast<BlendMode>(currentBlendIndex);
+		//if (ImGui::Combo("Blend Mode", &currentBlendIndex, blendItems, IM_ARRAYSIZE(blendItems))) {
+		//	blendMode = static_cast<BlendMode>(currentBlendIndex);
 
-			// --- PSO 再生成 ---
-			D3D12_BLEND_DESC newBlendDesc{};
-			newBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-			newBlendDesc.RenderTarget[0].BlendEnable = TRUE;
+		//	// --- PSO 再生成 ---
+		//	D3D12_BLEND_DESC newBlendDesc{};
+		//	newBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		//	newBlendDesc.RenderTarget[0].BlendEnable = TRUE;
 
-			switch (blendMode) {
-			case kBlendModeNone:
-				newBlendDesc.RenderTarget[0].BlendEnable = FALSE;
-				break;
-			case kBlendModeNormal:
-				newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-				newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-				newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-				break;
-			case kBlendModeAdd:
-				newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-				newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-				newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-				break;
-			case kBlendModeSubtract:
-				newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-				newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
-				newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-				break;
-			case kBlendModeMultily:
-				newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
-				newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-				newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
-				break;
-			case kBlendModeScreen:
-				newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
-				newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-				newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-				break;
-			}
+		//	switch (blendMode) {
+		//	case kBlendModeNone:
+		//		newBlendDesc.RenderTarget[0].BlendEnable = FALSE;
+		//		break;
+		//	case kBlendModeNormal:
+		//		newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		//		newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		//		newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		//		break;
+		//	case kBlendModeAdd:
+		//		newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		//		newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		//		newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		//		break;
+		//	case kBlendModeSubtract:
+		//		newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		//		newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+		//		newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		//		break;
+		//	case kBlendModeMultily:
+		//		newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
+		//		newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		//		newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
+		//		break;
+		//	case kBlendModeScreen:
+		//		newBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+		//		newBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		//		newBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		//		break;
+		//	}
 
-			newBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-			newBlendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-			newBlendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+		//	newBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+		//	newBlendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		//	newBlendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
 
-			// PSO の設定をコピーして再作成
-			D3D12_GRAPHICS_PIPELINE_STATE_DESC newDesc = graphicsPipelineStateDesc;
-			newDesc.BlendState = newBlendDesc;
+		//	// PSO の設定をコピーして再作成
+		//	D3D12_GRAPHICS_PIPELINE_STATE_DESC newDesc = graphicsPipelineStateDesc;
+		//	newDesc.BlendState = newBlendDesc;
 
-			Microsoft::WRL::ComPtr<ID3D12PipelineState> newPSO;
-			HRESULT hr = dxCore->GetDevice()->CreateGraphicsPipelineState(&newDesc, IID_PPV_ARGS(&newPSO));
-			assert(SUCCEEDED(hr));
-			graphicsPipelineState = newPSO; // 新しいPSOに差し替え
-		}
+		//	Microsoft::WRL::ComPtr<ID3D12PipelineState> newPSO;
+		//	HRESULT hr = dxCore->GetDevice()->CreateGraphicsPipelineState(&newDesc, IID_PPV_ARGS(&newPSO));
+		//	assert(SUCCEEDED(hr));
+		//	graphicsPipelineState = newPSO; // 新しいPSOに差し替え
+		//}
 
 		//==============================
 		// ここまでブレンドモードの変更処理
 		//==============================
 
 		// SpriteTransform（Sprite自体の見た目位置など）
-		ImGui::Checkbox("Show Sprite", &isSpriteVisible);
-		ImGui::Text("SpriteTransform");
-		ImGui::DragFloat3("Scale##Sprite", &transformSprite.scale.x, 0.01f);
-		ImGui::DragFloat3("Rotate##Sprite", &transformSprite.rotate.x, 0.01f);
-		ImGui::DragFloat3("Translate##Sprite", &transformSprite.translate.x, 1.0f);
+		//ImGui::Checkbox("Show Sprite", &isSpriteVisible);
+		//ImGui::Text("SpriteTransform");
+		//ImGui::DragFloat3("Scale##Sprite", &transformSprite.scale.x, 0.01f);
+		//ImGui::DragFloat3("Rotate##Sprite", &transformSprite.rotate.x, 0.01f);
+		//ImGui::DragFloat3("Translate##Sprite", &transformSprite.translate.x, 1.0f);
 
-		// UVTransform（テクスチャの位置・回転など）
-		ImGui::Text("UVTransform");
-		ImGui::DragFloat2("Scale##UV", &uvTransformSprite.scale.x, 0.01f);
-		ImGui::SliderAngle("Rotate##UV", &uvTransformSprite.rotate.z);
-		ImGui::DragFloat2("Translate##UV", &uvTransformSprite.translate.x, 0.01f);
+		//// UVTransform（テクスチャの位置・回転など）
+		//ImGui::Text("UVTransform");
+		//ImGui::DragFloat2("Scale##UV", &uvTransformSprite.scale.x, 0.01f);
+		//ImGui::SliderAngle("Rotate##UV", &uvTransformSprite.rotate.z);
+		//ImGui::DragFloat2("Translate##UV", &uvTransformSprite.translate.x, 0.01f);
 
-		// カメラ操作
-		ImGui::Text("DebugCamera");
-		ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
+		//// カメラ操作
+		//ImGui::Text("DebugCamera");
+		//ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
 
-		// Light
-		ImGui::Text("Light");
+		//// Light
+		//ImGui::Text("Light");
 
-		const char* lightingItems[] = { "None", "Lambert", "Half Lambert" };
-		int currentLightingIndex = static_cast<int>(lightingMode);
-		if (ImGui::Combo("Lighting", &currentLightingIndex, lightingItems, IM_ARRAYSIZE(lightingItems))) {
-			lightingMode = static_cast<LightingMode>(currentLightingIndex);
-		}
+		//const char* lightingItems[] = { "None", "Lambert", "Half Lambert" };
+		//int currentLightingIndex = static_cast<int>(lightingMode);
+		//if (ImGui::Combo("Lighting", &currentLightingIndex, lightingItems, IM_ARRAYSIZE(lightingItems))) {
+		//	lightingMode = static_cast<LightingMode>(currentLightingIndex);
+		//}
 
-		//ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
-		ImGui::ColorEdit4("Color", &directionalLightData->color.x);
-		ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
-		ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
+		////ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
+		//ImGui::ColorEdit4("Color", &directionalLightData->color.x);
+		//ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
+		//ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
 
-		ImGui::End();
+		//ImGui::End();
 
 		//===================================
 		// デバッグカメラの操作説明(別ウィンドウ)
 		//===================================
-		ImGui::Begin("Debug Camera Controls");
+		/*ImGui::Begin("Debug Camera Controls");
 
 		ImGui::Text("=== Movement ===");
 		ImGui::BulletText("W : Zoom In");
@@ -1453,7 +1482,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::BulletText("O : Roll -");
 		ImGui::BulletText("P : Roll +");
 
-		ImGui::End();
+		ImGui::End();*/
 
 		debugCamera->Update(keyboardInput->keys_);
 
@@ -1516,27 +1545,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//	instancingData[index].WVP = worldViewProjectionMatrixInstancing;
 		//	instancingData[index].World = worldMatrixInstancing;
 		//}
-
-		sprite->SetAnchorPoint({ 0.5f,0.5f });
-		sprite->SetIsFlipX(true);
-		// 回転テスト
-		float rotation = sprite->GetRotation();
-		rotation += 0.01f;
-		sprite->SetRotation(rotation);
-
-		// カメラの更新は必ずオブジェクトの更新まえにやる
-		camera->Update();
-
-		for (Object3DInstance* obj : object3DInstances) {
-			obj->Update();
-		}
-
-		sprite->Update();
-
-		for (SpriteInstance* sprite : sprites) {
-			sprite->Update();
-		}
-
+		
 		// ESCAPEキーのトリガー入力で終了
 		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
 			PostQuitMessage(0);
@@ -1547,13 +1556,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		// ゲームの処理が終わったので描画処理前にImGUIの内部コマンドを生成
-		ImGui::Render();
+		//ImGui::Render();
 
 		dxCore->BeginDraw();
 
+		srvManager->PreDraw();
+
 		// SRVヒープをコマンドリストに設定
-		ID3D12DescriptorHeap* heaps[] = { srvDescriptorHeap.Get() };
-		dxCore->GetCommandList()->SetDescriptorHeaps(_countof(heaps), heaps);
+		//ID3D12DescriptorHeap* heaps[] = { srvDescriptorHeap.Get() };
+		//dxCore->GetCommandList()->SetDescriptorHeaps(_countof(heaps), heaps);
 
 		//=========================
 		// コマンドを積む
@@ -1583,7 +1594,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(1, instancingResource->GetGPUVirtualAddress());
 
 		// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]。useMonsterBallでテクスチャを切り替え
-		dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU[1] : textureSrvHandleGPU[0]);
+		//dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU[1] : textureSrvHandleGPU[0]);
 
 		// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
 		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
@@ -1660,9 +1671,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 生成と逆順に行う
 
 	// ImGUIの終了処理
-	ImGui_ImplDX12_Shutdown();
+	/*ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();
+	ImGui::DestroyContext();*/
 
 	// 入力を解放
 	delete keyboardInput;
@@ -1698,7 +1709,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	includeHandler->Release();
 	dxcCompiler->Release();
 	dxcUtils->Release();
-
+	delete srvManager;
 	dxCore->Finalize();
 	delete dxCore;
 

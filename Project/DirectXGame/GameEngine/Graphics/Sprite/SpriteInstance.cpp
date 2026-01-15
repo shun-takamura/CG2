@@ -4,18 +4,19 @@
 void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath)
 {
     spriteManager_ = spriteManager;
+    textureFilePath_ = filePath;
 
     // TextureをGPU にロードしてSRVを取得
-    textureGpuHandle_ = spriteManager_->LoadTextureToGPU(filePath);
+    //textureGpuHandle_ = spriteManager_->LoadTextureToGPU(filePath);
 
     // テクスチャを読み込む（重複読み込みはTextureManager側で回避）
     TextureManager::GetInstance()->LoadTexture(filePath);
     
     // ファイルパスからテクスチャ番号（SRVインデックス）を取得して保持
-    textureIndex_ = TextureManager::GetInstance()->GetTextureIndexByFilePath(filePath);
+    //textureIndex_ = TextureManager::GetInstance()->GetTextureIndexByFilePath(filePath);
     
     // その番号からGPUハンドルを取得して保持
-    textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_);
+    textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(filePath);
 
     CreateVertexBuffer();
     CreateMaterialBuffer();
@@ -40,7 +41,7 @@ void SpriteInstance::Update()
     }
 
     const DirectX::TexMetadata& metadata =
-        TextureManager::GetInstance()->GetMetaData(textureIndex_);
+        TextureManager::GetInstance()->GetMetaData(textureFilePath_);
     float tex_left = textureLeftTop_.x / metadata.width;
     float tex_right = (textureLeftTop_.x+ textureSize_.x) / metadata.width;
     float tex_top = textureLeftTop_.y / metadata.height;
@@ -126,7 +127,7 @@ void SpriteInstance::Draw()
     // ===================================
     commandList->SetGraphicsRootDescriptorTable(
         2,
-        TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_)
+        TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
         //textureGpuHandle_
     );
 
@@ -168,7 +169,7 @@ SpriteInstance::~SpriteInstance()
 void SpriteInstance::AdjustTextureSize()
 {
     // テクスチャのメタデータを取得
-    const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(textureIndex_);
+    const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(textureFilePath_);
 
     textureSize_.x = static_cast<float>(metadata.width);
     textureSize_.y = static_cast<float>(metadata.height);
