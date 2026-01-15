@@ -66,10 +66,14 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include "DirectXCore.h"
 #include "SpriteManager.h"
 #include "SpriteInstance.h"
+#include "Object3DManager.h"
+#include "Object3DInstance.h"
 #include "Log.h"
 #include "ConvertString.h"
 #include "MathUtility.h"
 #include "TextureManager.h"
+#include"ModelManager.h"
+#include"Camera.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -81,11 +85,11 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 //========================
 // 構造体の定義
 //========================
-enum class LightingMode {
-	None, // ライティング無し
-	Lambert, // ランバート反射
-	HalfLambert // 
-};
+//enum class LightingMode {
+//	None, // ライティング無し
+//	Lambert, // ランバート反射
+//	HalfLambert // 
+//};
 
 // ブレンドモード
 enum BlendMode {
@@ -148,15 +152,15 @@ struct SoundData
 	unsigned int bufferSize;
 };
 
-// モデルデータの構造体
-struct MaterialData {
-	std::string textureFilePath;
-};
-
-struct ModelData {
-	std::vector<VertexData> vertices;
-	MaterialData material;
-};
+//// モデルデータの構造体
+//struct MaterialData {
+//	std::string textureFilePath;
+//};
+//
+//struct ModelData {
+//	std::vector<VertexData> vertices;
+//	MaterialData material;
+//};
 
 // デッドゾーンの設定
 struct DeadZone {
@@ -357,6 +361,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
+
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore);
@@ -366,6 +371,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	SpriteInstance* sprite = new SpriteInstance();
 	sprite->Initialize(spriteManager, "Resources/uvChecker.png");
+
+	// モデルマネージャーの初期化
+	ModelManager::GetInstance()->Initialize(dxCore);
+
+	// 3DObjectの共通部分の初期化
+	Object3DManager* object3DManager = new Object3DManager();
+	object3DManager->Initialize(dxCore);
+
+	// カメラの生成
+	Camera* camera = new Camera();
+	camera->SetRotate({ 0.0f,0.0f,0.0f });
+	camera->SetTranslate({ 0.0f,0.0f,-20.0f });
+	object3DManager->SetDefaultCamera(camera);
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -389,6 +407,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->SetPosition({ i * 2.0f, 0.0f });
 
 		sprites.push_back(sprite);
+	}
+
+	// 3Dオブジェクトを配列で管理
+	std::vector<Object3DInstance*> object3DInstances;
+
+	// 複数のモデルを作成
+	const std::string modelFiles[] = { "axis.obj", "fence.obj", "plane.obj" };
+	for (int i = 0; i < 3; ++i) {
+		Object3DInstance* obj = new Object3DInstance();
+		obj->Initialize(object3DManager, dxCore, "Resources", modelFiles[i]);
+
+		// 位置を設定（横に並べる）
+		obj->SetTranslate({ i * 3.0f, 0.0f, 0.0f });
+
+		object3DInstances.push_back(obj);
 	}
 
 	// soundsの変数の宣言
@@ -419,7 +452,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// Textureを2枚読み込んで転送
 	DirectX::ScratchImage mipImages[2] = {
 		LoadTexture("Resources/uvChecker.png"),
-		LoadTexture(modelData.material.textureFilePath)
+		LoadTexture(modelData.materialData.textureFilePath)
 	};
 
 	const DirectX::TexMetadata& metadata = mipImages[0].GetMetadata();
@@ -1491,25 +1524,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		rotation += 0.01f;
 		sprite->SetRotation(rotation);
 
-		// 移動テスト
-		/*Vector2 position = sprite->GetPosition();
-		position.x += 0.1f;
-		position.y += 0.1f;
-		sprite->SetPosition(position);*/
+		// カメラの更新は必ずオブジェクトの更新まえにやる
+		camera->Update();
 
-		// 色変更テスト
-		/*Vector4 color = sprite->GetColor();
-		color.x += 0.01f;
-		if (color.x > 1.0f) {
-			color.x -= 1.0f;
+		for (Object3DInstance* obj : object3DInstances) {
+			obj->Update();
 		}
-		sprite->SetColor(color);*/
-
-		// サイズ変更テスト
-		/*Vector2 size = sprite->GetSize();
-		size.x += 0.1f;
-		size.y += 0.1f;
-		sprite->SetSize(size);*/
 
 		sprite->Update();
 
@@ -1601,6 +1621,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//dxCore->GetCommandList()->DrawIndexedInstanced(6, 1, 0, 0, 0);
 		}
 
+		// 3Dオブジェクトの共通描画設定
+		object3DManager->DrawSetting();
+
+		// 描画
+		object3DManager->DrawSetting();
+		for (Object3DInstance* obj : object3DInstances) {
+			obj->Draw(dxCore);
+		}
+
 		spriteManager->DrawSetting();
 		sprite->Draw();
 
@@ -1645,17 +1674,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 絶対にXAudio2を解放してから行うこと
 	SoundUnload(&soundData);
 
-	//
-
 	// スプライト解放
 	for (SpriteInstance* sprite : sprites) {
 		delete sprite;
 	}
 	sprites.clear();
 	delete sprite;
+
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();
 	delete spriteManager;
+
+	// 終了処理
+	for (Object3DInstance* obj : object3DInstances) {
+		delete obj;
+	}
+	object3DInstances.clear();
+
+	delete object3DManager;
+	ModelManager::GetInstance()->Finalize();
 
 	// dxc関連
 	includeHandler->Release();
@@ -2187,7 +2224,7 @@ ModelData LoadObjFile(const std::string& directorPath, const std::string& filena
 			s >> materialFilename;
 
 			// 基本的にobjファイルと同一階層にmtlは存在するので、ディレクトリ名とファイル名を渡す
-			modelData.material = LoadMaterialTemplateFile(directorPath, materialFilename);
+			modelData.materialData = LoadMaterialTemplateFile(directorPath, materialFilename);
 
 		}
 

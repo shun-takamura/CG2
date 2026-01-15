@@ -4,7 +4,14 @@
 
 typedef struct Material {
 	Vector4 color;
-	int enableLighting;
+	int32_t enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
 }Material;
+
+
+struct MaterialData
+{
+	std::string textureFilePath;
+	uint32_t textureIndex = 0;
+};
