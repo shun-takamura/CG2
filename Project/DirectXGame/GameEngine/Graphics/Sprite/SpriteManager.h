@@ -65,13 +65,6 @@ public:
    std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> intermediateResources_;
    void ClearIntermediateResources();
 
-   /// <summary>
-   /// テクスチャをロードしてGPUに転送する関数
-   /// </summary>
-   /// <param name="filePath"></param>
-   /// <returns></returns>
-   //D3D12_GPU_DESCRIPTOR_HANDLE LoadTextureToGPU(const std::string& filePath);
-
    DirectXCore* GetDxCore() const { return dxCore_; }   
    BlendMode GetBlendMode() const { return blendMode_; }  
 

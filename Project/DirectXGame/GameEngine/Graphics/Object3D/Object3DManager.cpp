@@ -18,11 +18,7 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
 
 void Object3DManager::DrawSetting()
 {
-    // DirectXCore の SRV ヒープをセット
-   /* ID3D12DescriptorHeap* descriptorHeaps[] = { dxCore_->GetSrvDescriptorHeap() };
-
-    dxCore_->GetCommandList()->SetDescriptorHeaps(1, descriptorHeaps);*/
-
+   
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
     dxCore_->GetCommandList()->SetPipelineState(pipelineState_.Get());

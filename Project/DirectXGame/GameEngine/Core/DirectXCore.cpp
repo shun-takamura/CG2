@@ -5,8 +5,6 @@
 
 using Microsoft::WRL::ComPtr;
 
-//const uint32_t DirectXCore::kMaxTextureCount = 512;
-
 void DirectXCore::Initialize(WindowsApplication* winApp) {
 
     assert(winApp != nullptr);
@@ -51,8 +49,6 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     // 現時点でincludeはしないがincludeに対応するための設定を行う
     hr = dxcUtils_->CreateDefaultIncludeHandler(&includeHandler_);
     assert(SUCCEEDED(hr));
-
-    //srvDescriptorHeap_ = CreateDescriptorHeap(device_, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kMaxTextureCount, true);
 
 }
 
