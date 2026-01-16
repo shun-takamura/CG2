@@ -75,6 +75,8 @@
 #include"ModelManager.h"
 #include"Camera.h"
 #include"SRVManager.h"
+#include"ParticleManager.h"
+#include "ParticleInstances.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -306,6 +308,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	camera->SetTranslate({ 0.0f,0.0f,-20.0f });
 	object3DManager->SetDefaultCamera(camera);
 
+	ParticleManager* particleManager = new ParticleManager();
+	particleManager->Initialize(dxCore, srvManager);
+	particleManager->SetCamera(camera);
+
+	ParticleInstances* particleInstances = new ParticleInstances();
+	particleInstances->Initialize(particleManager, "Resources/uvChecker.png", 100);
+
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
 
@@ -354,24 +363,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 音声読み込み
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
-
-	// 板ポリ=====================================================================================================================
-	//ModelData modelData2;
-	//modelData2.vertices.push_back({ .position = {  -1.0f,  1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左上
-	//modelData2.vertices.push_back({ .position = {  1.0f, 1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右上
-	//modelData2.vertices.push_back({ .position = { -1.0f,  -1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左下
-	//modelData2.vertices.push_back({ .position = { -1.0f,  -1.0f, 0.0f, 1.0f }, .texcoord = { 0.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 左下
-	//modelData2.vertices.push_back({ .position = { 1.0f, 1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 0.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右上
-	//modelData2.vertices.push_back({ .position = { 1.0f, -1.0f, 0.0f, 1.0f }, .texcoord = { 1.0f, 1.0f }, .normal = { 0.0f, 0.0f, 1.0f } }); // 右下
-	//modelData2.material.textureFilePath = "Resources/uvChecker.png";
-
-	//uint32_t instanceCount = 10;==================================================================================================
-
-	
-	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource[2] = {
-		/*UploadTextureData(textureResource[0], mipImages[0], dxCore->GetDevice(), dxCore->GetCommandList()),
-		UploadTextureData(textureResource[1], mipImages[1], dxCore->GetDevice(), dxCore->GetCommandList())*/ };
-
 
 	// DepthStencilTextureをウィンドウサイズで作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(dxCore->GetDevice(), WindowsApplication::kClientWidth, WindowsApplication::kClientHeight);
@@ -799,6 +790,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			obj->Update();
 		}
 
+		particleInstances->Update();
+
 		sprite->Update();
 
 		for (SpriteInstance* sprite : sprites) {
@@ -814,6 +807,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 数字の0のキーが押されていたら
 		if (keyboardInput->TriggerKey(DIK_0)) {
 			OutputDebugStringA("trigger [0]\n");
+		}
+
+		if (keyboardInput->TriggerKey(DIK_SPACE)) {
+			particleInstances->Emit({ 0.0f, 0.0f, 0.0f }, 10);
 		}
 
 		//=========================
@@ -1085,12 +1082,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			obj->Draw(dxCore);
 		}
 
+		particleManager->SetBlendMode(ParticleManager::kBlendModeAdd);
+		particleManager->DrawSetting();
+		particleInstances->Draw();
+
 		spriteManager->DrawSetting();
 		sprite->Draw();
 
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Draw();
 		}
+
 
 		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 		// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1128,6 +1130,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 音声データ解放
 	// 絶対にXAudio2を解放してから行うこと
 	SoundUnload(&soundData);
+
+	// パーティクル解放
+	delete particleInstances;
+	delete particleManager;
 
 	// スプライト解放
 	for (SpriteInstance* sprite : sprites) {
