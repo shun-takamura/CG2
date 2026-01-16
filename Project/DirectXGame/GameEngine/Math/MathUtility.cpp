@@ -3,6 +3,15 @@
 #define _USE_MATH_DEFINES
 #include <cassert>
 
+float Cotangent(float theta)
+{
+	float cotngent;
+
+	cotngent = 1.0f / tanf(theta);
+
+	return cotngent;
+}
+
 //===============================
 // MT3でも使う関数
 //===============================

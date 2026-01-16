@@ -91,7 +91,7 @@ void SRVManager::PreDraw()
 
 }
 
-void SRVManager::SetGraPhicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex)
+void SRVManager::SetGraphicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex)
 {
 	dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(RootParameterIndex, GetGPUDescriptorHandle(srvIndex));
 }

@@ -44,7 +44,7 @@ public:
 	void CreateSRVForStructuredBuffer(uint32_t srvIndex, ID3D12Resource* pResource, UINT elementNums, UINT structureByteStride);
 
 	// セッター
-	void SetGraPhicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);
+	void SetGraphicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);
 
 	// ゲッター
 	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(uint32_t index);
