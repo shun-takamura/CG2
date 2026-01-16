@@ -618,75 +618,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 三角形の中を塗りつぶす
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
-	//=========================
-	// VertexResourceを生成
-	//=========================
-
-	// sprite用の頂点リソースを作る
-	//Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceSprite = dxCore->CreateBufferResource(sizeof(VertexData) * 4);
-
-	// sprite用のIndexリソースを作る
-	//Microsoft::WRL::ComPtr<ID3D12Resource> indexResourceSprite = dxCore->CreateBufferResource(sizeof(uint32_t) * 6);
-
-	//=============================
-	// Material用のResourceの作成
-	//=============================
-	// マテリアル用のリソースを作る。今回はMaterial1つ分のサイズを用意
-	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource = dxCore->CreateBufferResource(sizeof(Material));
-
-	// スプライト用のマテリアルリソース
-	//Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceSprite = dxCore->CreateBufferResource(sizeof(Material));
-
-	// マテリアルにデータを書き込む
-	Material* materialData = nullptr;
-	//Material* materialDataSprite = nullptr;
-
-	// 書き込むためのアドレスを取得
-	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	//materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
-
-	// 白で書き込む
-	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-	//materialDataSprite->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-
-	// 球のみLightingを有効にする
-	materialData->enableLighting = true;
-	//materialDataSprite->enableLighting = false;
-
-	// UVTransformに単位行列を書き込む
-	materialData->uvTransform = MakeIdentity4x4();
-	//materialDataSprite->uvTransform = MakeIdentity4x4();
-
-	// Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	//Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResourceSprite = dxCore->CreateBufferResource(sizeof(Matrix4x4) * 2);
-
-	// データを書き込む
-	//Matrix4x4* transformationMatrixDataSprite = nullptr;
-
-	// 書き込むためのアドレスを取得
-	//transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
-
-	// 単位行列を書き込んでおく
-	//*transformationMatrixDataSprite = MakeIdentity4x4();
-
-	//============================================
-	// TransformationMatrix用のResourceの作成
-	//============================================
-	UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
-
-	// WVP用のリソースを作る。
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = dxCore->CreateBufferResource(transformationMatrixSize);
-
-	// データを書き込む
-	TransformationMatrix* transformationMatrix = nullptr;
-
-	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrix));
-
-	// 単位行列を書き込む
-	transformationMatrix->WVP = MakeIdentity4x4();
-	transformationMatrix->World = MakeIdentity4x4();
-
 	//=====================================
 	// Instancing用のResourceの作成
 	//=====================================
@@ -1120,18 +1051,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// RootSignatureを設定。PSOに設定してるけど別途設定が必要
 		dxCore->GetCommandList()->SetGraphicsRootSignature(rootSignature.Get());
-		//dxCore->GetCommandList()->SetPipelineState(graphicsPipelineState.Get());     // PSOを設定
 		dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
-		//dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferViewSphere);    // IBVを設定
 
 		// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 		dxCore->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		// 指定した深度で画面全体をクリアする
 		dxCore->GetCommandList()->ClearDepthStencilView(dxCore->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-		// マテリアルCBufferの場所を設定
-		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
 		// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
 		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
