@@ -183,7 +183,6 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Graphics\TextureManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
-    <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleInstances.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
@@ -229,7 +228,6 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\TextureManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\SRVManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h" />
-    <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleInstances.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Particle.PS.hlsl">

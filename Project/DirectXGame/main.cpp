@@ -76,7 +76,6 @@
 #include"Camera.h"
 #include"SRVManager.h"
 #include"ParticleManager.h"
-#include "ParticleInstances.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -151,10 +150,6 @@ struct D3DResourceLeakCheker {
 //============================
 // 関数の宣言
 //============================
-
-[[nodiscard]]
-
-Microsoft::WRL::ComPtr<ID3D12Resource> CreateDepthStencilTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, int32_t width, int32_t height);
 
 //==========================
 // サウンドの関数
@@ -305,12 +300,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	camera->SetTranslate({ 0.0f,0.0f,-20.0f });
 	object3DManager->SetDefaultCamera(camera);
 
-	ParticleManager* particleManager = new ParticleManager();
-	particleManager->Initialize(dxCore, srvManager);
-	particleManager->SetCamera(camera);
-
-	ParticleInstances* particleInstances = new ParticleInstances();
-	particleInstances->Initialize(particleManager, "Resources/uvChecker.png", 100);
+	ParticleManager::GetInstance()->Initialize(dxCore, srvManager);
+	ParticleManager::GetInstance()->SetCamera(camera);
+	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "Resources/uvChecker.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("monsterBall", "Resources/monsterBall.png");
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -489,6 +482,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// ここから更新処理
 		//=================================
 
+		//=========================
+		// キーボードの入力処理
+		//=========================
+		// 更新
+		keyboardInput->Update();
+
+		// 数字の0のキーが押されていたら
+		if (keyboardInput->TriggerKey(DIK_0)) {
+			OutputDebugStringA("trigger [0]\n");
+		}
+
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
 		sprite->SetIsFlipX(true);
 		// 回転テスト
@@ -503,27 +507,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			obj->Update();
 		}
 
-		particleInstances->Update();
+		// 更新処理
+		ParticleManager::GetInstance()->Update();
+
+		// キー入力でパーティクル発生
+		if (keyboardInput->TriggerKey(DIK_SPACE)) {
+			ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
+		}
+		if (keyboardInput->TriggerKey(DIK_SPACE)) {
+			ParticleManager::GetInstance()->Emit("monsterBall", { 2.0f, 0.0f, 0.0f }, 5);
+		}
 
 		sprite->Update();
 
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Update();
-		}
-
-		//=========================
-		// キーボードの入力処理
-		//=========================
-		// 更新
-		keyboardInput->Update();
-
-		// 数字の0のキーが押されていたら
-		if (keyboardInput->TriggerKey(DIK_0)) {
-			OutputDebugStringA("trigger [0]\n");
-		}
-
-		if (keyboardInput->TriggerKey(DIK_SPACE)) {
-			particleInstances->Emit({ 0.0f, 0.0f, 0.0f }, 10);
 		}
 
 		//=========================
@@ -747,9 +745,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			obj->Draw(dxCore);
 		}
 
-		particleManager->SetBlendMode(ParticleManager::kBlendModeAdd);
-		particleManager->DrawSetting();
-		particleInstances->Draw();
+		// 描画処理
+		ParticleManager::GetInstance()->SetBlendMode(ParticleManager::kBlendModeAdd);
+		ParticleManager::GetInstance()->Draw();
 
 		spriteManager->DrawSetting();
 		sprite->Draw();
@@ -795,9 +793,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 絶対にXAudio2を解放してから行うこと
 	SoundUnload(&soundData);
 
-	// パーティクル解放
-	delete particleInstances;
-	delete particleManager;
+	// パーティクル終了処理
+	ParticleManager::GetInstance()->Finalize();
 
 	// スプライト解放
 	for (SpriteInstance* sprite : sprites) {
@@ -856,43 +853,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 //============================
 // 関数の定義
 //============================
-
-Microsoft::WRL::ComPtr<ID3D12Resource> CreateDepthStencilTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, int32_t width, int32_t height)
-{
-	// 生成するResourceの設定
-	D3D12_RESOURCE_DESC resourceDesc{};
-	resourceDesc.Width = width;                                   // Textureの横幅
-	resourceDesc.Height = height;                                 // Textureの縦幅
-	resourceDesc.MipLevels = 1;                                   // mipMapの数
-	resourceDesc.DepthOrArraySize = 1;                            // 奥行or配列Textureの配列数
-	resourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;          // DepthStencilとして利用可能なフォーマット
-	resourceDesc.SampleDesc.Count = 1;                            // サンプリングカウント。1固定
-	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;  // 2次元
-	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL; // DepthStencilとして使う通知
-
-	// 利用するHeapの設定
-	D3D12_HEAP_PROPERTIES heapPropertis{};
-	heapPropertis.Type = D3D12_HEAP_TYPE_DEFAULT; // VRAM上に作成
-
-	// 深度のクリア設定
-	D3D12_CLEAR_VALUE depthClearValue{};
-	depthClearValue.DepthStencil.Depth = 1.0f;              // 1.0f(最大値)でクリア
-	depthClearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // ResourceDescと同じにする
-
-	// Resourceの生成
-	Microsoft::WRL::ComPtr<ID3D12Resource> resource = nullptr;
-	HRESULT hr = device->CreateCommittedResource(
-		&heapPropertis,                   // Heapの設定
-		D3D12_HEAP_FLAG_NONE,             // Heapの特殊な設定。無し
-		&resourceDesc,                    // Resourceの設定
-		D3D12_RESOURCE_STATE_DEPTH_WRITE, // 鮮度を書き込む状態にする
-		&depthClearValue,                 // Clear最適値
-		IID_PPV_ARGS(&resource));         // 作成するResourceポインタへのポインタ
-
-	assert(SUCCEEDED(hr));
-
-	return resource;
-}
 
 SoundData SoundLoadWave(const char* filename)
 {
