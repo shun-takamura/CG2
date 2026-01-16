@@ -153,7 +153,6 @@ struct D3DResourceLeakCheker {
 //============================
 
 [[nodiscard]]
-//Microsoft::WRL::ComPtr<ID3D12Resource> UploadTextureData(Microsoft::WRL::ComPtr<ID3D12Resource> texture, const DirectX::ScratchImage& mipImages, Microsoft::WRL::ComPtr<ID3D12Device> device, ID3D12GraphicsCommandList* commandList);
 
 Microsoft::WRL::ComPtr<ID3D12Resource> CreateDepthStencilTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, int32_t width, int32_t height);
 
@@ -183,8 +182,6 @@ void VibrateController(int controllerNum, WORD leftPower, WORD rightPower);
 
 // 振動停止
 void StopVibration(DWORD controllerNum);
-
-//void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -364,64 +361,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 音声読み込み
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
 
-	// DepthStencilTextureをウィンドウサイズで作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(dxCore->GetDevice(), WindowsApplication::kClientWidth, WindowsApplication::kClientHeight);
-
-	// DSVの設定
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;// Format。基本的にはResourceに合わせる
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;//2DTexture
-
-	// DepthStencilStateの設定
-	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
-	// Depthの機能を有効化する
-	depthStencilDesc.DepthEnable = true;
-	// 書き込む
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-	// 比較関数はLessEqual。つまり、近ければ描画される。変更したい場合は3_1の22ページを参照
-	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-
-	const uint32_t descriptorSizeSRV = dxCore->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	const uint32_t descriptorSizeRTV = dxCore->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	const uint32_t descriptorSizeDSV = dxCore->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-
-	if (FAILED(hr)) {
-		std::cerr << "CreateSwapChainForHwnd failed: " << hr << std::endl; // エラーコードを出力
-		if (hr == DXGI_ERROR_INVALID_CALL) {
-			std::cerr << "DXGI_ERROR_INVALID_CALL: Invalid parameters passed to the function." << std::endl; // エラーコードの説明
-		}
-		// 他のエラーコードも同様にチェック
-		assert(false);
-	}
-
-	// ディスクリプタヒープが作れなかったので起動できない
-	assert(SUCCEEDED(hr));
-
-	//　SwapChainからResourceを引っ張ってくる
-	Microsoft::WRL::ComPtr<ID3D12Resource> swapChainResources[2] = { nullptr };
-	hr = dxCore->GetSwapChain()->GetBuffer(0, IID_PPV_ARGS(&swapChainResources[0]));
-
-	//上手く取得できなかったので起動できない
-	assert(SUCCEEDED(hr));
-
-	// 1もやる
-	hr = dxCore->GetSwapChain()->GetBuffer(1, IID_PPV_ARGS(&swapChainResources[1]));
-
-	//上手く取得できなかったので起動できない
-	assert(SUCCEEDED(hr));
-
-	// RTVの設定
-	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;      // 出力結果をSRGBに変換して書き込む
-	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D; // 2Dテクスチャとして書き込む
-
-	// RTVを2つ作るのでディスクリプタを2つ用い
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// ここDirectX初期化終了位置
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 	//==============================
 	// DirectInputの初期化
 	//==============================
@@ -492,216 +431,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = xAudio2->CreateMasteringVoice(&masterVoice);
 	assert(SUCCEEDED(hr)); // マスターボイス生成できなかったら停止
 
-	//=============================
-	// PipelineStateObject
-	//=============================
-	// RootSignature作成
-	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
-	descriptionRootSignature.Flags =
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-	// RootParameterを作成。PixelShaderのMaterialとVertexShaderのTransform。テクスチャが[2]を使用
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
-	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う。PSのb0のb
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
-	rootParameters[0].Descriptor.ShaderRegister = 0;                     // レジスタ番号0。PSのb0の0
-	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う。VSのb0のb
-	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使う
-	rootParameters[1].Descriptor.ShaderRegister = 0;                     // レジスタ番号0。VSのb0の0
-	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
-	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
-	rootParameters[3].Descriptor.ShaderRegister = 1;                     // レジスタ番号1を使う
-
-	descriptionRootSignature.pParameters = rootParameters;               // ルートパラメータ配列へのポイント
-	descriptionRootSignature.NumParameters = _countof(rootParameters);   // 配列の長さ
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource = dxCore->CreateBufferResource(sizeof(DirectionalLight));
-	DirectionalLight* directionalLightData = nullptr;
-	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
-	directionalLightData->color = { 1.0f,1.0f,1.0f,1.0f };
-	directionalLightData->direction = { 0.0f,-1.0f,0.0f };
-	directionalLightData->intensity = 1.0f;
-
-	LightingMode lightingMode = LightingMode::None;
-
-
-	// DescriptorRange
-	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-	descriptorRange[0].BaseShaderRegister = 0;                      // 0から始まる
-	descriptorRange[0].NumDescriptors = 1;                          // 数は1つ
-	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
-	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
-
-	// DescriptorTable
-	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // DescriptorTableを使用
-	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
-	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // Tableの中身の配列を指定
-	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // Tableで利用する数
-
-	// DescriptorRangeこれインスタンシング用
-	D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
-	descriptorRangeForInstancing[0].BaseShaderRegister = 0;                      // 0から始まる
-	descriptorRangeForInstancing[0].NumDescriptors = 1;                          // 数は1つ
-	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
-	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
-
-	// DescriptorTable
-	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // DescriptorTableを使用
-	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使用
-	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing; // Tableの中身の配列を指定
-	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); // Tableで利用する数
-
-	// Sumplerの設定。rootSignatureは532行付近にあると思う(上にコード追加してたら知らん)
-	// 基本の設定なので暫くはこれで問題ない
-	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;         // バイリニアフィルタ？
-	staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 0~1の範囲をリピート
-	staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 
-	staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 
-	staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;     // 比較しない
-	staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;                       // Mipmapをあるだけ使用
-	staticSamplers[0].ShaderRegister = 0;                               // レジスタ番号0を使用
-	staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
-	descriptionRootSignature.pStaticSamplers = staticSamplers;
-	descriptionRootSignature.NumStaticSamplers = _countof(staticSamplers);
-
-	// シリアライズしてバイナリにする
-	Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob = nullptr;
-	Microsoft::WRL::ComPtr<ID3DBlob>  errorBlob = nullptr;
-	hr = D3D12SerializeRootSignature(&descriptionRootSignature,
-		D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-	if (FAILED(hr)) {
-		Log(reinterpret_cast<char*>(errorBlob->GetBufferSize()));
-		assert(false);
-	}
-
-	// バイナリをもとに生成
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature = nullptr;
-	hr = dxCore->GetDevice()->CreateRootSignature(0,
-		signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(),
-		IID_PPV_ARGS(&rootSignature));
-	assert(SUCCEEDED(hr));
-
-	// InputLayoutの設定
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
-	inputElementDescs[0].SemanticName = "POSITION";
-	inputElementDescs[0].SemanticIndex = 0;
-	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-	inputElementDescs[1].SemanticName = "TEXCOORD";
-	inputElementDescs[1].SemanticIndex = 0;
-	inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-	inputElementDescs[2].SemanticName = "NORMAL";
-	inputElementDescs[2].SemanticIndex = 0;
-	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-	inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
-	inputLayoutDesc.pInputElementDescs = inputElementDescs;
-	inputLayoutDesc.NumElements = _countof(inputElementDescs);
-
-	// ResiterzerStateの設定
-	D3D12_RASTERIZER_DESC rasterizerDesc{};
-
-	// 裏面(時計回り)を表示しない
-	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
-
-	// 三角形の中を塗りつぶす
-	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
-
-	//=====================================
-	// Instancing用のResourceの作成
-	//=====================================
-
-	//const uint32_t kNumInstance = 10;
-
-	//// Instancing用のTransformationMatriResourceの作成
-	//Microsoft::WRL::ComPtr<ID3D12Resource>instancingResource =
-	//	dxCore->CreateBufferResource(sizeof(TransformationMatrix) * kNumInstance);
-
-	////TransformationMatrix* gTransformationMatrice[10];
-
-	//// 書き込むためのアドレスを取得
-	//TransformationMatrix* instancingData = nullptr;
-	//instancingResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
-
-	//// 単位行列を書き込む
-	//for (uint32_t index = 0; index < kNumInstance; ++index) {
-	//	instancingData[index].WVP = MakeIdentity4x4();
-	//	instancingData[index].World = MakeIdentity4x4();
-	//}
-
-	////========================================
- //   // Instancing用のSRVの作成
- //   //========================================
- //   // SRV（Shader Resource View）設定
-	//D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
-	//instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN; // 構造体のレイアウトは自由なので不明（UNKNOWN）
-	//instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	//instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER; // StructuredBuffer用
-	//instancingSrvDesc.Buffer.FirstElement = 0; // 最初の要素から
-	//instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE; // 固定
-	//instancingSrvDesc.Buffer.NumElements = kNumInstance; // インスタンス数（アクセスする要素数）
-	//instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix); // 構造体1個のサイズ
-
-	//// SRVハンドルを取得（Heapの3番目に作成している例、空いていれば他でも可）
-	//D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU =
-	//	GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
-	//D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU =
-	//	GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
-
-	//// SRVの作成
-	//dxCore->GetDevice()->CreateShaderResourceView(
-	//	instancingResource.Get(),
-	//	&instancingSrvDesc,
-	//	instancingSrvHandleCPU
-	//);
-
-	//===================================
-	// BufferViewの作成
-	//===================================
-	// 頂点バッファビューを作成
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-
-	// リソースの先頭アドレスから使用
-	//vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
-
-	// 使用するリソースのサイズは頂点4個のサイズ
-	//vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 4;
-
-	// 1頂点あたりのサイズ
-	//vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
-
-	// sprite用のindexバッファビューを作る
-	//D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
-
-	// リソースの先頭アドレスから使う
-	//indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
-
-	// 使用するリソースのサイズはインデックスの6つ分のサイズ
-	//indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
-
-	// インデックスはuint32_tとする
-	//indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
-
-	// 板ポリ頂点バッファを作成========================================================================================
-	/*Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource2 =
-		dxCore->CreateBufferResource(sizeof(VertexData) * modelData2.vertices.size());*/
-
-	// 頂点データ転送
-	/*VertexData* vertexData2 = nullptr;
-	vertexResource2->Map(0, nullptr, reinterpret_cast<void**>(&vertexData2));
-	std::memcpy(vertexData2, modelData2.vertices.data(), sizeof(VertexData) * modelData2.vertices.size());
-	vertexResource2->Unmap(0, nullptr);*/
-
-	// ビュー作成
-	/*D3D12_VERTEX_BUFFER_VIEW vertexBufferView2{};
-	vertexBufferView2.BufferLocation = vertexResource2->GetGPUVirtualAddress();
-	vertexBufferView2.SizeInBytes = UINT(sizeof(VertexData) * modelData2.vertices.size());
-	vertexBufferView2.StrideInBytes = sizeof(VertexData);*/
-	//====================================================================================================================
-
-	
 	//=========================
 	// ViewportとScissor
 	//=========================
@@ -724,22 +453,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRect.right = WindowsApplication::kClientWidth;
 	scissorRect.top = 0;
 	scissorRect.bottom = WindowsApplication::kClientHeight;
-
-	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
-	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform uvTransformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-
-	//=====================================
-	// Instancing用のTransformの作成と書き込み
-	//=====================================
-	//ここ
-	/*Transform transforms[kNumInstance];
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
-		transforms[index].scale = { 1.0f,1.0f,1.0f };
-		transforms[index].rotate = { 0.0f,0.0f,0.0f };
-		transforms[index].translate = { index*0.1f,index * 0.1f,index * 0.1f };
-	}*/
 
 	// サウンドを再生
 	// キー入力ができるようになったらキー入力で再生とかの方が望ましい
@@ -998,32 +711,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		debugCamera->Update(keyboardInput->keys_);
 
-		// Instancing
-		// WVP等を計算してResourceに書き込む
-		//for (uint32_t index = 0; index < kNumInstance; ++index) {
-		//	// ワールド行列作成
-		//	Matrix4x4 worldMatrixInstancing = MakeAffineMatrix(transforms[index]);
-
-		//	Matrix4x4 viewMatrixInstancing;
-
-		//	if (isUseDebugCamera) {
-		//		viewMatrixInstancing = debugCamera->GetViewMatrix();
-
-		//	} else {
-		//		viewMatrixInstancing = Inverse(cameraMatrix);
-
-		//	}
-
-		//	Matrix4x4 viewProjectionMatrixInstancing = Multiply(viewMatrixInstancing, projectionMatrix);
-
-		//	// WVP行列作成
-		//	Matrix4x4 worldViewProjectionMatrixInstancing = Multiply(worldMatrixInstancing, viewProjectionMatrixInstancing);
-
-		//	// 書き込み
-		//	instancingData[index].WVP = worldViewProjectionMatrixInstancing;
-		//	instancingData[index].World = worldMatrixInstancing;
-		//}
-		
 		// ESCAPEキーのトリガー入力で終了
 		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
 			PostQuitMessage(0);
@@ -1046,38 +733,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		dxCore->GetCommandList()->RSSetViewports(1, &viewport);                // Viewportを設定
 		dxCore->GetCommandList()->RSSetScissorRects(1, &scissorRect);          // Scirssorを設定
 
-		// RootSignatureを設定。PSOに設定してるけど別途設定が必要
-		dxCore->GetCommandList()->SetGraphicsRootSignature(rootSignature.Get());
-		dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
-
 		// 形状を設定。PSOに設定しているものとは別。同じものを設定。
 		dxCore->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		// 指定した深度で画面全体をクリアする
 		dxCore->GetCommandList()->ClearDepthStencilView(dxCore->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
-		dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
-
-		// 描画(drawCall/ドローコール)。3頂点で1つのインスタンス。
-		// 1つ目の引数は頂点の数 球は1536
-		//dxCore->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
-		//commandList->DrawIndexedInstanced(1536, 1, 0, 0, 0);
-
-		// 板ポリを使うようセット
-		//dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView2);
-
-		// 板ポリ用の SRV（uvChecker.png の方）を設定
-		//dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
-
-		// 板ポリをインスタンシング描画
-		//dxCore->GetCommandList()->DrawInstanced(UINT(modelData2.vertices.size()), kNumInstance, 0, 0);
-
 		// 3Dオブジェクトの共通描画設定
 		object3DManager->DrawSetting();
 
 		// 描画
-		object3DManager->DrawSetting();
 		for (Object3DInstance* obj : object3DInstances) {
 			obj->Draw(dxCore);
 		}
@@ -1092,7 +757,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Draw();
 		}
-
 
 		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
 		// 実際のCommandListのImGUIの描画コマンドを積む
@@ -1356,49 +1020,6 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData)
 	// 波形データの再生
 	result = pSourceVoice->SubmitSourceBuffer(&buf);
 	result = pSourceVoice->Start();
-}
-
-MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename)
-{
-	//======================
-	// 中で必要となる変数の宣言
-	//======================
-	MaterialData materialData; // 構築するMaterialData
-	std::string line; // ファイルから読んだ1行を格納する場所
-
-	//======================
-	// ファイルを開く
-	//======================
-	std::ifstream file(directoryPath + "/" + filename); // ファイルを開く
-	assert(file.is_open()); // 開けなかったら止める
-
-	//============================================
-	// 実際にファイルを読み,MaterialDataを構築していく
-	//============================================
-	while (std::getline(file, line)) {
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier;
-
-		//=============================
-		// identifierに応じて処理をしていく
-		//=============================
-		if (identifier == "map_Kd") {
-			std::string textureFilename;
-			s >> textureFilename;
-
-			// 連結してファイルパスにする
-			materialData.textureFilePath = directoryPath + "/" + textureFilename;
-
-		}
-
-	}
-
-	//======================
-	// MaterialDataを返す
-	//======================
-	return materialData;
-
 }
 
 void VibrateController(int controllerNum, WORD leftPower, WORD rightPower) {
