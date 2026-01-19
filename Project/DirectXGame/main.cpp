@@ -76,6 +76,7 @@
 #include"Camera.h"
 #include"SRVManager.h"
 #include"ParticleManager.h"
+#include"SoundManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -354,6 +355,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 音声読み込み
 	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
 
+	SoundManager::GetInstance()->Initialize();
+	SoundManager::GetInstance()->LoadWave("fanfare", "Resource/fanfare.wav");
+
 	//==============================
 	// DirectInputの初期化
 	//==============================
@@ -491,6 +495,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 数字の0のキーが押されていたら
 		if (keyboardInput->TriggerKey(DIK_0)) {
 			OutputDebugStringA("trigger [0]\n");
+		}
+
+		if (keyboardInput->TriggerKey(DIK_1)) {
+			SoundManager::GetInstance()->Play("fanfare");
 		}
 
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
@@ -791,6 +799,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 音声データ解放
 	// 絶対にXAudio2を解放してから行うこと
+	SoundManager::GetInstance()->Finalize();
 	SoundUnload(&soundData);
 
 	// パーティクル終了処理
