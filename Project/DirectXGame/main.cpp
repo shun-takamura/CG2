@@ -28,7 +28,7 @@
 
 // DirectX12
 #include <d3d12.h>
-#include <dxgi1_6.h>1
+#include <dxgi1_6.h>
 #include <cassert>
 #include <dxgidebug.h>
 #include <iostream>
@@ -356,7 +356,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
 
 	SoundManager::GetInstance()->Initialize();
-	SoundManager::GetInstance()->LoadWave("fanfare", "Resources/fanfare.wav");
+	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
 
 	//==============================
 	// DirectInputの初期化
@@ -500,6 +500,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		if (keyboardInput->TriggerKey(DIK_1)) {
 			SoundManager::GetInstance()->Play("fanfare");
 			OutputDebugStringA("trigger [1]\n");
+		}
+
+		if (keyboardInput->TriggerKey(DIK_2)) {
+			SoundManager::GetInstance()->Stop("fanfare");
+			OutputDebugStringA("trigger [2]\n");
 		}
 
 		sprite->SetAnchorPoint({ 0.5f,0.5f });

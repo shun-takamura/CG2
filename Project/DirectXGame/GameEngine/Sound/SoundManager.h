@@ -1,39 +1,40 @@
 #pragma once
 #include <xaudio2.h>
+#include <windows.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
 #include <wrl.h>
-#include <fstream>
 #include <unordered_map>
 #include <string>
+#include <vector>
+#include"ConvertString.h"
 
-// 音声データの構造体（内部で使用）
+#pragma comment(lib, "xaudio2.lib")
+#pragma comment(lib, "mfplat.lib")
+#pragma comment(lib, "Mfreadwrite.lib")
+#pragma comment(lib, "mfuuid.lib")
+
 struct SoundData
 {
     WAVEFORMATEX wfex;
-    BYTE* pBuffer;
-    unsigned int bufferSize;
+    std::vector<BYTE> buffer;
 };
 
 class SoundManager
 {
 public:
-    // シングルトン
     static SoundManager* GetInstance();
 
-    // 初期化・終了
     void Initialize();
     void Finalize();
 
-    // 音声データの読み込み（名前をつけて管理）
-    void LoadWave(const std::string& name, const std::string& filename);
-
-    // 音声データの解放
+    // wav, mp3, aac などまとめて読み込める
+    void LoadFile(const std::string& name, const std::string& filename);
     void Unload(const std::string& name);
 
-    // 再生
     void Play(const std::string& name);
-
-    // 停止（必要なら）
-    //void Stop(const std::string& name);
+    void Stop(const std::string& name);
 
 private:
     SoundManager() = default;
@@ -41,13 +42,9 @@ private:
     SoundManager(const SoundManager&) = delete;
     SoundManager& operator=(const SoundManager&) = delete;
 
-    // WAVファイル読み込み（内部用）
-    SoundData LoadWaveFile(const std::string& filename);
-
-    // XAudio2
     Microsoft::WRL::ComPtr<IXAudio2> xAudio2_;
     IXAudio2MasteringVoice* masterVoice_ = nullptr;
 
-    // 音声データをキーで管理
     std::unordered_map<std::string, SoundData> soundDatas_;
+    std::unordered_map<std::string, IXAudio2SourceVoice*> sourceVoices_;
 };
