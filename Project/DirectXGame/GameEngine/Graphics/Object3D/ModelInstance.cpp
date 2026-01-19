@@ -85,6 +85,9 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 	// UVTransformに単位行列を書き込む
 	material_->uvTransform = MakeIdentity4x4();
+
+	// 光沢度の初期値
+	material_->shininess = 50.0f;
 }
 
 ModelData ModelInstance::LoadObjFile(const std::string& directorPath, const std::string& filename)

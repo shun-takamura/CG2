@@ -188,6 +188,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h" />
