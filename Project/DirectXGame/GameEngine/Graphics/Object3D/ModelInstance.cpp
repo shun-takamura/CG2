@@ -86,7 +86,7 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 	// UVTransformに単位行列を書き込む
 	material_->uvTransform = MakeIdentity4x4();
 
-	// 光沢度の初期値
+	// 光沢度の初期値。小さいほどぼんやり広く、大きいほどくっきり狭く
 	material_->shininess = 50.0f;
 }
 
