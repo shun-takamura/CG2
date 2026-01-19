@@ -11,8 +11,8 @@
 #include <wrl.h>
 
 // Sounds
-#include <xaudio2.h>
-#pragma comment(lib,"xaudio2.lib")
+//#include <xaudio2.h>
+//#pragma comment(lib,"xaudio2.lib")
 // もう入ってるけどfstreamも必要だからね
 
 // ============
@@ -28,7 +28,7 @@
 
 // DirectX12
 #include <d3d12.h>
-#include <dxgi1_6.h>
+#include <dxgi1_6.h>1
 #include <cassert>
 #include <dxgidebug.h>
 #include <iostream>
@@ -76,6 +76,7 @@
 #include"Camera.h"
 #include"SRVManager.h"
 #include"ParticleManager.h"
+#include"SoundManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -92,38 +93,38 @@
 // ファイル構造によって色々ある
 
 // チャンクヘッダ
-struct ChunkHeader
-{
-	char id[4]; // チャンク毎のID
-	int32_t size; // チャンクサイズ
-};
+//struct ChunkHeader
+//{
+//	char id[4]; // チャンク毎のID
+//	int32_t size; // チャンクサイズ
+//};
+//
+//// RIFFヘッダチャンク
+//struct RiffHeader
+//{
+//	ChunkHeader chunk; // RIFF
+//	char type[4]; // WAVE
+//};
+//
+//// FMTチャンク
+//struct FormatChunk
+//{
+//	ChunkHeader chunk; // fmt
+//	WAVEFORMATEX fmt; // 波形フォーマット
+//};
 
-// RIFFヘッダチャンク
-struct RiffHeader
-{
-	ChunkHeader chunk; // RIFF
-	char type[4]; // WAVE
-};
-
-// FMTチャンク
-struct FormatChunk
-{
-	ChunkHeader chunk; // fmt
-	WAVEFORMATEX fmt; // 波形フォーマット
-};
-
-// 音声データ
-struct SoundData
-{
-	// 波形フォーマット
-	WAVEFORMATEX wfex;
-
-	// バッファの先頭アドレス
-	BYTE* pBuffer;
-
-	// バッファのサイズ
-	unsigned int bufferSize;
-};
+//// 音声データ
+//struct SoundData
+//{
+//	// 波形フォーマット
+//	WAVEFORMATEX wfex;
+//
+//	// バッファの先頭アドレス
+//	BYTE* pBuffer;
+//
+//	// バッファのサイズ
+//	unsigned int bufferSize;
+//};
 
 // デッドゾーンの設定
 struct DeadZone {
@@ -160,15 +161,15 @@ struct D3DResourceLeakCheker {
 /// </summary>
 /// <param name="filename">ファイル名</param>
 /// <returns>音声データ</returns>
-SoundData SoundLoadWave(const char* filename);
-
-/// <summary>
-/// 音声データ解放関数
-/// </summary>
-/// <param name="soundData">解放する音声データ</param>
-void SoundUnload(SoundData* soundData);
-
-void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData);
+//SoundData SoundLoadWave(const char* filename);
+//
+///// <summary>
+///// 音声データ解放関数
+///// </summary>
+///// <param name="soundData">解放する音声データ</param>
+//void SoundUnload(SoundData* soundData);
+//
+//void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData);
 
 //=======================
 // xboxコントローラーの関数
@@ -352,7 +353,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	IXAudio2MasteringVoice* masterVoice;
 
 	// 音声読み込み
-	SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
+	//SoundData soundData = SoundLoadWave("Resources/fanfare.wav");
+
+	SoundManager::GetInstance()->Initialize();
+	SoundManager::GetInstance()->LoadWave("fanfare", "Resources/fanfare.wav");
 
 	//==============================
 	// DirectInputの初期化
@@ -491,6 +495,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 数字の0のキーが押されていたら
 		if (keyboardInput->TriggerKey(DIK_0)) {
 			OutputDebugStringA("trigger [0]\n");
+		}
+
+		if (keyboardInput->TriggerKey(DIK_1)) {
+			SoundManager::GetInstance()->Play("fanfare");
+			OutputDebugStringA("trigger [1]\n");
 		}
 
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
@@ -787,11 +796,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete keyboardInput;
 
 	// XAudio2解放
-	xAudio2.Reset();
+	//xAudio2.Reset();
 
 	// 音声データ解放
 	// 絶対にXAudio2を解放してから行うこと
-	SoundUnload(&soundData);
+	SoundManager::GetInstance()->Finalize();
+	//SoundUnload(&soundData);
 
 	// パーティクル終了処理
 	ParticleManager::GetInstance()->Finalize();
@@ -853,134 +863,134 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 //============================
 // 関数の定義
 //============================
-
-SoundData SoundLoadWave(const char* filename)
-{
-	//HRESULT result;
-
-	//===========================
-	// ファイルを開く
-	//===========================
-	// fstreamのインスタンス
-	std::ifstream file;
-
-	// .wavファイルをバイナリモードで開く
-	file.open(filename, std::ios_base::binary);
-
-	// ファイルが開けなかったら停止
-	assert(file.is_open());
-
-	//===========================
-	// .wavデータを読み込み
-	//===========================
-	// RIFFヘッダの読み込み
-	RiffHeader riff;
-	file.read((char*)&riff, sizeof(riff));
-
-	// ファイルがRIFFかチェック
-	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
-		assert(0);
-	}
-
-	// RIFFならファイルタイプがWAVEかチェック
-	// MP3を拡張子だけ.wavにしてもダメ。やりたいなら変換して
-	if (strncmp(riff.type, "WAVE", 4) != 0) {
-		assert(0);
-	}
-
-	// 一時的にチャンクヘッダ（IDとサイズ）を格納する変数を用意
-	ChunkHeader chunk = {};
-
-	// ファイルからチャンクヘッダ（4バイトのIDと4バイトのサイズ）を読み込む
-	file.read((char*)&chunk, sizeof(ChunkHeader));
-
-	// チャンクIDが "fmt " であることを確認（フォーマットチャンクでなければ停止）
-	if (strncmp(chunk.id, "fmt ", 4) != 0) {
-		assert(0);  // フォーマットチャンク以外だった場合は処理を中断
-	}
-
-	// フォーマットチャンク用の構造体を初期化
-	FormatChunk format = {};
-
-	// 読み込んだチャンクヘッダ情報を FormatChunk にコピー
-	format.chunk = chunk;
-
-	// ファイルからチャンク本体（波形フォーマット情報）を読み込む(40Byte対応Ver)
-	// サイズはチャンクヘッダに記録されていたサイズに基づいて読み込む
-	const size_t kFmtLimitSize = sizeof(format.fmt);             // 通常18バイト
-	std::vector<char> buffer(chunk.size);                        // チャンクサイズ分の一時バッファを確保
-	file.read(buffer.data(), chunk.size);                        // チャンクサイズ分を読み込む
-	std::memcpy(&format.fmt, buffer.data(), kFmtLimitSize);      // 先頭kFmtLimitSize分だけをコピー
-
-	// Dataチャンクの読み込み
-	ChunkHeader data;
-	file.read((char*)&data, sizeof(data));
-
-	// JUNKチャンクを検知した場合の処理
-	if (strncmp(data.id, "JUNK", 4) == 0) {
-		// 読み取り位置をJUNKチャンクの終わりまで進める
-		file.seekg(data.size, std::ios_base::cur);
-
-		// 再読み込み
-		file.read((char*)&data, sizeof(data));
-	}
-
-	if (strncmp(data.id, "data", 4) != 0) {
-		assert(0);
-	}
-
-	// Dataチャンクのデータ部(波形データ)の読み込み
-	// Dataチャンクは音声ファイルごとに異なるのでバッファを動的確保
-	char* pBuffer = new char[data.size];
-	file.read(pBuffer, data.size);
-
-	//===========================
-	// ファイルを閉じる
-	//===========================
-	// WAVEファイルを閉じる
-	file.close();
-
-	//===========================
-	// SoundDataを返す
-	//===========================
-	SoundData soundData = {};
-
-	soundData.wfex = format.fmt; // 波形フォーマット
-	soundData.pBuffer = reinterpret_cast<BYTE*>(pBuffer); // 波形データ
-	soundData.bufferSize = data.size; // 波形データのサイズ
-
-	return soundData;
-}
-
-void SoundUnload(SoundData* soundData)
-{
-	// バッファのメモリを解放
-	delete[] soundData->pBuffer;
-
-	soundData->pBuffer = 0;
-	soundData->bufferSize = 0;
-	soundData->wfex = {};
-}
-
-void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData)
-{
-	HRESULT result;
-
-	// 波形フォーマットを基にSourceVoiceの生成
-	IXAudio2SourceVoice* pSourceVoice = nullptr;
-	result = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
-	assert(SUCCEEDED(result));
-
-	// 再生する波形データの設定
-	XAUDIO2_BUFFER buf{};
-	buf.pAudioData = soundData.pBuffer;
-	buf.AudioBytes = soundData.bufferSize;
-	buf.Flags = XAUDIO2_END_OF_STREAM;
-
-	// 波形データの再生
-	result = pSourceVoice->SubmitSourceBuffer(&buf);
-	result = pSourceVoice->Start();
-}
+//
+//SoundData SoundLoadWave(const char* filename)
+//{
+//	//HRESULT result;
+//
+//	//===========================
+//	// ファイルを開く
+//	//===========================
+//	// fstreamのインスタンス
+//	std::ifstream file;
+//
+//	// .wavファイルをバイナリモードで開く
+//	file.open(filename, std::ios_base::binary);
+//
+//	// ファイルが開けなかったら停止
+//	assert(file.is_open());
+//
+//	//===========================
+//	// .wavデータを読み込み
+//	//===========================
+//	// RIFFヘッダの読み込み
+//	RiffHeader riff;
+//	file.read((char*)&riff, sizeof(riff));
+//
+//	// ファイルがRIFFかチェック
+//	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
+//		assert(0);
+//	}
+//
+//	// RIFFならファイルタイプがWAVEかチェック
+//	// MP3を拡張子だけ.wavにしてもダメ。やりたいなら変換して
+//	if (strncmp(riff.type, "WAVE", 4) != 0) {
+//		assert(0);
+//	}
+//
+//	// 一時的にチャンクヘッダ（IDとサイズ）を格納する変数を用意
+//	ChunkHeader chunk = {};
+//
+//	// ファイルからチャンクヘッダ（4バイトのIDと4バイトのサイズ）を読み込む
+//	file.read((char*)&chunk, sizeof(ChunkHeader));
+//
+//	// チャンクIDが "fmt " であることを確認（フォーマットチャンクでなければ停止）
+//	if (strncmp(chunk.id, "fmt ", 4) != 0) {
+//		assert(0);  // フォーマットチャンク以外だった場合は処理を中断
+//	}
+//
+//	// フォーマットチャンク用の構造体を初期化
+//	FormatChunk format = {};
+//
+//	// 読み込んだチャンクヘッダ情報を FormatChunk にコピー
+//	format.chunk = chunk;
+//
+//	// ファイルからチャンク本体（波形フォーマット情報）を読み込む(40Byte対応Ver)
+//	// サイズはチャンクヘッダに記録されていたサイズに基づいて読み込む
+//	const size_t kFmtLimitSize = sizeof(format.fmt);             // 通常18バイト
+//	std::vector<char> buffer(chunk.size);                        // チャンクサイズ分の一時バッファを確保
+//	file.read(buffer.data(), chunk.size);                        // チャンクサイズ分を読み込む
+//	std::memcpy(&format.fmt, buffer.data(), kFmtLimitSize);      // 先頭kFmtLimitSize分だけをコピー
+//
+//	// Dataチャンクの読み込み
+//	ChunkHeader data;
+//	file.read((char*)&data, sizeof(data));
+//
+//	// JUNKチャンクを検知した場合の処理
+//	if (strncmp(data.id, "JUNK", 4) == 0) {
+//		// 読み取り位置をJUNKチャンクの終わりまで進める
+//		file.seekg(data.size, std::ios_base::cur);
+//
+//		// 再読み込み
+//		file.read((char*)&data, sizeof(data));
+//	}
+//
+//	if (strncmp(data.id, "data", 4) != 0) {
+//		assert(0);
+//	}
+//
+//	// Dataチャンクのデータ部(波形データ)の読み込み
+//	// Dataチャンクは音声ファイルごとに異なるのでバッファを動的確保
+//	char* pBuffer = new char[data.size];
+//	file.read(pBuffer, data.size);
+//
+//	//===========================
+//	// ファイルを閉じる
+//	//===========================
+//	// WAVEファイルを閉じる
+//	file.close();
+//
+//	//===========================
+//	// SoundDataを返す
+//	//===========================
+//	SoundData soundData = {};
+//
+//	soundData.wfex = format.fmt; // 波形フォーマット
+//	soundData.pBuffer = reinterpret_cast<BYTE*>(pBuffer); // 波形データ
+//	soundData.bufferSize = data.size; // 波形データのサイズ
+//
+//	return soundData;
+//}
+//
+//void SoundUnload(SoundData* soundData)
+//{
+//	// バッファのメモリを解放
+//	delete[] soundData->pBuffer;
+//
+//	soundData->pBuffer = 0;
+//	soundData->bufferSize = 0;
+//	soundData->wfex = {};
+//}
+//
+//void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData)
+//{
+//	HRESULT result;
+//
+//	// 波形フォーマットを基にSourceVoiceの生成
+//	IXAudio2SourceVoice* pSourceVoice = nullptr;
+//	result = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
+//	assert(SUCCEEDED(result));
+//
+//	// 再生する波形データの設定
+//	XAUDIO2_BUFFER buf{};
+//	buf.pAudioData = soundData.pBuffer;
+//	buf.AudioBytes = soundData.bufferSize;
+//	buf.Flags = XAUDIO2_END_OF_STREAM;
+//
+//	// 波形データの再生
+//	result = pSourceVoice->SubmitSourceBuffer(&buf);
+//	result = pSourceVoice->Start();
+//}
 
 void VibrateController(int controllerNum, WORD leftPower, WORD rightPower) {
 	XINPUT_VIBRATION vibration;
