@@ -14,6 +14,7 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
 
 	CreateTransformationMatrixResource(dxCore);
 	CreateDirectionalLight(dxCore);
+	CreateCameraResource(dxCore);
 
 	// Transform変数を作る
 	transform_ = {
@@ -32,6 +33,9 @@ void Object3DInstance::Update()
 	if (camera_) {
 		const Matrix4x4& viewProjectionMatrix = camera_->GetViewProjectionMatrix();
 		worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
+
+		// カメラ位置をGPUに送る
+		cameraData_->worldPosition = camera_->GetTranslate();
 	} else{
 		worldViewProjectionMatrix = worldMatrix;
 	}
@@ -45,6 +49,11 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
 	// 座標変換行列CBufferの場所を設定
 	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
 		1,transformationMatrixResource_->GetGPUVirtualAddress()
+	);
+
+	// カメラCBufferの場所を設定
+	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+		4, cameraResource_->GetGPUVirtualAddress()
 	);
 
 	// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
@@ -93,6 +102,19 @@ void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
 
 	// ライトの方式の設定
 	LightingMode lightingMode = LightingMode::None;
+}
+
+void Object3DInstance::CreateCameraResource(DirectXCore* dxCore)
+{
+	// カメラ用リソースを作成
+	cameraResource_ = dxCore->CreateBufferResource(sizeof(CameraForGPU));
+
+	// 書き込み用アドレスを取得
+	cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
+
+	// 初期値
+	cameraData_->worldPosition = { 0.0f, 0.0f, -10.0f };
+	cameraData_->padding = 0.0f;
 }
 
 void Object3DInstance::SetModel(const std::string& filePath)

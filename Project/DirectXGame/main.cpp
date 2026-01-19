@@ -296,8 +296,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// カメラの生成
 	Camera* camera = new Camera();
-	camera->SetRotate({ 0.0f,0.0f,0.0f });
-	camera->SetTranslate({ 0.0f,0.0f,-20.0f });
+	camera->SetRotate({ 0.5f,0.0f,0.0f });
+	camera->SetTranslate({ 0.0f,2.0f,-20.0f });
 	object3DManager->SetDefaultCamera(camera);
 
 	ParticleManager::GetInstance()->Initialize(dxCore, srvManager);
@@ -333,7 +333,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::vector<Object3DInstance*> object3DInstances;
 
 	// 複数のモデルを作成
-	const std::string modelFiles[] = { "axis.obj", "fence.obj", "plane.obj" };
+	const std::string modelFiles[] = { "axis.obj", "monsterBall.obj", "plane.obj" };
 	for (int i = 0; i < 3; ++i) {
 		Object3DInstance* obj = new Object3DInstance();
 		obj->Initialize(object3DManager, dxCore, "Resources", modelFiles[i]);

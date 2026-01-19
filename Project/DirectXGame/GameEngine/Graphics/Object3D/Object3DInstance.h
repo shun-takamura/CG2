@@ -15,6 +15,7 @@
 #include"ModelInstance.h"
 #include"ModelManager.h"
 #include"Camera.h"
+#include"CameraForGPU.h"
 
 class Object3DManager;
 
@@ -30,10 +31,12 @@ class Object3DInstance{
 	// バッファリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource_;
+	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource_;
 
 	// バッファ内データへのCPU側ポインタ
 	TransformationMatrix* transformationMatrixData_ = nullptr;
 	DirectionalLight* directionalLightData_ = nullptr;
+	CameraForGPU* cameraData_ = nullptr;
 
 	// バッファリソースの使い道を補足するバッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
@@ -50,6 +53,8 @@ class Object3DInstance{
 
 	// 平行光源リソース作成
 	void CreateDirectionalLight(DirectXCore* dxCore);
+
+	void CreateCameraResource(DirectXCore* dxCore);
 
 public:
 
