@@ -9,6 +9,7 @@
 #include "MathUtility.h"
 #include "TransformationMatrix.h"
 #include "DirectionalLight.h"
+#include"PointLight.h"
 #include "TextureManager.h"
 #include "Transform.h"
 #include "ModelCore.h"
@@ -35,12 +36,14 @@ class Object3DInstance : public IImGuiEditable {
 
     // バッファリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
-    Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource_;
+    //Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource_;
+    //Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource_;
 
     // バッファ内データへのCPU側ポインタ
     TransformationMatrix* transformationMatrixData_ = nullptr;
-    DirectionalLight* directionalLightData_ = nullptr;
+    //DirectionalLight* directionalLightData_ = nullptr;
+    //PointLight* pointLightData_ = nullptr;
     CameraForGPU* cameraData_ = nullptr;
 
     // バッファリソースの使い道を補足するバッファビュー
@@ -60,7 +63,10 @@ class Object3DInstance : public IImGuiEditable {
     void CreateTransformationMatrixResource(DirectXCore* dxCore);
 
     // 平行光源リソース作成
-    void CreateDirectionalLight(DirectXCore* dxCore);
+    //void CreateDirectionalLight(DirectXCore* dxCore);
+
+    // pointLight
+    //void CreatePointLight(DirectXCore* dxCore);
 
     void CreateCameraResource(DirectXCore* dxCore);
 

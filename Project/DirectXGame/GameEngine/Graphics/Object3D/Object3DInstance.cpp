@@ -23,7 +23,8 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
     modelInstance_ = ModelManager::GetInstance()->FindModel(filename);
 
     CreateTransformationMatrixResource(dxCore);
-    CreateDirectionalLight(dxCore);
+    //CreateDirectionalLight(dxCore);
+    //CreatePointLight(dxCore);
     CreateCameraResource(dxCore);
 
     // Transform変数を作る
@@ -66,10 +67,15 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
         4, cameraResource_->GetGPUVirtualAddress()
     );
 
-    // rootParameter[3]のところにライトのリソースを入れる。CPUに送る
-    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        3, directionalLightResource_->GetGPUVirtualAddress()
-    );
+    //// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
+    //dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+    //    3, directionalLightResource_->GetGPUVirtualAddress()
+    //);
+
+    //// rootParameter[5]のところにポイントライトのリソースを入れる。CPUに送る
+    //dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+    //    5, pointLightResource_->GetGPUVirtualAddress()
+    //);
 
     // 3Dモデルがあれば描画
     if (modelInstance_) {
@@ -94,26 +100,43 @@ void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
     transformationMatrixData_->WorldInverseTranspose = MakeIdentity4x4();
 }
 
-void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
-{
-    // サイズを設定
-    directionalLightResource_ = dxCore->CreateBufferResource(sizeof(DirectionalLight));
+//void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
+//{
+//    // サイズを設定
+//    directionalLightResource_ = dxCore->CreateBufferResource(sizeof(DirectionalLight));
+//
+//    // 書き込むためのアドレスを取得してdirectionalLightDataに割り当てる
+//    directionalLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData_));
+//
+//    // 白で書き込む
+//    directionalLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+//
+//    // ライトの向きを設定
+//    directionalLightData_->direction = { 0.0f, -1.0f, 0.0f };
+//
+//    // 強度設定
+//    directionalLightData_->intensity = 0.0f;
+//
+//    // ライトの方式の設定
+//    LightingMode lightingMode = LightingMode::None;
+//}
 
-    // 書き込むためのアドレスを取得してdirectionalLightDataに割り当てる
-    directionalLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData_));
-
-    // 白で書き込む
-    directionalLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-    // ライトの向きを設定
-    directionalLightData_->direction = { 0.0f, -1.0f, 0.0f };
-
-    // 強度設定
-    directionalLightData_->intensity = 1.0f;
-
-    // ライトの方式の設定
-    LightingMode lightingMode = LightingMode::None;
-}
+//void Object3DInstance::CreatePointLight(DirectXCore* dxCore){
+//    // サイズを設定
+//    pointLightResource_ = dxCore->CreateBufferResource(sizeof(PointLight));
+//
+//    // 書き込むためのアドレスを取得してdirectionalLightDataに割り当てる
+//    pointLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData_));
+//
+//    // 白で書き込む
+//    pointLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+//
+//    // ライトの位置
+//    pointLightData_->position = { 0.0f,0.0f,-3.0f };
+//    
+//    // 強度設定
+//    pointLightData_->intensity = 1.0f;
+//}
 
 void Object3DInstance::CreateCameraResource(DirectXCore* dxCore)
 {
@@ -166,11 +189,17 @@ void Object3DInstance::OnImGuiInspector()
     }
 
     // Light
-    if (ImGui::CollapsingHeader("Directional Light")) {
+  /*  if (ImGui::CollapsingHeader("Directional Light")) {
         ImGui::ColorEdit4("Light Color", &directionalLightData_->color.x);
         ImGui::DragFloat3("Light Direction", &directionalLightData_->direction.x, 0.01f);
         ImGui::DragFloat("Light Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
     }
+
+    if (ImGui::CollapsingHeader("Point Light")) {
+        ImGui::ColorEdit4("PointLight Color", &pointLightData_->color.x);
+        ImGui::DragFloat3("PointLight Position", &pointLightData_->position.x, 0.01f);
+        ImGui::DragFloat("PointLight Intensity", &pointLightData_->intensity, 0.01f, 0.0f, 10.0f);
+    }*/
 
     // Texture（将来の拡張用）
     if (ImGui::CollapsingHeader("Texture")) {
