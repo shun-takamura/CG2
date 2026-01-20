@@ -77,6 +77,13 @@ Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float botto
 /// <returns>4x4逆行列</returns>
 Matrix4x4 Inverse(Matrix4x4 matrix4x4);
 
+/// <summary>
+/// 転置行列を求める関数
+/// </summary>
+/// <param name="matrix">転置行列を求めたい行列</param>
+/// <returns>4x4転置行列</returns>
+Matrix4x4 Transpose(const Matrix4x4& matrix);
+
 // Scale行列作成関数
 Matrix4x4 MakeScaleMatrix(Transform transform);
 

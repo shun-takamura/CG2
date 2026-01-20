@@ -439,6 +439,19 @@ Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 	return resoultMatrix;
 }
 
+Matrix4x4 Transpose(const Matrix4x4& matrix)
+{
+	Matrix4x4 resoltMatrix;
+
+	for (int i = 0; i < 4; ++i) {
+		for (int j = 0; j < 4; ++j) {
+			resoltMatrix.m[i][j] = matrix.m[j][i];
+		}
+	}
+
+	return resoltMatrix;
+}
+
 Matrix4x4 MakeScaleMatrix(Transform transform)
 {
 	Matrix4x4 scaleMatrix4x4;

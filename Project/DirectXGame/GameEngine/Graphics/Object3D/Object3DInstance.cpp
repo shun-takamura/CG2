@@ -51,6 +51,7 @@ void Object3DInstance::Update()
 
     transformationMatrixData_->World = worldMatrix;
     transformationMatrixData_->WVP = worldViewProjectionMatrix;
+    transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(worldMatrix));
 }
 
 void Object3DInstance::Draw(DirectXCore* dxCore)
@@ -90,6 +91,7 @@ void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
     // 単位行列を書き込む
     transformationMatrixData_->WVP = MakeIdentity4x4();
     transformationMatrixData_->World = MakeIdentity4x4();
+    transformationMatrixData_->WorldInverseTranspose = MakeIdentity4x4();
 }
 
 void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
