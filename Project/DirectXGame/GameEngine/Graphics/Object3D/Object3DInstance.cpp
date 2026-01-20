@@ -1,124 +1,182 @@
 #include "Object3DInstance.h"
+#include "imgui.h"
 
-void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, const std::string& directorPath, const std::string& filename)
+void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore,
+    const std::string& directorPath, const std::string& filename,
+    const std::string& name)
 {
-	object3DManager_ = object3DManager;
+    object3DManager_ = object3DManager;
 
-	camera_ = object3DManager_->GetDefaultCamera();
+    // 名前が指定されていなければファイル名を使用
+    if (name.empty()) {
+        name_ = filename;
+    } else {
+        name_ = name;
+    }
 
-	// ModelManagerからモデルをロード
-	ModelManager::GetInstance()->LoadModel(filename);
+    camera_ = object3DManager_->GetDefaultCamera();
 
-	// ロードしたモデルを取得してセット
-	modelInstance_ = ModelManager::GetInstance()->FindModel(filename);
+    // ModelManagerからモデルをロード
+    ModelManager::GetInstance()->LoadModel(filename);
 
-	CreateTransformationMatrixResource(dxCore);
-	CreateDirectionalLight(dxCore);
-	CreateCameraResource(dxCore);
+    // ロードしたモデルを取得してセット
+    modelInstance_ = ModelManager::GetInstance()->FindModel(filename);
 
-	// Transform変数を作る
-	transform_ = {
-		{1.0f,1.0f,1.0f},
-		{0.0f,0.0f,0.0f},
-		{0.0f,0.0f,0.0f}
-	};
+    CreateTransformationMatrixResource(dxCore);
+    CreateDirectionalLight(dxCore);
+    CreateCameraResource(dxCore);
 
+    // Transform変数を作る
+    transform_ = {
+        {1.0f, 1.0f, 1.0f},
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f}
+    };
 }
 
 void Object3DInstance::Update()
 {
-	Matrix4x4 worldMatrix = MakeAffineMatrix(transform_);
-	Matrix4x4 worldViewProjectionMatrix;
+    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_);
+    Matrix4x4 worldViewProjectionMatrix;
 
-	if (camera_) {
-		const Matrix4x4& viewProjectionMatrix = camera_->GetViewProjectionMatrix();
-		worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
+    if (camera_) {
+        const Matrix4x4& viewProjectionMatrix = camera_->GetViewProjectionMatrix();
+        worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
 
-		// カメラ位置をGPUに送る
-		cameraData_->worldPosition = camera_->GetTranslate();
-	} else{
-		worldViewProjectionMatrix = worldMatrix;
-	}
+        // カメラ位置をGPUに送る
+        cameraData_->worldPosition = camera_->GetTranslate();
+    } else {
+        worldViewProjectionMatrix = worldMatrix;
+    }
 
-	transformationMatrixData_->World = worldMatrix;
-	transformationMatrixData_->WVP = worldViewProjectionMatrix;
+    transformationMatrixData_->World = worldMatrix;
+    transformationMatrixData_->WVP = worldViewProjectionMatrix;
 }
 
 void Object3DInstance::Draw(DirectXCore* dxCore)
 {
-	// 座標変換行列CBufferの場所を設定
-	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-		1,transformationMatrixResource_->GetGPUVirtualAddress()
-	);
+    // 座標変換行列CBufferの場所を設定
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        1, transformationMatrixResource_->GetGPUVirtualAddress()
+    );
 
-	// カメラCBufferの場所を設定
-	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-		4, cameraResource_->GetGPUVirtualAddress()
-	);
+    // カメラCBufferの場所を設定
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        4, cameraResource_->GetGPUVirtualAddress()
+    );
 
-	// rootParameter[3]のところにライトのリソースを入れる。CPUに送る
-	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionalLightResource_->GetGPUVirtualAddress());
+    // rootParameter[3]のところにライトのリソースを入れる。CPUに送る
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        3, directionalLightResource_->GetGPUVirtualAddress()
+    );
 
-	// 3Dモデルがあれば描画
-	if (modelInstance_) {
-		modelInstance_->Draw(dxCore);
-	}
-
+    // 3Dモデルがあれば描画
+    if (modelInstance_) {
+        modelInstance_->Draw(dxCore);
+    }
 }
 
 void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
-	// サイズを設定
-	UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
+    // サイズを設定
+    UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
 
-	// WVP用のリソースを作る。
-	transformationMatrixResource_ = dxCore->CreateBufferResource(transformationMatrixSize);
+    // WVP用のリソースを作る。
+    transformationMatrixResource_ = dxCore->CreateBufferResource(transformationMatrixSize);
 
-	// 書き込むためのアドレスを取得
-	transformationMatrixResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData_));
+    // 書き込むためのアドレスを取得
+    transformationMatrixResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData_));
 
-	// 単位行列を書き込む
-	transformationMatrixData_->WVP = MakeIdentity4x4();
-	transformationMatrixData_->World = MakeIdentity4x4();
-
+    // 単位行列を書き込む
+    transformationMatrixData_->WVP = MakeIdentity4x4();
+    transformationMatrixData_->World = MakeIdentity4x4();
 }
 
 void Object3DInstance::CreateDirectionalLight(DirectXCore* dxCore)
 {
-	// サイズを設定
-	directionalLightResource_ = dxCore->CreateBufferResource(sizeof(DirectionalLight));
+    // サイズを設定
+    directionalLightResource_ = dxCore->CreateBufferResource(sizeof(DirectionalLight));
 
-	// 書き込むためのアドレスを取得してdirectionalLightDataに割り当てる
-	directionalLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData_));
+    // 書き込むためのアドレスを取得してdirectionalLightDataに割り当てる
+    directionalLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData_));
 
-	// 白で書き込む
-	directionalLightData_->color = { 1.0f,1.0f,1.0f,1.0f };
+    // 白で書き込む
+    directionalLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-	// ライトの向きを設定
-	directionalLightData_->direction = { 0.0f,-1.0f,0.0f };
+    // ライトの向きを設定
+    directionalLightData_->direction = { 0.0f, -1.0f, 0.0f };
 
-	// なんの設定かわすれた
-	directionalLightData_->intensity = 1.0f;
+    // 強度設定
+    directionalLightData_->intensity = 1.0f;
 
-	// ライトの方式の設定
-	LightingMode lightingMode = LightingMode::None;
+    // ライトの方式の設定
+    LightingMode lightingMode = LightingMode::None;
 }
 
 void Object3DInstance::CreateCameraResource(DirectXCore* dxCore)
 {
-	// カメラ用リソースを作成
-	cameraResource_ = dxCore->CreateBufferResource(sizeof(CameraForGPU));
+    // カメラ用リソースを作成
+    cameraResource_ = dxCore->CreateBufferResource(sizeof(CameraForGPU));
 
-	// 書き込み用アドレスを取得
-	cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
+    // 書き込み用アドレスを取得
+    cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
 
-	// 初期値
-	cameraData_->worldPosition = { 0.0f, 0.0f, -10.0f };
-	cameraData_->padding = 0.0f;
+    // 初期値
+    cameraData_->worldPosition = { 0.0f, 0.0f, -10.0f };
+    cameraData_->padding = 0.0f;
 }
 
 void Object3DInstance::SetModel(const std::string& filePath)
 {
-	// モデルを検索してセット
-	modelInstance_ = ModelManager::GetInstance()->FindModel(filePath);
+    // モデルを検索してセット
+    modelInstance_ = ModelManager::GetInstance()->FindModel(filePath);
+}
+
+void Object3DInstance::SetTexture(const std::string& filePath)
+{
+    textureFilePath_ = filePath;
+    // TODO: モデルのテクスチャを変更する処理
+    // ModelInstanceにテクスチャ変更機能があれば呼び出す
+}
+
+//==============================
+// ImGui Inspector描画
+//==============================
+void Object3DInstance::OnImGuiInspector()
+{
+    // Transform
+    if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat3("Position", &transform_.translate.x, 0.1f);
+
+        // 回転をDegreeで表示
+        Vector3 rotateDegree = {
+            transform_.rotate.x * (180.0f / 3.14159265f),
+            transform_.rotate.y * (180.0f / 3.14159265f),
+            transform_.rotate.z * (180.0f / 3.14159265f)
+        };
+        if (ImGui::DragFloat3("Rotation", &rotateDegree.x, 1.0f)) {
+            transform_.rotate.x = rotateDegree.x * (3.14159265f / 180.0f);
+            transform_.rotate.y = rotateDegree.y * (3.14159265f / 180.0f);
+            transform_.rotate.z = rotateDegree.z * (3.14159265f / 180.0f);
+        }
+
+        ImGui::DragFloat3("Scale", &transform_.scale.x, 0.01f);
+    }
+
+    // Light
+    if (ImGui::CollapsingHeader("Directional Light")) {
+        ImGui::ColorEdit4("Light Color", &directionalLightData_->color.x);
+        ImGui::DragFloat3("Light Direction", &directionalLightData_->direction.x, 0.01f);
+        ImGui::DragFloat("Light Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
+    }
+
+    // Texture（将来の拡張用）
+    if (ImGui::CollapsingHeader("Texture")) {
+        ImGui::Text("Current: %s", textureFilePath_.empty() ? "(none)" : textureFilePath_.c_str());
+
+        // テクスチャ変更ボタン（将来実装）
+        if (ImGui::Button("Change Texture...")) {
+            // TODO: テクスチャ選択ダイアログ
+        }
+    }
 }

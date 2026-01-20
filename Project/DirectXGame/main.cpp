@@ -7,17 +7,6 @@
 // ComPtr
 #include <wrl.h>
 
-// ============
-// 入力デバイス
-//=============
-#define DIRECTINPUT_VERSION 0x0800 // Directinputのバージョン指定
-#include <dinput.h> // 必ずバージョン指定後にインクルード
-#pragma comment(lib,"dinput8.lib")
-#pragma comment(lib,"dxguid.lib")
-
-#include <XInput.h> // xboxコントローラー使うから
-#pragma comment(lib,"xinput.lib")
-
 // DirectX12
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -72,6 +61,8 @@
 #include "ControllerInput.h"
 #include "MouseInput.h"
 #include "InputManager.h"
+#include "ImGuiManager.h"
+#include "Debug.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -79,6 +70,11 @@
 
 // 入力デバイス
 #include "KeyboardInput.h"
+
+//ImGUI
+#include "imgui.h"
+#include "imgui_impl_dx12.h"
+#include "imgui_impl_win32.h"
 
 // リリースチェック
 struct D3DResourceLeakCheker {
@@ -123,6 +119,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// SRVManagerの初期化
 	SRVManager* srvManager = new SRVManager();
 	srvManager->Initialize(dxCore);
+
+	// ImGuiManagerの初期化
+	ImGuiManager::Instance().Initialize(
+		winApp->GetHwnd(),
+		dxCore,
+		srvManager
+	);
 
 	//========================================
 	// ここにデバッグレイヤー デバックの時だけ出る
@@ -222,7 +225,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
 
-	// 交互に使うテクスチャ
+	// 交互に使うスプライト
 	const std::string textures[2] = {
 		"Resources/uvChecker.png",
 		"Resources/monsterBall.png"
@@ -231,30 +234,32 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 5枚生成
 	for (uint32_t i = 0; i < 5; ++i) {
 		SpriteInstance* sprite = new SpriteInstance();
-
-		// iが偶数なら0、奇数なら1
 		const std::string& texturePath = textures[i % 2];
 
-		sprite->Initialize(spriteManager, texturePath);
+		// 名前を指定して初期化
+		std::string spriteName = "Sprite_" + std::to_string(i);
+		sprite->Initialize(spriteManager, texturePath, spriteName);
 
 		sprite->SetSize({ 100.0f, 100.0f });
 		sprite->SetPosition({ i * 2.0f, 0.0f });
-
 		sprites.push_back(sprite);
 	}
 
 	// 3Dオブジェクトを配列で管理
 	std::vector<Object3DInstance*> object3DInstances;
+	const std::string modelFiles[] = { "axis.obj", "monsterBall.obj", "fence.obj" };
+	const std::string objectNames[] = { "Axis", "MonsterBall", "Fence" };
 
-	// 複数のモデルを作成
-	const std::string modelFiles[] = { "axis.obj", "monsterBall.obj", "plane.obj" };
 	for (int i = 0; i < 3; ++i) {
 		Object3DInstance* obj = new Object3DInstance();
-		obj->Initialize(object3DManager, dxCore, "Resources", modelFiles[i]);
-
-		// 位置を設定（横に並べる）
+		obj->Initialize(
+			object3DManager,
+			dxCore,
+			"Resources",
+			modelFiles[i],
+			objectNames[i]  // 名前を指定
+		);
 		obj->SetTranslate({ i * 3.0f, 0.0f, 0.0f });
-
 		object3DInstances.push_back(obj);
 	}
 
@@ -308,10 +313,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ウィンドウのxボタンが押されるまでループ
 	while (winApp->ProcessMessage()) {
 
-		// ImGUIにここから始まることを通知
-		/*ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();*/
+
+		// ===== ImGuiフレーム開始 =====
+		ImGuiManager::Instance().BeginFrame();
 
 		///
 		// ここからゲームの処理
@@ -321,7 +325,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// ここから更新処理
 		//=================================
 		// 入力の更新
-		// --- 入力の更新（1行でOK）---
 		input->Update();
 
 		// --- キーボード入力 ---
@@ -337,7 +340,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// Wキーを押している間
 		}
 
-		// --- マウス入力 ---
+		// マウス入力
 		MouseInput* mouse = input->GetMouse();  // 変数に取っておくと楽
 
 		if (mouse->IsButtonTriggered(MouseInput::Button::Left)) {
@@ -377,17 +380,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//=========================
 		// 数字の0のキーが押されていたら
 		if (input->GetKeyboard()->TriggerKey(DIK_0)) {
-			OutputDebugStringA("trigger [0]\n");
+			Debug::Log("trigger [0]");
 		}
 
 		if (input->GetKeyboard()->TriggerKey(DIK_1)) {
 			SoundManager::GetInstance()->Play("fanfare");
-			OutputDebugStringA("trigger [1]\n");
+			Debug::Log("trigger [1]");
 		}
 
 		if (input->GetKeyboard()->TriggerKey(DIK_2)) {
 			SoundManager::GetInstance()->Stop("fanfare");
-			OutputDebugStringA("trigger [2]\n");
+			Debug::Log("trigger [2]");
 		}
 
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
@@ -398,7 +401,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		rotation += 0.01f;
 		sprite->SetRotation(rotation);
 
-		// カメラの更新は必ずオブジェクトの更新まえにやる
+		// カメラの更新は必ずオブジェクトの更新前にやる
 		camera->Update();
 
 		for (Object3DInstance* obj : object3DInstances) {
@@ -422,74 +425,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			sprite->Update();
 		}
 
-		// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
-		// ImGui フレーム開始直後
-		//ImGui::Begin("Triangle Settings");
-
-		//// ModelTransform
-		//ImGui::Text("ModelTransform");
-		//ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);
-		//ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f);
-		//ImGui::DragFloat3("Translate", &transform.translate.x, 1.0f);
-		//ImGui::ColorEdit4("ColorEdit", &materialData->color.x);
-
-		// SpriteTransform（Sprite自体の見た目位置など）
-		//ImGui::Checkbox("Show Sprite", &isSpriteVisible);
-		//ImGui::Text("SpriteTransform");
-		//ImGui::DragFloat3("Scale##Sprite", &transformSprite.scale.x, 0.01f);
-		//ImGui::DragFloat3("Rotate##Sprite", &transformSprite.rotate.x, 0.01f);
-		//ImGui::DragFloat3("Translate##Sprite", &transformSprite.translate.x, 1.0f);
-
-		//// UVTransform（テクスチャの位置・回転など）
-		//ImGui::Text("UVTransform");
-		//ImGui::DragFloat2("Scale##UV", &uvTransformSprite.scale.x, 0.01f);
-		//ImGui::SliderAngle("Rotate##UV", &uvTransformSprite.rotate.z);
-		//ImGui::DragFloat2("Translate##UV", &uvTransformSprite.translate.x, 0.01f);
-
-		//// カメラ操作
-		//ImGui::Text("DebugCamera");
-		//ImGui::Checkbox("Use Debug Camera", reinterpret_cast<bool*>(&isUseDebugCamera));
-
-		//// Light
-		//ImGui::Text("Light");
-
-		//const char* lightingItems[] = { "None", "Lambert", "Half Lambert" };
-		//int currentLightingIndex = static_cast<int>(lightingMode);
-		//if (ImGui::Combo("Lighting", &currentLightingIndex, lightingItems, IM_ARRAYSIZE(lightingItems))) {
-		//	lightingMode = static_cast<LightingMode>(currentLightingIndex);
-		//}
-
-		////ImGui::Checkbox("Use Half Lambert", reinterpret_cast<bool*>(&isUseHalfLambert));
-		//ImGui::ColorEdit4("Color", &directionalLightData->color.x);
-		//ImGui::DragFloat3("Direction", &directionalLightData->direction.x, 0.01f);
-		//ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f);
-
-		//ImGui::End();
-
-		//===================================
-		// デバッグカメラの操作説明(別ウィンドウ)
-		//===================================
-		/*ImGui::Begin("Debug Camera Controls");
-
-		ImGui::Text("=== Movement ===");
-		ImGui::BulletText("W : Zoom In");
-		ImGui::BulletText("S : Zoom Out");
-		ImGui::BulletText("A : Move Left");
-		ImGui::BulletText("D : Move Right");
-		ImGui::BulletText("Q : Move Down");
-		ImGui::BulletText("E : Move Up");
-
-		ImGui::Spacing();
-		ImGui::Text("=== Rotation ===");
-		ImGui::BulletText("Up Arrow    : Pitch Up");
-		ImGui::BulletText("Down Arrow  : Pitch Down");
-		ImGui::BulletText("Left Arrow  : Yaw Left");
-		ImGui::BulletText("Right Arrow : Yaw Right");
-		ImGui::BulletText("O : Roll -");
-		ImGui::BulletText("P : Roll +");
-
-		ImGui::End();*/
-
 		debugCamera->Update(input->GetKeyboard()->keys_);
 
 		// ESCAPEキーのトリガー入力で終了
@@ -500,9 +435,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 		// ここまでゲームの処理
 		///
-
-		// ゲームの処理が終わったので描画処理前にImGUIの内部コマンドを生成
-		//ImGui::Render();
 
 		dxCore->BeginDraw();
 
@@ -539,9 +471,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			sprite->Draw();
 		}
 
-		// 諸々の描画が終わってからImGUIの描画を行う(手前に出さなきゃいけないからねぇ)
-		// 実際のCommandListのImGUIの描画コマンドを積む
-		//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCore->GetCommandList());
+		// ===== ImGui描画（描画の最後） =====
+		ImGuiManager::Instance().EndFrame();
+
 		assert(dxCore->GetCommandList() != nullptr);
 		dxCore->EndDraw();
 		spriteManager->ClearIntermediateResources();
@@ -596,6 +528,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	delete object3DManager;
 	ModelManager::GetInstance()->Finalize();
+
+	// ImGui終了処理
+	ImGuiManager::Instance().Shutdown();
 
 	// dxc関連
 	includeHandler->Release();
