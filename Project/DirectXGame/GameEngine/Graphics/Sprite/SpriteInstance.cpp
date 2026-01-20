@@ -1,14 +1,29 @@
 #include "SpriteInstance.h"
 #include "MathUtility.h"
+#include "imgui.h"
 
-void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath)
+void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath,
+    const std::string& name)
 {
     spriteManager_ = spriteManager;
     textureFilePath_ = filePath;
 
+    // 名前が指定されていなければファイル名を使用
+    if (name.empty()) {
+        // ファイルパスからファイル名だけ抽出
+        size_t pos = filePath.find_last_of("/\\");
+        if (pos != std::string::npos) {
+            name_ = filePath.substr(pos + 1);
+        } else {
+            name_ = filePath;
+        }
+    } else {
+        name_ = name;
+    }
+
     // テクスチャを読み込む（重複読み込みはTextureManager側で回避）
     TextureManager::GetInstance()->LoadTexture(filePath);
-    
+
     // その番号からGPUハンドルを取得して保持
     textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(filePath);
 
@@ -21,7 +36,7 @@ void SpriteInstance::Update()
 {
     float left = 0.0f - anchorPoint_.x;
     float right = 1.0f - anchorPoint_.x;
-    float top= 0.0f - anchorPoint_.y;
+    float top = 0.0f - anchorPoint_.y;
     float bottom = 1.0f - anchorPoint_.y;
 
     if (isFlipX_) {
@@ -37,30 +52,30 @@ void SpriteInstance::Update()
     const DirectX::TexMetadata& metadata =
         TextureManager::GetInstance()->GetMetaData(textureFilePath_);
     float tex_left = textureLeftTop_.x / metadata.width;
-    float tex_right = (textureLeftTop_.x+ textureSize_.x) / metadata.width;
+    float tex_right = (textureLeftTop_.x + textureSize_.x) / metadata.width;
     float tex_top = textureLeftTop_.y / metadata.height;
     float tex_bottom = (textureLeftTop_.y + textureSize_.y) / metadata.height;
 
     // indexに格納するから同一頂点のデータをわざわざ用意する必要はない
     // 左下
-    vertexData_[0].position = { left,bottom,0.0f,1.0f };
-    vertexData_[0].texcoord = { tex_left,tex_bottom };
-    vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
+    vertexData_[0].position = { left, bottom, 0.0f, 1.0f };
+    vertexData_[0].texcoord = { tex_left, tex_bottom };
+    vertexData_[0].normal = { 0.0f, 0.0f, -1.0f };
 
     // 左上
-    vertexData_[1].position = { left,top,0.0f,1.0f };
-    vertexData_[1].texcoord = { tex_left,tex_top };
-    vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
+    vertexData_[1].position = { left, top, 0.0f, 1.0f };
+    vertexData_[1].texcoord = { tex_left, tex_top };
+    vertexData_[1].normal = { 0.0f, 0.0f, -1.0f };
 
     // 右下
-    vertexData_[2].position = { right,bottom,0.0f,1.0f };
-    vertexData_[2].texcoord = { tex_right,tex_bottom };
-    vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
+    vertexData_[2].position = { right, bottom, 0.0f, 1.0f };
+    vertexData_[2].texcoord = { tex_right, tex_bottom };
+    vertexData_[2].normal = { 0.0f, 0.0f, -1.0f };
 
     // 右上
-    vertexData_[3].position = { right,top,0.0f,1.0f };
-    vertexData_[3].texcoord = { tex_right,tex_top };
-    vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
+    vertexData_[3].position = { right, top, 0.0f, 1.0f };
+    vertexData_[3].texcoord = { tex_right, tex_top };
+    vertexData_[3].normal = { 0.0f, 0.0f, -1.0f };
 
     // インデックスリソースにデータを書き込む
     indexData_[0] = 0;
@@ -70,9 +85,9 @@ void SpriteInstance::Update()
     indexData_[4] = 3;
     indexData_[5] = 2;
 
-    transform.scale = { size_.x,size_.y,1.0f };
-    transform.rotate = { 0.0f,0.0f,rotation_ };
-    transform.translate = { position_.x,position_.y,0.0f };
+    transform.scale = { size_.x, size_.y, 1.0f };
+    transform.rotate = { 0.0f, 0.0f, rotation_ };
+    transform.translate = { position_.x, position_.y, 0.0f };
 
     // 行列
     Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
@@ -173,7 +188,6 @@ void SpriteInstance::AdjustTextureSize()
 
 void SpriteInstance::CreateVertexBuffer()
 {
-
     // 4頂点のバッファを作るので *4
     vertexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(VertexData) * 4);
 
@@ -197,20 +211,19 @@ void SpriteInstance::CreateVertexBuffer()
     vertexData_[3].texcoord = { 1.0f, 1.0f };
 
     // 法線方向
-    vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
-    vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
-    vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
-    vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
+    vertexData_[0].normal = { 0.0f, 0.0f, -1.0f };
+    vertexData_[1].normal = { 0.0f, 0.0f, -1.0f };
+    vertexData_[2].normal = { 0.0f, 0.0f, -1.0f };
+    vertexData_[3].normal = { 0.0f, 0.0f, -1.0f };
 
     // バッファビュー設定
-    vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();// リソースの先頭アドレスから使用
-    vertexBufferView_.SizeInBytes = sizeof(VertexData) * 4;// 使用するリソースのサイズは頂点4個のサイズ
-    vertexBufferView_.StrideInBytes = sizeof(VertexData);// 1頂点あたりのサイズ
+    vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
+    vertexBufferView_.SizeInBytes = sizeof(VertexData) * 4;
+    vertexBufferView_.StrideInBytes = sizeof(VertexData);
 
-    indexBufferView_.BufferLocation =indexResource_->GetGPUVirtualAddress();// リソースの先頭アドレスから使う
-    indexBufferView_.SizeInBytes = sizeof(uint32_t) * 6;// 使用するリソースのサイズはインデックスの6つ分のサイズ
-    indexBufferView_.Format = DXGI_FORMAT_R32_UINT; // インデックスはuint32_tとする
-
+    indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+    indexBufferView_.SizeInBytes = sizeof(uint32_t) * 6;
+    indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
 }
 
 void SpriteInstance::CreateMaterialBuffer()
@@ -218,7 +231,7 @@ void SpriteInstance::CreateMaterialBuffer()
     materialResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(Material));
     materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&materialData_));
 
-    materialData_->color = { 1,1,1,1 };
+    materialData_->color = { 1, 1, 1, 1 };
     materialData_->enableLighting = false;
     materialData_->uvTransform = MakeIdentity4x4();
 }
@@ -230,4 +243,56 @@ void SpriteInstance::CreateTransformationMatrixBuffer()
 
     transformationMatrixData_->World = MakeIdentity4x4();
     transformationMatrixData_->WVP = MakeIdentity4x4();
+}
+
+//==============================
+// ImGui Inspector描画
+//==============================
+void SpriteInstance::OnImGuiInspector()
+{
+    // Transform
+    if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat2("Position", &position_.x, 1.0f);
+        ImGui::DragFloat2("Size", &size_.x, 1.0f);
+
+        float rotationDegree = rotation_ * (180.0f / 3.14159265f);
+        if (ImGui::DragFloat("Rotation", &rotationDegree, 1.0f)) {
+            rotation_ = rotationDegree * (3.14159265f / 180.0f);
+        }
+
+        ImGui::DragFloat2("Anchor Point", &anchorPoint_.x, 0.01f, 0.0f, 1.0f);
+    }
+
+    // UV座標
+    if (ImGui::CollapsingHeader("UV Coordinates", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat2("Texture Left Top", &textureLeftTop_.x, 1.0f);
+        ImGui::DragFloat2("Texture Size", &textureSize_.x, 1.0f);
+
+        // テクスチャサイズにリセットボタン
+        if (ImGui::Button("Reset to Texture Size")) {
+            AdjustTextureSize();
+        }
+    }
+
+    // Flip
+    if (ImGui::CollapsingHeader("Flip")) {
+        ImGui::Checkbox("Flip X", &isFlipX_);
+        ImGui::Checkbox("Flip Y", &isFlipY_);
+    }
+
+    // Color
+    if (ImGui::CollapsingHeader("Color")) {
+        ImGui::ColorEdit4("Color", &materialData_->color.x);
+    }
+
+    // Texture Info
+    if (ImGui::CollapsingHeader("Texture")) {
+        ImGui::Text("File: %s", textureFilePath_.c_str());
+
+        const DirectX::TexMetadata& metadata =
+            TextureManager::GetInstance()->GetMetaData(textureFilePath_);
+        ImGui::Text("Original Size: %dx%d",
+            static_cast<int>(metadata.width),
+            static_cast<int>(metadata.height));
+    }
 }

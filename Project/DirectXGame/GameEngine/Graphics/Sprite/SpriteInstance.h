@@ -9,14 +9,18 @@
 #include "TextureManager.h"
 #include "ConvertString.h"
 
+// ImGui対応
+#include "IImGuiEditable.h"
+
 class SpriteManager;
 
-class SpriteInstance {
+class SpriteInstance : public IImGuiEditable {
 
+    std::string name_;  // スプライト名（ImGui用に追加）
     std::string textureFilePath_;  // テクスチャファイルパスを保持
 
-    Vector2 position_ = { 0.0f,0.0f };
-    Vector2 anchorPoint_ = { 0.0f,0.0f };
+    Vector2 position_ = { 0.0f, 0.0f };
+    Vector2 anchorPoint_ = { 0.0f, 0.0f };
 
     // 左右フリップ
     bool isFlipX_ = false;
@@ -31,15 +35,15 @@ class SpriteInstance {
     void AdjustTextureSize();
 
     float rotation_ = 0.0f;
-    Vector2 size_ = { 320.0f,180.0f };
+    Vector2 size_ = { 320.0f, 180.0f };
 
     Transform transform{
-        {1.0f,1.0f,1.0f},// s
-        {0.0f,0.0f,0.0f},// r
-        {0.0f,0.0f,0.0f} // t
+        {1.0f, 1.0f, 1.0f},// s
+        {0.0f, 0.0f, 0.0f},// r
+        {0.0f, 0.0f, 0.0f} // t
     };
 
-	SpriteManager* spriteManager_ = nullptr;
+    SpriteManager* spriteManager_ = nullptr;
 
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> indexResource_;
@@ -77,26 +81,47 @@ class SpriteInstance {
     void CreateVertexBuffer();
     void CreateMaterialBuffer();
     void CreateTransformationMatrixBuffer();
-   
-public:
 
-    void Initialize(SpriteManager* spriteManager, const std::string& filePath);
+public:
+    //==============================
+    // コンストラクタ・デストラクタ
+    //==============================
+    SpriteInstance() = default;
+    ~SpriteInstance() override;
+
+    //==============================
+    // IImGuiEditable実装
+    //==============================
+    std::string GetName() const override { return name_; }
+    std::string GetTypeName() const override { return "Sprite"; }
+    void OnImGuiInspector() override;
+
+    //==============================
+    // 初期化・更新・描画
+    //==============================
+    void Initialize(SpriteManager* spriteManager, const std::string& filePath,
+        const std::string& name = "");
     void Update();
     void Draw();
-    ~SpriteInstance();
 
-    // ゲッターロボ
-    const Vector2& GetPosition()const { return position_; }
-    const Vector2& GetAnchorPoint()const { return anchorPoint_; }
-    const float& GetRotation()const { return rotation_; }
-    const Vector4& GetColor()const { return materialData_->color; }
-    const Vector2& GetSize()const { return size_; }
-    const bool& GetIsFlipX()const { return isFlipX_; }
-    const bool& GetIsFlipY()const { return isFlipY_; }
-    const Vector2& GetTextureLeftTop()const { return textureLeftTop_; }
-    const Vector2& GetTextureSize()const { return textureSize_; }
+    //==============================
+    // ゲッター
+    //==============================
+    const Vector2& GetPosition() const { return position_; }
+    const Vector2& GetAnchorPoint() const { return anchorPoint_; }
+    const float& GetRotation() const { return rotation_; }
+    const Vector4& GetColor() const { return materialData_->color; }
+    const Vector2& GetSize() const { return size_; }
+    const bool& GetIsFlipX() const { return isFlipX_; }
+    const bool& GetIsFlipY() const { return isFlipY_; }
+    const Vector2& GetTextureLeftTop() const { return textureLeftTop_; }
+    const Vector2& GetTextureSize() const { return textureSize_; }
+    const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
+    //==============================
     // セッター
+    //==============================
+    void SetName(const std::string& name) { name_ = name; }
     void SetPosition(const Vector2& position) { position_ = position; }
     void SetAnchorPoint(const Vector2& anchorPoint) { anchorPoint_ = anchorPoint; }
     void SetRotation(const float& rotation) { rotation_ = rotation; }
@@ -107,4 +132,3 @@ public:
     void SetTextureLeftTop(const Vector2& textureLeftTop) { textureLeftTop_ = textureLeftTop; }
     void SetTextureSize(const Vector2& textureSize) { textureSize_ = textureSize; }
 };
-
