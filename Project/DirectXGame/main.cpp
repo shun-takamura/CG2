@@ -69,6 +69,9 @@
 #include"SRVManager.h"
 #include"ParticleManager.h"
 #include"SoundManager.h"
+#include "ControllerInput.h"
+#include "MouseInput.h"
+#include "InputManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -76,19 +79,6 @@
 
 // 入力デバイス
 #include "KeyboardInput.h"
-
-//========================
-// 構造体の定義
-//========================
-
-// デッドゾーンの設定
-struct DeadZone {
-	SHORT leftThumb;
-	SHORT rightThumb;
-
-	BYTE leftTrigger;
-	BYTE rightTrigger;
-};
 
 // リリースチェック
 struct D3DResourceLeakCheker {
@@ -102,14 +92,6 @@ struct D3DResourceLeakCheker {
 		}
 	}
 };
-
-//=======================
-// xboxコントローラーの関数
-//=======================
-void VibrateController(int controllerNum, WORD leftPower, WORD rightPower);
-
-// 振動停止
-void StopVibration(DWORD controllerNum);
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -209,7 +191,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
-
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
 	spriteManager->Initialize(dxCore,srvManager);
@@ -281,64 +262,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
 
 	//==============================
-	// DirectInputの初期化
+	// Inputの初期化
 	//==============================
-	// ここはデバイスを増やしても1つでいい
-	IDirectInput8* directInput = nullptr;
-	hr = DirectInput8Create(
-		winApp->GetInstanceHandle(), DIRECTINPUT_VERSION, IID_IDirectInput8,
-		(void**)&directInput, nullptr);
-	assert(SUCCEEDED(hr));
-
-	// キーボードインプットのポインタ
-	KeyboardInput* keyboardInput = nullptr;
-
-	// 入力の初期化
-	keyboardInput = new KeyboardInput();
-	keyboardInput->Initialize(winApp);
-
-	// マウスデバイスの生成
-	IDirectInputDevice8* mouse = nullptr;
-	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
-	assert(SUCCEEDED(hr));
-
-	// マウスの入力データ形式のセット
-	hr = mouse->SetDataFormat(&c_dfDIMouse); // 標準形式。入力デバイスによっては複数用意されていたりする
-	assert(SUCCEEDED(hr));
-
-	// マウスの排他制御レベルのセット
-	hr = mouse->SetCooperativeLevel(
-		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
-		winApp->GetHwnd(), DISCL_NONEXCLUSIVE
-	);
-
-	// xboxコントローラーの初期化
-	XINPUT_STATE xinputState;
-
-	// xboxコントローラーの初期化
-	SHORT lX = 0;  // 左スティック X
-	SHORT lY = 0;  // 左スティック Y
-	SHORT rX = 0;  // 右スティック X
-	SHORT rY = 0;  // 右スティック Y
-
-	// 左右トリガー (0～255の範囲のアナログ値)
-	BYTE leftTrigger = 0;   // 左トリガー
-	BYTE rightTrigger = 0;  // 右トリガー
-
-	// デッドゾーンの初期化(初期値はXInput標準値にしてある)
-	DeadZone deadZone = {
-		7849, // 左スティック
-		7849, // 右スティック
-		30,   // 左トリガー
-		30    // 左トリガー
-	};
-
-	// xboxコントローラーのデッドゾーンのセッター(クラス化したら使う)
-	//void SetLeftThumbDeadZone(SHORT* val) { deadZone.leftThumb = val; }
-	//void SetRightThumbDeadZone(SHORT* val) { deadZone.rightThumb = val; }
-	//void SetLeftTriggerDeadZone(SHORT* val) { deadZone.leftTrigger = val; }
-	//void SetRightTriggerDeadZone(SHORT* val) { deadZone.rightTrigger = val; }
-
+	InputManager* input = new InputManager();
+	input->Initialize(winApp);
+	
 	//=========================
 	// ViewportとScissor
 	//=========================
@@ -378,7 +306,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
-	while (/*msg.message != WM_QUIT*/winApp->ProcessMessage()) {
+	while (winApp->ProcessMessage()) {
 
 		// ImGUIにここから始まることを通知
 		/*ImGui_ImplDX12_NewFrame();
@@ -392,30 +320,79 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//=================================
 		// ここから更新処理
 		//=================================
+		// 入力の更新
+		// --- 入力の更新（1行でOK）---
+		input->Update();
+
+		// --- キーボード入力 ---
+		if (input->GetKeyboard()->TriggerKey(DIK_ESCAPE)) {
+			PostQuitMessage(0);
+		}
+
+		if (input->GetKeyboard()->TriggerKey(DIK_SPACE)) {
+			// スペースキーを押した瞬間
+		}
+
+		if (input->GetKeyboard()->PuhsKey(DIK_W)) {
+			// Wキーを押している間
+		}
+
+		// --- マウス入力 ---
+		MouseInput* mouse = input->GetMouse();  // 変数に取っておくと楽
+
+		if (mouse->IsButtonTriggered(MouseInput::Button::Left)) {
+			// 左クリックした瞬間
+		}
+
+		// マウスの移動量
+		LONG deltaX = mouse->GetDeltaX();
+		LONG deltaY = mouse->GetDeltaY();
+
+		// マウス座標
+		LONG mouseX = mouse->GetClientX();
+		LONG mouseY = mouse->GetClientY();
+
+		// --- コントローラー入力 ---
+		ControllerInput* controller = input->GetController();
+
+		if (controller->IsConnected()) {
+			// Aボタントリガー
+			if (controller->IsButtonTriggered(XINPUT_GAMEPAD_A)) {
+				// Aボタンを押した瞬間
+			}
+
+			// 左スティック
+			const auto& leftStick = controller->GetLeftStick();
+			float moveX = leftStick.x * leftStick.magnitude;
+			float moveY = leftStick.y * leftStick.magnitude;
+
+			// 振動
+			if (controller->IsButtonTriggered(XINPUT_GAMEPAD_Y)) {
+				controller->SetVibration(32000, 32000);
+			}
+		}
 
 		//=========================
 		// キーボードの入力処理
 		//=========================
-		// 更新
-		keyboardInput->Update();
-
 		// 数字の0のキーが押されていたら
-		if (keyboardInput->TriggerKey(DIK_0)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_0)) {
 			OutputDebugStringA("trigger [0]\n");
 		}
 
-		if (keyboardInput->TriggerKey(DIK_1)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_1)) {
 			SoundManager::GetInstance()->Play("fanfare");
 			OutputDebugStringA("trigger [1]\n");
 		}
 
-		if (keyboardInput->TriggerKey(DIK_2)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_2)) {
 			SoundManager::GetInstance()->Stop("fanfare");
 			OutputDebugStringA("trigger [2]\n");
 		}
 
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
 		sprite->SetIsFlipX(true);
+
 		// 回転テスト
 		float rotation = sprite->GetRotation();
 		rotation += 0.01f;
@@ -432,10 +409,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ParticleManager::GetInstance()->Update();
 
 		// キー入力でパーティクル発生
-		if (keyboardInput->TriggerKey(DIK_SPACE)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 			ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
 		}
-		if (keyboardInput->TriggerKey(DIK_SPACE)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 			ParticleManager::GetInstance()->Emit("monsterBall", { 2.0f, 0.0f, 0.0f }, 5);
 		}
 
@@ -443,121 +420,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Update();
-		}
-
-		//=========================
-		// マウスの入力処理
-		//=========================
-
-		//=========================
-		// xboxコントローラーの入力処理
-		//=========================
-		// xboxコントローラーの入力情報を初期化
-		ZeroMemory(&xinputState, sizeof(xinputState));
-
-		// xboxコントローラーの情報の取得開始
-		DWORD conResult = XInputGetState(0, &xinputState); // 0~3までの4つのコントローラーに対応可
-
-		// xboxコントローラー接続時
-		if (conResult == ERROR_SUCCESS) {
-
-			// ボタン
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_A) { /* Aボタンを押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_B) { /* Bボタンを押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_X) { /* Xボタンを押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_Y) { /* Yボタンを押したときの処理 */ }
-
-			// 十字キー
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP) { /* ↑を押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) { /* ↓を押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) { /* ←を押したときの処理 */ }
-			if (xinputState.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) { /* →を押したときの処理 */ }
-
-			// 左右スティック (−32768 ～ +32767 の範囲のアナログ値)
-			lX = xinputState.Gamepad.sThumbLX;  // 左スティック X
-			lY = xinputState.Gamepad.sThumbLY;  // 左スティック Y
-			rX = xinputState.Gamepad.sThumbRX;  // 右スティック X
-			rY = xinputState.Gamepad.sThumbRY;  // 右スティック Y
-
-			// 左右トリガー (0～255の範囲のアナログ値)
-			leftTrigger = xinputState.Gamepad.bLeftTrigger;   // 左トリガー
-			rightTrigger = xinputState.Gamepad.bRightTrigger;  // 右トリガー
-
-			//=================================
-			// 円形デッドゾーンで補正（左スティック）
-			//=================================
-			{
-				// スティックの倒れ具合（ベクトルの長さ）を計算
-				float magnitude = std::sqrt(float(lX * lX + lY * lY));
-
-				// 正規化方向ベクトル（単位ベクトル）
-				float normalizedLX = 0.0f;
-				float normalizedLY = 0.0f;
-
-				// デッドゾーンを除いた後の正規化された大きさ（0.0～1.0）
-				float normalizedMagnitude = 0.0f;
-
-				// デッドゾーン外にある場合
-				if (magnitude > deadZone.leftThumb) {
-					// 最大値でクリップ（±32767）
-					if (magnitude > 32767.0f) magnitude = 32767.0f;
-
-					// デッドゾーン分を差し引く
-					magnitude -= deadZone.leftThumb;
-
-					// 0.0～1.0 に正規化
-					normalizedMagnitude = magnitude / (32767.0f - deadZone.leftThumb);
-
-					// 方向ベクトルを計算（magnitudeは0除算しないよう注意）
-					normalizedLX = lX / std::sqrt(float(lX * lX + lY * lY));
-					normalizedLY = lY / std::sqrt(float(lX * lX + lY * lY));
-				} else {
-					// デッドゾーン内は 0 扱い
-					magnitude = 0.0f;
-					normalizedMagnitude = 0.0f;
-					normalizedLX = 0.0f;
-					normalizedLY = 0.0f;
-				}
-
-				// ゲーム用の入力値として使える
-				// normalizedLX, normalizedLY : 方向ベクトル
-				// normalizedMagnitude        : 倒し具合（0.0～1.0）
-			}
-
-			//=================================
-			// 円形デッドゾーンで補正（右スティック）
-			//=================================
-			{
-				float magnitude = std::sqrt(float(rX * rX + rY * rY));
-				float normalizedRX = 0.0f;
-				float normalizedRY = 0.0f;
-				float normalizedMagnitude = 0.0f;
-
-				if (magnitude > deadZone.rightThumb) {
-					if (magnitude > 32767.0f) magnitude = 32767.0f;
-					magnitude -= deadZone.rightThumb;
-					normalizedMagnitude = magnitude / (32767.0f - deadZone.rightThumb);
-
-					normalizedRX = rX / std::sqrt(float(rX * rX + rY * rY));
-					normalizedRY = rY / std::sqrt(float(rX * rX + rY * rY));
-				} else {
-					magnitude = 0.0f;
-					normalizedMagnitude = 0.0f;
-					normalizedRX = 0.0f;
-					normalizedRY = 0.0f;
-				}
-
-				// ゲーム用の入力値として使える
-				// normalizedRX, normalizedRY : 方向ベクトル
-				// normalizedMagnitude        : 倒し具合（0.0～1.0）
-			}
-
-			//=========================
-			// トリガーのデッドゾーン補正
-			//=========================
-			if (leftTrigger < deadZone.leftTrigger)  leftTrigger = 0;
-			if (rightTrigger < deadZone.rightTrigger) rightTrigger = 0;
-
 		}
 
 		// 開発用UI処理。実際に開発用のuiを出す場合はここをゲーム固有の処理に置き換える.
@@ -628,10 +490,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		ImGui::End();*/
 
-		debugCamera->Update(keyboardInput->keys_);
+		debugCamera->Update(input->GetKeyboard()->keys_);
 
 		// ESCAPEキーのトリガー入力で終了
-		if (keyboardInput->TriggerKey(DIK_ESCAPE)) {
+		if (input->GetKeyboard()->TriggerKey(DIK_ESCAPE)) {
 			PostQuitMessage(0);
 		}
 
@@ -705,7 +567,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ImGui::DestroyContext();*/
 
 	// 入力を解放
-	delete keyboardInput;
+	input->Finalize();
+	delete input;
 
 	// 音声データ解放
 	// 絶対にXAudio2を解放してから行うこと
@@ -766,22 +629,4 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete winApp;
 
 	return 0;
-}
-
-void VibrateController(int controllerNum, WORD leftPower, WORD rightPower) {
-	XINPUT_VIBRATION vibration;
-
-	// ゼロにクリア
-	ZeroMemory(&vibration, sizeof(vibration));
-
-	// 振動の強さを設定
-	vibration.wLeftMotorSpeed = leftPower; // 左モーター
-	vibration.wRightMotorSpeed = rightPower; // 右モーター
-
-	// コントローラーを指定して振動
-	XInputSetState(controllerNum, &vibration);
-}
-
-void StopVibration(DWORD controllerNum) {
-	VibrateController(controllerNum, 0, 0); // 指定したコントローラーのモーターを止める
 }

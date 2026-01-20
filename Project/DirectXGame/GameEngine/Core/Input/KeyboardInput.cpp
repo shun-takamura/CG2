@@ -1,35 +1,24 @@
 #include "KeyboardInput.h"
 
-void KeyboardInput::Initialize(WindowsApplication* winApp) {
+void KeyboardInput::Initialize(WindowsApplication* winApp, IDirectInput8* directInput) {
+	assert(winApp);
+	assert(directInput);
 
-	// 借りてきたWinAppのインスタンスを記録
 	winApp_ = winApp;
-
-	//==============================
-	// DirectInputの初期化
-	//==============================
-	// ここはデバイスを増やしても1つでいい
-	HRESULT hr = DirectInput8Create(
-		winApp->GetInstanceHandle(), DIRECTINPUT_VERSION, IID_IDirectInput8,
-		(void**)&directInput_, nullptr);
-	assert(SUCCEEDED(hr));
+	directInput_ = directInput;
 
 	// キーボードデバイスの生成
-	hr = directInput_->CreateDevice(GUID_SysKeyboard, &keyboard_, NULL);// GUID_JoystickやGUID_Mouseとかでほかのデバイスも使える
+	HRESULT hr = directInput_->CreateDevice(GUID_SysKeyboard, &keyboard_, NULL);
 	assert(SUCCEEDED(hr));
 
-	// キーボードの入力データ形式のセット
-	hr = keyboard_->SetDataFormat(&c_dfDIKeyboard); // 標準形式。入力デバイスによっては複数用意されていたりする
+	// 以下は変更なし（SetDataFormat, SetCooperativeLevel）
+	hr = keyboard_->SetDataFormat(&c_dfDIKeyboard);
 	assert(SUCCEEDED(hr));
 
-	// キーボードの排他制御レベルのセット
 	hr = keyboard_->SetCooperativeLevel(
-		// DISCL_FOREGROUND : 画面が手前にある場合のみ入力を受け付ける
-		// DISCL_NONEXCLUSIVE : デバイスをこのアプリだけで占有しない
-		// DISCL_NOWINKEY : Windowsキーを無効化
 		winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY
 	);
-
+	assert(SUCCEEDED(hr));
 }
 
 void KeyboardInput::Update() {

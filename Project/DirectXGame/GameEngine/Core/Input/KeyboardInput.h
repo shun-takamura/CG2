@@ -37,7 +37,7 @@ public:
 	BYTE preKeys_[256] = {};
 
 	// メンバ関数
-	void Initialize(WindowsApplication* winApp);
+	void Initialize(WindowsApplication* winApp, IDirectInput8* directInput);
 
 	void Update();
 

@@ -151,6 +151,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
@@ -184,8 +185,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Sound\SoundManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\Input\MouseInput.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DirectXGame\GameEngine\Core\Input\ControllerInput.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
@@ -231,6 +235,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\SRVManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Sound\SoundManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\Input\MouseInput.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\Input\InputManager.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Particle.PS.hlsl">
