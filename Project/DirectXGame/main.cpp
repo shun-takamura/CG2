@@ -22,13 +22,6 @@
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
 
-//ImGUI
-//#include "imgui.h"
-//#include "imgui_impl_dx12.h"
-//#include "imgui_impl_win32.h"
-//
-//extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
 //============================
 // 自作ヘッダーのインクルード
 //============================
@@ -247,10 +240,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 3Dオブジェクトを配列で管理
 	std::vector<Object3DInstance*> object3DInstances;
-	const std::string modelFiles[] = { "axis.obj", "monsterBall.obj", "fence.obj" };
-	const std::string objectNames[] = { "Axis", "MonsterBall", "Fence" };
+	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj"};
+	const std::string objectNames[] = { "MonsterBall", "terrain" };
 
-	for (int i = 0; i < 3; ++i) {
+	// 複数だすとき
+	for (int i = 0; i < 2; ++i) {
 		Object3DInstance* obj = new Object3DInstance();
 		obj->Initialize(
 			object3DManager,
@@ -259,7 +253,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			modelFiles[i],
 			objectNames[i]  // 名前を指定
 		);
-		obj->SetTranslate({ i * 3.0f, 0.0f, 0.0f });
+		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
 		object3DInstances.push_back(obj);
 	}
 
@@ -294,20 +288,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRect.right = WindowsApplication::kClientWidth;
 	scissorRect.top = 0;
 	scissorRect.bottom = WindowsApplication::kClientHeight;
-
-	//================
-	// ImGUIの初期化
-	//================
-	/*IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(winApp->GetHwnd());
-	ImGui_ImplDX12_Init(dxCore->GetDevice(),
-		dxCore->GetBackBufferCount(),
-		rtvDesc.Format,
-		srvDescriptorHeap.Get(),
-		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());*/
 
 	//MSG msg{};
 	// ウィンドウのxボタンが押されるまでループ
@@ -471,7 +451,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			sprite->Draw();
 		}
 
-		// ===== ImGui描画（描画の最後） =====
+		// ImGui描画
 		ImGuiManager::Instance().EndFrame();
 
 		assert(dxCore->GetCommandList() != nullptr);
@@ -492,11 +472,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 解放処理
 	//=============
 	// 生成と逆順に行う
-
-	// ImGUIの終了処理
-	/*ImGui_ImplDX12_Shutdown();
-	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();*/
 
 	// 入力を解放
 	input->Finalize();
