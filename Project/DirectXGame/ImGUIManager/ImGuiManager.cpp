@@ -121,7 +121,7 @@ void ImGuiManager::Unregister(IImGuiEditable* editable) {
 
 void ImGuiManager::DrawMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("Windows")) {
+        if (ImGui::BeginMenu("ImGuiMenu")) {
             // 各ウィンドウの表示/非表示トグル
             for (auto& window : windows_) {
                 bool isOpen = window->IsOpen();
