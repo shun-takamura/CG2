@@ -207,6 +207,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\LightManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\PointLight.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\SpotLight.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteVertexData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />

@@ -100,3 +100,7 @@ Matrix4x4 MakeRotateZMatrix(Vector3 rotate);
 Matrix4x4 MakeTranslateMatrix(Transform transform);
 
 Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix);
+
+float Length(const Vector3& vector);
+
+Vector3 Normalize(const Vector3& vector);
