@@ -1,4 +1,25 @@
 #include "ModelInstance.h"
+#include <unordered_map>
+
+struct VertexHash {
+	size_t operator()(const VertexData& v) const {
+		size_t h1 = std::hash<float>()(v.position.x);
+		size_t h2 = std::hash<float>()(v.position.y);
+		size_t h3 = std::hash<float>()(v.position.z);
+		size_t h4 = std::hash<float>()(v.texcoord.x);
+		size_t h5 = std::hash<float>()(v.texcoord.y);
+		return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4);
+	}
+};
+
+struct VertexEqual {
+	bool operator()(const VertexData& a, const VertexData& b) const {
+		return a.position.x == b.position.x && a.position.y == b.position.y &&
+			a.position.z == b.position.z && a.normal.x == b.normal.x &&
+			a.normal.y == b.normal.y && a.normal.z == b.normal.z &&
+			a.texcoord.x == b.texcoord.x && a.texcoord.y == b.texcoord.y;
+	}
+};
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -9,6 +30,9 @@ void ModelInstance::Initialize(ModelCore* modelCore, const std::string& director
 
 	// 頂点データ作成
 	CreateVertexData(modelCore_->GetDXCore());
+
+	// インデックスデータ作成
+	CreateIndexData(modelCore_->GetDXCore());
 
 	// マテリアルデータ作成
 	CreateMaterialData(modelCore_->GetDXCore());
@@ -32,8 +56,16 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	// デバッグ: ファイルパスが空でないか確認
 	assert(!textureFilePath_.empty() && "textureFilePath is empty in Draw!");
 
+	// 追加：インデックスバッファが有効か確認
+	assert(indexResource_ != nullptr && "indexResource is nullptr!");
+	assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
+	assert(!modelData_.indices.empty() && "indices is empty in Draw!");
+
 	// VBVを設定
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+	// インデックスバッファ設定
+	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
 
 	// マテリアルCBufferの場所を設定
 	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
@@ -46,7 +78,8 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	);
 
 	// ドローコール
-	dxCore->GetCommandList()->DrawInstanced(UINT(modelData_.vertices.size()), 1, 0, 0);
+	dxCore->GetCommandList()->DrawIndexedInstanced(
+		UINT(modelData_.indices.size()), 1, 0, 0, 0);
 }
 
 void ModelInstance::CreateVertexData(DirectXCore* dxCore)
@@ -88,6 +121,20 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 	// 光沢度の初期値。小さいほどぼんやり広く、大きいほどくっきり狭く
 	material_->shininess = 50.0f;
+}
+
+void ModelInstance::CreateIndexData(DirectXCore* dxCore)
+{
+	indexResource_ = dxCore->CreateBufferResource(sizeof(uint32_t) * modelData_.indices.size());
+
+	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+	indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * modelData_.indices.size());
+	indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
+
+	uint32_t* indexData = nullptr;
+	indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
+	std::memcpy(indexData, modelData_.indices.data(), sizeof(uint32_t) * modelData_.indices.size());
+	indexResource_->Unmap(0, nullptr);
 }
 
 Node ModelInstance::ReadNode(aiNode* node)
@@ -136,104 +183,6 @@ Node ModelInstance::ReadNode(aiNode* node)
 
 }
 
-ModelData ModelInstance::LoadObjFile(const std::string& directorPath, const std::string& filename)
-{
-	//==========================
-	// 必要なファイルの宣言
-	//==========================
-	ModelData modelData; // 構築するModelData
-	std::vector<Vector4> positions; // 位置
-	std::vector<Vector3> normals; // 法線
-	std::vector<Vector2> texcoords; // テクスチャの座標
-	std::string line; // ファイルから読んだ1行を格納する場所
-
-	//==========================
-	// ファイルを開く
-	//==========================
-	std::ifstream file(directorPath + "/" + filename); // ファイルを開く
-	assert(file.is_open()); // 開けなかったら止める
-
-	//==========================================
-	// 実際にファイルを読み、ModelDataを構築していく
-	//==========================================
-	while (std::getline(file, line)) {
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier; // 先頭の識別子を読む
-
-		//=============================
-		// identifierに応じて処理をしていく
-		//=============================
-		if (identifier == "v") { // "v" :頂点位置
-			Vector4 position;
-			s >> position.x >> position.y >> position.z;
-			position.w = 1.0f;
-			positions.push_back(position);
-
-		} else if (identifier == "vt") { // "vt":頂点テクスチャ座標
-			Vector2 texcood;
-			s >> texcood.x >> texcood.y;
-			texcoords.push_back(texcood);
-
-		} else if (identifier == "vn") { // "vn":頂点法線
-			Vector3 normal;
-			s >> normal.x >> normal.y >> normal.z;
-			normals.push_back(normal);
-
-		} else if (identifier == "f") { // "f" :面
-			VertexData triangle[3];
-
-			// 面は三角形限定。その他は未対応
-			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
-				std::string vertexDefinition;
-				s >> vertexDefinition;
-				// 頂点の要素へのIndexは「位置/UV/法線」で格納されているので、分解してIndexを取得する
-				std::istringstream v(vertexDefinition);
-				uint32_t elementIndices[3];
-				for (int32_t element = 0; element < 3; ++element) {
-					std::string index;
-					std::getline(v, index, '/');// "/"区切りでindexを読んでいく
-					elementIndices[element] = std::stoi(index);
-				}
-
-				// 要素へのIndexから、実際の要素の値を取得して頂点を構築する
-				// 1始まりだから-1しておく
-				Vector4 position = positions[elementIndices[0] - 1];
-				Vector2 texcoord = texcoords[elementIndices[1] - 1];
-				Vector3 normal = normals[elementIndices[2] - 1];
-				texcoord.y = 1.0f - texcoord.y;
-
-				position.x *= -1.0f;
-				normal.x *= -1.0f;
-
-				triangle[faceVertex] = { position,texcoord,normal };
-
-			}
-
-			// 頂点を逆順で登録することで回り順を逆にする
-			modelData.vertices.push_back(triangle[2]);
-			modelData.vertices.push_back(triangle[1]);
-			modelData.vertices.push_back(triangle[0]);
-
-		} else if (identifier == "mtllib") {
-			// materialTemplateLibraryファイルの名前を取得する
-			std::string materialFilename;
-			s >> materialFilename;
-
-			// 基本的にobjファイルと同一階層にmtlは存在するので、ディレクトリ名とファイル名を渡す
-			modelData.materialData = LoadMaterialTemplateFile(directorPath, materialFilename);
-
-		}
-
-	}
-
-	//==========================
-	// ModelDataを返す
-	//==========================
-	return modelData;
-
-}
-
 void ModelInstance::LoadModel(const std::string& directoryPath, const std::string& filename)
 {
 	Assimp::Importer importer;
@@ -243,18 +192,18 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
 	assert(scene->HasMeshes());
 
-	// Meshの解析
+	// 重複チェック用
+	std::unordered_map<VertexData, uint32_t, VertexHash, VertexEqual> uniqueVertices;
+
 	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
 		aiMesh* mesh = scene->mMeshes[meshIndex];
 		assert(mesh->HasNormals());
 		assert(mesh->HasTextureCoords(0));
 
-		// Faceの解析
 		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
 			aiFace& face = mesh->mFaces[faceIndex];
 			assert(face.mNumIndices == 3);
 
-			// Vertexの解析
 			for (uint32_t element = 0; element < face.mNumIndices; ++element) {
 				uint32_t vertexIndex = face.mIndices[element];
 				aiVector3D& position = mesh->mVertices[vertexIndex];
@@ -262,20 +211,21 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
 
 				VertexData vertex;
-				vertex.position = { position.x, position.y, position.z, 1.0f };
-				vertex.normal = { normal.x, normal.y, normal.z };
+				vertex.position = { -position.x, position.y, position.z, 1.0f };
+				vertex.normal = { -normal.x, normal.y, normal.z };
 				vertex.texcoord = { texcoord.x, texcoord.y };
 
-				// 左手座標系への変換
-				vertex.position.x *= -1.0f;
-				vertex.normal.x *= -1.0f;
-
-				modelData_.vertices.push_back(vertex);
+				// 重複チェック
+				if (uniqueVertices.count(vertex) == 0) {
+					uniqueVertices[vertex] = static_cast<uint32_t>(modelData_.vertices.size());
+					modelData_.vertices.push_back(vertex);
+				}
+				modelData_.indices.push_back(uniqueVertices[vertex]);
 			}
 		}
 	}
 
-	// Materialの解析
+	// Material解析
 	for (uint32_t materialIndex = 0; materialIndex < scene->mNumMaterials; ++materialIndex) {
 		aiMaterial* material = scene->mMaterials[materialIndex];
 		if (material->GetTextureCount(aiTextureType_DIFFUSE) != 0) {
@@ -285,8 +235,9 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 		}
 	}
 
-	// 階層構造を読む
 	modelData_.rootNode = ReadNode(scene->mRootNode);
+
+	assert(!modelData_.indices.empty() && "indices is empty!");
 }
 
 MaterialData ModelInstance::LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename)
