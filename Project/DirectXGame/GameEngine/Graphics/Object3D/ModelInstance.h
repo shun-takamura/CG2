@@ -23,6 +23,7 @@ struct Node{
 struct ModelData
 {
 	std::vector<VertexData>vertices;
+	std::vector<uint32_t> indices;
 	MaterialData materialData;
 	Node rootNode;
 };
@@ -43,9 +44,11 @@ class ModelInstance
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
+	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource_;
 
 	// バッファリソースの使い道を補足するバッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
+	D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
 
 	//==============================
 	// メンバ関数
@@ -65,9 +68,12 @@ private:
 	// マテリアルデータ作成
 	void CreateMaterialData(DirectXCore* dxCore);
 
+	// indexを作成
+	void CreateIndexData(DirectXCore* dxCore);
+
 	Node ReadNode(aiNode* node);
 
-	static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
+	//static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
 	void LoadModel(const std::string& directoryPath, const std::string& filename);
 	static MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);
 
