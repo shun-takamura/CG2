@@ -40,7 +40,10 @@ void Object3DInstance::Update()
 
     if (camera_) {
         const Matrix4x4& viewProjectionMatrix = camera_->GetViewProjectionMatrix();
-        worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
+
+        // RootNodeのlocalMatrixを適用
+        Matrix4x4 localMatrix = modelInstance_->GetModelData().rootNode.localMatrix;
+        worldViewProjectionMatrix = Multiply(localMatrix, Multiply(worldMatrix, viewProjectionMatrix));
 
         // カメラ位置をGPUに送る
         cameraData_->worldPosition = camera_->GetTranslate();
@@ -48,9 +51,11 @@ void Object3DInstance::Update()
         worldViewProjectionMatrix = worldMatrix;
     }
 
-    transformationMatrixData_->World = worldMatrix;
+    Matrix4x4 localMatrix = modelInstance_->GetModelData().rootNode.localMatrix;
+    transformationMatrixData_->World = Multiply(localMatrix, worldMatrix);
     transformationMatrixData_->WVP = worldViewProjectionMatrix;
-    transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(worldMatrix));
+    transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(transformationMatrixData_->World));
+
 }
 
 void Object3DInstance::Draw(DirectXCore* dxCore)

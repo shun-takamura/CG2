@@ -244,11 +244,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// 3Dオブジェクトを配列で管理
 	std::vector<Object3DInstance*> object3DInstances;
-	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj"};
-	const std::string objectNames[] = { "MonsterBall", "terrain" };
+	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj","plane.gltf"};
+	const std::string objectNames[] = { "MonsterBall", "terrain" ,"plane"};
 
 	// 複数だすとき
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < 3; ++i) {
 		Object3DInstance* obj = new Object3DInstance();
 		obj->Initialize(
 			object3DManager,

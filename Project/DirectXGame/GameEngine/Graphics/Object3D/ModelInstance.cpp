@@ -90,6 +90,52 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 	material_->shininess = 50.0f;
 }
 
+Node ModelInstance::ReadNode(aiNode* node)
+{
+	Node result;
+
+	// ノードのローカルマトリクスを取得
+	aiMatrix4x4 aiLocalMatrix = node->mTransformation;
+
+	// 列ベクトルを行ベクトルに転置
+	aiLocalMatrix.Transpose();
+
+	// ローカルマトリクスを代入
+	result.localMatrix.m[0][0] = aiLocalMatrix.a1;
+	result.localMatrix.m[0][1] = aiLocalMatrix.a2;
+	result.localMatrix.m[0][2] = aiLocalMatrix.a3;
+	result.localMatrix.m[0][3] = aiLocalMatrix.a4;
+
+	result.localMatrix.m[1][0] = aiLocalMatrix.b1;
+	result.localMatrix.m[1][1] = aiLocalMatrix.b2;
+	result.localMatrix.m[1][2] = aiLocalMatrix.b3;
+	result.localMatrix.m[1][3] = aiLocalMatrix.b4;
+
+	result.localMatrix.m[2][0] = aiLocalMatrix.c1;
+	result.localMatrix.m[2][1] = aiLocalMatrix.c2;
+	result.localMatrix.m[2][2] = aiLocalMatrix.c3;
+	result.localMatrix.m[2][3] = aiLocalMatrix.c4;
+
+	result.localMatrix.m[3][0] = aiLocalMatrix.d1;
+	result.localMatrix.m[3][1] = aiLocalMatrix.d2;
+	result.localMatrix.m[3][2] = aiLocalMatrix.d3;
+	result.localMatrix.m[3][3] = aiLocalMatrix.d4;
+
+	// Node名を格納
+	result.name = node->mName.C_Str();
+
+	// 子供の数だけ確保
+	result.children.resize(node->mNumChildren);
+
+	for (uint32_t childIndex = 0; childIndex < node->mNumChildren; ++childIndex) {
+		// 再帰的に読んで階層構造を作っていく
+		result.children[childIndex] = ReadNode(node->mChildren[childIndex]);
+	}
+
+	return result;
+
+}
+
 ModelData ModelInstance::LoadObjFile(const std::string& directorPath, const std::string& filename)
 {
 	//==========================
@@ -238,6 +284,9 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 			modelData_.materialData.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
 		}
 	}
+
+	// 階層構造を読む
+	modelData_.rootNode = ReadNode(scene->mRootNode);
 }
 
 MaterialData ModelInstance::LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename)

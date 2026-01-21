@@ -36,14 +36,10 @@ class Object3DInstance : public IImGuiEditable {
 
     // バッファリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
-    //Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource_;
-    //Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource_;
 
     // バッファ内データへのCPU側ポインタ
     TransformationMatrix* transformationMatrixData_ = nullptr;
-    //DirectionalLight* directionalLightData_ = nullptr;
-    //PointLight* pointLightData_ = nullptr;
     CameraForGPU* cameraData_ = nullptr;
 
     // バッファリソースの使い道を補足するバッファビュー
@@ -61,12 +57,6 @@ class Object3DInstance : public IImGuiEditable {
 
     // 座標変換行列リソース作成
     void CreateTransformationMatrixResource(DirectXCore* dxCore);
-
-    // 平行光源リソース作成
-    //void CreateDirectionalLight(DirectXCore* dxCore);
-
-    // pointLight
-    //void CreatePointLight(DirectXCore* dxCore);
 
     void CreateCameraResource(DirectXCore* dxCore);
 
