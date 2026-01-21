@@ -56,6 +56,7 @@
 #include "InputManager.h"
 #include "ImGuiManager.h"
 #include "Debug.h"
+#include "LightManager.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -186,6 +187,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	IDxcIncludeHandler* includeHandler = nullptr;
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
+	
+	// ライトの初期化
+	LightManager::GetInstance()->Initialize(dxCore);
 
 	// Spriteの共通部分の初期化
 	SpriteManager* spriteManager = new SpriteManager();
@@ -207,7 +211,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// カメラの生成
 	Camera* camera = new Camera();
 	camera->SetRotate({ 0.5f,0.0f,0.0f });
-	camera->SetTranslate({ 0.0f,2.0f,-20.0f });
+	camera->SetTranslate({ 0.0f,2.0f,-30.0f });
 	object3DManager->SetDefaultCamera(camera);
 
 	ParticleManager::GetInstance()->Initialize(dxCore, srvManager);
@@ -434,6 +438,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 3Dオブジェクトの共通描画設定
 		object3DManager->DrawSetting();
+		LightManager::GetInstance()->BindLights(dxCore->GetCommandList());
+		LightManager::GetInstance()->OnImGui();
 
 		// 描画
 		for (Object3DInstance* obj : object3DInstances) {
@@ -503,6 +509,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	delete object3DManager;
 	ModelManager::GetInstance()->Finalize();
+
+	LightManager::GetInstance()->Finalize();
 
 	// ImGui終了処理
 	ImGuiManager::Instance().Shutdown();

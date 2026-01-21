@@ -158,6 +158,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Light\LightManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
@@ -204,6 +205,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\LightManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Light\PointLight.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteVertexData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
