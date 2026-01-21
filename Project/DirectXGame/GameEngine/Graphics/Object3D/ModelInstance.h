@@ -14,10 +14,17 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+struct Node{
+	Matrix4x4 localMatrix;
+	std::string name;
+	std::vector<Node>children;
+};
+
 struct ModelData
 {
 	std::vector<VertexData>vertices;
 	MaterialData materialData;
+	Node rootNode;
 };
 
 class ModelInstance
@@ -48,6 +55,8 @@ public:
 
 	void Draw(DirectXCore* dxCore);
 
+	const ModelData& GetModelData() const { return modelData_; }
+
 private:
 
 	// 頂点データ作成
@@ -55,6 +64,8 @@ private:
 
 	// マテリアルデータ作成
 	void CreateMaterialData(DirectXCore* dxCore);
+
+	Node ReadNode(aiNode* node);
 
 	static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
 	void LoadModel(const std::string& directoryPath, const std::string& filename);
