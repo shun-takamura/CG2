@@ -106,10 +106,10 @@ PixelShaderOutput main(VertexShaderOutput input)
         float3 specularDirectionalLight = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow;
         
         // PointLight
-        float3 pointLightDirection = normalize(gPointLight.position - input.worldPosition);
+        float3 pointLightDirection = normalize( input.worldPosition - gPointLight.position);
         
-        // PointLight用の拡散反射係数を計算（DirectionalLightとは別に計算）
-        float pointLightCos = 1.0f;
+        // PointLight用の拡散反射係数 (法線とライト方向の内積)
+        float pointLightCos = saturate(dot(normal, -pointLightDirection));
        
         // PointLightの拡散反射
         float3 diffusePointLight = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * pointLightCos * gPointLight.intensity;

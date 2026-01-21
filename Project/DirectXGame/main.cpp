@@ -211,7 +211,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// カメラの生成
 	Camera* camera = new Camera();
 	camera->SetRotate({ 0.5f,0.0f,0.0f });
-	camera->SetTranslate({ 0.0f,2.0f,-20.0f });
+	camera->SetTranslate({ 0.0f,2.0f,-30.0f });
 	object3DManager->SetDefaultCamera(camera);
 
 	ParticleManager::GetInstance()->Initialize(dxCore, srvManager);
