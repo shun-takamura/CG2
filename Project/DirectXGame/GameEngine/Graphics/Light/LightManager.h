@@ -2,6 +2,10 @@
 #include "DirectXCore.h"
 #include "DirectionalLight.h"
 #include "PointLight.h"
+#include "SpotLight.h"
+#include"MathUtility.h"
+#include <numbers>
+#include <cmath>
 #include <wrl.h>
 
 class LightManager {
@@ -18,6 +22,11 @@ private:
     // PointLight
     Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource_;
     PointLight* pointLightData_ = nullptr;
+
+    // SpotLight
+    Microsoft::WRL::ComPtr<ID3D12Resource> spotLightResource_;
+    SpotLight* spotLightData_ = nullptr;
+
 
     // コンストラクタ（private）
     LightManager() = default;
@@ -49,9 +58,20 @@ public:
     void SetPointLightPosition(const Vector3& position) { pointLightData_->position = position; }
     void SetPointLightIntensity(float intensity) { pointLightData_->intensity = intensity; }
 
+    // SpotLight設定
+    void SetSpotLightColor(const Vector4& color) { spotLightData_->color = color; }
+    void SetSpotLightPosition(const Vector3& position) { spotLightData_->position = position; }
+    void SetSpotLightDirection(const Vector3& direction) { spotLightData_->direction = direction; }
+    void SetSpotLightIntensity(float intensity) { spotLightData_->intensity = intensity; }
+    void SetSpotLightDistance(float distance) { spotLightData_->distance = distance; }
+    void SetSpotLightDecay(float decay) { spotLightData_->decay = decay; }
+    void SetSpotLightCosAngle(float cosAngle) { spotLightData_->cosAngle = cosAngle; }
+    void SetSpotLightCosFalloffStart(float cosFalloffStart) { spotLightData_->cosFalloffStart = cosFalloffStart; }
+
     // ゲッター
     DirectionalLight* GetDirectionalLightData() { return directionalLightData_; }
     PointLight* GetPointLightData() { return pointLightData_; }
+    SpotLight* GetSpotLightData() { return spotLightData_; }
 
     // ImGui用
     void OnImGui();

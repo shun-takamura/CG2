@@ -606,3 +606,21 @@ Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix)
 
 	return resultVector3;
 }
+
+float Length(const Vector3& vector)
+{
+	float length;
+
+	length = sqrtf(powf(vector.x, 2.0f) + powf(vector.y, 2.0f) + powf(vector.z, 2.0f));
+
+	return length;
+}
+
+Vector3 Normalize(const Vector3& vector)
+{
+	Vector3 normalizedV;
+
+	normalizedV = { vector.x / Length(vector),vector.y / Length(vector),vector.z / Length(vector) };
+
+	return normalizedV;
+}
