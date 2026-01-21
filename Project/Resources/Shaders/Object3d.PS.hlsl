@@ -13,6 +13,8 @@ struct PointLight
     float4 color;
     float3 position;
     float intensity;
+    float radius;
+    float decay;
 };
 
 cbuffer gTransformationMatrix : register(b0)
@@ -105,6 +107,10 @@ PixelShaderOutput main(VertexShaderOutput input)
         // 鏡面反射色
         float3 specularDirectionalLight = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow;
         
+        // 逆二乗の法則による減衰係数の計算を行う
+        float distance = length(gPointLight.position - input.worldPosition);
+        float factor = pow(saturate(-distance / gPointLight.radius + 1.0), gPointLight.decay);
+        
         // PointLight
         float3 pointLightDirection = normalize( input.worldPosition - gPointLight.position);
         
@@ -112,13 +118,13 @@ PixelShaderOutput main(VertexShaderOutput input)
         float pointLightCos = saturate(dot(normal, -pointLightDirection));
        
         // PointLightの拡散反射
-        float3 diffusePointLight = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * pointLightCos * gPointLight.intensity;
+        float3 diffusePointLight = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * pointLightCos * gPointLight.intensity*factor;
         
         // PointLightの鏡面反射
         float3 pointLightHalfVector = normalize(-pointLightDirection + toEye);
         float pointLightNDotH = dot(normal, pointLightHalfVector);
         float pointLightSpecularPow = pow(saturate(pointLightNDotH), gMaterial.shininess);
-        float3 specularPointLight = gPointLight.color.rgb * gPointLight.intensity * pointLightSpecularPow;
+        float3 specularPointLight = gPointLight.color.rgb * gPointLight.intensity * pointLightSpecularPow*factor;
         
         // 最終出力
         output.color.rgb = diffuseDirectionalLight + specularDirectionalLight + diffusePointLight + specularPointLight;

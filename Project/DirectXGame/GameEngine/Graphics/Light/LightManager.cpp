@@ -21,8 +21,8 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     // DirectionalLight初期値
     directionalLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     directionalLightData_->direction = { 0.0f, -1.0f, 0.0f };
-    directionalLightData_->intensity = 1.0f;
-    directionalLightData_->lightingType = 2; // Half-Lambert
+    directionalLightData_->intensity = 0.0f;
+    directionalLightData_->lightingType = 0;
 
     // PointLight用バッファ作成
     UINT pointLightSize = (sizeof(PointLight) + 255) & ~255;
@@ -31,8 +31,10 @@ void LightManager::Initialize(DirectXCore* dxCore) {
 
     // PointLight初期値
     pointLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    pointLightData_->position = { 0.0f, 2.0f, -3.0f };
+    pointLightData_->position = { 0.0f, 2.0f, 0.0f };
     pointLightData_->intensity = 1.0f;
+    pointLightData_->radius = 5.0f;
+    pointLightData_->decay = 1.0f;
 }
 
 void LightManager::Finalize() {
@@ -74,6 +76,8 @@ void LightManager::OnImGui() {
             ImGui::ColorEdit4("PL Color", &pointLightData_->color.x);
             ImGui::DragFloat3("PL Position", &pointLightData_->position.x, 0.1f);
             ImGui::DragFloat("PL Intensity", &pointLightData_->intensity, 0.01f, 0.0f, 10.0f);
+            ImGui::DragFloat("PL Radius", &pointLightData_->radius, 0.01f, 0.0f, 10.0f);
+            ImGui::DragFloat("PL Decay", &pointLightData_->decay, 0.01f, 0.0f, 10.0f);
         }
     }
     ImGui::End();
