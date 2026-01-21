@@ -23,8 +23,6 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
     modelInstance_ = ModelManager::GetInstance()->FindModel(filename);
 
     CreateTransformationMatrixResource(dxCore);
-    //CreateDirectionalLight(dxCore);
-    //CreatePointLight(dxCore);
     CreateCameraResource(dxCore);
 
     // Transform変数を作る

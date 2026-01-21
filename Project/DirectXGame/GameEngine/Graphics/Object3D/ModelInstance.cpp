@@ -5,7 +5,7 @@ void ModelInstance::Initialize(ModelCore* modelCore, const std::string& director
 	modelCore_ = modelCore;
 
 	// モデル読み込み
-	modelData_ = LoadObjFile(directorPath, filename);
+	LoadModel(directorPath, filename);
 
 	// 頂点データ作成
 	CreateVertexData(modelCore_->GetDXCore());
@@ -186,6 +186,58 @@ ModelData ModelInstance::LoadObjFile(const std::string& directorPath, const std:
 	//==========================
 	return modelData;
 
+}
+
+void ModelInstance::LoadModel(const std::string& directoryPath, const std::string& filename)
+{
+	Assimp::Importer importer;
+	std::string filePath = directoryPath + "/" + filename;
+
+	const aiScene* scene = importer.ReadFile(filePath.c_str(),
+		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
+	assert(scene->HasMeshes());
+
+	// Meshの解析
+	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		assert(mesh->HasNormals());
+		assert(mesh->HasTextureCoords(0));
+
+		// Faceの解析
+		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
+			aiFace& face = mesh->mFaces[faceIndex];
+			assert(face.mNumIndices == 3);
+
+			// Vertexの解析
+			for (uint32_t element = 0; element < face.mNumIndices; ++element) {
+				uint32_t vertexIndex = face.mIndices[element];
+				aiVector3D& position = mesh->mVertices[vertexIndex];
+				aiVector3D& normal = mesh->mNormals[vertexIndex];
+				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+
+				VertexData vertex;
+				vertex.position = { position.x, position.y, position.z, 1.0f };
+				vertex.normal = { normal.x, normal.y, normal.z };
+				vertex.texcoord = { texcoord.x, texcoord.y };
+
+				// 左手座標系への変換
+				vertex.position.x *= -1.0f;
+				vertex.normal.x *= -1.0f;
+
+				modelData_.vertices.push_back(vertex);
+			}
+		}
+	}
+
+	// Materialの解析
+	for (uint32_t materialIndex = 0; materialIndex < scene->mNumMaterials; ++materialIndex) {
+		aiMaterial* material = scene->mMaterials[materialIndex];
+		if (material->GetTextureCount(aiTextureType_DIFFUSE) != 0) {
+			aiString textureFilePath;
+			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+			modelData_.materialData.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+		}
+	}
 }
 
 MaterialData ModelInstance::LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename)

@@ -9,6 +9,11 @@
 #include"TextureManager.h"
 #include"MathUtility.h"
 
+// assimp
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 struct ModelData
 {
 	std::vector<VertexData>vertices;
@@ -52,6 +57,7 @@ private:
 	void CreateMaterialData(DirectXCore* dxCore);
 
 	static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
+	void LoadModel(const std::string& directoryPath, const std::string& filename);
 	static MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);
 
 };
