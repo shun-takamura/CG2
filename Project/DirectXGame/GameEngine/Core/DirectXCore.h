@@ -77,6 +77,13 @@ public:
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
 
+	// デルタタイムの取得
+	float GetDeltaTime() const { return deltaTime_; }
+
+	// 固定/可変フレームレートの切り替え
+	void SetUseFixedFrameRate(bool useFixed) { useFixedFrameRate_ = useFixed; }
+	bool IsUsingFixedFrameRate() const { return useFixedFrameRate_; }
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
@@ -121,6 +128,11 @@ private:
 	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_ = nullptr;
 	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_ = nullptr;
 	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_ = nullptr;
+
+	// デルタタイム
+	std::chrono::steady_clock::time_point lastFrameTime_;
+	float deltaTime_ = 1.0f / 60.0f;
+	bool useFixedFrameRate_ = true; // true: 固定, false: 可変
 
 	HANDLE fenceEvent_ = nullptr;
 	UINT frameIndex_ = 0;

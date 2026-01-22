@@ -6,7 +6,7 @@
 #include "Material.h"
 #include "Log.h"
 #include <cassert>
-#include <random>
+#include "imgui.h"
 
 ParticleManager* ParticleManager::GetInstance()
 {
@@ -29,6 +29,10 @@ void ParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
     // 共通リソース作成
     CreateVertexData();
     CreateMaterialResource();
+
+    // 乱数生成器の初期化
+    std::random_device rd;
+    randomEngine_.seed(rd());
 }
 
 void ParticleManager::Finalize()
@@ -102,11 +106,11 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
 
     ParticleGroup& group = particleGroups_[name];
 
-    // 乱数生成器
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> distVel(-0.1f, 0.1f);
-    std::uniform_real_distribution<float> distVelY(0.0f, 0.1f);
+    // 拡散スケールを適用した速度範囲
+    float velScale = emitterSettings_.velocityScale;
+    std::uniform_real_distribution<float> distVel(-0.5f * velScale, 0.5f * velScale);
+    std::uniform_real_distribution<float> distVelY(0.0f, 0.5f * velScale);
+    std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
 
     for (uint32_t i = 0; i < count; ++i) {
         // 最大数チェック
@@ -122,12 +126,23 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
 
         // ランダムな速度
         particle.velocity = {
-            distVel(gen),
-            distVelY(gen),
-            distVel(gen)
+            distVel(randomEngine_),
+            distVelY(randomEngine_),
+            distVel(randomEngine_)
         };
 
-        particle.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        // 色の設定
+        if (emitterSettings_.useRandomColor) {
+            particle.color = {
+                distColor(randomEngine_),
+                distColor(randomEngine_),
+                distColor(randomEngine_),
+                1.0f
+            };
+        } else {
+            particle.color = emitterSettings_.baseColor;
+        }
+
         particle.lifeTime = 2.0f;
         particle.currentTime = 0.0f;
 
@@ -142,6 +157,9 @@ void ParticleManager::Update()
     if (!camera_) {
         return;
     }
+
+    // デルタタイムを取得
+    const float kDeltaTime = dxCore_->GetDeltaTime();
 
     Matrix4x4 viewMatrix = camera_->GetViewMatrix();
     Matrix4x4 projectionMatrix = camera_->GetProjectionMatrix();
@@ -179,12 +197,19 @@ void ParticleManager::Update()
             }
 
             // 場の影響を計算（加速）
-            // 今は省略、必要なら重力などを追加
+            if (isAccelerationFieldEnabled_) {
+                // Fieldの範囲内のParticleには加速度を適用する
+                if (IsCollision(accelerationField_.area, particle.transform.translate)) {
+                    particle.velocity.x += accelerationField_.acceleration.x * kDeltaTime;
+                    particle.velocity.y += accelerationField_.acceleration.y * kDeltaTime;
+                    particle.velocity.z += accelerationField_.acceleration.z * kDeltaTime;
+                }
+            }
 
             // 移動処理（速度を座標に加算）
-            particle.transform.translate.x += particle.velocity.x;
-            particle.transform.translate.y += particle.velocity.y;
-            particle.transform.translate.z += particle.velocity.z;
+            particle.transform.translate.x += particle.velocity.x * kDeltaTime;
+            particle.transform.translate.y += particle.velocity.y * kDeltaTime;
+            particle.transform.translate.z += particle.velocity.z * kDeltaTime;
 
             // ワールド行列を計算
             Matrix4x4 scaleMatrix = MakeScaleMatrix(particle.transform);
@@ -200,6 +225,7 @@ void ParticleManager::Update()
             if (instanceIndex < kMaxInstanceCount) {
                 group.instancingData[instanceIndex].WVP = wvpMatrix;
                 group.instancingData[instanceIndex].World = worldMatrix;
+                group.instancingData[instanceIndex].color = particle.color;
                 instanceIndex++;
             }
 
@@ -247,6 +273,62 @@ void ParticleManager::Draw()
         // DrawCall（インスタンシング描画）
         commandList->DrawInstanced(6, group.instanceCount, 0, 0);
     }
+}
+
+void ParticleManager::OnImGui()
+{
+    if (ImGui::Begin("Particle Settings")) {
+        // エミッター設定
+        ImGui::Text("Emitter Settings");
+        ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
+        ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
+        ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
+
+        if (!emitterSettings_.useRandomColor) {
+            ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
+        }
+
+        ImGui::Separator();
+
+        // 加速度フィールド設定
+        ImGui::Text("Acceleration Field");
+        ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
+
+        if (isAccelerationFieldEnabled_) {
+            ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
+            ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
+            ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
+        }
+
+        ImGui::Separator();
+
+        // ブレンドモード
+        const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
+        int currentMode = static_cast<int>(blendMode_);
+        if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
+            blendMode_ = static_cast<BlendMode>(currentMode);
+        }
+
+        // パーティクル情報
+        ImGui::Separator();
+        ImGui::Text("Particle Info");
+        uint32_t totalCount = 0;
+        for (const auto& pair : particleGroups_) {
+            totalCount += static_cast<uint32_t>(pair.second.particles.size());
+        }
+        ImGui::Text("Total Particles: %u", totalCount);
+    }
+    ImGui::End();
+}
+
+bool ParticleManager::IsCollision(const AABB& aabb, const Vector3& point)
+{
+    if (point.x >= aabb.min.x && point.x <= aabb.max.x &&
+        point.y >= aabb.min.y && point.y <= aabb.max.y &&
+        point.z >= aabb.min.z && point.z <= aabb.max.z) {
+        return true;
+    }
+    return false;
 }
 
 void ParticleManager::CreateRootSignature()

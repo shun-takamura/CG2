@@ -217,7 +217,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ParticleManager::GetInstance()->Initialize(dxCore, srvManager);
 	ParticleManager::GetInstance()->SetCamera(camera);
 	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "Resources/uvChecker.png");
-	ParticleManager::GetInstance()->CreateParticleGroup("monsterBall", "Resources/monsterBall.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
+
+	// 加速度フィールドの設定
+	AccelerationField field;
+	field.acceleration = { 15.0f, 0.0f, 0.0f };  // +x方向に15m/s²（風）
+	field.area.min = { -1.0f, -1.0f, -1.0f }; // 範囲の最小点
+	field.area.max = { 10.0f, 10.0f, 10.0f };    // 範囲の最大点
+	ParticleManager::GetInstance()->SetAccelerationField(field);
+	ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true); // 有効化
 
 	// SpriteInstance を複数保持する
 	std::vector<SpriteInstance*> sprites;
@@ -377,6 +385,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Debug::Log("trigger [2]");
 		}
 
+		if (input->GetKeyboard()->TriggerKey(DIK_P)) {
+			dxCore->SetUseFixedFrameRate(false);
+		}
+
+		// Fキーで場のON/OFF切り替え
+		if (input->GetKeyboard()->TriggerKey(DIK_F)) {
+			bool current = ParticleManager::GetInstance()->IsAccelerationFieldEnabled();
+			ParticleManager::GetInstance()->SetAccelerationFieldEnabled(!current);
+		}
+
 		sprite->SetAnchorPoint({ 0.5f,0.5f });
 		sprite->SetIsFlipX(true);
 
@@ -395,12 +413,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 更新処理
 		ParticleManager::GetInstance()->Update();
 
+		// 1秒間に発生させる量を自動制御
+		static float emitTimer = 0.0f;
+		emitTimer += dxCore->GetDeltaTime();
+		float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
+		if (emitRate > 0.0f) {
+			float emitInterval = 1.0f / emitRate;
+			while (emitTimer >= emitInterval) {
+				ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
+				emitTimer -= emitInterval;
+			}
+		}
+
+		// circleのパーティクルを常に発生させる
+		ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
+
 		// キー入力でパーティクル発生
 		if (input->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 			ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
-		}
-		if (input->GetKeyboard()->TriggerKey(DIK_SPACE)) {
-			ParticleManager::GetInstance()->Emit("monsterBall", { 2.0f, 0.0f, 0.0f }, 5);
 		}
 
 		sprite->Update();
@@ -447,7 +477,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 
 		// 描画処理
-		ParticleManager::GetInstance()->SetBlendMode(ParticleManager::kBlendModeAdd);
 		ParticleManager::GetInstance()->Draw();
 
 		spriteManager->DrawSetting();
@@ -456,6 +485,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Draw();
 		}
+
+		// パーティクルのImGui表示
+		ParticleManager::GetInstance()->OnImGui();
 
 		// ImGui描画
 		ImGuiManager::Instance().EndFrame();

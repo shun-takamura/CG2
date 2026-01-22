@@ -440,32 +440,50 @@ void DirectXCore::CreateFenceObjects() {
 
 void DirectXCore::InitializeFixFPS(){
     reference_ = std::chrono::steady_clock::now();
+    lastFrameTime_ = reference_;
 }
 
 void DirectXCore::UpdateFixFPS(){
-    using namespace std::chrono;
+    // 現在時刻を取得
+    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-    // 現在時刻
-    steady_clock::time_point now = steady_clock::now();
+    // 前フレームからの経過時間を計算
+    std::chrono::microseconds elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(now - lastFrameTime_);
 
-    // 前回からの経過時間（マイクロ秒）
-    microseconds elapsed =
-        duration_cast<microseconds>(now - reference_);
+    if (useFixedFrameRate_) {
+        // 固定フレームレート（60FPS）
+        const std::chrono::microseconds kMinCheckTime(uint64_t(1000000.0f / 60.0f));
+        const std::chrono::microseconds kMinTime(uint64_t(1000000.0f / 60.0f));
 
-    // 1/60秒
-    const microseconds kMinTime(uint64_t(1000000.0f / 60.0f));
+        // 1/60秒経っていない場合は待機
+        std::chrono::microseconds check =
+            std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
 
-    // 1/60秒よりちょい短め（半端Hz対策）
-    const microseconds kMinCheckTime(uint64_t(1000000.0f / 65.0f));
+        if (check < kMinCheckTime) {
+            std::chrono::microseconds waitTime = kMinCheckTime - check;
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                static_cast<long long>(waitTime.count() * 0.9)));
+        }
 
-    // ここに “kMinCheckTime を使うバージョン” を入れる
-    if (elapsed < kMinCheckTime) {
-        // 1マイクロ秒スリープを繰り返す
-        while ((steady_clock::now() - reference_) < kMinTime) {
-            std::this_thread::sleep_for(microseconds(1));
+        // 時間が経つまでループ
+        do {
+            now = std::chrono::steady_clock::now();
+            elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
+        } while (elapsed < kMinTime);
+
+        reference_ = now;
+        deltaTime_ = 1.0f / 60.0f; // 固定
+    } else {
+        // 可変フレームレート
+        deltaTime_ = elapsed.count() / 1000000.0f;
+
+        // デルタタイムの上限を設定（処理落ち時の暴走防止）
+        const float kMaxDeltaTime = 0.1f; // 最大0.1秒（10FPS相当）
+        if (deltaTime_ > kMaxDeltaTime) {
+            deltaTime_ = kMaxDeltaTime;
         }
     }
 
-    // 時刻更新
-    reference_ = steady_clock::now();
+    lastFrameTime_ = now;
 }

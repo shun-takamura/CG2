@@ -37,15 +37,15 @@ cbuffer DirectionalLightBuffer : register(b1)
 }
 
 Texture2D<float4> gTexture : register(t0); // SRVはt
-SamplerState gSumpler : register(s0); // Sumplerはs
+SamplerState gSampler : register(s0); // Samplerはs
 
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
 
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
-    float4 textureColor = gTexture.Sample(gSumpler, transformedUV.xy);
-    output.color = gMaterial.color * textureColor;
+    float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
+    output.color = gMaterial.color * textureColor * input.color;
     
     if (output.color.a == 0.0){
         discard;
