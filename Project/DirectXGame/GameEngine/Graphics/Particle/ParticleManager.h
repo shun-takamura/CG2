@@ -11,6 +11,7 @@
 #include "Vector4.h"
 #include "Matrix4x4.h"
 #include "Transform.h"
+#include <random>
 
 // 前方宣言
 class Camera;
@@ -24,10 +25,32 @@ struct Particle {
     float currentTime;
 };
 
+// AABB
+struct AABB {
+    Vector3 min; //!< 最小点
+    Vector3 max; //!< 最大点
+};
+
+// 加速度フィールド
+struct AccelerationField {
+    Vector3 acceleration; //!< 加速度
+    AABB area;            //!< 範囲
+};
+
+
 // GPU送信用の行列データ
 struct ParticleForGPU {
     Matrix4x4 WVP;
     Matrix4x4 World;
+    Vector4 color;
+};
+
+// エミッター設定
+struct EmitterSettings {
+    float emitRate = 10.0f;         // 1秒間に発生させる数
+    float velocityScale = 1.0f;     // 速度の拡散スケール
+    bool useRandomColor = false;    // ランダムカラーを使うか
+    Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f }; // 基本色
 };
 
 // パーティクルグループ
@@ -80,6 +103,9 @@ public:
 
     // 描画
     void Draw();
+   
+    // ImGui表示
+    void OnImGui();
 
     // カメラのセット
     void SetCamera(Camera* camera) { camera_ = camera; }
@@ -87,11 +113,23 @@ public:
     // ブレンドモードのセット
     void SetBlendMode(BlendMode blendMode) { blendMode_ = blendMode; }
 
+    // 加速度フィールドのセット
+    void SetAccelerationField(const AccelerationField& field) { accelerationField_ = field; }
+
+    // 加速度フィールドの有効/無効切り替え
+    void SetAccelerationFieldEnabled(bool enabled) { isAccelerationFieldEnabled_ = enabled; }
+
+    // エミッター設定のセット/ゲット
+    void SetEmitterSettings(const EmitterSettings& settings) { emitterSettings_ = settings; }
+
     // ゲッター
     DirectXCore* GetDxCore() const { return dxCore_; }
     SRVManager* GetSRVManager() const { return srvManager_; }
     Camera* GetCamera() const { return camera_; }
     BlendMode GetBlendMode() const { return blendMode_; }
+    const AccelerationField& GetAccelerationField() const { return accelerationField_; }
+    bool IsAccelerationFieldEnabled() const { return isAccelerationFieldEnabled_; }
+    EmitterSettings& GetEmitterSettings() { return emitterSettings_; }
 
 private:
     // シングルトン用
@@ -103,6 +141,23 @@ private:
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
     Camera* camera_ = nullptr;
+
+    // エミッター設定
+    EmitterSettings emitterSettings_;
+
+    // エミット用の蓄積時間
+    float emitAccumulator_ = 0.0f;
+
+    // 乱数生成器（メンバとして保持）
+    std::random_device seedGenerator_;
+    std::mt19937 randomEngine_{ seedGenerator_() };
+
+    // AABBと点の当たり判定
+    bool IsCollision(const AABB& aabb, const Vector3& point);
+
+    // 加速度フィールド
+    AccelerationField accelerationField_;
+    bool isAccelerationFieldEnabled_ = false;
 
     BlendMode blendMode_ = kBlendModeAdd;
 
@@ -120,7 +175,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
 
     // 最大インスタンス数
-    static const uint32_t kMaxInstanceCount = 100;
+    static const uint32_t kMaxInstanceCount = 1000;
 
 private:
     void CreateRootSignature();
