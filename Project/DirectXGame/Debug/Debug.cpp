@@ -1,5 +1,9 @@
 #include "Debug.h"
+#include <dxgidebug.h>
 #include <Windows.h>
+#include <wrl.h>
+
+#pragma comment(lib, "dxguid.lib")
 
 namespace Debug {
 

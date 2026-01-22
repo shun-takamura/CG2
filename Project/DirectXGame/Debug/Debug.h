@@ -20,4 +20,5 @@ namespace Debug {
     /// エラーログを出力
     /// </summary>
     void LogError(const std::string& message);
+
 }
