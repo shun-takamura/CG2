@@ -1,39 +1,19 @@
 #pragma once
 
-#include <cstdint>
-#include <math.h>
-#define _USE_MATH_DEFINES
-#include <fstream>
-#include <sstream>
+#include "Framework.h"
 #include <vector>
 #include <string>
 
-// ComPtr
-#include <wrl.h>
-
-// DirectX12
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <cassert>
-#include <dxgidebug.h>
-#include <iostream>
-#include <dxcapi.h>
-
 // 前方宣言
-class ConvertStringClass;
 class DebugCamera;
-class WindowsApplication;
-class DirectXCore;
-class SRVManager;
-class SpriteManager;
 class SpriteInstance;
-class Object3DManager;
 class Object3DInstance;
 class Camera;
-class InputManager;
 
-// ゲーム
-class Game {
+/// <summary>
+/// ゲーム（ゲーム固有の処理）
+/// </summary>
+class Game : public Framework {
 public:
 	/// <summary>
 	/// コンストラクタ
@@ -46,64 +26,38 @@ public:
 	~Game();
 
 	/// <summary>
-	/// ゲームの初期化
+	/// 初期化
 	/// </summary>
-	void Initialize();
+	void Initialize() override;
+
+	/// <summary>
+	/// 終了
+	/// </summary>
+	void Finalize() override;
 
 	/// <summary>
 	/// 毎フレーム更新
 	/// </summary>
-	void Update();
+	void Update() override;
 
 	/// <summary>
 	/// 描画
 	/// </summary>
-	void Draw();
-
-	/// <summary>
-	/// ゲームの終了
-	/// </summary>
-	void Finalize();
-
-	/// <summary>
-	/// 終了リクエストがあるか
-	/// </summary>
-	bool IsEndRequest() const { return isEndRequest_; }
+	void Draw() override;
 
 private:
-	// 終了リクエストフラグ
-	bool isEndRequest_ = false;
-
-	// 基本システム
-	ConvertStringClass* convertStringClass_ = nullptr;
+	// デバッグカメラ
 	DebugCamera* debugCamera_ = nullptr;
-	WindowsApplication* winApp_ = nullptr;
-	DirectXCore* dxCore_ = nullptr;
-	SRVManager* srvManager_ = nullptr;
-
-	// dxcコンパイラ関連
-	IDxcUtils* dxcUtils_ = nullptr;
-	IDxcCompiler3* dxcCompiler_ = nullptr;
-	IDxcIncludeHandler* includeHandler_ = nullptr;
 
 	// スプライト関連
-	SpriteManager* spriteManager_ = nullptr;
 	SpriteInstance* sprite_ = nullptr;
 	std::vector<SpriteInstance*> sprites_;
 
 	// 3Dオブジェクト関連
-	Object3DManager* object3DManager_ = nullptr;
 	std::vector<Object3DInstance*> object3DInstances_;
 
 	// カメラ
 	Camera* camera_ = nullptr;
-
-	// 入力
-	InputManager* input_ = nullptr;
-
-	// ビューポートとシザー矩形
-	D3D12_VIEWPORT viewport_{};
-	D3D12_RECT scissorRect_{};
 
 	// パーティクル用タイマー
 	float emitTimer_ = 0.0f;
