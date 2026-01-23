@@ -79,7 +79,7 @@
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assimp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assimp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -107,7 +107,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -138,7 +138,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <TreatWarningAsError>true</TreatWarningAsError>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -164,6 +164,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Light\LightManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\BaseScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\SceneFactory.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\TitleScene.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ImGuiManager.cpp" />
@@ -219,6 +224,12 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\BaseScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\FPSWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\HierarchyWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiEditable.h" />

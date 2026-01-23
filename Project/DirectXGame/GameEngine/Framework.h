@@ -27,6 +27,7 @@ class SRVManager;
 class SpriteManager;
 class Object3DManager;
 class InputManager;
+class AbstractSceneFactory;
 
 /// <summary>
 /// フレームワーク（汎用部分）
@@ -89,6 +90,9 @@ protected:
 
 	// 入力
 	InputManager* input_ = nullptr;
+
+	// シーンファクトリー
+	AbstractSceneFactory* sceneFactory_ = nullptr;
 
 	// ビューポートとシザー矩形
 	D3D12_VIEWPORT viewport_{};
