@@ -1,22 +1,24 @@
 #pragma once
 
-#include "Framework.h"
+#include "BaseScene.h"
+
+// 前方宣言
+class SpriteInstance;
 
 /// <summary>
-/// ゲーム（ゲーム固有の処理）
-/// SceneManagerを使用してシーン管理を行う
+/// タイトルシーン
 /// </summary>
-class Game : public Framework {
+class TitleScene : public BaseScene {
 public:
 	/// <summary>
 	/// コンストラクタ
 	/// </summary>
-	Game();
+	TitleScene();
 
 	/// <summary>
 	/// デストラクタ
 	/// </summary>
-	~Game();
+	~TitleScene() override;
 
 	/// <summary>
 	/// 初期化
@@ -24,12 +26,12 @@ public:
 	void Initialize() override;
 
 	/// <summary>
-	/// 終了
+	/// 終了処理
 	/// </summary>
 	void Finalize() override;
 
 	/// <summary>
-	/// 毎フレーム更新
+	/// 更新
 	/// </summary>
 	void Update() override;
 
@@ -37,4 +39,8 @@ public:
 	/// 描画
 	/// </summary>
 	void Draw() override;
+
+private:
+	// タイトル用スプライト（uvChecker）
+	SpriteInstance* titleSprite_ = nullptr;
 };
