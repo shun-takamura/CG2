@@ -1,7 +1,10 @@
 #pragma once
 
+#include <string>
+
 // 前方宣言
 class BaseScene;
+class AbstractSceneFactory;
 class SpriteManager;
 class Object3DManager;
 class DirectXCore;
@@ -13,14 +16,6 @@ class InputManager;
 /// </summary>
 class SceneManager {
 public:
-	/// <summary>
-	/// シーンの種類
-	/// </summary>
-	enum Scene {
-		TITLE,
-		GAME,
-	};
-
 	/// <summary>
 	/// シングルトンインスタンスの取得
 	/// </summary>
@@ -43,12 +38,6 @@ public:
 	void Finalize();
 
 	/// <summary>
-	/// シーン切り替え
-	/// </summary>
-	/// <param name="scene">切り替え先のシーン</param>
-	void ChangeScene(Scene scene);
-
-	/// <summary>
 	/// 更新
 	/// </summary>
 	void Update();
@@ -59,9 +48,29 @@ public:
 	void Draw();
 
 	/// <summary>
+	/// 次シーン予約
+	/// </summary>
+	/// <param name="sceneName">シーン名</param>
+	void ChangeScene(const std::string& sceneName);
+
+	/// <summary>
+	/// シーンファクトリーのセッター
+	/// </summary>
+	void SetSceneFactory(AbstractSceneFactory* sceneFactory) { sceneFactory_ = sceneFactory; }
+
+	/// <summary>
 	/// 現在のシーンを取得
 	/// </summary>
 	BaseScene* GetCurrentScene() const { return currentScene_; }
+
+	//====================
+	// マネージャーのゲッター（シーン初期化時に使用）
+	//====================
+	SpriteManager* GetSpriteManager() const { return spriteManager_; }
+	Object3DManager* GetObject3DManager() const { return object3DManager_; }
+	DirectXCore* GetDirectXCore() const { return dxCore_; }
+	SRVManager* GetSRVManager() const { return srvManager_; }
+	InputManager* GetInputManager() const { return input_; }
 
 private:
 	// シングルトン用
@@ -70,8 +79,19 @@ private:
 	SceneManager(const SceneManager&) = delete;
 	SceneManager& operator=(const SceneManager&) = delete;
 
+	/// <summary>
+	/// シーンに各マネージャーをセットする
+	/// </summary>
+	void SetupScene(BaseScene* scene);
+
 	// 現在のシーン
 	BaseScene* currentScene_ = nullptr;
+
+	// 次のシーン
+	BaseScene* nextScene_ = nullptr;
+
+	// シーンファクトリー（借りてくる）
+	AbstractSceneFactory* sceneFactory_ = nullptr;
 
 	// 各マネージャーへのポインタ
 	SpriteManager* spriteManager_ = nullptr;

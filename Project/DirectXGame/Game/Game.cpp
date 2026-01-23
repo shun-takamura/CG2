@@ -15,6 +15,7 @@
 #include "ImGuiManager.h"
 #include "KeyboardInput.h"
 #include "SceneManager.h"
+#include "SceneFactory.h"
 
 Game::Game() {
 }
@@ -27,18 +28,13 @@ void Game::Initialize() {
 	Framework::Initialize();
 
 	//===================================
-	// SceneManagerの初期化
+	// シーンファクトリを生成し、マネージャにセット
 	//===================================
-	SceneManager::GetInstance()->Initialize(
-		spriteManager_,
-		object3DManager_,
-		dxCore_,
-		srvManager_,
-		input_
-	);
+	sceneFactory_ = new SceneFactory();
+	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_);
 
-	// 最初のシーンをタイトルシーンに設定
-	SceneManager::GetInstance()->ChangeScene(SceneManager::TITLE);
+	// シーンマネージャに最初のシーンをセット
+	SceneManager::GetInstance()->ChangeScene("TITLE");
 }
 
 void Game::Update() {
@@ -57,11 +53,6 @@ void Game::Update() {
 		endRequest_ = true;
 		return;
 	}
-
-	//===================================
-	// シーンの更新
-	//===================================
-	SceneManager::GetInstance()->Update();
 }
 
 void Game::Draw() {
@@ -96,12 +87,8 @@ void Game::Draw() {
 
 void Game::Finalize() {
 	//===================================
-	// SceneManagerの終了処理
-	//===================================
-	SceneManager::GetInstance()->Finalize();
-
-	//===================================
 	// 基底クラスの終了処理
+	// （SceneManagerとSceneFactoryの解放はFramework::Finalizeで行う）
 	//===================================
 	Framework::Finalize();
 }

@@ -25,6 +25,7 @@
 #include "InputManager.h"
 #include "ImGuiManager.h"
 #include "LightManager.h"
+#include "SceneManager.h"
 
 void Framework::Run() {
 	// ゲームの初期化
@@ -166,6 +167,17 @@ void Framework::Initialize() {
 	input_ = new InputManager();
 	input_->Initialize(winApp_);
 
+	//==============================
+	// SceneManagerの初期化
+	//==============================
+	SceneManager::GetInstance()->Initialize(
+		spriteManager_,
+		object3DManager_,
+		dxCore_,
+		srvManager_,
+		input_
+	);
+
 	//=========================
 	// ViewportとScissor
 	//=========================
@@ -196,6 +208,9 @@ void Framework::Update() {
 
 	// 入力の更新
 	input_->Update();
+
+	// シーンマネージャーの更新
+	SceneManager::GetInstance()->Update();
 }
 
 void Framework::Finalize() {
@@ -211,6 +226,12 @@ void Framework::Finalize() {
 	// 解放処理
 	//=============
 	// 生成と逆順に行う
+
+	// シーンマネージャーの終了処理
+	SceneManager::GetInstance()->Finalize();
+
+	// シーンファクトリ解放
+	delete sceneFactory_;
 
 	// 入力を解放
 	input_->Finalize();

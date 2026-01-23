@@ -166,6 +166,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\BaseScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\SceneFactory.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\TitleScene.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
@@ -223,8 +224,10 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\BaseScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />
     <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\FPSWindow.h" />

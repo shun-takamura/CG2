@@ -101,7 +101,7 @@ void GameScene::Finalize() {
 		delete s;
 	}
 	sprites_.clear();
-	
+
 	if (sprite_) {
 		delete sprite_;
 		sprite_ = nullptr;

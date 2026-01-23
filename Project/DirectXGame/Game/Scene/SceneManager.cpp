@@ -1,7 +1,7 @@
 #include "SceneManager.h"
 #include "BaseScene.h"
-#include "TitleScene.h"
-#include "GameScene.h"
+#include "AbstractSceneFactory.h"
+#include <cassert>
 
 SceneManager* SceneManager::GetInstance() {
 	static SceneManager instance;
@@ -31,40 +31,25 @@ void SceneManager::Finalize() {
 	}
 }
 
-void SceneManager::ChangeScene(Scene scene) {
-	// 現在のシーンがあれば解放
-	if (currentScene_) {
-		currentScene_->Finalize();
-		delete currentScene_;
-		currentScene_ = nullptr;
-	}
+void SceneManager::Update() {
+	// 次のシーンが予約されていたら切り替え
+	if (nextScene_) {
+		// 現在のシーンがあれば解放
+		if (currentScene_) {
+			currentScene_->Finalize();
+			delete currentScene_;
+		}
 
-	// 新しいシーンを生成
-	switch (scene) {
-	case TITLE:
-		currentScene_ = new TitleScene();
-		break;
-	case GAME:
-		currentScene_ = new GameScene();
-		break;
-	default:
-		break;
-	}
+		// 次のシーンを現在のシーンに
+		currentScene_ = nextScene_;
+		nextScene_ = nullptr;
 
-	// シーンに各マネージャーを設定
-	if (currentScene_) {
-		currentScene_->SetSpriteManager(spriteManager_);
-		currentScene_->SetObject3DManager(object3DManager_);
-		currentScene_->SetDirectXCore(dxCore_);
-		currentScene_->SetSRVManager(srvManager_);
-		currentScene_->SetInputManager(input_);
-
-		// シーンの初期化
+		// シーンのセットアップと初期化
+		SetupScene(currentScene_);
 		currentScene_->Initialize();
 	}
-}
 
-void SceneManager::Update() {
+	// 現在のシーンを更新
 	if (currentScene_) {
 		currentScene_->Update();
 	}
@@ -73,5 +58,23 @@ void SceneManager::Update() {
 void SceneManager::Draw() {
 	if (currentScene_) {
 		currentScene_->Draw();
+	}
+}
+
+void SceneManager::ChangeScene(const std::string& sceneName) {
+	assert(sceneFactory_);
+	assert(nextScene_ == nullptr);
+
+	// 次シーンを生成
+	nextScene_ = sceneFactory_->CreateScene(sceneName);
+}
+
+void SceneManager::SetupScene(BaseScene* scene) {
+	if (scene) {
+		scene->SetSpriteManager(spriteManager_);
+		scene->SetObject3DManager(object3DManager_);
+		scene->SetDirectXCore(dxCore_);
+		scene->SetSRVManager(srvManager_);
+		scene->SetInputManager(input_);
 	}
 }

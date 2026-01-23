@@ -4,7 +4,7 @@
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
-/// SceneManagerを使用してシーン管理を行う
+/// SceneManagerとSceneFactoryを使用してシーン管理を行う
 /// </summary>
 class Game : public Framework {
 public:
