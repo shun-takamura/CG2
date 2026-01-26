@@ -136,22 +136,19 @@ void GameScene::Finalize() {
 
 void GameScene::Update() {
 
-	// カメラスプライトの初期化（カメラが開かれてテクスチャが作成されたら）
 	if (cameraSprite == nullptr && CameraCapture::GetInstance()->IsOpened()) {
-		OutputDebugStringA("Checking for camera texture...\n");
-
-		// テクスチャが存在するか確認
 		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
-			OutputDebugStringA("Camera texture found! Creating sprite...\n");
-
 			cameraSprite = new SpriteInstance();
 			cameraSprite->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
 			cameraSprite->SetPosition({ 0.0f, 0.0f });
 			cameraSprite->SetSize({ 640.0f, 480.0f });
 
-			OutputDebugStringA("Camera sprite created!\n");
-		} else {
-			OutputDebugStringA("Camera texture NOT found yet\n");
+			// テクスチャ全体を使用するように設定
+			cameraSprite->SetTextureLeftTop({ 0.0f, 0.0f });
+			cameraSprite->SetTextureSize({
+				static_cast<float>(CameraCapture::GetInstance()->GetFrameWidth()),
+				static_cast<float>(CameraCapture::GetInstance()->GetFrameHeight())
+				});
 		}
 	}
 

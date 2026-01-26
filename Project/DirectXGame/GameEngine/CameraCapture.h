@@ -1,4 +1,3 @@
-// CameraCapture.h
 #pragma once
 #include <mfapi.h>
 #include <mfidl.h>
@@ -30,7 +29,6 @@ public:
     void Initialize();
     void Finalize();
 
-    // publicセクションに追加:
     /// <summary>
     /// カメラ映像をテクスチャとして登録・更新
     /// </summary>
@@ -60,8 +58,6 @@ public:
     void LogDevicesToImGui();
 
 private:
-
-    // privateセクションに追加:
     static inline const std::string kCameraTextureName_ = "##CameraTexture##";
     bool textureCreated_ = false;
 

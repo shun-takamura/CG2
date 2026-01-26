@@ -27,39 +27,27 @@ void CameraCapture::UpdateTexture()
         return;
     }
 
-    // フレームを取得
     if (!CaptureFrame())
     {
-        OutputDebugStringA("CameraCapture: CaptureFrame failed\n");
         return;
     }
 
-    // フレームデータが空なら何もしない
     if (frameBuffer_.empty() || frameWidth_ == 0 || frameHeight_ == 0)
     {
-        OutputDebugStringA("CameraCapture: Invalid frame data\n");
         return;
     }
 
-    // テクスチャが未作成なら作成
     if (!textureCreated_)
     {
-        char buf[256];
-        sprintf_s(buf, "CameraCapture: Creating texture %u x %u\n", frameWidth_, frameHeight_);
-        OutputDebugStringA(buf);
-
         TextureManager::GetInstance()->CreateDynamicTexture(
             kCameraTextureName_,
             frameWidth_,
             frameHeight_,
-            DXGI_FORMAT_B8G8R8A8_UNORM
+            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
         );
         textureCreated_ = true;
-
-        OutputDebugStringA("CameraCapture: Texture created\n");
     }
 
-    // テクスチャを更新
     if (textureCreated_)
     {
         TextureManager::GetInstance()->UpdateDynamicTexture(
@@ -136,23 +124,17 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
 {
     if (deviceIndex >= devices_.size())
     {
-        OutputDebugStringA("CameraCapture: Invalid device index\n");
         return false;
     }
 
-    // 既に開いていたら閉じる
     CloseCamera();
 
     HRESULT result;
 
-    // ========================================
-    // デバイスを再列挙して新しいActivateを取得
-    // ========================================
     Microsoft::WRL::ComPtr<IMFAttributes> pEnumAttributes;
     result = MFCreateAttributes(&pEnumAttributes, 1);
     if (FAILED(result))
     {
-        OutputDebugStringA("CameraCapture: MFCreateAttributes for enum failed\n");
         return false;
     }
 
@@ -162,7 +144,6 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     );
     if (FAILED(result))
     {
-        OutputDebugStringA("CameraCapture: SetGUID for enum failed\n");
         return false;
     }
 
@@ -171,7 +152,6 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     result = MFEnumDeviceSources(pEnumAttributes.Get(), &ppDevices, &deviceCount);
     if (FAILED(result) || deviceIndex >= deviceCount)
     {
-        OutputDebugStringA("CameraCapture: MFEnumDeviceSources failed or index out of range\n");
         if (ppDevices)
         {
             for (UINT32 i = 0; i < deviceCount; i++)
@@ -183,10 +163,8 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         return false;
     }
 
-    // 新しいActivateからMediaSourceを作成
     result = ppDevices[deviceIndex]->ActivateObject(IID_PPV_ARGS(&mediaSource_));
 
-    // 全てのActivateを解放
     for (UINT32 i = 0; i < deviceCount; i++)
     {
         ppDevices[i]->Release();
@@ -195,35 +173,34 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
 
     if (FAILED(result))
     {
-        char buf[256];
-        sprintf_s(buf, "CameraCapture: ActivateObject failed (0x%08X)\n", result);
-        OutputDebugStringA(buf);
         return false;
     }
-    OutputDebugStringA("CameraCapture: ActivateObject OK\n");
 
-    // SourceReaderを作成
+    // SourceReaderの属性を設定（自動変換を有効にする）
+    Microsoft::WRL::ComPtr<IMFAttributes> pReaderAttributes;
+    result = MFCreateAttributes(&pReaderAttributes, 1);
+    if (SUCCEEDED(result))
+    {
+        // ビデオプロセッサを有効にして自動変換を許可
+        pReaderAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+    }
+
     result = MFCreateSourceReaderFromMediaSource(
         mediaSource_.Get(),
-        nullptr,
+        pReaderAttributes.Get(),
         &sourceReader_
     );
     if (FAILED(result))
     {
-        char buf[256];
-        sprintf_s(buf, "CameraCapture: MFCreateSourceReaderFromMediaSource failed (0x%08X)\n", result);
-        OutputDebugStringA(buf);
         CloseCamera();
         return false;
     }
-    OutputDebugStringA("CameraCapture: SourceReader created OK\n");
 
-    // 出力フォーマットをRGB32に設定
+    // RGB32形式を要求
     Microsoft::WRL::ComPtr<IMFMediaType> pType;
     result = MFCreateMediaType(&pType);
     if (FAILED(result))
     {
-        OutputDebugStringA("CameraCapture: MFCreateMediaType failed\n");
         CloseCamera();
         return false;
     }
@@ -239,30 +216,13 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     if (FAILED(result))
     {
         char buf[256];
-        sprintf_s(buf, "CameraCapture: SetCurrentMediaType RGB32 failed (0x%08X)\n", result);
+        sprintf_s(buf, "SetCurrentMediaType RGB32 failed: 0x%08X\n", result);
         OutputDebugStringA(buf);
-
-        // RGB32がダメならNV12を試す
-        pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
-        result = sourceReader_->SetCurrentMediaType(
-            MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-            nullptr,
-            pType.Get()
-        );
-        if (FAILED(result))
-        {
-            sprintf_s(buf, "CameraCapture: SetCurrentMediaType NV12 also failed (0x%08X)\n", result);
-            OutputDebugStringA(buf);
-            CloseCamera();
-            return false;
-        }
-        OutputDebugStringA("CameraCapture: Using NV12 format instead\n");
-    } else
-    {
-        OutputDebugStringA("CameraCapture: Using RGB32 format\n");
+        CloseCamera();
+        return false;
     }
 
-    // 解像度を取得
+    // 実際に設定されたメディアタイプを取得
     Microsoft::WRL::ComPtr<IMFMediaType> pCurrentType;
     result = sourceReader_->GetCurrentMediaType(
         MF_SOURCE_READER_FIRST_VIDEO_STREAM,
@@ -275,25 +235,36 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         frameWidth_ = width;
         frameHeight_ = height;
 
-        char buf[256];
-        sprintf_s(buf, "CameraCapture: Resolution %u x %u\n", width, height);
+        GUID subtype;
+        pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
+
+        char buf[512];
+        sprintf_s(buf, "Camera: %u x %u\n", width, height);
         OutputDebugStringA(buf);
+
+        if (subtype == MFVideoFormat_RGB32)
+        {
+            OutputDebugStringA("Format: RGB32 (OK)\n");
+        } else if (subtype == MFVideoFormat_NV12)
+        {
+            OutputDebugStringA("Format: NV12 (変換失敗)\n");
+        } else
+        {
+            OutputDebugStringA("Format: Other\n");
+        }
     }
 
     isOpened_ = true;
-    OutputDebugStringA("CameraCapture: Camera opened successfully!\n");
     return true;
 }
 
 void CameraCapture::CloseCamera()
 {
-    // SourceReaderを先に解放
     if (sourceReader_)
     {
         sourceReader_.Reset();
     }
 
-    // MediaSourceをシャットダウンして解放
     if (mediaSource_)
     {
         mediaSource_->Shutdown();
@@ -304,15 +275,17 @@ void CameraCapture::CloseCamera()
     frameWidth_ = 0;
     frameHeight_ = 0;
     isOpened_ = false;
-
     textureCreated_ = false;
-
-    OutputDebugStringA("CameraCapture: Camera closed\n");
 }
 
 bool CameraCapture::CaptureFrame()
 {
     if (!isOpened_ || !sourceReader_)
+    {
+        return false;
+    }
+
+    if (frameWidth_ == 0 || frameHeight_ == 0)
     {
         return false;
     }
@@ -337,7 +310,6 @@ bool CameraCapture::CaptureFrame()
         return false;
     }
 
-    // バッファを取得
     Microsoft::WRL::ComPtr<IMFMediaBuffer> pBuffer;
     result = pSample->ConvertToContiguousBuffer(&pBuffer);
     if (FAILED(result))
@@ -355,9 +327,22 @@ bool CameraCapture::CaptureFrame()
         return false;
     }
 
-    // フレームデータをコピー
-    frameBuffer_.resize(currentLength);
-    memcpy(frameBuffer_.data(), pData, currentLength);
+    // 実際のピクセル数を計算
+    uint32_t expectedPixelCount = frameWidth_ * frameHeight_;
+    uint32_t actualPixelCount = currentLength / 4;
+    uint32_t pixelCount = (actualPixelCount < expectedPixelCount) ? actualPixelCount : expectedPixelCount;
+
+    frameBuffer_.resize(pixelCount * 4);
+
+    // MediaFoundationのRGB32はBGRA順
+    // テクスチャはRGBA順（R8G8B8A8_UNORM）
+    for (uint32_t i = 0; i < pixelCount; i++)
+    {
+        frameBuffer_[i * 4 + 0] = pData[i * 4 + 2];  // R ← B
+        frameBuffer_[i * 4 + 1] = pData[i * 4 + 1];  // G ← G
+        frameBuffer_[i * 4 + 2] = pData[i * 4 + 0];  // B ← R
+        frameBuffer_[i * 4 + 3] = 255;               // A
+    }
 
     pBuffer->Unlock();
 
@@ -381,7 +366,6 @@ void CameraCapture::LogDevicesToImGui()
             const auto& device = devices_[i];
             std::string nameUtf8 = ConvertString(device.name);
 
-            // カメラを開くボタン
             std::string buttonLabel = "Open##" + std::to_string(i);
             if (ImGui::Button(buttonLabel.c_str()))
             {
@@ -399,7 +383,6 @@ void CameraCapture::LogDevicesToImGui()
         EnumerateDevices();
     }
 
-    // カメラ状態表示
     ImGui::Separator();
     ImGui::Text("=== Camera Status ===");
 
@@ -411,15 +394,6 @@ void CameraCapture::LogDevicesToImGui()
         if (ImGui::Button("Close Camera"))
         {
             CloseCamera();
-        }
-
-        // テスト用: フレーム取得ボタン
-        if (ImGui::Button("Capture Frame"))
-        {
-            if (CaptureFrame())
-            {
-                ImGui::Text("Frame captured: %zu bytes", frameBuffer_.size());
-            }
         }
 
         if (!frameBuffer_.empty())

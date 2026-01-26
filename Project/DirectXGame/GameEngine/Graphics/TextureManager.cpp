@@ -35,6 +35,10 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
         return;
     }
 
+    char buf[256];
+    sprintf_s(buf, "CreateDynamicTexture: %s, %u x %u\n", name.c_str(), width, height);
+    OutputDebugStringA(buf);
+
     TextureData& textureData = textureDatas[name];
     textureData.isDynamic = true;
 
@@ -132,8 +136,6 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
     OutputDebugStringA("TextureManager: Dynamic texture created successfully\n");
 }
 
-// TextureManager.cpp
-
 void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t* data, size_t dataSize)
 {
     if (data == nullptr || dataSize == 0)
@@ -149,20 +151,8 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
 
     TextureData& textureData = it->second;
 
-    // リソースのnullチェック
     if (!textureData.resource || !textureData.uploadBuffer)
     {
-        OutputDebugStringA("TextureManager: Resource is null\n");
-        return;
-    }
-
-    // アップロードバッファにデータをコピー
-    uint8_t* mappedData = nullptr;
-    D3D12_RANGE readRange{ 0, 0 };
-    HRESULT hr = textureData.uploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
-    if (FAILED(hr))
-    {
-        OutputDebugStringA("TextureManager: Map failed\n");
         return;
     }
 
@@ -176,20 +166,28 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
         &resourceDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes
     );
 
-    // 行ごとにコピー（ピッチが異なる場合があるため）
+    // アップロードバッファにデータをコピー
+    uint8_t* mappedData = nullptr;
+    D3D12_RANGE readRange{ 0, 0 };
+    HRESULT hr = textureData.uploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+    if (FAILED(hr))
+    {
+        return;
+    }
+
+    // 行ごとにコピー
     uint32_t srcRowPitch = static_cast<uint32_t>(textureData.metadata.width * 4);
+    uint32_t dstRowPitch = footprint.Footprint.RowPitch;
+
     for (UINT row = 0; row < numRows; row++)
     {
         size_t srcOffset = row * srcRowPitch;
-        if (srcOffset + srcRowPitch > dataSize)
+        size_t dstOffset = footprint.Offset + row * dstRowPitch;
+
+        if (srcOffset + srcRowPitch <= dataSize)
         {
-            break;  // データが足りない場合は中断
+            memcpy(mappedData + dstOffset, data + srcOffset, srcRowPitch);
         }
-        memcpy(
-            mappedData + footprint.Offset + row * footprint.Footprint.RowPitch,
-            data + srcOffset,
-            srcRowPitch
-        );
     }
 
     textureData.uploadBuffer->Unmap(0, nullptr);
@@ -197,7 +195,6 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
     // コマンドリストでコピー
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
 
-    // リソースバリア: PIXEL_SHADER_RESOURCE -> COPY_DEST
     D3D12_RESOURCE_BARRIER barrier{};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Transition.pResource = textureData.resource.Get();
@@ -206,7 +203,6 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     commandList->ResourceBarrier(1, &barrier);
 
-    // コピー
     D3D12_TEXTURE_COPY_LOCATION dst{};
     dst.pResource = textureData.resource.Get();
     dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -219,7 +215,6 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
 
     commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
-    // リソースバリア: COPY_DEST -> PIXEL_SHADER_RESOURCE
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     commandList->ResourceBarrier(1, &barrier);
