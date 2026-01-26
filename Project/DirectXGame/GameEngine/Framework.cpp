@@ -26,6 +26,7 @@
 #include "ImGuiManager.h"
 #include "LightManager.h"
 #include "SceneManager.h"
+#include "CameraCapture.h"
 
 void Framework::Run() {
 	// ゲームの初期化
@@ -161,6 +162,9 @@ void Framework::Initialize() {
 	// サウンドマネージャーの初期化
 	SoundManager::GetInstance()->Initialize();
 
+	// 初期化時（SoundManagerのInitialize後に呼ぶ）
+	CameraCapture::GetInstance()->Initialize();
+
 	//==============================
 	// Inputの初期化
 	//==============================
@@ -231,11 +235,14 @@ void Framework::Finalize() {
 	SceneManager::GetInstance()->Finalize();
 
 	// シーンファクトリ解放
-	delete sceneFactory_;
+	//delete sceneFactory_;
 
 	// 入力を解放
 	input_->Finalize();
 	delete input_;
+
+	// 終了時（SoundManagerのFinalize前に呼ぶ）
+	CameraCapture::GetInstance()->Finalize();
 
 	// 音声データ解放
 	SoundManager::GetInstance()->Finalize();

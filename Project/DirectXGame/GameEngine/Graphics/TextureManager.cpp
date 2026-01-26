@@ -13,6 +13,213 @@ void TextureManager::Initialize(SpriteManager* spriteManager, DirectXCore* dxCor
 	//textureDatas.reserve(SRVManager::kMaxSRVCount);
 }
 
+bool TextureManager::HasTexture(const std::string& filePath) const
+{
+    return textureDatas.contains(filePath);
+}
+
+void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t width, uint32_t height,
+    DXGI_FORMAT format)
+{
+    // 既に存在する場合は何もしない
+    if (textureDatas.contains(name))
+    {
+        OutputDebugStringA("TextureManager: Dynamic texture already exists\n");
+        return;
+    }
+
+    // テクスチャ枚数上限チェック
+    if (!srvManager_->CanAllocate())
+    {
+        OutputDebugStringA("TextureManager: SRV limit reached\n");
+        return;
+    }
+
+    char buf[256];
+    sprintf_s(buf, "CreateDynamicTexture: %s, %u x %u\n", name.c_str(), width, height);
+    OutputDebugStringA(buf);
+
+    TextureData& textureData = textureDatas[name];
+    textureData.isDynamic = true;
+
+    // メタデータを設定
+    textureData.metadata.width = width;
+    textureData.metadata.height = height;
+    textureData.metadata.depth = 1;
+    textureData.metadata.arraySize = 1;
+    textureData.metadata.mipLevels = 1;
+    textureData.metadata.format = format;
+    textureData.metadata.dimension = DirectX::TEX_DIMENSION_TEXTURE2D;
+
+    // テクスチャリソースを作成（DEFAULTヒープ）
+    D3D12_RESOURCE_DESC resourceDesc{};
+    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    resourceDesc.Width = width;
+    resourceDesc.Height = height;
+    resourceDesc.DepthOrArraySize = 1;
+    resourceDesc.MipLevels = 1;
+    resourceDesc.Format = format;
+    resourceDesc.SampleDesc.Count = 1;
+    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    D3D12_HEAP_PROPERTIES heapProps{};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    // 初期ステートをPIXEL_SHADER_RESOURCEにする
+    HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
+        &heapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,  // 変更
+        nullptr,
+        IID_PPV_ARGS(&textureData.resource)
+    );
+
+    if (FAILED(hr))
+    {
+        char buf[256];
+        sprintf_s(buf, "TextureManager: CreateCommittedResource failed (0x%08X)\n", hr);
+        OutputDebugStringA(buf);
+        textureDatas.erase(name);
+        return;
+    }
+
+    // アップロードバッファを作成
+    UINT64 uploadBufferSize = 0;
+    dxCore_->GetDevice()->GetCopyableFootprints(
+        &resourceDesc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize
+    );
+
+    D3D12_HEAP_PROPERTIES uploadHeapProps{};
+    uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    D3D12_RESOURCE_DESC uploadBufferDesc{};
+    uploadBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    uploadBufferDesc.Width = uploadBufferSize;
+    uploadBufferDesc.Height = 1;
+    uploadBufferDesc.DepthOrArraySize = 1;
+    uploadBufferDesc.MipLevels = 1;
+    uploadBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    uploadBufferDesc.SampleDesc.Count = 1;
+    uploadBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    hr = dxCore_->GetDevice()->CreateCommittedResource(
+        &uploadHeapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &uploadBufferDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&textureData.uploadBuffer)
+    );
+
+    if (FAILED(hr))
+    {
+        char buf[256];
+        sprintf_s(buf, "TextureManager: CreateCommittedResource for upload failed (0x%08X)\n", hr);
+        OutputDebugStringA(buf);
+        textureDatas.erase(name);
+        return;
+    }
+
+    // SRVインデックスを確保
+    textureData.srvIndex = srvManager_->Allocate();
+
+    // SRVを生成
+    srvManager_->CreateSRVForTexture2D(
+        textureData.srvIndex,
+        textureData.resource.Get(),
+        format,
+        1
+    );
+
+    OutputDebugStringA("TextureManager: Dynamic texture created successfully\n");
+}
+
+void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t* data, size_t dataSize)
+{
+    if (data == nullptr || dataSize == 0)
+    {
+        return;
+    }
+
+    auto it = textureDatas.find(name);
+    if (it == textureDatas.end() || !it->second.isDynamic)
+    {
+        return;
+    }
+
+    TextureData& textureData = it->second;
+
+    if (!textureData.resource || !textureData.uploadBuffer)
+    {
+        return;
+    }
+
+    // フットプリントを取得
+    D3D12_RESOURCE_DESC resourceDesc = textureData.resource->GetDesc();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+    UINT numRows;
+    UINT64 rowSizeInBytes;
+    UINT64 totalBytes;
+    dxCore_->GetDevice()->GetCopyableFootprints(
+        &resourceDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes
+    );
+
+    // アップロードバッファにデータをコピー
+    uint8_t* mappedData = nullptr;
+    D3D12_RANGE readRange{ 0, 0 };
+    HRESULT hr = textureData.uploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+    if (FAILED(hr))
+    {
+        return;
+    }
+
+    // 行ごとにコピー
+    uint32_t srcRowPitch = static_cast<uint32_t>(textureData.metadata.width * 4);
+    uint32_t dstRowPitch = footprint.Footprint.RowPitch;
+
+    for (UINT row = 0; row < numRows; row++)
+    {
+        size_t srcOffset = row * srcRowPitch;
+        size_t dstOffset = footprint.Offset + row * dstRowPitch;
+
+        if (srcOffset + srcRowPitch <= dataSize)
+        {
+            memcpy(mappedData + dstOffset, data + srcOffset, srcRowPitch);
+        }
+    }
+
+    textureData.uploadBuffer->Unmap(0, nullptr);
+
+    // コマンドリストでコピー
+    ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
+
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = textureData.resource.Get();
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    commandList->ResourceBarrier(1, &barrier);
+
+    D3D12_TEXTURE_COPY_LOCATION dst{};
+    dst.pResource = textureData.resource.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION src{};
+    src.pResource = textureData.uploadBuffer.Get();
+    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src.PlacedFootprint = footprint;
+
+    commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    commandList->ResourceBarrier(1, &barrier);
+}
+
 void TextureManager::LoadTexture(const std::string& filePath)
 {
 	// 読み込み済みテクスチャを検索

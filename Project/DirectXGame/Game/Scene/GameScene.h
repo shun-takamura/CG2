@@ -50,6 +50,7 @@ private:
 	DebugCamera* debugCamera_ = nullptr;
 
 	// スプライト関連
+	SpriteInstance* cameraSprite = nullptr;
 	SpriteInstance* sprite_ = nullptr;
 	std::vector<SpriteInstance*> sprites_;
 
