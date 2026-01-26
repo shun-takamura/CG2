@@ -16,6 +16,7 @@
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "SceneFactory.h"
+#include"CameraCapture.h"
 
 Game::Game() {
 }
@@ -76,6 +77,8 @@ void Game::Draw() {
 	// シーンの描画
 	//===================================
 	SceneManager::GetInstance()->Draw();
+
+	CameraCapture::GetInstance()->LogDevicesToImGui();
 
 	// ImGui描画
 	ImGuiManager::Instance().EndFrame();

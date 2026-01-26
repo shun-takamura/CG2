@@ -21,6 +21,7 @@
 #include "Debug.h"
 #include "LightManager.h"
 #include "KeyboardInput.h"
+#include "CameraCapture.h"
 
 GameScene::GameScene() {
 }
@@ -96,6 +97,13 @@ void GameScene::Initialize() {
 }
 
 void GameScene::Finalize() {
+
+	// カメラスプライト解放
+	if (cameraSprite) {
+		delete cameraSprite;
+		cameraSprite = nullptr;
+	}
+
 	// スプライト解放
 	for (SpriteInstance* s : sprites_) {
 		delete s;
@@ -127,6 +135,26 @@ void GameScene::Finalize() {
 }
 
 void GameScene::Update() {
+
+	// カメラスプライトの初期化（カメラが開かれてテクスチャが作成されたら）
+	if (cameraSprite == nullptr && CameraCapture::GetInstance()->IsOpened()) {
+		OutputDebugStringA("Checking for camera texture...\n");
+
+		// テクスチャが存在するか確認
+		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
+			OutputDebugStringA("Camera texture found! Creating sprite...\n");
+
+			cameraSprite = new SpriteInstance();
+			cameraSprite->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
+			cameraSprite->SetPosition({ 0.0f, 0.0f });
+			cameraSprite->SetSize({ 640.0f, 480.0f });
+
+			OutputDebugStringA("Camera sprite created!\n");
+		} else {
+			OutputDebugStringA("Camera texture NOT found yet\n");
+		}
+	}
+
 	// --- キーボード入力 ---
 	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 		// スペースキーを押した瞬間
@@ -224,6 +252,11 @@ void GameScene::Update() {
 
 	sprite_->Update();
 
+	// カメラスプライトが存在する場合のみ更新
+	if (cameraSprite) {
+		cameraSprite->Update();
+	}
+
 	for (SpriteInstance* s : sprites_) {
 		s->Update();
 	}
@@ -232,6 +265,12 @@ void GameScene::Update() {
 }
 
 void GameScene::Draw() {
+	// 描画の最初にカメラテクスチャを更新
+	if (CameraCapture::GetInstance()->IsOpened()) {
+		OutputDebugStringA("Updating camera texture...\n");
+		CameraCapture::GetInstance()->UpdateTexture();
+	}
+
 	// 3Dオブジェクトの共通描画設定
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
@@ -247,11 +286,16 @@ void GameScene::Draw() {
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
-	sprite_->Draw();
+	//sprite_->Draw();
 
-	for (SpriteInstance* s : sprites_) {
-		s->Draw();
+	// カメラスプライトが存在する場合のみ描画
+	if (cameraSprite) {
+		cameraSprite->Draw();
 	}
+
+	/*for (SpriteInstance* s : sprites_) {
+		s->Draw();
+	}*/
 
 	// パーティクルのImGui表示
 	ParticleManager::GetInstance()->OnImGui();
