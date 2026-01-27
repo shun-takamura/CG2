@@ -206,7 +206,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Game.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Framework.cpp" />
+    <ClCompile Include="externals\quirc\decode.c" />
+    <ClCompile Include="externals\quirc\identify.c" />
     <ClCompile Include="externals\quirc\quirc.c" />
+    <ClCompile Include="externals\quirc\version_db.c" />
+    <ClCompile Include="DirectXGame\GameEngine\QRCodeReader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\CameraCapture.h" />
@@ -279,6 +283,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\Game\Game.h" />
     <ClInclude Include="DirectXGame\GameEngine\Framework.h" />
     <ClInclude Include="externals\quirc\quirc.h" />
+    <ClInclude Include="externals\quirc\quirc_internal.h" />
+    <ClInclude Include="DirectXGame\GameEngine\QRCodeReader.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Particle.PS.hlsl">

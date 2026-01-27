@@ -1,5 +1,5 @@
-// CameraCapture.cpp
 #include "CameraCapture.h"
+#include "QRCodeReader.h"
 #include <imgui.h>
 #include <cassert>
 
@@ -228,8 +228,9 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         MF_SOURCE_READER_FIRST_VIDEO_STREAM,
         &pCurrentType
     );
-    if (SUCCEEDED(result))
-    {
+
+    if (SUCCEEDED(result)){
+
         UINT32 width = 0, height = 0;
         MFGetAttributeSize(pCurrentType.Get(), MF_MT_FRAME_SIZE, &width, &height);
         frameWidth_ = width;
@@ -242,15 +243,18 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         sprintf_s(buf, "Camera: %u x %u\n", width, height);
         OutputDebugStringA(buf);
 
-        if (subtype == MFVideoFormat_RGB32)
-        {
+        if (subtype == MFVideoFormat_RGB32){
+
             OutputDebugStringA("Format: RGB32 (OK)\n");
-        } else if (subtype == MFVideoFormat_NV12)
-        {
+
+        } else if (subtype == MFVideoFormat_NV12){
+
             OutputDebugStringA("Format: NV12 (変換失敗)\n");
-        } else
-        {
+
+        } else{
+
             OutputDebugStringA("Format: Other\n");
+
         }
     }
 
