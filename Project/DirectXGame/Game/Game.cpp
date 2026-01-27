@@ -17,6 +17,7 @@
 #include "SceneManager.h"
 #include "SceneFactory.h"
 #include"CameraCapture.h"
+#include "QRCodeReader.h"
 
 Game::Game() {
 }
@@ -79,6 +80,7 @@ void Game::Draw() {
 	SceneManager::GetInstance()->Draw();
 
 	CameraCapture::GetInstance()->LogDevicesToImGui();
+	QRCodeReader::GetInstance()->OnImGui();
 
 	// ImGui描画
 	ImGuiManager::Instance().EndFrame();

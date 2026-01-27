@@ -22,6 +22,7 @@
 #include "LightManager.h"
 #include "KeyboardInput.h"
 #include "CameraCapture.h"
+#include "QRCodeReader.h"
 
 GameScene::GameScene() {
 }
@@ -136,19 +137,40 @@ void GameScene::Finalize() {
 
 void GameScene::Update() {
 
+	// カメラスプライトの初期化（カメラが開かれてテクスチャが作成されたら）
 	if (cameraSprite == nullptr && CameraCapture::GetInstance()->IsOpened()) {
 		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
 			cameraSprite = new SpriteInstance();
 			cameraSprite->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
 			cameraSprite->SetPosition({ 0.0f, 0.0f });
 			cameraSprite->SetSize({ 640.0f, 480.0f });
-
-			// テクスチャ全体を使用するように設定
 			cameraSprite->SetTextureLeftTop({ 0.0f, 0.0f });
 			cameraSprite->SetTextureSize({
 				static_cast<float>(CameraCapture::GetInstance()->GetFrameWidth()),
 				static_cast<float>(CameraCapture::GetInstance()->GetFrameHeight())
 				});
+		}
+	}
+
+	// カメラが閉じられたらスプライトを削除
+	if (cameraSprite != nullptr && !CameraCapture::GetInstance()->IsOpened()) {
+		delete cameraSprite;
+		cameraSprite = nullptr;
+		QRCodeReader::GetInstance()->Reset();
+	}
+
+	// カメラスプライトが存在する場合のみ更新
+	if (cameraSprite) {
+		cameraSprite->Update();
+
+		// QRコード読み取り
+		const auto& frameData = CameraCapture::GetInstance()->GetFrameData();
+		if (!frameData.empty()) {
+			QRCodeReader::GetInstance()->Decode(
+				frameData.data(),
+				CameraCapture::GetInstance()->GetFrameWidth(),
+				CameraCapture::GetInstance()->GetFrameHeight()
+			);
 		}
 	}
 
@@ -262,6 +284,7 @@ void GameScene::Update() {
 }
 
 void GameScene::Draw() {
+
 	// 描画の最初にカメラテクスチャを更新
 	if (CameraCapture::GetInstance()->IsOpened()) {
 		OutputDebugStringA("Updating camera texture...\n");
@@ -284,8 +307,8 @@ void GameScene::Draw() {
 	// スプライト描画
 	spriteManager_->DrawSetting();
 	//sprite_->Draw();
-
-	// カメラスプライトが存在する場合のみ描画
+	
+    // カメラスプライトが存在する場合のみ描画
 	if (cameraSprite) {
 		cameraSprite->Draw();
 	}
