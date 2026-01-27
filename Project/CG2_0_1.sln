@@ -23,14 +23,14 @@ Global
 		{ED0974D8-3163-48C5-9656-8F616C55D717}.Debug|x64.Build.0 = Debug|x64
 		{ED0974D8-3163-48C5-9656-8F616C55D717}.Development|x64.ActiveCfg = Development|x64
 		{ED0974D8-3163-48C5-9656-8F616C55D717}.Development|x64.Build.0 = Development|x64
-		{ED0974D8-3163-48C5-9656-8F616C55D717}.Release|x64.ActiveCfg = Release|x64
-		{ED0974D8-3163-48C5-9656-8F616C55D717}.Release|x64.Build.0 = Release|x64
+		{ED0974D8-3163-48C5-9656-8F616C55D717}.Release|x64.ActiveCfg = Debug|x64
+		{ED0974D8-3163-48C5-9656-8F616C55D717}.Release|x64.Build.0 = Debug|x64
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Debug|x64.ActiveCfg = Debug|x64
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Debug|x64.Build.0 = Debug|x64
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Development|x64.ActiveCfg = Development|x64
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Development|x64.Build.0 = Development|x64
-		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x64.ActiveCfg = Release|x64
-		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x64.Build.0 = Release|x64
+		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x64.ActiveCfg = Debug|x64
+		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x64.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

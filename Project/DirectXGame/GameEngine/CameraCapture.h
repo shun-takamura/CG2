@@ -61,6 +61,9 @@ private:
     static inline const std::string kCameraTextureName_ = "##CameraTexture##";
     bool textureCreated_ = false;
 
+    int frameSkipCounter_ = 0;
+    static const int kFrameSkipCount_ = 2;  // 2フレームに1回更新
+
     CameraCapture() = default;
     ~CameraCapture() = default;
     CameraCapture(const CameraCapture&) = delete;

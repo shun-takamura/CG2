@@ -27,6 +27,13 @@ void CameraCapture::UpdateTexture()
         return;
     }
 
+    frameSkipCounter_++;
+    if (frameSkipCounter_ < kFrameSkipCount_)
+    {
+        return;
+    }
+    frameSkipCounter_ = 0;
+
     if (!CaptureFrame())
     {
         return;
@@ -43,7 +50,7 @@ void CameraCapture::UpdateTexture()
             kCameraTextureName_,
             frameWidth_,
             frameHeight_,
-            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+            DXGI_FORMAT_B8G8R8A8_UNORM  // BGRAフォーマットに変更
         );
         textureCreated_ = true;
     }
@@ -176,12 +183,10 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         return false;
     }
 
-    // SourceReaderの属性を設定（自動変換を有効にする）
     Microsoft::WRL::ComPtr<IMFAttributes> pReaderAttributes;
     result = MFCreateAttributes(&pReaderAttributes, 1);
     if (SUCCEEDED(result))
     {
-        // ビデオプロセッサを有効にして自動変換を許可
         pReaderAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
     }
 
@@ -196,7 +201,7 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         return false;
     }
 
-    // RGB32形式を要求
+    // RGB32形式を要求（解像度も指定）
     Microsoft::WRL::ComPtr<IMFMediaType> pType;
     result = MFCreateMediaType(&pType);
     if (FAILED(result))
@@ -208,6 +213,9 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
 
+    // 解像度を640x480に指定
+    MFSetAttributeSize(pType.Get(), MF_MT_FRAME_SIZE, 640, 480);
+
     result = sourceReader_->SetCurrentMediaType(
         MF_SOURCE_READER_FIRST_VIDEO_STREAM,
         nullptr,
@@ -215,47 +223,32 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     );
     if (FAILED(result))
     {
-        char buf[256];
-        sprintf_s(buf, "SetCurrentMediaType RGB32 failed: 0x%08X\n", result);
-        OutputDebugStringA(buf);
-        CloseCamera();
-        return false;
+        // 指定解像度がダメなら解像度指定なしで再試行
+        pType->DeleteItem(MF_MT_FRAME_SIZE);
+        result = sourceReader_->SetCurrentMediaType(
+            MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+            nullptr,
+            pType.Get()
+        );
+        if (FAILED(result))
+        {
+            CloseCamera();
+            return false;
+        }
     }
 
-    // 実際に設定されたメディアタイプを取得
     Microsoft::WRL::ComPtr<IMFMediaType> pCurrentType;
     result = sourceReader_->GetCurrentMediaType(
         MF_SOURCE_READER_FIRST_VIDEO_STREAM,
         &pCurrentType
     );
 
-    if (SUCCEEDED(result)){
-
+    if (SUCCEEDED(result))
+    {
         UINT32 width = 0, height = 0;
         MFGetAttributeSize(pCurrentType.Get(), MF_MT_FRAME_SIZE, &width, &height);
         frameWidth_ = width;
         frameHeight_ = height;
-
-        GUID subtype;
-        pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
-
-        char buf[512];
-        sprintf_s(buf, "Camera: %u x %u\n", width, height);
-        OutputDebugStringA(buf);
-
-        if (subtype == MFVideoFormat_RGB32){
-
-            OutputDebugStringA("Format: RGB32 (OK)\n");
-
-        } else if (subtype == MFVideoFormat_NV12){
-
-            OutputDebugStringA("Format: NV12 (変換失敗)\n");
-
-        } else{
-
-            OutputDebugStringA("Format: Other\n");
-
-        }
     }
 
     isOpened_ = true;
@@ -280,6 +273,7 @@ void CameraCapture::CloseCamera()
     frameHeight_ = 0;
     isOpened_ = false;
     textureCreated_ = false;
+    frameSkipCounter_ = 0;
 }
 
 bool CameraCapture::CaptureFrame()
@@ -331,21 +325,18 @@ bool CameraCapture::CaptureFrame()
         return false;
     }
 
-    // 実際のピクセル数を計算
-    uint32_t expectedPixelCount = frameWidth_ * frameHeight_;
-    uint32_t actualPixelCount = currentLength / 4;
-    uint32_t pixelCount = (actualPixelCount < expectedPixelCount) ? actualPixelCount : expectedPixelCount;
+    uint32_t expectedSize = frameWidth_ * frameHeight_ * 4;
+    uint32_t copySize = (currentLength < expectedSize) ? currentLength : expectedSize;
 
-    frameBuffer_.resize(pixelCount * 4);
+    frameBuffer_.resize(copySize);
 
-    // MediaFoundationのRGB32はBGRA順
-    // テクスチャはRGBA順（R8G8B8A8_UNORM）
-    for (uint32_t i = 0; i < pixelCount; i++)
+    // BGRAのままコピー（変換なし）
+    memcpy(frameBuffer_.data(), pData, copySize);
+
+    // アルファ値だけ255に設定
+    for (uint32_t i = 3; i < copySize; i += 4)
     {
-        frameBuffer_[i * 4 + 0] = pData[i * 4 + 2];  // R ← B
-        frameBuffer_[i * 4 + 1] = pData[i * 4 + 1];  // G ← G
-        frameBuffer_[i * 4 + 2] = pData[i * 4 + 0];  // B ← R
-        frameBuffer_[i * 4 + 3] = 255;               // A
+        frameBuffer_[i] = 255;
     }
 
     pBuffer->Unlock();
