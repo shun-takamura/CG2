@@ -6,6 +6,9 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include "ConvertString.h"
 #include "TextureManager.h"
 
@@ -29,40 +32,26 @@ public:
     void Initialize();
     void Finalize();
 
-    /// <summary>
-    /// カメラ映像をテクスチャとして登録・更新
-    /// </summary>
     void UpdateTexture();
 
-    /// <summary>
-    /// カメラテクスチャの名前を取得（SpriteInstanceで使用）
-    /// </summary>
     static const std::string& GetTextureName() { return kCameraTextureName_; }
 
-    // デバイス列挙
     void EnumerateDevices();
     const std::vector<CameraDeviceInfo>& GetDevices() const { return devices_; }
 
-    // カメラ操作
     bool OpenCamera(uint32_t deviceIndex);
     void CloseCamera();
     bool IsOpened() const { return isOpened_; }
 
-    // フレーム取得
-    bool CaptureFrame();
-    const std::vector<uint8_t>& GetFrameData() const { return frameBuffer_; }
+    const std::vector<uint8_t>& GetFrameData() const { return frameBufferMain_; }
     uint32_t GetFrameWidth() const { return frameWidth_; }
     uint32_t GetFrameHeight() const { return frameHeight_; }
 
-    // ImGuiログ出力
     void LogDevicesToImGui();
 
 private:
     static inline const std::string kCameraTextureName_ = "##CameraTexture##";
     bool textureCreated_ = false;
-
-    int frameSkipCounter_ = 0;
-    static const int kFrameSkipCount_ = 2;  // 2フレームに1回更新
 
     CameraCapture() = default;
     ~CameraCapture() = default;
@@ -71,13 +60,21 @@ private:
 
     std::vector<CameraDeviceInfo> devices_;
 
-    // カメラ関連
     Microsoft::WRL::ComPtr<IMFMediaSource> mediaSource_;
     Microsoft::WRL::ComPtr<IMFSourceReader> sourceReader_;
     bool isOpened_ = false;
 
-    // フレームデータ
-    std::vector<uint8_t> frameBuffer_;
+    // メインスレッド用バッファ
+    std::vector<uint8_t> frameBufferMain_;
     uint32_t frameWidth_ = 0;
     uint32_t frameHeight_ = 0;
+
+    // スレッド用
+    std::thread captureThread_;
+    std::mutex bufferMutex_;
+    std::atomic<bool> threadRunning_ = false;
+    std::atomic<bool> newFrameAvailable_ = false;
+    std::vector<uint8_t> frameBufferThread_;
+
+    void CaptureThreadFunc();
 };

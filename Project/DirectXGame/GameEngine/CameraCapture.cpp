@@ -1,5 +1,4 @@
 #include "CameraCapture.h"
-#include "QRCodeReader.h"
 #include <imgui.h>
 #include <cassert>
 
@@ -20,6 +19,70 @@ void CameraCapture::Finalize()
     devices_.clear();
 }
 
+void CameraCapture::CaptureThreadFunc()
+{
+    // このスレッド用にCOMを初期化
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+    while (threadRunning_)
+    {
+        if (!sourceReader_)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        DWORD streamIndex = 0;
+        DWORD flags = 0;
+        LONGLONG timestamp = 0;
+        Microsoft::WRL::ComPtr<IMFSample> pSample;
+
+        HRESULT result = sourceReader_->ReadSample(
+            MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+            0,
+            &streamIndex,
+            &flags,
+            &timestamp,
+            &pSample
+        );
+
+        if (SUCCEEDED(result) && pSample)
+        {
+            Microsoft::WRL::ComPtr<IMFMediaBuffer> pBuffer;
+            result = pSample->ConvertToContiguousBuffer(&pBuffer);
+
+            if (SUCCEEDED(result))
+            {
+                BYTE* pData = nullptr;
+                DWORD maxLength = 0;
+                DWORD currentLength = 0;
+
+                result = pBuffer->Lock(&pData, &maxLength, &currentLength);
+
+                if (SUCCEEDED(result))
+                {
+                    std::lock_guard<std::mutex> lock(bufferMutex_);
+
+                    frameBufferThread_.resize(currentLength);
+                    memcpy(frameBufferThread_.data(), pData, currentLength);
+
+                    // アルファ値を255に
+                    for (uint32_t i = 3; i < currentLength; i += 4)
+                    {
+                        frameBufferThread_[i] = 255;
+                    }
+
+                    newFrameAvailable_ = true;
+
+                    pBuffer->Unlock();
+                }
+            }
+        }
+    }
+
+    CoUninitialize();
+}
+
 void CameraCapture::UpdateTexture()
 {
     if (!isOpened_)
@@ -27,19 +90,15 @@ void CameraCapture::UpdateTexture()
         return;
     }
 
-    frameSkipCounter_++;
-    if (frameSkipCounter_ < kFrameSkipCount_)
+    // 新しいフレームがあればメインバッファにコピー
+    if (newFrameAvailable_)
     {
-        return;
-    }
-    frameSkipCounter_ = 0;
-
-    if (!CaptureFrame())
-    {
-        return;
+        std::lock_guard<std::mutex> lock(bufferMutex_);
+        frameBufferMain_ = frameBufferThread_;
+        newFrameAvailable_ = false;
     }
 
-    if (frameBuffer_.empty() || frameWidth_ == 0 || frameHeight_ == 0)
+    if (frameBufferMain_.empty() || frameWidth_ == 0 || frameHeight_ == 0)
     {
         return;
     }
@@ -50,7 +109,7 @@ void CameraCapture::UpdateTexture()
             kCameraTextureName_,
             frameWidth_,
             frameHeight_,
-            DXGI_FORMAT_B8G8R8A8_UNORM  // BGRAフォーマットに変更
+            DXGI_FORMAT_B8G8R8A8_UNORM
         );
         textureCreated_ = true;
     }
@@ -59,8 +118,8 @@ void CameraCapture::UpdateTexture()
     {
         TextureManager::GetInstance()->UpdateDynamicTexture(
             kCameraTextureName_,
-            frameBuffer_.data(),
-            frameBuffer_.size()
+            frameBufferMain_.data(),
+            frameBufferMain_.size()
         );
     }
 }
@@ -201,7 +260,6 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
         return false;
     }
 
-    // RGB32形式を要求（解像度も指定）
     Microsoft::WRL::ComPtr<IMFMediaType> pType;
     result = MFCreateMediaType(&pType);
     if (FAILED(result))
@@ -213,9 +271,6 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
 
-    // 解像度を640x480に指定
-    MFSetAttributeSize(pType.Get(), MF_MT_FRAME_SIZE, 640, 480);
-
     result = sourceReader_->SetCurrentMediaType(
         MF_SOURCE_READER_FIRST_VIDEO_STREAM,
         nullptr,
@@ -223,18 +278,8 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     );
     if (FAILED(result))
     {
-        // 指定解像度がダメなら解像度指定なしで再試行
-        pType->DeleteItem(MF_MT_FRAME_SIZE);
-        result = sourceReader_->SetCurrentMediaType(
-            MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-            nullptr,
-            pType.Get()
-        );
-        if (FAILED(result))
-        {
-            CloseCamera();
-            return false;
-        }
+        CloseCamera();
+        return false;
     }
 
     Microsoft::WRL::ComPtr<IMFMediaType> pCurrentType;
@@ -252,11 +297,23 @@ bool CameraCapture::OpenCamera(uint32_t deviceIndex)
     }
 
     isOpened_ = true;
+
+    // キャプチャスレッド開始
+    threadRunning_ = true;
+    captureThread_ = std::thread(&CameraCapture::CaptureThreadFunc, this);
+
     return true;
 }
 
 void CameraCapture::CloseCamera()
 {
+    // スレッド停止
+    threadRunning_ = false;
+    if (captureThread_.joinable())
+    {
+        captureThread_.join();
+    }
+
     if (sourceReader_)
     {
         sourceReader_.Reset();
@@ -268,80 +325,13 @@ void CameraCapture::CloseCamera()
         mediaSource_.Reset();
     }
 
-    frameBuffer_.clear();
+    frameBufferMain_.clear();
+    frameBufferThread_.clear();
     frameWidth_ = 0;
     frameHeight_ = 0;
     isOpened_ = false;
     textureCreated_ = false;
-    frameSkipCounter_ = 0;
-}
-
-bool CameraCapture::CaptureFrame()
-{
-    if (!isOpened_ || !sourceReader_)
-    {
-        return false;
-    }
-
-    if (frameWidth_ == 0 || frameHeight_ == 0)
-    {
-        return false;
-    }
-
-    HRESULT result;
-    DWORD streamIndex = 0;
-    DWORD flags = 0;
-    LONGLONG timestamp = 0;
-    Microsoft::WRL::ComPtr<IMFSample> pSample;
-
-    result = sourceReader_->ReadSample(
-        MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-        0,
-        &streamIndex,
-        &flags,
-        &timestamp,
-        &pSample
-    );
-
-    if (FAILED(result) || !pSample)
-    {
-        return false;
-    }
-
-    Microsoft::WRL::ComPtr<IMFMediaBuffer> pBuffer;
-    result = pSample->ConvertToContiguousBuffer(&pBuffer);
-    if (FAILED(result))
-    {
-        return false;
-    }
-
-    BYTE* pData = nullptr;
-    DWORD maxLength = 0;
-    DWORD currentLength = 0;
-
-    result = pBuffer->Lock(&pData, &maxLength, &currentLength);
-    if (FAILED(result))
-    {
-        return false;
-    }
-
-    uint32_t expectedSize = frameWidth_ * frameHeight_ * 4;
-    uint32_t copySize = (currentLength < expectedSize) ? currentLength : expectedSize;
-
-    frameBuffer_.resize(copySize);
-
-    // BGRAのままコピー（変換なし）
-    memcpy(frameBuffer_.data(), pData, copySize);
-
-    // アルファ値だけ255に設定
-    for (uint32_t i = 3; i < copySize; i += 4)
-    {
-        frameBuffer_[i] = 255;
-    }
-
-    pBuffer->Unlock();
-
-    return true;
+    newFrameAvailable_ = false;
 }
 
 void CameraCapture::LogDevicesToImGui()
@@ -391,9 +381,9 @@ void CameraCapture::LogDevicesToImGui()
             CloseCamera();
         }
 
-        if (!frameBuffer_.empty())
+        if (!frameBufferMain_.empty())
         {
-            ImGui::Text("Buffer size: %zu bytes", frameBuffer_.size());
+            ImGui::Text("Buffer size: %zu bytes", frameBufferMain_.size());
         }
     } else
     {
