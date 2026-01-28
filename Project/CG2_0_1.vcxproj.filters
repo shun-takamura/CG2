@@ -417,6 +417,11 @@
     <FxCompile Include="Resources\Shaders\Sprite.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\CopyImage.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Grayscale.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostProcess.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostProcess.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Sepia.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Vignette.PS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -427,5 +432,6 @@
     <None Include="Resources\Shaders\Object3d.hlsli" />
     <None Include="Resources\Shaders\Particle.hlsli" />
     <None Include="Resources\Shaders\CopyImage.hlsli" />
+    <None Include="Resources\Shaders\PostProcess.hlsli" />
   </ItemGroup>
 </Project>

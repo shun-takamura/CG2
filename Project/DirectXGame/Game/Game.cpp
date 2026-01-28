@@ -40,7 +40,7 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
 
 	// クリアカラーを赤に設定
-	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };  // 赤
+	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // 赤
 
 	// RenderTexture初期化（画面サイズで作成）
 	renderTexture_ = std::make_unique<RenderTexture>();
@@ -71,6 +71,11 @@ void Game::Update() {
 		endRequest_ = true;
 		return;
 	}
+
+	//===================================
+	// ポストエフェクトのImGui表示
+	//===================================
+	postEffect_->ShowImGui();
 }
 
 void Game::Draw() {
@@ -110,6 +115,16 @@ void Game::Draw() {
 }
 
 void Game::Finalize() {
+	//===================================
+	// PostEffectの終了処理
+	//===================================
+	if (postEffect_) {
+		postEffect_->Finalize();
+	}
+	if (renderTexture_) {
+		renderTexture_->Finalize();
+	}
+
 	//===================================
 	// 基底クラスの終了処理
 	// （SceneManagerとSceneFactoryの解放はFramework::Finalizeで行う）

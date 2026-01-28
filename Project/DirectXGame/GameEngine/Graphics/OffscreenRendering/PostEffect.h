@@ -9,9 +9,25 @@ class SRVManager;
 class RenderTexture;
 
 /// <summary>
+/// ポストエフェクトのパラメータ構造体
+/// シェーダーの定数バッファと同じレイアウトにする必要がある
+/// HLSLのfloat3は16バイトアライメントされるため注意
+/// </summary>
+struct PostProcessParams
+{
+	float grayscaleIntensity = 0.0f;  // offset: 0
+	float sepiaIntensity = 0.0f;      // offset: 4
+	float sepiaColor[3] = { 1.0f, 0.691f, 0.402f };  // offset: 8, 12, 16
+	float _padding1 = 0.0f;           // offset: 20 (float3の後のパディング)
+	float vignetteIntensity = 1.0f;  // offset: 24 ← デフォルトを0.5に
+	float vignettePower = 0.8f;      // offset: 28
+	float vignetteScale = 16.0f;      // offset: 32
+	float _padding2 = 0.0f;           // offset: 36 (アライメント用)
+};
+
+/// <summary>
 /// ポストエフェクトクラス
-/// RenderTextureの内容をSwapchainにコピーする機能を提供
-/// 将来的にはここにブラー、ブルームなどのエフェクトを追加できる
+/// RenderTextureの内容にエフェクトを適用してSwapchainに描画
 /// </summary>
 class PostEffect
 {
@@ -19,15 +35,11 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
-	/// <param name="dxCore">DirectXCoreへのポインタ</param>
-	/// <param name="srvManager">SRVManagerへのポインタ</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
 
 	/// <summary>
-	/// 描画（RenderTextureの内容を現在のレンダーターゲットにコピー）
+	/// 描画（RenderTextureの内容を現在のレンダーターゲットに描画）
 	/// </summary>
-	/// <param name="commandList">コマンドリスト</param>
-	/// <param name="renderTexture">コピー元のRenderTexture</param>
 	void Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* renderTexture);
 
 	/// <summary>
@@ -35,29 +47,45 @@ public:
 	/// </summary>
 	void Finalize();
 
-private:
 	/// <summary>
-	/// ルートシグネチャを作成
+	/// ImGuiでパラメータを表示・編集
 	/// </summary>
-	void CreateRootSignature();
+	void ShowImGui();
 
 	/// <summary>
-	/// パイプラインステートを作成
+	/// パラメータを取得
 	/// </summary>
-	void CreatePipelineState();
+	PostProcessParams& GetParams() { return params_; }
 
 private:
-	// DirectXCoreへのポインタ
+	void CreateCopyRootSignature();
+	void CreateEffectRootSignature();
+	void CreatePipelineStates();
+	void CreateConstantBuffer();
+	void UpdateConstantBuffer();
+
+private:
 	DirectXCore* dxCore_ = nullptr;
-
-	// SRVManagerへのポインタ
 	SRVManager* srvManager_ = nullptr;
 
-	// ルートシグネチャ
-	// シェーダーが使うリソース（テクスチャ、サンプラー等）のレイアウトを定義
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
+	// ルートシグネチャ（2種類）
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;    // Copy用（定数バッファなし）
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;  // エフェクト用（定数バッファあり）
 
-	// パイプラインステート
-	// シェーダー、ブレンド、深度テストなどの描画設定をまとめたもの
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
+	// パイプラインステート（5種類）
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> combinedPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> grayscalePipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> sepiaPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> vignettePipelineState_;
+
+	// 定数バッファ
+	Microsoft::WRL::ComPtr<ID3D12Resource> constantBuffer_;
+	PostProcessParams* constantBufferMappedPtr_ = nullptr;
+
+	// パラメータ
+	PostProcessParams params_;
+
+	// 現在のエフェクトタイプ（ImGuiで選択）
+	int currentEffectType_ = 0;  // 0:Copy, 1:Combined, 2:Grayscale, 3:Sepia, 4:Vignette
 };
