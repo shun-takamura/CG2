@@ -11,7 +11,7 @@
 class LightManager {
 private:
     // シングルトン
-    static LightManager* instance_;
+    //static LightManager* instance_;
 
     DirectXCore* dxCore_ = nullptr;
 

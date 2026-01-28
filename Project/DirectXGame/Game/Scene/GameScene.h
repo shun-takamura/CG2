@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BaseScene.h"
+#include <memory>
 #include <vector>
 #include <string>
 
@@ -46,19 +47,20 @@ public:
 	void Draw() override;
 
 private:
+
 	// デバッグカメラ
-	DebugCamera* debugCamera_ = nullptr;
+	std::unique_ptr<DebugCamera> debugCamera_;
 
 	// スプライト関連
-	SpriteInstance* cameraSprite = nullptr;
-	SpriteInstance* sprite_ = nullptr;
-	std::vector<SpriteInstance*> sprites_;
+	std::unique_ptr<SpriteInstance> cameraSprite_;
+	std::unique_ptr<SpriteInstance> sprite_;
+	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
 
-	// 3Dオブジェクト関連
-	std::vector<Object3DInstance*> object3DInstances_;
+	// 3Dオブジェクト
+	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
 
 	// カメラ
-	Camera* camera_ = nullptr;
+	std::unique_ptr<Camera> camera_;
 
 	// パーティクル用タイマー
 	float emitTimer_ = 0.0f;

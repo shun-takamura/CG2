@@ -55,10 +55,10 @@ void Framework::Initialize() {
 	assert(SUCCEEDED(hr));
 
 	// クラスの生成
-	convertStringClass_ = new ConvertStringClass;
+	convertStringClass_ = std::make_unique<ConvertStringClass>();
 
 	// Windowsアプリケーション生成
-	winApp_ = new WindowsApplication();
+	winApp_ = std::make_unique<WindowsApplication>();
 
 	//========================
 	// ウィンドウの初期化
@@ -66,18 +66,16 @@ void Framework::Initialize() {
 	// 初期化（タイトル）
 	winApp_->Initialize(L"GE3");
 
-	dxCore_ = new DirectXCore();
-	dxCore_->Initialize(winApp_);
+	dxCore_ = std::make_unique<DirectXCore>();
+	dxCore_->Initialize(winApp_.get());
 
-	// SRVManagerの初期化
-	srvManager_ = new SRVManager();
-	srvManager_->Initialize(dxCore_);
+	srvManager_ = std::make_unique<SRVManager>();
+	srvManager_->Initialize(dxCore_.get());
 
-	// ImGuiManagerの初期化
 	ImGuiManager::Instance().Initialize(
 		winApp_->GetHwnd(),
-		dxCore_,
-		srvManager_
+		dxCore_.get(),
+		srvManager_.get()
 	);
 
 	//========================================
@@ -140,24 +138,24 @@ void Framework::Initialize() {
 	assert(SUCCEEDED(hr));
 
 	// ライトの初期化
-	LightManager::GetInstance()->Initialize(dxCore_);
+	LightManager::GetInstance()->Initialize(dxCore_.get());
 
 	// Spriteの共通部分の初期化
-	spriteManager_ = new SpriteManager();
-	spriteManager_->Initialize(dxCore_, srvManager_);
+	spriteManager_ = std::make_unique<SpriteManager>();
+	spriteManager_->Initialize(dxCore_.get(), srvManager_.get());
 
 	// テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialize(spriteManager_, dxCore_, srvManager_);
+	TextureManager::GetInstance()->Initialize(spriteManager_.get(), dxCore_.get(), srvManager_.get());
 
 	// モデルマネージャーの初期化
-	ModelManager::GetInstance()->Initialize(dxCore_);
+	ModelManager::GetInstance()->Initialize(dxCore_.get());
 
 	// 3DObjectの共通部分の初期化
-	object3DManager_ = new Object3DManager();
-	object3DManager_->Initialize(dxCore_);
+	object3DManager_ = std::make_unique<Object3DManager>();
+	object3DManager_->Initialize(dxCore_.get());
 
 	// パーティクルマネージャーの初期化
-	ParticleManager::GetInstance()->Initialize(dxCore_, srvManager_);
+	ParticleManager::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
 
 	// サウンドマネージャーの初期化
 	SoundManager::GetInstance()->Initialize();
@@ -168,18 +166,18 @@ void Framework::Initialize() {
 	//==============================
 	// Inputの初期化
 	//==============================
-	input_ = new InputManager();
-	input_->Initialize(winApp_);
+	input_ = std::make_unique<InputManager>();
+	input_->Initialize(winApp_.get());
 
 	//==============================
 	// SceneManagerの初期化
 	//==============================
 	SceneManager::GetInstance()->Initialize(
-		spriteManager_,
-		object3DManager_,
-		dxCore_,
-		srvManager_,
-		input_
+		spriteManager_.get(),
+		object3DManager_.get(),
+		dxCore_.get(),
+		srvManager_.get(),
+		input_.get()
 	);
 
 	//=========================
@@ -221,8 +219,6 @@ void Framework::Finalize() {
 	// 出力ウィンドウへの文字出力
 	Log("DirectX12isNotUseful\n");
 
-	delete convertStringClass_;
-
 	// COMの終了
 	CoUninitialize();
 
@@ -234,12 +230,8 @@ void Framework::Finalize() {
 	// シーンマネージャーの終了処理
 	SceneManager::GetInstance()->Finalize();
 
-	// シーンファクトリ解放
-	//delete sceneFactory_;
-
 	// 入力を解放
 	input_->Finalize();
-	delete input_;
 
 	// 終了時（SoundManagerのFinalize前に呼ぶ）
 	CameraCapture::GetInstance()->Finalize();
@@ -252,26 +244,14 @@ void Framework::Finalize() {
 
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();
-	delete spriteManager_;
-
-	delete object3DManager_;
-	ModelManager::GetInstance()->Finalize();
-
 	LightManager::GetInstance()->Finalize();
 
 	// ImGui終了処理
 	ImGuiManager::Instance().Shutdown();
 
-	// dxc関連
-	includeHandler_->Release();
-	dxcCompiler_->Release();
-	dxcUtils_->Release();
-	delete srvManager_;
 	dxCore_->Finalize();
-	delete dxCore_;
 
 	CloseWindow(winApp_->GetHwnd());
-
 	winApp_->Finalize();
-	delete winApp_;
+
 }

@@ -18,6 +18,7 @@
 #include "SceneFactory.h"
 #include"CameraCapture.h"
 #include "QRCodeReader.h"
+#include <memory>
 
 Game::Game() {
 }
@@ -32,8 +33,8 @@ void Game::Initialize() {
 	//===================================
 	// シーンファクトリを生成し、マネージャにセット
 	//===================================
-	sceneFactory_ = new SceneFactory();
-	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_);
+	sceneFactory_ = std::make_unique<SceneFactory>();
+	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
 	SceneManager::GetInstance()->ChangeScene("GAMEPLAY");

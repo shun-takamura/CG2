@@ -1,5 +1,5 @@
 #pragma once
-
+#include <memory>
 #include "BaseScene.h"
 
 // 前方宣言
@@ -42,5 +42,5 @@ public:
 
 private:
 	// タイトル用スプライト（uvChecker）
-	SpriteInstance* titleSprite_ = nullptr;
+	std::unique_ptr<SpriteInstance> titleSprite_;
 };

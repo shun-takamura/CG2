@@ -13,7 +13,7 @@ TitleScene::~TitleScene() {
 
 void TitleScene::Initialize() {
 	// タイトルスプライトの初期化（uvChecker）
-	titleSprite_ = new SpriteInstance();
+	titleSprite_ = std::make_unique<SpriteInstance>();
 	titleSprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
 
 	// 画面全体に表示
@@ -24,7 +24,6 @@ void TitleScene::Initialize() {
 void TitleScene::Finalize() {
 	// スプライトの解放
 	if (titleSprite_) {
-		delete titleSprite_;
 		titleSprite_ = nullptr;
 	}
 }

@@ -26,9 +26,13 @@ void CameraCapture::CaptureThreadFunc()
     // ===== COMの初期化（スレッドごとに必要）=====
     // Media FoundationはCOMを使うので、スレッドごとに初期化が必要
     // COINIT_MULTITHREADED: マルチスレッドモードで初期化
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr)) {
+        // COM初期化失敗時はスレッドを終了
+        return;
+    }
 
-    // ===== メインのキャプチャループ =====
+    // メインのキャプチャループ
     // threadRunning_がtrueの間、ずっとカメラからフレームを取得し続ける
     while (threadRunning_)
     {
