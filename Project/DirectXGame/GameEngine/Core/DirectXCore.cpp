@@ -76,11 +76,30 @@ void DirectXCore::BeginDraw() {
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
         dsvHeap_->GetCPUDescriptorHandleForHeapStart();
 
-    commandList_->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
+    commandList_->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+    // ビューポート・シザー設定
+    D3D12_VIEWPORT viewport{};
+    viewport.Width = static_cast<float>(WindowsApplication::kClientWidth);
+    viewport.Height = static_cast<float>(WindowsApplication::kClientHeight);
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    commandList_->RSSetViewports(1, &viewport);
+
+    D3D12_RECT scissorRect{};
+    scissorRect.right = WindowsApplication::kClientWidth;
+    scissorRect.bottom = WindowsApplication::kClientHeight;
+    commandList_->RSSetScissorRects(1, &scissorRect);
 
     // クリア処理
-    float clearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
-    commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    //float clearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
+    //commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    //commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+}
+
+void DirectXCore::ClearDepthBuffer()
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
     commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 }
 

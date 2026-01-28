@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Framework.h"
+#include"RenderTexture.h"
+#include"PostEffect.h"
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
@@ -37,4 +39,10 @@ public:
 	/// 描画
 	/// </summary>
 	void Draw() override;
+
+private:
+
+	// オフスクリーンレンダリング用
+	std::unique_ptr<RenderTexture> renderTexture_;
+	std::unique_ptr<PostEffect> postEffect_;
 };

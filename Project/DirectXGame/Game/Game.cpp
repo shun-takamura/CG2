@@ -38,6 +38,21 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 	SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+
+	// クリアカラーを赤に設定
+	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };  // 赤
+
+	// RenderTexture初期化（画面サイズで作成）
+	renderTexture_ = std::make_unique<RenderTexture>();
+	renderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
+		WindowsApplication::kClientWidth,
+		WindowsApplication::kClientHeight,
+		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+		redClearColor);
+
+	// PostEffect初期化
+	postEffect_ = std::make_unique<PostEffect>();
+	postEffect_->Initialize(dxCore_.get(), srvManager_.get());
 }
 
 void Game::Update() {
@@ -59,34 +74,37 @@ void Game::Update() {
 }
 
 void Game::Draw() {
-	dxCore_->BeginDraw();
+	// 1. RenderTextureにシーンを描画
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
+		dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
+
+	renderTexture_->BeginRender(dxCore_->GetCommandList(), &dsvHandle);
 
 	srvManager_->PreDraw();
 
-	//=========================
-	// コマンドを積む
-	//=========================
-	dxCore_->GetCommandList()->RSSetViewports(1, &viewport_);
-	dxCore_->GetCommandList()->RSSetScissorRects(1, &scissorRect_);
-
-	dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
+	// 深度クリア
 	dxCore_->GetCommandList()->ClearDepthStencilView(
-		dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart(),
-		D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	//===================================
-	// シーンの描画
-	//===================================
+	// シーン描画
 	SceneManager::GetInstance()->Draw();
 
+	renderTexture_->EndRender(dxCore_->GetCommandList());
+
+	// 2. Swapchainに切り替え
+	dxCore_->BeginDraw();
+
+	srvManager_->PreDraw();  // ディスクリプタヒープを再設定
+
+	// 3. PostEffectでRenderTexture → Swapchainにコピー
+	postEffect_->Draw(dxCore_->GetCommandList(), renderTexture_.get());
+
+	// 4. ImGui描画（Swapchainに直接）
 	CameraCapture::GetInstance()->LogDevicesToImGui();
 	QRCodeReader::GetInstance()->OnImGui();
-
-	// ImGui描画
 	ImGuiManager::Instance().EndFrame();
 
-	assert(dxCore_->GetCommandList() != nullptr);
+	// 5. 終了
 	dxCore_->EndDraw();
 	spriteManager_->ClearIntermediateResources();
 }
