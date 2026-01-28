@@ -359,6 +359,39 @@ void PostEffect::CreateConstantBuffer()
 
 void PostEffect::UpdateConstantBuffer()
 {
+	// デバッグ: 送信する値をログ出力
+	char debugMsg[256];
+	sprintf_s(debugMsg, "UpdateConstantBuffer:\n");
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  grayscaleIntensity: %f\n", params_.grayscaleIntensity);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  sepiaIntensity: %f\n", params_.sepiaIntensity);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  sepiaColor: [%f, %f, %f]\n",
+		params_.sepiaColor[0], params_.sepiaColor[1], params_.sepiaColor[2]);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  _padding1: %f\n", params_._padding1);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  vignetteIntensity: %f\n", params_.vignetteIntensity);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  vignettePower: %f\n", params_.vignettePower);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  vignetteScale: %f\n", params_.vignetteScale);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  _padding2: %f\n", params_._padding2);
+	OutputDebugStringA(debugMsg);
+
+	sprintf_s(debugMsg, "  sizeof(PostProcessParams): %zu\n", sizeof(PostProcessParams));
+	OutputDebugStringA(debugMsg);
+
 	memcpy(constantBufferMappedPtr_, &params_, sizeof(PostProcessParams));
 }
 
@@ -447,11 +480,6 @@ void PostEffect::ShowImGui()
 	}
 
 	ImGui::Separator();
-
-	ImGui::Text("Vignette");
-	ImGui::SliderFloat("Intensity##Vig", &params_.vignetteIntensity, 0.0f, 1.0f);
-	ImGui::SliderFloat("Power", &params_.vignettePower, 0.1f, 2.0f);
-	ImGui::SliderFloat("Scale", &params_.vignetteScale, 1.0f, 32.0f);
 
 	ImGui::Separator();
 

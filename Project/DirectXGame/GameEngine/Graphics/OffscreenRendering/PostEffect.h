@@ -19,8 +19,8 @@ struct PostProcessParams
 	float sepiaIntensity = 0.0f;      // offset: 4
 	float sepiaColor[3] = { 1.0f, 0.691f, 0.402f };  // offset: 8, 12, 16
 	float _padding1 = 0.0f;           // offset: 20 (float3の後のパディング)
-	float vignetteIntensity = 0.0f;  // offset: 24
-	float vignettePower = 0.8f;       // offset: 28
+	float vignetteIntensity = 1.0f;  // offset: 24 ← デフォルトを0.5に
+	float vignettePower = 0.8f;      // offset: 28
 	float vignetteScale = 16.0f;      // offset: 32
 	float _padding2 = 0.0f;           // offset: 36 (アライメント用)
 };

@@ -40,7 +40,7 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
 
 	// クリアカラーを赤に設定
-	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };  // 赤
+	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // 赤
 
 	// RenderTexture初期化（画面サイズで作成）
 	renderTexture_ = std::make_unique<RenderTexture>();
