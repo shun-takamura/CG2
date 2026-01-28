@@ -71,6 +71,11 @@ void Game::Update() {
 		endRequest_ = true;
 		return;
 	}
+
+	//===================================
+	// ポストエフェクトのImGui表示
+	//===================================
+	postEffect_->ShowImGui();
 }
 
 void Game::Draw() {
@@ -110,6 +115,16 @@ void Game::Draw() {
 }
 
 void Game::Finalize() {
+	//===================================
+	// PostEffectの終了処理
+	//===================================
+	if (postEffect_) {
+		postEffect_->Finalize();
+	}
+	if (renderTexture_) {
+		renderTexture_->Finalize();
+	}
+
 	//===================================
 	// 基底クラスの終了処理
 	// （SceneManagerとSceneFactoryの解放はFramework::Finalizeで行う）
