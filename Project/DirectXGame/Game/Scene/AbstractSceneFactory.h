@@ -1,5 +1,5 @@
 #pragma once
-
+#include<memory>
 #include <string>
 
 // 前方宣言
@@ -19,5 +19,5 @@ public:
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
 	/// <returns>生成したシーン</returns>
-	virtual BaseScene* CreateScene(const std::string& sceneName) = 0;
+	virtual std::unique_ptr<BaseScene> CreateScene(const std::string& sceneName) = 0;
 };

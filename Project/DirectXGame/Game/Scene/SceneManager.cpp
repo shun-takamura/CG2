@@ -26,8 +26,6 @@ void SceneManager::Finalize() {
 	// 現在のシーンを解放
 	if (currentScene_) {
 		currentScene_->Finalize();
-		delete currentScene_;
-		currentScene_ = nullptr;
 	}
 }
 
@@ -37,15 +35,14 @@ void SceneManager::Update() {
 		// 現在のシーンがあれば解放
 		if (currentScene_) {
 			currentScene_->Finalize();
-			delete currentScene_;
+			
 		}
 
 		// 次のシーンを現在のシーンに
-		currentScene_ = nextScene_;
-		nextScene_ = nullptr;
+		currentScene_ = std::move(nextScene_);
 
 		// シーンのセットアップと初期化
-		SetupScene(currentScene_);
+		SetupScene(currentScene_.get());
 		currentScene_->Initialize();
 	}
 

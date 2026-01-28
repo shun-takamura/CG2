@@ -1,5 +1,5 @@
 #pragma once
-
+#include <memory>
 #include <string>
 
 // 前方宣言
@@ -61,7 +61,7 @@ public:
 	/// <summary>
 	/// 現在のシーンを取得
 	/// </summary>
-	BaseScene* GetCurrentScene() const { return currentScene_; }
+	BaseScene* GetCurrentScene() const { return currentScene_.get(); }
 
 	//====================
 	// マネージャーのゲッター（シーン初期化時に使用）
@@ -85,10 +85,10 @@ private:
 	void SetupScene(BaseScene* scene);
 
 	// 現在のシーン
-	BaseScene* currentScene_ = nullptr;
+	std::unique_ptr<BaseScene> currentScene_;
 
 	// 次のシーン
-	BaseScene* nextScene_ = nullptr;
+	std::unique_ptr<BaseScene> nextScene_;
 
 	// シーンファクトリー（借りてくる）
 	AbstractSceneFactory* sceneFactory_ = nullptr;

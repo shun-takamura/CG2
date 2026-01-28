@@ -1,13 +1,15 @@
 #include "LightManager.h"
 #include "imgui.h"
 
-LightManager* LightManager::instance_ = nullptr;
+//LightManager* LightManager::instance_ = nullptr;
 
 LightManager* LightManager::GetInstance() {
-    if (instance_ == nullptr) {
-        instance_ = new LightManager();
-    }
-    return instance_;
+    //if (instance_ == nullptr) {
+        //instance_ = new LightManager();
+    //}
+    //return instance_;
+    static LightManager instance;
+    return &instance;
 }
 
 void LightManager::Initialize(DirectXCore* dxCore) {
@@ -63,8 +65,8 @@ void LightManager::Finalize() {
     pointLightResource_.Reset();
     spotLightResource_.Reset();
 
-    delete instance_;
-    instance_ = nullptr;
+    //delete instance_;
+    //instance_ = nullptr;
 }
 
 void LightManager::BindLights(ID3D12GraphicsCommandList* commandList) {

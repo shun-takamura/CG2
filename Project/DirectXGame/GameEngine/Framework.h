@@ -7,6 +7,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <memory> 
 
 // ComPtr
 #include <wrl.h>
@@ -74,25 +75,23 @@ protected:
 	bool endRequest_ = false;
 
 	// 基本システム
-	ConvertStringClass* convertStringClass_ = nullptr;
-	WindowsApplication* winApp_ = nullptr;
-	DirectXCore* dxCore_ = nullptr;
-	SRVManager* srvManager_ = nullptr;
+	std::unique_ptr<ConvertStringClass> convertStringClass_;
+	std::unique_ptr<WindowsApplication> winApp_;
+	std::unique_ptr<DirectXCore> dxCore_;
+	std::unique_ptr<SRVManager> srvManager_;
 
-	// dxcコンパイラ関連
-	IDxcUtils* dxcUtils_ = nullptr;
-	IDxcCompiler3* dxcCompiler_ = nullptr;
-	IDxcIncludeHandler* includeHandler_ = nullptr;
-
-	// マネージャー類
-	SpriteManager* spriteManager_ = nullptr;
-	Object3DManager* object3DManager_ = nullptr;
+	// マネージャー
+	std::unique_ptr<SpriteManager> spriteManager_;
+	std::unique_ptr<Object3DManager> object3DManager_;
 
 	// 入力
-	InputManager* input_ = nullptr;
+	std::unique_ptr<InputManager> input_;
+	std::unique_ptr<AbstractSceneFactory> sceneFactory_;
 
-	// シーンファクトリー
-	AbstractSceneFactory* sceneFactory_ = nullptr;
+	// dxcコンパイラ
+	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_;
+	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_;
+	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_;
 
 	// ビューポートとシザー矩形
 	D3D12_VIEWPORT viewport_{};

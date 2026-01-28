@@ -44,7 +44,7 @@ private:
 	std::unordered_map<std::string, TextureData>textureDatas;
 
 	// シングルトンでインスタンスを一つだけ所有
-	static TextureManager* instance;
+	//static TextureManager* instance;
 
 	TextureManager() = default;
 	~TextureManager() = default;

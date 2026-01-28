@@ -32,20 +32,20 @@ GameScene::~GameScene() {
 
 void GameScene::Initialize() {
 	// デバッグカメラの生成
-	debugCamera_ = new DebugCamera;
+	debugCamera_ = std::make_unique<DebugCamera>();
 
 	// スプライトの初期化
-	sprite_ = new SpriteInstance();
+	sprite_ = std::make_unique<SpriteInstance>();
 	sprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
 
 	// カメラの生成
-	camera_ = new Camera();
+	camera_ = std::make_unique<Camera>();
 	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
 	camera_->SetTranslate({ 0.0f, 2.0f, -30.0f });
-	object3DManager_->SetDefaultCamera(camera_);
+	object3DManager_->SetDefaultCamera(camera_.get());
 
 	// パーティクルの設定
-	ParticleManager::GetInstance()->SetCamera(camera_);
+	ParticleManager::GetInstance()->SetCamera(camera_.get());
 	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "Resources/uvChecker.png");
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
 
@@ -65,7 +65,7 @@ void GameScene::Initialize() {
 
 	// 5枚生成
 	for (uint32_t i = 0; i < 5; ++i) {
-		SpriteInstance* newSprite = new SpriteInstance();
+		auto newSprite = std::make_unique<SpriteInstance>();
 		const std::string& texturePath = textures[i % 2];
 
 		std::string spriteName = "Sprite_" + std::to_string(i);
@@ -73,7 +73,7 @@ void GameScene::Initialize() {
 
 		newSprite->SetSize({ 100.0f, 100.0f });
 		newSprite->SetPosition({ i * 2.0f, 0.0f });
-		sprites_.push_back(newSprite);
+		sprites_.push_back(std::move(newSprite));
 	}
 
 	// 3Dオブジェクトを配列で管理
@@ -81,7 +81,7 @@ void GameScene::Initialize() {
 	const std::string objectNames[] = { "MonsterBall", "terrain", "plane" };
 
 	for (int i = 0; i < 3; ++i) {
-		Object3DInstance* obj = new Object3DInstance();
+		auto obj = std::make_unique<Object3DInstance>();
 		obj->Initialize(
 			object3DManager_,
 			dxCore_,
@@ -90,7 +90,7 @@ void GameScene::Initialize() {
 			objectNames[i]
 		);
 		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
-		object3DInstances_.push_back(obj);
+		object3DInstances_.push_back(std::move(obj));
 	}
 
 	// サウンドのロード
@@ -99,53 +99,22 @@ void GameScene::Initialize() {
 
 void GameScene::Finalize() {
 
-	// カメラスプライト解放
-	if (cameraSprite) {
-		delete cameraSprite;
-		cameraSprite = nullptr;
-	}
-
-	// スプライト解放
-	for (SpriteInstance* s : sprites_) {
-		delete s;
-	}
 	sprites_.clear();
-
-	if (sprite_) {
-		delete sprite_;
-		sprite_ = nullptr;
-	}
-
-	// 3Dオブジェクト解放
-	for (Object3DInstance* obj : object3DInstances_) {
-		delete obj;
-	}
 	object3DInstances_.clear();
 
-	// カメラ解放
-	if (camera_) {
-		delete camera_;
-		camera_ = nullptr;
-	}
-
-	// デバッグカメラ解放
-	if (debugCamera_) {
-		delete debugCamera_;
-		debugCamera_ = nullptr;
-	}
 }
 
 void GameScene::Update() {
 
 	// カメラスプライトの初期化（カメラが開かれてテクスチャが作成されたら）
-	if (cameraSprite == nullptr && CameraCapture::GetInstance()->IsOpened()) {
+	if (cameraSprite_ == nullptr && CameraCapture::GetInstance()->IsOpened()) {
 		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
-			cameraSprite = new SpriteInstance();
-			cameraSprite->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
-			cameraSprite->SetPosition({ 0.0f, 0.0f });
-			cameraSprite->SetSize({ 640.0f, 480.0f });
-			cameraSprite->SetTextureLeftTop({ 0.0f, 0.0f });
-			cameraSprite->SetTextureSize({
+			cameraSprite_ = std::make_unique<SpriteInstance>();
+			cameraSprite_->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
+			cameraSprite_->SetPosition({ 0.0f, 0.0f });
+			cameraSprite_->SetSize({ 640.0f, 480.0f });
+			cameraSprite_->SetTextureLeftTop({ 0.0f, 0.0f });
+			cameraSprite_->SetTextureSize({
 				static_cast<float>(CameraCapture::GetInstance()->GetFrameWidth()),
 				static_cast<float>(CameraCapture::GetInstance()->GetFrameHeight())
 				});
@@ -153,15 +122,14 @@ void GameScene::Update() {
 	}
 
 	// カメラが閉じられたらスプライトを削除
-	if (cameraSprite != nullptr && !CameraCapture::GetInstance()->IsOpened()) {
-		delete cameraSprite;
-		cameraSprite = nullptr;
+	if (cameraSprite_ != nullptr && !CameraCapture::GetInstance()->IsOpened()) {
+		cameraSprite_.reset();
 		QRCodeReader::GetInstance()->Reset();
 	}
 
 	// カメラスプライトが存在する場合のみ更新
-	if (cameraSprite) {
-		cameraSprite->Update();
+	if (cameraSprite_) {
+		cameraSprite_->Update();
 
 		// QRコード読み取り
 		const auto& frameData = CameraCapture::GetInstance()->GetFrameData();
@@ -243,7 +211,7 @@ void GameScene::Update() {
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();
 
-	for (Object3DInstance* obj : object3DInstances_) {
+	for (const auto& obj : object3DInstances_) {
 		obj->Update();
 	}
 
@@ -272,11 +240,11 @@ void GameScene::Update() {
 	sprite_->Update();
 
 	// カメラスプライトが存在する場合のみ更新
-	if (cameraSprite) {
-		cameraSprite->Update();
+	if (cameraSprite_) {
+		cameraSprite_->Update();
 	}
 
-	for (SpriteInstance* s : sprites_) {
+	for (const auto& s : sprites_) {
 		s->Update();
 	}
 
@@ -297,7 +265,7 @@ void GameScene::Draw() {
 	LightManager::GetInstance()->OnImGui();
 
 	// 3Dオブジェクト描画
-	for (Object3DInstance* obj : object3DInstances_) {
+	for (const auto& obj : object3DInstances_) {
 		obj->Draw(dxCore_);
 	}
 
@@ -306,16 +274,15 @@ void GameScene::Draw() {
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
-	//sprite_->Draw();
+	sprite_->Draw();
+	for (const auto& s : sprites_) {
+		s->Draw();
+	}
 	
     // カメラスプライトが存在する場合のみ描画
-	if (cameraSprite) {
-		cameraSprite->Draw();
+	if (cameraSprite_) {
+		cameraSprite_->Draw();
 	}
-
-	/*for (SpriteInstance* s : sprites_) {
-		s->Draw();
-	}*/
 
 	// パーティクルのImGui表示
 	ParticleManager::GetInstance()->OnImGui();

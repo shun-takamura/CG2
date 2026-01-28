@@ -1,5 +1,6 @@
 #pragma once
 #include <map>
+#include <memory> 
 #include <iostream>
 #include"ModelInstance.h"
 #include"DirectXCore.h"
@@ -7,9 +8,9 @@
 class ModelManager
 {
 
-	static ModelManager* instance;
+	//static ModelManager* instance;
 
-	ModelCore* modelCore_ = nullptr;
+	std::unique_ptr<ModelCore> modelCore_;
 
 	ModelManager() = default;
 	~ModelManager() = default;

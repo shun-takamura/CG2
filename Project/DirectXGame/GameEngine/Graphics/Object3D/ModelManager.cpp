@@ -1,10 +1,10 @@
 #include "ModelManager.h"
 
-ModelManager* ModelManager::instance = nullptr;
+//ModelManager* ModelManager::instance = nullptr;
 
 void ModelManager::Initialize(DirectXCore* dxCore)
 {
-	modelCore_ = new ModelCore;
+	modelCore_ = std::make_unique<ModelCore>();
 	modelCore_->Initialize(dxCore);
 }
 
@@ -18,7 +18,7 @@ void ModelManager::LoadModel(const std::string& filePath)
 
 	// モデルの生成とファイル読み込み、初期化
 	std::unique_ptr<ModelInstance>model = std::make_unique<ModelInstance>();
-	model->Initialize(modelCore_, "Resources", filePath);
+	model->Initialize(modelCore_.get(), "Resources", filePath);
 
 	// モデルをmapコンテナに格納
 	models.insert(std::make_pair(filePath, std::move(model)));
@@ -40,15 +40,13 @@ ModelInstance* ModelManager::FindModel(const std::string& filePath)
 
 ModelManager* ModelManager::GetInstance()
 {
-	if (instance == nullptr) {
-		instance = new ModelManager;
-	}
-
-	return instance;
+	static ModelManager instance;
+	return &instance;
 }
 
 void ModelManager::Finalize()
 {
-	delete instance;
-	instance = nullptr;
+	// モデルとModelCoreをクリア
+	models.clear();
+	modelCore_.reset();
 }

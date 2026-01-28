@@ -1,5 +1,5 @@
 #include "TextureManager.h"
-TextureManager* TextureManager::instance = nullptr;
+//TextureManager* TextureManager::instance = nullptr;
 
 uint32_t TextureManager::kSRVIndexTop = 1;
 
@@ -278,11 +278,13 @@ void TextureManager::LoadTexture(const std::string& filePath)
 
 TextureManager* TextureManager::GetInstance()
 {
-	if (instance == nullptr) {
-		instance = new TextureManager;
-	}
+	//if (instance == nullptr) {
+		//instance = new TextureManager;
+	//}
 
-	return instance;
+    static TextureManager instance;
+
+	return &instance;
 }
 
 const DirectX::TexMetadata& TextureManager::GetMetaData(const std::string& filePath)
@@ -337,6 +339,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string& f
 
 void TextureManager::Finalize()
 {
-	delete instance;
-	instance = nullptr;
+	//delete instance;
+	//instance = nullptr;
+    textureDatas.clear();
 }
