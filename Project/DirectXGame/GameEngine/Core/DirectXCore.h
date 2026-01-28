@@ -37,12 +37,18 @@ public:
 	/// </summary>
 	UINT GetSrvDescriptorSize() const {
 	assert(device_);
-	return device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);}
+	return device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
 
 	/// <summary>
 	/// 描画コマンドの積み始め。
 	/// </summary>
 	void BeginDraw();
+
+	/// <summary>
+	/// 深度バッファをクリア
+	/// </summary>
+	void ClearDepthBuffer();
 
 	/// <summary>
 	/// 描画コマンドの終了と Present。
@@ -73,6 +79,11 @@ public:
 	/// RTVフォーマットを取得
 	/// </summary>
 	DXGI_FORMAT GetRenderTargetFormat() const { return backBufferFormat_; }
+
+	// DSVハンドルの取得
+	D3D12_CPU_DESCRIPTOR_HANDLE GetDsvHandle() const {
+		return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+	}
 
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
