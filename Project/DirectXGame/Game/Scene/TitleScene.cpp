@@ -1,9 +1,11 @@
 #include "TitleScene.h"
 #include "SceneManager.h"
+#include "TransitionManager.h"
 #include "SpriteManager.h"
 #include "SpriteInstance.h"
 #include "InputManager.h"
 #include "KeyboardInput.h"
+#include "Debug.h"
 
 TitleScene::TitleScene() {
 }
@@ -12,42 +14,90 @@ TitleScene::~TitleScene() {
 }
 
 void TitleScene::Initialize() {
-	// タイトルスプライトの初期化（uvChecker）
+	// 前のシーンからどのトランジションで来たか確認
+	TransitionType lastType = SceneManager::GetInstance()->GetLastUsedTransitionType();
+	std::string lastName = SceneManager::GetInstance()->GetLastUsedTransitionName();
+
+	if (lastType != TransitionType::None) {
+		Debug::Log("Arrived via transition: " + lastName);
+	}
+
+	// タイトルスプライトの初期化
 	titleSprite_ = std::make_unique<SpriteInstance>();
 	titleSprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
-
-	// 画面全体に表示
 	titleSprite_->SetPosition({ 0.0f, 0.0f });
-	titleSprite_->SetSize({ 1280.0f, 720.0f });
+	titleSprite_->SetSize({ 640.0f, 360.0f });
+
+	testStripe_ = std::make_unique<SpriteInstance>();
+	testStripe_->Initialize(spriteManager_, "Resources/monsterBall.png");
+	testStripe_->SetPosition({ 700.0f, 100.0f });
+	testStripe_->SetSize({ 200.0f, 200.0f });
 }
 
 void TitleScene::Finalize() {
-	// スプライトの解放
 	if (titleSprite_) {
 		titleSprite_ = nullptr;
+	}
+
+	if (testStripe_) {
+		testStripe_ = nullptr;
 	}
 }
 
 void TitleScene::Update() {
-	// 0キーでゲームシーンへ遷移
-	if (input_->GetKeyboard()->TriggerKey(DIK_0)) {
-		// シーン名を文字列で指定
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+	
+	if (titleSprite_) {
+		titleSprite_->Update();
+	}
+
+	if (testStripe_) {
+		testStripe_->Update();
+	}
+
+	// 1キー: ストライプトランジションでゲームシーンへ
+	if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
+		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Stripe);
 		return;
 	}
 
-	// スプライトの更新
+	// 2キー: フェードトランジションでゲームシーンへ
+	if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
+		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
+		return;
+	}
+
+	// 3キー: ランダムトランジションでゲームシーンへ
+	if (input_->GetKeyboard()->TriggerKey(DIK_3)) {
+		SceneManager::GetInstance()->ChangeSceneRandom("GAMEPLAY");
+		return;
+	}
+
+	// 0キー: トランジションなしで即時切り替え
+	if (input_->GetKeyboard()->TriggerKey(DIK_0)) {
+		SceneManager::GetInstance()->ChangeSceneImmediate("GAMEPLAY");
+		return;
+	}
+
 	if (titleSprite_) {
 		titleSprite_->Update();
+	}
+
+	if (testStripe_) {
+		testStripe_->Update();
 	}
 }
 
 void TitleScene::Draw() {
-	// スプライト描画設定
 	spriteManager_->DrawSetting();
 
-	// タイトルスプライトの描画
 	if (titleSprite_) {
 		titleSprite_->Draw();
 	}
+
+	if (testStripe_) {
+		testStripe_->Draw();
+	}
+
+	TransitionManager::GetInstance()->Draw();
+
 }

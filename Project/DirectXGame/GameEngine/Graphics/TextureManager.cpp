@@ -5,17 +5,88 @@ uint32_t TextureManager::kSRVIndexTop = 1;
 
 void TextureManager::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore, SRVManager* srvManager)
 {
-	spriteManager_ = spriteManager;
-	dxCore_ = dxCore;
-	srvManager_ = srvManager;
+    spriteManager_ = spriteManager;
+    dxCore_ = dxCore;
+    srvManager_ = srvManager;
 
-	// SRVの数と同数
-	//textureDatas.reserve(SRVManager::kMaxSRVCount);
+    // SRVの数と同数
+    //textureDatas.reserve(SRVManager::kMaxSRVCount);
 }
 
 bool TextureManager::HasTexture(const std::string& filePath) const
 {
     return textureDatas.contains(filePath);
+}
+
+void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    OutputDebugStringA(("CreateSolidColorTexture called: " + name + "\n").c_str());
+
+    // 既に存在する場合は何もしない
+    if (textureDatas.contains(name)) {
+        OutputDebugStringA("  -> Already exists, skipping\n");
+        return;
+    }
+
+    // テクスチャ枚数上限チェック
+    if (!srvManager_->CanAllocate()) {
+        OutputDebugStringA("TextureManager: SRV limit reached\n");
+        return;
+    }
+
+    // 1x1ピクセルのテクスチャデータを作成
+    uint8_t pixelData[4] = { r, g, b, a };
+
+    // ScratchImageを使って1x1テクスチャを作成
+    DirectX::ScratchImage image;
+    HRESULT hr = image.Initialize2D(
+        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        1, 1,  // width, height
+        1, 1   // arraySize, mipLevels
+    );
+
+    if (FAILED(hr)) {
+        OutputDebugStringA("TextureManager: Failed to initialize ScratchImage\n");
+        return;
+    }
+
+    // ピクセルデータをコピー
+    const DirectX::Image* img = image.GetImage(0, 0, 0);
+    if (img && img->pixels) {
+        memcpy(img->pixels, pixelData, 4);
+    }
+
+    // テクスチャデータの作成
+    TextureData& textureData = textureDatas[name];
+    textureData.metadata = image.GetMetadata();
+    textureData.isDynamic = false;
+
+    // テクスチャリソース生成
+    textureData.resource = spriteManager_->CreateTextureResource(
+        dxCore_->GetDevice(),
+        textureData.metadata
+    );
+
+    // テクスチャデータ転送
+    spriteManager_->UploadTextureData(
+        textureData.resource.Get(),
+        image,
+        dxCore_->GetDevice(),
+        dxCore_->GetCommandList()
+    );
+
+    // SRVインデックスを確保
+    textureData.srvIndex = srvManager_->Allocate();
+
+    // SRVを生成
+    srvManager_->CreateSRVForTexture2D(
+        textureData.srvIndex,
+        textureData.resource.Get(),
+        textureData.metadata.format,
+        static_cast<UINT>(textureData.metadata.mipLevels)
+    );
+
+    OutputDebugStringA(("TextureManager: Created solid color texture: " + name + "\n").c_str());
 }
 
 void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t width, uint32_t height,
@@ -71,7 +142,7 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
         &heapProps,
         D3D12_HEAP_FLAG_NONE,
         &resourceDesc,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,  // 変更
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         nullptr,
         IID_PPV_ARGS(&textureData.resource)
     );
@@ -222,124 +293,129 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
 
 void TextureManager::LoadTexture(const std::string& filePath)
 {
-	// 読み込み済みテクスチャを検索
-	if (textureDatas.contains(filePath)) {
-		// 既に読み込み済みなので何もしない
-		return;
-	}
+    OutputDebugStringA(("LoadTexture called: " + filePath + "\n").c_str());
 
-	// テクスチャ枚数上限チェック
-	assert(srvManager_->CanAllocate());
+    // 読み込み済みテクスチャを検索
+    if (textureDatas.contains(filePath)) {
+        // 既に読み込み済みなので何もしない
+        OutputDebugStringA("  -> Already exists, skipping\n");
+        return;
+    }
 
-	// テクスチャファイルを読み込んでプログラムで扱えるようにする
-	DirectX::ScratchImage image{};
-	std::wstring filePathW = ConvertString(filePath);
-	HRESULT hr = DirectX::LoadFromWICFile(
-		filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
-	assert(SUCCEEDED(hr));
+    OutputDebugStringA("  -> Loading from file...\n");
 
-	// ミップマップの作成
-	DirectX::ScratchImage mipImages{};
-	hr = DirectX::GenerateMipMaps(
-		image.GetImages(), image.GetImageCount(), image.GetMetadata(),
-		DirectX::TEX_FILTER_SRGB, 0, mipImages);
-	assert(SUCCEEDED(hr));
+    // テクスチャ枚数上限チェック
+    assert(srvManager_->CanAllocate());
 
-	// テクスチャデータの作成
-	TextureData& textureData = textureDatas[filePath];
-	textureData.metadata = mipImages.GetMetadata();
+    // テクスチャファイルを読み込んでプログラムで扱えるようにする
+    DirectX::ScratchImage image{};
+    std::wstring filePathW = ConvertString(filePath);
+    HRESULT hr = DirectX::LoadFromWICFile(
+        filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+    assert(SUCCEEDED(hr));
 
-	// テクスチャリソース生成
-	textureData.resource = spriteManager_->CreateTextureResource(
-		dxCore_->GetDevice(),
-		textureData.metadata
-	);
+    // ミップマップの作成
+    DirectX::ScratchImage mipImages{};
+    hr = DirectX::GenerateMipMaps(
+        image.GetImages(), image.GetImageCount(), image.GetMetadata(),
+        DirectX::TEX_FILTER_SRGB, 0, mipImages);
+    assert(SUCCEEDED(hr));
 
-	// テクスチャデータ転送
-	spriteManager_->UploadTextureData(
-		textureData.resource.Get(),
-		mipImages,
-		dxCore_->GetDevice(),
-		dxCore_->GetCommandList()
-	);
+    // テクスチャデータの作成
+    TextureData& textureData = textureDatas[filePath];
+    textureData.metadata = mipImages.GetMetadata();
 
-	// SRVインデックスを確保
-	textureData.srvIndex = srvManager_->Allocate();
+    // テクスチャリソース生成
+    textureData.resource = spriteManager_->CreateTextureResource(
+        dxCore_->GetDevice(),
+        textureData.metadata
+    );
 
-	// SRVを生成
-	srvManager_->CreateSRVForTexture2D(
-		textureData.srvIndex,
-		textureData.resource.Get(),
-		textureData.metadata.format,
-		static_cast<UINT>(textureData.metadata.mipLevels)
-	);
-	
+    // テクスチャデータ転送
+    spriteManager_->UploadTextureData(
+        textureData.resource.Get(),
+        mipImages,
+        dxCore_->GetDevice(),
+        dxCore_->GetCommandList()
+    );
+
+    // SRVインデックスを確保
+    textureData.srvIndex = srvManager_->Allocate();
+
+    // SRVを生成
+    srvManager_->CreateSRVForTexture2D(
+        textureData.srvIndex,
+        textureData.resource.Get(),
+        textureData.metadata.format,
+        static_cast<UINT>(textureData.metadata.mipLevels)
+    );
+
 }
 
 TextureManager* TextureManager::GetInstance()
 {
-	//if (instance == nullptr) {
-		//instance = new TextureManager;
-	//}
+    //if (instance == nullptr) {
+        //instance = new TextureManager;
+    //}
 
     static TextureManager instance;
 
-	return &instance;
+    return &instance;
 }
 
 const DirectX::TexMetadata& TextureManager::GetMetaData(const std::string& filePath)
 {
-	// filePathがキーなので、unordered_mapから直接取得
-	auto it = textureDatas.find(filePath);
+    // filePathがキーなので、unordered_mapから直接取得
+    auto it = textureDatas.find(filePath);
 
-	if (it != textureDatas.end()) {
-		return it->second.metadata;
-	}
+    if (it != textureDatas.end()) {
+        return it->second.metadata;
+    }
 
-	// 見つからない場合は停止
-	assert(0);
-	static DirectX::TexMetadata dummy{};
-	return dummy;
+    // 見つからない場合は停止
+    assert(0);
+    static DirectX::TexMetadata dummy{};
+    return dummy;
 }
 
 uint32_t TextureManager::GetSrvIndex(const std::string& filePath)
 {
-	// filePathがキーなので、unordered_mapから直接取得
-	auto it = textureDatas.find(filePath);
+    // filePathがキーなので、unordered_mapから直接取得
+    auto it = textureDatas.find(filePath);
 
-	if (it != textureDatas.end()) {
-		return it->second.srvIndex;
-	}
+    if (it != textureDatas.end()) {
+        return it->second.srvIndex;
+    }
 
-	// 見つからない場合は停止
-	assert(0);
-	return 0;
+    // 見つからない場合は停止
+    assert(0);
+    return 0;
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string& filePath)
 {
-	// デバッグ出力
-	OutputDebugStringA(("GetSrvHandleGPU called with: " + filePath + "\n").c_str());
+    // デバッグ出力
+    //OutputDebugStringA(("GetSrvHandleGPU called with: " + filePath + "\n").c_str());
 
-	auto it = textureDatas.find(filePath);
+    auto it = textureDatas.find(filePath);
 
-	if (it != textureDatas.end()) {
-		return srvManager_->GetGPUDescriptorHandle(it->second.srvIndex);
-	}
+    if (it != textureDatas.end()) {
+        return srvManager_->GetGPUDescriptorHandle(it->second.srvIndex);
+    }
 
-	// 見つからない場合、登録されているキーを出力
-	OutputDebugStringA("Registered textures:\n");
-	for (const auto& pair : textureDatas) {
-		OutputDebugStringA(("  - " + pair.first + "\n").c_str());
-	}
+    // 見つからない場合、登録されているキーを出力
+    OutputDebugStringA("Registered textures:\n");
+    for (const auto& pair : textureDatas) {
+        OutputDebugStringA(("  - " + pair.first + "\n").c_str());
+    }
 
-	assert(0 && "Texture not found!");
-	return D3D12_GPU_DESCRIPTOR_HANDLE{};
+    assert(0 && "Texture not found!");
+    return D3D12_GPU_DESCRIPTOR_HANDLE{};
 }
 
 void TextureManager::Finalize()
 {
-	//delete instance;
-	//instance = nullptr;
+    //delete instance;
+    //instance = nullptr;
     textureDatas.clear();
 }

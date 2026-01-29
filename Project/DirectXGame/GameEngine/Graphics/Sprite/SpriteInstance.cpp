@@ -27,6 +27,11 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
     // その番号からGPUハンドルを取得して保持
     textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(filePath);
 
+    // テクスチャサイズをデフォルトで全体に設定
+    const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(filePath);
+    textureLeftTop_ = { 0.0f, 0.0f };
+    textureSize_ = { static_cast<float>(metadata.width), static_cast<float>(metadata.height) };
+
     CreateVertexBuffer();
     CreateMaterialBuffer();
     CreateTransformationMatrixBuffer();

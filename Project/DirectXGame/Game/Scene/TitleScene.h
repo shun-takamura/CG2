@@ -43,4 +43,5 @@ public:
 private:
 	// タイトル用スプライト（uvChecker）
 	std::unique_ptr<SpriteInstance> titleSprite_;
+	std::unique_ptr<SpriteInstance> testStripe_;
 };
