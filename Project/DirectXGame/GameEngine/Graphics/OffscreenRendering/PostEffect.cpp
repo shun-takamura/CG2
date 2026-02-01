@@ -456,6 +456,8 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* ren
 
 void PostEffect::ShowImGui()
 {
+#ifdef DEBUG
+
 	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
 	const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
@@ -488,6 +490,8 @@ void PostEffect::ShowImGui()
 	}
 
 	ImGui::End();
+
+#endif // DEBUG
 }
 
 void PostEffect::Finalize()

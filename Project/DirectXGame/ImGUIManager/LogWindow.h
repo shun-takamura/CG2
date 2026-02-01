@@ -11,6 +11,8 @@ public:
 
 protected:
     void OnDraw() override {
+#ifdef DEBUG
+
         // クリアボタンとオートスクロール設定
         if (ImGui::Button("Clear")) {
             LogBuffer::Instance().Clear();
@@ -57,6 +59,8 @@ protected:
         }
 
         ImGui::EndChild();
+
+#endif // DEBUG
     }
 
 private:

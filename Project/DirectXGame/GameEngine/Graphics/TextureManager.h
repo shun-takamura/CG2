@@ -54,22 +54,22 @@ private:
 	/*SpriteManager* spriteManager_;
 	DirectXCore* dxCore_;*/
 	SpriteManager* spriteManager_ = nullptr;
-	DirectXCore * dxCore_ = nullptr;
+	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 
 public:
 
-	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,SRVManager*srvManager);
+	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore, SRVManager* srvManager);
 
 	void LoadTexture(const std::string& filePath);
-	
+
 	/// <summary>
-    /// 動的テクスチャを作成（カメラ映像など毎フレーム更新するテクスチャ用）
-    /// </summary>
-    /// <param name="name">テクスチャの識別名</param>
-    /// <param name="width">幅</param>
-    /// <param name="height">高さ</param>
-    /// <param name="format">フォーマット（デフォルトはRGBA）</param>
+	/// 動的テクスチャを作成（カメラ映像など毎フレーム更新するテクスチャ用）
+	/// </summary>
+	/// <param name="name">テクスチャの識別名</param>
+	/// <param name="width">幅</param>
+	/// <param name="height">高さ</param>
+	/// <param name="format">フォーマット（デフォルトはRGBA）</param>
 	void CreateDynamicTexture(const std::string& name, uint32_t width, uint32_t height,
 		DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
 
@@ -85,6 +85,16 @@ public:
 	/// テクスチャが存在するかチェック
 	/// </summary>
 	bool HasTexture(const std::string& filePath) const;
+
+	/// <summary>
+	/// 単色テクスチャを生成（ファイル不要）
+	/// </summary>
+	/// <param name="name">テクスチャ名（キー）</param>
+	/// <param name="r">赤 (0-255)</param>
+	/// <param name="g">緑 (0-255)</param>
+	/// <param name="b">青 (0-255)</param>
+	/// <param name="a">アルファ (0-255)</param>
+	void CreateSolidColorTexture(const std::string& name, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
 	// シングルトンインスタンスの取得
 	static TextureManager* GetInstance();
@@ -111,4 +121,3 @@ public:
 	void Finalize();
 
 };
-

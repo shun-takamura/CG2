@@ -120,6 +120,8 @@ void ImGuiManager::Unregister(IImGuiEditable* editable) {
 }
 
 void ImGuiManager::DrawMenuBar() {
+#ifdef DEBUG
+
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("ImGuiMenu")) {
             // 各ウィンドウの表示/非表示トグル
@@ -133,4 +135,6 @@ void ImGuiManager::DrawMenuBar() {
         }
         ImGui::EndMainMenuBar();
     }
+
+#endif // DEBUG
 }

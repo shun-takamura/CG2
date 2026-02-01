@@ -413,6 +413,8 @@ void CameraCapture::CloseCamera()
 
 void CameraCapture::LogDevicesToImGui()
 {
+#ifdef DEBUG
+
     ImGui::Text("=== Camera Devices ===");
 
     if (devices_.empty())
@@ -468,4 +470,6 @@ void CameraCapture::LogDevicesToImGui()
     {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera: CLOSED");
     }
+
+#endif // DEBUG
 }

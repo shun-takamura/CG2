@@ -277,6 +277,8 @@ void ParticleManager::Draw()
 
 void ParticleManager::OnImGui()
 {
+#ifdef DEBUG
+
     if (ImGui::Begin("Particle Settings")) {
         // エミッター設定
         ImGui::Text("Emitter Settings");
@@ -319,6 +321,8 @@ void ParticleManager::OnImGui()
         ImGui::Text("Total Particles: %u", totalCount);
     }
     ImGui::End();
+
+#endif // DEBUG
 }
 
 bool ParticleManager::IsCollision(const AABB& aabb, const Vector3& point)

@@ -18,6 +18,7 @@
 #include "SceneFactory.h"
 #include"CameraCapture.h"
 #include "QRCodeReader.h"
+#include"TransitionManager.h"
 #include <memory>
 
 Game::Game() {
@@ -37,7 +38,7 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
-	SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 
 	// クリアカラーを赤に設定
 	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // 赤
@@ -107,6 +108,7 @@ void Game::Draw() {
 	// 4. ImGui描画（Swapchainに直接）
 	CameraCapture::GetInstance()->LogDevicesToImGui();
 	QRCodeReader::GetInstance()->OnImGui();
+	TransitionManager::GetInstance()->OnImGui();
 	ImGuiManager::Instance().EndFrame();
 
 	// 5. 終了

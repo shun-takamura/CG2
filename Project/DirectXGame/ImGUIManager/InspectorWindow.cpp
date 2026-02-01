@@ -2,6 +2,8 @@
 #include "ImGuiManager.h"
 
 void InspectorWindow::OnDraw() {
+#ifdef DEBUG
+
     IImGuiEditable* selected = manager_->GetSelected();
 
     if (!selected) {
@@ -17,4 +19,6 @@ void InspectorWindow::OnDraw() {
 
     // 各オブジェクトが実装した編集UIを描画
     selected->OnImGuiInspector();
+
+#endif // DEBUG
 }

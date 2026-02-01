@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include "BaseTransition.h"
 
 // 前方宣言
 class BaseScene;
@@ -48,10 +49,23 @@ public:
 	void Draw();
 
 	/// <summary>
-	/// 次シーン予約
+	/// シーン変更（トランジション指定）
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
-	void ChangeScene(const std::string& sceneName);
+	/// <param name="transitionType">トランジションの種類</param>
+	void ChangeScene(const std::string& sceneName, TransitionType transitionType);
+
+	/// <summary>
+	/// シーン変更（ランダムトランジション）
+	/// </summary>
+	/// <param name="sceneName">シーン名</param>
+	void ChangeSceneRandom(const std::string& sceneName);
+
+	/// <summary>
+	/// シーン変更（トランジションなし）
+	/// </summary>
+	/// <param name="sceneName">シーン名</param>
+	void ChangeSceneImmediate(const std::string& sceneName);
 
 	/// <summary>
 	/// シーンファクトリーのセッター
@@ -63,8 +77,28 @@ public:
 	/// </summary>
 	BaseScene* GetCurrentScene() const { return currentScene_.get(); }
 
+	/// <summary>
+	/// 現在のシーン名を取得
+	/// </summary>
+	const std::string& GetCurrentSceneName() const { return currentSceneName_; }
+
+	/// <summary>
+	/// トランジション中かどうか
+	/// </summary>
+	bool IsTransitioning() const;
+
+	/// <summary>
+	/// 最後に使用されたトランジションの種類を取得
+	/// </summary>
+	TransitionType GetLastUsedTransitionType() const;
+
+	/// <summary>
+	/// 最後に使用されたトランジション名を取得
+	/// </summary>
+	std::string GetLastUsedTransitionName() const;
+
 	//====================
-	// マネージャーのゲッター（シーン初期化時に使用）
+	// マネージャーのゲッター
 	//====================
 	SpriteManager* GetSpriteManager() const { return spriteManager_; }
 	Object3DManager* GetObject3DManager() const { return object3DManager_; }
@@ -73,24 +107,25 @@ public:
 	InputManager* GetInputManager() const { return input_; }
 
 private:
-	// シングルトン用
 	SceneManager() = default;
 	~SceneManager() = default;
 	SceneManager(const SceneManager&) = delete;
 	SceneManager& operator=(const SceneManager&) = delete;
 
-	/// <summary>
-	/// シーンに各マネージャーをセットする
-	/// </summary>
 	void SetupScene(BaseScene* scene);
+	void ExecuteSceneChange();
 
 	// 現在のシーン
 	std::unique_ptr<BaseScene> currentScene_;
+	std::string currentSceneName_;
 
-	// 次のシーン
+	// 次のシーン（即時切り替え用）
 	std::unique_ptr<BaseScene> nextScene_;
 
-	// シーンファクトリー（借りてくる）
+	// 予約されたシーン名（トランジション用）
+	std::string pendingSceneName_;
+
+	// シーンファクトリー
 	AbstractSceneFactory* sceneFactory_ = nullptr;
 
 	// 各マネージャーへのポインタ
