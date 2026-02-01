@@ -2,6 +2,8 @@
 #include "ImGuiManager.h"
 
 void HierarchyWindow::OnDraw() {
+#ifdef DEBUG
+
     const auto& editables = manager_->GetEditables();
     IImGuiEditable* selected = manager_->GetSelected();
 
@@ -39,4 +41,6 @@ void HierarchyWindow::OnDraw() {
             manager_->SetSelected(editable);
         }
     }
+
+#endif // DEBUG
 }

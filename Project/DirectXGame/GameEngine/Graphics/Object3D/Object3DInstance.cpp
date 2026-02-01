@@ -124,6 +124,8 @@ void Object3DInstance::SetTexture(const std::string& filePath)
 //==============================
 void Object3DInstance::OnImGuiInspector()
 {
+#ifdef DEBUG
+
     // Transform
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat3("Position", &transform_.translate.x, 0.1f);
@@ -152,4 +154,6 @@ void Object3DInstance::OnImGuiInspector()
             // TODO: テクスチャ選択ダイアログ
         }
     }
+
+#endif // DEBUG
 }

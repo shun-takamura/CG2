@@ -6,6 +6,7 @@
 #include "InputManager.h"
 #include "KeyboardInput.h"
 #include "Debug.h"
+#include"StripeTransition.h"
 
 TitleScene::TitleScene() {
 }
@@ -22,36 +23,56 @@ void TitleScene::Initialize() {
 		Debug::Log("Arrived via transition: " + lastName);
 	}
 
-	// タイトルスプライトの初期化
-	titleSprite_ = std::make_unique<SpriteInstance>();
-	titleSprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
-	titleSprite_->SetPosition({ 0.0f, 0.0f });
-	titleSprite_->SetSize({ 640.0f, 360.0f });
+	// スプライトをvectorで管理
+	sprites_.clear();
 
-	testStripe_ = std::make_unique<SpriteInstance>();
-	testStripe_->Initialize(spriteManager_, "Resources/monsterBall.png");
-	testStripe_->SetPosition({ 700.0f, 100.0f });
-	testStripe_->SetSize({ 200.0f, 200.0f });
+	// タイトルスプライト（背景）
+	// 交互に使うスプライト
+	const std::string textures[3] = {
+		"Resources/uvChecker.png",
+		"Resources/monsterBall.png",
+		"Resources/stripe.png"
+	};
+
+	{
+		auto sprite = std::make_unique<SpriteInstance>();
+		sprite->Initialize(spriteManager_,textures[1], "TitleBG");
+		sprite->SetSize({ 300.0f, 300.0f });
+		sprite->SetPosition({ 0.0f, 0.0f });
+		sprites_.push_back(std::move(sprite));
+	}
+
+	// 5枚生成
+	for (uint32_t i = 0; i < 5; ++i) {
+		auto newSprite = std::make_unique<SpriteInstance>();
+		const std::string& texturePath = textures[2];
+
+		std::string spriteName = "Sprite_" + std::to_string(i);
+		newSprite->Initialize(spriteManager_, texturePath, spriteName);
+
+		newSprite->SetSize({ 100.0f, 100.0f });
+		newSprite->SetPosition({ i * 2.0f, 0.0f });
+		sprites_.push_back(std::move(newSprite));
+	}
+
+	// テスト用スプライト
+	char buf[128];
+	sprintf_s(buf, "TitleScene: %zu sprites initialized\n", sprites_.size());
+	OutputDebugStringA(buf);
 }
 
 void TitleScene::Finalize() {
-	if (titleSprite_) {
-		titleSprite_ = nullptr;
-	}
-
-	if (testStripe_) {
-		testStripe_ = nullptr;
-	}
+	sprites_.clear();
 }
 
 void TitleScene::Update() {
-	
-	if (titleSprite_) {
-		titleSprite_->Update();
-	}
-
-	if (testStripe_) {
-		testStripe_->Update();
+	// トランジション中は入力を受け付けない
+	if (SceneManager::GetInstance()->IsTransitioning()) {
+		// スプライトの更新は行う
+		for (auto& sprite : sprites_) {
+			sprite->Update();
+		}
+		return;
 	}
 
 	// 1キー: ストライプトランジションでゲームシーンへ
@@ -62,6 +83,12 @@ void TitleScene::Update() {
 
 	// 2キー: フェードトランジションでゲームシーンへ
 	if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
+		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
+		return;
+	}
+
+	// SPACE: フェードトランジションでゲームシーンへ
+	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
 		return;
 	}
@@ -78,26 +105,23 @@ void TitleScene::Update() {
 		return;
 	}
 
-	if (titleSprite_) {
-		titleSprite_->Update();
-	}
-
-	if (testStripe_) {
-		testStripe_->Update();
+	// スプライトの更新
+	for (auto& sprite : sprites_) {
+		sprite->Update();
 	}
 }
 
 void TitleScene::Draw() {
 	spriteManager_->DrawSetting();
 
-	if (titleSprite_) {
-		titleSprite_->Draw();
+	// スプライトの描画
+	for (auto& sprite : sprites_) {
+		sprite->Draw();
 	}
 
-	if (testStripe_) {
-		testStripe_->Draw();
+	// ストライプトランジションのスプライトを直接取得して描画
+	auto* stripeTransition = TransitionManager::GetInstance()->GetTransition<StripeTransition>(TransitionType::Stripe);
+	if (stripeTransition) {
+		stripeTransition->Draw();
 	}
-
-	TransitionManager::GetInstance()->Draw();
-
 }

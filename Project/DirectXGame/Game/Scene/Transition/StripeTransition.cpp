@@ -30,30 +30,20 @@ void StripeTransition::CreateStripes() {
 	// stripe.pngを先に読み込む
 	TextureManager::GetInstance()->LoadTexture("Resources/stripe.png");
 
-	// stripe.pngのメタデータを取得してテクスチャサイズを取得
-	const DirectX::TexMetadata& metadata =
-		TextureManager::GetInstance()->GetMetaData("Resources/stripe.png");
-	float texWidth = static_cast<float>(metadata.width);
-	float texHeight = static_cast<float>(metadata.height);
-
 	for (int i = 0; i < stripeCount_; ++i) {
 		auto stripe = std::make_unique<SpriteInstance>();
 
-		// 斜めの画像を使用
-		stripe->Initialize(spriteManager_, "Resources/stripe.png", "StripeTransition_" + std::to_string(i));
+		std::string spriteName = "StripeTransition_" + std::to_string(i);
+		stripe->Initialize(spriteManager_, "Resources/stripe.png", spriteName);
 
-		// テクスチャ全体を使用するように設定（重要！）
-		stripe->SetTextureLeftTop({ 0.0f, 0.0f });
-		stripe->SetTextureSize({ texWidth, texHeight });
-
-		// スプライトのサイズ設定
+		// サイズを先に設定（重要！）
 		stripe->SetSize({ debugStripeWidth_, debugStripeHeight_ });
+
+		// 位置は後で設定
+		stripe->SetPosition({ 0.0f, 0.0f });
 
 		// 左上を基準点に
 		stripe->SetAnchorPoint({ 0.0f, 0.0f });
-
-		// 回転なし（画像自体が斜め）
-		stripe->SetRotation(0.0f);
 
 		stripes_.push_back(std::move(stripe));
 		stripeProgress_.push_back(0.0f);
@@ -86,14 +76,22 @@ void StripeTransition::Update() {
 
 		if (state_ == TransitionState::FadeIn) {
 			bool allComplete = true;
+			float triggerY = debugStripeHeight_ / 2.0f;
 
-			for (int i = 0; i < stripeCount_; ++i) {
-				float startTime = i * stripeDelay_;
+			for (size_t i = 0; i < stripes_.size(); ++i) {
+				bool shouldStart = false;
 
-				if (currentTime_ >= startTime) {
-					float elapsed = currentTime_ - startTime;
-					stripeProgress_[i] = elapsed / transitionDuration_;
+				if (i == 0) {
+					shouldStart = true;
+				} else {
+					float prevTriggerPoint = stripePositions_[i - 1].y + (debugStripeHeight_ * 2.0f / 3.0f);
+					if (prevTriggerPoint >= triggerY) {
+						shouldStart = true;
+					}
+				}
 
+				if (shouldStart && stripeProgress_[i] < 1.0f) {
+					stripeProgress_[i] += moveSpeed_;
 					if (stripeProgress_[i] > 1.0f) {
 						stripeProgress_[i] = 1.0f;
 					}
@@ -108,6 +106,7 @@ void StripeTransition::Update() {
 				state_ = TransitionState::Hold;
 				currentTime_ = 0.0f;
 			}
+
 		} else if (state_ == TransitionState::Hold) {
 			if (!sceneChangeTriggered_ && onSceneChange_) {
 				onSceneChange_();
@@ -118,16 +117,23 @@ void StripeTransition::Update() {
 				state_ = TransitionState::FadeOut;
 				currentTime_ = 0.0f;
 			}
+
 		} else if (state_ == TransitionState::FadeOut) {
 			bool allGone = true;
 
-			for (int i = 0; i < stripeCount_; ++i) {
-				float startTime = i * stripeDelay_;
+			for (size_t i = 0; i < stripes_.size(); ++i) {
+				bool shouldStart = false;
 
-				if (currentTime_ >= startTime) {
-					float elapsed = currentTime_ - startTime;
-					stripeProgress_[i] = 1.0f - (elapsed / transitionDuration_);
+				if (i == 0) {
+					shouldStart = true;
+				} else {
+					if (stripeProgress_[i - 1] <= 0.7f) {
+						shouldStart = true;
+					}
+				}
 
+				if (shouldStart && stripeProgress_[i] > 0.0f) {
+					stripeProgress_[i] -= moveSpeed_;
 					if (stripeProgress_[i] < 0.0f) {
 						stripeProgress_[i] = 0.0f;
 					}
@@ -155,55 +161,70 @@ void StripeTransition::Update() {
 }
 
 void StripeTransition::UpdateStripePositions() {
-	float spacing = screenWidth_ / stripeCount_;
+	if (stripes_.empty()) return;
 
-	for (int i = 0; i < stripeCount_; ++i) {
-		// X位置
-		float x = spacing * i + debugOffsetX_;
+	float spacing = screenWidth_ / static_cast<float>(stripes_.size());
 
-		// Y位置：進行度に応じて移動
+	for (size_t i = 0; i < stripes_.size(); ++i) {
 		float progress = stripeProgress_[i];
 
-		// デバッグ強制表示時は progress = 1.0 として扱う
 		if (debugForceShow_ && !isTransitioning_) {
 			progress = 1.0f;
 		}
 
-		float y = debugStartY_ + (debugEndY_ - debugStartY_) * progress;
+		float x, y;
 
-		// 位置を保存（ImGui表示用）
+		if (state_ == TransitionState::FadeOut ||
+			(state_ == TransitionState::None && !isTransitioning_)) {
+			// はけ：覆っている状態から左下へ
+			float startX = (spacing + spacingOffset_) * i - 450.0f;
+			float startY = -50.0f;
+			float endX = startX - 500.0f;
+			float endY = startY + 870.0f;
+
+			float outProgress = 1.0f - progress;
+			x = startX + (endX - startX) * outProgress;
+			y = startY + (endY - startY) * outProgress;
+		} else {
+			// 入り：右上から左下へ
+			float startX = (spacing + spacingOffset_) * i + 50.0f;
+			float startY = -screenHeight_ - 200.0f;
+			float endX = (spacing + spacingOffset_) * i - 450.0f;
+			float endY = -50.0f;
+
+			x = startX + (endX - startX) * progress;
+			y = startY + (endY - startY) * progress;
+		}
+
 		stripePositions_[i] = { x, y };
-
-		// サイズも更新
 		stripes_[i]->SetSize({ debugStripeWidth_, debugStripeHeight_ });
 		stripes_[i]->SetPosition({ x, y });
 	}
 }
 
 void StripeTransition::Draw() {
-	// 通常時またはデバッグ強制表示時に描画
-	bool shouldDraw = (isTransitioning_ && state_ != TransitionState::None) || debugForceShow_;
-	if (!shouldDraw) return;
+	// デバッグ：常に描画する
+	OutputDebugStringA("StripeTransition::Draw() - FORCE DRAWING\n");
 
 	// スプライト描画設定
 	spriteManager_->DrawSetting();
 
-	// 描画
-	for (int i = 0; i < stripeCount_; ++i) {
-		// デバッグ強制表示または進行度が0より大きい場合に描画
-		if (debugForceShow_ || stripeProgress_[i] > 0.0f) {
-			stripes_[i]->Draw();
-		}
+	// 強制的に全て描画
+	for (size_t i = 0; i < stripes_.size(); ++i) {
+		stripes_[i]->Draw();
 	}
 }
 
 void StripeTransition::OnImGui() {
+#ifdef DEBUG
+
 	if (ImGui::Begin("Stripe Transition Debug")) {
 
 		ImGui::Text("=== Status ===");
 		ImGui::Text("IsTransitioning: %s", isTransitioning_ ? "true" : "false");
 		ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)", static_cast<int>(state_));
 		ImGui::Text("CurrentTime: %.2f", currentTime_);
+		ImGui::Text("Stripe Count: %zu", stripes_.size());
 
 		ImGui::Separator();
 		ImGui::Text("=== Debug Controls ===");
@@ -216,6 +237,10 @@ void StripeTransition::OnImGui() {
 					stripeProgress_[i] = 1.0f;
 				}
 				UpdateStripePositions();
+				// スプライトも更新
+				for (size_t i = 0; i < stripes_.size(); ++i) {
+					stripes_[i]->Update();
+				}
 			}
 		}
 
@@ -235,6 +260,9 @@ void StripeTransition::OnImGui() {
 
 		if (changed && debugForceShow_) {
 			UpdateStripePositions();
+			for (size_t i = 0; i < stripes_.size(); ++i) {
+				stripes_[i]->Update();
+			}
 		}
 
 		ImGui::Separator();
@@ -257,14 +285,17 @@ void StripeTransition::OnImGui() {
 					stripeProgress_[i] = 1.0f;
 				}
 				UpdateStripePositions();
+				for (size_t i = 0; i < stripes_.size(); ++i) {
+					stripes_[i]->Update();
+				}
 			}
 		}
 
 		ImGui::Separator();
 		ImGui::Text("=== Stripe Positions ===");
 
-		for (int i = 0; i < stripeCount_ && i < static_cast<int>(stripePositions_.size()); ++i) {
-			ImGui::Text("Stripe[%d]: pos=(%.1f, %.1f), progress=%.2f",
+		for (size_t i = 0; i < stripes_.size() && i < stripePositions_.size(); ++i) {
+			ImGui::Text("Stripe[%zu]: pos=(%.1f, %.1f), progress=%.2f",
 				i, stripePositions_[i].x, stripePositions_[i].y, stripeProgress_[i]);
 		}
 
@@ -296,4 +327,6 @@ void StripeTransition::OnImGui() {
 		}
 	}
 	ImGui::End();
+
+#endif // DEBUG
 }

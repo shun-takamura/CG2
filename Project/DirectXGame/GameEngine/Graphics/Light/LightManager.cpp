@@ -190,6 +190,8 @@ SpotLight* LightManager::GetSpotLight(uint32_t index) {
 }
 
 void LightManager::OnImGui() {
+#ifdef DEBUG
+
     if (ImGui::Begin("Light Settings")) {
 
         // ===== DirectionalLight =====
@@ -274,4 +276,6 @@ void LightManager::OnImGui() {
         }
     }
     ImGui::End();
+
+#endif // DEBUG
 }

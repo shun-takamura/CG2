@@ -46,6 +46,9 @@ private:
 	float transitionDuration_ = 0.5f;
 	float stripeDelay_ = 0.05f;
 
+	float spacingOffset_ = 50.0f;
+	float moveSpeed_ = 0.1f;
+
 	// 再生成フラグ
 	bool needsRecreate_ = false;
 
