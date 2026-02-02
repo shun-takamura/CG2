@@ -36,7 +36,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     for (uint32_t i = 0; i < kMaxPointLights; ++i) {
         pointLightGroupData_->lights[i].color = { 1.0f, 1.0f, 1.0f, 1.0f };
         pointLightGroupData_->lights[i].position = { 0.0f, 2.0f, static_cast<float>(i) * 3.0f };
-        pointLightGroupData_->lights[i].intensity = 1.0f;
+        pointLightGroupData_->lights[i].intensity = 0.0f;
         pointLightGroupData_->lights[i].radius = 5.0f;
         pointLightGroupData_->lights[i].decay = 1.0f;
     }
@@ -53,7 +53,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
         spotLightGroupData_->lights[i].position = { 2.0f + static_cast<float>(i) * 2.0f, 1.25f, 0.0f };
         spotLightGroupData_->lights[i].distance = 7.0f;
         spotLightGroupData_->lights[i].direction = Normalize({ -1.0f, -1.0f, 0.0f });
-        spotLightGroupData_->lights[i].intensity = 4.0f;
+        spotLightGroupData_->lights[i].intensity = 0.0f;
         spotLightGroupData_->lights[i].decay = 2.0f;
         spotLightGroupData_->lights[i].cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
         spotLightGroupData_->lights[i].cosFalloffStart = std::cos(std::numbers::pi_v<float> / 4.0f);

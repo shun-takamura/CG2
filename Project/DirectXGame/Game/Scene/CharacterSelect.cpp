@@ -37,7 +37,10 @@ void CharacterSelect::Initialize()
 {
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
+	sprite_->Initialize(spriteManager_, "Resources/CharacterSelect_UI_QR.png");
+	sprite_->SetAnchorPoint({ 0.5f,0.0f });
+	sprite_->SetPosition({ 640.0f, 64.0f });
+	sprite_->SetSize({ 640.0f, 360.0f });
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
@@ -47,7 +50,7 @@ void CharacterSelect::Initialize()
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/Particle.png");
 
 	// 3Dオブジェクトを配列で管理
 	const std::string modelFiles[] = { "player1.obj", "player2.obj"};
@@ -75,7 +78,7 @@ void CharacterSelect::Initialize()
 	lightMgr->SetSpotLightPosition(0, { -2.0f, 10.0f, -4.0f });
 	lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
 	lightMgr->SetSpotLightColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
-	lightMgr->SetSpotLightIntensity(0, 1.0f);
+	lightMgr->SetSpotLightIntensity(0, 4.0f);
 	lightMgr->SetSpotLightDistance(0, 15.0f);
 	lightMgr->SetSpotLightDecay(0, 2.0f);
 	lightMgr->SetSpotLightCosAngle(0, std::cos(std::numbers::pi_v<float> / 6.0f));       // 30°
@@ -85,7 +88,7 @@ void CharacterSelect::Initialize()
 	lightMgr->SetSpotLightPosition(1, { 2.0f, 10.0f, -4.0f });
 	lightMgr->SetSpotLightDirection(1, Normalize({ 0.0f, -1.0f, 0.0f }));
 	lightMgr->SetSpotLightColor(1, { 1.0f, 1.0f, 1.0f, 1.0f });
-	lightMgr->SetSpotLightIntensity(1, 1.0f);
+	lightMgr->SetSpotLightIntensity(1, 4.0f);
 	lightMgr->SetSpotLightDistance(1, 15.0f);
 	lightMgr->SetSpotLightDecay(1, 2.0f);
 	lightMgr->SetSpotLightCosAngle(1, std::cos(std::numbers::pi_v<float> / 6.0f));
@@ -126,8 +129,9 @@ void CharacterSelect::Update()
 		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
 			cameraSprite_ = std::make_unique<SpriteInstance>();
 			cameraSprite_->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
-			cameraSprite_->SetPosition({ 0.0f, 0.0f });
-			cameraSprite_->SetSize({ 640.0f, 480.0f });
+			cameraSprite_->SetAnchorPoint({ 0.5f,0.0f });
+			cameraSprite_->SetPosition({ 640.0f, 64.0f });
+			cameraSprite_->SetSize({ 640.0f, 360.0f });
 			cameraSprite_->SetTextureLeftTop({ 0.0f, 0.0f });
 			cameraSprite_->SetTextureSize({
 				static_cast<float>(CameraCapture::GetInstance()->GetFrameWidth()),
@@ -238,7 +242,6 @@ void CharacterSelect::Draw()
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
-	sprite_->Draw();
 	for (const auto& s : sprites_) {
 		s->Draw();
 	}
@@ -247,6 +250,9 @@ void CharacterSelect::Draw()
 	if (cameraSprite_) {
 		cameraSprite_->Draw();
 	}
+
+	// QRコードのUIを前面に描画
+	sprite_->Draw();
 
 	// パーティクルのImGui表示
 	ParticleManager::GetInstance()->OnImGui();
