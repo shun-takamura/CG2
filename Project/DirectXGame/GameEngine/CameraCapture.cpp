@@ -413,7 +413,7 @@ void CameraCapture::CloseCamera()
 
 void CameraCapture::LogDevicesToImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     ImGui::Text("=== Camera Devices ===");
 

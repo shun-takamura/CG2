@@ -124,7 +124,7 @@ void Object3DInstance::SetTexture(const std::string& filePath)
 //==============================
 void Object3DInstance::OnImGuiInspector()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     // Transform
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {

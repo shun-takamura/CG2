@@ -120,7 +120,7 @@ void ImGuiManager::Unregister(IImGuiEditable* editable) {
 }
 
 void ImGuiManager::DrawMenuBar() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("ImGuiMenu")) {

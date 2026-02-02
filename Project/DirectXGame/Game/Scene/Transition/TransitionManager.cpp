@@ -84,6 +84,8 @@ void TransitionManager::RegisterTransition(TransitionType type, std::unique_ptr<
 void TransitionManager::StartTransition(TransitionType type, const std::string& fromScene,
 	const std::string& toScene, std::function<void()> onSceneChange) {
 
+#ifdef DEBUG
+
 	// デバッグ出力
 	OutputDebugStringA("=== StartTransition called ===\n");
 	if (type == TransitionType::Stripe) {
@@ -94,6 +96,7 @@ void TransitionManager::StartTransition(TransitionType type, const std::string& 
 		OutputDebugStringA("Type: Unknown\n");
 	}
 
+#endif // DEBUG
 	// 既にトランジション中なら無視
 	if (IsTransitioning()) {
 		OutputDebugStringA("Already transitioning, ignored\n");

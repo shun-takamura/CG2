@@ -24,7 +24,8 @@ public:
     /// 描画処理（共通）
     /// </summary>
     void Draw() {
-#ifdef DEBUG
+
+#ifdef _DEBUG
 
         if (!isOpen_) return;
 

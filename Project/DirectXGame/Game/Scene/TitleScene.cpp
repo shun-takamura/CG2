@@ -75,33 +75,21 @@ void TitleScene::Update() {
 		return;
 	}
 
-	// 1キー: ストライプトランジションでゲームシーンへ
-	if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Stripe);
-		return;
-	}
+	//// 1キー: ストライプトランジションでゲームシーンへ
+	//if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
+	//	SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Stripe);
+	//	return;
+	//}
 
-	// 2キー: フェードトランジションでゲームシーンへ
-	if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
-		return;
-	}
+	//// 2キー: フェードトランジションでゲームシーンへ
+	//if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
+	//	SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
+	//	return;
+	//}
 
 	// SPACE: フェードトランジションでゲームシーンへ
 	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
-		return;
-	}
-
-	// 3キー: ランダムトランジションでゲームシーンへ
-	if (input_->GetKeyboard()->TriggerKey(DIK_3)) {
-		SceneManager::GetInstance()->ChangeSceneRandom("GAMEPLAY");
-		return;
-	}
-
-	// 0キー: トランジションなしで即時切り替え
-	if (input_->GetKeyboard()->TriggerKey(DIK_0)) {
-		SceneManager::GetInstance()->ChangeSceneImmediate("GAMEPLAY");
+		SceneManager::GetInstance()->ChangeScene("CHARACTERSELECT", TransitionType::Fade);
 		return;
 	}
 

@@ -38,10 +38,13 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
-	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+	//SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 
-	// クリアカラーを赤に設定
-	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // 赤
+	SceneManager::GetInstance()->ChangeSceneImmediate("CLEAR");
+
+
+	// クリアカラーを設定
+	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	// RenderTexture初期化（画面サイズで作成）
 	renderTexture_ = std::make_unique<RenderTexture>();

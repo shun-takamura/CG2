@@ -11,7 +11,7 @@ public:
 
 protected:
     void OnDraw() override {
-#ifdef DEBUG
+#ifdef _DEBUG
 
         float fps = ImGui::GetIO().Framerate;
         ImGui::Text("FPS: %.1f", fps);

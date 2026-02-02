@@ -156,6 +156,9 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="DirectXGame\Game\Scene\ClearScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\CharacterSelect.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\CameraCapture.cpp" />
     <ClCompile Include="DirectXGame\Debug\Debug.cpp" />
     <ClCompile Include="DirectXGame\Debug\LogBuffer.cpp" />
@@ -235,8 +238,12 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="externals\quirc\quirc.c" />
     <ClCompile Include="externals\quirc\version_db.c" />
     <ClCompile Include="DirectXGame\GameEngine\QRCodeReader.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DirectXGame\Game\Scene\ClearScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\CharacterSelect.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
     <ClInclude Include="DirectXGame\GameEngine\CameraCapture.h" />
     <ClInclude Include="DirectXGame\Debug\Debug.h" />
     <ClInclude Include="DirectXGame\Debug\LogBuffer.h" />
@@ -315,6 +322,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="externals\quirc\quirc.h" />
     <ClInclude Include="externals\quirc\quirc_internal.h" />
     <ClInclude Include="DirectXGame\GameEngine\QRCodeReader.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl">

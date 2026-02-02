@@ -190,7 +190,7 @@ SpotLight* LightManager::GetSpotLight(uint32_t index) {
 }
 
 void LightManager::OnImGui() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     if (ImGui::Begin("Light Settings")) {
 

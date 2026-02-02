@@ -86,7 +86,7 @@ void QRCodeReader::Reset()
 
 void QRCodeReader::OnImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     ImGui::Text("=== QR Code Reader ===");
 

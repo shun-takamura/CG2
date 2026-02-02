@@ -456,7 +456,7 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* ren
 
 void PostEffect::ShowImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
 	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 

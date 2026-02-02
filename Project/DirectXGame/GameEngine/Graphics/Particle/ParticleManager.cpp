@@ -277,7 +277,7 @@ void ParticleManager::Draw()
 
 void ParticleManager::OnImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     if (ImGui::Begin("Particle Settings")) {
         // エミッター設定

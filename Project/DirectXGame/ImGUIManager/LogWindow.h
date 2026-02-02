@@ -11,7 +11,7 @@ public:
 
 protected:
     void OnDraw() override {
-#ifdef DEBUG
+#ifdef _DEBUG
 
         // クリアボタンとオートスクロール設定
         if (ImGui::Button("Clear")) {

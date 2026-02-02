@@ -2,7 +2,7 @@
 #include "ImGuiManager.h"
 
 void HierarchyWindow::OnDraw() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     const auto& editables = manager_->GetEditables();
     IImGuiEditable* selected = manager_->GetSelected();

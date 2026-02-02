@@ -2,7 +2,7 @@
 #include "ImGuiManager.h"
 
 void InspectorWindow::OnDraw() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     IImGuiEditable* selected = manager_->GetSelected();
 
