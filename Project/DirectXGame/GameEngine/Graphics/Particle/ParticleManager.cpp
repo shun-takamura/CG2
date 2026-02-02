@@ -125,7 +125,7 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
     // 拡散スケールを適用した速度範囲
     float velScale = emitterSettings_.velocityScale;
     std::uniform_real_distribution<float> distVel(-0.5f * velScale, 0.5f * velScale);
-    std::uniform_real_distribution<float> distVelY(0.0f, 0.5f * velScale);
+    std::uniform_real_distribution<float> distVelY(-0.5f * velScale, 0.5f * velScale);
     std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
 
     for (uint32_t i = 0; i < count; ++i) {

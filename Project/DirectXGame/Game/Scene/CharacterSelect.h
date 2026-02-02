@@ -46,6 +46,11 @@ public:
 
 private:
 
+	// シーン遷移の待機用
+	bool isTransitioning_ = false;
+	float transitionTimer_ = 0.0f;
+	static constexpr float kTransitionDelay = 1.5f; // パーティクル表示時間（秒）
+
 	// デバッグカメラ
 	std::unique_ptr<DebugCamera> debugCamera_;
 

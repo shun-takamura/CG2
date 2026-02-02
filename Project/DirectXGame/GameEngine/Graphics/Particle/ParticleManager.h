@@ -136,6 +136,9 @@ public:
     bool IsAccelerationFieldEnabled() const { return isAccelerationFieldEnabled_; }
     EmitterSettings& GetEmitterSettings() { return emitterSettings_; }
 
+    // セッター
+    void SetVelocityScale(float scale) { emitterSettings_.velocityScale = scale; }
+
 private:
     // シングルトン用
     ParticleManager() = default;

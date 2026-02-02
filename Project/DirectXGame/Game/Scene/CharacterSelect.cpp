@@ -63,9 +63,33 @@ void CharacterSelect::Initialize()
 			objectNames[i]
 		);
 		obj->SetTranslate({ -2.0f+(i*4.0f), 0.0f, 0.0f});
-		obj->SetRotate({ 0.0f,0.0f,0.0f });
+		obj->SetRotate({ 0.0f,3.14f,0.0f });
 		object3DInstances_.push_back(std::move(obj));
 	}
+
+	// スポットライトの設定（プレイヤーモデルを上から照らす）
+	auto* lightMgr = LightManager::GetInstance();
+	lightMgr->SetSpotLightCount(2);
+
+	// Player1用スポットライト（x = -2.0f の真上）
+	lightMgr->SetSpotLightPosition(0, { -2.0f, 10.0f, -4.0f });
+	lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
+	lightMgr->SetSpotLightColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
+	lightMgr->SetSpotLightIntensity(0, 1.0f);
+	lightMgr->SetSpotLightDistance(0, 15.0f);
+	lightMgr->SetSpotLightDecay(0, 2.0f);
+	lightMgr->SetSpotLightCosAngle(0, std::cos(std::numbers::pi_v<float> / 6.0f));       // 30°
+	lightMgr->SetSpotLightCosFalloffStart(0, std::cos(std::numbers::pi_v<float> / 8.0f)); // 22.5°
+
+	// Player2用スポットライト（x = 2.0f の真上）
+	lightMgr->SetSpotLightPosition(1, { 2.0f, 10.0f, -4.0f });
+	lightMgr->SetSpotLightDirection(1, Normalize({ 0.0f, -1.0f, 0.0f }));
+	lightMgr->SetSpotLightColor(1, { 1.0f, 1.0f, 1.0f, 1.0f });
+	lightMgr->SetSpotLightIntensity(1, 1.0f);
+	lightMgr->SetSpotLightDistance(1, 15.0f);
+	lightMgr->SetSpotLightDecay(1, 2.0f);
+	lightMgr->SetSpotLightCosAngle(1, std::cos(std::numbers::pi_v<float> / 6.0f));
+	lightMgr->SetSpotLightCosFalloffStart(1, std::cos(std::numbers::pi_v<float> / 8.0f));
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
@@ -133,24 +157,38 @@ void CharacterSelect::Update()
 		}
 	}
 
-	// QRコードでプレイヤー選択がされたら選択されたプレイヤーを保存してシーンを切り替える
-	if (QRCodeReader::GetInstance()->HasDetected()) {
+	// 遷移待機中の処理
+	if (isTransitioning_) {
+		transitionTimer_ += 1.0f / 60.0f;
+		if (transitionTimer_ >= kTransitionDelay) {
+			SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
+			return;
+		}
+	}
+
+	// QRコードでプレイヤー選択がされたら選択されたプレイヤーを保存
+	if (!isTransitioning_ && QRCodeReader::GetInstance()->HasDetected()) {
 
 		std::string modelName = QRCodeReader::GetInstance()->GetData();
 
-		// モデルファイル名として有効かチェック
 		if (modelName.find(".obj") != std::string::npos ||
 			modelName.find(".gltf") != std::string::npos) {
 
-			// 選択されたプレイヤーのモデルを保存
 			GameData::GetInstance()->SetSelectedModel(modelName);
 
-			// プレイヤーからパーティクルを発生させる
-			ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 10);
+			// 該当モデルの位置からパーティクルを発生
+			for (const auto& obj : object3DInstances_) {
+				if (obj->GetModelFileName() == modelName) {
+					Vector3 pos = obj->GetTranslate();
+					ParticleManager::GetInstance()->SetVelocityScale(5.0f);
+					ParticleManager::GetInstance()->Emit("circle", pos, 10);
+					break;
+				}
+			}
 
-			// シーンを切り替える
-			SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
-			return;
+			// 遷移待機開始
+			isTransitioning_ = true;
+			transitionTimer_ = 0.0f;
 		}
 	}
 
@@ -163,11 +201,6 @@ void CharacterSelect::Update()
 
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update();
-
-	// キー入力でパーティクル発生
-	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
-		ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 10);
-	}
 
 	sprite_->Update();
 
