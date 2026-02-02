@@ -40,8 +40,8 @@ void DemoScene::Initialize() {
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
+	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
 	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
-	camera_->SetTranslate({ 0.0f, 2.0f, -30.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
 
 	// パーティクルの設定

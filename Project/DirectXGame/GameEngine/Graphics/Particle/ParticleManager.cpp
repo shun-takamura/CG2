@@ -99,6 +99,22 @@ void ParticleManager::CreateParticleGroup(const std::string& name, const std::st
     particleGroups_[name] = std::move(group);
 }
 
+void ParticleManager::RemoveParticleGroup(const std::string& name)
+{
+    auto it = particleGroups_.find(name);
+    if (it == particleGroups_.end()) {
+        return;
+    }
+
+    // リソースを解放
+    if (it->second.instancingResource) {
+        it->second.instancingResource->Unmap(0, nullptr);
+        it->second.instancingResource.Reset();
+    }
+
+    particleGroups_.erase(it);
+}
+
 void ParticleManager::Emit(const std::string& name, const Vector3& position, uint32_t count)
 {
     // 登録済みのパーティクルグループ名かチェック

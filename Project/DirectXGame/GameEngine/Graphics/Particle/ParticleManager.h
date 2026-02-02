@@ -95,6 +95,11 @@ public:
     // パーティクルグループの生成
     void CreateParticleGroup(const std::string& name, const std::string& textureFilePath);
 
+    /// <summary>
+    /// 指定した名前のパーティクルグループを削除する
+    /// </summary>
+    void RemoveParticleGroup(const std::string& name);
+
     // パーティクル発生
     void Emit(const std::string& name, const Vector3& position, uint32_t count);
 

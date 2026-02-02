@@ -23,6 +23,7 @@
 #include "KeyboardInput.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include "GameData.h"
 
 CharacterSelect::CharacterSelect()
 {
@@ -40,8 +41,8 @@ void CharacterSelect::Initialize()
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
+	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
 	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
-	camera_->SetTranslate({ 0.0f, 2.0f, -30.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
 
 	// パーティクルの設定
@@ -49,10 +50,10 @@ void CharacterSelect::Initialize()
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
 
 	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj", "plane.gltf" };
-	const std::string objectNames[] = { "MonsterBall", "terrain", "plane" };
+	const std::string modelFiles[] = { "player1.obj", "player2.obj"};
+	const std::string objectNames[] = { "Player1", "Player2"};
 
-	for (int i = 0; i < 3; ++i) {
+	for (int i = 0;  i < std::size(modelFiles); ++i) {
 		auto obj = std::make_unique<Object3DInstance>();
 		obj->Initialize(
 			object3DManager_,
@@ -61,17 +62,32 @@ void CharacterSelect::Initialize()
 			modelFiles[i],
 			objectNames[i]
 		);
-		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
+		obj->SetTranslate({ -2.0f+(i*4.0f), 0.0f, 0.0f});
+		obj->SetRotate({ 0.0f,0.0f,0.0f });
 		object3DInstances_.push_back(std::move(obj));
 	}
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
 
+	// デバイスカメラをオープン
+	CameraCapture::GetInstance()->EnumerateDevices();
+	const auto& devices = CameraCapture::GetInstance()->GetDevices();
+	if (!devices.empty()) {
+		CameraCapture::GetInstance()->OpenCamera(0); // 最初のカメラを使用
+	}
+
 }
 
 void CharacterSelect::Finalize()
 {
+	// カメラを閉じる
+	if (CameraCapture::GetInstance()->IsOpened()) {
+		CameraCapture::GetInstance()->CloseCamera();
+	}
+
+	// このシーンで作ったパーティクルグループを削除
+	ParticleManager::GetInstance()->RemoveParticleGroup("circle");
 
 	sprites_.clear();
 	object3DInstances_.clear();
@@ -118,16 +134,24 @@ void CharacterSelect::Update()
 	}
 
 	// QRコードでプレイヤー選択がされたら選択されたプレイヤーを保存してシーンを切り替える
-	if (cameraSprite_) {
+	if (QRCodeReader::GetInstance()->HasDetected()) {
 
-		// 選択がされたプレイヤーのモデルを保存
+		std::string modelName = QRCodeReader::GetInstance()->GetData();
 
-		// 選択がされたプレイヤーからパーティクルを発生させる
-		ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 10);
+		// モデルファイル名として有効かチェック
+		if (modelName.find(".obj") != std::string::npos ||
+			modelName.find(".gltf") != std::string::npos) {
 
-		// シーンを切り替える
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
-		return;
+			// 選択されたプレイヤーのモデルを保存
+			GameData::GetInstance()->SetSelectedModel(modelName);
+
+			// プレイヤーからパーティクルを発生させる
+			ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 10);
+
+			// シーンを切り替える
+			SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
+			return;
+		}
 	}
 
 	// カメラの更新は必ずオブジェクトの更新前にやる
@@ -193,4 +217,7 @@ void CharacterSelect::Draw()
 
 	// パーティクルのImGui表示
 	ParticleManager::GetInstance()->OnImGui();
+
+	// カメラのImGui
+	camera_->OnImGui();
 }
