@@ -138,6 +138,12 @@ public:
 
     // セッター
     void SetVelocityScale(float scale) { emitterSettings_.velocityScale = scale; }
+    void SetParticleScale(float scale) { particleScale_ = scale; }
+    void SetVelocityDirection(const Vector3& dir) {
+        customDirection_ = dir;
+        useCustomDirection_ = true;
+    }
+    void ResetVelocityDirection() { useCustomDirection_ = false; }
 
 private:
     // シングルトン用
@@ -145,6 +151,10 @@ private:
     ~ParticleManager() = default;
     ParticleManager(const ParticleManager&) = delete;
     ParticleManager& operator=(const ParticleManager&) = delete;
+
+    float particleScale_ = 1.0f;
+    bool useCustomDirection_ = false;
+    Vector3 customDirection_{ 0.0f, 0.0f, 0.0f };
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;

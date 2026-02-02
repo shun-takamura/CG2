@@ -20,45 +20,36 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
-	/// <param name="object3DManager">3Dオブジェクトマネージャ</param>
-	/// <param name="dxCore">DirectXコア</param>
-	/// <param name="bulletModelName">弾のモデルファイル名（QRで変更可能）</param>
-	/// <param name="startPos">発射位置</param>
-	/// <param name="direction">発射方向（正規化済み）</param>
 	void Initialize(
 		Object3DManager* object3DManager,
 		DirectXCore* dxCore,
 		const std::string& bulletModelName,
-		const struct Vector3& startPos,
+		const Vector3& startPos,
 		const Vector3& direction
 	);
 
-	/// <summary>
-	/// 更新
-	/// </summary>
-	/// <param name="deltaTime">フレーム間秒数</param>
 	void Update(float deltaTime);
-
-	/// <summary>
-	/// 描画
-	/// </summary>
-	/// <param name="dxCore">DirectXコア</param>
 	void Draw(DirectXCore* dxCore);
 
 	// ===== ゲッター =====
-
 	const Vector3& GetPosition() const { return position_; }
 	bool IsActive() const { return isActive_; }
-
-	/// <summary>
-	/// 当たり判定用の半径
-	/// </summary>
 	float GetRadius() const { return radius_; }
+	int GetDamage() const { return damage_; }
+
+	void OnHit();
+
+	// ===== セッター（Initialize後、発射前に呼ぶ） =====
 
 	/// <summary>
-	/// 命中時に呼ぶ（弾を非アクティブにする）
+	/// チャージショット用パラメータ一括設定
 	/// </summary>
-	void OnHit();
+	void SetChargeParams(float scale, float radius, int damage);
+
+	/// <summary>
+	/// 弾速を設定
+	/// </summary>
+	void SetSpeed(float speed);
 
 private:
 	std::unique_ptr<Object3DInstance> model_;
@@ -66,13 +57,14 @@ private:
 	Vector3 position_{ 0.0f, 0.0f, 0.0f };
 	Vector3 velocity_{ 0.0f, 0.0f, 0.0f };
 
-	float speed_ = 15.0f;
-	float radius_ = 0.25f;     // 当たり判定の半径
-	float lifeTime_ = 3.0f;   // 生存時間（秒）
-	float lifeTimer_ = 0.0f;  // 経過時間
+	float speed_ = 30.0f;
+	float scale_ = 1.0f;
+	float radius_ = 0.3f;
+	int damage_ = 10;
+	float lifeTime_ = 3.0f;
+	float lifeTimer_ = 0.0f;
 	bool isActive_ = true;
 
-	// 画面外判定の閾値（ゲーム範囲に合わせて調整）
 	float outOfBoundsX_ = 50.0f;
 	float outOfBoundsY_ = 30.0f;
 };

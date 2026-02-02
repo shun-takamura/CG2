@@ -173,6 +173,35 @@ void CharacterSelect::Update()
 	// QRコードでプレイヤー選択がされたら選択されたプレイヤーを保存
 	if (!isTransitioning_ && QRCodeReader::GetInstance()->HasDetected()) {
 
+		std::string qrData = QRCodeReader::GetInstance()->GetData();
+
+		size_t firstComma = qrData.find(',');
+		size_t secondComma = qrData.find(',', firstComma + 1);
+
+		if (firstComma != std::string::npos && secondComma != std::string::npos) {
+			// 3項目すべてあり
+			std::string modelName = qrData.substr(0, firstComma);
+			std::string bulletMode = qrData.substr(firstComma + 1, secondComma - firstComma - 1);
+			std::string bulletModel = qrData.substr(secondComma + 1);
+
+			GameData::GetInstance()->SetSelectedModel(modelName);
+			GameData::GetInstance()->SetBulletMode(bulletMode);
+			GameData::GetInstance()->SetBulletModel(bulletModel);
+		} else if (firstComma != std::string::npos) {
+			// 2項目（従来の互換）
+			std::string modelName = qrData.substr(0, firstComma);
+			std::string bulletMode = qrData.substr(firstComma + 1);
+
+			GameData::GetInstance()->SetSelectedModel(modelName);
+			GameData::GetInstance()->SetBulletMode(bulletMode);
+			GameData::GetInstance()->SetBulletModel("playerBullet.obj");
+		} else {
+			// モデル名のみ（最低限の互換）
+			GameData::GetInstance()->SetSelectedModel(qrData);
+			GameData::GetInstance()->SetBulletMode("normal");
+			GameData::GetInstance()->SetBulletModel("playerBullet.obj");
+		}
+
 		std::string modelName = QRCodeReader::GetInstance()->GetData();
 
 		if (modelName.find(".obj") != std::string::npos ||

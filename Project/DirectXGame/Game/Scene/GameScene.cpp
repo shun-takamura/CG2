@@ -73,11 +73,12 @@ void GameScene::Initialize() {
 
 	// QRから取得したデータ
 	std::string modelName = GameData::GetInstance()->GetSelectedModel();
-	std::string bulletType = "playerBullet.obj";
+	std::string bulletType = GameData::GetInstance()->GetBulletModel();
+	std::string bulletMode = GameData::GetInstance()->GetBulletMode();
 
 	// プレイヤー生成
 	player_ = std::make_unique<Player>();
-	player_->Initialize(object3DManager_, dxCore_, modelName, bulletType);
+	player_->Initialize(object3DManager_, dxCore_, modelName, bulletType, bulletMode);
 
 	enemy_ = std::make_unique<Enemy>();
 	enemy_->Initialize(
@@ -199,6 +200,25 @@ void GameScene::Update() {
 	lm->SetSpotLightPosition(0, { player_->GetPosition().x, 15.0f, -2.0f });
 	lm->SetSpotLightPosition(1, { enemy_->GetPosition().x, 15.0f, -2.0f });
 
+	// チャージ中はプレイヤーのライトを強くする
+	if (player_->IsCharging()) {
+		float chargeT = player_->GetChargeRatio();
+		// 通常10 → 最大チャージで25
+		float intensity = 10.0f + chargeT * 15.0f;
+		lm->SetSpotLightIntensity(0, intensity);
+		// 色も白っぽくする
+		lm->SetSpotLightColor(0, {
+			0.3f + chargeT * 0.7f,
+			0.3f + chargeT * 0.7f,
+			1.0f,
+			1.0f
+			});
+	} else {
+		// 通常状態に戻す
+		lm->SetSpotLightIntensity(0, 10.0f);
+		lm->SetSpotLightColor(0, { 0.3f, 0.3f, 1.0f, 1.0f });
+	}
+
 	// 当たり判定
 	CheckCollisions();
 
@@ -264,7 +284,7 @@ void GameScene::CheckCollisions()
 			// 弾を消す
 			bullet->OnHit();
 			// 敵にダメージ
-			enemy_->TakeDamage(10);
+			enemy_->TakeDamage(bullet->GetDamage());
 
 			// TODO: ヒットエフェクト（パーティクル等）
 			// ParticleManager::GetInstance()->Emit("circle", bullet->GetPosition(), 5);
@@ -283,7 +303,7 @@ void GameScene::CheckCollisions()
 			// 弾を消す
 			bullet->OnHit();
 			// プレイヤーにダメージ
-			player_->TakeDamage(10);
+			player_->TakeDamage(bullet->GetDamage());
 
 			// TODO: ヒットエフェクト
 		}

@@ -117,35 +117,50 @@ void ParticleManager::RemoveParticleGroup(const std::string& name)
 
 void ParticleManager::Emit(const std::string& name, const Vector3& position, uint32_t count)
 {
-    // 登録済みのパーティクルグループ名かチェック
     assert(particleGroups_.find(name) != particleGroups_.end());
-
     ParticleGroup& group = particleGroups_[name];
 
-    // 拡散スケールを適用した速度範囲
     float velScale = emitterSettings_.velocityScale;
     std::uniform_real_distribution<float> distVel(-0.5f * velScale, 0.5f * velScale);
     std::uniform_real_distribution<float> distVelY(-0.5f * velScale, 0.5f * velScale);
     std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
 
     for (uint32_t i = 0; i < count; ++i) {
-        // 最大数チェック
         if (group.particles.size() >= kMaxInstanceCount) {
             break;
         }
 
-        // 新たなパーティクルを作成
         Particle particle;
-        particle.transform.scale = { 1.0f, 1.0f, 1.0f };
+
+        // スケール適用
+        particle.transform.scale = { particleScale_, particleScale_, particleScale_ };
         particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
         particle.transform.translate = position;
 
-        // ランダムな速度
-        particle.velocity = {
-            distVel(randomEngine_),
-            distVelY(randomEngine_),
-            distVel(randomEngine_)
-        };
+        // 速度の設定
+        if (useCustomDirection_) {
+            // カスタム方向が指定されている場合、その方向に飛ばす
+            float len = std::sqrt(
+                customDirection_.x * customDirection_.x +
+                customDirection_.y * customDirection_.y +
+                customDirection_.z * customDirection_.z
+            );
+            if (len > 0.0f) {
+                // 正規化してスケール適用
+                particle.velocity.x = (customDirection_.x / len) * velScale;
+                particle.velocity.y = (customDirection_.y / len) * velScale;
+                particle.velocity.z = (customDirection_.z / len) * velScale;
+            } else {
+                particle.velocity = { 0.0f, 0.0f, 0.0f };
+            }
+        } else {
+            // 従来どおりランダム
+            particle.velocity = {
+                distVel(randomEngine_),
+                distVelY(randomEngine_),
+                distVel(randomEngine_)
+            };
+        }
 
         // 色の設定
         if (emitterSettings_.useRandomColor) {
@@ -162,7 +177,6 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
         particle.lifeTime = 2.0f;
         particle.currentTime = 0.0f;
 
-        // パーティクルグループに登録
         group.particles.push_back(particle);
     }
 }
