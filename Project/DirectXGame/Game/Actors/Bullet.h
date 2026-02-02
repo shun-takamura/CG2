@@ -67,7 +67,7 @@ private:
 	Vector3 velocity_{ 0.0f, 0.0f, 0.0f };
 
 	float speed_ = 15.0f;
-	float radius_ = 0.3f;     // 当たり判定の半径
+	float radius_ = 0.25f;     // 当たり判定の半径
 	float lifeTime_ = 3.0f;   // 生存時間（秒）
 	float lifeTimer_ = 0.0f;  // 経過時間
 	bool isActive_ = true;

@@ -89,10 +89,10 @@ void GameScene::Initialize() {
 	);
 
 	// プレイヤーのAABBサイズ設定（モデルの大きさに合わせて調整）
-	playerCollider_.halfSize = { 1.0f, 1.0f, 1.0f };
+	playerCollider_.halfSize = { 0.5f, 0.5f, 0.5f };
 
 	// エネミーのAABBサイズ設定
-	enemyCollider_.halfSize = { 1.0f, 1.0f, 1.0f };
+	enemyCollider_.halfSize = { 0.5f, 0.5f, 0.5f };
 
 	// ステージ生成
 	stage_ = std::make_unique<Object3DInstance>();
