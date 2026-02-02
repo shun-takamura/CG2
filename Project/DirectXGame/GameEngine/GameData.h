@@ -20,5 +20,5 @@ private:
     GameData() = default;
     std::string selectedModel_ = "player1.obj";
     std::string bulletModel_ = "playerBullet.obj";
-    std::string bulletMode_ = "charge";
+    std::string bulletMode_ = "normal";
 };

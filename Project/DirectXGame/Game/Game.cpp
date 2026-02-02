@@ -40,7 +40,7 @@ void Game::Initialize() {
 	// シーンマネージャに最初のシーンをセット
 	//SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 
-	SceneManager::GetInstance()->ChangeSceneImmediate("GAMEPLAY");
+	SceneManager::GetInstance()->ChangeSceneImmediate("CHARACTERSELECT");
 
 	// クリアカラーを設定
 	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
