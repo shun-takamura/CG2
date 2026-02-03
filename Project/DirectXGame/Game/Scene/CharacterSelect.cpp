@@ -44,6 +44,18 @@ void CharacterSelect::Initialize()
 	sprite_->SetPosition({ 640.0f, 64.0f });
 	sprite_->SetSize({ 640.0f, 360.0f });
 
+	playerQRNormal_ = std::make_unique<SpriteInstance>();
+	playerQRNormal_->Initialize(spriteManager_, "Resources/QR_player1.png");
+	playerQRNormal_->SetAnchorPoint({ 0.0f,1.0f });
+	playerQRNormal_->SetPosition({ 0.0f, 720.0f });
+	playerQRNormal_->SetSize({ 200.0f, 200.0f });
+
+	playerQRCharge_ = std::make_unique<SpriteInstance>();
+	playerQRCharge_->Initialize(spriteManager_, "Resources/QR_player2.png");
+	playerQRCharge_->SetAnchorPoint({ 1.0f,1.0f });
+	playerQRCharge_->SetPosition({ 1280.0f, 720.0f });
+	playerQRCharge_->SetSize({ 200.0f, 200.0f });
+
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
 	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
@@ -118,7 +130,6 @@ void CharacterSelect::Finalize()
 	// このシーンで作ったパーティクルグループを削除
 	ParticleManager::GetInstance()->RemoveParticleGroup("circle");
 
-	sprites_.clear();
 	object3DInstances_.clear();
 
 }
@@ -238,15 +249,14 @@ void CharacterSelect::Update()
 	ParticleManager::GetInstance()->Update();
 
 	sprite_->Update();
+	playerQRNormal_->Update();
+	playerQRCharge_->Update();
 
 	// カメラスプライトが存在する場合のみ更新
 	if (cameraSprite_) {
 		cameraSprite_->Update();
 	}
 
-	for (const auto& s : sprites_) {
-		s->Update();
-	}
 }
 
 void CharacterSelect::Draw()
@@ -276,9 +286,6 @@ void CharacterSelect::Draw()
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
-	for (const auto& s : sprites_) {
-		s->Draw();
-	}
 
 	// カメラスプライトが存在する場合のみ描画
 	if (cameraSprite_) {
@@ -287,6 +294,8 @@ void CharacterSelect::Draw()
 
 	// QRコードのUIを前面に描画
 	sprite_->Draw();
+	playerQRNormal_->Draw();
+	playerQRCharge_->Draw();
 #ifdef _DEBUG
 
 	// パーティクルのImGui表示

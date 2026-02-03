@@ -57,7 +57,8 @@ private:
 	// スプライト関連
 	std::unique_ptr<SpriteInstance> cameraSprite_;
 	std::unique_ptr<SpriteInstance> sprite_;
-	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
+	std::unique_ptr<SpriteInstance> playerQRNormal_;
+	std::unique_ptr<SpriteInstance> playerQRCharge_;
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
