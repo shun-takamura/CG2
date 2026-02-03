@@ -23,6 +23,7 @@
 #include "KeyboardInput.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include"Game.h"
 
 DemoScene::DemoScene() {
 }
@@ -31,6 +32,8 @@ DemoScene::~DemoScene() {
 }
 
 void DemoScene::Initialize() {
+	Game::GetPostEffect()->ResetEffects();
+
 	// デバッグカメラの生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 

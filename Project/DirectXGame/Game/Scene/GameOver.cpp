@@ -4,11 +4,13 @@
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
+#include"Game.h"
 
 GameOver::~GameOver() = default;
 
 void GameOver::Initialize()
 {
+	Game::GetPostEffect()->ResetEffects();
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
 	sprite_->Initialize(spriteManager_, "Resources/GAMEOVER.png");

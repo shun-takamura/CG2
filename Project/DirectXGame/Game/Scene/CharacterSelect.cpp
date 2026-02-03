@@ -24,6 +24,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "GameData.h"
+#include"Game.h"
 
 CharacterSelect::CharacterSelect()
 {
@@ -35,6 +36,7 @@ CharacterSelect::~CharacterSelect()
 
 void CharacterSelect::Initialize()
 {
+	Game::GetPostEffect()->ResetEffects();
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
 	sprite_->Initialize(spriteManager_, "Resources/CharacterSelect_UI_QR.png");

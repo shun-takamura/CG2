@@ -2,6 +2,7 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <cstdint>
+#include<algorithm>
 
 // 前方宣言
 class DirectXCore;
@@ -19,7 +20,7 @@ struct PostProcessParams
 	float sepiaIntensity = 0.0f;      // offset: 4
 	float sepiaColor[3] = { 1.0f, 0.691f, 0.402f };  // offset: 8, 12, 16
 	float _padding1 = 0.0f;           // offset: 20 (float3の後のパディング)
-	float vignetteIntensity = 1.0f;  // offset: 24 ← デフォルトを0.5に
+	float vignetteIntensity = 0.0f;  // offset: 24 ← デフォルトを0.5に
 	float vignettePower = 0.8f;      // offset: 28
 	float vignetteScale = 16.0f;      // offset: 32
 	float _padding2 = 0.0f;           // offset: 36 (アライメント用)
@@ -53,9 +54,40 @@ public:
 	void ShowImGui();
 
 	/// <summary>
+    /// 全エフェクトをリセット（シーン開始時に呼ぶ）
+    /// </summary>
+	void ResetEffects();
+
+	/// <summary>
+	/// ダメージ演出を適用（HP割合に応じて自動計算）
+	/// </summary>
+	/// <param name="damageRatio">0.0 = 満タン, 1.0 = 瀕死</param>
+	void ApplyDamageEffect(float damageRatio);
+
+	/// <summary>
+	/// ヴィネットを設定
+	/// </summary>
+	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
+	void SetVignette(float intensity);
+
+	/// <summary>
+	/// グレースケールを設定
+	/// </summary>
+	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
+	void SetGrayscale(float intensity);
+
+	/// <summary>
+	/// セピアを設定
+	/// </summary>
+	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
+	void SetSepia(float intensity);
+
+	/// <summary>
 	/// パラメータを取得
 	/// </summary>
 	PostProcessParams& GetParams() { return params_; }
+
+	int GetCurrentEffectType() const { return currentEffectType_; }
 
 private:
 	void CreateCopyRootSignature();

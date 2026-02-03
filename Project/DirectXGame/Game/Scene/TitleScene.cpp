@@ -7,6 +7,7 @@
 #include "KeyboardInput.h"
 #include "Debug.h"
 #include"StripeTransition.h"
+#include"Game.h"
 
 TitleScene::TitleScene() {
 }
@@ -15,6 +16,8 @@ TitleScene::~TitleScene() {
 }
 
 void TitleScene::Initialize() {
+	Game::GetPostEffect()->ResetEffects();
+
 	// 前のシーンからどのトランジションで来たか確認
 	TransitionType lastType = SceneManager::GetInstance()->GetLastUsedTransitionType();
 	std::string lastName = SceneManager::GetInstance()->GetLastUsedTransitionName();

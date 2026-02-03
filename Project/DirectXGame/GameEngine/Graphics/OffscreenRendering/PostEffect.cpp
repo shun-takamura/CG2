@@ -14,6 +14,8 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 	CreateEffectRootSignature();
 	CreatePipelineStates();
 	CreateConstantBuffer();
+
+	UpdateConstantBuffer();
 }
 
 void PostEffect::CreateCopyRootSignature()
@@ -397,6 +399,11 @@ void PostEffect::UpdateConstantBuffer()
 
 void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* renderTexture)
 {
+	// デバッグ出力
+	char debugMsg[128];
+	sprintf_s(debugMsg, "PostEffect::Draw - currentEffectType_: %d\n", currentEffectType_);
+	OutputDebugStringA(debugMsg);
+
 	ID3D12RootSignature* rootSignature = nullptr;
 	ID3D12PipelineState* pipelineState = nullptr;
 	bool needsConstantBuffer = false;
@@ -492,6 +499,63 @@ void PostEffect::ShowImGui()
 	ImGui::End();
 
 #endif // DEBUG
+}
+
+void PostEffect::ResetEffects()
+{
+	params_.grayscaleIntensity = 0.0f;
+	params_.sepiaIntensity = 0.0f;
+	params_.vignetteIntensity = 0.0f;
+	params_.vignettePower = 0.8f;
+	params_.vignetteScale = 16.0f;
+
+	// Combinedモードにしておく(複数エフェクト同時使用)
+	currentEffectType_ = 1;
+
+	UpdateConstantBuffer();
+}
+
+void PostEffect::ApplyDamageEffect(float damageRatio)
+{
+	damageRatio = std::clamp(damageRatio, 0.0f, 1.0f);
+
+	// ヴィネット: HPが減るほど視野が狭くなる
+	params_.vignetteIntensity = damageRatio * 1.2f;
+	params_.vignetteScale = 16.0f - damageRatio * 10.0f;
+
+	// セピア / グレースケール
+	if (damageRatio >= 0.9f) {
+		// HP 10% 以下 → グレースケール
+		params_.grayscaleIntensity = 1.0f;
+		params_.sepiaIntensity = 0.0f;
+	} else {
+		params_.grayscaleIntensity = 0.0f;
+		params_.sepiaIntensity = (damageRatio / 0.9f) * 0.8f;
+	}
+
+	currentEffectType_ = 1;
+	UpdateConstantBuffer();
+}
+
+void PostEffect::SetVignette(float intensity)
+{
+	params_.vignetteIntensity = std::clamp(intensity, 0.0f, 2.0f);
+	currentEffectType_ = 1;
+	UpdateConstantBuffer();
+}
+
+void PostEffect::SetGrayscale(float intensity)
+{
+	params_.grayscaleIntensity = std::clamp(intensity, 0.0f, 1.0f);
+	currentEffectType_ = 1;
+	UpdateConstantBuffer();
+}
+
+void PostEffect::SetSepia(float intensity)
+{
+	params_.sepiaIntensity = std::clamp(intensity, 0.0f, 1.0f);
+	currentEffectType_ = 1;
+	UpdateConstantBuffer();
 }
 
 void PostEffect::Finalize()

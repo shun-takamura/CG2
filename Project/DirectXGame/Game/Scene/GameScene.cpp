@@ -27,6 +27,7 @@
 #include "QRCodeReader.h"
 #include "GameData.h"
 #include "Bullet.h"
+#include "Game.h"
 
 GameScene::GameScene() {
 }
@@ -35,6 +36,7 @@ GameScene::~GameScene() {
 }
 
 void GameScene::Initialize() {
+
 	// デバッグカメラの生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 
@@ -140,6 +142,9 @@ void GameScene::Initialize() {
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
+
+	// ポストエフェクトをリセット
+	Game::GetInstance()->GetPostEffect()->ResetEffects();
 }
 
 void GameScene::Finalize() {
@@ -187,6 +192,9 @@ void GameScene::Update() {
 
 	// プレイヤー更新
 	player_->Update(input_, deltaTime);
+
+	// ダメージ演出をHPに応じて適用
+	Game::GetInstance()->GetPostEffect()->ApplyDamageEffect(player_->GetDamageRatio());
 
 	// 敵更新
 	enemy_->Update(player_->GetPosition(), deltaTime);

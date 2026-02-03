@@ -21,10 +21,15 @@
 #include"TransitionManager.h"
 #include <memory>
 
+std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
+Game* Game::instance_ = nullptr;
+
 Game::Game() {
+	instance_ = this;
 }
 
 Game::~Game() {
+	instance_ = nullptr;
 }
 
 void Game::Initialize() {
@@ -40,7 +45,7 @@ void Game::Initialize() {
 	// シーンマネージャに最初のシーンをセット
 	//SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 
-	SceneManager::GetInstance()->ChangeSceneImmediate("CHARACTERSELECT");
+	SceneManager::GetInstance()->ChangeSceneImmediate("GAMEPLAY");
 
 	// クリアカラーを設定
 	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -74,6 +79,8 @@ void Game::Update() {
 		endRequest_ = true;
 		return;
 	}
+
+	OutputDebugStringA(("currentEffectType_: " + std::to_string(postEffect_->GetCurrentEffectType()) + "\n").c_str());
 
 	//===================================
 	// ポストエフェクトのImGui表示
