@@ -1,17 +1,22 @@
 #pragma once
+#include "BaseScene.h"
 #include <memory>
 #include <vector>
-#include "BaseScene.h"
+#include <string>
+#include <random>
+#include "Camera.h" 
+#include "Object3DInstance.h"
 
 // 前方宣言
 class SpriteInstance;
+//class Object3DInstance;
+//class Camera;
 
 /// <summary>
 /// タイトルシーン
 /// </summary>
 class TitleScene : public BaseScene {
 public:
-	TitleScene();
 	~TitleScene() override;
 
 	void Initialize() override;
@@ -20,6 +25,14 @@ public:
 	void Draw() override;
 
 private:
-	// スプライトをvectorで管理
-	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
+
+	// パーティクル用乱数
+	std::mt19937 randomEngine_;
+	int particleTimer_ = 0;
+
+	std::unique_ptr<Object3DInstance> title_;
+	std::unique_ptr<Object3DInstance> space_;
+
+	// カメラ
+	std::unique_ptr<Camera> camera_;
 };
