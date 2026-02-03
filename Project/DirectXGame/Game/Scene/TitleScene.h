@@ -9,8 +9,6 @@
 
 // 前方宣言
 class SpriteInstance;
-//class Object3DInstance;
-//class Camera;
 
 /// <summary>
 /// タイトルシーン
