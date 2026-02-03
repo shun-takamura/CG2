@@ -43,7 +43,7 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
-	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+	SceneManager::GetInstance()->ChangeSceneImmediate("GAMEPLAY");
 
 	// クリアカラーを設定
 	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -83,7 +83,11 @@ void Game::Update() {
 	//===================================
 	// ポストエフェクトのImGui表示
 	//===================================
+#ifdef _DEBUG
+
 	postEffect_->ShowImGui();
+#endif // _DEBUG
+
 }
 
 void Game::Draw() {
@@ -113,10 +117,13 @@ void Game::Draw() {
 	postEffect_->Draw(dxCore_->GetCommandList(), renderTexture_.get());
 
 	// 4. ImGui描画（Swapchainに直接）
+#ifdef _DEBUG
+
 	CameraCapture::GetInstance()->LogDevicesToImGui();
 	QRCodeReader::GetInstance()->OnImGui();
 	TransitionManager::GetInstance()->OnImGui();
 	ImGuiManager::Instance().EndFrame();
+#endif // _DEBUG
 
 	// 5. 終了
 	dxCore_->EndDraw();

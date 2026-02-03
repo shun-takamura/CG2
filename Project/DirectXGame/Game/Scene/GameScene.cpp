@@ -2,6 +2,7 @@
 #include "SceneManager.h"
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 
 //============================
 // 自作ヘッダーのインクルード
@@ -41,8 +42,11 @@ void GameScene::Initialize() {
 	debugCamera_ = std::make_unique<DebugCamera>();
 
 	// スプライトの初期化
-	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
+	operation_ = std::make_unique<SpriteInstance>();
+	operation_->Initialize(spriteManager_, "Resources/operation.png");
+	operation_->SetAnchorPoint({ 0.0f,0.0f });
+	operation_->SetSize({ 1280.0f,720.0f });
+	operation_->SetPosition({ 0.0f,0.0f });
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
@@ -54,24 +58,32 @@ void GameScene::Initialize() {
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
 
-	// 交互に使うスプライト
-	const std::string textures[2] = {
-		"Resources/uvChecker.png",
-		"Resources/monsterBall.png"
-	};
+	// ===== UI用スプライト初期化 =====
 
-	// 5枚生成
-	for (uint32_t i = 0; i < 5; ++i) {
-		auto newSprite = std::make_unique<SpriteInstance>();
-		const std::string& texturePath = textures[i % 2];
+    // プレイヤーHP用
+	hpGaugeBack_ = std::make_unique<SpriteInstance>();
+	hpGaugeBack_->Initialize(spriteManager_, "Resources/hp_gauge_back.png", "HPGaugeBack");
 
-		std::string spriteName = "Sprite_" + std::to_string(i);
-		newSprite->Initialize(spriteManager_, texturePath, spriteName);
+	hpGaugeFill_ = std::make_unique<SpriteInstance>();
+	hpGaugeFill_->Initialize(spriteManager_, "Resources/hp_gauge_fill.png", "HPGaugeFill");
 
-		newSprite->SetSize({ 100.0f, 100.0f });
-		newSprite->SetPosition({ i * 2.0f, 0.0f });
-		sprites_.push_back(std::move(newSprite));
-	}
+	// エネミーHP用
+	hpGaugeBackEnemy_ = std::make_unique<SpriteInstance>();
+	hpGaugeBackEnemy_->Initialize(spriteManager_, "Resources/hp_gauge_back.png", "HPGaugeBackEnemy");
+
+	hpGaugeFillEnemy_ = std::make_unique<SpriteInstance>();
+	hpGaugeFillEnemy_->Initialize(spriteManager_, "Resources/hp_gauge_fill.png", "HPGaugeFillEnemy");
+
+	// 弾数ゲージ用
+	ammoGaugeBack_ = std::make_unique<SpriteInstance>();
+	ammoGaugeBack_->Initialize(spriteManager_, "Resources/hp_gauge_back.png", "AmmoGaugeBack");
+
+	ammoGaugeFill_ = std::make_unique<SpriteInstance>();
+	ammoGaugeFill_->Initialize(spriteManager_, "Resources/hp_gauge_fill.png", "AmmoGaugeFill");
+
+	// リロードゲージ
+	reloadGauge_ = std::make_unique<SpriteInstance>();
+	reloadGauge_->Initialize(spriteManager_, "Resources/white1x1.png", "ReloadGauge");
 
 	// QRから取得したデータ
 	std::string modelName = GameData::GetInstance()->GetSelectedModel();
@@ -108,6 +120,19 @@ void GameScene::Initialize() {
 	);
 	stage_->SetTranslate({ 0.0f, -1.0f, 0.0f }); // 地面の位置に合わせて調整
 	stage_->SetRotate({ 0.0f, 0.0f, 0.0f });
+
+	// ===== 天球生成 =====
+	skydome_ = std::make_unique<Object3DInstance>();
+	skydome_->Initialize(
+		object3DManager_,
+		dxCore_,
+		"Resources",
+		"skydome.obj",
+		"Skydome"
+	);
+	skydome_->SetTranslate({ 0.0f, 0.0f, 0.0f });
+	skydome_->SetScale({ 100.0f, 100.0f, 100.0f });  // 十分大きくする
+	skydome_->SetRotate({ 0.0f, 0.0f, 0.0f });
 
 	// ===== ライティング設定 =====
 
@@ -152,10 +177,19 @@ void GameScene::Finalize() {
 	// このシーンで作ったパーティクルグループを削除
 	ParticleManager::GetInstance()->RemoveParticleGroup("circle");
 
+	skydome_.reset();
 	stage_.reset();
 	sprites_.clear();
 	object3DInstances_.clear();
 
+	// UI用スプライト解放
+	hpGaugeBack_.reset();
+	hpGaugeFill_.reset();
+	hpGaugeBackEnemy_.reset();
+	hpGaugeFillEnemy_.reset();
+	ammoGaugeBack_.reset();
+	ammoGaugeFill_.reset();
+	reloadGauge_.reset();
 }
 
 void GameScene::Update() {
@@ -183,15 +217,34 @@ void GameScene::Update() {
 		currentCameraPos_.y += (targetY - currentCameraPos_.y) * lerpFactor;
 		currentCameraPos_.z += (targetZ - currentCameraPos_.z) * lerpFactor;
 
-		camera_->SetTranslate(currentCameraPos_);
+		// カメラシェイク更新
+		UpdateCameraShake(deltaTime);
+
+		// シェイクオフセットを適用した最終位置
+		Vector3 finalCameraPos = currentCameraPos_;
+		finalCameraPos.x += cameraShakeOffset_.x;
+		finalCameraPos.y += cameraShakeOffset_.y;
+		finalCameraPos.z += cameraShakeOffset_.z;
+
+		camera_->SetTranslate(finalCameraPos);
 	}
 
 	camera_->Update();
+
+	// 天球をカメラに追従（常にカメラを中心に）
+	skydome_->SetTranslate({ currentCameraPos_.x, 0.0f, 0.0f });
+	skydome_->Update();
 
 	stage_->Update();
 
 	// プレイヤー更新
 	player_->Update(input_, deltaTime);
+
+	// プレイヤーがダメージを受けたらカメラシェイク
+	if (player_->JustTookDamage()) {
+		StartCameraShake(0.5f, 0.3f);  // 強さ0.5、0.3秒
+		player_->ClearJustTookDamage();
+	}
 
 	// ダメージ演出をHPに応じて適用
 	Game::GetInstance()->GetPostEffect()->ApplyDamageEffect(player_->GetDamageRatio());
@@ -240,6 +293,15 @@ void GameScene::Update() {
 		return;
 	}
 
+	operation_->Update();
+	hpGaugeBack_->Update();
+	hpGaugeFill_->Update();
+	hpGaugeBackEnemy_->Update();
+	hpGaugeFillEnemy_->Update();
+	ammoGaugeBack_->Update();
+	ammoGaugeFill_->Update();
+	reloadGauge_->Update();
+
 	// パーティクル更新
 	ParticleManager::GetInstance()->Update();
 }
@@ -249,7 +311,13 @@ void GameScene::Draw() {
 	// 3Dオブジェクトの共通描画設定
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
-	LightManager::GetInstance()->OnImGui();
+#ifdef _DEBUG
+	//LightManager::GetInstance()->OnImGui();
+#endif // !_DEBUG
+
+
+	// ===== 天球描画（最初に描画、深度テスト無効推奨） =====
+	skydome_->Draw(dxCore_);
 
 	// ステージ描画
 	stage_->Draw(dxCore_);
@@ -265,21 +333,168 @@ void GameScene::Draw() {
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
-	sprite_->Draw();
+	operation_->Draw();
 	for (const auto& s : sprites_) {
 		s->Draw();
 	}
+
+	// ===== UI描画 =====
+	DrawUI();
 	
 	// パーティクルのImGui表示
+#ifdef _DEBUG
 	ParticleManager::GetInstance()->OnImGui();
 
 	// カメラのImGui
 	camera_->OnImGui();
+#endif // _DEBUG
+
+}
+
+// =============================================================
+// カメラシェイク
+// =============================================================
+void GameScene::StartCameraShake(float intensity, float duration) {
+	cameraShakeIntensity_ = intensity;
+	cameraShakeDuration_ = duration;
+	cameraShakeTimer_ = duration;
+}
+
+void GameScene::UpdateCameraShake(float deltaTime) {
+	if (cameraShakeTimer_ > 0.0f) {
+		cameraShakeTimer_ -= deltaTime;
+
+		// 残り時間に応じて強度を減衰
+		float ratio = cameraShakeTimer_ / cameraShakeDuration_;
+		float currentIntensity = cameraShakeIntensity_ * ratio;
+
+		// ランダムなオフセットを生成
+		cameraShakeOffset_.x = ((float)std::rand() / RAND_MAX - 0.5f) * 2.0f * currentIntensity;
+		cameraShakeOffset_.y = ((float)std::rand() / RAND_MAX - 0.5f) * 2.0f * currentIntensity;
+		cameraShakeOffset_.z = ((float)std::rand() / RAND_MAX - 0.5f) * currentIntensity * 0.5f;
+
+		if (cameraShakeTimer_ <= 0.0f) {
+			cameraShakeTimer_ = 0.0f;
+			cameraShakeOffset_ = { 0.0f, 0.0f, 0.0f };
+		}
+	}
+}
+
+// =============================================================
+// UI描画
+// =============================================================
+void GameScene::DrawUI() {
+	
+	// プレイヤーHPゲージ（左上）
+	DrawHPGauge(20.0f, 20.0f, 200.0f, 20.0f, 
+		player_->GetHP(), player_->GetMaxHP(), true);
+
+	// エネミーHPゲージ（右上）
+	DrawHPGauge(1060.0f, 20.0f, 200.0f, 20.0f, 
+		enemy_->GetHP(), enemy_->GetMaxHP(), false);
+
+	// 弾数ゲージ（左下）
+	DrawAmmoGauge(20.0f, 680.0f);
+
+	// 操作説明（右下）
+	DrawControlsUI();
+}
+
+void GameScene::DrawHPGauge(float x, float y, float width, float height,
+	int currentHP, int maxHP, bool isPlayer) {
+
+	float hpRatio = static_cast<float>(currentHP) / static_cast<float>(maxHP);
+	hpRatio = std::clamp(hpRatio, 0.0f, 1.0f);
+
+	int hpPercent = static_cast<int>(hpRatio * 100.0f);
+
+	// HP残量で色を決定
+	float r, g, b;
+	if (hpPercent >= 60) {
+		// 60~100%: 緑
+		r = 0.2f;  g = 0.8f;  b = 0.2f;
+	} else if (hpPercent >= 30) {
+		// 30~59%: 黄色
+		r = 1.0f;  g = 0.8f;  b = 0.0f;
+	} else {
+		// 0~29%: 赤
+		r = 1.0f;  g = 0.2f;  b = 0.2f;
+	}
+
+	if (isPlayer) {
+		// 背景
+		hpGaugeBack_->SetPosition({ x, y });
+		hpGaugeBack_->SetSize({ 200.0f, 20.0f });
+		hpGaugeBack_->SetColor({ 0.1f, 0.1f, 0.1f, 0.9f });
+		hpGaugeBack_->Draw();
+
+		// ゲージ
+		hpGaugeFill_->SetPosition({ x + 2.0f, y + 2.0f });
+		hpGaugeFill_->SetSize({ 196.0f * hpRatio, 16.0f });
+		hpGaugeFill_->SetColor({ r, g, b, 1.0f });
+		hpGaugeFill_->Draw();
+	} else {
+		// エネミー用（赤固定にしたい場合はここで色を変更）
+		hpGaugeBackEnemy_->SetPosition({ x, y });
+		hpGaugeBackEnemy_->SetSize({ 200.0f, 20.0f });
+		hpGaugeBackEnemy_->SetColor({ 0.1f, 0.1f, 0.1f, 0.9f });
+		hpGaugeBackEnemy_->Draw();
+
+		hpGaugeFillEnemy_->SetPosition({ x + 2.0f, y + 2.0f });
+		hpGaugeFillEnemy_->SetSize({ 196.0f * hpRatio, 16.0f });
+		hpGaugeFillEnemy_->SetColor({ 0.8f, 0.2f, 0.2f, 1.0f }); // 赤固定
+		hpGaugeFillEnemy_->Draw();
+	}
+}
+
+void GameScene::DrawAmmoGauge(float x, float y) {
+	float ammoRatio = static_cast<float>(player_->GetCurrentAmmo()) / 
+		static_cast<float>(player_->GetMaxAmmo());
+	ammoRatio = std::clamp(ammoRatio, 0.0f, 1.0f);
+
+	const float width = 150.0f;
+	const float height = 15.0f;
+
+	// 背景
+	ammoGaugeBack_->SetPosition({ x, y });
+	ammoGaugeBack_->SetSize({ width, height });
+	ammoGaugeBack_->SetColor({ 0.2f, 0.2f, 0.2f, 0.8f });
+	ammoGaugeBack_->Draw();
+
+	// リロード中かどうかで表示を切り替え
+	if (player_->IsReloading()) {
+		// リロード進行度
+		float reloadRatio = player_->GetReloadProgress();
+		reloadGauge_->SetPosition({ x + 2.0f, y + 2.0f });
+		reloadGauge_->SetSize({ (width - 4.0f) * reloadRatio, height - 4.0f });
+		reloadGauge_->SetColor({ 1.0f, 0.8f, 0.0f, 1.0f }); // 黄色
+		reloadGauge_->Draw();
+	} else {
+		// 弾数ゲージ（青系）
+		ammoGaugeFill_->SetPosition({ x + 2.0f, y + 2.0f });
+		ammoGaugeFill_->SetSize({ (width - 4.0f) * ammoRatio, height - 4.0f });
+		ammoGaugeFill_->SetColor({ 0.2f, 0.5f, 1.0f, 1.0f });
+		ammoGaugeFill_->Draw();
+	}
+
+	// TODO: 弾数テキスト表示（フォント実装が必要）
+	// 例: "10 / 10" や "RELOADING..."
+}
+
+void GameScene::DrawControlsUI() {
+	// 操作説明は画面右下に固定テキストで表示
+	// フォント描画が実装されている場合はここで描画
+	// 現状はスプライトベースで簡易表示、または後で実装
+
+	// TODO: 以下のようなテキストを表示
+	// "A/D: Move"
+	// "W: Jump / Glide"
+	// "SPACE: Shoot"
+	// "R: Reload"
 }
 
 void GameScene::CheckCollisions()
 {
-
 	// プレイヤーの弾とエネミー
 	for (auto& bullet : player_->GetBullets()) {
 		if (!bullet->IsActive()) continue;
@@ -291,11 +506,31 @@ void GameScene::CheckCollisions()
 		if (CollisionHelper::IsCollisionAABBSphere(enemyCollider_, bulletSphere)) {
 			// 弾を消す
 			bullet->OnHit();
+
 			// 敵にダメージ
 			enemy_->TakeDamage(bullet->GetDamage());
 
-			// TODO: ヒットエフェクト（パーティクル等）
-			// ParticleManager::GetInstance()->Emit("circle", bullet->GetPosition(), 5);
+			// ===== ノックバック =====
+			// 弾の進行方向を基にノックバック方向を計算
+			Vector3 knockbackDir = {
+				bullet->GetPosition().x - player_->GetPosition().x,
+				0.0f,
+				0.0f
+			};
+			// 正規化
+			float len = std::abs(knockbackDir.x);
+			if (len > 0.01f) {
+				knockbackDir.x /= len;
+			} else {
+				knockbackDir.x = 1.0f;  // デフォルトは右方向
+			}
+
+			// ダメージに応じたノックバック力
+			float knockbackForce = static_cast<float>(bullet->GetDamage()) * 0.3f;
+			enemy_->ApplyKnockback(knockbackDir, knockbackForce);
+
+			// ヒットエフェクト（パーティクル）
+			ParticleManager::GetInstance()->Emit("circle", bullet->GetPosition(), 5);
 		}
 	}
 
@@ -313,7 +548,24 @@ void GameScene::CheckCollisions()
 			// プレイヤーにダメージ
 			player_->TakeDamage(bullet->GetDamage());
 
-			// TODO: ヒットエフェクト
+			// ===== ノックバック =====
+			Vector3 knockbackDir = {
+				bullet->GetPosition().x - enemy_->GetPosition().x,
+				0.0f,
+				0.0f
+			};
+			float len = std::abs(knockbackDir.x);
+			if (len > 0.01f) {
+				knockbackDir.x /= len;
+			} else {
+				knockbackDir.x = -1.0f;  // デフォルトは左方向
+			}
+
+			float knockbackForce = static_cast<float>(bullet->GetDamage()) * 0.2f;
+			player_->ApplyKnockback(knockbackDir, knockbackForce);
+
+			// ヒットエフェクト
+			ParticleManager::GetInstance()->Emit("circle", bullet->GetPosition(), 3);
 		}
 	}
 

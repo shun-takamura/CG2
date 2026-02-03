@@ -36,6 +36,13 @@ public:
 	void Draw(DirectXCore* dxCore);
 	void TakeDamage(int amount);
 
+	/// <summary>
+	/// ノックバックを適用
+	/// </summary>
+	/// <param name="direction">ノックバック方向（正規化済み）</param>
+	/// <param name="force">ノックバックの強さ</param>
+	void ApplyKnockback(const Vector3& direction, float force);
+
 	// ===== ゲッター =====
 	const Vector3& GetPosition() const { return position_; }
 	int GetHP() const { return hp_; }
@@ -57,12 +64,29 @@ public:
 	/// </summary>
 	float GetChargeRatio() const;
 
+	/// <summary>
+	/// ダメージを受けた瞬間かどうか（カメラシェイク用）
+	/// </summary>
+	bool JustTookDamage() const { return justTookDamage_; }
+	void ClearJustTookDamage() { justTookDamage_ = false; }
+
+	// ===== 弾数・リロード関連ゲッター =====
+	int GetCurrentAmmo() const { return currentAmmo_; }
+	int GetMaxAmmo() const { return maxAmmo_; }
+	bool IsReloading() const { return isReloading_; }
+	float GetReloadProgress() const;
+
+	// ===== 滑空関連ゲッター =====
+	bool IsGliding() const { return isGliding_; }
+
 private:
 	void Move(InputManager* input, float deltaTime);
 	void ShootNormal(InputManager* input, float deltaTime);
 	void ShootCharge(InputManager* input, float deltaTime);
 	void UpdateBullets(float deltaTime);
 	void UpdateChargeParticles(float deltaTime);
+	void UpdateKnockback(float deltaTime);
+	void UpdateReload(InputManager* input, float deltaTime);
 
 private:
 	// ===== モデル =====
@@ -81,6 +105,11 @@ private:
 	bool isGrounded_ = false;
 	int jumpCount_ = 0;
 	int maxJumpCount_ = 2;
+
+	// ===== 滑空 =====
+	bool isGliding_ = false;
+	float glideGravity_ = -5.0f;        // 滑空中の重力（通常より弱い）
+	float glideMaxFallSpeed_ = -3.0f;   // 滑空中の最大落下速度
 
 	// ===== 向き =====
 	float targetRotationY_ = 0.0f;
@@ -101,6 +130,13 @@ private:
 	float fireTimer_ = 0.0f;
 	float airSpread_ = 0.4f;
 
+	// ===== 弾数・リロード =====
+	int currentAmmo_ = 10;       // 現在の弾数
+	int maxAmmo_ = 10;           // 最大弾数
+	bool isReloading_ = false;   // リロード中か
+	float reloadTime_ = 1.5f;    // リロードにかかる時間
+	float reloadTimer_ = 0.0f;   // 現在のリロード経過時間
+
 	// ===== チャージショット =====
 	bool isCharging_ = false;
 	float chargeTime_ = 0.0f;           // 現在のチャージ秒数
@@ -116,8 +152,14 @@ private:
 	float chargeParticleTimer_ = 0.0f;  // パーティクル発生間隔用
 	float chargeParticleRate_ = 0.05f;  // パーティクル発生間隔（秒）
 	float chargeMoveSpeedMult_ = 0.5f;  // チャージ中の移動速度倍率
+	int chargeAmmoCost_ = 3;            // チャージショットの弾消費
+
+	// ===== ノックバック =====
+	Vector3 knockbackVelocity_{ 0.0f, 0.0f, 0.0f };
+	float knockbackDecay_ = 8.0f;       // ノックバックの減衰速度
 
 	// ===== ダメージ演出 =====
 	float damageFlashTimer_ = 0.0f;
 	float damageFlashDuration_ = 0.3f;
+	bool justTookDamage_ = false;       // ダメージを受けた瞬間フラグ（カメラシェイク用）
 };

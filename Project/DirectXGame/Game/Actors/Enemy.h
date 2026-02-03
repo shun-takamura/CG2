@@ -52,12 +52,20 @@ public:
 	/// </summary>
 	void TakeDamage(int amount);
 
+	/// <summary>
+	/// ノックバックを適用
+	/// </summary>
+	/// <param name="direction">ノックバック方向（正規化済み）</param>
+	/// <param name="force">ノックバックの強さ</param>
+	void ApplyKnockback(const Vector3& direction, float force);
+
 	// ===== ゲッター =====
 
 	const Vector3& GetPosition() const { return position_; }
 	int GetHP() const { return hp_; }
 	int GetMaxHP() const { return maxHp_; }
 	bool GetIsAlive() const { return isAlive_; }
+	float GetDamageFlashTimer() const { return damageFlashTimer_; }
 
 	/// <summary>
 	/// 当たり判定用の半径
@@ -92,6 +100,11 @@ private:
 	/// 弾の更新・削除
 	/// </summary>
 	void UpdateBullets(float deltaTime);
+
+	/// <summary>
+	/// ノックバックの更新
+	/// </summary>
+	void UpdateKnockback(float deltaTime);
 
 private:
 	// ===== モデル =====
@@ -133,6 +146,10 @@ private:
 	float distanceTolerance_ = 2.0f;  // この範囲内なら移動しない
 	float jumpChance_ = 0.02f;        // 毎フレームのジャンプ確率
 	float jumpPower_ = 12.0f;
+
+	// ===== ノックバック =====
+	Vector3 knockbackVelocity_{ 0.0f, 0.0f, 0.0f };
+	float knockbackDecay_ = 8.0f;     // ノックバックの減衰速度
 
 	// ===== ダメージ演出 =====
 	float damageFlashTimer_ = 0.0f;

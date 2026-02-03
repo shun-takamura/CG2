@@ -53,6 +53,40 @@ public:
 	void CheckCollisions();
 
 private:
+	/// <summary>
+	/// カメラシェイクを開始
+	/// </summary>
+	/// <param name="intensity">シェイクの強さ</param>
+	/// <param name="duration">シェイクの持続時間</param>
+	void StartCameraShake(float intensity, float duration);
+
+	/// <summary>
+	/// カメラシェイクの更新
+	/// </summary>
+	void UpdateCameraShake(float deltaTime);
+
+	/// <summary>
+	/// UIの描画
+	/// </summary>
+	void DrawUI();
+
+	/// <summary>
+	/// HPゲージの描画
+	/// </summary>
+	void DrawHPGauge(float x, float y, float width, float height, 
+		int currentHP, int maxHP, bool isPlayer);
+
+	/// <summary>
+	/// 弾数ゲージの描画
+	/// </summary>
+	void DrawAmmoGauge(float x, float y);
+
+	/// <summary>
+	/// 操作説明の描画
+	/// </summary>
+	void DrawControlsUI();
+
+private:
 
 	// ===== スマブラ風カメラ =====
 	float cameraMinZ_ = -12.0f;   // 最も寄った時のZ（近い）
@@ -62,6 +96,12 @@ private:
 	float cameraSmoothSpeed_ = 5.0f; // 追従の滑らかさ
 	float cameraBaseY_ = 15.0f;     // 通常の高さ
 	float cameraCloseUpY_ = 8.0f;   // 最大ズーム時の高さ（低めに寄る）
+
+	// ===== カメラシェイク =====
+	float cameraShakeTimer_ = 0.0f;
+	float cameraShakeDuration_ = 0.0f;
+	float cameraShakeIntensity_ = 0.0f;
+	Vector3 cameraShakeOffset_{ 0.0f, 0.0f, 0.0f };
 
 	ColliderAABB playerCollider_;
 	ColliderAABB enemyCollider_;
@@ -74,8 +114,22 @@ private:
 
 	// スプライト関連
 	std::unique_ptr<SpriteInstance> cameraSprite_;
-	std::unique_ptr<SpriteInstance> sprite_;
+	std::unique_ptr<SpriteInstance> operation_;
 	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
+
+	// ===== UI用スプライト =====
+
+	// HPゲージ（プレイヤー）
+	std::unique_ptr<SpriteInstance> hpGaugeBack_;
+	std::unique_ptr<SpriteInstance> hpGaugeFill_;
+
+	// HPゲージ（エネミー）
+	std::unique_ptr<SpriteInstance> hpGaugeBackEnemy_;
+	std::unique_ptr<SpriteInstance> hpGaugeFillEnemy_;
+
+	std::unique_ptr<SpriteInstance> ammoGaugeBack_;       // 弾数ゲージ背景
+	std::unique_ptr<SpriteInstance> ammoGaugeFill_;       // 弾数ゲージ
+	std::unique_ptr<SpriteInstance> reloadGauge_;         // リロードゲージ
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
@@ -89,4 +143,7 @@ private:
 	std::unique_ptr<Player> player_;
 	std::unique_ptr<Enemy> enemy_;
 	std::unique_ptr<Object3DInstance> stage_;
+
+	// ===== 天球 =====
+	std::unique_ptr<Object3DInstance> skydome_;
 };

@@ -5,6 +5,7 @@
 #include "Bullet.h"
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 
 Enemy::Enemy() {}
 
@@ -54,6 +55,9 @@ void Enemy::Update(const Vector3& playerPos, float deltaTime) {
 	if (!isAlive_) {
 		return;
 	}
+
+	// ノックバック更新
+	UpdateKnockback(deltaTime);
 
 	UpdateRotation(playerPos, deltaTime);
 	MoveAI(playerPos, deltaTime);
@@ -105,6 +109,34 @@ void Enemy::TakeDamage(int amount) {
 		isAlive_ = false;
 		// TODO: 死亡演出（パーティクル等）
 	}
+}
+
+// =============================================================
+// ApplyKnockback
+// =============================================================
+void Enemy::ApplyKnockback(const Vector3& direction, float force) {
+	knockbackVelocity_.x += direction.x * force;
+	knockbackVelocity_.y += direction.y * force * 0.5f;  // Y方向は控えめに
+	knockbackVelocity_.z += direction.z * force;
+}
+
+// =============================================================
+// UpdateKnockback
+// =============================================================
+void Enemy::UpdateKnockback(float deltaTime) {
+	// ノックバック速度を位置に適用
+	position_.x += knockbackVelocity_.x * deltaTime;
+	position_.y += knockbackVelocity_.y * deltaTime;
+
+	// ノックバックを減衰
+	float decay = std::exp(-knockbackDecay_ * deltaTime);
+	knockbackVelocity_.x *= decay;
+	knockbackVelocity_.y *= decay;
+	knockbackVelocity_.z *= decay;
+
+	// 十分小さくなったらゼロに
+	if (std::abs(knockbackVelocity_.x) < 0.01f) knockbackVelocity_.x = 0.0f;
+	if (std::abs(knockbackVelocity_.y) < 0.01f) knockbackVelocity_.y = 0.0f;
 }
 
 // =============================================================

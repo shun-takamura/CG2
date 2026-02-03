@@ -465,38 +465,38 @@ void PostEffect::ShowImGui()
 {
 #ifdef _DEBUG
 
-	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+	//ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-	const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
-	ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 5);
+	//const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
+	//ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 5);
 
-	ImGui::Separator();
+	//ImGui::Separator();
 
-	ImGui::Text("Grayscale");
-	ImGui::SliderFloat("Intensity##GS", &params_.grayscaleIntensity, 0.0f, 1.0f);
+	//ImGui::Text("Grayscale");
+	//ImGui::SliderFloat("Intensity##GS", &params_.grayscaleIntensity, 0.0f, 1.0f);
 
-	ImGui::Separator();
+	//ImGui::Separator();
 
-	ImGui::Text("Sepia");
-	ImGui::SliderFloat("Intensity##Sepia", &params_.sepiaIntensity, 0.0f, 1.0f);
-	if (ImGui::ColorEdit3("Color", params_.sepiaColor)) {
-		// 値は自動的に更新される
-	}
-	if (ImGui::Button("Reset Sepia Color")) {
-		params_.sepiaColor[0] = 1.0f;
-		params_.sepiaColor[1] = 0.691f;
-		params_.sepiaColor[2] = 0.402f;
-	}
+	//ImGui::Text("Sepia");
+	//ImGui::SliderFloat("Intensity##Sepia", &params_.sepiaIntensity, 0.0f, 1.0f);
+	//if (ImGui::ColorEdit3("Color", params_.sepiaColor)) {
+	//	// 値は自動的に更新される
+	//}
+	//if (ImGui::Button("Reset Sepia Color")) {
+	//	params_.sepiaColor[0] = 1.0f;
+	//	params_.sepiaColor[1] = 0.691f;
+	//	params_.sepiaColor[2] = 0.402f;
+	//}
 
-	ImGui::Separator();
+	//ImGui::Separator();
 
-	ImGui::Separator();
+	//ImGui::Separator();
 
-	if (ImGui::Button("Reset All")) {
-		params_ = PostProcessParams();
-	}
+	//if (ImGui::Button("Reset All")) {
+	//	params_ = PostProcessParams();
+	//}
 
-	ImGui::End();
+	//ImGui::End();
 
 #endif // DEBUG
 }

@@ -27,12 +27,12 @@ public:
 
 #ifdef _DEBUG
 
-        if (!isOpen_) return;
+      /*  if (!isOpen_) return;
 
         if (ImGui::Begin(name_.c_str(), &isOpen_)) {
             OnDraw();
         }
-        ImGui::End();
+        ImGui::End();*/
 
 #endif // DEBUG
     }

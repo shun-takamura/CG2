@@ -17,7 +17,7 @@ Camera::Camera()
 void Camera::OnImGui()
 {
 #ifdef _DEBUG
-    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+  /*  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat3("Position", &transform_.translate.x, 0.1f);
 
         Vector3 rotateDegree = {
@@ -35,7 +35,7 @@ void Camera::OnImGui()
         ImGui::DragFloat("FovY", &horizontalFovY_, 0.01f, 0.01f, 3.14f);
         ImGui::DragFloat("NearClip", &nearClip_, 0.01f, 0.001f, 10.0f);
         ImGui::DragFloat("FarClip", &farClip_, 1.0f, 1.0f, 1000.0f);
-    }
+    }*/
 #endif
 }
 

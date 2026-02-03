@@ -78,18 +78,6 @@ void TitleScene::Update() {
 		return;
 	}
 
-	//// 1キー: ストライプトランジションでゲームシーンへ
-	//if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
-	//	SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Stripe);
-	//	return;
-	//}
-
-	//// 2キー: フェードトランジションでゲームシーンへ
-	//if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
-	//	SceneManager::GetInstance()->ChangeScene("GAMEPLAY", TransitionType::Fade);
-	//	return;
-	//}
-
 	// SPACE: フェードトランジションでゲームシーンへ
 	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 		SceneManager::GetInstance()->ChangeScene("CHARACTERSELECT", TransitionType::Fade);
@@ -110,9 +98,4 @@ void TitleScene::Draw() {
 		sprite->Draw();
 	}
 
-	// ストライプトランジションのスプライトを直接取得して描画
-	auto* stripeTransition = TransitionManager::GetInstance()->GetTransition<StripeTransition>(TransitionType::Stripe);
-	if (stripeTransition) {
-		stripeTransition->Draw();
-	}
 }

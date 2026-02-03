@@ -309,48 +309,48 @@ void ParticleManager::OnImGui()
 {
 #ifdef _DEBUG
 
-    if (ImGui::Begin("Particle Settings")) {
-        // エミッター設定
-        ImGui::Text("Emitter Settings");
-        ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
-        ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
-        ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
+    //if (ImGui::Begin("Particle Settings")) {
+    //    // エミッター設定
+    //    ImGui::Text("Emitter Settings");
+    //    ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
+    //    ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
+    //    ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
 
-        if (!emitterSettings_.useRandomColor) {
-            ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
-        }
+    //    if (!emitterSettings_.useRandomColor) {
+    //        ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
+    //    }
 
-        ImGui::Separator();
+    //    ImGui::Separator();
 
-        // 加速度フィールド設定
-        ImGui::Text("Acceleration Field");
-        ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
+    //    // 加速度フィールド設定
+    //    ImGui::Text("Acceleration Field");
+    //    ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
 
-        if (isAccelerationFieldEnabled_) {
-            ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
-            ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
-            ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
-        }
+    //    if (isAccelerationFieldEnabled_) {
+    //        ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
+    //        ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
+    //        ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
+    //    }
 
-        ImGui::Separator();
+    //    ImGui::Separator();
 
-        // ブレンドモード
-        const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
-        int currentMode = static_cast<int>(blendMode_);
-        if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
-            blendMode_ = static_cast<BlendMode>(currentMode);
-        }
+    //    // ブレンドモード
+    //    const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
+    //    int currentMode = static_cast<int>(blendMode_);
+    //    if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
+    //        blendMode_ = static_cast<BlendMode>(currentMode);
+    //    }
 
-        // パーティクル情報
-        ImGui::Separator();
-        ImGui::Text("Particle Info");
-        uint32_t totalCount = 0;
-        for (const auto& pair : particleGroups_) {
-            totalCount += static_cast<uint32_t>(pair.second.particles.size());
-        }
-        ImGui::Text("Total Particles: %u", totalCount);
-    }
-    ImGui::End();
+    //    // パーティクル情報
+    //    ImGui::Separator();
+    //    ImGui::Text("Particle Info");
+    //    uint32_t totalCount = 0;
+    //    for (const auto& pair : particleGroups_) {
+    //        totalCount += static_cast<uint32_t>(pair.second.particles.size());
+    //    }
+    //    ImGui::Text("Total Particles: %u", totalCount);
+    //}
+    //ImGui::End();
 
 #endif // DEBUG
 }

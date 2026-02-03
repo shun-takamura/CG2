@@ -178,9 +178,13 @@ std::vector<TransitionType> TransitionManager::GetAvailableTransitions() const {
 }
 
 void TransitionManager::OnImGui() {
+#ifdef _DEBUG
+
 	// StripeTransitionのOnImGuiを呼ぶ
 	auto* stripe = GetTransition<StripeTransition>(TransitionType::Stripe);
 	if (stripe) {
 		stripe->OnImGui();
 	}
+
+#endif // _DEBUG
 }
