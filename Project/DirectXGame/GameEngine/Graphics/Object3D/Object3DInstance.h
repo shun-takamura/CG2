@@ -50,6 +50,7 @@ class Object3DInstance : public IImGuiEditable {
 
     // テクスチャファイルパス（テクスチャ変更機能用）
     std::string textureFilePath_;
+    std::string modelFileName_;
 
     //==============================
     // メンバ関数
@@ -93,6 +94,7 @@ public:
     const Vector3& GetRotate() const { return transform_.rotate; }
     const Vector3& GetTranslate() const { return transform_.translate; }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
+    const std::string& GetModelFileName() const { return modelFileName_; }
 
     //==============================
     // 初期化・更新・描画

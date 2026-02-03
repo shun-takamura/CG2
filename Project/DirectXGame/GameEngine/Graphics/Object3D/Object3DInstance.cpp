@@ -6,6 +6,7 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
     const std::string& name)
 {
     object3DManager_ = object3DManager;
+    modelFileName_ = filename;
 
     // 名前が指定されていなければファイル名を使用
     if (name.empty()) {
@@ -124,7 +125,7 @@ void Object3DInstance::SetTexture(const std::string& filePath)
 //==============================
 void Object3DInstance::OnImGuiInspector()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
     // Transform
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {

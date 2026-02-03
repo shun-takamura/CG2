@@ -99,37 +99,68 @@ void ParticleManager::CreateParticleGroup(const std::string& name, const std::st
     particleGroups_[name] = std::move(group);
 }
 
+void ParticleManager::RemoveParticleGroup(const std::string& name)
+{
+    auto it = particleGroups_.find(name);
+    if (it == particleGroups_.end()) {
+        return;
+    }
+
+    // リソースを解放
+    if (it->second.instancingResource) {
+        it->second.instancingResource->Unmap(0, nullptr);
+        it->second.instancingResource.Reset();
+    }
+
+    particleGroups_.erase(it);
+}
+
 void ParticleManager::Emit(const std::string& name, const Vector3& position, uint32_t count)
 {
-    // 登録済みのパーティクルグループ名かチェック
     assert(particleGroups_.find(name) != particleGroups_.end());
-
     ParticleGroup& group = particleGroups_[name];
 
-    // 拡散スケールを適用した速度範囲
     float velScale = emitterSettings_.velocityScale;
     std::uniform_real_distribution<float> distVel(-0.5f * velScale, 0.5f * velScale);
-    std::uniform_real_distribution<float> distVelY(0.0f, 0.5f * velScale);
+    std::uniform_real_distribution<float> distVelY(-0.5f * velScale, 0.5f * velScale);
     std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
 
     for (uint32_t i = 0; i < count; ++i) {
-        // 最大数チェック
         if (group.particles.size() >= kMaxInstanceCount) {
             break;
         }
 
-        // 新たなパーティクルを作成
         Particle particle;
-        particle.transform.scale = { 1.0f, 1.0f, 1.0f };
+
+        // スケール適用
+        particle.transform.scale = { particleScale_, particleScale_, particleScale_ };
         particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
         particle.transform.translate = position;
 
-        // ランダムな速度
-        particle.velocity = {
-            distVel(randomEngine_),
-            distVelY(randomEngine_),
-            distVel(randomEngine_)
-        };
+        // 速度の設定
+        if (useCustomDirection_) {
+            // カスタム方向が指定されている場合、その方向に飛ばす
+            float len = std::sqrt(
+                customDirection_.x * customDirection_.x +
+                customDirection_.y * customDirection_.y +
+                customDirection_.z * customDirection_.z
+            );
+            if (len > 0.0f) {
+                // 正規化してスケール適用
+                particle.velocity.x = (customDirection_.x / len) * velScale;
+                particle.velocity.y = (customDirection_.y / len) * velScale;
+                particle.velocity.z = (customDirection_.z / len) * velScale;
+            } else {
+                particle.velocity = { 0.0f, 0.0f, 0.0f };
+            }
+        } else {
+            // 従来どおりランダム
+            particle.velocity = {
+                distVel(randomEngine_),
+                distVelY(randomEngine_),
+                distVel(randomEngine_)
+            };
+        }
 
         // 色の設定
         if (emitterSettings_.useRandomColor) {
@@ -146,7 +177,6 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
         particle.lifeTime = 2.0f;
         particle.currentTime = 0.0f;
 
-        // パーティクルグループに登録
         group.particles.push_back(particle);
     }
 }
@@ -277,50 +307,50 @@ void ParticleManager::Draw()
 
 void ParticleManager::OnImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-    if (ImGui::Begin("Particle Settings")) {
-        // エミッター設定
-        ImGui::Text("Emitter Settings");
-        ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
-        ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
-        ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
+    //if (ImGui::Begin("Particle Settings")) {
+    //    // エミッター設定
+    //    ImGui::Text("Emitter Settings");
+    //    ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
+    //    ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
+    //    ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
 
-        if (!emitterSettings_.useRandomColor) {
-            ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
-        }
+    //    if (!emitterSettings_.useRandomColor) {
+    //        ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
+    //    }
 
-        ImGui::Separator();
+    //    ImGui::Separator();
 
-        // 加速度フィールド設定
-        ImGui::Text("Acceleration Field");
-        ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
+    //    // 加速度フィールド設定
+    //    ImGui::Text("Acceleration Field");
+    //    ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
 
-        if (isAccelerationFieldEnabled_) {
-            ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
-            ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
-            ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
-        }
+    //    if (isAccelerationFieldEnabled_) {
+    //        ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
+    //        ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
+    //        ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
+    //    }
 
-        ImGui::Separator();
+    //    ImGui::Separator();
 
-        // ブレンドモード
-        const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
-        int currentMode = static_cast<int>(blendMode_);
-        if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
-            blendMode_ = static_cast<BlendMode>(currentMode);
-        }
+    //    // ブレンドモード
+    //    const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
+    //    int currentMode = static_cast<int>(blendMode_);
+    //    if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
+    //        blendMode_ = static_cast<BlendMode>(currentMode);
+    //    }
 
-        // パーティクル情報
-        ImGui::Separator();
-        ImGui::Text("Particle Info");
-        uint32_t totalCount = 0;
-        for (const auto& pair : particleGroups_) {
-            totalCount += static_cast<uint32_t>(pair.second.particles.size());
-        }
-        ImGui::Text("Total Particles: %u", totalCount);
-    }
-    ImGui::End();
+    //    // パーティクル情報
+    //    ImGui::Separator();
+    //    ImGui::Text("Particle Info");
+    //    uint32_t totalCount = 0;
+    //    for (const auto& pair : particleGroups_) {
+    //        totalCount += static_cast<uint32_t>(pair.second.particles.size());
+    //    }
+    //    ImGui::Text("Total Particles: %u", totalCount);
+    //}
+    //ImGui::End();
 
 #endif // DEBUG
 }

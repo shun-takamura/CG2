@@ -40,9 +40,14 @@ public:
 	/// </summary>
 	void Draw() override;
 
+	static Game* GetInstance() { return instance_; }
+	static PostEffect* GetPostEffect() { return postEffect_.get(); }
+
 private:
+
+	static Game* instance_;
 
 	// オフスクリーンレンダリング用
 	std::unique_ptr<RenderTexture> renderTexture_;
-	std::unique_ptr<PostEffect> postEffect_;
+	static std::unique_ptr<PostEffect> postEffect_;
 };

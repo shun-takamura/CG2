@@ -214,7 +214,7 @@ Matrix4x4 MakeAffineMatrix(const Transform& transform)
 	// 上で作った行列からアフィン行列を作る
 	Matrix4x4 affineMatrix4x4;
 
-	affineMatrix4x4 = Multiply(translateMatrix4x4, Multiply(rotateMatrix4x4, scaleMatrix4x4));
+	affineMatrix4x4 = Multiply(Multiply(scaleMatrix4x4, rotateMatrix4x4), translateMatrix4x4);
 
 	return  affineMatrix4x4;
 }

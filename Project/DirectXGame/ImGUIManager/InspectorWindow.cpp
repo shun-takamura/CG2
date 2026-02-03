@@ -2,23 +2,23 @@
 #include "ImGuiManager.h"
 
 void InspectorWindow::OnDraw() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-    IImGuiEditable* selected = manager_->GetSelected();
+    //IImGuiEditable* selected = manager_->GetSelected();
 
-    if (!selected) {
-        ImGui::Text("No object selected");
-        ImGui::TextDisabled("Select an object from Hierarchy");
-        return;
-    }
+    //if (!selected) {
+    //    ImGui::Text("No object selected");
+    //    ImGui::TextDisabled("Select an object from Hierarchy");
+    //    return;
+    //}
 
-    // オブジェクト情報ヘッダー
-    ImGui::Text("Name: %s", selected->GetName().c_str());
-    ImGui::Text("Type: %s", selected->GetTypeName().c_str());
-    ImGui::Separator();
+    //// オブジェクト情報ヘッダー
+    //ImGui::Text("Name: %s", selected->GetName().c_str());
+    //ImGui::Text("Type: %s", selected->GetTypeName().c_str());
+    //ImGui::Separator();
 
-    // 各オブジェクトが実装した編集UIを描画
-    selected->OnImGuiInspector();
+    //// 各オブジェクトが実装した編集UIを描画
+    //selected->OnImGuiInspector();
 
 #endif // DEBUG
 }

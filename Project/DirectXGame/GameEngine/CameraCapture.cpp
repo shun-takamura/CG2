@@ -413,63 +413,63 @@ void CameraCapture::CloseCamera()
 
 void CameraCapture::LogDevicesToImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-    ImGui::Text("=== Camera Devices ===");
+    //ImGui::Text("=== Camera Devices ===");
 
-    if (devices_.empty())
-    {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No camera devices found");
-    } else
-    {
-        ImGui::Text("Found %zu device(s):", devices_.size());
-        ImGui::Separator();
+    //if (devices_.empty())
+    //{
+    //    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No camera devices found");
+    //} else
+    //{
+    //    ImGui::Text("Found %zu device(s):", devices_.size());
+    //    ImGui::Separator();
 
-        // 各デバイスにOpenボタンを表示
-        for (size_t i = 0; i < devices_.size(); i++)
-        {
-            const auto& device = devices_[i];
-            std::string nameUtf8 = ConvertString(device.name);
+    //    // 各デバイスにOpenボタンを表示
+    //    for (size_t i = 0; i < devices_.size(); i++)
+    //    {
+    //        const auto& device = devices_[i];
+    //        std::string nameUtf8 = ConvertString(device.name);
 
-            // ##でIDを付けてボタンを区別
-            std::string buttonLabel = "Open##" + std::to_string(i);
-            if (ImGui::Button(buttonLabel.c_str()))
-            {
-                OpenCamera(static_cast<uint32_t>(i));
-            }
-            ImGui::SameLine();
-            ImGui::Text("[%zu] %s", i, nameUtf8.c_str());
-        }
-    }
+    //        // ##でIDを付けてボタンを区別
+    //        std::string buttonLabel = "Open##" + std::to_string(i);
+    //        if (ImGui::Button(buttonLabel.c_str()))
+    //        {
+    //            OpenCamera(static_cast<uint32_t>(i));
+    //        }
+    //        ImGui::SameLine();
+    //        ImGui::Text("[%zu] %s", i, nameUtf8.c_str());
+    //    }
+    //}
 
-    ImGui::Separator();
+    //ImGui::Separator();
 
-    if (ImGui::Button("Refresh Devices"))
-    {
-        EnumerateDevices();
-    }
+    //if (ImGui::Button("Refresh Devices"))
+    //{
+    //    EnumerateDevices();
+    //}
 
-    ImGui::Separator();
-    ImGui::Text("=== Camera Status ===");
+    //ImGui::Separator();
+    //ImGui::Text("=== Camera Status ===");
 
-    if (isOpened_)
-    {
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Camera: OPENED");
-        ImGui::Text("Resolution: %u x %u", frameWidth_, frameHeight_);
+    //if (isOpened_)
+    //{
+    //    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Camera: OPENED");
+    //    ImGui::Text("Resolution: %u x %u", frameWidth_, frameHeight_);
 
-        if (ImGui::Button("Close Camera"))
-        {
-            CloseCamera();
-        }
+    //    if (ImGui::Button("Close Camera"))
+    //    {
+    //        CloseCamera();
+    //    }
 
-        if (!frameBufferMain_.empty())
-        {
-            ImGui::Text("Buffer size: %zu bytes", frameBufferMain_.size());
-        }
-    } else
-    {
-        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera: CLOSED");
-    }
+    //    if (!frameBufferMain_.empty())
+    //    {
+    //        ImGui::Text("Buffer size: %zu bytes", frameBufferMain_.size());
+    //    }
+    //} else
+    //{
+    //    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera: CLOSED");
+    //}
 
 #endif // DEBUG
 }

@@ -64,7 +64,7 @@ void Framework::Initialize() {
 	// ウィンドウの初期化
 	//========================
 	// 初期化（タイトル）
-	winApp_->Initialize(L"GE3");
+	winApp_->Initialize(L"QR");
 
 	dxCore_ = std::make_unique<DirectXCore>();
 	dxCore_->Initialize(winApp_.get());

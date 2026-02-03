@@ -68,7 +68,16 @@ bool QRCodeReader::Decode(const uint8_t* rgbaData, uint32_t width, uint32_t heig
 
         if (err == QUIRC_SUCCESS)
         {
-            qrCodeData_ = std::string(reinterpret_cast<char*>(data.payload), data.payload_len);
+            // ペイロードから文字列を作成し、不要な文字を除去
+            std::string raw(reinterpret_cast<char*>(data.payload), data.payload_len);
+
+            // 末尾のヌル文字や空白を除去
+            while (!raw.empty() && (raw.back() == '\0' || raw.back() == '\n' ||
+                raw.back() == '\r' || raw.back() == ' ')) {
+                raw.pop_back();
+            }
+
+            qrCodeData_ = raw;
             hasDetected_ = true;
         }
     }
@@ -86,9 +95,9 @@ void QRCodeReader::Reset()
 
 void QRCodeReader::OnImGui()
 {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-    ImGui::Text("=== QR Code Reader ===");
+ /*   ImGui::Text("=== QR Code Reader ===");
 
     if (hasDetected_)
     {
@@ -97,7 +106,7 @@ void QRCodeReader::OnImGui()
     } else
     {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "No QR code detected");
-    }
+    }*/
 
 #endif // DEBUG
 }

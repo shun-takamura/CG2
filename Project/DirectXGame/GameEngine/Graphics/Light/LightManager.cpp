@@ -36,7 +36,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     for (uint32_t i = 0; i < kMaxPointLights; ++i) {
         pointLightGroupData_->lights[i].color = { 1.0f, 1.0f, 1.0f, 1.0f };
         pointLightGroupData_->lights[i].position = { 0.0f, 2.0f, static_cast<float>(i) * 3.0f };
-        pointLightGroupData_->lights[i].intensity = 1.0f;
+        pointLightGroupData_->lights[i].intensity = 0.0f;
         pointLightGroupData_->lights[i].radius = 5.0f;
         pointLightGroupData_->lights[i].decay = 1.0f;
     }
@@ -53,7 +53,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
         spotLightGroupData_->lights[i].position = { 2.0f + static_cast<float>(i) * 2.0f, 1.25f, 0.0f };
         spotLightGroupData_->lights[i].distance = 7.0f;
         spotLightGroupData_->lights[i].direction = Normalize({ -1.0f, -1.0f, 0.0f });
-        spotLightGroupData_->lights[i].intensity = 4.0f;
+        spotLightGroupData_->lights[i].intensity = 0.0f;
         spotLightGroupData_->lights[i].decay = 2.0f;
         spotLightGroupData_->lights[i].cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
         spotLightGroupData_->lights[i].cosFalloffStart = std::cos(std::numbers::pi_v<float> / 4.0f);
@@ -190,92 +190,92 @@ SpotLight* LightManager::GetSpotLight(uint32_t index) {
 }
 
 void LightManager::OnImGui() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-    if (ImGui::Begin("Light Settings")) {
+    //if (ImGui::Begin("Light Settings")) {
 
-        // ===== DirectionalLight =====
-        if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::ColorEdit4("DL Color", &directionalLightData_->color.x);
-            ImGui::DragFloat3("DL Direction", &directionalLightData_->direction.x, 0.01f);
-            ImGui::DragFloat("DL Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
+    //    // ===== DirectionalLight =====
+    //    if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+    //        ImGui::ColorEdit4("DL Color", &directionalLightData_->color.x);
+    //        ImGui::DragFloat3("DL Direction", &directionalLightData_->direction.x, 0.01f);
+    //        ImGui::DragFloat("DL Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
 
-            const char* lightingTypes[] = { "None", "Lambert", "Half-Lambert" };
-            ImGui::Combo("DL Type", &directionalLightData_->lightingType, lightingTypes, 3);
-        }
+    //        const char* lightingTypes[] = { "None", "Lambert", "Half-Lambert" };
+    //        ImGui::Combo("DL Type", &directionalLightData_->lightingType, lightingTypes, 3);
+    //    }
 
-        // ===== PointLight (複数対応) =====
-        if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // ライト数の調整
-            int pointLightCount = static_cast<int>(pointLightGroupData_->activeCount);
-            if (ImGui::SliderInt("Point Light Count", &pointLightCount, 0, kMaxPointLights)) {
-                pointLightGroupData_->activeCount = static_cast<uint32_t>(pointLightCount);
-            }
+    //    // ===== PointLight (複数対応) =====
+    //    if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+    //        // ライト数の調整
+    //        int pointLightCount = static_cast<int>(pointLightGroupData_->activeCount);
+    //        if (ImGui::SliderInt("Point Light Count", &pointLightCount, 0, kMaxPointLights)) {
+    //            pointLightGroupData_->activeCount = static_cast<uint32_t>(pointLightCount);
+    //        }
 
-            // 各ライトの設定
-            for (uint32_t i = 0; i < pointLightGroupData_->activeCount; ++i) {
-                ImGui::PushID(static_cast<int>(i));
+    //        // 各ライトの設定
+    //        for (uint32_t i = 0; i < pointLightGroupData_->activeCount; ++i) {
+    //            ImGui::PushID(static_cast<int>(i));
 
-                char label[32];
-                sprintf_s(label, "Point Light [%d]", i);
+    //            char label[32];
+    //            sprintf_s(label, "Point Light [%d]", i);
 
-                if (ImGui::TreeNode(label)) {
-                    PointLight& pl = pointLightGroupData_->lights[i];
-                    ImGui::ColorEdit4("Color", &pl.color.x);
-                    ImGui::DragFloat3("Position", &pl.position.x, 0.1f);
-                    ImGui::DragFloat("Intensity", &pl.intensity, 0.01f, 0.0f, 10.0f);
-                    ImGui::DragFloat("Radius", &pl.radius, 0.1f, 0.1f, 50.0f);
-                    ImGui::DragFloat("Decay", &pl.decay, 0.01f, 0.1f, 10.0f);
-                    ImGui::TreePop();
-                }
+    //            if (ImGui::TreeNode(label)) {
+    //                PointLight& pl = pointLightGroupData_->lights[i];
+    //                ImGui::ColorEdit4("Color", &pl.color.x);
+    //                ImGui::DragFloat3("Position", &pl.position.x, 0.1f);
+    //                ImGui::DragFloat("Intensity", &pl.intensity, 0.01f, 0.0f, 10.0f);
+    //                ImGui::DragFloat("Radius", &pl.radius, 0.1f, 0.1f, 50.0f);
+    //                ImGui::DragFloat("Decay", &pl.decay, 0.01f, 0.1f, 10.0f);
+    //                ImGui::TreePop();
+    //            }
 
-                ImGui::PopID();
-            }
-        }
+    //            ImGui::PopID();
+    //        }
+    //    }
 
-        // ===== SpotLight (複数対応) =====
-        if (ImGui::CollapsingHeader("Spot Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // ライト数の調整
-            int spotLightCount = static_cast<int>(spotLightGroupData_->activeCount);
-            if (ImGui::SliderInt("Spot Light Count", &spotLightCount, 0, kMaxSpotLights)) {
-                spotLightGroupData_->activeCount = static_cast<uint32_t>(spotLightCount);
-            }
+    //    // ===== SpotLight (複数対応) =====
+    //    if (ImGui::CollapsingHeader("Spot Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+    //        // ライト数の調整
+    //        int spotLightCount = static_cast<int>(spotLightGroupData_->activeCount);
+    //        if (ImGui::SliderInt("Spot Light Count", &spotLightCount, 0, kMaxSpotLights)) {
+    //            spotLightGroupData_->activeCount = static_cast<uint32_t>(spotLightCount);
+    //        }
 
-            // 各ライトの設定
-            for (uint32_t i = 0; i < spotLightGroupData_->activeCount; ++i) {
-                ImGui::PushID(1000 + static_cast<int>(i)); // PointLightとIDが被らないようにオフセット
+    //        // 各ライトの設定
+    //        for (uint32_t i = 0; i < spotLightGroupData_->activeCount; ++i) {
+    //            ImGui::PushID(1000 + static_cast<int>(i)); // PointLightとIDが被らないようにオフセット
 
-                char label[32];
-                sprintf_s(label, "Spot Light [%d]", i);
+    //            char label[32];
+    //            sprintf_s(label, "Spot Light [%d]", i);
 
-                if (ImGui::TreeNode(label)) {
-                    SpotLight& sl = spotLightGroupData_->lights[i];
-                    ImGui::ColorEdit4("Color", &sl.color.x);
-                    ImGui::DragFloat3("Position", &sl.position.x, 0.1f);
-                    ImGui::DragFloat3("Direction", &sl.direction.x, 0.01f);
-                    ImGui::DragFloat("Intensity", &sl.intensity, 0.01f, 0.0f, 10.0f);
-                    ImGui::DragFloat("Distance", &sl.distance, 0.1f, 0.1f, 50.0f);
-                    ImGui::DragFloat("Decay", &sl.decay, 0.01f, 0.1f, 10.0f);
+    //            if (ImGui::TreeNode(label)) {
+    //                SpotLight& sl = spotLightGroupData_->lights[i];
+    //                ImGui::ColorEdit4("Color", &sl.color.x);
+    //                ImGui::DragFloat3("Position", &sl.position.x, 0.1f);
+    //                ImGui::DragFloat3("Direction", &sl.direction.x, 0.01f);
+    //                ImGui::DragFloat("Intensity", &sl.intensity, 0.01f, 0.0f, 10.0f);
+    //                ImGui::DragFloat("Distance", &sl.distance, 0.1f, 0.1f, 50.0f);
+    //                ImGui::DragFloat("Decay", &sl.decay, 0.01f, 0.1f, 10.0f);
 
-                    // 角度をdegreeで表示・編集
-                    float angleDeg = std::acos(sl.cosAngle) * 180.0f / std::numbers::pi_v<float>;
-                    if (ImGui::DragFloat("Angle", &angleDeg, 0.5f, 1.0f, 90.0f)) {
-                        sl.cosAngle = std::cos(angleDeg * std::numbers::pi_v<float> / 180.0f);
-                    }
+    //                // 角度をdegreeで表示・編集
+    //                float angleDeg = std::acos(sl.cosAngle) * 180.0f / std::numbers::pi_v<float>;
+    //                if (ImGui::DragFloat("Angle", &angleDeg, 0.5f, 1.0f, 90.0f)) {
+    //                    sl.cosAngle = std::cos(angleDeg * std::numbers::pi_v<float> / 180.0f);
+    //                }
 
-                    float falloffStartDeg = std::acos(sl.cosFalloffStart) * 180.0f / std::numbers::pi_v<float>;
-                    if (ImGui::DragFloat("Falloff Start", &falloffStartDeg, 0.5f, 0.0f, angleDeg)) {
-                        sl.cosFalloffStart = std::cos(falloffStartDeg * std::numbers::pi_v<float> / 180.0f);
-                    }
+    //                float falloffStartDeg = std::acos(sl.cosFalloffStart) * 180.0f / std::numbers::pi_v<float>;
+    //                if (ImGui::DragFloat("Falloff Start", &falloffStartDeg, 0.5f, 0.0f, angleDeg)) {
+    //                    sl.cosFalloffStart = std::cos(falloffStartDeg * std::numbers::pi_v<float> / 180.0f);
+    //                }
 
-                    ImGui::TreePop();
-                }
+    //                ImGui::TreePop();
+    //            }
 
-                ImGui::PopID();
-            }
-        }
-    }
-    ImGui::End();
+    //            ImGui::PopID();
+    //        }
+    //    }
+    //}
+    //ImGui::End();
 
 #endif // DEBUG
 }

@@ -24,14 +24,15 @@ public:
     /// 描画処理（共通）
     /// </summary>
     void Draw() {
-#ifdef DEBUG
 
-        if (!isOpen_) return;
+#ifdef _DEBUG
+
+      /*  if (!isOpen_) return;
 
         if (ImGui::Begin(name_.c_str(), &isOpen_)) {
             OnDraw();
         }
-        ImGui::End();
+        ImGui::End();*/
 
 #endif // DEBUG
     }

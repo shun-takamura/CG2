@@ -26,6 +26,11 @@ public:
 	// 更新
 	void Update();
 
+	/// <summary>
+    /// ImGuiでカメラのパラメータを調整する
+    /// </summary>
+	void OnImGui();
+
 	// セッター
 	void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
 	void SetTranslate(const Vector3& translate) { transform_.translate = translate; }

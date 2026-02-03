@@ -21,10 +21,15 @@
 #include"TransitionManager.h"
 #include <memory>
 
+std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
+Game* Game::instance_ = nullptr;
+
 Game::Game() {
+	instance_ = this;
 }
 
 Game::~Game() {
+	instance_ = nullptr;
 }
 
 void Game::Initialize() {
@@ -40,8 +45,8 @@ void Game::Initialize() {
 	// シーンマネージャに最初のシーンをセット
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 
-	// クリアカラーを赤に設定
-	float redClearColor[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // 赤
+	// クリアカラーを設定
+	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	// RenderTexture初期化（画面サイズで作成）
 	renderTexture_ = std::make_unique<RenderTexture>();
@@ -73,10 +78,16 @@ void Game::Update() {
 		return;
 	}
 
+	OutputDebugStringA(("currentEffectType_: " + std::to_string(postEffect_->GetCurrentEffectType()) + "\n").c_str());
+
 	//===================================
 	// ポストエフェクトのImGui表示
 	//===================================
+#ifdef _DEBUG
+
 	postEffect_->ShowImGui();
+#endif // _DEBUG
+
 }
 
 void Game::Draw() {
@@ -106,10 +117,13 @@ void Game::Draw() {
 	postEffect_->Draw(dxCore_->GetCommandList(), renderTexture_.get());
 
 	// 4. ImGui描画（Swapchainに直接）
+#ifdef _DEBUG
+
 	CameraCapture::GetInstance()->LogDevicesToImGui();
 	QRCodeReader::GetInstance()->OnImGui();
 	TransitionManager::GetInstance()->OnImGui();
 	ImGuiManager::Instance().EndFrame();
+#endif // _DEBUG
 
 	// 5. 終了
 	dxCore_->EndDraw();

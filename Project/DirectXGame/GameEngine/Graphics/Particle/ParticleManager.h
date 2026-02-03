@@ -95,6 +95,11 @@ public:
     // パーティクルグループの生成
     void CreateParticleGroup(const std::string& name, const std::string& textureFilePath);
 
+    /// <summary>
+    /// 指定した名前のパーティクルグループを削除する
+    /// </summary>
+    void RemoveParticleGroup(const std::string& name);
+
     // パーティクル発生
     void Emit(const std::string& name, const Vector3& position, uint32_t count);
 
@@ -131,12 +136,25 @@ public:
     bool IsAccelerationFieldEnabled() const { return isAccelerationFieldEnabled_; }
     EmitterSettings& GetEmitterSettings() { return emitterSettings_; }
 
+    // セッター
+    void SetVelocityScale(float scale) { emitterSettings_.velocityScale = scale; }
+    void SetParticleScale(float scale) { particleScale_ = scale; }
+    void SetVelocityDirection(const Vector3& dir) {
+        customDirection_ = dir;
+        useCustomDirection_ = true;
+    }
+    void ResetVelocityDirection() { useCustomDirection_ = false; }
+
 private:
     // シングルトン用
     ParticleManager() = default;
     ~ParticleManager() = default;
     ParticleManager(const ParticleManager&) = delete;
     ParticleManager& operator=(const ParticleManager&) = delete;
+
+    float particleScale_ = 1.0f;
+    bool useCustomDirection_ = false;
+    Vector3 customDirection_{ 0.0f, 0.0f, 0.0f };
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
