@@ -326,3 +326,9 @@ imgui.ini
 
 # Debug symbol files
 *.pdb
+
+# .pdbファイルをすべてキャッシュから削除（ローカルのファイル自体は残る）
+git rm -r --cached "*.pdb"
+
+# imgui.iniをキャッシュから削除
+git rm --cached Project/imgui.ini
