@@ -50,10 +50,10 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     );
 
     // 各ウィンドウを生成
-  /*  windows_.push_back(std::make_unique<FPSWindow>());
+    windows_.push_back(std::make_unique<FPSWindow>());
     windows_.push_back(std::make_unique<LogWindow>());
     windows_.push_back(std::make_unique<HierarchyWindow>(this));
-    windows_.push_back(std::make_unique<InspectorWindow>(this));*/
+    windows_.push_back(std::make_unique<InspectorWindow>(this));
 
     isInitialized_ = true;
 
@@ -62,7 +62,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
 void ImGuiManager::Shutdown() {
 #ifdef _DEBUG
-  /*  if (!isInitialized_) return;
+    if (!isInitialized_) return;
 
     windows_.clear();
     editables_.clear();
@@ -72,7 +72,7 @@ void ImGuiManager::Shutdown() {
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
 
-    isInitialized_ = false;*/
+    isInitialized_ = false;
 
 #endif // !_DEBUG
 }
@@ -93,13 +93,13 @@ void ImGuiManager::EndFrame() {
 
     if (!isInitialized_) return;
 
-    //// メニューバー描画
-    //DrawMenuBar();
+    // メニューバー描画
+    DrawMenuBar();
 
-    //// 全ウィンドウ描画
-    //for (auto& window : windows_) {
-    //    window->Draw();
-    //}
+    // 全ウィンドウ描画
+    for (auto& window : windows_) {
+        window->Draw();
+    }
 
     // ImGui描画
     ImGui::Render();
@@ -111,50 +111,50 @@ void ImGuiManager::EndFrame() {
 void ImGuiManager::Register(IImGuiEditable* editable) {
 #ifdef _DEBUG
 
-    //if (!editable) return;
+    if (!editable) return;
 
-    //// 重複チェック
-    //auto it = std::find(editables_.begin(), editables_.end(), editable);
-    //if (it == editables_.end()) {
-    //    editables_.push_back(editable);
-    //}
+    // 重複チェック
+    auto it = std::find(editables_.begin(), editables_.end(), editable);
+    if (it == editables_.end()) {
+        editables_.push_back(editable);
+    }
 #endif // !_DEBUG
 }
 
 void ImGuiManager::Unregister(IImGuiEditable* editable) {
 #ifdef _DEBUG
 
-    //if (!editable) return;
+    if (!editable) return;
 
-    //// 選択中のオブジェクトなら選択解除
-    //if (selectedObject_ == editable) {
-    //    selectedObject_ = nullptr;
-    //}
+    // 選択中のオブジェクトなら選択解除
+    if (selectedObject_ == editable) {
+        selectedObject_ = nullptr;
+    }
 
-    //// リストから削除
-    //auto it = std::find(editables_.begin(), editables_.end(), editable);
-    //if (it != editables_.end()) {
-    //    editables_.erase(it);
-    //}
+    // リストから削除
+    auto it = std::find(editables_.begin(), editables_.end(), editable);
+    if (it != editables_.end()) {
+        editables_.erase(it);
+    }
 #endif // !_DEBUG
 }
 
 void ImGuiManager::DrawMenuBar() {
 #ifdef _DEBUG
 
-    //if (ImGui::BeginMainMenuBar()) {
-    //    if (ImGui::BeginMenu("ImGuiMenu")) {
-    //        // 各ウィンドウの表示/非表示トグル
-    //        for (auto& window : windows_) {
-    //            bool isOpen = window->IsOpen();
-    //            if (ImGui::MenuItem(window->GetName().c_str(), nullptr, &isOpen)) {
-    //                window->SetOpen(isOpen);
-    //            }
-    //        }
-    //        ImGui::EndMenu();
-    //    }
-    //    ImGui::EndMainMenuBar();
-    //}
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("ImGuiMenu")) {
+            // 各ウィンドウの表示/非表示トグル
+            for (auto& window : windows_) {
+                bool isOpen = window->IsOpen();
+                if (ImGui::MenuItem(window->GetName().c_str(), nullptr, &isOpen)) {
+                    window->SetOpen(isOpen);
+                }
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
 
 #endif // DEBUG
 }
