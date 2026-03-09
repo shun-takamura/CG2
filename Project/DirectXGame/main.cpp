@@ -63,6 +63,7 @@
 #include "InputManager.h"
 #include "ImGuiManager.h"
 #include "Debug.h"
+#include "SpriteDebugWindow.h"
 
 // 今のところ不良品
 #include "ResourceManager.h"
@@ -463,6 +464,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		// 描画処理
 		ParticleManager::GetInstance()->SetBlendMode(ParticleManager::kBlendModeAdd);
 		ParticleManager::GetInstance()->Draw();
+
+		SpriteDebugWindow::Draw(sprite);
 
 		spriteManager->DrawSetting();
 		sprite->Draw();
