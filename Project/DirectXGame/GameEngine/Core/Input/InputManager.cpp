@@ -33,15 +33,15 @@ void InputManager::Initialize(WindowsApplication* winApp) {
 	//==============================
 
 	// キーボード
-	keyboard_ = new KeyboardInput();
+	keyboard_ = std::make_unique<KeyboardInput>();
 	keyboard_->Initialize(winApp, directInput_.Get());
 
 	// マウス
-	mouse_ = new MouseInput();
+	mouse_ = std::make_unique<MouseInput>();
 	mouse_->Initialize(winApp, directInput_.Get());
 
 	// コントローラー（XInputなのでDirectInput不要）
-	controller_ = new ControllerInput(0);
+	controller_ = std::make_unique<ControllerInput>(0);
 }
 
 void InputManager::Update() {
@@ -58,19 +58,10 @@ void InputManager::Update() {
 }
 
 void InputManager::Finalize() {
-	// 各デバイスの解放
-	if (controller_) {
-		delete controller_;
-		controller_ = nullptr;
-	}
-	if (mouse_) {
-		delete mouse_;
-		mouse_ = nullptr;
-	}
-	if (keyboard_) {
-		delete keyboard_;
-		keyboard_ = nullptr;
-	}
+	// unique_ptrが自動解放するためresetで明示的に解放順を制御
+	controller_.reset();
+	mouse_.reset();
+	keyboard_.reset();
 
 	// DirectInputの解放（ComPtrなので自動解放されるが明示的にリセット）
 	directInput_.Reset();

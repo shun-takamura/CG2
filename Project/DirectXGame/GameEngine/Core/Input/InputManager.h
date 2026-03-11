@@ -11,6 +11,9 @@
 // ComPtr
 #include <wrl.h>
 
+// スマートポインタ
+#include <memory>
+
 // 前方宣言
 class WindowsApplication;
 class KeyboardInput;
@@ -60,17 +63,17 @@ public:
 	/// <summary>
 	/// キーボード入力を取得
 	/// </summary>
-	KeyboardInput* GetKeyboard() const { return keyboard_; }
+	KeyboardInput* GetKeyboard() const { return keyboard_.get(); }
 
 	/// <summary>
 	/// マウス入力を取得
 	/// </summary>
-	MouseInput* GetMouse() const { return mouse_; }
+	MouseInput* GetMouse() const { return mouse_.get(); }
 
 	/// <summary>
 	/// コントローラー入力を取得
 	/// </summary>
-	ControllerInput* GetController() const { return controller_; }
+	ControllerInput* GetController() const { return controller_.get(); }
 
 	//====================
 	// DirectInputの取得（内部用）
@@ -88,7 +91,7 @@ private:
 	ComPtr<IDirectInput8> directInput_ = nullptr;
 
 	// 各入力デバイス
-	KeyboardInput* keyboard_ = nullptr;
-	MouseInput* mouse_ = nullptr;
-	ControllerInput* controller_ = nullptr;
+	std::unique_ptr<KeyboardInput> keyboard_ = nullptr;
+	std::unique_ptr<MouseInput> mouse_ = nullptr;
+	std::unique_ptr<ControllerInput> controller_ = nullptr;
 };

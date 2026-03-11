@@ -18,22 +18,18 @@
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
 
-class ResourceObject{
+class ResourceObject {
 public:
 	ResourceObject(ID3D12Resource* resource)
 		:resource_(resource)
-	{}
-
-	~ResourceObject() {
-		// デストラクタでリリース
-		if (resource_) {
-			resource_->Release();
-		}
+	{
 	}
 
-	ID3D12Resource* Get() { return resource_; }
+	// ComPtrが自動解放するためデストラクタ不要
+	~ResourceObject() = default;
+
+	ID3D12Resource* Get() { return resource_.Get(); }
 
 private:
-	ID3D12Resource* resource_;
+	Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
 };
-
