@@ -121,11 +121,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	srvManager->Initialize(dxCore);
 
 	// ImGuiManagerの初期化
+#ifdef USE_IMGUI
+
 	ImGuiManager::Instance().Initialize(
 		winApp->GetHwnd(),
 		dxCore,
 		srvManager
 	);
+
+#endif // USE_IMGUI
 
 	//========================================
 	// ここにデバッグレイヤー デバックの時だけ出る
@@ -313,9 +317,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ウィンドウのxボタンが押されるまでループ
 	while (winApp->ProcessMessage()) {
 
+#ifdef USE_IMGUI
 
 		// ===== ImGuiフレーム開始 =====
 		ImGuiManager::Instance().BeginFrame();
+
+#endif // USE_IMGUI
 
 		///
 		// ここからゲームの処理
@@ -470,9 +477,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		for (SpriteInstance* sprite : sprites) {
 			sprite->Draw();
 		}
+#ifdef USE_IMGUI
 
 		// ===== ImGui描画（描画の最後） =====
 		ImGuiManager::Instance().EndFrame();
+
+#endif // USE_IMGUI
 
 		assert(dxCore->GetCommandList() != nullptr);
 		dxCore->EndDraw();
@@ -529,8 +539,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete object3DManager;
 	ModelManager::GetInstance()->Finalize();
 
+#ifdef USE_IMGUI
+
 	// ImGui終了処理
 	ImGuiManager::Instance().Shutdown();
+
+#endif // USE_IMGUI
 
 	// dxc関連
 	includeHandler->Release();
