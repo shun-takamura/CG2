@@ -9,12 +9,21 @@
 #include "TextureManager.h"
 #include "ConvertString.h"
 
+#ifdef USE_IMGUI
 // ImGui対応
 #include "IImGuiEditable.h"
+#endif // USE_IMGUI
 
 class SpriteManager;
 
-class SpriteInstance : public IImGuiEditable {
+class SpriteInstance 
+#ifdef USE_IMGUI
+
+    : public IImGuiEditable
+
+#endif // USE_IMGUI
+
+{
 
     std::string name_;  // スプライト名（ImGui用に追加）
     std::string textureFilePath_;  // テクスチャファイルパスを保持
@@ -87,7 +96,17 @@ public:
     // コンストラクタ・デストラクタ
     //==============================
     SpriteInstance() = default;
+#ifdef USE_IMGUI
+
     ~SpriteInstance() override;
+
+#else 
+
+    ~SpriteInstance();
+
+#endif // USE_IMGUI
+
+#ifdef USE_IMGUI
 
     //==============================
     // IImGuiEditable実装
@@ -95,6 +114,8 @@ public:
     std::string GetName() const override { return name_; }
     std::string GetTypeName() const override { return "Sprite"; }
     void OnImGuiInspector() override;
+
+#endif // USE_IMGUI
 
     //==============================
     // 初期化・更新・描画

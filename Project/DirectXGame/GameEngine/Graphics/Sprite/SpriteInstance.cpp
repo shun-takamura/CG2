@@ -1,6 +1,9 @@
 #include "SpriteInstance.h"
 #include "MathUtility.h"
+
+#ifdef USE_IMGUI
 #include "imgui.h"
+#endif // USE_IMGUI
 
 void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath,
     const std::string& name)
@@ -250,6 +253,8 @@ void SpriteInstance::CreateTransformationMatrixBuffer()
     transformationMatrixData_->WVP = MakeIdentity4x4();
 }
 
+#ifdef USE_IMGUI
+
 //==============================
 // ImGui Inspector描画
 //==============================
@@ -300,4 +305,6 @@ void SpriteInstance::OnImGuiInspector()
             static_cast<int>(metadata.width),
             static_cast<int>(metadata.height));
     }
+
 }
+#endif // USE_IMGUI
