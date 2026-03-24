@@ -113,7 +113,7 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 	// 白で書き込む
 	material_->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 
-	// 球のみLightingを有効にする
+	// Lightingを有効にする
 	material_->enableLighting = true;
 
 	// UVTransformに単位行列を書き込む
