@@ -46,7 +46,7 @@ void RenderTexture::CreateResource()
 	resourceDesc.SampleDesc.Quality = 0;
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
-	// ★重要：ALLOW_RENDER_TARGETフラグを指定
+	// ALLOW_RENDER_TARGETフラグを指定
 	// これがないとRTVとして使えない
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 

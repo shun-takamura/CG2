@@ -569,7 +569,7 @@ void PostEffect::ShowImGui()
 
 	ImGui::End();
 
-#endif 
+#endif // USE_IMGUI
 }
 
 void PostEffect::ResetEffects()

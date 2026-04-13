@@ -95,9 +95,9 @@ void QRCodeReader::Reset()
 
 void QRCodeReader::OnImGui()
 {
-#ifdef _DEBUG
+#ifdef USE_IMGUI
 
- /*   ImGui::Text("=== QR Code Reader ===");
+    ImGui::Text("=== QR Code Reader ===");
 
     if (hasDetected_)
     {
@@ -106,7 +106,7 @@ void QRCodeReader::OnImGui()
     } else
     {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "No QR code detected");
-    }*/
+    }
 
-#endif // DEBUG
+#endif // USE_IMGUI
 }
