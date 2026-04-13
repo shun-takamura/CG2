@@ -26,6 +26,13 @@ struct PostProcessParams
 	float _padding2 = 0.0f;           // offset: 36 (アライメント用)
 };
 
+/// Smoothing用のパラメータ構造体
+struct SmoothingParams
+{
+	int kernelSize = 3;    // offset: 0（カーネルサイズ。3, 5, 7, 9...）
+	float _padding[3];     // offset: 4-15（16バイトアライメント用）
+};
+
 /// <summary>
 /// ポストエフェクトクラス
 /// RenderTextureの内容にエフェクトを適用してSwapchainに描画
@@ -82,6 +89,10 @@ public:
 	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
 	void SetSepia(float intensity);
 
+	/// カーネルサイズを設定
+    /// <param name="size">カーネルサイズ（3, 5, 7, 9...奇数）</param>
+	void SetSmoothingKernelSize(int size);
+
 	/// <summary>
 	/// パラメータを取得
 	/// </summary>
@@ -100,24 +111,32 @@ private:
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 
-	// ルートシグネチャ（2種類）
+	// ルートシグネチャ
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;    // Copy用（定数バッファなし）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;  // エフェクト用（定数バッファあり）
 
-	// パイプラインステート（5種類）
+	// パイプラインステート
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> combinedPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> grayscalePipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> sepiaPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> vignettePipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> smoothingPipelineState_;
 
 	// 定数バッファ
 	Microsoft::WRL::ComPtr<ID3D12Resource> constantBuffer_;
 	PostProcessParams* constantBufferMappedPtr_ = nullptr;
 
+	// Smoothing用定数バッファ
+	Microsoft::WRL::ComPtr<ID3D12Resource> smoothingConstantBuffer_;
+	SmoothingParams* smoothingConstantBufferMappedPtr_ = nullptr;
+
 	// パラメータ
 	PostProcessParams params_;
 
+	// Smoothingパラメータ
+	SmoothingParams smoothingParams_;
+
 	// 現在のエフェクトタイプ（ImGuiで選択）
-	int currentEffectType_ = 0;  // 0:Copy, 1:Combined, 2:Grayscale, 3:Sepia, 4:Vignette
+	int currentEffectType_ = 0;  // 0:Copy, 1:Combined, 2:Grayscale, 3:Sepia, 4:Vignette, 5:Smoothing
 };
