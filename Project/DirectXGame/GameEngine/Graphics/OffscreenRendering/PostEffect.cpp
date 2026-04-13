@@ -325,6 +325,30 @@ void PostEffect::CreatePipelineStates()
 		OutputDebugStringA("Vignette pipeline created successfully\n");
 	}
 
+	// 6. Smoothing
+	{
+		OutputDebugStringA("Creating Smoothing pipeline...\n");
+		IDxcBlob* psBlob = dxCore_->CompileShader(
+			L"Resources/Shaders/Smoothing.PS.hlsl",
+			L"ps_6_0"
+		);
+		if (!psBlob) {
+			OutputDebugStringA("ERROR: Smoothing.PS.hlsl compile failed\n");
+			assert(false);
+		}
+
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = basePsoDesc;
+		psoDesc.pRootSignature = effectRootSignature_.Get();
+		psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
+
+		hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&smoothingPipelineState_));
+		if (FAILED(hr)) {
+			OutputDebugStringA("ERROR: Smoothing pipeline creation failed\n");
+			assert(false);
+		}
+		OutputDebugStringA("Smoothing pipeline created successfully\n");
+	}
+
 	OutputDebugStringA("PostEffect::CreatePipelineStates - Complete\n");
 }
 
@@ -357,6 +381,40 @@ void PostEffect::CreateConstantBuffer()
 
 	hr = constantBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&constantBufferMappedPtr_));
 	assert(SUCCEEDED(hr));
+
+	// Smoothing用定数バッファ
+	{
+		uint32_t bufferSize = (sizeof(SmoothingParams) + 0xFF) & ~0xFF;
+
+		D3D12_HEAP_PROPERTIES heapProps{};
+		heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+		D3D12_RESOURCE_DESC resDesc{};
+		resDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		resDesc.Width = bufferSize;
+		resDesc.Height = 1;
+		resDesc.DepthOrArraySize = 1;
+		resDesc.MipLevels = 1;
+		resDesc.Format = DXGI_FORMAT_UNKNOWN;
+		resDesc.SampleDesc.Count = 1;
+		resDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+		hr = dxCore_->GetDevice()->CreateCommittedResource(
+			&heapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&resDesc,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&smoothingConstantBuffer_)
+		);
+		assert(SUCCEEDED(hr));
+
+		hr = smoothingConstantBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&smoothingConstantBufferMappedPtr_));
+		assert(SUCCEEDED(hr));
+
+		// 初期値を書き込み
+		memcpy(smoothingConstantBufferMappedPtr_, &smoothingParams_, sizeof(SmoothingParams));
+	}
 }
 
 void PostEffect::UpdateConstantBuffer()
@@ -433,6 +491,11 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* ren
 		pipelineState = vignettePipelineState_.Get();
 		needsConstantBuffer = true;
 		break;
+	case 5: // Smoothing
+		rootSignature = effectRootSignature_.Get();
+		pipelineState = smoothingPipelineState_.Get();
+		needsConstantBuffer = true;
+		break;
 	default: // フォールバック: Copy
 		rootSignature = copyRootSignature_.Get();
 		pipelineState = copyPipelineState_.Get();
@@ -454,7 +517,15 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* ren
 	srvManager_->SetGraphicsRootDescriptorTable(0, renderTexture->GetSRVIndex());
 
 	if (needsConstantBuffer) {
-		commandList->SetGraphicsRootConstantBufferView(1, constantBuffer_->GetGPUVirtualAddress());
+		if (currentEffectType_ == 5) {
+			// Smoothing用
+			memcpy(smoothingConstantBufferMappedPtr_, &smoothingParams_, sizeof(SmoothingParams));
+			commandList->SetGraphicsRootConstantBufferView(1, smoothingConstantBuffer_->GetGPUVirtualAddress());
+		} else {
+			// 既存エフェクト用
+			UpdateConstantBuffer();
+			commandList->SetGraphicsRootConstantBufferView(1, constantBuffer_->GetGPUVirtualAddress());
+		}
 	}
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -463,42 +534,42 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* ren
 
 void PostEffect::ShowImGui()
 {
-#ifdef _DEBUG
+#ifdef USE_IMGUI
 
-	//ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-	//const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
-	//ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 5);
+	const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
+	ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 5);
 
-	//ImGui::Separator();
+	ImGui::Separator();
 
-	//ImGui::Text("Grayscale");
-	//ImGui::SliderFloat("Intensity##GS", &params_.grayscaleIntensity, 0.0f, 1.0f);
+	ImGui::Text("Grayscale");
+	ImGui::SliderFloat("Intensity##GS", &params_.grayscaleIntensity, 0.0f, 1.0f);
 
-	//ImGui::Separator();
+	ImGui::Separator();
 
-	//ImGui::Text("Sepia");
-	//ImGui::SliderFloat("Intensity##Sepia", &params_.sepiaIntensity, 0.0f, 1.0f);
-	//if (ImGui::ColorEdit3("Color", params_.sepiaColor)) {
-	//	// 値は自動的に更新される
-	//}
-	//if (ImGui::Button("Reset Sepia Color")) {
-	//	params_.sepiaColor[0] = 1.0f;
-	//	params_.sepiaColor[1] = 0.691f;
-	//	params_.sepiaColor[2] = 0.402f;
-	//}
+	ImGui::Text("Sepia");
+	ImGui::SliderFloat("Intensity##Sepia", &params_.sepiaIntensity, 0.0f, 1.0f);
+	if (ImGui::ColorEdit3("Color", params_.sepiaColor)) {
+		// 値は自動的に更新される
+	}
+	if (ImGui::Button("Reset Sepia Color")) {
+		params_.sepiaColor[0] = 1.0f;
+		params_.sepiaColor[1] = 0.691f;
+		params_.sepiaColor[2] = 0.402f;
+	}
 
-	//ImGui::Separator();
+	ImGui::Separator();
 
-	//ImGui::Separator();
+	ImGui::Separator();
 
-	//if (ImGui::Button("Reset All")) {
-	//	params_ = PostProcessParams();
-	//}
+	if (ImGui::Button("Reset All")) {
+		params_ = PostProcessParams();
+	}
 
-	//ImGui::End();
+	ImGui::End();
 
-#endif // DEBUG
+#endif 
 }
 
 void PostEffect::ResetEffects()
@@ -558,12 +629,33 @@ void PostEffect::SetSepia(float intensity)
 	UpdateConstantBuffer();
 }
 
+void PostEffect::SetSmoothingKernelSize(int size)
+{
+	// 奇数に補正（偶数が来たら+1）
+	if (size % 2 == 0) {
+		size += 1;
+	}
+	if (size < 1) {
+		size = 1;
+	}
+	smoothingParams_.kernelSize = size;
+	currentEffectType_ = 5;
+}
+
 void PostEffect::Finalize()
 {
+
 	if (constantBuffer_ && constantBufferMappedPtr_) {
 		constantBuffer_->Unmap(0, nullptr);
 		constantBufferMappedPtr_ = nullptr;
 	}
+
+	smoothingPipelineState_.Reset();
+	if (smoothingConstantBuffer_ && smoothingConstantBufferMappedPtr_) {
+		smoothingConstantBuffer_->Unmap(0, nullptr);
+		smoothingConstantBufferMappedPtr_ = nullptr;
+	}
+	smoothingConstantBuffer_.Reset();
 
 	copyRootSignature_.Reset();
 	effectRootSignature_.Reset();
