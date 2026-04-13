@@ -538,8 +538,8 @@ void PostEffect::ShowImGui()
 
 	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-	const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette" };
-	ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 5);
+	const char* effectTypes[] = { "Copy", "Combined", "Grayscale", "Sepia", "Vignette", "Smoothing" };
+	ImGui::Combo("Effect Type", &currentEffectType_, effectTypes, 6);
 
 	ImGui::Separator();
 
@@ -550,13 +550,25 @@ void PostEffect::ShowImGui()
 
 	ImGui::Text("Sepia");
 	ImGui::SliderFloat("Intensity##Sepia", &params_.sepiaIntensity, 0.0f, 1.0f);
+
 	if (ImGui::ColorEdit3("Color", params_.sepiaColor)) {
 		// 値は自動的に更新される
 	}
+
 	if (ImGui::Button("Reset Sepia Color")) {
 		params_.sepiaColor[0] = 1.0f;
 		params_.sepiaColor[1] = 0.691f;
 		params_.sepiaColor[2] = 0.402f;
+	}
+
+	if (currentEffectType_ == 5) {
+		ImGui::Separator();
+		ImGui::Text("Smoothing");
+		ImGui::SliderInt("Kernel Size", &smoothingParams_.kernelSize, 1, 15);
+		// 奇数に補正
+		if (smoothingParams_.kernelSize % 2 == 0) {
+			smoothingParams_.kernelSize += 1;
+		}
 	}
 
 	ImGui::Separator();
