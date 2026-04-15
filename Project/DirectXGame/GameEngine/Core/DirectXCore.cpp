@@ -151,6 +151,27 @@ void DirectXCore::Finalize() {
     }
 }
 
+void DirectXCore::RestoreSwapchainRenderTarget(ID3D12GraphicsCommandList* commandList)
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle =
+        rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += frameIndex_ * rtvDescriptorSize_;
+
+    commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+    D3D12_VIEWPORT viewport{};
+    viewport.Width = static_cast<float>(WindowsApplication::kClientWidth);
+    viewport.Height = static_cast<float>(WindowsApplication::kClientHeight);
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    commandList->RSSetViewports(1, &viewport);
+
+    D3D12_RECT scissorRect{};
+    scissorRect.right = WindowsApplication::kClientWidth;
+    scissorRect.bottom = WindowsApplication::kClientHeight;
+    commandList->RSSetScissorRects(1, &scissorRect);
+}
+
 //==============================
 // 内部ヘルパー
 //==============================

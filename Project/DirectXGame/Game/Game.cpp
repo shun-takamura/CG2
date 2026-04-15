@@ -16,9 +16,9 @@
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "SceneFactory.h"
-#include"CameraCapture.h"
+#include "CameraCapture.h"
 #include "QRCodeReader.h"
-#include"TransitionManager.h"
+#include "TransitionManager.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -45,20 +45,11 @@ void Game::Initialize() {
 	// シーンマネージャに最初のシーンをセット
 	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
 
-	// クリアカラーを設定
-	float redClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-	// RenderTexture初期化（画面サイズで作成）
-	renderTexture_ = std::make_unique<RenderTexture>();
-	renderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
-		WindowsApplication::kClientWidth,
-		WindowsApplication::kClientHeight,
-		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
-		redClearColor);
-
-	// PostEffect初期化
+	// PostEffect初期化（RenderTextureも内部で作成される）
 	postEffect_ = std::make_unique<PostEffect>();
-	postEffect_->Initialize(dxCore_.get(), srvManager_.get());
+	postEffect_->Initialize(dxCore_.get(), srvManager_.get(),
+		WindowsApplication::kClientWidth,
+		WindowsApplication::kClientHeight);
 }
 
 void Game::Update() {
@@ -78,24 +69,20 @@ void Game::Update() {
 		return;
 	}
 
-	OutputDebugStringA(("currentEffectType_: " + std::to_string(postEffect_->GetCurrentEffectType()) + "\n").c_str());
-
 	//===================================
 	// ポストエフェクトのImGui表示
 	//===================================
 #ifdef _DEBUG
-
 	postEffect_->ShowImGui();
 #endif // _DEBUG
-
 }
 
 void Game::Draw() {
-	// 1. RenderTextureにシーンを描画
+	// 1. PostEffectのRenderTextureにシーンを描画
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
 		dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
 
-	renderTexture_->BeginRender(dxCore_->GetCommandList(), &dsvHandle);
+	postEffect_->BeginSceneRender(dxCore_->GetCommandList(), &dsvHandle);
 
 	srvManager_->PreDraw();
 
@@ -106,19 +93,18 @@ void Game::Draw() {
 	// シーン描画
 	SceneManager::GetInstance()->Draw();
 
-	renderTexture_->EndRender(dxCore_->GetCommandList());
+	postEffect_->EndSceneRender(dxCore_->GetCommandList());
 
 	// 2. Swapchainに切り替え
 	dxCore_->BeginDraw();
 
 	srvManager_->PreDraw();  // ディスクリプタヒープを再設定
 
-	// 3. PostEffectでRenderTexture → Swapchainにコピー
-	postEffect_->Draw(dxCore_->GetCommandList(), renderTexture_.get());
+	// 3. マルチパスでエフェクト適用 → Swapchainに出力
+	postEffect_->Draw(dxCore_->GetCommandList());
 
 	// 4. ImGui描画（Swapchainに直接）
 #ifdef _DEBUG
-
 	CameraCapture::GetInstance()->LogDevicesToImGui();
 	QRCodeReader::GetInstance()->OnImGui();
 	TransitionManager::GetInstance()->OnImGui();
@@ -137,13 +123,9 @@ void Game::Finalize() {
 	if (postEffect_) {
 		postEffect_->Finalize();
 	}
-	if (renderTexture_) {
-		renderTexture_->Finalize();
-	}
 
 	//===================================
 	// 基底クラスの終了処理
-	// （SceneManagerとSceneFactoryの解放はFramework::Finalizeで行う）
 	//===================================
 	Framework::Finalize();
 }

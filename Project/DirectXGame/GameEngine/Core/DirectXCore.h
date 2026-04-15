@@ -80,6 +80,12 @@ public:
 	/// </summary>
 	DXGI_FORMAT GetRenderTargetFormat() const { return backBufferFormat_; }
 
+	/// <summary>
+    /// SwapchainのRTVとビューポートを再設定する
+    /// ポストエフェクトのマルチパス後に呼ぶ
+    /// </summary>
+	void RestoreSwapchainRenderTarget(ID3D12GraphicsCommandList* commandList);
+
 	// DSVハンドルの取得
 	D3D12_CPU_DESCRIPTOR_HANDLE GetDsvHandle() const {
 		return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
