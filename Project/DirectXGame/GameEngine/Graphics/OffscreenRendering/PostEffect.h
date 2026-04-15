@@ -2,40 +2,39 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <cstdint>
-#include<algorithm>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <memory>
+#include <algorithm>
+#include <variant>
+#include "RenderTexture.h"
 
 // 前方宣言
 class DirectXCore;
 class SRVManager;
-class RenderTexture;
+
+// ===== パラメータの型 =====
+using ParamValue = std::variant<int, float, bool>;
 
 /// <summary>
-/// ポストエフェクトのパラメータ構造体
-/// シェーダーの定数バッファと同じレイアウトにする必要がある
-/// HLSLのfloat3は16バイトアライメントされるため注意
+/// エフェクト1つ分の情報
 /// </summary>
-struct PostProcessParams
+struct EffectEntry
 {
-	float grayscaleIntensity = 0.0f;  // offset: 0
-	float sepiaIntensity = 0.0f;      // offset: 4
-	float sepiaColor[3] = { 1.0f, 0.691f, 0.402f };  // offset: 8, 12, 16
-	float _padding1 = 0.0f;           // offset: 20 (float3の後のパディング)
-	float vignetteIntensity = 0.0f;  // offset: 24 ← デフォルトを0.5に
-	float vignettePower = 0.8f;      // offset: 28
-	float vignetteScale = 16.0f;      // offset: 32
-	float _padding2 = 0.0f;           // offset: 36 (アライメント用)
-};
-
-/// Smoothing用のパラメータ構造体
-struct SmoothingParams
-{
-	int kernelSize = 3;    // offset: 0（カーネルサイズ。3, 5, 7, 9...）
-	float _padding[3];     // offset: 4-15（16バイトアライメント用）
+	std::string name;                                                // エフェクト名（"Grayscale", "Sepia"等）
+	bool enabled = false;                                            // ON/OFF
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;       // パイプラインステート
+	bool needsCBuffer = false;                                       // 定数バッファを使うか
+	Microsoft::WRL::ComPtr<ID3D12Resource> constantBuffer;           // 定数バッファリソース
+	void* constantBufferMappedPtr = nullptr;                         // マップ済みポインタ
+	uint32_t constantBufferSize = 0;                                 // 定数バッファの実データサイズ
+	std::unordered_map<std::string, ParamValue> params;              // パラメータ（名前→値）
 };
 
 /// <summary>
-/// ポストエフェクトクラス
-/// RenderTextureの内容にエフェクトを適用してSwapchainに描画
+/// ポストエフェクトクラス（マルチパス対応）
+/// 複数のエフェクトをピンポンRenderTextureで順番に適用する
 /// </summary>
 class PostEffect
 {
@@ -43,12 +42,30 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
-	void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
+	/// <param name="dxCore">DirectXCoreへのポインタ</param>
+	/// <param name="srvManager">SRVManagerへのポインタ</param>
+	/// <param name="width">画面幅</param>
+	/// <param name="height">画面高さ</param>
+	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t width, uint32_t height);
 
 	/// <summary>
-	/// 描画（RenderTextureの内容を現在のレンダーターゲットに描画）
+	/// シーン描画の開始（RenderTextureへの描画を開始する）
 	/// </summary>
-	void Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* renderTexture);
+	/// <param name="commandList">コマンドリスト</param>
+	/// <param name="dsvHandle">深度ステンシルビューのハンドル</param>
+	void BeginSceneRender(ID3D12GraphicsCommandList* commandList, D3D12_CPU_DESCRIPTOR_HANDLE* dsvHandle = nullptr);
+
+	/// <summary>
+	/// シーン描画の終了（RenderTextureへの描画を終了する）
+	/// </summary>
+	/// <param name="commandList">コマンドリスト</param>
+	void EndSceneRender(ID3D12GraphicsCommandList* commandList);
+
+	/// <summary>
+	/// マルチパス描画（ONのエフェクトを順番に適用してSwapchainに出力）
+	/// </summary>
+	/// <param name="commandList">コマンドリスト</param>
+	void Draw(ID3D12GraphicsCommandList* commandList);
 
 	/// <summary>
 	/// 終了処理
@@ -56,87 +73,97 @@ public:
 	void Finalize();
 
 	/// <summary>
-	/// ImGuiでパラメータを表示・編集
+	/// ImGuiでパラメータを表示・編集（ON/OFF、順番入れ替え、パラメータ調整）
 	/// </summary>
 	void ShowImGui();
 
+	// ===== ゲームコード用API =====
+
 	/// <summary>
-    /// 全エフェクトをリセット（シーン開始時に呼ぶ）
-    /// </summary>
+	/// エフェクトのON/OFFを設定
+	/// </summary>
+	/// <param name="name">エフェクト名</param>
+	/// <param name="enabled">true=ON, false=OFF</param>
+	void SetEffectEnabled(const std::string& name, bool enabled);
+
+	/// <summary>
+	/// エフェクトのパラメータを設定（float）
+	/// </summary>
+	void SetEffectParam(const std::string& name, const std::string& param, float value);
+
+	/// <summary>
+	/// エフェクトのパラメータを設定（int）
+	/// </summary>
+	void SetEffectParam(const std::string& name, const std::string& param, int value);
+
+	/// <summary>
+	/// エフェクトの適用順序を設定
+	/// </summary>
+	/// <param name="order">エフェクト名のリスト（先頭から順に適用）</param>
+	void SetEffectOrder(const std::vector<std::string>& order);
+
+	/// <summary>
+	/// 全エフェクトをOFFにしてパラメータをリセット
+	/// </summary>
 	void ResetEffects();
 
 	/// <summary>
-	/// ダメージ演出を適用（HP割合に応じて自動計算）
+	/// ダメージ演出を適用（複数エフェクトをまとめて設定するヘルパー）
 	/// </summary>
 	/// <param name="damageRatio">0.0 = 満タン, 1.0 = 瀕死</param>
 	void ApplyDamageEffect(float damageRatio);
 
 	/// <summary>
-	/// ヴィネットを設定
+	/// エフェクトがONかどうかを取得
 	/// </summary>
-	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
-	void SetVignette(float intensity);
+	bool IsEffectEnabled(const std::string& name) const;
 
 	/// <summary>
-	/// グレースケールを設定
+	/// エフェクトリストを取得（読み取り専用）
 	/// </summary>
-	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
-	void SetGrayscale(float intensity);
-
-	/// <summary>
-	/// セピアを設定
-	/// </summary>
-	/// <param name="intensity">強度 0.0〜1.0（0で無効）</param>
-	void SetSepia(float intensity);
-
-	/// カーネルサイズを設定
-    /// <param name="size">カーネルサイズ（3, 5, 7, 9...奇数）</param>
-	void SetSmoothingKernelSize(int size);
-
-	/// <summary>
-	/// パラメータを取得
-	/// </summary>
-	PostProcessParams& GetParams() { return params_; }
-
-	int GetCurrentEffectType() const { return currentEffectType_; }
+	const std::vector<EffectEntry>& GetEffectList() const { return effects_; }
 
 private:
-	void CreateCopyRootSignature();
-	void CreateEffectRootSignature();
+	// ===== 初期化系 =====
+	void CreateRootSignatures();
 	void CreatePipelineStates();
-	void CreateConstantBuffer();
-	void UpdateConstantBuffer();
+	void RegisterEffect(const std::string& name,
+		const wchar_t* psPath,
+		bool needsCBuffer,
+		uint32_t cbufferDataSize,
+		const std::unordered_map<std::string, ParamValue>& defaultParams);
+
+	// ===== 定数バッファ系 =====
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateConstantBuffer(uint32_t dataSize);
+	void UpdateEffectConstantBuffer(EffectEntry& effect);
+
+	// ===== 描画ヘルパー =====
+	void DrawEffect(ID3D12GraphicsCommandList* commandList, EffectEntry& effect, RenderTexture* input);
+	void DrawCopy(ID3D12GraphicsCommandList* commandList, RenderTexture* input);
+
+	// ===== エフェクト検索 =====
+	EffectEntry* FindEffect(const std::string& name);
+	const EffectEntry* FindEffect(const std::string& name) const;
 
 private:
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 
-	// ルートシグネチャ
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;    // Copy用（定数バッファなし）
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;  // エフェクト用（定数バッファあり）
+	// ピンポンRenderTexture（シーン描画用 + エフェクト作業用）
+	std::unique_ptr<RenderTexture> renderTextureA_;
+	std::unique_ptr<RenderTexture> renderTextureB_;
 
-	// パイプラインステート
+	// ルートシグネチャ（2種類）
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;    // cbufferなし
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;  // cbufferあり
+
+	// コピー用パイプライン（エフェクトなし時 or 最終出力用）
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> combinedPipelineState_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> grayscalePipelineState_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> sepiaPipelineState_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> vignettePipelineState_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> smoothingPipelineState_;
 
-	// 定数バッファ
-	Microsoft::WRL::ComPtr<ID3D12Resource> constantBuffer_;
-	PostProcessParams* constantBufferMappedPtr_ = nullptr;
+	// エフェクトリスト（この順番で適用される）
+	std::vector<EffectEntry> effects_;
 
-	// Smoothing用定数バッファ
-	Microsoft::WRL::ComPtr<ID3D12Resource> smoothingConstantBuffer_;
-	SmoothingParams* smoothingConstantBufferMappedPtr_ = nullptr;
-
-	// パラメータ
-	PostProcessParams params_;
-
-	// Smoothingパラメータ
-	SmoothingParams smoothingParams_;
-
-	// 現在のエフェクトタイプ（ImGuiで選択）
-	int currentEffectType_ = 0;  // 0:Copy, 1:Combined, 2:Grayscale, 3:Sepia, 4:Vignette, 5:Smoothing
+	// 画面サイズ
+	uint32_t width_ = 0;
+	uint32_t height_ = 0;
 };

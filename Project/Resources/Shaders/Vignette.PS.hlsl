@@ -12,40 +12,36 @@ struct PixelShaderOutput
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
 
-// PostProcessと同じ定数バッファ構造を使用
-cbuffer PostProcessParams : register(b0)
+
+// Vignette専用の定数バッファ
+cbuffer VignetteParams : register(b0)
 {
-    float grayscaleIntensity; // offset: 0
-    float sepiaIntensity; // offset: 4
-    float3 sepiaColor; // offset: 8-19 (float3は12バイト)
-    float _padding1; // offset: 20 (float3の後のパディング)
-    float vignetteIntensity; // offset: 24
-    float vignettePower; // offset: 28
-    float vignetteScale; // offset: 32
-    float _padding2; // offset: 36
+    float intensity; // offset: 0
+    float power; // offset: 4
+    float scale; // offset: 8
 };
 
 PixelShaderOutput main(VertexShaderOutput input)
 {
-    
     PixelShaderOutput output;
-    
+
     // 元の色をサンプリング
     output.color = gTexture.Sample(gSampler, input.texcoord);
-    
+
     // 中心からの距離を計算
     float2 correct = input.texcoord * (1.0f - input.texcoord.yx);
-        
+
     // 中心が明るく、周辺が暗くなるグラデーション
-    float vignette = correct.x * correct.y * 16.0f;
-        
+    float vignette = correct.x * correct.y * scale;
+
     // カーブ調整
-    vignette = pow(vignette, 0.8f);
-        
+    vignette = pow(vignette, 1.0f / power);
+
     // 0〜1にクランプ
     vignette = saturate(vignette);
-        
-    output.color.rgb *= vignette;
-    
+
+    // intensityでブレンド（0なら効果なし、1で最大）
+    output.color.rgb *= lerp(1.0f, vignette, intensity);
+
     return output;
 }

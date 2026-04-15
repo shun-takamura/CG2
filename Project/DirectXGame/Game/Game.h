@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Framework.h"
-#include"RenderTexture.h"
-#include"PostEffect.h"
+#include "PostEffect.h"
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
@@ -47,7 +46,6 @@ private:
 
 	static Game* instance_;
 
-	// オフスクリーンレンダリング用
-	std::unique_ptr<RenderTexture> renderTexture_;
+	// ポストエフェクト（RenderTextureも内部で管理）
 	static std::unique_ptr<PostEffect> postEffect_;
 };
