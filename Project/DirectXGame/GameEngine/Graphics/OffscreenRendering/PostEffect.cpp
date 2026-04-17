@@ -211,6 +211,7 @@ void PostEffect::InitializeEffects()
 	// ----- 各エフェクトを登録 -----
 	grayscale = static_cast<GrayscaleEffect*>(registerEffect(std::make_unique<GrayscaleEffect>()));
 	gaussian = static_cast<GaussianEffect*>(registerEffect(std::make_unique<GaussianEffect>()));
+	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
 }
 
 // ===================================================================

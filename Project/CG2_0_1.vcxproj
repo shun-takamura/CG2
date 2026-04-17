@@ -262,6 +262,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXGame\GameEngine\QRCodeReader.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\GameData.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.h" />
@@ -354,6 +355,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="DirectXGame\GameEngine\QRCodeReader.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver.h" />
     <ClInclude Include="DirectXGame\GameEngine\GameData.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl">

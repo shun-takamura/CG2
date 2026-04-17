@@ -11,6 +11,7 @@
 #include "BaseFilterEffect.h"
 #include "GrayscaleEffect.h"
 #include "GaussianEffect.h"
+#include "SepiaEffect.h"
 
 // 前方宣言
 class DirectXCore;
@@ -72,6 +73,7 @@ public:
 
 	GrayscaleEffect* grayscale = nullptr;
 	GaussianEffect* gaussian = nullptr;
+	SepiaEffect* sepia = nullptr;
 
 private:
 	void CreateRootSignatures();
