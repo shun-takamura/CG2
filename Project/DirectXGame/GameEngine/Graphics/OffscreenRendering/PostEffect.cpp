@@ -3,36 +3,10 @@
 #include "SRVManager.h"
 #include "RenderTexture.h"
 #include <cassert>
-#include <cstring>
 
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
-
-// ===== cbuffer構造体定義（C++側） =====
-// シェーダーのcbufferと完全にレイアウトを一致させること
-
-struct SepiaParamsCB
-{
-	float intensity = 0.0f;       // offset: 0
-	float sepiaColorR = 1.0f;    // offset: 4
-	float sepiaColorG = 0.691f;  // offset: 8
-	float sepiaColorB = 0.402f;  // offset: 12
-};
-
-struct VignetteParamsCB
-{
-	float intensity = 0.5f;  // offset: 0
-	float power = 0.8f;      // offset: 4
-	float scale = 16.0f;     // offset: 8
-	float _padding = 0.0f;   // offset: 12
-};
-
-struct SmoothingParamsCB
-{
-	int kernelSize = 3;      // offset: 0
-	float _padding[3];       // offset: 4-15
-};
 
 // ===================================================================
 // 初期化
@@ -57,7 +31,8 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
 
 	CreateRootSignatures();
-	CreatePipelineStates();
+	CreateBasePsoDesc();
+	InitializeEffects();
 }
 
 // ===================================================================
@@ -159,212 +134,86 @@ void PostEffect::CreateRootSignatures()
 }
 
 // ===================================================================
-// パイプライン作成 & エフェクト登録
+// 共通PSO設定の作成
 // ===================================================================
 
-void PostEffect::CreatePipelineStates()
+void PostEffect::CreateBasePsoDesc()
 {
-	HRESULT hr;
-
-	// 共通PSO設定
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC basePsoDesc{};
-	basePsoDesc.InputLayout.pInputElementDescs = nullptr;
-	basePsoDesc.InputLayout.NumElements = 0;
+	basePsoDesc_ = {};
+	basePsoDesc_.InputLayout.pInputElementDescs = nullptr;
+	basePsoDesc_.InputLayout.NumElements = 0;
 
 	D3D12_BLEND_DESC blendDesc{};
 	blendDesc.AlphaToCoverageEnable = FALSE;
 	blendDesc.IndependentBlendEnable = FALSE;
 	blendDesc.RenderTarget[0].BlendEnable = FALSE;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	basePsoDesc.BlendState = blendDesc;
+	basePsoDesc_.BlendState = blendDesc;
 
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 	rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;
 	rasterizerDesc.FrontCounterClockwise = FALSE;
 	rasterizerDesc.DepthClipEnable = TRUE;
-	basePsoDesc.RasterizerState = rasterizerDesc;
+	basePsoDesc_.RasterizerState = rasterizerDesc;
 
 	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
 	depthStencilDesc.DepthEnable = FALSE;
 	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	basePsoDesc.DepthStencilState = depthStencilDesc;
+	basePsoDesc_.DepthStencilState = depthStencilDesc;
 
-	basePsoDesc.SampleMask = UINT_MAX;
-	basePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	basePsoDesc.NumRenderTargets = 1;
-	basePsoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	basePsoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	basePsoDesc.SampleDesc.Count = 1;
+	basePsoDesc_.SampleMask = UINT_MAX;
+	basePsoDesc_.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	basePsoDesc_.NumRenderTargets = 1;
+	basePsoDesc_.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	basePsoDesc_.DSVFormat = DXGI_FORMAT_UNKNOWN;
+	basePsoDesc_.SampleDesc.Count = 1;
 
-	// 頂点シェーダー（Copy用）
-	IDxcBlob* copyVsBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.VS.hlsl", L"vs_6_0");
-	assert(copyVsBlob);
+	// 頂点シェーダー（エフェクト共通）
+	IDxcBlob* vsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostProcess.VS.hlsl", L"vs_6_0");
+	assert(vsBlob);
+	basePsoDesc_.VS = { vsBlob->GetBufferPointer(), vsBlob->GetBufferSize() };
 
-	// 頂点シェーダー（エフェクト用）
-	IDxcBlob* effectVsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostProcess.VS.hlsl", L"vs_6_0");
-	assert(effectVsBlob);
-
-	// ----- Copyパイプライン -----
+	// コピー用パイプライン
 	{
-		IDxcBlob* psBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.PS.hlsl", L"ps_6_0");
-		assert(psBlob);
+		IDxcBlob* copyVsBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.VS.hlsl", L"vs_6_0");
+		assert(copyVsBlob);
+		IDxcBlob* copyPsBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.PS.hlsl", L"ps_6_0");
+		assert(copyPsBlob);
 
-		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = basePsoDesc;
-		psoDesc.pRootSignature = copyRootSignature_.Get();
-		psoDesc.VS = { copyVsBlob->GetBufferPointer(), copyVsBlob->GetBufferSize() };
-		psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC copyPsoDesc = basePsoDesc_;
+		copyPsoDesc.pRootSignature = copyRootSignature_.Get();
+		copyPsoDesc.VS = { copyVsBlob->GetBufferPointer(), copyVsBlob->GetBufferSize() };
+		copyPsoDesc.PS = { copyPsBlob->GetBufferPointer(), copyPsBlob->GetBufferSize() };
 
-		hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&copyPipelineState_));
+		HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&copyPsoDesc, IID_PPV_ARGS(&copyPipelineState_));
 		assert(SUCCEEDED(hr));
 	}
+}
 
-	// 以降のエフェクトはeffectVsBlobを共有
-	basePsoDesc.VS = { effectVsBlob->GetBufferPointer(), effectVsBlob->GetBufferSize() };
+// ===================================================================
+// エフェクト初期化
+// ===================================================================
 
-	// ----- エフェクト登録ヘルパーのためにbasePsoDescを保存 -----
-	// RegisterEffectの中でパイプラインを作るため、ローカル変数では渡せない
-	// →直接ここで全エフェクトのパイプラインを作成する
-
-	auto createEffectPipeline = [&](const wchar_t* psPath, bool needsCBuffer)
-		-> Microsoft::WRL::ComPtr<ID3D12PipelineState>
+void PostEffect::InitializeEffects()
+{
+	// エフェクトを作成して登録するラムダ
+	auto registerEffect = [&](std::unique_ptr<BaseFilterEffect> effect) -> BaseFilterEffect*
 		{
-			IDxcBlob* psBlob = dxCore_->CompileShader(psPath, L"ps_6_0");
-			assert(psBlob);
-
-			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = basePsoDesc;
-			psoDesc.pRootSignature = needsCBuffer ? effectRootSignature_.Get() : copyRootSignature_.Get();
-			psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
-
-			Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
-			hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pso));
-			assert(SUCCEEDED(hr));
-			return pso;
+			effect->Initialize(dxCore_, copyRootSignature_.Get(), effectRootSignature_.Get(), basePsoDesc_);
+			BaseFilterEffect* ptr = effect.get();
+			effectOrder_.push_back(ptr);
+			effectOwners_.push_back(std::move(effect));
+			return ptr;
 		};
 
-	// ----- Grayscale（cbufferなし） -----
-	{
-		EffectEntry effect;
-		effect.name = "Grayscale";
-		effect.enabled = false;
-		effect.needsCBuffer = false;
-		effect.pipelineState = createEffectPipeline(L"Resources/Shaders/Grayscale.PS.hlsl", false);
-		effects_.push_back(std::move(effect));
-	}
-
-	// ----- Sepia（cbufferあり） -----
-	{
-		EffectEntry effect;
-		effect.name = "Sepia";
-		effect.enabled = false;
-		effect.needsCBuffer = true;
-		effect.constantBufferSize = sizeof(SepiaParamsCB);
-		effect.constantBuffer = CreateConstantBuffer(sizeof(SepiaParamsCB));
-		effect.constantBuffer->Map(0, nullptr, &effect.constantBufferMappedPtr);
-		effect.pipelineState = createEffectPipeline(L"Resources/Shaders/Sepia.PS.hlsl", true);
-		// デフォルトパラメータ
-		effect.params["intensity"] = 1.0f;
-		effect.params["sepiaColorR"] = 1.0f;
-		effect.params["sepiaColorG"] = 0.691f;
-		effect.params["sepiaColorB"] = 0.402f;
-		effects_.push_back(std::move(effect));
-	}
-
-	// ----- Vignette（cbufferあり） -----
-	{
-		EffectEntry effect;
-		effect.name = "Vignette";
-		effect.enabled = false;
-		effect.needsCBuffer = true;
-		effect.constantBufferSize = sizeof(VignetteParamsCB);
-		effect.constantBuffer = CreateConstantBuffer(sizeof(VignetteParamsCB));
-		effect.constantBuffer->Map(0, nullptr, &effect.constantBufferMappedPtr);
-		effect.pipelineState = createEffectPipeline(L"Resources/Shaders/Vignette.PS.hlsl", true);
-		// デフォルトパラメータ
-		effect.params["intensity"] = 0.5f;
-		effect.params["power"] = 0.8f;
-		effect.params["scale"] = 16.0f;
-		effects_.push_back(std::move(effect));
-	}
-
-	// ----- Smoothing（cbufferあり） -----
-	{
-		EffectEntry effect;
-		effect.name = "Smoothing";
-		effect.enabled = false;
-		effect.needsCBuffer = true;
-		effect.constantBufferSize = sizeof(SmoothingParamsCB);
-		effect.constantBuffer = CreateConstantBuffer(sizeof(SmoothingParamsCB));
-		effect.constantBuffer->Map(0, nullptr, &effect.constantBufferMappedPtr);
-		effect.pipelineState = createEffectPipeline(L"Resources/Shaders/Smoothing.PS.hlsl", true);
-		// デフォルトパラメータ
-		effect.params["kernelSize"] = 3;
-		effects_.push_back(std::move(effect));
-	}
-}
-
-// ===================================================================
-// 定数バッファ作成ヘルパー
-// ===================================================================
-
-Microsoft::WRL::ComPtr<ID3D12Resource> PostEffect::CreateConstantBuffer(uint32_t dataSize)
-{
-	uint32_t bufferSize = (dataSize + 0xFF) & ~0xFF;
-
-	D3D12_HEAP_PROPERTIES heapProps{};
-	heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-	D3D12_RESOURCE_DESC resourceDesc{};
-	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	resourceDesc.Width = bufferSize;
-	resourceDesc.Height = 1;
-	resourceDesc.DepthOrArraySize = 1;
-	resourceDesc.MipLevels = 1;
-	resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
-	resourceDesc.SampleDesc.Count = 1;
-	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
-	HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &resourceDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&buffer));
-	assert(SUCCEEDED(hr));
-
-	return buffer;
-}
-
-// ===================================================================
-// 定数バッファ更新
-// ===================================================================
-
-void PostEffect::UpdateEffectConstantBuffer(EffectEntry& effect)
-{
-	if (!effect.needsCBuffer || !effect.constantBufferMappedPtr) return;
-
-	if (effect.name == "Sepia") {
-		SepiaParamsCB cb;
-		cb.intensity = std::get<float>(effect.params["intensity"]);
-		cb.sepiaColorR = std::get<float>(effect.params["sepiaColorR"]);
-		cb.sepiaColorG = std::get<float>(effect.params["sepiaColorG"]);
-		cb.sepiaColorB = std::get<float>(effect.params["sepiaColorB"]);
-		memcpy(effect.constantBufferMappedPtr, &cb, sizeof(cb));
-	}
-	else if (effect.name == "Vignette") {
-		VignetteParamsCB cb;
-		cb.intensity = std::get<float>(effect.params["intensity"]);
-		cb.power = std::get<float>(effect.params["power"]);
-		cb.scale = std::get<float>(effect.params["scale"]);
-		memcpy(effect.constantBufferMappedPtr, &cb, sizeof(cb));
-	}
-	else if (effect.name == "Smoothing") {
-		SmoothingParamsCB cb;
-		cb.kernelSize = std::get<int>(effect.params["kernelSize"]);
-		// 奇数に補正
-		if (cb.kernelSize % 2 == 0) cb.kernelSize += 1;
-		if (cb.kernelSize < 1) cb.kernelSize = 1;
-		memcpy(effect.constantBufferMappedPtr, &cb, sizeof(cb));
-	}
+	// ----- 各エフェクトを登録 -----
+	grayscale = static_cast<GrayscaleEffect*>(registerEffect(std::make_unique<GrayscaleEffect>()));
+	gaussian = static_cast<GaussianEffect*>(registerEffect(std::make_unique<GaussianEffect>()));
+	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
+	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
+	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
 }
 
 // ===================================================================
@@ -373,7 +222,6 @@ void PostEffect::UpdateEffectConstantBuffer(EffectEntry& effect)
 
 void PostEffect::BeginSceneRender(ID3D12GraphicsCommandList* commandList, D3D12_CPU_DESCRIPTOR_HANDLE* dsvHandle)
 {
-	// シーンはRenderTexture Aに描画する
 	renderTextureA_->BeginRender(commandList, dsvHandle);
 }
 
@@ -385,25 +233,30 @@ void PostEffect::EndSceneRender(ID3D12GraphicsCommandList* commandList)
 // ===================================================================
 // マルチパス描画
 // ===================================================================
+
 void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 {
-	std::vector<EffectEntry*> activeEffects;
-	for (auto& effect : effects_) {
-		if (effect.enabled) {
-			activeEffects.push_back(&effect);
+	// ONになっているエフェクトを集める
+	std::vector<BaseFilterEffect*> activeEffects;
+	for (auto* effect : effectOrder_) {
+		if (effect->IsEnabled()) {
+			activeEffects.push_back(effect);
 		}
 	}
 
+	// 全エフェクトOFF → コピーだけ
 	if (activeEffects.empty()) {
 		DrawCopy(commandList, renderTextureA_.get());
 		return;
 	}
 
+	// 1つだけ → 直接Swapchainに描画
 	if (activeEffects.size() == 1) {
-		DrawEffect(commandList, *activeEffects[0], renderTextureA_.get());
+		DrawEffect(commandList, activeEffects[0], renderTextureA_.get());
 		return;
 	}
 
+	// 複数エフェクトのピンポン描画
 	RenderTexture* currentInput = renderTextureA_.get();
 	RenderTexture* currentOutput = renderTextureB_.get();
 
@@ -411,17 +264,19 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 		bool isLast = (i == activeEffects.size() - 1);
 
 		if (isLast) {
-			// 最後のパス: SwapchainのRTVに戻す
+			// 最後のパス: SwapchainのRTVに戻して描画
 			dxCore_->RestoreSwapchainRenderTarget(commandList);
 			srvManager_->PreDraw();
-
-			DrawEffect(commandList, *activeEffects[i], currentInput);
-		} else {
+			DrawEffect(commandList, activeEffects[i], currentInput);
+		}
+		else {
+			// 中間パス: currentOutputに描画
 			currentOutput->BeginRender(commandList);
 			srvManager_->PreDraw();
-			DrawEffect(commandList, *activeEffects[i], currentInput);
+			DrawEffect(commandList, activeEffects[i], currentInput);
 			currentOutput->EndRender(commandList);
 
+			// 入力と出力を入れ替え
 			RenderTexture* temp = currentInput;
 			currentInput = currentOutput;
 			currentOutput = temp;
@@ -433,20 +288,20 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 // 1エフェクト分の描画
 // ===================================================================
 
-void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, EffectEntry& effect, RenderTexture* input)
+void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEffect* effect, RenderTexture* input)
 {
-	ID3D12RootSignature* rootSig = effect.needsCBuffer ? effectRootSignature_.Get() : copyRootSignature_.Get();
+	ID3D12RootSignature* rootSig = effect->NeedsCBuffer() ? effectRootSignature_.Get() : copyRootSignature_.Get();
 
-	if (effect.needsCBuffer) {
-		UpdateEffectConstantBuffer(effect);
+	if (effect->NeedsCBuffer()) {
+		effect->UpdateConstantBuffer();
 	}
 
 	commandList->SetGraphicsRootSignature(rootSig);
-	commandList->SetPipelineState(effect.pipelineState.Get());
+	commandList->SetPipelineState(effect->GetPipelineState());
 	srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
 
-	if (effect.needsCBuffer) {
-		commandList->SetGraphicsRootConstantBufferView(1, effect.constantBuffer->GetGPUVirtualAddress());
+	if (effect->NeedsCBuffer()) {
+		commandList->SetGraphicsRootConstantBufferView(1, effect->GetConstantBufferGPUAddress());
 	}
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -454,7 +309,7 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, EffectEntry&
 }
 
 // ===================================================================
-// コピー描画（エフェクトなし）
+// コピー描画
 // ===================================================================
 
 void PostEffect::DrawCopy(ID3D12GraphicsCommandList* commandList, RenderTexture* input)
@@ -467,151 +322,64 @@ void PostEffect::DrawCopy(ID3D12GraphicsCommandList* commandList, RenderTexture*
 }
 
 // ===================================================================
-// ゲームコード用API
+// エフェクト順序設定
 // ===================================================================
-
-void PostEffect::SetEffectEnabled(const std::string& name, bool enabled)
-{
-	EffectEntry* effect = FindEffect(name);
-	if (effect) {
-		effect->enabled = enabled;
-	}
-
-	else {
-		OutputDebugStringA(("PostEffect::SetEffectEnabled - Unknown effect: " + name + "\n").c_str());
-		assert(false && "Unknown effect name");
-	}
-}
-
-void PostEffect::SetEffectParam(const std::string& name, const std::string& param, float value)
-{
-	EffectEntry* effect = FindEffect(name);
-	if (!effect) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Unknown effect: " + name + "\n").c_str());
-		assert(false && "Unknown effect name");
-		return;
-	}
-
-	auto it = effect->params.find(param);
-	if (it == effect->params.end()) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Unknown param: " + param + " on " + name + "\n").c_str());
-		assert(false && "Unknown param name");
-		return;
-	}
-
-	if (!std::holds_alternative<float>(it->second)) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Type mismatch: " + param + " on " + name + " is not float\n").c_str());
-		assert(false && "Param type mismatch: expected float");
-		return;
-	}
-
-	it->second = value;
-}
-
-void PostEffect::SetEffectParam(const std::string& name, const std::string& param, int value)
-{
-	EffectEntry* effect = FindEffect(name);
-	if (!effect) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Unknown effect: " + name + "\n").c_str());
-		assert(false && "Unknown effect name");
-		return;
-	}
-
-	auto it = effect->params.find(param);
-	if (it == effect->params.end()) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Unknown param: " + param + " on " + name + "\n").c_str());
-		assert(false && "Unknown param name");
-		return;
-	}
-
-	if (!std::holds_alternative<int>(it->second)) {
-		OutputDebugStringA(("PostEffect::SetEffectParam - Type mismatch: " + param + " on " + name + " is not int\n").c_str());
-		assert(false && "Param type mismatch: expected int");
-		return;
-	}
-
-	it->second = value;
-}
 
 void PostEffect::SetEffectOrder(const std::vector<std::string>& order)
 {
-	std::vector<EffectEntry> reordered;
-	reordered.reserve(effects_.size());
+	std::vector<BaseFilterEffect*> reordered;
+	reordered.reserve(effectOrder_.size());
 
 	// 指定された順番のエフェクトを先に追加
 	for (const auto& name : order) {
-		for (auto& effect : effects_) {
-			if (effect.name == name) {
-				reordered.push_back(std::move(effect));
+		for (auto* effect : effectOrder_) {
+			if (effect->GetName() == name) {
+				reordered.push_back(effect);
 				break;
 			}
 		}
 	}
 
 	// orderに含まれなかったエフェクトを末尾に追加
-	for (auto& effect : effects_) {
-		if (effect.pipelineState) { // moveされていないもの
-			reordered.push_back(std::move(effect));
+	for (auto* effect : effectOrder_) {
+		bool found = false;
+		for (auto* e : reordered) {
+			if (e == effect) { found = true; break; }
+		}
+		if (!found) {
+			reordered.push_back(effect);
 		}
 	}
 
-	effects_ = std::move(reordered);
-}
-
-void PostEffect::ResetEffects()
-{
-	for (auto& effect : effects_) {
-		effect.enabled = false;
-
-		if (effect.name == "Sepia") {
-			effect.params["intensity"] = 1.0f;
-			effect.params["sepiaColorR"] = 1.0f;
-			effect.params["sepiaColorG"] = 0.691f;
-			effect.params["sepiaColorB"] = 0.402f;
-		}
-		else if (effect.name == "Vignette") {
-			effect.params["intensity"] = 0.5f;
-			effect.params["power"] = 0.8f;
-			effect.params["scale"] = 16.0f;
-		}
-		else if (effect.name == "Smoothing") {
-			effect.params["kernelSize"] = 3;
-		}
-	}
-}
-
-bool PostEffect::IsEffectEnabled(const std::string& name) const
-{
-	const EffectEntry* effect = FindEffect(name);
-	return effect ? effect->enabled : false;
+	effectOrder_ = std::move(reordered);
 }
 
 // ===================================================================
-// ダメージ演出ヘルパー
+// リセット
+// ===================================================================
+
+void PostEffect::ResetEffects()
+{
+	for (auto* effect : effectOrder_) {
+		effect->SetEnabled(false);
+		effect->ResetParams();
+	}
+}
+
+// ===================================================================
+// ダメージ演出
 // ===================================================================
 
 void PostEffect::ApplyDamageEffect(float damageRatio)
 {
 	damageRatio = std::clamp(damageRatio, 0.0f, 1.0f);
 
-	// ヴィネット: HPが減るほど視野が狭くなる
-	SetEffectEnabled("Vignette", damageRatio > 0.0f);
-	SetEffectParam("Vignette", "intensity", damageRatio * 1.2f);
-	SetEffectParam("Vignette", "scale", 16.0f - damageRatio * 10.0f);
-
-	// セピア / グレースケール
+	// グレースケール
 	if (damageRatio >= 0.9f) {
-		SetEffectEnabled("Grayscale", true);
-		SetEffectEnabled("Sepia", false);
-	}
-	else if (damageRatio > 0.0f) {
-		SetEffectEnabled("Grayscale", false);
-		SetEffectEnabled("Sepia", true);
-		SetEffectParam("Sepia", "intensity", (damageRatio / 0.9f) * 0.8f);
+		grayscale->SetEnabled(true);
 	}
 	else {
-		SetEffectEnabled("Grayscale", false);
-		SetEffectEnabled("Sepia", false);
+		grayscale->SetEnabled(false);
 	}
 }
 
@@ -630,18 +398,21 @@ void PostEffect::ShowImGui()
 	int moveFrom = -1;
 	int moveTo = -1;
 
-	for (int i = 0; i < static_cast<int>(effects_.size()); ++i) {
-		auto& effect = effects_[i];
+	for (int i = 0; i < static_cast<int>(effectOrder_.size()); ++i) {
+		auto* effect = effectOrder_[i];
 
 		ImGui::PushID(i);
 
 		// ON/OFFチェックボックス
-		ImGui::Checkbox(effect.name.c_str(), &effect.enabled);
+		bool enabled = effect->IsEnabled();
+		if (ImGui::Checkbox(effect->GetName().c_str(), &enabled)) {
+			effect->SetEnabled(enabled);
+		}
 
 		// ドラッグで順番入れ替え
 		if (ImGui::IsItemActive() && !ImGui::IsItemHovered()) {
 			int next = i + (ImGui::GetMouseDragDelta(0).y < 0.0f ? -1 : 1);
-			if (next >= 0 && next < static_cast<int>(effects_.size())) {
+			if (next >= 0 && next < static_cast<int>(effectOrder_.size())) {
 				moveFrom = i;
 				moveTo = next;
 				ImGui::ResetMouseDragDelta();
@@ -649,41 +420,9 @@ void PostEffect::ShowImGui()
 		}
 
 		// パラメータ表示（ONの時だけ）
-		if (effect.enabled && !effect.params.empty()) {
+		if (effect->IsEnabled()) {
 			ImGui::Indent();
-
-			if (effect.name == "Sepia") {
-				float intensity = std::get<float>(effect.params["intensity"]);
-				if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 1.0f)) {
-					effect.params["intensity"] = intensity;
-				}
-				float color[3] = {
-					std::get<float>(effect.params["sepiaColorR"]),
-					std::get<float>(effect.params["sepiaColorG"]),
-					std::get<float>(effect.params["sepiaColorB"])
-				};
-				if (ImGui::ColorEdit3("Color", color)) {
-					effect.params["sepiaColorR"] = color[0];
-					effect.params["sepiaColorG"] = color[1];
-					effect.params["sepiaColorB"] = color[2];
-				}
-			}
-			else if (effect.name == "Vignette") {
-				float intensity = std::get<float>(effect.params["intensity"]);
-				float power = std::get<float>(effect.params["power"]);
-				float scale = std::get<float>(effect.params["scale"]);
-				if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 2.0f)) effect.params["intensity"] = intensity;
-				if (ImGui::SliderFloat("Power", &power, 0.1f, 3.0f)) effect.params["power"] = power;
-				if (ImGui::SliderFloat("Scale", &scale, 1.0f, 50.0f)) effect.params["scale"] = scale;
-			}
-			else if (effect.name == "Smoothing") {
-				int kernelSize = std::get<int>(effect.params["kernelSize"]);
-				if (ImGui::SliderInt("Kernel Size", &kernelSize, 1, 15)) {
-					if (kernelSize % 2 == 0) kernelSize += 1;
-					effect.params["kernelSize"] = kernelSize;
-				}
-			}
-
+			effect->ShowImGui();
 			ImGui::Unindent();
 		}
 
@@ -692,7 +431,7 @@ void PostEffect::ShowImGui()
 
 	// 順番入れ替え実行
 	if (moveFrom >= 0 && moveTo >= 0) {
-		std::swap(effects_[moveFrom], effects_[moveTo]);
+		std::swap(effectOrder_[moveFrom], effectOrder_[moveTo]);
 	}
 
 	ImGui::Separator();
@@ -705,40 +444,16 @@ void PostEffect::ShowImGui()
 }
 
 // ===================================================================
-// エフェクト検索
-// ===================================================================
-
-EffectEntry* PostEffect::FindEffect(const std::string& name)
-{
-	for (auto& effect : effects_) {
-		if (effect.name == name) return &effect;
-	}
-	return nullptr;
-}
-
-const EffectEntry* PostEffect::FindEffect(const std::string& name) const
-{
-	for (const auto& effect : effects_) {
-		if (effect.name == name) return &effect;
-	}
-	return nullptr;
-}
-
-// ===================================================================
 // 終了処理
 // ===================================================================
 
 void PostEffect::Finalize()
 {
-	for (auto& effect : effects_) {
-		if (effect.constantBuffer && effect.constantBufferMappedPtr) {
-			effect.constantBuffer->Unmap(0, nullptr);
-			effect.constantBufferMappedPtr = nullptr;
-		}
-		effect.pipelineState.Reset();
-		effect.constantBuffer.Reset();
+	for (auto& effect : effectOwners_) {
+		effect->Finalize();
 	}
-	effects_.clear();
+	effectOrder_.clear();
+	effectOwners_.clear();
 
 	copyRootSignature_.Reset();
 	effectRootSignature_.Reset();
