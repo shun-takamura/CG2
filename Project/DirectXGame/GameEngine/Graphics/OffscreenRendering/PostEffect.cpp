@@ -212,6 +212,8 @@ void PostEffect::InitializeEffects()
 	grayscale = static_cast<GrayscaleEffect*>(registerEffect(std::make_unique<GrayscaleEffect>()));
 	gaussian = static_cast<GaussianEffect*>(registerEffect(std::make_unique<GaussianEffect>()));
 	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
+	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
+	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
 }
 
 // ===================================================================

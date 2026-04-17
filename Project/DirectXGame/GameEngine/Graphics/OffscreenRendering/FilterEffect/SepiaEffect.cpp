@@ -66,3 +66,7 @@ void  SepiaEffect::SetSepiaColor(float r, float g, float b) {
     sepiaColorG_ = g;
     sepiaColorB_ = b;
 }
+
+void SepiaEffect::SetIntensity(float intensity) {
+    intensity_ = std::clamp(intensity, 0.0f, 1.0f);
+}

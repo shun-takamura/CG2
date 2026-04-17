@@ -12,6 +12,8 @@
 #include "GrayscaleEffect.h"
 #include "GaussianEffect.h"
 #include "SepiaEffect.h"
+#include "VignetteEffect.h"
+#include "SmoothingEffect.h"
 
 // 前方宣言
 class DirectXCore;
@@ -74,6 +76,8 @@ public:
 	GrayscaleEffect* grayscale = nullptr;
 	GaussianEffect* gaussian = nullptr;
 	SepiaEffect* sepia = nullptr;
+	VignetteEffect* vignette = nullptr;
+	SmoothingEffect* smoothing = nullptr;
 
 private:
 	void CreateRootSignatures();
