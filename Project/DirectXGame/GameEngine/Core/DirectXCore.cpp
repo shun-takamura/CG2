@@ -436,7 +436,7 @@ void DirectXCore::CreateRenderTargets() {
 void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
     // DSVヒープ作成
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
-    dsvHeapDesc.NumDescriptors = 1;
+    dsvHeapDesc.NumDescriptors = 2;
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     HRESULT hr = device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_));
     assert(SUCCEEDED(hr));
@@ -464,8 +464,27 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
         &clearValue, IID_PPV_ARGS(&depthStencilBuffer_));
     assert(SUCCEEDED(hr));
 
-    device_->CreateDepthStencilView(depthStencilBuffer_.Get(), nullptr,
-        dsvHeap_->GetCPUDescriptorHandleForHeapStart());
+
+    // DSVのサイズを取得
+    UINT dsvDescriptorSize = device_->GetDescriptorHandleIncrementSize(
+        D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+    // DSV Desc設定
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+    // 通常用DSV（index 0）
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+    device_->CreateDepthStencilView(depthStencilBuffer_.Get(), &dsvDesc, dsvHandle);
+
+    // READ_ONLY_DEPTH用DSV（index 1）
+    dsvDesc.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+    dsvHandle.ptr += dsvDescriptorSize;
+    device_->CreateDepthStencilView(depthStencilBuffer_.Get(), &dsvDesc, dsvHandle);
+
+   /* device_->CreateDepthStencilView(depthStencilBuffer_.Get(), nullptr,
+        dsvHeap_->GetCPUDescriptorHandleForHeapStart());*/
 
 }
 

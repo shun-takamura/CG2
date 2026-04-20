@@ -8,6 +8,7 @@
 class DebugCamera;
 class SpriteInstance;
 class Object3DInstance;
+class Skybox;
 class Camera;
 
 class DemoScene :public BaseScene
@@ -55,6 +56,9 @@ private:
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
+
+	// 天球(Skybox)
+	std::unique_ptr<Skybox> skybox_;
 
 	// カメラ
 	std::unique_ptr<Camera> camera_;

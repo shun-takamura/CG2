@@ -310,16 +310,32 @@ void TextureManager::LoadTexture(const std::string& filePath)
     // テクスチャファイルを読み込んでプログラムで扱えるようにする
     DirectX::ScratchImage image{};
     std::wstring filePathW = ConvertString(filePath);
-    HRESULT hr = DirectX::LoadFromWICFile(
-        filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+
+	// 拡張子.ddsであればLoadFromDDSFileを使う
+    HRESULT hr;
+    if(filePathW.ends_with(L".dds")) {
+        hr = DirectX::LoadFromDDSFile(
+            filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+    } else {
+        hr = DirectX::LoadFromWICFile(
+            filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+    }
+
     assert(SUCCEEDED(hr));
 
     // ミップマップの作成
     DirectX::ScratchImage mipImages{};
-    hr = DirectX::GenerateMipMaps(
-        image.GetImages(), image.GetImageCount(), image.GetMetadata(),
-        DirectX::TEX_FILTER_SRGB, 0, mipImages);
-    assert(SUCCEEDED(hr));
+    if (DirectX::IsCompressed(image.GetMetadata().format)) {
+		// BC6Hなどの圧縮フォーマットはGenerateMipMapsが使えないため、そのまま使う
+		// 圧縮フォーマットの場合すでにミップマップが入っていることが多い
+        // std::moveでimageの所有権をmipImagesに移す
+        mipImages = std::move(image);
+    } else {
+        hr = DirectX::GenerateMipMaps(
+            image.GetImages(), image.GetImageCount(), image.GetMetadata(),
+            DirectX::TEX_FILTER_SRGB, 0, mipImages);
+        assert(SUCCEEDED(hr));
+    }
 
     // テクスチャデータの作成
     TextureData& textureData = textureDatas[filePath];
@@ -343,12 +359,22 @@ void TextureManager::LoadTexture(const std::string& filePath)
     textureData.srvIndex = srvManager_->Allocate();
 
     // SRVを生成
-    srvManager_->CreateSRVForTexture2D(
-        textureData.srvIndex,
-        textureData.resource.Get(),
-        textureData.metadata.format,
-        static_cast<UINT>(textureData.metadata.mipLevels)
-    );
+    textureData.srvIndex = srvManager_->Allocate();
+    if (textureData.metadata.IsCubemap()) {
+        srvManager_->CreateSRVForCubemap(
+            textureData.srvIndex,
+            textureData.resource.Get(),
+            textureData.metadata.format,
+            static_cast<UINT>(textureData.metadata.mipLevels)
+        );
+    } else {
+        srvManager_->CreateSRVForTexture2D(
+            textureData.srvIndex,
+            textureData.resource.Get(),
+            textureData.metadata.format,
+            static_cast<UINT>(textureData.metadata.mipLevels)
+        );
+    }
 
 }
 

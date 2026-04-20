@@ -23,7 +23,9 @@
 #include "KeyboardInput.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include "TextureManager.h"
 #include"Game.h"
+#include "Skybox.h"
 
 DemoScene::DemoScene() {
 }
@@ -39,18 +41,23 @@ void DemoScene::Initialize() {
 
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
+	sprite_->Initialize(spriteManager_, "DistributionAssets/Textures/uvChecker.png");
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
 	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
 	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
+	skyboxManager_->SetDefaultCamera(camera_.get());
+
+	// Skybox生成
+	skybox_ = std::make_unique<Skybox>();
+	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_4k.dds");
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "Resources/uvChecker.png");
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "DistributionAssets/Textures/uvChecker.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
 	// 加速度フィールドの設定
 	AccelerationField field;
@@ -60,10 +67,12 @@ void DemoScene::Initialize() {
 	ParticleManager::GetInstance()->SetAccelerationField(field);
 	ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
 
+	TextureManager::GetInstance()->LoadTexture("DistributionAssets/Cubemaps/rostock_laage_airport_4k.dds");
+
 	// 交互に使うスプライト
 	const std::string textures[2] = {
-		"Resources/uvChecker.png",
-		"Resources/monsterBall.png"
+		"DistributionAssets/Textures/uvChecker.png",
+		"DistributionAssets/Models/MonsterBall/monsterBall.png"
 	};
 
 	// 5枚生成
@@ -80,15 +89,24 @@ void DemoScene::Initialize() {
 	}
 
 	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj", "plane.gltf" };
-	const std::string objectNames[] = { "MonsterBall", "terrain", "plane" };
+	const std::string modelFiles[] = { 
+		"Models/MonsterBall/monsterBall.obj", 
+		"Models/Terrain/terrain.obj", 
+		"Models/Plane/plane.gltf"
+	};
+
+	const std::string objectNames[] = { 
+		"MonsterBall", 
+		"terrain", 
+		"plane"
+	};
 
 	for (int i = 0; i < 3; ++i) {
 		auto obj = std::make_unique<Object3DInstance>();
 		obj->Initialize(
 			object3DManager_,
 			dxCore_,
-			"Resources",
+			"DistributionAssets/",
 			modelFiles[i],
 			objectNames[i]
 		);
@@ -97,7 +115,7 @@ void DemoScene::Initialize() {
 	}
 
 	// サウンドのロード
-	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
+	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
 }
 
 void DemoScene::Finalize() {
@@ -214,9 +232,13 @@ void DemoScene::Update() {
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();
 
+	// 3Dオブジェクトの更新
 	for (const auto& obj : object3DInstances_) {
 		obj->Update();
 	}
+
+	// Skybox更新を追加
+	skybox_->Update();
 
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update();
@@ -272,6 +294,15 @@ void DemoScene::Draw() {
 		obj->Draw(dxCore_);
 	}
 
+	// DSVを切り替えてSkybox描画
+	auto commandList = dxCore_->GetCommandList();
+	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
+
+	skyboxManager_->DrawSetting();
+	skybox_->Draw(dxCore_);
+
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
 
@@ -281,6 +312,8 @@ void DemoScene::Draw() {
 	for (const auto& s : sprites_) {
 		s->Draw();
 	}
+
+	camera_->OnImGui();
 
 	// カメラスプライトが存在する場合のみ描画
 	if (cameraSprite_) {

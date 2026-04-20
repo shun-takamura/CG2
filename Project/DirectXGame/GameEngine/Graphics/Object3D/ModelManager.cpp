@@ -8,7 +8,7 @@ void ModelManager::Initialize(DirectXCore* dxCore)
 	modelCore_->Initialize(dxCore);
 }
 
-void ModelManager::LoadModel(const std::string& filePath)
+void ModelManager::LoadModel(const std::string& directoryPath, const std::string& filePath)
 {
 	// 読み込み済みモデルを検索
 	if (models.contains(filePath)) {
@@ -18,7 +18,7 @@ void ModelManager::LoadModel(const std::string& filePath)
 
 	// モデルの生成とファイル読み込み、初期化
 	std::unique_ptr<ModelInstance>model = std::make_unique<ModelInstance>();
-	model->Initialize(modelCore_.get(), "Resources", filePath);
+	model->Initialize(modelCore_.get(), directoryPath, filePath);
 
 	// モデルをmapコンテナに格納
 	models.insert(std::make_pair(filePath, std::move(model)));

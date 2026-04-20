@@ -1,5 +1,6 @@
 #include "ModelInstance.h"
 #include <unordered_map>
+#include <filesystem> // std::filesystem::path を使うために必要
 
 struct VertexHash {
 	size_t operator()(const VertexData& v) const {
@@ -231,7 +232,10 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 		if (material->GetTextureCount(aiTextureType_DIFFUSE) != 0) {
 			aiString textureFilePath;
 			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
-			modelData_.materialData.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+			// モデルファイルのあるディレクトリを基準にテクスチャパスを解決
+			std::string modelDirectory = std::filesystem::path(filePath).parent_path().string();
+			std::filesystem::path fullPath = std::filesystem::path(modelDirectory) / textureFilePath.C_Str();
+			modelData_.materialData.textureFilePath = fullPath.lexically_normal().string();
 		}
 	}
 
