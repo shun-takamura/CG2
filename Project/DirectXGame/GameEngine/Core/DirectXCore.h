@@ -91,6 +91,14 @@ public:
 		return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
 	}
 
+	// READ_ONLY_DEPTH用のDSVハンドル取得
+	D3D12_CPU_DESCRIPTOR_HANDLE GetReadOnlyDsvHandle() const {
+		D3D12_CPU_DESCRIPTOR_HANDLE handle = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+		handle.ptr += device_->GetDescriptorHandleIncrementSize(
+			D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+		return handle;
+	}
+
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
 

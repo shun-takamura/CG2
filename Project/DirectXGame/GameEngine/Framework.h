@@ -20,6 +20,8 @@
 #include <iostream>
 #include <dxcapi.h>
 
+#include "SkyboxManager.h"
+
 // 前方宣言
 class ConvertStringClass;
 class WindowsApplication;
@@ -27,6 +29,7 @@ class DirectXCore;
 class SRVManager;
 class SpriteManager;
 class Object3DManager;
+class SkyboxManager;
 class InputManager;
 class AbstractSceneFactory;
 
@@ -83,6 +86,7 @@ protected:
 	// マネージャー
 	std::unique_ptr<SpriteManager> spriteManager_;
 	std::unique_ptr<Object3DManager> object3DManager_;
+	std::unique_ptr<SkyboxManager> skyboxManager_;
 
 	// 入力
 	std::unique_ptr<InputManager> input_;

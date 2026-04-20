@@ -8,6 +8,7 @@ class BaseScene;
 class AbstractSceneFactory;
 class SpriteManager;
 class Object3DManager;
+class SkyboxManager;
 class DirectXCore;
 class SRVManager;
 class InputManager;
@@ -28,6 +29,7 @@ public:
 	void Initialize(
 		SpriteManager* spriteManager,
 		Object3DManager* object3DManager,
+		SkyboxManager* skyboxManager,
 		DirectXCore* dxCore,
 		SRVManager* srvManager,
 		InputManager* input
@@ -102,6 +104,7 @@ public:
 	//====================
 	SpriteManager* GetSpriteManager() const { return spriteManager_; }
 	Object3DManager* GetObject3DManager() const { return object3DManager_; }
+	SkyboxManager* GetSkyboxManager() const { return skyboxManager_; }
 	DirectXCore* GetDirectXCore() const { return dxCore_; }
 	SRVManager* GetSRVManager() const { return srvManager_; }
 	InputManager* GetInputManager() const { return input_; }
@@ -131,6 +134,7 @@ private:
 	// 各マネージャーへのポインタ
 	SpriteManager* spriteManager_ = nullptr;
 	Object3DManager* object3DManager_ = nullptr;
+	SkyboxManager* skyboxManager_ = nullptr;
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 	InputManager* input_ = nullptr;

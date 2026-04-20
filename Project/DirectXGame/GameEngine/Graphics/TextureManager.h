@@ -13,8 +13,6 @@ class TextureManager
 {
 private:
 
-
-
 	// 既存のprivateセクションのTextureData構造体を修正:
 	struct TextureData {
 		DirectX::TexMetadata metadata;

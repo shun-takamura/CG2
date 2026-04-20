@@ -4,6 +4,7 @@
 // 前方宣言
 class SpriteManager;
 class Object3DManager;
+class SkyboxManager;
 class DirectXCore;
 class SRVManager;
 class InputManager;
@@ -44,6 +45,7 @@ public:
 
 	void SetSpriteManager(SpriteManager* spriteManager) { spriteManager_ = spriteManager; }
 	void SetObject3DManager(Object3DManager* object3DManager) { object3DManager_ = object3DManager; }
+	void SetSkyboxManager(SkyboxManager* skyboxManager) { skyboxManager_ = skyboxManager; }
 	void SetDirectXCore(DirectXCore* dxCore) { dxCore_ = dxCore; }
 	void SetSRVManager(SRVManager* srvManager) { srvManager_ = srvManager; }
 	void SetInputManager(InputManager* input) { input_ = input; }
@@ -52,6 +54,7 @@ protected:
 	// 各マネージャーへのポインタ（Frameworkから受け取る）
 	SpriteManager* spriteManager_ = nullptr;
 	Object3DManager* object3DManager_ = nullptr;
+	SkyboxManager* skyboxManager_ = nullptr;
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 	InputManager* input_ = nullptr;

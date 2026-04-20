@@ -23,7 +23,9 @@
 #include "KeyboardInput.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include "TextureManager.h"
 #include"Game.h"
+#include "Skybox.h"
 
 DemoScene::DemoScene() {
 }
@@ -46,6 +48,11 @@ void DemoScene::Initialize() {
 	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
 	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
+	skyboxManager_->SetDefaultCamera(camera_.get());
+
+	// Skybox生成
+	skybox_ = std::make_unique<Skybox>();
+	skybox_->Initialize(skyboxManager_, dxCore_, "DistributionAssets/Cubemaps/rostock_laage_airport_4k.dds");
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
@@ -59,6 +66,8 @@ void DemoScene::Initialize() {
 	field.area.max = { 10.0f, 10.0f, 10.0f };
 	ParticleManager::GetInstance()->SetAccelerationField(field);
 	ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
+
+	TextureManager::GetInstance()->LoadTexture("DistributionAssets/Cubemaps/rostock_laage_airport_4k.dds");
 
 	// 交互に使うスプライト
 	const std::string textures[2] = {
@@ -223,9 +232,13 @@ void DemoScene::Update() {
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();
 
+	// 3Dオブジェクトの更新
 	for (const auto& obj : object3DInstances_) {
 		obj->Update();
 	}
+
+	// Skybox更新を追加
+	skybox_->Update();
 
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update();
@@ -281,6 +294,15 @@ void DemoScene::Draw() {
 		obj->Draw(dxCore_);
 	}
 
+	// DSVを切り替えてSkybox描画
+	auto commandList = dxCore_->GetCommandList();
+	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
+
+	skyboxManager_->DrawSetting();
+	skybox_->Draw(dxCore_);
+
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
 
@@ -290,6 +312,8 @@ void DemoScene::Draw() {
 	for (const auto& s : sprites_) {
 		s->Draw();
 	}
+
+	camera_->OnImGui();
 
 	// カメラスプライトが存在する場合のみ描画
 	if (cameraSprite_) {

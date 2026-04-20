@@ -28,6 +28,7 @@
 #include "SceneManager.h"
 #include "CameraCapture.h"
 
+
 void Framework::Run() {
 	// ゲームの初期化
 	Initialize();
@@ -154,6 +155,10 @@ void Framework::Initialize() {
 	object3DManager_ = std::make_unique<Object3DManager>();
 	object3DManager_->Initialize(dxCore_.get());
 
+	// Skyboxの共通部分の初期化
+	skyboxManager_ = std::make_unique<SkyboxManager>();
+	skyboxManager_->Initialize(dxCore_.get());
+
 	// パーティクルマネージャーの初期化
 	ParticleManager::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
 
@@ -175,6 +180,7 @@ void Framework::Initialize() {
 	SceneManager::GetInstance()->Initialize(
 		spriteManager_.get(),
 		object3DManager_.get(),
+		skyboxManager_.get(),
 		dxCore_.get(),
 		srvManager_.get(),
 		input_.get()

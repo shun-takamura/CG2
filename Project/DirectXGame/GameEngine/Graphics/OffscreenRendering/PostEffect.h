@@ -66,6 +66,9 @@ public:
 	/// </summary>
 	void ResetEffects();
 
+	// シーン描画先のRenderTextureを取得（Skyboxなどで使用）
+	RenderTexture* GetSceneRenderTarget() const { return renderTextureA_.get(); }
+
 	/// <summary>
 	/// ダメージ演出を適用
 	/// </summary>

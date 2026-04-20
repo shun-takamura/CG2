@@ -233,8 +233,6 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 			aiString textureFilePath;
 			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
 			// モデルファイルのあるディレクトリを基準にテクスチャパスを解決
-			/*std::string modelDirectory = std::filesystem::path(filePath).parent_path().string();
-			modelData_.materialData.textureFilePath = modelDirectory + "/" + textureFilePath.C_Str();*/
 			std::string modelDirectory = std::filesystem::path(filePath).parent_path().string();
 			std::filesystem::path fullPath = std::filesystem::path(modelDirectory) / textureFilePath.C_Str();
 			modelData_.materialData.textureFilePath = fullPath.lexically_normal().string();
