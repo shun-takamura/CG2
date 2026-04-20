@@ -24,7 +24,7 @@ public:
 
 	void Initialize(DirectXCore* dxCore);
 
-	void LoadModel(const std::string& filePath);
+	void LoadModel(const std::string& directoryPath, const std::string& filePath);
 
 	/// <summary>
 	/// モデルの検索

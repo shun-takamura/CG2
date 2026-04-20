@@ -39,7 +39,7 @@ void DemoScene::Initialize() {
 
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/uvChecker.png");
+	sprite_->Initialize(spriteManager_, "DistributionAssets/Textures/uvChecker.png");
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
@@ -49,8 +49,8 @@ void DemoScene::Initialize() {
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "Resources/uvChecker.png");
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/circle.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "DistributionAssets/Textures/uvChecker.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
 	// 加速度フィールドの設定
 	AccelerationField field;
@@ -62,8 +62,8 @@ void DemoScene::Initialize() {
 
 	// 交互に使うスプライト
 	const std::string textures[2] = {
-		"Resources/uvChecker.png",
-		"Resources/monsterBall.png"
+		"DistributionAssets/Textures/uvChecker.png",
+		"DistributionAssets/Models/MonsterBall/monsterBall.png"
 	};
 
 	// 5枚生成
@@ -80,15 +80,24 @@ void DemoScene::Initialize() {
 	}
 
 	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { "monsterBall.obj", "terrain.obj", "plane.gltf" };
-	const std::string objectNames[] = { "MonsterBall", "terrain", "plane" };
+	const std::string modelFiles[] = { 
+		"Models/MonsterBall/monsterBall.obj", 
+		"Models/Terrain/terrain.obj", 
+		"Models/Plane/plane.gltf"
+	};
+
+	const std::string objectNames[] = { 
+		"MonsterBall", 
+		"terrain", 
+		"plane"
+	};
 
 	for (int i = 0; i < 3; ++i) {
 		auto obj = std::make_unique<Object3DInstance>();
 		obj->Initialize(
 			object3DManager_,
 			dxCore_,
-			"Resources",
+			"DistributionAssets/",
 			modelFiles[i],
 			objectNames[i]
 		);
@@ -97,7 +106,7 @@ void DemoScene::Initialize() {
 	}
 
 	// サウンドのロード
-	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/fanfare.wav");
+	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
 }
 
 void DemoScene::Finalize() {

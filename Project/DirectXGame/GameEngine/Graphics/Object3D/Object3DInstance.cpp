@@ -18,7 +18,7 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
     camera_ = object3DManager_->GetDefaultCamera();
 
     // ModelManagerからモデルをロード
-    ModelManager::GetInstance()->LoadModel(filename);
+    ModelManager::GetInstance()->LoadModel(directorPath,filename);
 
     // ロードしたモデルを取得してセット
     modelInstance_ = ModelManager::GetInstance()->FindModel(filename);

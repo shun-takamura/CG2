@@ -28,13 +28,13 @@ void StripeTransition::CreateStripes() {
 	stripePositions_.clear();
 
 	// stripe.pngを先に読み込む
-	TextureManager::GetInstance()->LoadTexture("Resources/stripe.png");
+	TextureManager::GetInstance()->LoadTexture("Resources/Textures/stripe.png");
 
 	for (int i = 0; i < stripeCount_; ++i) {
 		auto stripe = std::make_unique<SpriteInstance>();
 
 		std::string spriteName = "StripeTransition_" + std::to_string(i);
-		stripe->Initialize(spriteManager_, "Resources/stripe.png", spriteName);
+		stripe->Initialize(spriteManager_, "Resources/Textures/stripe.png", spriteName);
 
 		// サイズを先に設定（重要！）
 		stripe->SetSize({ debugStripeWidth_, debugStripeHeight_ });

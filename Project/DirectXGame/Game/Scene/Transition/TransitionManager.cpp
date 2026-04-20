@@ -20,10 +20,10 @@ void TransitionManager::Initialize(SpriteManager* spriteManager, DirectXCore* dx
 	screenHeight_ = screenHeight;
 
 	// トランジション用の白テクスチャを生成（トランジション初期化より先に！）
-	TextureManager::GetInstance()->CreateSolidColorTexture("Resources/white1x1.png", 255, 255, 255, 255);
+	TextureManager::GetInstance()->CreateSolidColorTexture("DistributionAssets/Textures/white1x1.png", 255, 255, 255, 255);
 
 	// テクスチャが正しく生成されたか確認
-	if (!TextureManager::GetInstance()->HasTexture("Resources/white1x1.png")) {
+	if (!TextureManager::GetInstance()->HasTexture("DistributionAssets/Textures/white1x1.png")) {
 		OutputDebugStringA("TransitionManager: Failed to create white texture!\n");
 		return;
 	}
