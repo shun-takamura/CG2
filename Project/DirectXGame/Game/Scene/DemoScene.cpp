@@ -52,7 +52,7 @@ void DemoScene::Initialize() {
 
 	// Skybox生成
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night.dds");
+	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_4k.dds");
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
