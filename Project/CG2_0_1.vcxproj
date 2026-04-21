@@ -517,6 +517,7 @@ call "convert_hdr_to_dds.bat" --silent</Command>
     <None Include="Resources\Shaders\Object3d.hlsli" />
     <None Include="Resources\Shaders\PostProcess.hlsli" />
     <None Include="Resources\Shaders\Skybox.hlsli" />
+    <None Include="Resources\Shaders\Sprite.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

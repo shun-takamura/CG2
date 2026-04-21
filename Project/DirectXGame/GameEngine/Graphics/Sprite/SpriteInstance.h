@@ -2,54 +2,45 @@
 #include "Vector3.h"
 #include "Vector2.h"
 #include "SpriteManager.h"
-#include "Material.h"
-#include "VertexData.h"
+#include "SpriteMaterialData.h" 
+#include "SpriteVertexData.h"
 #include "Transform.h"
 #include "TransformationMatrix.h"
 #include "TextureManager.h"
 #include "ConvertString.h"
 
 #ifdef USE_IMGUI
-// ImGui対応
 #include "IImGuiEditable.h"
-#endif // USE_IMGUI
+#endif
 
 class SpriteManager;
 
-class SpriteInstance 
+class SpriteInstance
 #ifdef USE_IMGUI
-
     : public IImGuiEditable
-
-#endif // USE_IMGUI
-
+#endif
 {
-
-    std::string name_;  // スプライト名（ImGui用に追加）
-    std::string textureFilePath_;  // テクスチャファイルパスを保持
+    std::string name_;
+    std::string textureFilePath_;
 
     Vector2 position_ = { 0.0f, 0.0f };
     Vector2 anchorPoint_ = { 0.0f, 0.0f };
 
-    // 左右フリップ
     bool isFlipX_ = false;
-
-    // 上下フリップ
     bool isFlipY_ = false;
 
-    Vector2 textureLeftTop_ = { 0.0f, 0.0f }; // テクスチャ左上座標（px）
-    Vector2 textureSize_ = { 100.0f, 100.0f }; // 切り出しサイズ（px）
+    Vector2 textureLeftTop_ = { 0.0f, 0.0f };
+    Vector2 textureSize_ = { 100.0f, 100.0f };
 
-    // テクスチャサイズを元のイメージに合わせる
     void AdjustTextureSize();
 
     float rotation_ = 0.0f;
     Vector2 size_ = { 320.0f, 180.0f };
 
     Transform transform{
-        {1.0f, 1.0f, 1.0f},// s
-        {0.0f, 0.0f, 0.0f},// r
-        {0.0f, 0.0f, 0.0f} // t
+        {1.0f, 1.0f, 1.0f},
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f}
     };
 
     SpriteManager* spriteManager_ = nullptr;
@@ -57,34 +48,22 @@ class SpriteInstance
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> indexResource_;
 
-    // ===============================
-    // バッファ内データへのCPU側ポインタ
-    // ===============================
-    VertexData* vertexData_ = nullptr;
+    // バッファ内データへのCPU側ポインタ ← 型変更
+    SpriteVertexData* vertexData_ = nullptr;     // ← VertexData から変更
     uint32_t* indexData_ = nullptr;
 
-    // ===============================
-    // D3D12 のビュー
-    // ===============================
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
     D3D12_INDEX_BUFFER_VIEW  indexBufferView_{};
 
-    // マテリアル用リソース
+    // マテリアル用リソース ← 型変更
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
-    Material* materialData_ = nullptr;
+    SpriteMaterialData* materialData_ = nullptr;  // ← Material から変更
 
-    // ===============================
-    // 座標変換行列リソース
-    // ===============================
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_ = nullptr;
-    // バッファ内のデータを指すポインタ
     TransformationMatrix* transformationMatrixData_ = nullptr;
 
-    // SRV の GPU ハンドル（PS の t0 に渡す用）
     D3D12_GPU_DESCRIPTOR_HANDLE textureGpuHandle_{};
     int textureNum_ = 0;
-
-    // テクスチャ番号（SRVインデックス）
     uint32_t textureIndex_ = 0;
 
     void CreateVertexBuffer();
@@ -92,42 +71,25 @@ class SpriteInstance
     void CreateTransformationMatrixBuffer();
 
 public:
-    //==============================
-    // コンストラクタ・デストラクタ
-    //==============================
     SpriteInstance() = default;
 #ifdef USE_IMGUI
-
     ~SpriteInstance() override;
-
 #else 
-
     ~SpriteInstance();
-
-#endif // USE_IMGUI
+#endif
 
 #ifdef USE_IMGUI
-
-    //==============================
-    // IImGuiEditable実装
-    //==============================
     std::string GetName() const override { return name_; }
     std::string GetTypeName() const override { return "Sprite"; }
     void OnImGuiInspector() override;
+#endif
 
-#endif // USE_IMGUI
-
-    //==============================
-    // 初期化・更新・描画
-    //==============================
     void Initialize(SpriteManager* spriteManager, const std::string& filePath,
         const std::string& name = "");
     void Update();
     void Draw();
 
-    //==============================
     // ゲッター
-    //==============================
     const Vector2& GetPosition() const { return position_; }
     const Vector2& GetAnchorPoint() const { return anchorPoint_; }
     const float& GetRotation() const { return rotation_; }
@@ -139,9 +101,7 @@ public:
     const Vector2& GetTextureSize() const { return textureSize_; }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
-    //==============================
     // セッター
-    //==============================
     void SetName(const std::string& name) { name_ = name; }
     void SetPosition(const Vector2& position) { position_ = position; }
     void SetAnchorPoint(const Vector2& anchorPoint) { anchorPoint_ = anchorPoint; }

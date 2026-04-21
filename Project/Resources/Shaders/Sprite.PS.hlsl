@@ -1,13 +1,45 @@
-Texture2D tex : register(t0);
-SamplerState smp : register(s0);
+#include "Sprite.hlsli"
 
-cbuffer Material : register(b0)
+struct SpriteMaterial
 {
     float4 color;
+    float4x4 uvTransform;
 };
 
-float4 main(float4 pos : SV_POSITION, float2 uv : TEXCOORD) : SV_TARGET
+cbuffer MaterialBuffer : register(b0)
 {
-    float4 texColor = tex.Sample(smp, uv);
-    return texColor * color;
+    SpriteMaterial gMaterial;
+};
+
+Texture2D<float4> gTexture : register(t0);
+SamplerState gSampler : register(s0);
+
+struct PixelShaderOutput
+{
+    float4 color : SV_TARGET0;
+};
+
+PixelShaderOutput main(VertexShaderOutput input)
+{
+    PixelShaderOutput output;
+
+    // UV変換
+    float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
+    float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
+
+    // マテリアル色とテクスチャ色を乗算
+    output.color = gMaterial.color * textureColor;
+
+    // テクスチャαまたは最終αが0ならdiscard
+    if (textureColor.a == 0.0f)
+    {
+        discard;
+    }
+    if (output.color.a == 0.0f)
+    {
+        discard;
+    }
+
+    return output;
+    
 }

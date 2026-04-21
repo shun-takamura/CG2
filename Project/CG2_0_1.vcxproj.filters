@@ -570,5 +570,6 @@
     <None Include="Resources\Shaders\CopyImage.hlsli" />
     <None Include="Resources\Shaders\PostProcess.hlsli" />
     <None Include="Resources\Shaders\Skybox.hlsli" />
+    <None Include="Resources\Shaders\Sprite.hlsli" />
   </ItemGroup>
 </Project>

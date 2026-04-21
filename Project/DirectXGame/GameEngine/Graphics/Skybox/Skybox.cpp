@@ -183,4 +183,5 @@ void Skybox::CreateMaterialResource(DirectXCore* dxCore)
     materialData_->enableLighting = 0;                     // ライティング無効（Skyboxでは使わない）
     materialData_->uvTransform = MakeIdentity4x4();        // 単位行列
     materialData_->shininess = 0.0f;                       // 未使用
+    materialData_->environmentCoefficient = 0.0f;         // 未使用
 }

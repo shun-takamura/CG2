@@ -67,7 +67,8 @@ struct Material
     float3 padding;
     float4x4 uvTransform;
     float shininess;
-    float3 padding2;
+    float environmentCoefficient;
+    float2 padding2;
 };
 
 struct PixelShaderOutput
@@ -101,6 +102,7 @@ cbuffer SpotLightBuffer : register(b4)
 }
 
 Texture2D<float4> gTexture : register(t0);
+TextureCube<float4> gEnvironmentTexture : register(t1);
 SamplerState gSampler : register(s0);
 
 
@@ -198,9 +200,20 @@ PixelShaderOutput main(VertexShaderOutput input)
             totalSpecular += specular;
         }
 
+        // EnvironmentMap
+        // カメラから描画点へのベクトル
+        float3 cameraToPosition = normalize(input.worldPosition - gCamera.worldPosition);
+        // 法線で反射させて入射光方向を求める
+        float3 reflectedVector = reflect(cameraToPosition, normal);
+        // Cubemapから入射光をサンプリング
+        float4 environmentColor = gEnvironmentTexture.Sample(gSampler, reflectedVector);
+        // 係数をかけて加算（BlinnPhong の NdotH=1 ケースと等価）
+        float3 environmentReflection = environmentColor.rgb * gMaterial.environmentCoefficient;
+        
         // 最終出力
-        output.color.rgb = totalDiffuse + totalSpecular;
+        output.color.rgb = totalDiffuse + totalSpecular + environmentReflection;
         output.color.a = gMaterial.color.a * textureColor.a;
+    
     }
     else
     {

@@ -17,11 +17,18 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
 }
 
 void Object3DManager::DrawSetting()
-{
-   
+{  
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
     dxCore_->GetCommandList()->SetPipelineState(pipelineState_.Get());
+
+    // 環境マップをバインド（t1 = rootParameter[7])
+    if (!environmentTexturePath_.empty()) {
+        dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
+            7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
+        );
+    }
+
 }
 
 void Object3DManager::SetBlendMode(BlendMode blendMode)
@@ -60,7 +67,14 @@ void Object3DManager::CreateRootSignature()
     descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
     descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
 
-    D3D12_ROOT_PARAMETER rootParameters[7] = {};
+    // PS: SRV(t1)
+    D3D12_DESCRIPTOR_RANGE descriptorRangeEnvironment[1] = {};
+    descriptorRangeEnvironment[0].BaseShaderRegister = 1;                      // 1を使用
+    descriptorRangeEnvironment[0].NumDescriptors = 1;                          // 数は1つ
+    descriptorRangeEnvironment[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
+    descriptorRangeEnvironment[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
+
+    D3D12_ROOT_PARAMETER rootParameters[8] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -97,6 +111,14 @@ void Object3DManager::CreateRootSignature()
     rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[6].Descriptor.ShaderRegister = 4;  // b4
+
+    // ============================================
+    // PS: DescriptorTable(t1) - Environment Map用
+    // ============================================
+    rootParameters[7].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[7].DescriptorTable.pDescriptorRanges = descriptorRangeEnvironment;
+    rootParameters[7].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeEnvironment);
 
     // ============================================
     // Sampler (PS の s0)

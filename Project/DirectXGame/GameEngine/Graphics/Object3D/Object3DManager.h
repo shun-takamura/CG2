@@ -7,10 +7,13 @@
 #include "Log.h"
 #include <cassert>
 #include"Camera.h"
+#include "TextureManager.h"
+#include <string>  
 
 class Object3DManager{
 
     Camera* defaultCamera_ = nullptr;
+    std::string environmentTexturePath_;
 
     // ブレンドモード
     enum BlendMode {
@@ -77,6 +80,11 @@ public:
 
     // セッター
     void SetDefaultCamera(Camera* camera) { defaultCamera_ = camera; }
+
+    // 環境マップを設定（シーン全体で使用するCubemapファイルパス）
+    void SetEnvironmentTexture(const std::string& filePath) {
+        environmentTexturePath_ = filePath;
+    }
 
 	// ゲッターロボ
 	DirectXCore* GetDxCore() const { return dxCore_; }
