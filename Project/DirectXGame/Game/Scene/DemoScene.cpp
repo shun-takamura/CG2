@@ -67,8 +67,6 @@ void DemoScene::Initialize() {
 	ParticleManager::GetInstance()->SetAccelerationField(field);
 	ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
 
-	TextureManager::GetInstance()->LoadTexture("DistributionAssets/Cubemaps/rostock_laage_airport_4k.dds");
-
 	// 交互に使うスプライト
 	const std::string textures[2] = {
 		"DistributionAssets/Textures/uvChecker.png",
