@@ -2,27 +2,58 @@
 
 void Object3DManager::Initialize(DirectXCore* dxCore)
 {
+    //dxCore_ = dxCore;
+    //CreateRootSignature();
+
+    //// 全ブレンドモードのPSOを作成
+    //for (int i = 0; i < kCountOfBlendMode; ++i) {
+    //    CreateGraphicsPipelineState(static_cast<BlendMode>(i));
+    //}
+
+    //// デフォルトはNormalブレンド
+    //blendMode_ = kBlendModeNormal;
+    //currentBlendMode_ = static_cast<int>(blendMode_);
+    //pipelineState_ = pipelineStates_[currentBlendMode_];
+
     dxCore_ = dxCore;
     CreateRootSignature();
 
-    // 全ブレンドモードのPSOを作成
-    for (int i = 0; i < kCountOfBlendMode; ++i) {
-        CreateGraphicsPipelineState(static_cast<BlendMode>(i));
+    // 全ShaderType × 全BlendModeのPSOを作成
+    for (int st = 0; st < kCountOfShaderType; ++st) {
+        for (int bm = 0; bm < kCountOfBlendMode; ++bm) {
+            CreateGraphicsPipelineState(
+                static_cast<ShaderType>(st),
+                static_cast<BlendMode>(bm)
+            );
+        }
     }
 
-    // デフォルトはNormalブレンド
     blendMode_ = kBlendModeNormal;
     currentBlendMode_ = static_cast<int>(blendMode_);
-    pipelineState_ = pipelineStates_[currentBlendMode_];
 }
 
 void Object3DManager::DrawSetting()
 {  
+    //dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    //dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
+    //dxCore_->GetCommandList()->SetPipelineState(pipelineState_.Get());
+
+    //// 環境マップをバインド（t1 = rootParameter[7])
+    //if (!environmentTexturePath_.empty()) {
+    //    dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
+    //        7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
+    //    );
+    //}
+
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
-    dxCore_->GetCommandList()->SetPipelineState(pipelineState_.Get());
 
-    // 環境マップをバインド（t1 = rootParameter[7])
+    // デフォルトは環境マップありのPSOをセット（個別オブジェクトで上書きされる）
+    dxCore_->GetCommandList()->SetPipelineState(
+        pipelineStates2D_[kShaderEnvironmentMap][currentBlendMode_].Get()
+    );
+
+    // 環境マップをバインド
     if (!environmentTexturePath_.empty()) {
         dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
             7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
@@ -42,16 +73,18 @@ void Object3DManager::SetBlendMode(BlendMode blendMode)
     currentBlendMode_ = static_cast<int>(blendMode);
 
     // PSO を差し替える
-    pipelineState_ = pipelineStates_[currentBlendMode_];
+    pipelineStates2D_[kShaderEnvironmentMap][currentBlendMode_];
 }
 
 Object3DManager::~Object3DManager()
 {
     // RootSignature / PSO の解放(ComPtr なので自動)
     rootSignature_.Reset();
-    pipelineState_.Reset();
-    for (auto& p : pipelineStates_) {
-        p.Reset();
+    //pipelineState_.Reset();
+    for (auto& pipelineStateArray : pipelineStates2D_) {
+        for (auto& pipelineState : pipelineStateArray) {
+            pipelineState.Reset();
+        }
     }
 }
 
@@ -159,8 +192,21 @@ void Object3DManager::CreateRootSignature()
     assert(SUCCEEDED(hr));
 }
 
-void Object3DManager::CreateGraphicsPipelineState(BlendMode mode)
+void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode)
 {
+    // ShaderTypeに応じてPSファイルを切り替え
+    const wchar_t* psFilePath = nullptr;
+    switch (shaderType) {
+    case kShaderEnvironmentMap:
+        psFilePath = L"Resources/Shaders/Object3d.PS.hlsl";
+        break;
+    case kShaderNoEnvironmentMap:
+        psFilePath = L"Resources/Shaders/Object3dNoEnv.PS.hlsl";
+        break;
+    default:
+        assert(false);
+    }
+
     // ===== シェーダーコンパイル =====
     IDxcBlob* vs = dxCore_->CompileShader(
         L"Resources/Shaders/Object3d.VS.hlsl",
@@ -168,7 +214,7 @@ void Object3DManager::CreateGraphicsPipelineState(BlendMode mode)
     );
 
     IDxcBlob* ps = dxCore_->CompileShader(
-        L"Resources/Shaders/Object3d.PS.hlsl",
+        psFilePath,
         L"ps_6_0"
     );
 
@@ -276,6 +322,8 @@ void Object3DManager::CreateGraphicsPipelineState(BlendMode mode)
     desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     desc.SampleDesc.Count = 1;
 
-    HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineStates_[blendMode_]));
-    assert(SUCCEEDED(hr));
+    HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(
+        &desc,
+        IID_PPV_ARGS(&pipelineStates2D_[shaderType][blendMode])
+    ); assert(SUCCEEDED(hr));
 }

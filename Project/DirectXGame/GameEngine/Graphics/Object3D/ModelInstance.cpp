@@ -125,6 +125,9 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 	// 環境マップの反映度合い。1.0だと映り込みすぎになる
 	material_->environmentCoefficient = 1.0f;
+
+	// デフォルトで環境マップを使用しない
+	material_->useEnvironmentMap = false;  
 }
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)

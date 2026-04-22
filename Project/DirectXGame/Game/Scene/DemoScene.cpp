@@ -123,6 +123,8 @@ void DemoScene::Initialize() {
 		"sneakWalk"
 	);
 	sneakWalk->SetScale({ 100.0f, 100.0f, 100.0f });
+	sneakWalk->SetUseEnvironmentMap(true);
+	sneakWalk->SetEnvironmentCoefficient(0.5f);
 	object3DInstances_.push_back(std::move(sneakWalk));
 
 	// サウンドのロード

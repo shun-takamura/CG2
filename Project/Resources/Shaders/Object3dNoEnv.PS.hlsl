@@ -68,7 +68,7 @@ struct Material
     float4x4 uvTransform;
     float shininess;
     float environmentCoefficient;
-    int useEnvironmentMap; // このShaderでは使わないが構造体の整合性のため
+    int useEnvironmentMap;
     float padding2;
 };
 
@@ -103,7 +103,6 @@ cbuffer SpotLightBuffer : register(b4)
 }
 
 Texture2D<float4> gTexture : register(t0);
-TextureCube<float4> gEnvironmentTexture : register(t1);
 SamplerState gSampler : register(s0);
 
 
@@ -119,7 +118,6 @@ PixelShaderOutput main(VertexShaderOutput input)
         float3 normal = normalize(input.normal);
         float3 toEye = normalize(gCamera.worldPosition - input.worldPosition);
         
-        // 最終的な色を蓄積する変数
         float3 totalDiffuse = float3(0.0f, 0.0f, 0.0f);
         float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
 
@@ -130,12 +128,10 @@ PixelShaderOutput main(VertexShaderOutput input)
             float cos = 1.0f;
             if (gDirectionalLight.lightingType == 1)
             {
-                // Lambert
                 cos = saturate(dot(normal, lightDir));
             }
             else if (gDirectionalLight.lightingType == 2)
             {
-                // Half-Lambert
                 float NdotL = dot(normal, lightDir);
                 cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
             }
@@ -151,7 +147,7 @@ PixelShaderOutput main(VertexShaderOutput input)
             totalSpecular += specular;
         }
 
-        // ===== PointLights (複数対応) =====
+        // ===== PointLights =====
         for (uint i = 0; i < gPointLightGroup.activeCount; ++i)
         {
             PointLight pl = gPointLightGroup.lights[i];
@@ -173,7 +169,7 @@ PixelShaderOutput main(VertexShaderOutput input)
             totalSpecular += specular;
         }
 
-        // ===== SpotLights (複数対応) =====
+        // ===== SpotLights =====
         for (uint j = 0; j < gSpotLightGroup.activeCount; ++j)
         {
             SpotLight sl = gSpotLightGroup.lights[j];
@@ -201,20 +197,9 @@ PixelShaderOutput main(VertexShaderOutput input)
             totalSpecular += specular;
         }
 
-        // EnvironmentMap
-        // カメラから描画点へのベクトル
-        float3 cameraToPosition = normalize(input.worldPosition - gCamera.worldPosition);
-        // 法線で反射させて入射光方向を求める
-        float3 reflectedVector = reflect(cameraToPosition, normal);
-        // Cubemapから入射光をサンプリング
-        float4 environmentColor = gEnvironmentTexture.Sample(gSampler, reflectedVector);
-        // 係数をかけて加算（BlinnPhong の NdotH=1 ケースと等価）
-        float3 environmentReflection = environmentColor.rgb * gMaterial.environmentCoefficient;
-        
-        // 最終出力
-        output.color.rgb = totalDiffuse + totalSpecular + environmentReflection;
+        // 最終出力（環境マップなし）
+        output.color.rgb = totalDiffuse + totalSpecular;
         output.color.a = gMaterial.color.a * textureColor.a;
-    
     }
     else
     {

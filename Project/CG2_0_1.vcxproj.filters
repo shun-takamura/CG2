@@ -558,6 +558,7 @@
     <FxCompile Include="Resources\Shaders\GaussianFilter.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skybox.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skybox.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3dNoEnv.PS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">

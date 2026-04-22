@@ -88,6 +88,35 @@ public:
     void SetTexture(const std::string& filePath);
 
     //==============================
+    // Material関連セッター（環境マッピング関連）
+    //==============================
+
+    /// <summary>
+    /// 環境マップの使用ON/OFF
+    /// true: 環境マップあり（Object3d.PS.hlsl を使用）
+    /// false: 環境マップなし（Object3dNoEnv.PS.hlsl を使用、計算自体をスキップ）
+    /// </summary>
+    void SetUseEnvironmentMap(bool use);
+
+    /// <summary>
+    /// 環境マップの反映度合い (0.0〜1.0)
+    /// 1.0で「磨き上げられた金属」レベルの映り込みすぎ
+    /// 0.3程度が現実的な金属光沢
+    /// 0.0で映り込みなし（ただし計算自体は行われる、完全OFFは SetUseEnvironmentMap(false)）
+    /// </summary>
+    void SetEnvironmentCoefficient(float coef);
+
+    //==============================
+    // TODO: 将来的に拡張予定のMaterialセッター
+    //==============================
+    // void SetColor(const Vector4& color);
+    // void SetShininess(float shininess);
+    // void SetEnableLighting(bool enable);
+    //
+    // enum class MaterialPreset { Default, Metal, Plastic, Matte };
+    // void SetMaterialPreset(MaterialPreset preset);
+
+    //==============================
     // ゲッター
     //==============================
     const Vector3& GetScale() const { return transform_.scale; }
