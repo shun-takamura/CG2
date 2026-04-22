@@ -3,7 +3,7 @@
 
 #ifdef USE_IMGUI
 #include "imgui.h"
-#endif // USE_IMGUI
+#endif
 
 void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath,
     const std::string& name)
@@ -11,9 +11,7 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
     spriteManager_ = spriteManager;
     textureFilePath_ = filePath;
 
-    // 名前が指定されていなければファイル名を使用
     if (name.empty()) {
-        // ファイルパスからファイル名だけ抽出
         size_t pos = filePath.find_last_of("/\\");
         if (pos != std::string::npos) {
             name_ = filePath.substr(pos + 1);
@@ -24,13 +22,9 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
         name_ = name;
     }
 
-    // テクスチャを読み込む（重複読み込みはTextureManager側で回避）
     TextureManager::GetInstance()->LoadTexture(filePath);
-
-    // その番号からGPUハンドルを取得して保持
     textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(filePath);
 
-    // テクスチャサイズをデフォルトで全体に設定
     const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(filePath);
     textureLeftTop_ = { 0.0f, 0.0f };
     textureSize_ = { static_cast<float>(metadata.width), static_cast<float>(metadata.height) };
@@ -64,28 +58,24 @@ void SpriteInstance::Update()
     float tex_top = textureLeftTop_.y / metadata.height;
     float tex_bottom = (textureLeftTop_.y + textureSize_.y) / metadata.height;
 
-    // indexに格納するから同一頂点のデータをわざわざ用意する必要はない
     // 左下
-    vertexData_[0].position = { left, bottom, 0.0f, 1.0f };
+    vertexData_[0].pos = { left, bottom, 0.0f, 1.0f };           // ← position → pos
     vertexData_[0].texcoord = { tex_left, tex_bottom };
-    vertexData_[0].normal = { 0.0f, 0.0f, -1.0f };
+    // normal行を削除
 
     // 左上
-    vertexData_[1].position = { left, top, 0.0f, 1.0f };
+    vertexData_[1].pos = { left, top, 0.0f, 1.0f };
     vertexData_[1].texcoord = { tex_left, tex_top };
-    vertexData_[1].normal = { 0.0f, 0.0f, -1.0f };
 
     // 右下
-    vertexData_[2].position = { right, bottom, 0.0f, 1.0f };
+    vertexData_[2].pos = { right, bottom, 0.0f, 1.0f };
     vertexData_[2].texcoord = { tex_right, tex_bottom };
-    vertexData_[2].normal = { 0.0f, 0.0f, -1.0f };
 
     // 右上
-    vertexData_[3].position = { right, top, 0.0f, 1.0f };
+    vertexData_[3].pos = { right, top, 0.0f, 1.0f };
     vertexData_[3].texcoord = { tex_right, tex_top };
-    vertexData_[3].normal = { 0.0f, 0.0f, -1.0f };
 
-    // インデックスリソースにデータを書き込む
+    // インデックス
     indexData_[0] = 0;
     indexData_[1] = 1;
     indexData_[2] = 2;
@@ -97,7 +87,6 @@ void SpriteInstance::Update()
     transform.rotate = { 0.0f, 0.0f, rotation_ };
     transform.translate = { position_.x, position_.y, 0.0f };
 
-    // 行列
     Matrix4x4 worldMatrix = MakeAffineMatrix(transform);
     Matrix4x4 viewMatrix = MakeIdentity4x4();
     Matrix4x4 projectionMatrix = MakeOrthographicMatrix(
@@ -108,7 +97,6 @@ void SpriteInstance::Update()
     );
     Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
-    // GPUに転送
     transformationMatrixData_->World = worldMatrix;
     transformationMatrixData_->WVP = wvpMatrix;
 }
@@ -117,46 +105,28 @@ void SpriteInstance::Draw()
 {
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList = spriteManager_->GetDxCore()->GetCommandList();
 
-    // ===============================
-    // 1. Vertex / Index Buffer を設定
-    // ===============================
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
     commandList->IASetIndexBuffer(&indexBufferView_);
 
-    // ==================================================
-    // 2. マテリアル ConstantBuffer を設定（PixelShader b0）
-    // ==================================================
+    // PS b0: Material
     commandList->SetGraphicsRootConstantBufferView(
         0,
         materialResource_->GetGPUVirtualAddress()
     );
 
-    // ====================================================
-    // 3. Transform ConstantBuffer を設定（VertexShader b0）
-    // ====================================================
+    // VS b0: Transformation
     commandList->SetGraphicsRootConstantBufferView(
         1,
         transformationMatrixResource_->GetGPUVirtualAddress()
     );
 
-    // ===================================
-    // 4. SRV（Texture）の DescriptorTable
-    // ===================================
+    // PS t0: Texture
     commandList->SetGraphicsRootDescriptorTable(
         2,
         TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
 
-    // ===============================
-    // 5. 描画（DrawCall）
-    // ===============================
-    commandList->DrawIndexedInstanced(
-        6,   // index count (四角形 → 三角形2つ → 6 index)
-        1,   // instance count
-        0,   // start index
-        0,   // base vertex
-        0    // start instance
-    );
+    commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }
 
 SpriteInstance::~SpriteInstance()
@@ -184,33 +154,29 @@ SpriteInstance::~SpriteInstance()
 
 void SpriteInstance::AdjustTextureSize()
 {
-    // テクスチャのメタデータを取得
     const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetaData(textureFilePath_);
 
     textureSize_.x = static_cast<float>(metadata.width);
     textureSize_.y = static_cast<float>(metadata.height);
 
-    // 画像サイズをテクスチャサイズに合わせる
     size_ = textureSize_;
 }
 
 void SpriteInstance::CreateVertexBuffer()
 {
-    // 4頂点のバッファを作るので *4
-    vertexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(VertexData) * 4);
+    // SpriteVertexData を使用
+    vertexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(SpriteVertexData) * 4);
 
-    // 三角形2枚分のバッファを作るので *6
     indexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(uint32_t) * 6);
 
-    // GPU書き込み用アドレスの取得
     vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
     indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData_));
 
-    // 座標セット（左上・右上・左下・右下）
-    vertexData_[0].position = { 0.0f, 0.0f, 0.0f, 1.0f };
-    vertexData_[1].position = { static_cast<float>(size_.x), 0.0f, 0.0f, 1.0f };
-    vertexData_[2].position = { 0.0f, static_cast<float>(size_.y), 0.0f, 1.0f };
-    vertexData_[3].position = { static_cast<float>(size_.x), static_cast<float>(size_.y), 0.0f, 1.0f };
+    // 座標セット (position → pos)
+    vertexData_[0].pos = { 0.0f, 0.0f, 0.0f, 1.0f };
+    vertexData_[1].pos = { static_cast<float>(size_.x), 0.0f, 0.0f, 1.0f };
+    vertexData_[2].pos = { 0.0f, static_cast<float>(size_.y), 0.0f, 1.0f };
+    vertexData_[3].pos = { static_cast<float>(size_.x), static_cast<float>(size_.y), 0.0f, 1.0f };
 
     // UV
     vertexData_[0].texcoord = { 0.0f, 0.0f };
@@ -218,16 +184,12 @@ void SpriteInstance::CreateVertexBuffer()
     vertexData_[2].texcoord = { 0.0f, 1.0f };
     vertexData_[3].texcoord = { 1.0f, 1.0f };
 
-    // 法線方向
-    vertexData_[0].normal = { 0.0f, 0.0f, -1.0f };
-    vertexData_[1].normal = { 0.0f, 0.0f, -1.0f };
-    vertexData_[2].normal = { 0.0f, 0.0f, -1.0f };
-    vertexData_[3].normal = { 0.0f, 0.0f, -1.0f };
+    // normalの設定は削除（SpriteVertexDataには存在しない）
 
     // バッファビュー設定
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = sizeof(VertexData) * 4;
-    vertexBufferView_.StrideInBytes = sizeof(VertexData);
+    vertexBufferView_.SizeInBytes = sizeof(SpriteVertexData) * 4;
+    vertexBufferView_.StrideInBytes = sizeof(SpriteVertexData);
 
     indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
     indexBufferView_.SizeInBytes = sizeof(uint32_t) * 6;
@@ -236,11 +198,12 @@ void SpriteInstance::CreateVertexBuffer()
 
 void SpriteInstance::CreateMaterialBuffer()
 {
-    materialResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(Material));
+    // SpriteMaterialData を使用
+    materialResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(SpriteMaterialData));
     materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&materialData_));
 
     materialData_->color = { 1, 1, 1, 1 };
-    materialData_->enableLighting = false;
+    // enableLighting の設定は削除（SpriteMaterialDataには存在しない）
     materialData_->uvTransform = MakeIdentity4x4();
 }
 
@@ -255,9 +218,6 @@ void SpriteInstance::CreateTransformationMatrixBuffer()
 
 #ifdef USE_IMGUI
 
-//==============================
-// ImGui Inspector描画
-//==============================
 void SpriteInstance::OnImGuiInspector()
 {
     // Transform
@@ -278,7 +238,6 @@ void SpriteInstance::OnImGuiInspector()
         ImGui::DragFloat2("Texture Left Top", &textureLeftTop_.x, 1.0f);
         ImGui::DragFloat2("Texture Size", &textureSize_.x, 1.0f);
 
-        // テクスチャサイズにリセットボタン
         if (ImGui::Button("Reset to Texture Size")) {
             AdjustTextureSize();
         }
@@ -305,6 +264,5 @@ void SpriteInstance::OnImGuiInspector()
             static_cast<int>(metadata.width),
             static_cast<int>(metadata.height));
     }
-
 }
-#endif // USE_IMGUI
+#endif

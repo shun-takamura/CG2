@@ -1,24 +1,27 @@
-cbuffer Transform : register(b0)
+#include "Sprite.hlsli"
+
+struct TransformationMatrix
 {
     float4x4 WVP;
+    float4x4 World;
+    float4x4 WorldInverseTranspose; // Sprite では使わないがCBufferサイズを合わせるため必要
 };
 
-struct VSInput
+cbuffer TransformationMatrixBuffer : register(b0)
 {
-    float3 pos : POSITION;
-    float2 uv : TEXCOORD;
+    TransformationMatrix transformationMatrix;
 };
 
-struct VSOutput
+struct VertexShaderInput
 {
-    float4 pos : SV_POSITION;
-    float2 uv : TEXCOORD;
+    float4 position : POSITION0;
+    float2 texcoord : TEXCOORD0;
 };
 
-VSOutput main(VSInput input)
+VertexShaderOutput main(VertexShaderInput input)
 {
-    VSOutput output;
-    output.pos = mul(float4(input.pos, 1.0f), WVP);
-    output.uv = input.uv;
+    VertexShaderOutput output;
+    output.position = mul(input.position, transformationMatrix.WVP);
+    output.texcoord = input.texcoord;
     return output;
 }

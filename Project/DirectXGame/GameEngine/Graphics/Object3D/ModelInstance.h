@@ -60,6 +60,9 @@ public:
 
 	const ModelData& GetModelData() const { return modelData_; }
 
+	// ImGui/PSO切り替えから Material にアクセスするためのGetter
+	Material* GetMaterialPointer() const { return material_; }
+
 private:
 
 	// 頂点データ作成

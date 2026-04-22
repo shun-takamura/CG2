@@ -558,6 +558,7 @@
     <FxCompile Include="Resources\Shaders\GaussianFilter.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skybox.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skybox.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3dNoEnv.PS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -570,5 +571,6 @@
     <None Include="Resources\Shaders\CopyImage.hlsli" />
     <None Include="Resources\Shaders\PostProcess.hlsli" />
     <None Include="Resources\Shaders\Skybox.hlsli" />
+    <None Include="Resources\Shaders\Sprite.hlsli" />
   </ItemGroup>
 </Project>

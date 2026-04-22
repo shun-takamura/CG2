@@ -54,18 +54,20 @@ void DemoScene::Initialize() {
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_4k.dds");
 
-	// パーティクルの設定
-	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "DistributionAssets/Textures/uvChecker.png");
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
 
-	// 加速度フィールドの設定
-	AccelerationField field;
-	field.acceleration = { 15.0f, 0.0f, 0.0f };
-	field.area.min = { -1.0f, -1.0f, -1.0f };
-	field.area.max = { 10.0f, 10.0f, 10.0f };
-	ParticleManager::GetInstance()->SetAccelerationField(field);
-	ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
+	//// パーティクルの設定
+	//ParticleManager::GetInstance()->SetCamera(camera_.get());
+	//ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "DistributionAssets/Textures/uvChecker.png");
+	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+
+	//// 加速度フィールドの設定
+	//AccelerationField field;
+	//field.acceleration = { 15.0f, 0.0f, 0.0f };
+	//field.area.min = { -1.0f, -1.0f, -1.0f };
+	//field.area.max = { 10.0f, 10.0f, 10.0f };
+	//ParticleManager::GetInstance()->SetAccelerationField(field);
+	//ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
 
 	// 交互に使うスプライト
 	const std::string textures[2] = {
@@ -86,31 +88,44 @@ void DemoScene::Initialize() {
 		sprites_.push_back(std::move(newSprite));
 	}
 
-	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { 
-		"Models/MonsterBall/monsterBall.obj", 
-		"Models/Terrain/terrain.obj", 
-		"Models/Plane/plane.gltf"
-	};
+	//// 3Dオブジェクトを配列で管理
+	//const std::string modelFiles[] = { 
+	//	"Models/MonsterBall/monsterBall.obj", 
+	//	"Models/Terrain/terrain.obj", 
+	//	"Models/Plane/plane.gltf"
+	//};
 
-	const std::string objectNames[] = { 
-		"MonsterBall", 
-		"terrain", 
-		"plane"
-	};
+	//const std::string objectNames[] = { 
+	//	"MonsterBall", 
+	//	"terrain", 
+	//	"plane"
+	//};
 
-	for (int i = 0; i < 3; ++i) {
-		auto obj = std::make_unique<Object3DInstance>();
-		obj->Initialize(
-			object3DManager_,
-			dxCore_,
-			"DistributionAssets/",
-			modelFiles[i],
-			objectNames[i]
-		);
-		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
-		object3DInstances_.push_back(std::move(obj));
-	}
+	//for (int i = 0; i < 3; ++i) {
+	//	auto obj = std::make_unique<Object3DInstance>();
+	//	obj->Initialize(
+	//		object3DManager_,
+	//		dxCore_,
+	//		"DistributionAssets/",
+	//		modelFiles[i],
+	//		objectNames[i]
+	//	);
+	//	obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
+	//	object3DInstances_.push_back(std::move(obj));
+	//}
+
+	auto sneakWalk = std::make_unique<Object3DInstance>();
+	sneakWalk->Initialize(
+		object3DManager_,
+		dxCore_,
+		"DistributionAssets/",
+		"Models/human/sneakWalk.gltf",
+		"sneakWalk"
+	);
+	sneakWalk->SetScale({ 100.0f, 100.0f, 100.0f });
+	sneakWalk->SetUseEnvironmentMap(true);
+	sneakWalk->SetEnvironmentCoefficient(0.5f);
+	object3DInstances_.push_back(std::move(sneakWalk));
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
@@ -219,13 +234,17 @@ void DemoScene::Update() {
 		ParticleManager::GetInstance()->SetAccelerationFieldEnabled(!current);
 	}
 
-	sprite_->SetAnchorPoint({ 0.5f, 0.5f });
-	sprite_->SetIsFlipX(true);
+	sprite_->SetAnchorPoint({ 0.f, 0.0f });
+	sprite_->SetPosition({ 0.0f,0.0f });
+	sprite_->SetSize({ 200.0f,200.0f });
+	sprite_->Update();
+	//sprite_->SetIsFlipX(true);
 
 	// 回転テスト
 	float rotation = sprite_->GetRotation();
 	rotation += 0.01f;
 	sprite_->SetRotation(rotation);
+	sprite_->Update();
 
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();
@@ -241,26 +260,24 @@ void DemoScene::Update() {
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update();
 
-	// 1秒間に発生させる量を自動制御
-	emitTimer_ += dxCore_->GetDeltaTime();
-	float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
-	if (emitRate > 0.0f) {
-		float emitInterval = 1.0f / emitRate;
-		while (emitTimer_ >= emitInterval) {
-			ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
-			emitTimer_ -= emitInterval;
-		}
-	}
+	//// 1秒間に発生させる量を自動制御
+	//emitTimer_ += dxCore_->GetDeltaTime();
+	//float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
+	//if (emitRate > 0.0f) {
+	//	float emitInterval = 1.0f / emitRate;
+	//	while (emitTimer_ >= emitInterval) {
+	//		ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
+	//		emitTimer_ -= emitInterval;
+	//	}
+	//}
 
-	// circleのパーティクルを常に発生させる
-	ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
+	//// circleのパーティクルを常に発生させる
+	//ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
 
-	// キー入力でパーティクル発生
-	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
-		ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
-	}
-
-	sprite_->Update();
+	//// キー入力でパーティクル発生
+	//if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
+	//	ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
+	//}
 
 	// カメラスプライトが存在する場合のみ更新
 	if (cameraSprite_) {
@@ -301,8 +318,8 @@ void DemoScene::Draw() {
 	skyboxManager_->DrawSetting();
 	skybox_->Draw(dxCore_);
 
-	// パーティクル描画
-	ParticleManager::GetInstance()->Draw();
+	//// パーティクル描画
+	//ParticleManager::GetInstance()->Draw();
 
 	// スプライト描画
 	spriteManager_->DrawSetting();

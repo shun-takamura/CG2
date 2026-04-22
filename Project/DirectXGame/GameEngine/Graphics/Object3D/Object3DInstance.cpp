@@ -61,6 +61,20 @@ void Object3DInstance::Update()
 
 void Object3DInstance::Draw(DirectXCore* dxCore)
 {
+  // Materialのフラグに応じてPSOを切り替え
+    if (modelInstance_) {
+        Material* mat = modelInstance_->GetMaterialPointer();
+        if (mat && mat->useEnvironmentMap) {
+            dxCore->GetCommandList()->SetPipelineState(
+                object3DManager_->GetPipelineState(Object3DManager::kShaderEnvironmentMap)
+            );
+        } else {
+            dxCore->GetCommandList()->SetPipelineState(
+                object3DManager_->GetPipelineState(Object3DManager::kShaderNoEnvironmentMap)
+            );
+        }
+    }
+
     // 座標変換行列CBufferの場所を設定
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
         1, transformationMatrixResource_->GetGPUVirtualAddress()
@@ -71,7 +85,6 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
         4, cameraResource_->GetGPUVirtualAddress()
     );
 
-    // 3Dモデルがあれば描画
     if (modelInstance_) {
         modelInstance_->Draw(dxCore);
     }
@@ -120,6 +133,36 @@ void Object3DInstance::SetTexture(const std::string& filePath)
     // ModelInstanceにテクスチャ変更機能があれば呼び出す
 }
 
+void Object3DInstance::SetUseEnvironmentMap(bool use)
+{
+    // ModelInstanceがまだ生成されていない場合（Initialize前）は何もしない
+    if (!modelInstance_) {
+        return;
+    }
+
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) {
+        return;
+    }
+
+    // int32_t に変換して書き込む
+    mat->useEnvironmentMap = use ? 1 : 0;
+}
+
+void Object3DInstance::SetEnvironmentCoefficient(float coef)
+{
+    if (!modelInstance_) {
+        return;
+    }
+
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) {
+        return;
+    }
+
+    mat->environmentCoefficient = coef;
+}
+
 //==============================
 // ImGui Inspector描画
 //==============================
@@ -144,6 +187,30 @@ void Object3DInstance::OnImGuiInspector()
         }
 
         ImGui::DragFloat3("Scale", &transform_.scale.x, 0.01f);
+    }
+
+    // Material
+    if (ImGui::CollapsingHeader("Material")) {
+        if (modelInstance_) {
+            Material* mat = modelInstance_->GetMaterialPointer();
+            if (mat) {
+                // 環境マップ使用のON/OFF
+                bool useEnv = (mat->useEnvironmentMap != 0);
+                if (ImGui::Checkbox("Use Environment Map", &useEnv)) {
+                    mat->useEnvironmentMap = useEnv ? 1 : 0;
+                }
+
+                // 係数スライダー（環境マップONの時だけ表示）
+                if (useEnv) {
+                    ImGui::SliderFloat("Environment Coefficient",
+                        &mat->environmentCoefficient,
+                        0.0f, 1.0f);
+                }
+
+                // Shininess
+                ImGui::DragFloat("Shininess", &mat->shininess, 1.0f, 0.0f, 1000.0f);
+            }
+        }
     }
 
     // Texture（将来の拡張用）

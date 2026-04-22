@@ -8,7 +8,9 @@ typedef struct Material {
 	float padding[3];
 	Matrix4x4 uvTransform;
 	float shininess;
-	float padding2[3];
+	float environmentCoefficient;
+	int32_t useEnvironmentMap;  // 環境マップの使用ON/OFF
+	float padding2;
 }Material;
 
 
