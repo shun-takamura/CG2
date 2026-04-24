@@ -1,8 +1,10 @@
 #pragma once
 #include "BaseScene.h"
+#include "Vector3.h"
 #include <memory>
 #include <vector>
 #include <string>
+#include <random>
 
 // 前方宣言
 class DebugCamera;
@@ -10,6 +12,7 @@ class SpriteInstance;
 class Object3DInstance;
 class Skybox;
 class Camera;
+class PrimitiveMesh;
 
 class DemoScene :public BaseScene
 {
@@ -63,8 +66,30 @@ private:
 	// カメラ
 	std::unique_ptr<Camera> camera_;
 
+	// Primitiveメッシュ（動作確認用）
+	std::unique_ptr<PrimitiveMesh> testPrimitive_;
+	std::unique_ptr<PrimitiveMesh> testPrimitiveBox_;
+	std::unique_ptr<PrimitiveMesh> testRing_;
+	std::unique_ptr<PrimitiveMesh> testCylinder_;
+
+	// Plane版HitEffect用の1枚分のデータ
+	struct HitEffectPlane {
+		std::unique_ptr<PrimitiveMesh> mesh;
+		Vector3 initialScale;       // 初期スケール（縦長）
+		float lifeTime = 0.6f;      // 寿命
+		float currentTime = 0.0f;   // 現在の経過時間
+	};
+
+	// HitEffect（Plane版）の管理配列
+	std::vector<HitEffectPlane> hitEffectPlanes_;
+
 	// パーティクル用タイマー
 	float emitTimer_ = 0.0f;
 
+	// HitEffect用のタイマー
+	float hitEffectTimer_ = 0.0f;
+
+	// ランダム生成用
+	std::mt19937 randomEngine_;
 };
 

@@ -87,6 +87,9 @@ Matrix4x4 Transpose(const Matrix4x4& matrix);
 // Scale行列作成関数
 Matrix4x4 MakeScaleMatrix(Transform transform);
 
+// 回転行列作成関数
+Matrix4x4 MakeRotateMatrix(Vector3 rotate);
+
 // X回転行列作成関数
 Matrix4x4 MakeRotateXMatrix(Vector3 rotate);
 

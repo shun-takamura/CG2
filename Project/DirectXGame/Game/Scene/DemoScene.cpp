@@ -26,8 +26,15 @@
 #include "TextureManager.h"
 #include"Game.h"
 #include "Skybox.h"
+#include "Primitive/PrimitiveMesh.h"
+#include "Primitive/PrimitiveGenerator.h"
+#include "Easing.h"
+#include "Interpolator.h"
+#include <numbers>
 
 DemoScene::DemoScene() {
+	std::random_device rd;
+	randomEngine_.seed(rd());
 }
 
 DemoScene::~DemoScene() {
@@ -56,10 +63,9 @@ void DemoScene::Initialize() {
 
 	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
 
-	//// パーティクルの設定
-	//ParticleManager::GetInstance()->SetCamera(camera_.get());
-	//ParticleManager::GetInstance()->CreateParticleGroup("uvChecker", "DistributionAssets/Textures/uvChecker.png");
-	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+	// パーティクルの設定
+	ParticleManager::GetInstance()->SetCamera(camera_.get());
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -129,13 +135,56 @@ void DemoScene::Initialize() {
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
+
+	// Ringのテスト（角度範囲指定版）
+	testRing_ = std::make_unique<PrimitiveMesh>();
+
+	PrimitiveGenerator::RingParams ringParams;
+	ringParams.outerRadius = 1.0f;
+	ringParams.innerRadius = 0.0f;    // 内径0にすると円盤っぽくなる
+	// 波打つ輪っか
+	ringParams.divisions = 64;
+	ringParams.outerRadiusPerDivision.clear();
+	for (int i = 0; i < 64; ++i) {
+		float angle = i / 64.0f * 2.0f * std::numbers::pi_v<float>;
+		float wave = 1.0f + 0.2f * std::sin(angle * 5.0f);  // 5波
+		ringParams.outerRadiusPerDivision.push_back(wave);
+	}
+	ringParams.innerColor = { 1.0f, 1.0f, 1.0f, 1.0f };  // 中央：白不透明
+	ringParams.outerColor = { 1.0f, 1.0f, 1.0f, 0.0f };  // 外側：白透明
+	ringParams.startAngle = 0.0f;
+	ringParams.endAngle = 2.0f * std::numbers::pi_v<float>;
+	ringParams.uvHorizon = true;
+
+	testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
+	testRing_->SetTexture("DistributionAssets/Textures/white1x1.png");
+	testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+	testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
+	//testRing_->SetUVScroll({ 0.0f, 1.0f });
+
+	// Cylinderのテスト
+	testCylinder_ = std::make_unique<PrimitiveMesh>();
+	testCylinder_->Initialize(PrimitiveGenerator::CreateCylinder(
+		1.0f, 1.0f, 3.0f, 32,
+		{ 1.0f, 1.0f, 1.0f, 1.0f },
+		{ 1.0f, 1.0f, 1.0f, 1.0f }
+	));
+	testCylinder_->SetTexture("DistributionAssets/Textures/gradationLine.png");
+	testCylinder_->SetBlendMode(PrimitivePipeline::kBlendModeNone);
+	testCylinder_->GetTransform().translate = { 0.0f, 2.0f, 0.0f };
+	testCylinder_->SetDepthWrite(true);
+	testCylinder_->SetUVFlipV(true);
+	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
+	testCylinder_->SetAlphaReference(0.5f);
 }
 
 void DemoScene::Finalize() {
 
+	testCylinder_.reset();
+	testRing_.reset();
 	sprites_.clear();
 	object3DInstances_.clear();
-
+	hitEffectPlanes_.clear();
 }
 
 void DemoScene::Update() {
@@ -224,6 +273,82 @@ void DemoScene::Update() {
 		Debug::Log("trigger [2]");
 	}
 
+	// HキーでHitEffect発生
+	if (input_->GetKeyboard()->TriggerKey(DIK_H)) {
+		// --- Plane版 HitEffect（8枚の星型） ---
+		const int planeCount = 8;
+		const Vector3 hitPos = { 0.0f, 5.0f, 0.0f };
+
+		for (int i = 0; i < planeCount; ++i) {
+			HitEffectPlane p;
+
+			// Plane生成
+			p.mesh = std::make_unique<PrimitiveMesh>();
+			p.mesh->Initialize(PrimitiveGenerator::CreatePlane(1.0f, 1.0f));
+			p.mesh->SetTexture("DistributionAssets/Textures/circle2.png");
+			p.mesh->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+
+			// 縦長スケール（初期値）
+			p.initialScale = { 0.05f, 1.0f, 1.0f };
+			p.mesh->GetTransform().scale = p.initialScale;
+
+			// 位置
+			p.mesh->GetTransform().translate = hitPos;
+
+			// Z軸回転（-π〜+π のランダム）
+			std::uniform_real_distribution<float> distAngle(
+				-std::numbers::pi_v<float>,
+				std::numbers::pi_v<float>);
+			float angle = distAngle(randomEngine_);
+			p.mesh->GetTransform().rotate = { 0.0f, 0.0f, angle };
+
+			// 寿命
+			p.lifeTime = 0.6f;
+			p.currentTime = 0.0f;
+
+			hitEffectPlanes_.push_back(std::move(p));
+		}
+	}
+
+	// --- HitEffectPlanes の更新 ---
+	const float deltaTime = dxCore_->GetDeltaTime();
+
+	for (auto it = hitEffectPlanes_.begin(); it != hitEffectPlanes_.end();) {
+		it->currentTime += deltaTime;
+
+		if (it->currentTime >= it->lifeTime) {
+			// 寿命尽きた → 削除
+			it = hitEffectPlanes_.erase(it);
+			continue;
+		}
+
+		// 進行率 t (0.0 ~ 1.0)
+		float t = it->currentTime / it->lifeTime;
+
+		// スケール：初期サイズ → 3倍に拡大（EaseOutCubic）
+		float scaleFactor = 1.0f + 2.0f * Easing::Apply(Easing::Type::EaseOutCubic, t);
+		it->mesh->GetTransform().scale = {
+			it->initialScale.x * scaleFactor,
+			it->initialScale.y * scaleFactor,
+			it->initialScale.z
+		};
+
+		// アルファ：1.0 → 0.0（フェードアウト、EaseOutCubic）
+		float alpha = 1.0f - Easing::Apply(Easing::Type::EaseOutCubic, t);
+		it->mesh->SetColor({ 1.0f, 1.0f, 1.0f, alpha });
+
+		// 毎フレーム更新
+		it->mesh->Update(camera_.get());
+
+		++it;
+	}
+
+	// Update内
+	if (testRing_) testRing_->Update(camera_.get());
+
+	// Update内
+	if (testCylinder_) testCylinder_->Update(camera_.get());
+
 	if (input_->GetKeyboard()->TriggerKey(DIK_P)) {
 		dxCore_->SetUseFixedFrameRate(false);
 	}
@@ -293,6 +418,16 @@ void DemoScene::Update() {
 
 void DemoScene::Draw() {
 
+	// DSVを切り替えてSkybox描画
+	// 必ず最初に背景から描画していくこと
+	auto commandList = dxCore_->GetCommandList();
+	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
+
+	skyboxManager_->DrawSetting();
+	skybox_->Draw(dxCore_);
+
 	// 描画の最初にカメラテクスチャを更新
 	if (CameraCapture::GetInstance()->IsOpened()) {
 		OutputDebugStringA("Updating camera texture...\n");
@@ -309,17 +444,25 @@ void DemoScene::Draw() {
 		obj->Draw(dxCore_);
 	}
 
-	// DSVを切り替えてSkybox描画
-	auto commandList = dxCore_->GetCommandList();
-	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
-	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
 
-	skyboxManager_->DrawSetting();
-	skybox_->Draw(dxCore_);
+	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 
-	//// パーティクル描画
-	//ParticleManager::GetInstance()->Draw();
+	if (testCylinder_) {
+		testCylinder_->Draw();
+	}
+
+	// HitEffectPlanes の描画
+	for (auto& p : hitEffectPlanes_) {
+		p.mesh->Draw();
+	}
+
+	if (testRing_) { 
+		testRing_->Draw(); 
+	}
+
+	// パーティクル描画
+	ParticleManager::GetInstance()->Draw();
 
 	// スプライト描画
 	spriteManager_->DrawSetting();
