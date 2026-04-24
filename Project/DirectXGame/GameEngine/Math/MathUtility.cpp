@@ -478,6 +478,13 @@ Matrix4x4 MakeScaleMatrix(Transform transform)
 	return scaleMatrix4x4;
 }
 
+Matrix4x4 MakeRotateMatrix(Vector3 rotate)
+{
+	return Multiply(
+		Multiply(MakeRotateZMatrix(rotate), MakeRotateYMatrix(rotate)),
+		MakeRotateXMatrix(rotate));
+}
+
 Matrix4x4 MakeRotateXMatrix(Vector3 rotate)
 {
 	// Xの回転行列

@@ -72,8 +72,6 @@ void Object3DManager::SetBlendMode(BlendMode blendMode)
     blendMode_ = blendMode;
     currentBlendMode_ = static_cast<int>(blendMode);
 
-    // PSO を差し替える
-    pipelineStates2D_[kShaderEnvironmentMap][currentBlendMode_];
 }
 
 Object3DManager::~Object3DManager()

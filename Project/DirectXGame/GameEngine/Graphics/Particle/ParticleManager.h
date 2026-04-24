@@ -11,6 +11,8 @@
 #include "Vector4.h"
 #include "Matrix4x4.h"
 #include "Transform.h"
+#include "EmitParam.h"
+#include "BillboardMode.h"
 #include <random>
 
 // 前方宣言
@@ -23,6 +25,7 @@ struct Particle {
     Vector4 color;
     float lifeTime;
     float currentTime;
+    BillboardMode billboardMode = BillboardMode::Billboard;
 };
 
 // AABB
@@ -78,7 +81,7 @@ public:
         kBlendModeNormal,
         kBlendModeAdd,
         kBlendModeSubtract,
-        kBlendModeMultily,
+        kBlendModeMultiply,
         kBlendModeScreen,
         kCountOfBlendMode
     };
@@ -102,6 +105,9 @@ public:
 
     // パーティクル発生
     void Emit(const std::string& name, const Vector3& position, uint32_t count);
+
+    // パーティクル発生（EmitParam版）
+    void Emit(const std::string& name, const EmitParam& param);
 
     // 更新
     void Update();

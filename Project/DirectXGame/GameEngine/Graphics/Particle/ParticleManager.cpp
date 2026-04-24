@@ -181,6 +181,76 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
     }
 }
 
+void ParticleManager::Emit(const std::string& name, const EmitParam& param)
+{
+    assert(particleGroups_.find(name) != particleGroups_.end());
+    ParticleGroup& group = particleGroups_[name];
+
+    // 範囲ランダム用のヘルパー（min == max なら固定値）
+    auto randomInRange = [this](float minVal, float maxVal) -> float {
+        if (minVal == maxVal) return minVal;
+        std::uniform_real_distribution<float> dist(minVal, maxVal);
+        return dist(randomEngine_);
+        };
+
+    std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
+
+    for (uint32_t i = 0; i < param.count; ++i) {
+        if (group.particles.size() >= kMaxInstanceCount) {
+            break;
+        }
+
+        Particle particle;
+
+        // スケール：Base + RandomMin〜RandomMax
+        particle.transform.scale = {
+            param.scaleBase.x + randomInRange(param.scaleRandomMin.x, param.scaleRandomMax.x),
+            param.scaleBase.y + randomInRange(param.scaleRandomMin.y, param.scaleRandomMax.y),
+            param.scaleBase.z + randomInRange(param.scaleRandomMin.z, param.scaleRandomMax.z)
+        };
+
+        // 回転：Base + RandomMin〜RandomMax
+        particle.transform.rotate = {
+            param.rotateBase.x + randomInRange(param.rotateRandomMin.x, param.rotateRandomMax.x),
+            param.rotateBase.y + randomInRange(param.rotateRandomMin.y, param.rotateRandomMax.y),
+            param.rotateBase.z + randomInRange(param.rotateRandomMin.z, param.rotateRandomMax.z)
+        };
+
+        // 位置
+        particle.transform.translate = param.position;
+
+        // 速度：Base + RandomMin〜RandomMax
+        particle.velocity = {
+            param.velocityBase.x + randomInRange(param.velocityRandomMin.x, param.velocityRandomMax.x),
+            param.velocityBase.y + randomInRange(param.velocityRandomMin.y, param.velocityRandomMax.y),
+            param.velocityBase.z + randomInRange(param.velocityRandomMin.z, param.velocityRandomMax.z)
+        };
+
+        // 色
+        if (param.colorMode == ColorMode::Random) {
+            particle.color = {
+                distColor(randomEngine_),
+                distColor(randomEngine_),
+                distColor(randomEngine_),
+                param.baseColor.w // アルファはbaseColorから
+            };
+        } else {
+            particle.color = param.baseColor;
+        }
+
+        // 寿命
+        float lifeRandom = randomInRange(-param.lifeTimeRandomRange, param.lifeTimeRandomRange);
+        particle.lifeTime = param.lifeTime + lifeRandom;
+        if (particle.lifeTime < 0.01f) particle.lifeTime = 0.01f; // 負の値防止
+        particle.currentTime = 0.0f;
+
+        // ビルボードモード
+        particle.billboardMode = param.billboardMode;
+
+        group.particles.push_back(particle);
+    }
+}
+
 void ParticleManager::Update()
 {
     // カメラ取得
@@ -241,12 +311,25 @@ void ParticleManager::Update()
             particle.transform.translate.y += particle.velocity.y * kDeltaTime;
             particle.transform.translate.z += particle.velocity.z * kDeltaTime;
 
-            // ワールド行列を計算
             Matrix4x4 scaleMatrix = MakeScaleMatrix(particle.transform);
             Matrix4x4 translateMatrix = MakeTranslateMatrix(particle.transform);
 
-            // ビルボード適用
-            Matrix4x4 worldMatrix = Multiply(Multiply(scaleMatrix, billboardMatrix), translateMatrix);
+            // 回転行列を作成（XYZ統合）
+            Matrix4x4 rotateMatrix = MakeRotateMatrix(particle.transform.rotate);
+
+            // ビルボードの適用有無で処理を分岐
+            Matrix4x4 worldMatrix;
+            if (particle.billboardMode == BillboardMode::Billboard) {
+                // Scale → Rotate（自己回転）→ Billboard（カメラ向き）→ Translate
+                worldMatrix = Multiply(
+                    Multiply(Multiply(scaleMatrix, rotateMatrix), billboardMatrix),
+                    translateMatrix);
+            } else {
+                // Scale → Rotate → Translate（ビルボードなし）
+                worldMatrix = Multiply(
+                    Multiply(scaleMatrix, rotateMatrix),
+                    translateMatrix);
+            }
 
             // ワールドビュープロジェクション行列を合成
             Matrix4x4 wvpMatrix = Multiply(worldMatrix, viewProjectionMatrix);
@@ -515,7 +598,7 @@ void ParticleManager::CreateGraphicsPipelineState(BlendMode blendMode)
         blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
         break;
 
-    case kBlendModeMultily:
+    case kBlendModeMultiply:
         blend.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
         blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
         blend.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;

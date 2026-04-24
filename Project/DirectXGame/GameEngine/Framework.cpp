@@ -27,7 +27,7 @@
 #include "LightManager.h"
 #include "SceneManager.h"
 #include "CameraCapture.h"
-
+#include "Primitive/PrimitivePipeline.h"
 
 void Framework::Run() {
 	// ゲームの初期化
@@ -162,6 +162,9 @@ void Framework::Initialize() {
 	// パーティクルマネージャーの初期化
 	ParticleManager::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
 
+	// プリミティブパイプラインの初期化
+	PrimitivePipeline::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
+
 	// サウンドマネージャーの初期化
 	SoundManager::GetInstance()->Initialize();
 
@@ -244,6 +247,9 @@ void Framework::Finalize() {
 
 	// 音声データ解放
 	SoundManager::GetInstance()->Finalize();
+
+	// プリミティブパイプライン終了処理
+	PrimitivePipeline::GetInstance()->Finalize();
 
 	// パーティクル終了処理
 	ParticleManager::GetInstance()->Finalize();
