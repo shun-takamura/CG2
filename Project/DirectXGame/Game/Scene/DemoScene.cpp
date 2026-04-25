@@ -31,6 +31,9 @@
 #include "Easing.h"
 #include "Interpolator.h"
 #include <numbers>
+#include "AnimatedModelInstance.h"
+#include "AnimatedObject3DInstance.h"
+#include "ModelManager.h"
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -176,9 +179,31 @@ void DemoScene::Initialize() {
 	testCylinder_->SetUVFlipV(true);
 	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
 	testCylinder_->SetAlphaReference(0.5f);
+
+	// AnimatedCubeのモデル＆アニメーション読み込み
+	animatedCubeModel_ = std::make_unique<AnimatedModelInstance>();
+	animatedCubeModel_->Initialize(
+		ModelManager::GetInstance()->GetModelCore(),
+		"DistributionAssets/Models/AnimatedCube",
+		"AnimatedCube.gltf"
+	);
+
+	// AnimatedCubeのインスタンスを作成
+	animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
+	animatedCubeInstance_->Initialize(
+		object3DManager_,
+		dxCore_,
+		animatedCubeModel_.get(),
+		"AnimatedCube"
+	);
+	animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
+	animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 }
 
 void DemoScene::Finalize() {
+
+	animatedCubeInstance_.reset();
+	animatedCubeModel_.reset();
 
 	testCylinder_.reset();
 	testRing_.reset();
@@ -379,6 +404,11 @@ void DemoScene::Update() {
 		obj->Update();
 	}
 
+	// アニメーション付きオブジェクトの更新
+	if (animatedCubeInstance_) {
+		animatedCubeInstance_->Update(dxCore_->GetDeltaTime());
+	}
+
 	// Skybox更新を追加
 	skybox_->Update();
 
@@ -444,6 +474,10 @@ void DemoScene::Draw() {
 		obj->Draw(dxCore_);
 	}
 
+	// アニメーション付きオブジェクトの描画
+	if (animatedCubeInstance_) {
+		animatedCubeInstance_->Draw(dxCore_);
+	}
 
 	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);

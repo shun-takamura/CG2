@@ -631,3 +631,12 @@ Vector3 Normalize(const Vector3& vector)
 
 	return normalizedV;
 }
+
+Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t)
+{
+	Vector3 result;
+	result.x = v1.x + (v2.x - v1.x) * t;
+	result.y = v1.y + (v2.y - v1.y) * t;
+	result.z = v1.z + (v2.z - v1.z) * t;
+	return result;
+}

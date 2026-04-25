@@ -13,6 +13,8 @@ class Object3DInstance;
 class Skybox;
 class Camera;
 class PrimitiveMesh;
+class AnimatedModelInstance;
+class AnimatedObject3DInstance;
 
 class DemoScene :public BaseScene
 {
@@ -59,6 +61,10 @@ private:
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
+
+	// アニメーション付きモデル
+	std::unique_ptr<AnimatedModelInstance> animatedCubeModel_;
+	std::unique_ptr<AnimatedObject3DInstance> animatedCubeInstance_;
 
 	// 天球(Skybox)
 	std::unique_ptr<Skybox> skybox_;

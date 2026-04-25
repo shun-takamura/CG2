@@ -107,3 +107,6 @@ Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix);
 float Length(const Vector3& vector);
 
 Vector3 Normalize(const Vector3& vector);
+
+// 線形補間（Vector3）
+Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t);

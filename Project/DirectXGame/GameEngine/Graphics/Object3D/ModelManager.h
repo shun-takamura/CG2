@@ -26,6 +26,8 @@ public:
 
 	void LoadModel(const std::string& directoryPath, const std::string& filePath);
 
+	ModelCore* GetModelCore() const { return modelCore_.get(); }
+
 	/// <summary>
 	/// モデルの検索
 	/// </summary>

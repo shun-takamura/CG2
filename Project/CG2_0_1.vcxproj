@@ -178,6 +178,9 @@ call "convert_hdr_to_dds.bat" --silent</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Animation.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp" />
@@ -292,8 +295,12 @@ call "convert_hdr_to_dds.bat" --silent</Command>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Math\Quaternion.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Animation.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h" />
@@ -400,6 +407,7 @@ call "convert_hdr_to_dds.bat" --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Math\Quaternion.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl">
