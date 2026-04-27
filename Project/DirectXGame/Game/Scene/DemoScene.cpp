@@ -289,13 +289,71 @@ void DemoScene::Update() {
 	}
 
 	if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
-		SoundManager::GetInstance()->Play("fanfare");
-		Debug::Log("trigger [1]");
+		SoundManager::GetInstance()->Play2DSound("fanfare");
+		Debug::Log("trigger [1] - 2D Sound Play");
 	}
 
 	if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
-		SoundManager::GetInstance()->Stop("fanfare");
-		Debug::Log("trigger [2]");
+		SoundManager::GetInstance()->Stop2DSound("fanfare");
+		Debug::Log("trigger [2] - 2D Sound Stop");
+	}
+
+	// 3キー: AnimatedCubeの右側(5, 2, 0)で3Dサウンドを再生
+    // → 右スピーカーからより大きく聴こえるはず
+	if (input_->GetKeyboard()->TriggerKey(DIK_3)) {
+		if (sound3DHandle_ != 0) {
+			SoundManager::GetInstance()->Stop3DSound(sound3DHandle_);
+		}
+		sound3DHandle_ = SoundManager::GetInstance()->Play3DSound(
+			"fanfare", { -5.0f, 5.0f, 5.0f });
+		Debug::Log("trigger [3] - 3D Sound Play at (5, 2, 0)");
+	}
+
+	// 4キー: 3Dサウンドを停止
+	if (input_->GetKeyboard()->TriggerKey(DIK_4)) {
+		SoundManager::GetInstance()->Stop3DSound(sound3DHandle_);
+		sound3DHandle_ = 0;
+		Debug::Log("trigger [4] - 3D Sound Stop");
+	}
+
+	// 5キー: 音源が円周上を回り続けるサウンドをON/OFF
+	// → 左右の定位変化 + ドップラー効果による音程変化が聴こえるはず
+	if (input_->GetKeyboard()->TriggerKey(DIK_5)) {
+		sound3DOrbitActive_ = !sound3DOrbitActive_;
+		if (!sound3DOrbitActive_ && sound3DOrbitHandle_ != 0) {
+			SoundManager::GetInstance()->Stop3DSound(sound3DOrbitHandle_);
+			sound3DOrbitHandle_ = 0;
+		}
+		Debug::Log(sound3DOrbitActive_ ? "trigger [5] - Orbit ON" : "trigger [5] - Orbit OFF");
+	}
+
+	// 音源が半径8で円周上を回る（ドップラー・定位の確認用）
+	if (sound3DOrbitActive_) {
+		sound3DOrbitTime_ += dxCore_->GetDeltaTime();
+		const float orbitRadius = 8.0f;
+		const float orbitSpeed = 1.5f; // ラジアン/秒
+		float angle = sound3DOrbitTime_ * orbitSpeed;
+
+		Vector3 orbitPos = {
+			orbitRadius * std::cosf(angle),
+			3.0f,
+			orbitRadius * std::sinf(angle)
+		};
+		// 接線方向の速度（ドップラー計算に使う）
+		Vector3 orbitVel = {
+			-orbitRadius * orbitSpeed * std::sinf(angle),
+			0.0f,
+			 orbitRadius * orbitSpeed * std::cosf(angle)
+		};
+
+		if (sound3DOrbitHandle_ == 0) {
+			// まだ再生していなければ開始
+			sound3DOrbitHandle_ = SoundManager::GetInstance()->Play3DSound(
+				"fanfare", orbitPos, orbitVel, 30.0f);
+		} else {
+			// 毎フレーム位置を更新
+			SoundManager::GetInstance()->UpdateEmitter(sound3DOrbitHandle_, orbitPos, orbitVel);
+		}
 	}
 
 	// HキーでHitEffect発生
@@ -395,6 +453,11 @@ void DemoScene::Update() {
 	rotation += 0.01f;
 	sprite_->SetRotation(rotation);
 	sprite_->Update();
+
+	// リスナー（カメラ）の位置をSoundManagerに反映
+	SoundManager::GetInstance()->UpdateListener(camera_.get());
+	// 3Dサウンドの更新・終了検知
+	SoundManager::GetInstance()->Update();
 
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();

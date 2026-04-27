@@ -614,6 +614,11 @@ Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix)
 	return resultVector3;
 }
 
+float Dot(const Vector3& a, const Vector3& b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
 float Length(const Vector3& vector)
 {
 	float length;

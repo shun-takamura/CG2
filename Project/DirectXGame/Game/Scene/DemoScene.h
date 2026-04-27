@@ -97,5 +97,11 @@ private:
 
 	// ランダム生成用
 	std::mt19937 randomEngine_;
+
+	// --- 3Dサウンド確認用 ---
+	uint32_t sound3DHandle_ = 0;     // 静的3Dサウンドのハンドル
+	uint32_t sound3DOrbitHandle_ = 0;     // 周回する3Dサウンドのハンドル
+	float    sound3DOrbitTime_ = 0.0f;  // 周回タイマー
+	bool     sound3DOrbitActive_ = false; // 周回中かどうか
 };
 
