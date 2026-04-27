@@ -104,6 +104,8 @@ Matrix4x4 MakeTranslateMatrix(Transform transform);
 
 Vector3 TransformMatrix(const Vector3& vector, const Matrix4x4& matrix);
 
+float Dot(const Vector3& a, const Vector3& b);
+
 float Length(const Vector3& vector);
 
 Vector3 Normalize(const Vector3& vector);
