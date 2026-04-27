@@ -303,15 +303,6 @@ void SoundManager::Apply3DDSP(SoundEmitter3D& emitter3d)
         X3DAUDIO_CALCULATE_LPF_DIRECT,  // 距離による高音の篭り
         &emitter3d.dspSettings);
 
-    // デバッグ出力（確認後に消す）
-    char buf[256];
-    sprintf_s(buf, "Matrix[0]=%.3f Matrix[1]=%.3f Doppler=%.3f LPF=%.3f\n",
-        emitter3d.matrixCoefficients[0],
-        emitter3d.matrixCoefficients.size() > 1 ? emitter3d.matrixCoefficients[1] : 0.0f,
-        emitter3d.dspSettings.DopplerFactor,
-        emitter3d.dspSettings.LPFDirectCoefficient);
-    OutputDebugStringA(buf);
-
     // パンニングを適用
     emitter3d.sourceVoice->SetOutputMatrix(
         masterVoice_,
