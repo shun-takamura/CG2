@@ -8,6 +8,8 @@
 #include <cassert>
 #include"TextureManager.h"
 #include"MathUtility.h"
+#include "QuaternionTransform.h"
+#include <map>
 
 // assimp
 #include <assimp/Importer.hpp>
@@ -15,9 +17,21 @@
 #include <assimp/postprocess.h>
 
 struct Node{
+	QuaternionTransform transform;
 	Matrix4x4 localMatrix;
 	std::string name;
 	std::vector<Node>children;
+};
+
+// Skinning用のデータ構造
+struct VertexWeightData {
+	float weight;
+	uint32_t vertexIndex;
+};
+
+struct JointWeightData {
+	Matrix4x4 inverseBindPoseMatrix;
+	std::vector<VertexWeightData> vertexWeights;
 };
 
 struct ModelData
@@ -26,6 +40,7 @@ struct ModelData
 	std::vector<uint32_t> indices;
 	MaterialData materialData;
 	Node rootNode;
+	std::map<std::string, JointWeightData> skinClusterData;
 };
 
 class ModelInstance

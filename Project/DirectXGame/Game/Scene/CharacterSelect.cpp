@@ -90,7 +90,7 @@ void CharacterSelect::Initialize()
 
 	// Player1用スポットライト（x = -2.0f の真上）
 	lightMgr->SetSpotLightPosition(0, { -2.0f, 10.0f, -4.0f });
-	lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
+	//lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
 	lightMgr->SetSpotLightColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
 	lightMgr->SetSpotLightIntensity(0, 4.0f);
 	lightMgr->SetSpotLightDistance(0, 15.0f);
@@ -100,7 +100,7 @@ void CharacterSelect::Initialize()
 
 	// Player2用スポットライト（x = 2.0f の真上）
 	lightMgr->SetSpotLightPosition(1, { 2.0f, 10.0f, -4.0f });
-	lightMgr->SetSpotLightDirection(1, Normalize({ 0.0f, -1.0f, 0.0f }));
+	//lightMgr->SetSpotLightDirection(1, Normalize({ 0.0f, -1.0f, 0.0f }));
 	lightMgr->SetSpotLightColor(1, { 1.0f, 1.0f, 1.0f, 1.0f });
 	lightMgr->SetSpotLightIntensity(1, 4.0f);
 	lightMgr->SetSpotLightDistance(1, 15.0f);

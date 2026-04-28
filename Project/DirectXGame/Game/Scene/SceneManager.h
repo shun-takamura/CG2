@@ -12,6 +12,7 @@ class SkyboxManager;
 class DirectXCore;
 class SRVManager;
 class InputManager;
+class SkinningObject3DManager;
 
 /// <summary>
 /// シーン管理クラス
@@ -29,6 +30,7 @@ public:
 	void Initialize(
 		SpriteManager* spriteManager,
 		Object3DManager* object3DManager,
+		SkinningObject3DManager* skinningObject3DManager,
 		SkyboxManager* skyboxManager,
 		DirectXCore* dxCore,
 		SRVManager* srvManager,
@@ -108,6 +110,7 @@ public:
 	DirectXCore* GetDirectXCore() const { return dxCore_; }
 	SRVManager* GetSRVManager() const { return srvManager_; }
 	InputManager* GetInputManager() const { return input_; }
+	SkinningObject3DManager* GetSkinningObject3DManager() const { return skinningObject3DManager_; }
 
 private:
 	SceneManager() = default;
@@ -138,4 +141,5 @@ private:
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 	InputManager* input_ = nullptr;
+	SkinningObject3DManager* skinningObject3DManager_ = nullptr;
 };

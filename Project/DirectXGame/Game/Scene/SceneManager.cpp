@@ -12,6 +12,7 @@ SceneManager* SceneManager::GetInstance() {
 void SceneManager::Initialize(
 	SpriteManager* spriteManager,
 	Object3DManager* object3DManager,
+	SkinningObject3DManager* skinningObject3DManager,
 	SkyboxManager* skyboxManager,
 	DirectXCore* dxCore,
 	SRVManager* srvManager,
@@ -19,6 +20,7 @@ void SceneManager::Initialize(
 ) {
 	spriteManager_ = spriteManager;
 	object3DManager_ = object3DManager;
+	skinningObject3DManager_ = skinningObject3DManager;
 	skyboxManager_ = skyboxManager;
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
@@ -139,6 +141,7 @@ void SceneManager::SetupScene(BaseScene* scene) {
 	if (scene) {
 		scene->SetSpriteManager(spriteManager_);
 		scene->SetObject3DManager(object3DManager_);
+		scene->SetSkinningObject3DManager(skinningObject3DManager_);
 		scene->SetSkyboxManager(skyboxManager_);
 		scene->SetDirectXCore(dxCore_);
 		scene->SetSRVManager(srvManager_);

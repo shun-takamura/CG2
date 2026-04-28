@@ -63,6 +63,9 @@ private:
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
 
 	// アニメーション付きモデル
+	std::unique_ptr<AnimatedModelInstance> sneakWalk;
+	std::unique_ptr<AnimatedObject3DInstance> sneakWalkInstance_;
+
 	std::unique_ptr<AnimatedModelInstance> animatedCubeModel_;
 	std::unique_ptr<AnimatedObject3DInstance> animatedCubeInstance_;
 

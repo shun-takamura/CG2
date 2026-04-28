@@ -17,11 +17,19 @@
 #include "AnimatedModelInstance.h"
 #include "Camera.h"
 #include "CameraForGPU.h"
+#include "Skeleton.h"
+#include <memory>
+#include "SkinCluster.h"
+#include <vector>
 
 // ImGui対応
 #include "IImGuiEditable.h"
 
 class Object3DManager;
+class PrimitiveMesh;  // unique_ptrで持つので前方宣言でOK
+struct SkinCluster;
+class SkinningObject3DManager;
+class SRVManager;
 
 class AnimatedObject3DInstance : public IImGuiEditable {
 
@@ -33,6 +41,9 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     Object3DManager* object3DManager_ = nullptr;
     AnimatedModelInstance* animatedModelInstance_ = nullptr;
     Camera* camera_ = nullptr;
+
+    SkinningObject3DManager* skinningObject3DManager_ = nullptr;
+    SRVManager* srvManager_ = nullptr;  // Drawで使うので保持
 
     // バッファリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
@@ -50,12 +61,30 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     std::string modelFileName_;
 
     //==============================
-    // ★アニメーション関連メンバ変数
+    // アニメーション関連メンバ変数
     //==============================
     float animationTime_ = 0.0f;       // 現在の再生時刻（秒）
     bool isPlaying_ = true;            // 再生中フラグ
     bool isLoop_ = true;               // ループ再生フラグ
     float playbackSpeed_ = 1.0f;       // 再生速度（1.0が等倍）
+
+    //==============================
+    // Skeleton関連
+    //==============================
+    Skeleton skeleton_;
+    bool hasSkeleton_ = false;
+
+    SkinCluster skinCluster_;
+    bool hasSkinCluster_ = false;
+
+#ifdef USE_IMGUI
+    // デバッグ描画用
+    bool showSkeleton_ = false;
+    Vector4 jointSphereColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4 jointLineColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float   jointSphereRadius_ = 0.025f;
+    std::vector<std::unique_ptr<PrimitiveMesh>> debugSpheres_;
+#endif
 
     //==============================
     // 内部関数
@@ -65,7 +94,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
 
 public:
     AnimatedObject3DInstance() = default;
-    ~AnimatedObject3DInstance() override = default;
+    ~AnimatedObject3DInstance() override;
 
     //==============================
     // IImGuiEditable実装
@@ -89,7 +118,7 @@ public:
     void SetEnvironmentCoefficient(float coef);
 
     //==============================
-    // ★アニメーション制御
+    // アニメーション制御
     //==============================
     void Play() { isPlaying_ = true; }
     void Pause() { isPlaying_ = false; }
@@ -114,11 +143,19 @@ public:
     //==============================
     // 初期化・更新・描画
     //==============================
-    void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore,
+    void Initialize(Object3DManager* object3DManager,
+        SkinningObject3DManager* skinningObject3DManager,
+        DirectXCore* dxCore,
+        SRVManager* srvManager,
         AnimatedModelInstance* animatedModel,
         const std::string& name = "");
 
-    void Update(float deltaTime);  // ★引数にdeltaTimeを追加（可変フレーム対応）
+    void Update(float deltaTime);  // 引数にdeltaTimeを追加（可変フレーム対応）
 
     void Draw(DirectXCore* dxCore);
+
+#ifdef USE_IMGUI
+    // Skeletonのデバッグ描画（全モデル描画後に呼ぶ）
+    void DrawSkeletonDebug(DirectXCore* dxCore);
+#endif
 };
