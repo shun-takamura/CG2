@@ -370,4 +370,59 @@ namespace PrimitiveGenerator {
 
         return mesh;
     }
+
+    MeshData CreateSphere(float radius, uint32_t divisions, const Vector4& color) {
+        MeshData mesh;
+        if (divisions < 3) divisions = 3;
+
+        const float kPi = 3.14159265358979323846f;
+        const uint32_t latDivisions = divisions;          // 緯度方向（縦）
+        const uint32_t lonDivisions = divisions * 2;      // 経度方向（横）
+
+        // 頂点を生成（lat=0が北極、lat=latDivisionsが南極）
+        for (uint32_t lat = 0; lat <= latDivisions; ++lat) {
+            float theta = kPi * static_cast<float>(lat) / static_cast<float>(latDivisions);
+            float sinTheta = std::sin(theta);
+            float cosTheta = std::cos(theta);
+
+            for (uint32_t lon = 0; lon <= lonDivisions; ++lon) {
+                float phi = 2.0f * kPi * static_cast<float>(lon) / static_cast<float>(lonDivisions);
+                float sinPhi = std::sin(phi);
+                float cosPhi = std::cos(phi);
+
+                MeshVertex v{};
+                v.position = {
+                    radius * sinTheta * cosPhi,
+                    radius * cosTheta,
+                    radius * sinTheta * sinPhi
+                };
+                v.normal = { sinTheta * cosPhi, cosTheta, sinTheta * sinPhi };
+                v.texcoord = {
+                    static_cast<float>(lon) / lonDivisions,
+                    static_cast<float>(lat) / latDivisions
+                };
+                v.color = color;
+                mesh.vertices.push_back(v);
+            }
+        }
+
+        // インデックスを生成
+        for (uint32_t lat = 0; lat < latDivisions; ++lat) {
+            for (uint32_t lon = 0; lon < lonDivisions; ++lon) {
+                uint32_t i0 = lat * (lonDivisions + 1) + lon;
+                uint32_t i1 = i0 + 1;
+                uint32_t i2 = i0 + (lonDivisions + 1);
+                uint32_t i3 = i2 + 1;
+
+                mesh.indices.push_back(i0);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i1);
+
+                mesh.indices.push_back(i1);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i3);
+            }
+        }
+        return mesh;
+    }
 }

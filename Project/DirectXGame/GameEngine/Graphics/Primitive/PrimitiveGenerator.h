@@ -62,4 +62,11 @@ namespace PrimitiveGenerator {
         const Vector4& bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
+    // Sphere（UV球）を生成（中心が原点）
+    MeshData CreateSphere(
+        float radius = 0.5f,
+        uint32_t divisions = 16,
+        const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
+    );
+
 }

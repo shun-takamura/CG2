@@ -10,14 +10,18 @@
 #include "MathUtility.h"
 #include "Quaternion.h"
 #include "Animation.h"
+#include "SkinCluster.h"
 
 // assimp
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-// Nodeは既存のModelInstance.hで定義されているので、そちらをinclude
+// Nodeは既存のModelInstance.hで定義されているのでinclude
 #include "ModelInstance.h"
+
+struct SkinCluster;
+class SRVManager;
 
 class AnimatedModelInstance
 {
@@ -27,12 +31,15 @@ class AnimatedModelInstance
     std::string textureFilePath_;
 
     ModelData modelData_;
-    Animation animation_;  // ★アニメーションデータを追加
+    Animation animation_;
 
     ModelCore* modelCore_;
 
     VertexData* vertexData_ = nullptr;
     Material* material_ = nullptr;
+
+    SkinCluster skinCluster_;
+    bool hasSkinCluster_ = false;
 
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
@@ -49,10 +56,15 @@ public:
 
     void Draw(DirectXCore* dxCore);
 
+    void DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster, SRVManager* srvManager);
+
     const ModelData& GetModelData() const { return modelData_; }
-    const Animation& GetAnimation() const { return animation_; }  // ★追加
+    const Animation& GetAnimation() const { return animation_; }
 
     Material* GetMaterialPointer() const { return material_; }
+
+    SkinCluster& GetSkinCluster() { return skinCluster_; }
+    bool HasSkinCluster() const { return hasSkinCluster_; }
 
 private:
     void CreateVertexData(DirectXCore* dxCore);

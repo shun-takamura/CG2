@@ -148,46 +148,26 @@ Node ModelInstance::ReadNode(aiNode* node)
 {
 	Node result;
 
-	// ノードのローカルマトリクスを取得
-	aiMatrix4x4 aiLocalMatrix = node->mTransformation;
+	// assimpの行列をSRTに分解する（Decomposeはassimpの関数）
+	aiVector3D scale, translate;
+	aiQuaternion rotate;
+	node->mTransformation.Decompose(scale, rotate, translate);
 
-	// 列ベクトルを行ベクトルに転置
-	aiLocalMatrix.Transpose();
+	// 右手系→左手系の変換
+	result.transform.scale = { scale.x, scale.y, scale.z };               // Scaleはそのまま
+	result.transform.rotate = { rotate.x, -rotate.y, -rotate.z, rotate.w }; // x軸を反転、回転方向が逆なので軸も反転
+	result.transform.translate = { -translate.x, translate.y, translate.z };  // x軸を反転
 
-	// ローカルマトリクスを代入
-	result.localMatrix.m[0][0] = aiLocalMatrix.a1;
-	result.localMatrix.m[0][1] = aiLocalMatrix.a2;
-	result.localMatrix.m[0][2] = aiLocalMatrix.a3;
-	result.localMatrix.m[0][3] = aiLocalMatrix.a4;
+	// localMatrixを再構築（Quaternion版MakeAffineMatrix）
+	result.localMatrix = MakeAffineMatrix(
+		result.transform.scale, result.transform.rotate, result.transform.translate);
 
-	result.localMatrix.m[1][0] = aiLocalMatrix.b1;
-	result.localMatrix.m[1][1] = aiLocalMatrix.b2;
-	result.localMatrix.m[1][2] = aiLocalMatrix.b3;
-	result.localMatrix.m[1][3] = aiLocalMatrix.b4;
-
-	result.localMatrix.m[2][0] = aiLocalMatrix.c1;
-	result.localMatrix.m[2][1] = aiLocalMatrix.c2;
-	result.localMatrix.m[2][2] = aiLocalMatrix.c3;
-	result.localMatrix.m[2][3] = aiLocalMatrix.c4;
-
-	result.localMatrix.m[3][0] = aiLocalMatrix.d1;
-	result.localMatrix.m[3][1] = aiLocalMatrix.d2;
-	result.localMatrix.m[3][2] = aiLocalMatrix.d3;
-	result.localMatrix.m[3][3] = aiLocalMatrix.d4;
-
-	// Node名を格納
 	result.name = node->mName.C_Str();
-
-	// 子供の数だけ確保
 	result.children.resize(node->mNumChildren);
-
 	for (uint32_t childIndex = 0; childIndex < node->mNumChildren; ++childIndex) {
-		// 再帰的に読んで階層構造を作っていく
 		result.children[childIndex] = ReadNode(node->mChildren[childIndex]);
 	}
-
 	return result;
-
 }
 
 void ModelInstance::LoadModel(const std::string& directoryPath, const std::string& filename)

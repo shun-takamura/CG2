@@ -1,6 +1,8 @@
 #include "AnimatedModelInstance.h"
 #include <unordered_map>
 #include <filesystem>
+#include "SkinCluster.h"
+#include "SRVManager.h"
 
 // 既存のModelInstance.cppにあるVertexHash/VertexEqualをここでも使う
 struct VertexHashAnim {
@@ -30,7 +32,7 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
     // モデル読み込み
     LoadModel(directoryPath, filename);
 
-    // ★アニメーション読み込み（同じファイルをもう一度読む。後でリファクタ予定）
+    // アニメーション読み込み（同じファイルをもう一度読む。後でリファクタリング予定）
     animation_ = LoadAnimationFile(directoryPath, filename);
 
     // 頂点データ作成
@@ -66,6 +68,38 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
         2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
 
+    dxCore->GetCommandList()->DrawIndexedInstanced(
+        UINT(modelData_.indices.size()), 1, 0, 0, 0);
+}
+
+void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster, SRVManager* srvManager)
+{
+    // VBVを2本セット（VertexData + Influence）
+    D3D12_VERTEX_BUFFER_VIEW vbvs[2] = {
+        vertexBufferView_,
+        skinCluster.influenceBufferView
+    };
+    dxCore->GetCommandList()->IASetVertexBuffers(0, 2, vbvs);
+
+    // インデックスバッファ
+    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+
+    // RootParam[0] Material
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        0, materialResource_->GetGPUVirtualAddress()
+    );
+
+    // RootParam[2] Texture
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
+    );
+
+    // RootParam[8] MatrixPalette
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        8, srvManager->GetGPUDescriptorHandle(skinCluster.paletteSrvIndex)
+    );
+
+    // ドローコール
     dxCore->GetCommandList()->DrawIndexedInstanced(
         UINT(modelData_.indices.size()), 1, 0, 0, 0);
 }
@@ -109,33 +143,23 @@ void AnimatedModelInstance::CreateIndexData(DirectXCore* dxCore)
 Node AnimatedModelInstance::ReadNode(aiNode* node)
 {
     Node result;
-    aiMatrix4x4 aiLocalMatrix = node->mTransformation;
-    aiLocalMatrix.Transpose();
 
-    result.localMatrix.m[0][0] = aiLocalMatrix.a1;
-    result.localMatrix.m[0][1] = aiLocalMatrix.a2;
-    result.localMatrix.m[0][2] = aiLocalMatrix.a3;
-    result.localMatrix.m[0][3] = aiLocalMatrix.a4;
-    result.localMatrix.m[1][0] = aiLocalMatrix.b1;
-    result.localMatrix.m[1][1] = aiLocalMatrix.b2;
-    result.localMatrix.m[1][2] = aiLocalMatrix.b3;
-    result.localMatrix.m[1][3] = aiLocalMatrix.b4;
-    result.localMatrix.m[2][0] = aiLocalMatrix.c1;
-    result.localMatrix.m[2][1] = aiLocalMatrix.c2;
-    result.localMatrix.m[2][2] = aiLocalMatrix.c3;
-    result.localMatrix.m[2][3] = aiLocalMatrix.c4;
-    result.localMatrix.m[3][0] = aiLocalMatrix.d1;
-    result.localMatrix.m[3][1] = aiLocalMatrix.d2;
-    result.localMatrix.m[3][2] = aiLocalMatrix.d3;
-    result.localMatrix.m[3][3] = aiLocalMatrix.d4;
+    aiVector3D scale, translate;
+    aiQuaternion rotate;
+    node->mTransformation.Decompose(scale, rotate, translate);
+
+    result.transform.scale = { scale.x, scale.y, scale.z };
+    result.transform.rotate = { rotate.x, -rotate.y, -rotate.z, rotate.w };
+    result.transform.translate = { -translate.x, translate.y, translate.z };
+
+    result.localMatrix = MakeAffineMatrix(
+        result.transform.scale, result.transform.rotate, result.transform.translate);
 
     result.name = node->mName.C_Str();
     result.children.resize(node->mNumChildren);
-
     for (uint32_t childIndex = 0; childIndex < node->mNumChildren; ++childIndex) {
         result.children[childIndex] = ReadNode(node->mChildren[childIndex]);
     }
-
     return result;
 }
 
@@ -175,6 +199,38 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
                     modelData_.vertices.push_back(vertex);
                 }
                 modelData_.indices.push_back(uniqueVertices[vertex]);
+            }
+        }
+
+        // Skinning用データの抽出
+        for (uint32_t boneIndex = 0; boneIndex < mesh->mNumBones; ++boneIndex) {
+            aiBone* bone = mesh->mBones[boneIndex];
+            std::string jointName = bone->mName.C_Str();
+            JointWeightData& jointWeightData = modelData_.skinClusterData[jointName];
+
+            // BindPoseMatrixを取り出してInverseして格納
+            aiMatrix4x4 bindPoseMatrixAssimp = bone->mOffsetMatrix;
+            bindPoseMatrixAssimp.Inverse();
+
+            aiVector3D scale, translate;
+            aiQuaternion rotate;
+            bindPoseMatrixAssimp.Decompose(scale, rotate, translate);
+
+            // 左手系のBindPoseMatrixを作る
+            Matrix4x4 bindPoseMatrix = MakeAffineMatrix(
+                { scale.x, scale.y, scale.z },
+                { rotate.x, -rotate.y, -rotate.z, rotate.w },
+                { -translate.x, translate.y, translate.z });
+
+            // InverseBindPoseMatrixにする
+            jointWeightData.inverseBindPoseMatrix = Inverse(bindPoseMatrix);
+
+            // Weight情報を取り出す
+            for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
+                jointWeightData.vertexWeights.push_back({
+                    bone->mWeights[weightIndex].mWeight,
+                    bone->mWeights[weightIndex].mVertexId
+                    });
             }
         }
     }

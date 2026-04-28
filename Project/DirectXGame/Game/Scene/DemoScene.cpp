@@ -34,6 +34,8 @@
 #include "AnimatedModelInstance.h"
 #include "AnimatedObject3DInstance.h"
 #include "ModelManager.h"
+#include "LineRenderer.h"
+#include "SkinningObject3DManager.h"
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -64,8 +66,10 @@ void DemoScene::Initialize() {
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_4k.dds");
 
+	// ここで環境マップをモデルにセット
 	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
-
+	skinningObject3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
+	
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
@@ -123,19 +127,6 @@ void DemoScene::Initialize() {
 	//	object3DInstances_.push_back(std::move(obj));
 	//}
 
-	auto sneakWalk = std::make_unique<Object3DInstance>();
-	sneakWalk->Initialize(
-		object3DManager_,
-		dxCore_,
-		"DistributionAssets/",
-		"Models/human/sneakWalk.gltf",
-		"sneakWalk"
-	);
-	sneakWalk->SetScale({ 100.0f, 100.0f, 100.0f });
-	sneakWalk->SetUseEnvironmentMap(true);
-	sneakWalk->SetEnvironmentCoefficient(0.5f);
-	object3DInstances_.push_back(std::move(sneakWalk));
-
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
 
@@ -180,6 +171,42 @@ void DemoScene::Initialize() {
 	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
 	testCylinder_->SetAlphaReference(0.5f);
 
+	/*auto sneakWalkModel = std::make_unique<Object3DInstance>();
+	sneakWalkModel->Initialize(
+		object3DManager_,
+		dxCore_,
+		"DistributionAssets/",
+		"Models/human/sneakWalk.gltf",
+		"sneakWalk"
+	);
+	sneakWalkModel->SetScale({ 100.0f, 100.0f, 100.0f });
+	sneakWalkModel->SetUseEnvironmentMap(true);
+	sneakWalkModel->SetEnvironmentCoefficient(0.5f);
+	object3DInstances_.push_back(std::move(sneakWalkModel));*/
+
+
+	// sneakWalkのモデルとアニメーションの読み込み
+	sneakWalk = std::make_unique<AnimatedModelInstance>();
+	sneakWalk->Initialize(
+		ModelManager::GetInstance()->GetModelCore(),
+		"DistributionAssets/Models/human",
+		"sneakWalk.gltf"
+	);
+
+	// sneakWalkのインスタンスを作成
+	sneakWalkInstance_= std::make_unique<AnimatedObject3DInstance>();
+	sneakWalkInstance_->Initialize(
+		object3DManager_,
+		skinningObject3DManager_,
+		dxCore_,
+		srvManager_,
+		sneakWalk.get(),
+		"sneakWalk"
+	);
+	sneakWalkInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
+	sneakWalkInstance_->SetUseEnvironmentMap(true);
+	sneakWalkInstance_->SetEnvironmentCoefficient(0.5f);
+
 	// AnimatedCubeのモデル＆アニメーション読み込み
 	animatedCubeModel_ = std::make_unique<AnimatedModelInstance>();
 	animatedCubeModel_->Initialize(
@@ -192,7 +219,9 @@ void DemoScene::Initialize() {
 	animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
 	animatedCubeInstance_->Initialize(
 		object3DManager_,
+		skinningObject3DManager_,
 		dxCore_,
+		srvManager_,
 		animatedCubeModel_.get(),
 		"AnimatedCube"
 	);
@@ -468,6 +497,11 @@ void DemoScene::Update() {
 	}
 
 	// アニメーション付きオブジェクトの更新
+	if (sneakWalkInstance_) {
+		sneakWalkInstance_->Update(dxCore_->GetDeltaTime());
+	}
+
+	// アニメーション付きオブジェクトの更新
 	if (animatedCubeInstance_) {
 		animatedCubeInstance_->Update(dxCore_->GetDeltaTime());
 	}
@@ -537,7 +571,17 @@ void DemoScene::Draw() {
 		obj->Draw(dxCore_);
 	}
 
+	// ★ここで切り替え
+	if (skinningObject3DManager_) {
+		skinningObject3DManager_->DrawSetting();
+		LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
+	}
+
 	// アニメーション付きオブジェクトの描画
+	if (sneakWalkInstance_) {
+		sneakWalkInstance_->Draw(dxCore_);
+	}
+
 	if (animatedCubeInstance_) {
 		animatedCubeInstance_->Draw(dxCore_);
 	}
@@ -560,6 +604,21 @@ void DemoScene::Draw() {
 
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
+
+#ifdef USE_IMGUI
+	// Skeletonのデバッグ描画（全モデル描画完了後にまとめて行う）
+	if (sneakWalkInstance_) {
+		sneakWalkInstance_->DrawSkeletonDebug(dxCore_);
+	}
+
+	if (animatedCubeInstance_) {
+		animatedCubeInstance_->DrawSkeletonDebug(dxCore_);
+	}
+#endif
+
+	// 線描画（Skeletonデバッグ用 など）
+	LineRenderer::GetInstance()->SetCamera(camera_.get());
+	LineRenderer::GetInstance()->Draw();
 
 	// スプライト描画
 	spriteManager_->DrawSetting();

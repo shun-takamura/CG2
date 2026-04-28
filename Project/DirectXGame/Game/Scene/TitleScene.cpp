@@ -66,7 +66,7 @@ void TitleScene::Initialize() {
 
 	// title用のスポットライト
 	lightMgr->SetSpotLightPosition(0, { 0.0f, 10.0f, 0.0f });
-	lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
+	//lightMgr->SetSpotLightDirection(0, Normalize({ 0.0f, -1.0f, 0.0f }));
 	lightMgr->SetSpotLightColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
 	lightMgr->SetSpotLightIntensity(0, 7.0f);
 	lightMgr->SetSpotLightDistance(0, 15.0f);
@@ -76,7 +76,7 @@ void TitleScene::Initialize() {
 
 	// DirectionalLight の設定（弱め）
 	lightMgr->SetDirectionalLightColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-	lightMgr->SetDirectionalLightDirection(Normalize({ 0.5f, -1.0f, 0.5f }));
+	//lightMgr->SetDirectionalLightDirection(Normalize({ 0.5f, -1.0f, 0.5f }));
 	lightMgr->SetDirectionalLightIntensity(0.3f);  // 弱めの強度
 
 	std::random_device rd;

@@ -109,6 +109,6 @@ public:
 	DirectXCore* GetDxCore() const { return dxCore_; }
     BlendMode GetBlendMode() const { return blendMode_; }
     Camera* GetDefaultCamera()const { return defaultCamera_; }
-
+    ID3D12RootSignature* GetRootSignature() const { return rootSignature_.Get(); }
 };
 
