@@ -97,7 +97,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-call "convert_hdr_to_dds.bat" --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -133,7 +133,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-call "convert_hdr_to_dds.bat" --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -171,7 +171,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-call "convert_hdr_to_dds.bat" --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -621,6 +621,7 @@ call "convert_hdr_to_dds.bat" --silent</Command>
     <None Include="Resources\Shaders\Primitive.hlsli" />
     <None Include="Resources\Shaders\Skybox.hlsli" />
     <None Include="Resources\Shaders\Sprite.hlsli" />
+    <None Include="tools\Python\convert_hdr_to_dds.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

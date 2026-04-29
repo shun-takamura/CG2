@@ -670,5 +670,6 @@
     <None Include="Resources\Shaders\Skybox.hlsli" />
     <None Include="Resources\Shaders\Sprite.hlsli" />
     <None Include="Resources\Shaders\Primitive.hlsli" />
+    <None Include="tools\Python\convert_hdr_to_dds.py" />
   </ItemGroup>
 </Project>
