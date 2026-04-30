@@ -1,26 +1,5 @@
 #include "ModelInstance.h"
-#include <unordered_map>
 #include <filesystem> // std::filesystem::path を使うために必要
-
-struct VertexHash {
-	size_t operator()(const VertexData& v) const {
-		size_t h1 = std::hash<float>()(v.position.x);
-		size_t h2 = std::hash<float>()(v.position.y);
-		size_t h3 = std::hash<float>()(v.position.z);
-		size_t h4 = std::hash<float>()(v.texcoord.x);
-		size_t h5 = std::hash<float>()(v.texcoord.y);
-		return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4);
-	}
-};
-
-struct VertexEqual {
-	bool operator()(const VertexData& a, const VertexData& b) const {
-		return a.position.x == b.position.x && a.position.y == b.position.y &&
-			a.position.z == b.position.z && a.normal.x == b.normal.x &&
-			a.normal.y == b.normal.y && a.normal.z == b.normal.z &&
-			a.texcoord.x == b.texcoord.x && a.texcoord.y == b.texcoord.y;
-	}
-};
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -179,35 +158,35 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
 	assert(scene->HasMeshes());
 
-	// 重複チェック用
-	std::unordered_map<VertexData, uint32_t, VertexHash, VertexEqual> uniqueVertices;
-
 	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
 		aiMesh* mesh = scene->mMeshes[meshIndex];
 		assert(mesh->HasNormals());
 		assert(mesh->HasTextureCoords(0));
 
+		// 複数メッシュ対応：このmeshの頂点が始まる位置を記録
+		uint32_t vertexOffset = static_cast<uint32_t>(modelData_.vertices.size());
+
+		// 頂点解析
+		for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex) {
+			aiVector3D& position = mesh->mVertices[vertexIndex];
+			aiVector3D& normal = mesh->mNormals[vertexIndex];
+			aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+
+			VertexData vertex;
+			vertex.position = { -position.x, position.y, position.z, 1.0f };
+			vertex.normal = { -normal.x, normal.y, normal.z };
+			vertex.texcoord = { texcoord.x, texcoord.y };
+			modelData_.vertices.push_back(vertex);
+		}
+
+		// Index解析
 		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
 			aiFace& face = mesh->mFaces[faceIndex];
 			assert(face.mNumIndices == 3);
 
 			for (uint32_t element = 0; element < face.mNumIndices; ++element) {
 				uint32_t vertexIndex = face.mIndices[element];
-				aiVector3D& position = mesh->mVertices[vertexIndex];
-				aiVector3D& normal = mesh->mNormals[vertexIndex];
-				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
-
-				VertexData vertex;
-				vertex.position = { -position.x, position.y, position.z, 1.0f };
-				vertex.normal = { -normal.x, normal.y, normal.z };
-				vertex.texcoord = { texcoord.x, texcoord.y };
-
-				// 重複チェック
-				if (uniqueVertices.count(vertex) == 0) {
-					uniqueVertices[vertex] = static_cast<uint32_t>(modelData_.vertices.size());
-					modelData_.vertices.push_back(vertex);
-				}
-				modelData_.indices.push_back(uniqueVertices[vertex]);
+				modelData_.indices.push_back(vertexOffset + vertexIndex);
 			}
 		}
 	}
