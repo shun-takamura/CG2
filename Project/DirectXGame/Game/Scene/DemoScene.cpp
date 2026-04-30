@@ -171,7 +171,7 @@ void DemoScene::Initialize() {
 	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
 	testCylinder_->SetAlphaReference(0.5f);
 
-	/*auto sneakWalkModel = std::make_unique<Object3DInstance>();
+	auto sneakWalkModel = std::make_unique<Object3DInstance>();
 	sneakWalkModel->Initialize(
 		object3DManager_,
 		dxCore_,
@@ -182,7 +182,7 @@ void DemoScene::Initialize() {
 	sneakWalkModel->SetScale({ 100.0f, 100.0f, 100.0f });
 	sneakWalkModel->SetUseEnvironmentMap(true);
 	sneakWalkModel->SetEnvironmentCoefficient(0.5f);
-	object3DInstances_.push_back(std::move(sneakWalkModel));*/
+	object3DInstances_.push_back(std::move(sneakWalkModel));
 
 
 	// sneakWalkのモデルとアニメーションの読み込み
