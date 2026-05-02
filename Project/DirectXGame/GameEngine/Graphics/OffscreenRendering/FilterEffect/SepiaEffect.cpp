@@ -12,7 +12,7 @@ void SepiaEffect::Initialize(DirectXCore* dxCore, ID3D12RootSignature* copyRootS
 {
     // シェーダーコンパイル
     IDxcBlob* psBlob = dxCore->CompileShader(
-        L"Resources/Shaders/Sepia.PS.hlsl",
+        L"Resources/Shaders/PostEffect/Filters/Sepia.PS.hlsl",
         L"ps_6_0"
     );
     assert(psBlob);

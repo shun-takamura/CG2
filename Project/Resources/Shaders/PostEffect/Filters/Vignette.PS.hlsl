@@ -1,7 +1,7 @@
 // Vignette.PS.hlsl
 // ヴィネット効果専用のピクセルシェーダー（周辺減光）
 
-#include "PostProcess.hlsli"
+#include "../Common/PostProcess.hlsli"
 
 // ピクセルシェーダー出力構造体
 struct PixelShaderOutput

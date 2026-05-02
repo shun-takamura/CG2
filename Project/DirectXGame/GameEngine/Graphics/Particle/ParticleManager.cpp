@@ -531,12 +531,12 @@ void ParticleManager::CreateGraphicsPipelineState(BlendMode blendMode)
 {
     // シェーダーコンパイル
     IDxcBlob* vs = dxCore_->CompileShader(
-        L"Resources/Shaders/Particle.VS.hlsl",
+        L"Resources/Shaders/Particle/Particle.VS.hlsl",
         L"vs_6_0"
     );
 
     IDxcBlob* ps = dxCore_->CompileShader(
-        L"Resources/Shaders/Particle.PS.hlsl",
+        L"Resources/Shaders/Particle/Particle.PS.hlsl",
         L"ps_6_0"
     );
 

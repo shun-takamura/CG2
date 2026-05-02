@@ -171,15 +171,15 @@ void PostEffect::CreateBasePsoDesc()
 	basePsoDesc_.SampleDesc.Count = 1;
 
 	// 頂点シェーダー（エフェクト共通）
-	IDxcBlob* vsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostProcess.VS.hlsl", L"vs_6_0");
+	IDxcBlob* vsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostEffect/Common/PostProcess.VS.hlsl", L"vs_6_0");
 	assert(vsBlob);
 	basePsoDesc_.VS = { vsBlob->GetBufferPointer(), vsBlob->GetBufferSize() };
 
 	// コピー用パイプライン
 	{
-		IDxcBlob* copyVsBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.VS.hlsl", L"vs_6_0");
+		IDxcBlob* copyVsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostEffect/Common/CopyImage.VS.hlsl", L"vs_6_0");
 		assert(copyVsBlob);
-		IDxcBlob* copyPsBlob = dxCore_->CompileShader(L"Resources/Shaders/CopyImage.PS.hlsl", L"ps_6_0");
+		IDxcBlob* copyPsBlob = dxCore_->CompileShader(L"Resources/Shaders/PostEffect/Common/CopyImage.PS.hlsl", L"ps_6_0");
 		assert(copyPsBlob);
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC copyPsoDesc = basePsoDesc_;

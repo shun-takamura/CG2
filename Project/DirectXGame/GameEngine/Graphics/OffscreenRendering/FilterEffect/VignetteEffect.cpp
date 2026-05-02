@@ -16,7 +16,7 @@ void VignetteEffect::Initialize(
 ) {
     // シェーダーコンパイル
     IDxcBlob* psBlob = dxCore->CompileShader(
-        L"Resources/Shaders/Vignette.PS.hlsl",
+        L"Resources/Shaders/PostEffect/Filters/Vignette.PS.hlsl",
         L"ps_6_0"
     );
     assert(psBlob);

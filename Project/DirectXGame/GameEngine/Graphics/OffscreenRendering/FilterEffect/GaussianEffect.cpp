@@ -20,7 +20,7 @@ void GaussianEffect::Initialize(
 {
 	// シェーダーコンパイル
 	IDxcBlob* psBlob = dxCore->CompileShader(
-		L"Resources/Shaders/GaussianFilter.PS.hlsl",
+		L"Resources/Shaders/PostEffect/Filters/GaussianFilter.PS.hlsl",
 		L"ps_6_0"
 	);
 	assert(psBlob);

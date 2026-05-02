@@ -637,33 +637,33 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Object3d.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Particle.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Particle.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Sprite.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Sprite.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\CopyImage.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Grayscale.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\PostProcess.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\PostProcess.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Sepia.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Vignette.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Smoothing.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\GaussianFilter.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Skybox.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Skybox.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Object3dNoEnv.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Primitive.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Primitive.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Line.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Line.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl" />
-    <FxCompile Include="Resources\Shaders\InitializeParticle.CS.hlsl" />
-    <FxCompile Include="Resources\Shaders\GPUParticle.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\EmitParticle.CS.hlsl" />
-    <FxCompile Include="Resources\Shaders\UpdateParticle.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3D\Object3d.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3D\Object3d.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\Particle.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\Particle.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Sprite\Sprite.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Sprite\Sprite.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Common\CopyImage.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Common\CopyImage.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\Grayscale.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Common\PostProcess.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Common\PostProcess.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\Sepia.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\Vignette.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\Smoothing.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\GaussianFilter.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Skybox\Skybox.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Skybox\Skybox.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Object3D\Object3dNoEnv.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Primitive\Primitive.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Primitive\Primitive.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Primitive\Line.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Primitive\Line.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Skinning\Skinning.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\InitializeParticle.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\GPUParticle.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\EmitParticle.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Particle\UpdateParticle.CS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -671,14 +671,14 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\Shaders\Object3d.hlsli" />
-    <None Include="Resources\Shaders\Particle.hlsli" />
-    <None Include="Resources\Shaders\Random.hlsli" />
-    <None Include="Resources\Shaders\CopyImage.hlsli" />
-    <None Include="Resources\Shaders\PostProcess.hlsli" />
-    <None Include="Resources\Shaders\Skybox.hlsli" />
-    <None Include="Resources\Shaders\Sprite.hlsli" />
-    <None Include="Resources\Shaders\Primitive.hlsli" />
+    <None Include="Resources\Shaders\Object3D\Object3d.hlsli" />
+    <None Include="Resources\Shaders\Particle\Particle.hlsli" />
+    <None Include="Resources\Shaders\Particle\Random.hlsli" />
+    <None Include="Resources\Shaders\PostEffect\Common\CopyImage.hlsli" />
+    <None Include="Resources\Shaders\PostEffect\Common\PostProcess.hlsli" />
+    <None Include="Resources\Shaders\Skybox\Skybox.hlsli" />
+    <None Include="Resources\Shaders\Sprite\Sprite.hlsli" />
+    <None Include="Resources\Shaders\Primitive\Primitive.hlsli" />
     <None Include="tools\Python\convert_hdr_to_dds.py" />
   </ItemGroup>
 </Project>

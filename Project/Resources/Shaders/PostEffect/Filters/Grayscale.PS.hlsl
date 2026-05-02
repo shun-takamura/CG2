@@ -2,7 +2,7 @@
 // グレースケール専用のピクセルシェーダー（BT.709方式）
 // intensityで元の色とのブレンド具合を調整可能
 
-#include "PostProcess.hlsli"
+#include "../Common/PostProcess.hlsli"
 
 struct PixelShaderOutput
 {

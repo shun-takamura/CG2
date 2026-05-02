@@ -119,10 +119,10 @@ Game::GetPostEffect()->ApplyDamageEffect(0.5f);
 
 ### 手順1: シェーダーファイルを作成
 
-`Resources/Shaders/` にピクセルシェーダーを作成します。
+`Resources/Shaders/PostEffect/Filters/` にピクセルシェーダーを作成します。
 
 ```hlsl
-#include "PostProcess.hlsli"
+#include "../Common/PostProcess.hlsli"
 
 struct PixelShaderOutput
 {
@@ -226,7 +226,7 @@ void MyEffect::Initialize(
 {
     // シェーダーコンパイル
     IDxcBlob* psBlob = dxCore->CompileShader(
-        L"Resources/Shaders/MyEffect.PS.hlsl",
+        L"Resources/Shaders/PostEffect/Filters/MyEffect.PS.hlsl",
         L"ps_6_0"
     );
     assert(psBlob);
@@ -346,14 +346,16 @@ SmoothingEffect.h/cpp           : スムージング（BoxFilter）
 
 RenderTexture.h/cpp             : オフスクリーン描画用テクスチャ
 
-Resources/Shaders/
-  PostProcess.hlsli             : 共通のVertexShaderOutput定義
-  PostProcess.VS.hlsl           : エフェクト共通の頂点シェーダー
-  CopyImage.VS.hlsl             : コピー用の頂点シェーダー
-  CopyImage.PS.hlsl             : コピー用のピクセルシェーダー
-  Grayscale.PS.hlsl             : グレースケール
-  GaussianFilter.PS.hlsl        : ガウシアンぼかし
-  Sepia.PS.hlsl                 : セピア
-  Vignette.PS.hlsl              : ヴィネット
-  Smoothing.PS.hlsl             : スムージング（BoxFilter）
+Resources/Shaders/PostEffect/
+  Common/
+    PostProcess.hlsli           : 共通のVertexShaderOutput定義
+    PostProcess.VS.hlsl         : エフェクト共通の頂点シェーダー
+    CopyImage.VS.hlsl           : コピー用の頂点シェーダー
+    CopyImage.PS.hlsl           : コピー用のピクセルシェーダー
+  Filters/
+    Grayscale.PS.hlsl           : グレースケール
+    GaussianFilter.PS.hlsl      : ガウシアンぼかし
+    Sepia.PS.hlsl               : セピア
+    Vignette.PS.hlsl            : ヴィネット
+    Smoothing.PS.hlsl           : スムージング（BoxFilter）
 ```

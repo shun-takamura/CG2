@@ -1,7 +1,7 @@
 // Distortion.PS.hlsl
 // ディストーションRTに描画された歪みマップを読み取り、シーンのUVをオフセットする
 
-#include "PostProcess.hlsli"
+#include "../Common/PostProcess.hlsli"
 
 struct PixelShaderOutput
 {

@@ -15,7 +15,7 @@ void DistortionEffect::Initialize(
 ) {
     // シェーダーコンパイル
     IDxcBlob* psBlob = dxCore->CompileShader(
-        L"Resources/Shaders/Distortion.PS.hlsl",
+        L"Resources/Shaders/PostEffect/Filters/Distortion.PS.hlsl",
         L"ps_6_0"
     );
     assert(psBlob);

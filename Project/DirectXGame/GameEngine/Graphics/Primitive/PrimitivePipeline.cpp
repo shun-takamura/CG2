@@ -105,11 +105,11 @@ void PrimitivePipeline::CreateRootSignature() {
 void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool depthWrite) {
     // シェーダーコンパイル
     IDxcBlob* vs = dxCore_->CompileShader(
-        L"Resources/Shaders/Primitive.VS.hlsl",
+        L"Resources/Shaders/Primitive/Primitive.VS.hlsl",
         L"vs_6_0"
     );
     IDxcBlob* ps = dxCore_->CompileShader(
-        L"Resources/Shaders/Primitive.PS.hlsl",
+        L"Resources/Shaders/Primitive/Primitive.PS.hlsl",
         L"ps_6_0"
     );
 

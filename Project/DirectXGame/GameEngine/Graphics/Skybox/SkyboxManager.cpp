@@ -93,12 +93,12 @@ void SkyboxManager::CreateGraphicsPipelineState()
 {
     // ===== シェーダーコンパイル =====
     IDxcBlob* vs = dxCore_->CompileShader(
-        L"Resources/Shaders/Skybox.VS.hlsl",
+        L"Resources/Shaders/Skybox/Skybox.VS.hlsl",
         L"vs_6_0"
     );
 
     IDxcBlob* ps = dxCore_->CompileShader(
-        L"Resources/Shaders/Skybox.PS.hlsl",
+        L"Resources/Shaders/Skybox/Skybox.PS.hlsl",
         L"ps_6_0"
     );
 

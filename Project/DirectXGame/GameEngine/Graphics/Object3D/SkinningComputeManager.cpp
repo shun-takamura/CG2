@@ -110,7 +110,7 @@ void SkinningComputeManager::CreateComputePipelineState()
 {
     // CSコンパイル
     IDxcBlob* cs = dxCore_->CompileShader(
-        L"Resources/Shaders/Skinning.CS.hlsl",
+        L"Resources/Shaders/Skinning/Skinning.CS.hlsl",
         L"cs_6_0"
     );
 

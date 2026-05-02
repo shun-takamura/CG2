@@ -17,7 +17,7 @@ void GrayscaleEffect::Initialize(
 {
 	// シェーダーコンパイル
 	IDxcBlob* psBlob = dxCore->CompileShader(
-		L"Resources/Shaders/Grayscale.PS.hlsl",
+		L"Resources/Shaders/PostEffect/Filters/Grayscale.PS.hlsl",
 		L"ps_6_0"
 	);
 	assert(psBlob);

@@ -1,7 +1,7 @@
 // Sepia.PS.hlsl
 // セピア調専用のピクセルシェーダー
 
-#include "PostProcess.hlsli"
+#include "../Common/PostProcess.hlsli"
 
 // ピクセルシェーダー出力構造体
 struct PixelShaderOutput

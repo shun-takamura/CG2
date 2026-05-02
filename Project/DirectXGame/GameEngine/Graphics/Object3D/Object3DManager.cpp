@@ -196,10 +196,10 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     const wchar_t* psFilePath = nullptr;
     switch (shaderType) {
     case kShaderEnvironmentMap:
-        psFilePath = L"Resources/Shaders/Object3d.PS.hlsl";
+        psFilePath = L"Resources/Shaders/Object3D/Object3d.PS.hlsl";
         break;
     case kShaderNoEnvironmentMap:
-        psFilePath = L"Resources/Shaders/Object3dNoEnv.PS.hlsl";
+        psFilePath = L"Resources/Shaders/Object3D/Object3dNoEnv.PS.hlsl";
         break;
     default:
         assert(false);
@@ -207,7 +207,7 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
 
     // ===== シェーダーコンパイル =====
     IDxcBlob* vs = dxCore_->CompileShader(
-        L"Resources/Shaders/Object3d.VS.hlsl",
+        L"Resources/Shaders/Object3D/Object3d.VS.hlsl",
         L"vs_6_0"
     );
 

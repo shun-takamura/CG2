@@ -81,8 +81,8 @@ void LineRenderer::CreateRootSignature() {
 }
 
 void LineRenderer::CreatePipelineState() {
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Line.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Line.PS.hlsl", L"ps_6_0");
+    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Primitive/Line.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Primitive/Line.PS.hlsl", L"ps_6_0");
 
     // InputLayout: Position(float3) + Color(float4)
     D3D12_INPUT_ELEMENT_DESC inputElements[2] = {};
