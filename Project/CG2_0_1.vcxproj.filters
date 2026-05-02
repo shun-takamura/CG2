@@ -105,6 +105,9 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Sound\SoundManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -413,6 +416,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -654,6 +660,8 @@
     <FxCompile Include="Resources\Shaders\Line.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\Line.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\InitializeParticle.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\GPUParticle.VS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">

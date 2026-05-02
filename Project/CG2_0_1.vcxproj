@@ -272,6 +272,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\TextureManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Sound\SoundManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\MouseInput.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
@@ -394,6 +395,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\TextureManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\SRVManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Sound\SoundManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\MouseInput.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\InputManager.h" />
@@ -537,6 +539,25 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Compute</ShaderType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="Resources\Shaders\InitializeParticle.CS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Compute</ShaderType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="Resources\Shaders\GPUParticle.VS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Vertex</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Development|x64'">5.0</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.0</ShaderModel>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>

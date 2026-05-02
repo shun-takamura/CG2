@@ -15,6 +15,7 @@ class Camera;
 class PrimitiveMesh;
 class AnimatedModelInstance;
 class AnimatedObject3DInstance;
+class GPUParticleManager;
 
 class DemoScene :public BaseScene
 {
@@ -91,6 +92,9 @@ private:
 
 	// HitEffect（Plane版）の管理配列
 	std::vector<HitEffectPlane> hitEffectPlanes_;
+
+	// GPU Particle (CS版)
+	std::unique_ptr<GPUParticleManager> gpuParticleManager_;
 
 	// パーティクル用タイマー
 	float emitTimer_ = 0.0f;
