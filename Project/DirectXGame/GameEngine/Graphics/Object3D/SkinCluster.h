@@ -1,5 +1,6 @@
 #pragma once
 #include "Matrix4x4.h"
+#include "VertexData.h"
 #include <wrl.h>
 #include <d3d12.h>
 #include <span>
@@ -28,6 +29,11 @@ struct WellForGPU {
     Matrix4x4 skeletonSpaceInverseTransposeMatrix; // 法線用
 };
 
+// ComputeShaderに渡すSkinning情報
+struct SkinningInformationForGPU {
+    uint32_t numVertices;
+};
+
 // SkinCluster本体
 struct SkinCluster {
     // CPU側で持つInverseBindPoseMatrix配列
@@ -35,13 +41,36 @@ struct SkinCluster {
 
     // VertexInfluence用GPUリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> influenceResource;
-    D3D12_VERTEX_BUFFER_VIEW influenceBufferView{};
     std::span<VertexInfluence> mappedInfluence;
 
     // MatrixPalette用GPUリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> paletteResource;
     std::span<WellForGPU> mappedPalette;
     uint32_t paletteSrvIndex = 0;
+
+    //=================================
+    // ComputeShader版で利用するリソース
+    //=================================
+    // CS入力：頂点をStructuredBufferとして読むためのSRV
+    Microsoft::WRL::ComPtr<ID3D12Resource> inputVertexResource;
+    uint32_t inputVertexSrvIndex = 0;
+
+    // CS入力：InfluenceをStructuredBufferとして読むためのSRV（influenceResourceを共用）
+    uint32_t influenceSrvIndex = 0;
+
+    // CS出力：Skinning結果のSkinnedVertex（UAV）。描画時はVBVとして使う
+    Microsoft::WRL::ComPtr<ID3D12Resource> skinnedVertexResource;
+    D3D12_VERTEX_BUFFER_VIEW skinnedVertexBufferView{};
+    uint32_t skinnedVertexUavIndex = 0;
+    // Barrier管理用：現在のResourceState
+    D3D12_RESOURCE_STATES skinnedVertexState = D3D12_RESOURCE_STATE_COMMON;
+
+    // CS用：頂点数情報のCBV
+    Microsoft::WRL::ComPtr<ID3D12Resource> skinningInformationResource;
+    SkinningInformationForGPU* mappedSkinningInformation = nullptr;
+
+    // 描画用の頂点数（Dispatch計算に利用）
+    uint32_t numVertices = 0;
 };
 
 // SkinClusterを生成する

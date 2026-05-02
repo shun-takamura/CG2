@@ -279,7 +279,7 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.cpp">
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
@@ -626,7 +626,7 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.h">
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -653,9 +653,7 @@
     <FxCompile Include="Resources\Shaders\Primitive.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Line.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\Line.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\SkinningObject3d.VS.hlsl" />
-    <FxCompile Include="Resources\Shaders\SkinningObject3d.PS.hlsl" />
-    <FxCompile Include="Resources\Shaders\SkinningObject3dNoEnv.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">

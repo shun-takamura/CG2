@@ -85,6 +85,27 @@ void SRVManager::CreateSRVForStructuredBuffer(uint32_t srvIndex, ID3D12Resource*
 	);
 }
 
+void SRVManager::CreateUAVForStructuredBuffer(uint32_t srvIndex, ID3D12Resource* pResource, UINT elementNums, UINT structureByteStride)
+{
+	// UAVの設定
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.FirstElement = 0;
+	uavDesc.Buffer.NumElements = elementNums;
+	uavDesc.Buffer.StructureByteStride = structureByteStride;
+	uavDesc.Buffer.CounterOffsetInBytes = 0;
+	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+
+	// UAVの生成（Counterは利用しないのでnullptr）
+	dxCore_->GetDevice()->CreateUnorderedAccessView(
+		pResource,
+		nullptr,
+		&uavDesc,
+		GetCPUDescriptorHandle(srvIndex)
+	);
+}
+
 void SRVManager::Initialize(DirectXCore* dxCore)
 {
 	dxCore_ = dxCore;

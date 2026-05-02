@@ -110,6 +110,10 @@ public:
 	bool IsUsingFixedFrameRate() const { return useFixedFrameRate_; }
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
+
+	// UAV用のバッファResource（DEFAULT heap、ALLOW_UNORDERED_ACCESSフラグ、初期StateはCOMMON）
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateUavBufferResource(size_t sizeInBytes);
+
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
 	// 最大テクスチャ枚数

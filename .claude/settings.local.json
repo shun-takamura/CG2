@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where MSBuild.exe)",
+      "Read(//c/Program Files/Microsoft Visual Studio/2022/**)"
+    ]
+  }
+}

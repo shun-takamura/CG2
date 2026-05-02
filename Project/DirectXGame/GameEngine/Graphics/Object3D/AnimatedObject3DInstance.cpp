@@ -5,21 +5,21 @@
 #include "PrimitiveGenerator.h"
 #include "LineRenderer.h"
 #include "SRVManager.h"
-#include "SkinningObject3DManager.h"
-#include "SRVManager.h"
+#include "SkinningComputeManager.h"
 #include "LightManager.h"
+#include "Object3DManager.h"
 
 AnimatedObject3DInstance::~AnimatedObject3DInstance() = default;
 
 void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
-    SkinningObject3DManager* skinningObject3DManager,
+    SkinningComputeManager* skinningComputeManager,
     DirectXCore* dxCore,
     SRVManager* srvManager,
     AnimatedModelInstance* animatedModel,
     const std::string& name)
 {
     object3DManager_ = object3DManager;
-    skinningObject3DManager_ = skinningObject3DManager;
+    skinningComputeManager_ = skinningComputeManager;
     srvManager_ = srvManager;
     animatedModelInstance_ = animatedModel;
 
@@ -135,27 +135,80 @@ void AnimatedObject3DInstance::Update(float deltaTime)
     transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(worldMatrix));
 }
 
-void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
+void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
 {
-    // Skinning用RootSignatureを再設定
-    if (skinningObject3DManager_) {
-        dxCore->GetCommandList()->SetGraphicsRootSignature(
-            skinningObject3DManager_->GetRootSignature()
-        );
+    if (!skinningComputeManager_ || !hasSkinCluster_ || !animatedModelInstance_) {
+        return;
     }
 
-    // PSO切り替え
-    if (skinningObject3DManager_ && animatedModelInstance_) {
+    auto* commandList = dxCore->GetCommandList();
+
+    // skinnedVertexResourceを書き込み可能なStateへ遷移
+    if (skinCluster_.skinnedVertexState != D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = skinCluster_.skinnedVertexResource.Get();
+        barrier.Transition.StateBefore = skinCluster_.skinnedVertexState;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        commandList->ResourceBarrier(1, &barrier);
+        skinCluster_.skinnedVertexState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    }
+
+    // Compute用のRootSignature/PSOを設定
+    skinningComputeManager_->DispatchSetting();
+
+    // RootParam設定
+    commandList->SetComputeRootDescriptorTable(
+        0, srvManager_->GetGPUDescriptorHandle(skinCluster_.paletteSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        1, srvManager_->GetGPUDescriptorHandle(skinCluster_.inputVertexSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        2, srvManager_->GetGPUDescriptorHandle(skinCluster_.influenceSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        3, srvManager_->GetGPUDescriptorHandle(skinCluster_.skinnedVertexUavIndex));
+    commandList->SetComputeRootConstantBufferView(
+        4, skinCluster_.skinningInformationResource->GetGPUVirtualAddress());
+
+    // Dispatch（1024頂点ずつ処理。切り上げ）
+    const uint32_t threadGroupCount = (skinCluster_.numVertices + 1023) / 1024;
+    commandList->Dispatch(threadGroupCount, 1, 1);
+
+    // 描画でVBVとして読めるStateへ遷移
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = skinCluster_.skinnedVertexResource.Get();
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    commandList->ResourceBarrier(1, &barrier);
+    skinCluster_.skinnedVertexState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+}
+
+void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
+{
+    if (!animatedModelInstance_ || !hasSkinCluster_ || !skinningComputeManager_) {
+        return;
+    }
+
+    // CS実行（バリア込み）
+    DispatchSkinning(dxCore);
+
+    // Object3DManagerのRootSignature/PSOへ切替
+    if (object3DManager_) {
+        dxCore->GetCommandList()->SetGraphicsRootSignature(
+            object3DManager_->GetRootSignature()
+        );
+
         Material* mat = animatedModelInstance_->GetMaterialPointer();
-        if (mat && mat->useEnvironmentMap) {
-            dxCore->GetCommandList()->SetPipelineState(
-                skinningObject3DManager_->GetPipelineState(SkinningObject3DManager::kShaderEnvironmentMap)
-            );
-        } else {
-            dxCore->GetCommandList()->SetPipelineState(
-                skinningObject3DManager_->GetPipelineState(SkinningObject3DManager::kShaderNoEnvironmentMap)
-            );
-        }
+        Object3DManager::ShaderType shaderType = (mat && mat->useEnvironmentMap)
+            ? Object3DManager::kShaderEnvironmentMap
+            : Object3DManager::kShaderNoEnvironmentMap;
+        dxCore->GetCommandList()->SetPipelineState(
+            object3DManager_->GetPipelineState(shaderType)
+        );
     }
 
     // RootParam[1] TransformationMatrix
@@ -168,14 +221,11 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
         4, cameraResource_->GetGPUVirtualAddress()
     );
 
-    // ★ライトをバインド
     LightManager::GetInstance()->BindLights(dxCore->GetCommandList());
 
     // 環境マップは必ずバインドする（PSのvalidationが要求するため）
-    // useEnvironmentMap=falseの場合でもサンプルコードはコンパイルされており、
-    // GPU-Based Validationは未バインドを許可しない
-    if (skinningObject3DManager_) {
-        const std::string& envPath = skinningObject3DManager_->GetEnvironmentTexturePath();
+    if (object3DManager_) {
+        const std::string& envPath = object3DManager_->GetEnvironmentTexturePath();
         if (!envPath.empty()) {
             dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
                 7, TextureManager::GetInstance()->GetSrvHandleGPU(envPath)
@@ -183,10 +233,8 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
         }
     }
 
-    // Skinning版Draw
-    if (animatedModelInstance_ && hasSkinCluster_) {
-        animatedModelInstance_->DrawSkinning(dxCore, skinCluster_, srvManager_);
-    }
+    // Skinning済みVBVで描画
+    animatedModelInstance_->DrawSkinning(dxCore, skinCluster_);
 }
 
 #ifdef USE_IMGUI

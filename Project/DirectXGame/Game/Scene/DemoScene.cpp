@@ -35,7 +35,6 @@
 #include "AnimatedObject3DInstance.h"
 #include "ModelManager.h"
 #include "LineRenderer.h"
-#include "SkinningObject3DManager.h"
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -68,8 +67,8 @@ void DemoScene::Initialize() {
 
 	// ここで環境マップをモデルにセット
 	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
-	skinningObject3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
-	
+
+
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
@@ -197,7 +196,7 @@ void DemoScene::Initialize() {
 	sneakWalkInstance_= std::make_unique<AnimatedObject3DInstance>();
 	sneakWalkInstance_->Initialize(
 		object3DManager_,
-		skinningObject3DManager_,
+		skinningComputeManager_,
 		dxCore_,
 		srvManager_,
 		sneakWalk.get(),
@@ -219,7 +218,7 @@ void DemoScene::Initialize() {
 	animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
 	animatedCubeInstance_->Initialize(
 		object3DManager_,
-		skinningObject3DManager_,
+		skinningComputeManager_,
 		dxCore_,
 		srvManager_,
 		animatedCubeModel_.get(),
@@ -569,12 +568,6 @@ void DemoScene::Draw() {
 	// 3Dオブジェクト描画
 	for (const auto& obj : object3DInstances_) {
 		obj->Draw(dxCore_);
-	}
-
-	// ★ここで切り替え
-	if (skinningObject3DManager_) {
-		skinningObject3DManager_->DrawSetting();
-		LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
 	}
 
 	// アニメーション付きオブジェクトの描画

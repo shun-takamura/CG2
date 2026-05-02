@@ -1,7 +1,6 @@
 #include "AnimatedModelInstance.h"
 #include <filesystem>
 #include "SkinCluster.h"
-#include "SRVManager.h"
 
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
@@ -50,18 +49,13 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
         UINT(modelData_.indices.size()), 1, 0, 0, 0);
 }
 
-void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster, SRVManager* srvManager)
+void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster)
 {
-    // VBVを2本セット（VertexData + Influence）
-    D3D12_VERTEX_BUFFER_VIEW vbvs[2] = {
-        vertexBufferView_,
-        skinCluster.influenceBufferView
-    };
-    dxCore->GetCommandList()->IASetVertexBuffers(0, 2, vbvs);
-
-    // インデックスバッファ
+    // Skinning済みの頂点バッファをVBVとして使う（Slot 0のみ）
+    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
     dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
 
+    // Object3DManagerのRootSignatureに合わせる
     // RootParam[0] Material
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
         0, materialResource_->GetGPUVirtualAddress()
@@ -70,11 +64,6 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
     // RootParam[2] Texture
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
-    );
-
-    // RootParam[8] MatrixPalette
-    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        8, srvManager->GetGPUDescriptorHandle(skinCluster.paletteSrvIndex)
     );
 
     // ドローコール

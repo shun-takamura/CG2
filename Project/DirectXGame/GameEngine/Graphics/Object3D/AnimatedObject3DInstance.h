@@ -28,7 +28,7 @@
 class Object3DManager;
 class PrimitiveMesh;  // unique_ptrで持つので前方宣言でOK
 struct SkinCluster;
-class SkinningObject3DManager;
+class SkinningComputeManager;
 class SRVManager;
 
 class AnimatedObject3DInstance : public IImGuiEditable {
@@ -42,7 +42,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     AnimatedModelInstance* animatedModelInstance_ = nullptr;
     Camera* camera_ = nullptr;
 
-    SkinningObject3DManager* skinningObject3DManager_ = nullptr;
+    SkinningComputeManager* skinningComputeManager_ = nullptr;
     SRVManager* srvManager_ = nullptr;  // Drawで使うので保持
 
     // バッファリソース
@@ -144,13 +144,16 @@ public:
     // 初期化・更新・描画
     //==============================
     void Initialize(Object3DManager* object3DManager,
-        SkinningObject3DManager* skinningObject3DManager,
+        SkinningComputeManager* skinningComputeManager,
         DirectXCore* dxCore,
         SRVManager* srvManager,
         AnimatedModelInstance* animatedModel,
         const std::string& name = "");
 
     void Update(float deltaTime);  // 引数にdeltaTimeを追加（可変フレーム対応）
+
+    // ComputeShader版でSkinning計算をDispatchする（Drawの前に呼ぶ）
+    void DispatchSkinning(DirectXCore* dxCore);
 
     void Draw(DirectXCore* dxCore);
 

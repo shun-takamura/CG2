@@ -38,19 +38,68 @@ SkinCluster CreateSkinCluster(
     std::memset(mappedInfluence, 0, sizeof(VertexInfluence) * modelData.vertices.size());
     skinCluster.mappedInfluence = { mappedInfluence, modelData.vertices.size() };
 
-    // ===== influence用VBV =====
-    skinCluster.influenceBufferView.BufferLocation =
-        skinCluster.influenceResource->GetGPUVirtualAddress();
-    skinCluster.influenceBufferView.SizeInBytes =
-        UINT(sizeof(VertexInfluence) * modelData.vertices.size());
-    skinCluster.influenceBufferView.StrideInBytes = sizeof(VertexInfluence);
-
     // ===== InverseBindPoseMatrixを単位行列で初期化 =====
     skinCluster.inverseBindPoseMatrices.resize(skeleton.joints.size());
     std::generate(
         skinCluster.inverseBindPoseMatrices.begin(),
         skinCluster.inverseBindPoseMatrices.end(),
         MakeIdentity4x4);
+
+    //==========================================
+    // ComputeShader版用のリソースをまとめて作成
+    //==========================================
+    const uint32_t numVertices = static_cast<uint32_t>(modelData.vertices.size());
+    skinCluster.numVertices = numVertices;
+
+    // --- CS入力：頂点用StructuredBuffer（ModelDataの頂点をコピー） ---
+    skinCluster.inputVertexResource = dxCore->CreateBufferResource(
+        sizeof(VertexData) * numVertices);
+    {
+        VertexData* mapped = nullptr;
+        skinCluster.inputVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+        std::memcpy(mapped, modelData.vertices.data(), sizeof(VertexData) * numVertices);
+        skinCluster.inputVertexResource->Unmap(0, nullptr);
+    }
+    skinCluster.inputVertexSrvIndex = srvManager->Allocate();
+    srvManager->CreateSRVForStructuredBuffer(
+        skinCluster.inputVertexSrvIndex,
+        skinCluster.inputVertexResource.Get(),
+        numVertices,
+        sizeof(VertexData));
+
+    // --- CS入力：influence用SRV（既存のinfluenceResourceを共用） ---
+    skinCluster.influenceSrvIndex = srvManager->Allocate();
+    srvManager->CreateSRVForStructuredBuffer(
+        skinCluster.influenceSrvIndex,
+        skinCluster.influenceResource.Get(),
+        numVertices,
+        sizeof(VertexInfluence));
+
+    // --- CS出力：Skinning結果のUAV（DEFAULT heap、ALLOW_UNORDERED_ACCESS） ---
+    skinCluster.skinnedVertexResource = dxCore->CreateUavBufferResource(
+        sizeof(VertexData) * numVertices);
+    skinCluster.skinnedVertexState = D3D12_RESOURCE_STATE_COMMON;
+
+    skinCluster.skinnedVertexUavIndex = srvManager->Allocate();
+    srvManager->CreateUAVForStructuredBuffer(
+        skinCluster.skinnedVertexUavIndex,
+        skinCluster.skinnedVertexResource.Get(),
+        numVertices,
+        sizeof(VertexData));
+
+    // 描画時にVBVとして使うので設定しておく
+    skinCluster.skinnedVertexBufferView.BufferLocation =
+        skinCluster.skinnedVertexResource->GetGPUVirtualAddress();
+    skinCluster.skinnedVertexBufferView.SizeInBytes =
+        UINT(sizeof(VertexData) * numVertices);
+    skinCluster.skinnedVertexBufferView.StrideInBytes = sizeof(VertexData);
+
+    // --- CS用CBV：SkinningInformation ---
+    skinCluster.skinningInformationResource = dxCore->CreateBufferResource(
+        sizeof(SkinningInformationForGPU));
+    skinCluster.skinningInformationResource->Map(
+        0, nullptr, reinterpret_cast<void**>(&skinCluster.mappedSkinningInformation));
+    skinCluster.mappedSkinningInformation->numVertices = numVertices;
 
     // ===== ModelDataのskinClusterDataを解析してInfluenceを埋める =====
     for (const auto& jointWeight : modelData.skinClusterData) {
