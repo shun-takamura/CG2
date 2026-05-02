@@ -1,4 +1,4 @@
-// GPU Particle: ParticleResourceの中身を初期化するCS
+// GPU Particle: ParticleResource / FreeList / FreeListIndexを初期化するCS
 
 struct Particle
 {
@@ -13,6 +13,8 @@ struct Particle
 static const uint kMaxParticles = 1024;
 
 RWStructuredBuffer<Particle> gParticles : register(u0);
+RWStructuredBuffer<int32_t> gFreeListIndex : register(u1);
+RWStructuredBuffer<uint32_t> gFreeList : register(u2);
 
 [numthreads(1024, 1, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
@@ -20,10 +22,15 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint particleIndex = DTid.x;
     if (particleIndex < kMaxParticles)
     {
-        // ひとまず0埋めしておく
+        // Particleは0埋め
         gParticles[particleIndex] = (Particle) 0;
-        // 動作確認用：白色・0.5サイズで見えるようにする
-        gParticles[particleIndex].scale = float3(0.5f, 0.5f, 0.5f);
-        gParticles[particleIndex].color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+        // FreeListは連番で初期化（FreeList[i] = i）
+        gFreeList[particleIndex] = particleIndex;
+    }
+
+    // FreeListIndexは末尾を指すように、kMaxParticles - 1 にしておく
+    if (particleIndex == 0)
+    {
+        gFreeListIndex[0] = kMaxParticles - 1;
     }
 }
