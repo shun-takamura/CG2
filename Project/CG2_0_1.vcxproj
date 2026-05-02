@@ -291,6 +291,8 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\RadialBlurEffect.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DissolveEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineDepthEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineNormalEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxManager.cpp" />
@@ -411,6 +413,8 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\RadialBlurEffect.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DissolveEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineDepthEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineNormalEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxManager.h" />

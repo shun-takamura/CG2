@@ -284,6 +284,7 @@ void PostEffect::InitializeEffects()
 	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
 	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
 	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
+	radialBlur = static_cast<RadialBlurEffect*>(registerEffect(std::make_unique<RadialBlurEffect>()));
 
 	// ----- Outline系エフェクトの登録（outline用RootSignatureで初期化） -----
 	{
@@ -299,6 +300,15 @@ void PostEffect::InitializeEffects()
 		outlineNormal = normalEffect.get();
 		effectOrder_.push_back(outlineNormal);
 		effectOwners_.push_back(std::move(normalEffect));
+	}
+
+	// ----- Dissolve（マスクテクスチャを使う、outline用RootSignatureを共用） -----
+	{
+		auto dissolveEffect = std::make_unique<DissolveEffect>();
+		dissolveEffect->InitializeMasked(dxCore_, outlineRootSignature_.Get(), basePsoDesc_);
+		dissolve = dissolveEffect.get();
+		effectOrder_.push_back(dissolve);
+		effectOwners_.push_back(std::move(dissolveEffect));
 	}
 }
 
@@ -392,12 +402,16 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 		effect->UpdateConstantBuffer();
 	}
 
-	if (effect->NeedsDepth()) {
-		// Outline系: color t0, depth t1, cbuffer b0
+	if (effect->NeedsDepth() || effect->NeedsMaskTexture()) {
+		// Outline系/Dissolve系: color t0, aux t1, cbuffer b0
+		uint32_t auxSrvIndex = effect->NeedsDepth()
+			? dxCore_->GetDepthSRVIndex()
+			: effect->GetMaskTextureSRVIndex();
+
 		commandList->SetGraphicsRootSignature(outlineRootSignature_.Get());
 		commandList->SetPipelineState(effect->GetPipelineState());
 		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(1, dxCore_->GetDepthSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(1, auxSrvIndex);
 		commandList->SetGraphicsRootConstantBufferView(2, effect->GetConstantBufferGPUAddress());
 	}
 	else {
