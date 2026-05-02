@@ -64,6 +64,17 @@ public:
 	virtual bool NeedsDepth() const { return false; }
 
 	/// <summary>
+	/// 追加のテクスチャ(t1)を参照するかどうか（Dissolve等でtrueにする）
+	/// NeedsDepthがtrueなら自動的にtrue扱い。Dissolve等depthでないテクスチャを使う場合のみオーバーライド。
+	/// </summary>
+	virtual bool NeedsMaskTexture() const { return false; }
+
+	/// <summary>
+	/// マスクテクスチャのSRVインデックスを取得
+	/// </summary>
+	virtual uint32_t GetMaskTextureSRVIndex() const { return 0; }
+
+	/// <summary>
 	/// 射影行列を受け取る（NeedsDepth() == true のエフェクトのみ実装）
 	/// PostEffect::Draw()前に毎フレーム呼ばれる
 	/// </summary>

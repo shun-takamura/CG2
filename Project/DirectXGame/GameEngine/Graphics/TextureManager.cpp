@@ -378,6 +378,65 @@ void TextureManager::LoadTexture(const std::string& filePath)
 
 }
 
+void TextureManager::LoadTextureLinear(const std::string& filePath)
+{
+    if (textureDatas.contains(filePath)) {
+        return;
+    }
+
+    assert(srvManager_->CanAllocate());
+
+    DirectX::ScratchImage image{};
+    std::wstring filePathW = ConvertString(filePath);
+
+    HRESULT hr;
+    if (filePathW.ends_with(L".dds")) {
+        hr = DirectX::LoadFromDDSFile(
+            filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+    }
+    else {
+        // SRGBに強制せず線形値として扱う
+        hr = DirectX::LoadFromWICFile(
+            filePathW.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
+    }
+    assert(SUCCEEDED(hr));
+
+    DirectX::ScratchImage mipImages{};
+    if (DirectX::IsCompressed(image.GetMetadata().format)) {
+        mipImages = std::move(image);
+    }
+    else {
+        // 線形のまま縮小
+        hr = DirectX::GenerateMipMaps(
+            image.GetImages(), image.GetImageCount(), image.GetMetadata(),
+            DirectX::TEX_FILTER_DEFAULT, 0, mipImages);
+        assert(SUCCEEDED(hr));
+    }
+
+    TextureData& textureData = textureDatas[filePath];
+    textureData.metadata = mipImages.GetMetadata();
+
+    textureData.resource = spriteManager_->CreateTextureResource(
+        dxCore_->GetDevice(),
+        textureData.metadata
+    );
+
+    spriteManager_->UploadTextureData(
+        textureData.resource.Get(),
+        mipImages,
+        dxCore_->GetDevice(),
+        dxCore_->GetCommandList()
+    );
+
+    textureData.srvIndex = srvManager_->Allocate();
+    srvManager_->CreateSRVForTexture2D(
+        textureData.srvIndex,
+        textureData.resource.Get(),
+        textureData.metadata.format,
+        static_cast<UINT>(textureData.metadata.mipLevels)
+    );
+}
+
 TextureManager* TextureManager::GetInstance()
 {
     //if (instance == nullptr) {

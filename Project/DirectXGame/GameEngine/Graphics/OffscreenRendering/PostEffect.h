@@ -14,6 +14,8 @@
 #include "SepiaEffect.h"
 #include "VignetteEffect.h"
 #include "SmoothingEffect.h"
+#include "RadialBlurEffect.h"
+#include "DissolveEffect.h"
 #include "OutlineDepthEffect.h"
 #include "OutlineNormalEffect.h"
 #include "Matrix4x4.h"
@@ -90,6 +92,8 @@ public:
 	SepiaEffect* sepia = nullptr;
 	VignetteEffect* vignette = nullptr;
 	SmoothingEffect* smoothing = nullptr;
+	RadialBlurEffect* radialBlur = nullptr;
+	DissolveEffect* dissolve = nullptr;
 	OutlineDepthEffect* outlineDepth = nullptr;
 	OutlineNormalEffect* outlineNormal = nullptr;
 

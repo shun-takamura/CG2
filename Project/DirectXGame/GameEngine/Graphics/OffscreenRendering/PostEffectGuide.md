@@ -64,6 +64,18 @@ Game::GetPostEffect()->sepia->SetSepiaColor(1.0f, 0.691f, 0.402f);
 // スムージング
 Game::GetPostEffect()->smoothing->SetKernelSize(5);
 
+// 放射状ブラー
+Game::GetPostEffect()->radialBlur->SetCenter(0.5f, 0.5f);
+Game::GetPostEffect()->radialBlur->SetBlurWidth(0.01f);
+Game::GetPostEffect()->radialBlur->SetNumSamples(10);
+
+// ディゾルブ
+Game::GetPostEffect()->dissolve->SetThreshold(0.5f);            // 0..1
+Game::GetPostEffect()->dissolve->SetEdgeWidth(0.03f);           // 閾値からエッジまでの幅
+Game::GetPostEffect()->dissolve->SetEdgeColor(1.0f, 0.4f, 0.3f);
+Game::GetPostEffect()->dissolve->SetEdgeIntensity(2.0f);
+Game::GetPostEffect()->dissolve->SetMaskTexture("DistributionAssets/Textures/MaskTexture/noise1.png");
+
 // アウトライン（Depthベース、資料準拠）
 Game::GetPostEffect()->outlineDepth->SetEdgeStrength(6.0f);
 
@@ -112,6 +124,8 @@ Game::GetPostEffect()->ApplyDamageEffect(0.5f);
 | Sepia | SepiaEffect | セピア調 | `intensity`(float), `sepiaColorR/G/B`(float) |
 | Vignette | VignetteEffect | 周辺減光 | `intensity`(float), `power`(float), `scale`(float) |
 | Smoothing | SmoothingEffect | ぼかし（BoxFilter） | `kernelSize`(int) |
+| RadialBlur | RadialBlurEffect | 中心から放射状のぼかし | `center`(float2) `blurWidth`(float) `numSamples`(int) |
+| Dissolve | DissolveEffect | マスクテクスチャ閾値による溶解（discard） | `threshold` `edgeWidth` `edgeColor` `edgeIntensity` `maskTexture` |
 | OutlineDepth | OutlineDepthEffect | Depthベースのアウトライン（資料準拠） | `edgeStrength`(float) |
 | OutlineNormal | OutlineNormalEffect | Depth + 深度から再構築した法線によるアウトライン | `depthWeight` `normalWeight` `depthThreshold` `normalThreshold`(float) |
 

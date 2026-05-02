@@ -62,6 +62,11 @@ public:
 	void LoadTexture(const std::string& filePath);
 
 	/// <summary>
+	/// SRGB変換せずに線形値として読み込む（マスク・ノーマルマップ用）
+	/// </summary>
+	void LoadTextureLinear(const std::string& filePath);
+
+	/// <summary>
 	/// 動的テクスチャを作成（カメラ映像など毎フレーム更新するテクスチャ用）
 	/// </summary>
 	/// <param name="name">テクスチャの識別名</param>
