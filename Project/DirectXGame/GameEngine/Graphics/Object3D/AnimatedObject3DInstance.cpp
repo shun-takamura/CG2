@@ -6,8 +6,10 @@
 #include "LineRenderer.h"
 #include "SRVManager.h"
 #include "SkinningObject3DManager.h"
+#include "SkinningComputeManager.h"
 #include "SRVManager.h"
 #include "LightManager.h"
+#include "Object3DManager.h"
 
 AnimatedObject3DInstance::~AnimatedObject3DInstance() = default;
 
@@ -135,8 +137,118 @@ void AnimatedObject3DInstance::Update(float deltaTime)
     transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(worldMatrix));
 }
 
+void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
+{
+    // CS版を使わない、または依存物が揃っていなければ何もしない
+    if (!useComputeSkinning_ || !skinningComputeManager_ || !hasSkinCluster_ || !animatedModelInstance_) {
+        return;
+    }
+
+    auto* commandList = dxCore->GetCommandList();
+
+    // skinnedVertexResourceを書き込み可能なStateへ遷移
+    if (skinCluster_.skinnedVertexState != D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = skinCluster_.skinnedVertexResource.Get();
+        barrier.Transition.StateBefore = skinCluster_.skinnedVertexState;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        commandList->ResourceBarrier(1, &barrier);
+        skinCluster_.skinnedVertexState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    }
+
+    // Compute用のRootSignature/PSOを設定
+    skinningComputeManager_->DispatchSetting();
+
+    // RootParam設定
+    commandList->SetComputeRootDescriptorTable(
+        0, srvManager_->GetGPUDescriptorHandle(skinCluster_.paletteSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        1, srvManager_->GetGPUDescriptorHandle(skinCluster_.inputVertexSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        2, srvManager_->GetGPUDescriptorHandle(skinCluster_.influenceSrvIndex));
+    commandList->SetComputeRootDescriptorTable(
+        3, srvManager_->GetGPUDescriptorHandle(skinCluster_.skinnedVertexUavIndex));
+    commandList->SetComputeRootConstantBufferView(
+        4, skinCluster_.skinningInformationResource->GetGPUVirtualAddress());
+
+    // Dispatch（1024頂点ずつ処理。切り上げ）
+    const uint32_t threadGroupCount = (skinCluster_.numVertices + 1023) / 1024;
+    commandList->Dispatch(threadGroupCount, 1, 1);
+
+    // 描画でVBVとして読めるStateへ遷移
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = skinCluster_.skinnedVertexResource.Get();
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    commandList->ResourceBarrier(1, &barrier);
+    skinCluster_.skinnedVertexState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+}
+
 void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 {
+    if (!animatedModelInstance_ || !hasSkinCluster_) {
+        return;
+    }
+
+    // CS版を使う場合はObject3DManagerのRootSignature/PSOで描画
+    const bool useCS = useComputeSkinning_ && skinningComputeManager_;
+    if (useCS) {
+        // CS実行（バリア込み）
+        DispatchSkinning(dxCore);
+
+        // Object3DManagerのRootSignature/PSOへ切替
+        if (object3DManager_) {
+            dxCore->GetCommandList()->SetGraphicsRootSignature(
+                object3DManager_->GetRootSignature()
+            );
+
+            Material* mat = animatedModelInstance_->GetMaterialPointer();
+            Object3DManager::ShaderType shaderType = (mat && mat->useEnvironmentMap)
+                ? Object3DManager::kShaderEnvironmentMap
+                : Object3DManager::kShaderNoEnvironmentMap;
+            dxCore->GetCommandList()->SetPipelineState(
+                object3DManager_->GetPipelineState(shaderType)
+            );
+        }
+
+        // RootParam[1] TransformationMatrix
+        dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+            1, transformationMatrixResource_->GetGPUVirtualAddress()
+        );
+
+        // RootParam[4] Camera
+        dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+            4, cameraResource_->GetGPUVirtualAddress()
+        );
+
+        LightManager::GetInstance()->BindLights(dxCore->GetCommandList());
+
+        // 環境マップ
+        if (object3DManager_) {
+            // Object3DManagerが持つ環境マップパスはprivateだが、
+            // ここではSkinningObject3DManagerのものを共有利用
+            if (skinningObject3DManager_) {
+                const std::string& envPath = skinningObject3DManager_->GetEnvironmentTexturePath();
+                if (!envPath.empty()) {
+                    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+                        7, TextureManager::GetInstance()->GetSrvHandleGPU(envPath)
+                    );
+                }
+            }
+        }
+
+        // Skinning済みVBVで描画
+        animatedModelInstance_->DrawSkinningWithCS(dxCore, skinCluster_);
+        return;
+    }
+
+    // 以下は従来のVS版Skinning経路
     // Skinning用RootSignatureを再設定
     if (skinningObject3DManager_) {
         dxCore->GetCommandList()->SetGraphicsRootSignature(
@@ -183,10 +295,8 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
         }
     }
 
-    // Skinning版Draw
-    if (animatedModelInstance_ && hasSkinCluster_) {
-        animatedModelInstance_->DrawSkinning(dxCore, skinCluster_, srvManager_);
-    }
+    // Skinning版Draw（VS版）
+    animatedModelInstance_->DrawSkinning(dxCore, skinCluster_, srvManager_);
 }
 
 #ifdef USE_IMGUI
@@ -367,6 +477,15 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                 }
             }
         }
+    }
+
+    // Skinning方式の切り替え
+    if (ImGui::CollapsingHeader("Skinning Method")) {
+        bool useCS = useComputeSkinning_;
+        if (ImGui::Checkbox("Use ComputeShader Skinning", &useCS)) {
+            useComputeSkinning_ = useCS;
+        }
+        ImGui::Text(useComputeSkinning_ ? "Mode: CS" : "Mode: VS (legacy)");
     }
 
     // Material

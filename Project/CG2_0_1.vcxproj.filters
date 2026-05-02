@@ -282,6 +282,9 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h">
@@ -629,6 +632,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Object3d.VS.hlsl" />
@@ -656,6 +662,7 @@
     <FxCompile Include="Resources\Shaders\SkinningObject3d.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\SkinningObject3d.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\SkinningObject3dNoEnv.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">

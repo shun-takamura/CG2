@@ -203,6 +203,7 @@ void DemoScene::Initialize() {
 		sneakWalk.get(),
 		"sneakWalk"
 	);
+	sneakWalkInstance_->SetSkinningComputeManager(skinningComputeManager_);
 	sneakWalkInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 	sneakWalkInstance_->SetUseEnvironmentMap(true);
 	sneakWalkInstance_->SetEnvironmentCoefficient(0.5f);
@@ -225,6 +226,7 @@ void DemoScene::Initialize() {
 		animatedCubeModel_.get(),
 		"AnimatedCube"
 	);
+	animatedCubeInstance_->SetSkinningComputeManager(skinningComputeManager_);
 	animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
 	animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 }

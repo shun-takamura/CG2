@@ -300,6 +300,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.h" />
@@ -417,6 +418,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningObject3DManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\CopyImage.PS.hlsl">
@@ -545,6 +547,14 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Vertex</ShaderType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Development|x64'">Compute</ShaderType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>

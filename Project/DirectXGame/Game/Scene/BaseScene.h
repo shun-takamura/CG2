@@ -9,6 +9,7 @@ class DirectXCore;
 class SRVManager;
 class InputManager;
 class SkinningObject3DManager;
+class SkinningComputeManager;
 
 /// <summary>
 /// シーンの基底クラス
@@ -51,6 +52,7 @@ public:
 	void SetSRVManager(SRVManager* srvManager) { srvManager_ = srvManager; }
 	void SetInputManager(InputManager* input) { input_ = input; }
 	void SetSkinningObject3DManager(SkinningObject3DManager* manager) { skinningObject3DManager_ = manager; }
+	void SetSkinningComputeManager(SkinningComputeManager* manager) { skinningComputeManager_ = manager; }
 protected:
 	// 各マネージャーへのポインタ（Frameworkから受け取る）
 	SpriteManager* spriteManager_ = nullptr;
@@ -60,4 +62,5 @@ protected:
 	SRVManager* srvManager_ = nullptr;
 	InputManager* input_ = nullptr;
 	SkinningObject3DManager* skinningObject3DManager_ = nullptr;
+	SkinningComputeManager* skinningComputeManager_ = nullptr;
 };

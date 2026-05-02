@@ -30,6 +30,7 @@
 #include "PrimitivePipeline.h"
 #include "LineRenderer.h"
 #include "SkinningObject3DManager.h"
+#include "SkinningComputeManager.h"
 
 void Framework::Run() {
 	// ゲームの初期化
@@ -161,6 +162,10 @@ void Framework::Initialize() {
 	skinningObject3DManager_ = std::make_unique<SkinningObject3DManager>();
 	skinningObject3DManager_->Initialize(dxCore_.get());
 
+	// ComputeShader版Skinningの共通部分の初期化
+	skinningComputeManager_ = std::make_unique<SkinningComputeManager>();
+	skinningComputeManager_->Initialize(dxCore_.get());
+
 	// Skyboxの共通部分の初期化
 	skyboxManager_ = std::make_unique<SkyboxManager>();
 	skyboxManager_->Initialize(dxCore_.get());
@@ -196,7 +201,8 @@ void Framework::Initialize() {
 		skyboxManager_.get(),
 		dxCore_.get(),
 		srvManager_.get(),
-		input_.get()
+		input_.get(),
+		skinningComputeManager_.get()
 	);
 
 	//=========================

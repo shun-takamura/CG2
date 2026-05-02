@@ -58,6 +58,9 @@ public:
 
     void DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster, SRVManager* srvManager);
 
+    // ComputeShaderでSkinning済みのVBVを使って描画（Object3DManagerのRootSignatureを使用）
+    void DrawSkinningWithCS(DirectXCore* dxCore, const SkinCluster& skinCluster);
+
     const ModelData& GetModelData() const { return modelData_; }
     const Animation& GetAnimation() const { return animation_; }
 

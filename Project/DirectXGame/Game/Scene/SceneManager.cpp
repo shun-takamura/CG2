@@ -16,7 +16,8 @@ void SceneManager::Initialize(
 	SkyboxManager* skyboxManager,
 	DirectXCore* dxCore,
 	SRVManager* srvManager,
-	InputManager* input
+	InputManager* input,
+	SkinningComputeManager* skinningComputeManager
 ) {
 	spriteManager_ = spriteManager;
 	object3DManager_ = object3DManager;
@@ -25,6 +26,7 @@ void SceneManager::Initialize(
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
 	input_ = input;
+	skinningComputeManager_ = skinningComputeManager;
 
 	// トランジションマネージャーの初期化
 	TransitionManager::GetInstance()->Initialize(spriteManager, dxCore);
@@ -142,6 +144,7 @@ void SceneManager::SetupScene(BaseScene* scene) {
 		scene->SetSpriteManager(spriteManager_);
 		scene->SetObject3DManager(object3DManager_);
 		scene->SetSkinningObject3DManager(skinningObject3DManager_);
+		scene->SetSkinningComputeManager(skinningComputeManager_);
 		scene->SetSkyboxManager(skyboxManager_);
 		scene->SetDirectXCore(dxCore_);
 		scene->SetSRVManager(srvManager_);

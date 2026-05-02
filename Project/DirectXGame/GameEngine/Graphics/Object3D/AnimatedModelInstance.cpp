@@ -82,6 +82,28 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
         UINT(modelData_.indices.size()), 1, 0, 0, 0);
 }
 
+void AnimatedModelInstance::DrawSkinningWithCS(DirectXCore* dxCore, const SkinCluster& skinCluster)
+{
+    // Skinning済みの頂点バッファをVBVとして使う（Slot 0のみ）
+    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
+    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+
+    // Object3DManagerのRootSignatureに合わせる
+    // RootParam[0] Material
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        0, materialResource_->GetGPUVirtualAddress()
+    );
+
+    // RootParam[2] Texture
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
+    );
+
+    // ドローコール
+    dxCore->GetCommandList()->DrawIndexedInstanced(
+        UINT(modelData_.indices.size()), 1, 0, 0, 0);
+}
+
 void AnimatedModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
     vertexResource_ = dxCore->CreateBufferResource(sizeof(VertexData) * modelData_.vertices.size());

@@ -22,6 +22,7 @@
 
 #include "SkyboxManager.h"
 #include "SkinningObject3DManager.h"
+#include "SkinningComputeManager.h"
 
 // 前方宣言
 class ConvertStringClass;
@@ -89,6 +90,7 @@ protected:
 	std::unique_ptr<Object3DManager> object3DManager_;
 	std::unique_ptr<SkyboxManager> skyboxManager_;
 	std::unique_ptr<SkinningObject3DManager> skinningObject3DManager_;
+	std::unique_ptr<SkinningComputeManager> skinningComputeManager_;
 
 	// 入力
 	std::unique_ptr<InputManager> input_;

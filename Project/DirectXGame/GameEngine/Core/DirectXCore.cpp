@@ -213,6 +213,35 @@ Microsoft::WRL::ComPtr<ID3D12Resource> DirectXCore::CreateBufferResource(size_t 
     return vertexResource;
 }
 
+Microsoft::WRL::ComPtr<ID3D12Resource> DirectXCore::CreateUavBufferResource(size_t sizeInBytes)
+{
+    // UAV用のResourceはGPUに近いDEFAULT heapで作成する
+    D3D12_HEAP_PROPERTIES defaultHeapProperties{};
+    defaultHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC resourceDesc{};
+    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    resourceDesc.Width = sizeInBytes;
+    resourceDesc.Height = 1;
+    resourceDesc.DepthOrArraySize = 1;
+    resourceDesc.MipLevels = 1;
+    resourceDesc.SampleDesc.Count = 1;
+    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    // UAVとして利用するため必須のフラグ
+    resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> uavResource = nullptr;
+
+    // 初期StateはCOMMONにしておく
+    HRESULT hr = device_->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+        &resourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+        IID_PPV_ARGS(&uavResource));
+
+    assert(SUCCEEDED(hr));
+
+    return uavResource;
+}
+
 IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t* profile)
 {
     //=========================

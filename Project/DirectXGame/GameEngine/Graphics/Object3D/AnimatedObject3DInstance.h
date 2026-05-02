@@ -29,6 +29,7 @@ class Object3DManager;
 class PrimitiveMesh;  // unique_ptrで持つので前方宣言でOK
 struct SkinCluster;
 class SkinningObject3DManager;
+class SkinningComputeManager;
 class SRVManager;
 
 class AnimatedObject3DInstance : public IImGuiEditable {
@@ -43,7 +44,11 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     Camera* camera_ = nullptr;
 
     SkinningObject3DManager* skinningObject3DManager_ = nullptr;
+    SkinningComputeManager* skinningComputeManager_ = nullptr;
     SRVManager* srvManager_ = nullptr;  // Drawで使うので保持
+
+    // ComputeShader版のSkinningを使うかどうか（trueでCS、falseで従来のVS版）
+    bool useComputeSkinning_ = true;
 
     // バッファリソース
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
@@ -150,7 +155,17 @@ public:
         AnimatedModelInstance* animatedModel,
         const std::string& name = "");
 
+    // SkinningComputeManagerを後付けで設定（未設定ならVS版で動く）
+    void SetSkinningComputeManager(SkinningComputeManager* manager) { skinningComputeManager_ = manager; }
+
+    // ComputeShader版を使うかどうか
+    void SetUseComputeSkinning(bool use) { useComputeSkinning_ = use; }
+    bool GetUseComputeSkinning() const { return useComputeSkinning_; }
+
     void Update(float deltaTime);  // 引数にdeltaTimeを追加（可変フレーム対応）
+
+    // ComputeShader版でSkinning計算をDispatchする（Drawの前に呼ぶ）
+    void DispatchSkinning(DirectXCore* dxCore);
 
     void Draw(DirectXCore* dxCore);
 
