@@ -14,6 +14,7 @@
 #include "Camera.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
+#include "GPUParticleManager.h"
 #include "SoundManager.h"
 #include "ControllerInput.h"
 #include "MouseInput.h"
@@ -72,6 +73,10 @@ void DemoScene::Initialize() {
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+
+	// GPU Particle 初期化
+	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
+	gpuParticleManager_->Initialize(dxCore_, srvManager_, "DistributionAssets/Textures/circle2.png");
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -229,6 +234,11 @@ void DemoScene::Initialize() {
 }
 
 void DemoScene::Finalize() {
+
+	if (gpuParticleManager_) {
+		gpuParticleManager_->Finalize();
+		gpuParticleManager_.reset();
+	}
 
 	animatedCubeInstance_.reset();
 	animatedCubeModel_.reset();
@@ -511,6 +521,11 @@ void DemoScene::Update() {
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update();
 
+	// GPU Particle 更新（PerView書き込み）
+	if (gpuParticleManager_) {
+		gpuParticleManager_->Update(camera_.get());
+	}
+
 	//// 1秒間に発生させる量を自動制御
 	//emitTimer_ += dxCore_->GetDeltaTime();
 	//float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
@@ -597,6 +612,11 @@ void DemoScene::Draw() {
 
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
+
+	// GPU Particle 描画
+	if (gpuParticleManager_) {
+		gpuParticleManager_->Draw();
+	}
 
 #ifdef USE_IMGUI
 	// Skeletonのデバッグ描画（全モデル描画完了後にまとめて行う）
