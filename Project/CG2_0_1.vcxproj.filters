@@ -662,6 +662,8 @@
     <FxCompile Include="Resources\Shaders\Skinning.CS.hlsl" />
     <FxCompile Include="Resources\Shaders\InitializeParticle.CS.hlsl" />
     <FxCompile Include="Resources\Shaders\GPUParticle.VS.hlsl" />
+    <FxCompile Include="Resources\Shaders\EmitParticle.CS.hlsl" />
+    <FxCompile Include="Resources\Shaders\UpdateParticle.CS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\ImGUI\LICENSE.txt">
@@ -671,6 +673,7 @@
   <ItemGroup>
     <None Include="Resources\Shaders\Object3d.hlsli" />
     <None Include="Resources\Shaders\Particle.hlsli" />
+    <None Include="Resources\Shaders\Random.hlsli" />
     <None Include="Resources\Shaders\CopyImage.hlsli" />
     <None Include="Resources\Shaders\PostProcess.hlsli" />
     <None Include="Resources\Shaders\Skybox.hlsli" />
