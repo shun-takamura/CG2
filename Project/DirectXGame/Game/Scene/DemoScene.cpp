@@ -105,31 +105,31 @@ void DemoScene::Initialize() {
 		sprites_.push_back(std::move(newSprite));
 	}
 
-	//// 3Dオブジェクトを配列で管理
-	//const std::string modelFiles[] = { 
-	//	"Models/MonsterBall/monsterBall.obj", 
-	//	"Models/Terrain/terrain.obj", 
-	//	"Models/Plane/plane.gltf"
-	//};
+	// 3Dオブジェクトを配列で管理
+	const std::string modelFiles[] = { 
+		"Models/MonsterBall/monsterBall.obj", 
+		"Models/Terrain/terrain.obj", 
+		"Models/Plane/plane.gltf"
+	};
 
-	//const std::string objectNames[] = { 
-	//	"MonsterBall", 
-	//	"terrain", 
-	//	"plane"
-	//};
+	const std::string objectNames[] = { 
+		"MonsterBall", 
+		"terrain", 
+		"plane"
+	};
 
-	//for (int i = 0; i < 3; ++i) {
-	//	auto obj = std::make_unique<Object3DInstance>();
-	//	obj->Initialize(
-	//		object3DManager_,
-	//		dxCore_,
-	//		"DistributionAssets/",
-	//		modelFiles[i],
-	//		objectNames[i]
-	//	);
-	//	obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
-	//	object3DInstances_.push_back(std::move(obj));
-	//}
+	for (int i = 0; i < 3; ++i) {
+		auto obj = std::make_unique<Object3DInstance>();
+		obj->Initialize(
+			object3DManager_,
+			dxCore_,
+			"DistributionAssets/",
+			modelFiles[i],
+			objectNames[i]
+		);
+		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
+		object3DInstances_.push_back(std::move(obj));
+	}
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
@@ -170,7 +170,7 @@ void DemoScene::Initialize() {
 	testCylinder_->SetTexture("DistributionAssets/Textures/gradationLine.png");
 	testCylinder_->SetBlendMode(PrimitivePipeline::kBlendModeNone);
 	testCylinder_->GetTransform().translate = { 0.0f, 2.0f, 0.0f };
-	testCylinder_->SetDepthWrite(true);
+	//testCylinder_->SetDepthWrite(true);
 	testCylinder_->SetUVFlipV(true);
 	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
 	testCylinder_->SetAlphaReference(0.5f);
@@ -563,6 +563,8 @@ void DemoScene::Draw() {
 	// 必ず最初に背景から描画していくこと
 	auto commandList = dxCore_->GetCommandList();
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+
+	// Skybox描画は深度を書き込まないのでRead-Only DSVで問題なし
 	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
 
@@ -574,6 +576,10 @@ void DemoScene::Draw() {
 		OutputDebugStringA("Updating camera texture...\n");
 		CameraCapture::GetInstance()->UpdateTexture();
 	}
+
+	// Object3D以降は通常DSVに切り替え（深度書き込みを有効化）
+	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 
 	// 3Dオブジェクトの共通描画設定
 	object3DManager_->DrawSetting();
@@ -593,9 +599,6 @@ void DemoScene::Draw() {
 	if (animatedCubeInstance_) {
 		animatedCubeInstance_->Draw(dxCore_);
 	}
-
-	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
-	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 
 	if (testCylinder_) {
 		testCylinder_->Draw();

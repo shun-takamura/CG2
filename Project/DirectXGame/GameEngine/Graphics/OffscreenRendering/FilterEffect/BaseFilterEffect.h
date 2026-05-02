@@ -3,6 +3,7 @@
 #include <d3d12.h>
 #include <string>
 #include <cstdint>
+#include "Matrix4x4.h"
 
 // 前方宣言
 class DirectXCore;
@@ -56,6 +57,17 @@ public:
 	/// 定数バッファを使うかどうか
 	/// </summary>
 	virtual bool NeedsCBuffer() const = 0;
+
+	/// <summary>
+	/// 深度テクスチャを参照するかどうか（Outline等でtrueにする）
+	/// </summary>
+	virtual bool NeedsDepth() const { return false; }
+
+	/// <summary>
+	/// 射影行列を受け取る（NeedsDepth() == true のエフェクトのみ実装）
+	/// PostEffect::Draw()前に毎フレーム呼ばれる
+	/// </summary>
+	virtual void SetProjectionMatrix(const Matrix4x4& /*projection*/) {}
 
 	// ===== 共通関数（オーバーライドしない） =====
 

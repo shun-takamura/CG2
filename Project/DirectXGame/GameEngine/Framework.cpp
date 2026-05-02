@@ -75,6 +75,9 @@ void Framework::Initialize() {
 	srvManager_ = std::make_unique<SRVManager>();
 	srvManager_->Initialize(dxCore_.get());
 
+	// SRV化したdepthをポストエフェクトから読めるように登録
+	dxCore_->RegisterDepthSRV(srvManager_.get());
+
 	ImGuiManager::Instance().Initialize(
 		winApp_->GetHwnd(),
 		dxCore_.get(),

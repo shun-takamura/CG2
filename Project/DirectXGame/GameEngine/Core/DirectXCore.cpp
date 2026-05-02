@@ -1,4 +1,5 @@
 #include "DirectXCore.h"
+#include "SRVManager.h"
 #include <cassert>
 #include <dxgidebug.h>
 #include <iostream>
@@ -470,14 +471,14 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
     HRESULT hr = device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_));
     assert(SUCCEEDED(hr));
 
-    // 深度バッファ
+    // 深度バッファ（SRV対応のためTYPELESSで作成）
     D3D12_RESOURCE_DESC desc{};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = width;
     desc.Height = height;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
-    desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;//DXGI_FORMAT_D32_FLOAT
+    desc.Format = DXGI_FORMAT_R24G8_TYPELESS; // DSVもSRVも作れるようにTYPELESS
     desc.SampleDesc.Count = 1;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
@@ -515,6 +516,43 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
    /* device_->CreateDepthStencilView(depthStencilBuffer_.Get(), nullptr,
         dsvHeap_->GetCPUDescriptorHandleForHeapStart());*/
 
+    // 初期状態
+    depthState_ = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+}
+
+void DirectXCore::RegisterDepthSRV(SRVManager* srvManager)
+{
+    assert(srvManager);
+    depthSrvIndex_ = srvManager->Allocate();
+
+    // depthをR24_UNORM_X8_TYPELESSとしてSRV化（深度値のみ読み出す）
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    device_->CreateShaderResourceView(
+        depthStencilBuffer_.Get(),
+        &srvDesc,
+        srvManager->GetCPUDescriptorHandle(depthSrvIndex_)
+    );
+}
+
+void DirectXCore::TransitionDepthState(ID3D12GraphicsCommandList* commandList, D3D12_RESOURCE_STATES afterState)
+{
+    if (depthState_ == afterState) return;
+
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = depthStencilBuffer_.Get();
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = depthState_;
+    barrier.Transition.StateAfter = afterState;
+    commandList->ResourceBarrier(1, &barrier);
+
+    depthState_ = afterState;
 }
 
 void DirectXCore::CreateFenceObjects() {

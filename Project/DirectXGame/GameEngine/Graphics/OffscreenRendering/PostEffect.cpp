@@ -131,6 +131,76 @@ void PostEffect::CreateRootSignatures()
 			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&effectRootSignature_));
 		assert(SUCCEEDED(hr));
 	}
+
+	// ----- outlineRootSignature（color t0 + depth t1 + cbuffer b0 + linear/point sampler） -----
+	{
+		// color t0
+		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
+		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].NumDescriptors = 1;
+		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		// depth t1
+		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
+		depthRange[0].BaseShaderRegister = 1;
+		depthRange[0].NumDescriptors = 1;
+		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER rootParameters[3] = {};
+		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+
+		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[1].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+
+		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[2].Descriptor.ShaderRegister = 0;
+		rootParameters[2].Descriptor.RegisterSpace = 0;
+
+		// linear(s0) と point(s1) を用意（Depthの補間防止用）
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
+		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
+		staticSamplers[0].ShaderRegister = 0;
+		staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		staticSamplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		staticSamplers[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
+		staticSamplers[1].ShaderRegister = 1;
+		staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		D3D12_ROOT_SIGNATURE_DESC desc{};
+		desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+		desc.pParameters = rootParameters;
+		desc.NumParameters = _countof(rootParameters);
+		desc.pStaticSamplers = staticSamplers;
+		desc.NumStaticSamplers = _countof(staticSamplers);
+
+		Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob, errorBlob;
+		hr = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
+		if (FAILED(hr)) {
+			if (errorBlob) OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+			assert(false);
+		}
+		hr = dxCore_->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(),
+			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&outlineRootSignature_));
+		assert(SUCCEEDED(hr));
+	}
 }
 
 // ===================================================================
@@ -214,6 +284,22 @@ void PostEffect::InitializeEffects()
 	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
 	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
 	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
+
+	// ----- Outline系エフェクトの登録（outline用RootSignatureで初期化） -----
+	{
+		auto depthEffect = std::make_unique<OutlineDepthEffect>();
+		depthEffect->InitializeOutline(dxCore_, outlineRootSignature_.Get(), basePsoDesc_);
+		outlineDepth = depthEffect.get();
+		effectOrder_.push_back(outlineDepth);
+		effectOwners_.push_back(std::move(depthEffect));
+	}
+	{
+		auto normalEffect = std::make_unique<OutlineNormalEffect>();
+		normalEffect->InitializeOutline(dxCore_, outlineRootSignature_.Get(), basePsoDesc_);
+		outlineNormal = normalEffect.get();
+		effectOrder_.push_back(outlineNormal);
+		effectOwners_.push_back(std::move(normalEffect));
+	}
 }
 
 // ===================================================================
@@ -238,49 +324,61 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 {
 	// ONになっているエフェクトを集める
 	std::vector<BaseFilterEffect*> activeEffects;
+	bool needsDepth = false;
 	for (auto* effect : effectOrder_) {
 		if (effect->IsEnabled()) {
 			activeEffects.push_back(effect);
+			if (effect->NeedsDepth()) {
+				needsDepth = true;
+			}
 		}
+	}
+
+	// depth参照系がONなら、depthをShaderResource状態に遷移する
+	if (needsDepth) {
+		dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	}
 
 	// 全エフェクトOFF → コピーだけ
 	if (activeEffects.empty()) {
 		DrawCopy(commandList, renderTextureA_.get());
-		return;
 	}
-
 	// 1つだけ → 直接Swapchainに描画
-	if (activeEffects.size() == 1) {
+	else if (activeEffects.size() == 1) {
 		DrawEffect(commandList, activeEffects[0], renderTextureA_.get());
-		return;
+	}
+	else {
+		// 複数エフェクトのピンポン描画
+		RenderTexture* currentInput = renderTextureA_.get();
+		RenderTexture* currentOutput = renderTextureB_.get();
+
+		for (size_t i = 0; i < activeEffects.size(); ++i) {
+			bool isLast = (i == activeEffects.size() - 1);
+
+			if (isLast) {
+				// 最後のパス: SwapchainのRTVに戻して描画
+				dxCore_->RestoreSwapchainRenderTarget(commandList);
+				srvManager_->PreDraw();
+				DrawEffect(commandList, activeEffects[i], currentInput);
+			}
+			else {
+				// 中間パス: currentOutputに描画
+				currentOutput->BeginRender(commandList);
+				srvManager_->PreDraw();
+				DrawEffect(commandList, activeEffects[i], currentInput);
+				currentOutput->EndRender(commandList);
+
+				// 入力と出力を入れ替え
+				RenderTexture* temp = currentInput;
+				currentInput = currentOutput;
+				currentOutput = temp;
+			}
+		}
 	}
 
-	// 複数エフェクトのピンポン描画
-	RenderTexture* currentInput = renderTextureA_.get();
-	RenderTexture* currentOutput = renderTextureB_.get();
-
-	for (size_t i = 0; i < activeEffects.size(); ++i) {
-		bool isLast = (i == activeEffects.size() - 1);
-
-		if (isLast) {
-			// 最後のパス: SwapchainのRTVに戻して描画
-			dxCore_->RestoreSwapchainRenderTarget(commandList);
-			srvManager_->PreDraw();
-			DrawEffect(commandList, activeEffects[i], currentInput);
-		}
-		else {
-			// 中間パス: currentOutputに描画
-			currentOutput->BeginRender(commandList);
-			srvManager_->PreDraw();
-			DrawEffect(commandList, activeEffects[i], currentInput);
-			currentOutput->EndRender(commandList);
-
-			// 入力と出力を入れ替え
-			RenderTexture* temp = currentInput;
-			currentInput = currentOutput;
-			currentOutput = temp;
-		}
+	// depthを次フレームのために書き込み可能状態に戻す
+	if (needsDepth) {
+		dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	}
 }
 
@@ -290,18 +388,27 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 
 void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEffect* effect, RenderTexture* input)
 {
-	ID3D12RootSignature* rootSig = effect->NeedsCBuffer() ? effectRootSignature_.Get() : copyRootSignature_.Get();
-
 	if (effect->NeedsCBuffer()) {
 		effect->UpdateConstantBuffer();
 	}
 
-	commandList->SetGraphicsRootSignature(rootSig);
-	commandList->SetPipelineState(effect->GetPipelineState());
-	srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+	if (effect->NeedsDepth()) {
+		// Outline系: color t0, depth t1, cbuffer b0
+		commandList->SetGraphicsRootSignature(outlineRootSignature_.Get());
+		commandList->SetPipelineState(effect->GetPipelineState());
+		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(1, dxCore_->GetDepthSRVIndex());
+		commandList->SetGraphicsRootConstantBufferView(2, effect->GetConstantBufferGPUAddress());
+	}
+	else {
+		ID3D12RootSignature* rootSig = effect->NeedsCBuffer() ? effectRootSignature_.Get() : copyRootSignature_.Get();
+		commandList->SetGraphicsRootSignature(rootSig);
+		commandList->SetPipelineState(effect->GetPipelineState());
+		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
 
-	if (effect->NeedsCBuffer()) {
-		commandList->SetGraphicsRootConstantBufferView(1, effect->GetConstantBufferGPUAddress());
+		if (effect->NeedsCBuffer()) {
+			commandList->SetGraphicsRootConstantBufferView(1, effect->GetConstantBufferGPUAddress());
+		}
 	}
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -363,6 +470,19 @@ void PostEffect::ResetEffects()
 	for (auto* effect : effectOrder_) {
 		effect->SetEnabled(false);
 		effect->ResetParams();
+	}
+}
+
+// ===================================================================
+// 射影行列を全Outline系エフェクトに伝播
+// ===================================================================
+
+void PostEffect::SetProjectionMatrix(const Matrix4x4& projection)
+{
+	for (auto& effect : effectOwners_) {
+		if (effect->NeedsDepth()) {
+			effect->SetProjectionMatrix(projection);
+		}
 	}
 }
 
@@ -457,6 +577,7 @@ void PostEffect::Finalize()
 
 	copyRootSignature_.Reset();
 	effectRootSignature_.Reset();
+	outlineRootSignature_.Reset();
 	copyPipelineState_.Reset();
 
 	if (renderTextureA_) renderTextureA_->Finalize();

@@ -19,6 +19,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
+#include "Camera.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -99,6 +100,11 @@ void Game::Draw() {
 	dxCore_->BeginDraw();
 
 	srvManager_->PreDraw();  // ディスクリプタヒープを再設定
+
+	// Outline系エフェクトに最新の射影行列を渡す
+	if (Camera* cam = object3DManager_->GetDefaultCamera()) {
+		postEffect_->SetProjectionMatrix(cam->GetProjectionMatrix());
+	}
 
 	// 3. マルチパスでエフェクト適用 → Swapchainに出力
 	postEffect_->Draw(dxCore_->GetCommandList());

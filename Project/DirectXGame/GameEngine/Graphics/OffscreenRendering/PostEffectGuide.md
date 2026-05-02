@@ -63,7 +63,18 @@ Game::GetPostEffect()->sepia->SetSepiaColor(1.0f, 0.691f, 0.402f);
 
 // スムージング
 Game::GetPostEffect()->smoothing->SetKernelSize(5);
+
+// アウトライン（Depthベース、資料準拠）
+Game::GetPostEffect()->outlineDepth->SetEdgeStrength(6.0f);
+
+// アウトライン（Depth + Normal-from-depth 併用）
+Game::GetPostEffect()->outlineNormal->SetDepthWeight(6.0f);
+Game::GetPostEffect()->outlineNormal->SetNormalWeight(1.0f);
 ```
+
+> **Note:** Outline系のエフェクトはdepthバッファを参照するため、`Game::Draw()`で毎フレーム
+> `postEffect_->SetProjectionMatrix(camera->GetProjectionMatrix())` を呼んでいる前提です。
+> 別シーンで独自カメラを使う場合は同様の呼び出しが必要です。
 
 ### 適用順序の変更
 
@@ -101,6 +112,8 @@ Game::GetPostEffect()->ApplyDamageEffect(0.5f);
 | Sepia | SepiaEffect | セピア調 | `intensity`(float), `sepiaColorR/G/B`(float) |
 | Vignette | VignetteEffect | 周辺減光 | `intensity`(float), `power`(float), `scale`(float) |
 | Smoothing | SmoothingEffect | ぼかし（BoxFilter） | `kernelSize`(int) |
+| OutlineDepth | OutlineDepthEffect | Depthベースのアウトライン（資料準拠） | `edgeStrength`(float) |
+| OutlineNormal | OutlineNormalEffect | Depth + 深度から再構築した法線によるアウトライン | `depthWeight` `normalWeight` `depthThreshold` `normalThreshold`(float) |
 
 ---
 
