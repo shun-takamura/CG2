@@ -102,6 +102,15 @@ public:
 	IDXGISwapChain4* GetSwapChain() const { return swapChain_.Get(); }
 	ID3D12DescriptorHeap* GetDsvHeap() const { return dsvHeap_.Get(); }
 
+	// Depthをシェーダで読むためのSRV登録（SRVManager初期化後に呼ぶ）
+	void RegisterDepthSRV(class SRVManager* srvManager);
+
+	// Depth SRVのインデックス
+	uint32_t GetDepthSRVIndex() const { return depthSrvIndex_; }
+
+	// Depthリソースの状態を遷移する
+	void TransitionDepthState(ID3D12GraphicsCommandList* commandList, D3D12_RESOURCE_STATES afterState);
+
 	// デルタタイムの取得
 	float GetDeltaTime() const { return deltaTime_; }
 
@@ -152,6 +161,10 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers_[2];
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer_;
+	// Depth SRVのインデックス（SRVManagerに登録）
+	uint32_t depthSrvIndex_ = 0;
+	// Depthリソースの現在の状態
+	D3D12_RESOURCE_STATES depthState_ = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 	Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
 
 	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_ = nullptr;

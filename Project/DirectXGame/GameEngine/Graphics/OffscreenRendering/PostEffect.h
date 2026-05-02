@@ -14,6 +14,9 @@
 #include "SepiaEffect.h"
 #include "VignetteEffect.h"
 #include "SmoothingEffect.h"
+#include "OutlineDepthEffect.h"
+#include "OutlineNormalEffect.h"
+#include "Matrix4x4.h"
 
 // 前方宣言
 class DirectXCore;
@@ -74,6 +77,12 @@ public:
 	/// </summary>
 	void ApplyDamageEffect(float damageRatio);
 
+	/// <summary>
+	/// カメラの射影行列を渡す（Outline系エフェクトで使用）
+	/// 毎フレームDraw前に呼ぶ
+	/// </summary>
+	void SetProjectionMatrix(const Matrix4x4& projection);
+
 	// ===== エフェクトへの直接アクセス =====
 
 	GrayscaleEffect* grayscale = nullptr;
@@ -81,6 +90,8 @@ public:
 	SepiaEffect* sepia = nullptr;
 	VignetteEffect* vignette = nullptr;
 	SmoothingEffect* smoothing = nullptr;
+	OutlineDepthEffect* outlineDepth = nullptr;
+	OutlineNormalEffect* outlineNormal = nullptr;
 
 private:
 	void CreateRootSignatures();
@@ -99,9 +110,11 @@ private:
 	std::unique_ptr<RenderTexture> renderTextureA_;
 	std::unique_ptr<RenderTexture> renderTextureB_;
 
-	// ルートシグネチャ（2種類）
+	// ルートシグネチャ（3種類）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;
+	// outlineRootSignature: color SRV(t0) + depth SRV(t1) + cbuffer(b0) + linear(s0) + point(s1)
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> outlineRootSignature_;
 
 	// コピー用パイプライン
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;
