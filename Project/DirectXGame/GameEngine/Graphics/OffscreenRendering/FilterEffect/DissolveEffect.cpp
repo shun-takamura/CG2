@@ -79,11 +79,11 @@ void DissolveEffect::ShowImGui()
 	ImGui::Separator();
 	ImGui::TextDisabled("Mask: %s", maskTexturePath_.c_str());
 	if (ImGui::Button("noise0##Dissolve")) {
-		SetMaskTexture("DistributionAssets/Textures/MaskTexture/noise0.png");
+		SetMaskTexture("Resources/Textures/MaskTexture/noise0.png");
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("noise1##Dissolve")) {
-		SetMaskTexture("DistributionAssets/Textures/MaskTexture/noise1.png");
+		SetMaskTexture("Resources/Textures/MaskTexture/noise1.png");
 	}
 #endif
 }

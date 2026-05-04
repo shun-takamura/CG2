@@ -13,7 +13,7 @@ void ClearScene::Initialize()
 	Game::GetPostEffect()->ResetEffects();
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/CLEAR.png");
+	sprite_->Initialize(spriteManager_, "Resources/Textures/CLEAR.png");
 	sprite_->SetSize({ 1280.0f,720.0f });
 }
 

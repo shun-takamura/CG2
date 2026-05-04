@@ -19,10 +19,15 @@ void Bullet::Initialize(
 ) {
 	model_ = std::make_unique<Object3DInstance>();
 	std::string name = "Bullet_" + std::to_string(sBulletCount++);
+	// 弾モデルの所在に応じてディレクトリを切り替え（enemy* はEnemy/Bullet、それ以外はPlayer/Bullet）
+	const std::string directory =
+		(bulletModelName.rfind("enemy", 0) == 0)
+			? "Resources/Models/Enemy/Bullet"
+			: "Resources/Models/Player/Bullet";
 	model_->Initialize(
 		object3DManager,
 		dxCore,
-		"Resources",
+		directory,
 		bulletModelName,
 		name
 	);

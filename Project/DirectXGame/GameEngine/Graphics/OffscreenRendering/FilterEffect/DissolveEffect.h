@@ -72,6 +72,6 @@ private:
 	float fillColor_[3] = { 0.0f, 0.0f, 0.0f };
 	float fillIntensity_ = 1.0f;
 
-	std::string maskTexturePath_ = "DistributionAssets/Textures/MaskTexture/noise0.png";
+	std::string maskTexturePath_ = "Resources/Textures/MaskTexture/noise0.png";
 	uint32_t maskSrvIndex_ = 0;
 };

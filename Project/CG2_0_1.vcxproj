@@ -129,7 +129,9 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     </Link>
     <PostBuildEvent>
       <Command>copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" "$(TargetDir)dxcompiler.dll"
-copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dxil.dll"</Command>
+copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dxil.dll"
+cd /d "$(ProjectDir)"
+python tools\Python\package_release.py</Command>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"

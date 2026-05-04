@@ -27,7 +27,7 @@ void Enemy::Initialize(
 	model_->Initialize(
 		object3DManager_,
 		dxCore_,
-		"Resources",
+		"Resources/Models/Enemy",
 		modelName,
 		"Enemy"
 	);
