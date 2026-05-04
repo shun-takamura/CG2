@@ -44,7 +44,11 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
+#ifdef _DEBUG
 	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
+#else
+	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+#endif
 
 	// PostEffect初期化（RenderTextureも内部で作成される）
 	postEffect_ = std::make_unique<PostEffect>();

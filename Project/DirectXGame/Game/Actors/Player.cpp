@@ -30,7 +30,7 @@ void Player::Initialize(
 	model_->Initialize(
 		object3DManager_,
 		dxCore_,
-		"Resources",
+		"Resources/Models/Player",
 		modelName,
 		"Player"
 	);
