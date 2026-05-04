@@ -42,22 +42,38 @@ EXCLUDE_SUFFIXES = {
     ".zip",
 }
 
-
+# Release直下のファイルを走査し必要なファイルを返す
 def collect_release_files(release_dir: Path) -> list[Path]:
     files: list[Path] = []
+
+    #フォルダ直下の中だけ走査
     for f in release_dir.iterdir():
+
+        #ファイルでなければ早期リターン
         if not f.is_file():
             continue
+        
+        #大文字でも小文字でも扱えるようにする
         suffix = f.suffix.lower()
+
+        #取り込まない拡張子のものだった場合早期リターン
         if suffix in EXCLUDE_SUFFIXES:
             continue
+        
+        #取り込まない拡張子に設定していなくても取り込むところに設定していなければ早期リターン
         if suffix not in INCLUDE_SUFFIXES:
             continue
+
+        #ファイルを追加
         files.append(f)
+
+    #まとめたものを返す
     return files
 
-
+# Release配下を再帰的にすべて拾う
 def collect_resources_files(resources_dir: Path) -> list[Path]:
+
+    #なければ早期リターン
     if not resources_dir.exists():
         return []
     return [f for f in resources_dir.rglob("*") if f.is_file()]
