@@ -56,13 +56,23 @@ public:
 	float GetThreshold() const { return threshold_; }
 
 private:
+	// マスク取得元の種類
+	enum class MaskMode : int
+	{
+		Texture = 0,  // テクスチャから取得
+		GPUNoise = 1, // Shaderで擬似乱数を生成
+	};
+
 	struct DissolveParamsCB
 	{
 		float threshold;     // 4
 		float edgeWidth;     // 4
-		float _pad[2];       // 8 → 16バイト
+		float useNoise;      // 4 (Shader側はfloatで判定)
+		float noiseScale;    // 4 → 16バイト
 		float edgeColor[4];  // 16バイト（rgb + intensity）
 		float fillColor[4];  // 16バイト（rgb + intensity）
+		float noiseTime;     // 4
+		float _pad[3];       // 12 → 16バイト
 	};
 
 	float threshold_ = 0.0f;
@@ -72,6 +82,12 @@ private:
 	float fillColor_[3] = { 0.0f, 0.0f, 0.0f };
 	float fillIntensity_ = 1.0f;
 
+	MaskMode maskMode_ = MaskMode::Texture;
+	float noiseScale_ = 16.0f;
+	float noiseTime_ = 0.0f;
+
 	std::string maskTexturePath_ = "Resources/Textures/MaskTexture/noise0.png";
 	uint32_t maskSrvIndex_ = 0;
+
+	DirectXCore* dxCore_ = nullptr;
 };
