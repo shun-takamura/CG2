@@ -14,6 +14,8 @@ void DissolveEffect::InitializeMasked(
 	const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 )
 {
+	dxCore_ = dxCore;
+
 	IDxcBlob* psBlob = dxCore->CompileShader(
 		L"Resources/Shaders/PostEffect/Filters/Dissolve.PS.hlsl",
 		L"ps_6_0"
@@ -44,9 +46,16 @@ void DissolveEffect::UpdateConstantBuffer()
 {
 	if (!constantBufferMappedPtr_) return;
 
+	// GPUノイズモードのときだけSeedを変化させるための経過時間を進める
+	if (maskMode_ == MaskMode::GPUNoise && dxCore_) {
+		noiseTime_ += dxCore_->GetDeltaTime();
+	}
+
 	DissolveParamsCB cb{};
 	cb.threshold = threshold_;
 	cb.edgeWidth = edgeWidth_;
+	cb.useNoise = (maskMode_ == MaskMode::GPUNoise) ? 1.0f : 0.0f;
+	cb.noiseScale = noiseScale_;
 	cb.edgeColor[0] = edgeColor_[0];
 	cb.edgeColor[1] = edgeColor_[1];
 	cb.edgeColor[2] = edgeColor_[2];
@@ -55,6 +64,7 @@ void DissolveEffect::UpdateConstantBuffer()
 	cb.fillColor[1] = fillColor_[1];
 	cb.fillColor[2] = fillColor_[2];
 	cb.fillColor[3] = fillIntensity_;
+	cb.noiseTime = noiseTime_;
 	memcpy(constantBufferMappedPtr_, &cb, sizeof(cb));
 }
 
@@ -77,13 +87,30 @@ void DissolveEffect::ShowImGui()
 	}
 
 	ImGui::Separator();
-	ImGui::TextDisabled("Mask: %s", maskTexturePath_.c_str());
-	if (ImGui::Button("noise0##Dissolve")) {
-		SetMaskTexture("Resources/Textures/MaskTexture/noise0.png");
-	}
+	int mode = static_cast<int>(maskMode_);
+	ImGui::Text("Mask Source");
+	ImGui::RadioButton("Texture##DissolveMaskMode", &mode, static_cast<int>(MaskMode::Texture));
 	ImGui::SameLine();
-	if (ImGui::Button("noise1##Dissolve")) {
-		SetMaskTexture("Resources/Textures/MaskTexture/noise1.png");
+	ImGui::RadioButton("GPU Noise##DissolveMaskMode", &mode, static_cast<int>(MaskMode::GPUNoise));
+	maskMode_ = static_cast<MaskMode>(mode);
+
+	if (maskMode_ == MaskMode::Texture) {
+		ImGui::TextDisabled("Mask: %s", maskTexturePath_.c_str());
+		if (ImGui::Button("noise0##Dissolve")) {
+			SetMaskTexture("Resources/Textures/MaskTexture/noise0.png");
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("noise1##Dissolve")) {
+			SetMaskTexture("Resources/Textures/MaskTexture/noise1.png");
+		}
+	}
+	else {
+		ImGui::SliderFloat("Noise Scale##Dissolve", &noiseScale_, 1.0f, 256.0f, "%.1f");
+		ImGui::TextDisabled("Time: %.2f", noiseTime_);
+		ImGui::SameLine();
+		if (ImGui::Button("Reset Time##Dissolve")) {
+			noiseTime_ = 0.0f;
+		}
 	}
 #endif
 }
@@ -100,6 +127,9 @@ void DissolveEffect::ResetParams()
 	fillColor_[1] = 0.0f;
 	fillColor_[2] = 0.0f;
 	fillIntensity_ = 1.0f;
+	maskMode_ = MaskMode::Texture;
+	noiseScale_ = 16.0f;
+	noiseTime_ = 0.0f;
 }
 
 void DissolveEffect::SetThreshold(float v)

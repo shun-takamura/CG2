@@ -3,7 +3,9 @@
     "allow": [
       "Bash(where MSBuild.exe)",
       "Read(//c/Program Files/Microsoft Visual Studio/2022/**)",
-      "Bash(\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2\\\\Project\\\\CG2_0_1.sln\" /p:Configuration=Debug /p:Platform=x64 /v:minimal /m)"
+      "Bash(\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2\\\\Project\\\\CG2_0_1.sln\" /p:Configuration=Debug /p:Platform=x64 /v:minimal /m)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"Project\\\\CG2_0_1.sln\" /m /nologo /verbosity:minimal /p:Configuration=Development /p:Platform=x64 /t:Build 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"Project\\\\CG2_0_1.sln\" /m /nologo /verbosity:minimal /p:Configuration=Debug /p:Platform=x64 /t:Build 2>&1)"
     ]
   }
 }
