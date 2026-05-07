@@ -6,6 +6,7 @@
 #include "HierarchyWindow.h"
 #include "InspectorWindow.h"
 #include "ViewportWindow.h"
+#include "SceneEditorWindow.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "RenderTexture.h"
@@ -99,6 +100,9 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         []() { CameraCapture::GetInstance()->LogDevicesToImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("QR Code",
         []() { QRCodeReader::GetInstance()->OnImGui(); }));
+
+    // シーンエディタ（モデル一覧の非同期スキャン + 動的オブジェクト追加・削除）
+    windows_.push_back(std::make_unique<SceneEditorWindow>(this));
 
     // ViewportWindowをメンバに保存（後で参照するため）
     viewportWindow_ = dynamic_cast<ViewportWindow*>(windows_[0].get());

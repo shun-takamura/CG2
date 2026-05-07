@@ -62,6 +62,9 @@ void SceneManager::Update() {
 	// 現在のシーンを更新
 	if (currentScene_) {
 		currentScene_->Update();
+
+		// 非同期ロードキューの GPU フェーズを進める（毎フレーム1件）
+		currentScene_->ProcessAsyncLoads();
 	}
 }
 

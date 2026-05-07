@@ -46,6 +46,12 @@ struct ModelData
 class ModelInstance
 {
 	//==============================
+	// ロード状態
+	//==============================
+	enum class LoadState { Unloaded, CPUReady, GPUReady };
+	LoadState loadState_ = LoadState::Unloaded;
+
+	//==============================
 	// メンバ変数
 	//==============================
 	std::string textureFilePath_;  // テクスチャファイルパスを保持
@@ -69,7 +75,14 @@ class ModelInstance
 	// メンバ関数
 	//==============================
 public:
+	// 既存の同期ロード（CPU + GPU両方）
 	void Initialize(ModelCore* modelManager, const std::string& directorPath, const std::string& filename);
+
+	// CPU フェーズのみ（Assimp パース）スレッド安全
+	void LoadCPU(const std::string& directoryPath, const std::string& filename);
+
+	// GPU フェーズのみ（リソース作成）メインスレッドのみ
+	void InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore);
 
 	void Draw(DirectXCore* dxCore);
 
@@ -77,6 +90,10 @@ public:
 
 	// ImGui/PSO切り替えから Material にアクセスするためのGetter
 	Material* GetMaterialPointer() const { return material_; }
+
+	// ロード状態の確認
+	bool IsCPUReady() const { return loadState_ >= LoadState::CPUReady; }
+	bool IsGPUReady() const { return loadState_ == LoadState::GPUReady; }
 
 private:
 

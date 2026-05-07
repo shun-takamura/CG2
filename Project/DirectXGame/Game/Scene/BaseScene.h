@@ -1,5 +1,7 @@
 #pragma once
 #include <memory>
+#include <string>
+#include <vector>
 
 // 前方宣言
 class SpriteManager;
@@ -10,6 +12,7 @@ class SRVManager;
 class InputManager;
 class SkinningComputeManager;
 class Camera;
+class IImGuiEditable;
 
 /// <summary>
 /// シーンの基底クラス
@@ -47,6 +50,48 @@ public:
 	/// </summary>
 	virtual Camera* GetCamera() { return nullptr; }
 
+	/// <summary>
+	/// シーンに動的にオブジェクトを追加（SceneEditorWindow から呼ばれる）
+	/// デフォルトは no-op。受け付けるシーンが override する
+	/// </summary>
+	virtual void AddDynamicObject(const std::string& dirPath, const std::string& filename);
+
+	/// <summary>
+	/// シーンから動的オブジェクトを削除
+	/// </summary>
+	virtual void RemoveDynamicObject(const std::string& name);
+
+	/// <summary>
+	/// シーンに動的にスプライトを追加（Viewport ドロップ位置のクライアント座標を渡す）
+	/// </summary>
+	virtual void AddDynamicSprite(const std::string& texturePath, float clientX, float clientY);
+
+	/// <summary>
+	/// シーンから動的スプライトを削除
+	/// </summary>
+	virtual void RemoveDynamicSprite(const std::string& name);
+
+	/// <summary>
+	/// シーンに動的にアニメーションモデルを追加（枠組み。実装は派生で）
+	/// </summary>
+	virtual void AddDynamicAnimated(const std::string& dirPath, const std::string& filename);
+
+	/// <summary>
+	/// シーンから動的アニメーションモデルを削除
+	/// </summary>
+	virtual void RemoveDynamicAnimated(const std::string& name);
+
+	/// <summary>
+	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か
+	/// HierarchyWindow から × ボタンを出すかどうかの判定に使う
+	/// </summary>
+	virtual bool IsDynamicObject(IImGuiEditable* editable) const;
+
+	/// <summary>
+	/// 非同期ロードキューの GPU フェーズを進める（毎フレーム SceneManager から呼ばれる）
+	/// </summary>
+	void ProcessAsyncLoads();
+
 	//====================
 	// セッター
 	//====================
@@ -59,6 +104,11 @@ public:
 	void SetInputManager(InputManager* input) { input_ = input; }
 	void SetSkinningComputeManager(SkinningComputeManager* manager) { skinningComputeManager_ = manager; }
 protected:
+	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
+	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する
+	// 型消去で Object3DInstance.h の include を BaseScene.h に持ち込まない
+	std::vector<std::shared_ptr<void>> deferredDeletes_;
+
 	// 各マネージャーへのポインタ（Frameworkから受け取る）
 	SpriteManager* spriteManager_ = nullptr;
 	Object3DManager* object3DManager_ = nullptr;
