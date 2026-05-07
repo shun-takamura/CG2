@@ -55,6 +55,11 @@ void Game::Initialize() {
 	postEffect_->Initialize(dxCore_.get(), srvManager_.get(),
 		WindowsApplication::kClientWidth,
 		WindowsApplication::kClientHeight);
+
+#ifdef _DEBUG
+	// ViewportWindow にシーン共通の RenderTexture を渡す（PostEffect は全シーン共通）
+	ImGuiManager::Instance().SetViewportRenderTexture(postEffect_->GetSceneRenderTarget());
+#endif
 }
 
 void Game::Update() {
@@ -74,12 +79,6 @@ void Game::Update() {
 		return;
 	}
 
-	//===================================
-	// ポストエフェクトのImGui表示
-	//===================================
-#ifdef _DEBUG
-	postEffect_->ShowImGui();
-#endif // _DEBUG
 }
 
 void Game::Draw() {
@@ -111,13 +110,13 @@ void Game::Draw() {
 	}
 
 	// 3. マルチパスでエフェクト適用 → Swapchainに出力
+	// ※ Debugビルド（エディタモード）ではSwapchainには描画せず、ImGuiのViewportWindow内で表示する
+#ifndef _DEBUG
 	postEffect_->Draw(dxCore_->GetCommandList());
+#endif
 
 	// 4. ImGui描画（Swapchainに直接）
 #ifdef _DEBUG
-	CameraCapture::GetInstance()->LogDevicesToImGui();
-	QRCodeReader::GetInstance()->OnImGui();
-	TransitionManager::GetInstance()->OnImGui();
 	ImGuiManager::Instance().EndFrame();
 #endif // _DEBUG
 

@@ -74,6 +74,7 @@ public:
     std::string GetName() const override { return name_; }
     std::string GetTypeName() const override { return "Object3D"; }
     void OnImGuiInspector() override;
+    Vector3* GetEditableTranslate() override { return &transform_.translate; }
 
     //==============================
     // セッター

@@ -216,10 +216,9 @@ void StripeTransition::Draw() {
 }
 
 void StripeTransition::OnImGui() {
-#ifdef DEBUG
+#ifdef _DEBUG
 
-	if (ImGui::Begin("Stripe Transition Debug")) {
-
+	{
 		ImGui::Text("=== Status ===");
 		ImGui::Text("IsTransitioning: %s", isTransitioning_ ? "true" : "false");
 		ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)", static_cast<int>(state_));
@@ -326,7 +325,6 @@ void StripeTransition::OnImGui() {
 			debugForceShow_ = false;
 		}
 	}
-	ImGui::End();
 
-#endif // DEBUG
+#endif // _DEBUG
 }

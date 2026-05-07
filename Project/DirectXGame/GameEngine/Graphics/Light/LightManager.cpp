@@ -192,8 +192,7 @@ SpotLight* LightManager::GetSpotLight(uint32_t index) {
 void LightManager::OnImGui() {
 #ifdef USE_IMGUI
 
-    if (ImGui::Begin("Light Settings")) {
-
+    {
         // ===== DirectionalLight =====
         if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::ColorEdit4("DL Color", &directionalLightData_->color.x);
@@ -275,7 +274,6 @@ void LightManager::OnImGui() {
             }
         }
     }
-    ImGui::End();
 
 #endif // USE_IMGUI
 }

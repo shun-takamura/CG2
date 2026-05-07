@@ -4,6 +4,9 @@
 #include <d3d12.h>
 #include <wrl.h>
 
+#include "Gizmo.h"
+#include "SpriteGizmo.h"
+
 // 前方宣言
 class IImGuiWindow;
 class IImGuiEditable;
@@ -13,6 +16,10 @@ class FPSWindow;
 class LogWindow;
 class HierarchyWindow;
 class InspectorWindow;
+class ViewportWindow;
+class RenderTexture;
+class Camera;
+class GPUParticleManager;
 struct HWND__;
 typedef HWND__* HWND;
 
@@ -79,6 +86,21 @@ public:
     /// </summary>
     bool IsInitialized() const { return isInitialized_; }
 
+    /// <summary>
+    /// ビューポートのRenderTextureをセット
+    /// </summary>
+    void SetViewportRenderTexture(RenderTexture* renderTexture);
+
+    /// <summary>
+    /// ギズモ用にアクティブなカメラをセット
+    /// </summary>
+    void SetCamera(Camera* camera) { camera_ = camera; }
+
+    /// <summary>
+    /// デバッグUIで操作するGPUParticleManagerをセット（無いシーンではnullptr）
+    /// </summary>
+    void SetGPUParticleManager(GPUParticleManager* manager) { gpuParticleManager_ = manager; }
+
 private:
     ImGuiManager() = default;
     ~ImGuiManager() = default;
@@ -93,6 +115,9 @@ private:
     // ウィンドウ一覧
     std::vector<std::unique_ptr<IImGuiWindow>> windows_;
 
+    // ビューポートウィンドウ（参照用）
+    ViewportWindow* viewportWindow_ = nullptr;
+
     // 編集可能オブジェクト一覧
     std::vector<IImGuiEditable*> editables_;
 
@@ -103,6 +128,14 @@ private:
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
     uint32_t srvIndex_ = 0;
+
+    // ギズモ
+    Gizmo gizmo_;
+    SpriteGizmo spriteGizmo_;
+    Camera* camera_ = nullptr;
+
+    // シーン保有のGPUParticleManagerへの参照（非所有）
+    GPUParticleManager* gpuParticleManager_ = nullptr;
 
     bool isInitialized_ = false;
 };

@@ -33,6 +33,9 @@ public:
     // Emitter位置のセッター
     void SetEmitterTranslate(const Vector3& translate);
 
+    // ImGui デバッグUI
+    void OnImGui();
+
 private:
     // C++ <-> HLSL でメンバ並びを一致させる
     struct ParticleCS

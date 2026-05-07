@@ -32,13 +32,17 @@ void WindowsApplication::Initialize(const wchar_t* title){
     wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
     RegisterClass(&wc_);
 
+    // リサイズ・最大化を無効化（Swapchainサイズ固定のため）
+    // TODO: WM_SIZEでSwapchainをリサイズ対応したらWS_OVERLAPPEDWINDOWに戻す
+    DWORD windowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
     RECT wrc = { 0,0,kClientWidth,kClientHeight };
-    AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
+    AdjustWindowRect(&wrc, windowStyle, false);
 
     hwnd_ = CreateWindow(
         wc_.lpszClassName,
         title,
-        WS_OVERLAPPEDWINDOW,
+        windowStyle,
         CW_USEDEFAULT, CW_USEDEFAULT,
         wrc.right - wrc.left, wrc.bottom - wrc.top,
         nullptr, nullptr, wc_.hInstance, nullptr

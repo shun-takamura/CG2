@@ -22,6 +22,8 @@ public:
 	void Update() override;
 	void Draw() override;
 
+	Camera* GetCamera() override { return camera_.get(); }
+
 private:
 
 	// パーティクル用乱数

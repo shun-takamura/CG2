@@ -49,6 +49,8 @@ public:
 	/// </summary>
 	void Draw() override;
 
+	Camera* GetCamera() override { return camera_.get(); }
+
 	// 当たり判定メソッド
 	void CheckCollisions();
 

@@ -4,6 +4,10 @@
 #include "TransitionManager.h"
 #include <cassert>
 
+#ifdef _DEBUG
+#include "ImGuiManager.h"
+#endif
+
 SceneManager* SceneManager::GetInstance() {
 	static SceneManager instance;
 	return &instance;
@@ -50,6 +54,9 @@ void SceneManager::Update() {
 		currentScene_ = std::move(nextScene_);
 		SetupScene(currentScene_.get());
 		currentScene_->Initialize();
+#ifdef _DEBUG
+		ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
+#endif
 	}
 
 	// 現在のシーンを更新
@@ -121,6 +128,9 @@ void SceneManager::ExecuteSceneChange() {
 
 	SetupScene(currentScene_.get());
 	currentScene_->Initialize();
+#ifdef _DEBUG
+	ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
+#endif
 
 	pendingSceneName_.clear();
 }

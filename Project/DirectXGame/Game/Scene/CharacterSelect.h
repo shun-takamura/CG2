@@ -44,6 +44,8 @@ public:
 	/// </summary>
 	void Draw() override;
 
+	Camera* GetCamera() override { return camera_.get(); }
+
 private:
 
 	// シーン遷移の待機用

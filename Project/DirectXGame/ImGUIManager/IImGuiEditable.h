@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include "Vector2.h"
+#include "Vector3.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -34,6 +36,18 @@ public:
     /// Inspectorでの編集UIを描画
     /// </summary>
     virtual void OnImGuiInspector() = 0;
+
+    /// <summary>
+    /// 3Dギズモ操作用：Translateへのポインタを返す（nullptrならギズモ非対応）
+    /// 3Dオブジェクトはオーバーライドして transform_.translate のアドレスを返す
+    /// </summary>
+    virtual Vector3* GetEditableTranslate() { return nullptr; }
+
+    /// <summary>
+    /// 2Dギズモ操作用：スクリーン座標(Vector2)へのポインタを返す（nullptrなら非対応）
+    /// Spriteなどはオーバーライドして position_ のアドレスを返す
+    /// </summary>
+    virtual Vector2* GetEditable2DPosition() { return nullptr; }
 
     // コピー禁止
     IImGuiEditable(const IImGuiEditable&) = delete;

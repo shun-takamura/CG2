@@ -82,6 +82,7 @@ public:
     std::string GetName() const override { return name_; }
     std::string GetTypeName() const override { return "Sprite"; }
     void OnImGuiInspector() override;
+    Vector2* GetEditable2DPosition() override { return &position_; }
 #endif
 
     void Initialize(SpriteManager* spriteManager, const std::string& filePath,
