@@ -17,6 +17,7 @@ class LogWindow;
 class HierarchyWindow;
 class InspectorWindow;
 class ViewportWindow;
+class SceneEditorWindow;
 class RenderTexture;
 class Camera;
 class GPUParticleManager;

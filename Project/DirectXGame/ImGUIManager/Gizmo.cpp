@@ -1,6 +1,7 @@
 #include "Gizmo.h"
 #include "IImGuiEditable.h"
 #include "Camera.h"
+#include "MathUtility.h"
 #include <cmath>
 
 namespace {
@@ -13,6 +14,15 @@ namespace {
         r.z = v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2] + w * m.m[3][2];
         r.w = v.x * m.m[0][3] + v.y * m.m[1][3] + v.z * m.m[2][3] + w * m.m[3][3];
         return r;
+    }
+
+    // 外積（プロジェクトに Cross 関数が無いためここで実装）
+    Vector3 Cross(const Vector3& a, const Vector3& b) {
+        return {
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x
+        };
     }
 }
 
@@ -88,15 +98,24 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
     ImVec2 mousePos = io.MousePos;
 
     // ホバー判定（ドラッグ中は無視）
+    // 中央ハンドル（白円）を最優先でヒット判定し、軸ハンドルは外側にある分だけを扱う
     int hoverAxis = -1;
     if (activeAxis_ < 0) {
-        float minDist = kHandleHitThreshold;
-        for (int i = 0; i < 3; ++i) {
-            if (!axisVisible[i]) continue;
-            float dist = DistancePointToLineSegment(mousePos, originScreen, axisEndScreen[i]);
-            if (dist < minDist) {
-                minDist = dist;
-                hoverAxis = i;
+        // まず中央の白円
+        float dxc = mousePos.x - originScreen.x;
+        float dyc = mousePos.y - originScreen.y;
+        float distCenter = std::sqrt(dxc * dxc + dyc * dyc);
+        if (distCenter < kCenterRadius + kHandleHitThreshold * 0.5f) {
+            hoverAxis = 3;  // 中央 = 自由移動
+        } else {
+            float minDist = kHandleHitThreshold;
+            for (int i = 0; i < 3; ++i) {
+                if (!axisVisible[i]) continue;
+                float dist = DistancePointToLineSegment(mousePos, originScreen, axisEndScreen[i]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    hoverAxis = i;
+                }
             }
         }
     }
@@ -109,54 +128,115 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
         drawList->AddLine(originScreen, axisEndScreen[i], col, kHandleThickness);
         drawList->AddCircleFilled(axisEndScreen[i], 5.0f, col);
     }
-    drawList->AddCircleFilled(originScreen, 4.0f, IM_COL32(255, 255, 255, 255));
+    // 中央の白円（hover/drag 中は黄色）
+    {
+        ImU32 centerCol = IM_COL32(255, 255, 255, 255);
+        if (hoverAxis == 3 || activeAxis_ == 3) centerCol = hoverColor;
+        drawList->AddCircleFilled(originScreen, kCenterRadius, centerCol);
+    }
 
     // ドラッグ開始
     if (activeAxis_ < 0 && hoverAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         activeAxis_ = hoverAxis;
         dragStartMousePos_ = mousePos;
         dragStartTranslate_ = origin;
+
+        // 自由移動の場合のみカメラ基底をキャッシュ（ドラッグ中固定）
+        if (activeAxis_ == 3) {
+            Vector3 camForward = camera->GetForward();
+            Vector3 camUp = camera->GetUp();
+            Vector3 right = Normalize(Cross(camUp, camForward));
+            Vector3 up = Cross(camForward, right);
+            dragCameraRight_ = right;
+            dragCameraUp_ = up;
+        }
     }
 
     // ドラッグ中
     if (activeAxis_ >= 0) {
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            // 軸方向ベクトル（ワールド）
-            Vector3 axisDir = { 0, 0, 0 };
-            if (activeAxis_ == 0) axisDir.x = 1.0f;
-            else if (activeAxis_ == 1) axisDir.y = 1.0f;
-            else axisDir.z = 1.0f;
+            ImVec2 mouseDelta = ImVec2(
+                mousePos.x - dragStartMousePos_.x,
+                mousePos.y - dragStartMousePos_.y
+            );
 
-            // ドラッグ開始時の原点・軸先端のスクリーン座標を再計算
-            ImVec2 startOriginScreen, startAxisEndScreen;
-            Vector3 startAxisEndWorld = {
-                dragStartTranslate_.x + axisDir.x,
-                dragStartTranslate_.y + axisDir.y,
-                dragStartTranslate_.z + axisDir.z
-            };
-            if (WorldToScreen(dragStartTranslate_, viewProj, imagePos, imageSize, startOriginScreen) &&
-                WorldToScreen(startAxisEndWorld, viewProj, imagePos, imageSize, startAxisEndScreen)) {
+            if (activeAxis_ == 3) {
+                // ============================================
+                // 自由移動：カメラ右・上ベクトルでスクリーンプレーン投影
+                // ============================================
+                ImVec2 startOriginScreen, rightTipScreen, upTipScreen;
+                Vector3 rightTipWorld = {
+                    dragStartTranslate_.x + dragCameraRight_.x,
+                    dragStartTranslate_.y + dragCameraRight_.y,
+                    dragStartTranslate_.z + dragCameraRight_.z
+                };
+                Vector3 upTipWorld = {
+                    dragStartTranslate_.x + dragCameraUp_.x,
+                    dragStartTranslate_.y + dragCameraUp_.y,
+                    dragStartTranslate_.z + dragCameraUp_.z
+                };
+                if (WorldToScreen(dragStartTranslate_, viewProj, imagePos, imageSize, startOriginScreen) &&
+                    WorldToScreen(rightTipWorld, viewProj, imagePos, imageSize, rightTipScreen) &&
+                    WorldToScreen(upTipWorld, viewProj, imagePos, imageSize, upTipScreen)) {
 
-                ImVec2 axisDir2D = ImVec2(
-                    startAxisEndScreen.x - startOriginScreen.x,
-                    startAxisEndScreen.y - startOriginScreen.y
-                );
-                float axisLen2DSq = axisDir2D.x * axisDir2D.x + axisDir2D.y * axisDir2D.y;
+                    ImVec2 rightDir2D = ImVec2(
+                        rightTipScreen.x - startOriginScreen.x,
+                        rightTipScreen.y - startOriginScreen.y);
+                    ImVec2 upDir2D = ImVec2(
+                        upTipScreen.x - startOriginScreen.x,
+                        upTipScreen.y - startOriginScreen.y);
 
-                if (axisLen2DSq > 0.0001f) {
-                    ImVec2 mouseDelta = ImVec2(
-                        mousePos.x - dragStartMousePos_.x,
-                        mousePos.y - dragStartMousePos_.y
-                    );
-                    // ピクセル単位のドラッグ量を、軸方向（1ワールド単位）に射影
-                    float worldDelta = (mouseDelta.x * axisDir2D.x + mouseDelta.y * axisDir2D.y) / axisLen2DSq;
+                    float rightLenSq = rightDir2D.x * rightDir2D.x + rightDir2D.y * rightDir2D.y;
+                    float upLenSq = upDir2D.x * upDir2D.x + upDir2D.y * upDir2D.y;
+
+                    float worldDxRight = (rightLenSq > 0.0001f)
+                        ? (mouseDelta.x * rightDir2D.x + mouseDelta.y * rightDir2D.y) / rightLenSq
+                        : 0.0f;
+                    float worldDyUp = (upLenSq > 0.0001f)
+                        ? (mouseDelta.x * upDir2D.x + mouseDelta.y * upDir2D.y) / upLenSq
+                        : 0.0f;
 
                     Vector3 newPos = {
-                        dragStartTranslate_.x + axisDir.x * worldDelta,
-                        dragStartTranslate_.y + axisDir.y * worldDelta,
-                        dragStartTranslate_.z + axisDir.z * worldDelta
+                        dragStartTranslate_.x + dragCameraRight_.x * worldDxRight + dragCameraUp_.x * worldDyUp,
+                        dragStartTranslate_.y + dragCameraRight_.y * worldDxRight + dragCameraUp_.y * worldDyUp,
+                        dragStartTranslate_.z + dragCameraRight_.z * worldDxRight + dragCameraUp_.z * worldDyUp,
                     };
                     *translatePtr = newPos;
+                }
+            } else {
+                // ============================================
+                // 軸拘束移動（既存ロジック）
+                // ============================================
+                Vector3 axisDir = { 0, 0, 0 };
+                if (activeAxis_ == 0) axisDir.x = 1.0f;
+                else if (activeAxis_ == 1) axisDir.y = 1.0f;
+                else axisDir.z = 1.0f;
+
+                ImVec2 startOriginScreen, startAxisEndScreen;
+                Vector3 startAxisEndWorld = {
+                    dragStartTranslate_.x + axisDir.x,
+                    dragStartTranslate_.y + axisDir.y,
+                    dragStartTranslate_.z + axisDir.z
+                };
+                if (WorldToScreen(dragStartTranslate_, viewProj, imagePos, imageSize, startOriginScreen) &&
+                    WorldToScreen(startAxisEndWorld, viewProj, imagePos, imageSize, startAxisEndScreen)) {
+
+                    ImVec2 axisDir2D = ImVec2(
+                        startAxisEndScreen.x - startOriginScreen.x,
+                        startAxisEndScreen.y - startOriginScreen.y
+                    );
+                    float axisLen2DSq = axisDir2D.x * axisDir2D.x + axisDir2D.y * axisDir2D.y;
+
+                    if (axisLen2DSq > 0.0001f) {
+                        float worldDelta = (mouseDelta.x * axisDir2D.x + mouseDelta.y * axisDir2D.y) / axisLen2DSq;
+
+                        Vector3 newPos = {
+                            dragStartTranslate_.x + axisDir.x * worldDelta,
+                            dragStartTranslate_.y + axisDir.y * worldDelta,
+                            dragStartTranslate_.z + axisDir.z * worldDelta
+                        };
+                        *translatePtr = newPos;
+                    }
                 }
             }
         } else {

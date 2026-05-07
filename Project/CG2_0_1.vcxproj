@@ -218,6 +218,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ImGuiManager.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\InspectorWindow.cpp" />
+    <ClCompile Include="DirectXGame\ImGUIManager\SceneEditorWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ViewportWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\Gizmo.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\SpriteGizmo.cpp" />
@@ -368,6 +369,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ImGuiManager.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\InspectorWindow.h" />
+    <ClInclude Include="DirectXGame\ImGUIManager\SceneEditorWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ViewportWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\Gizmo.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\SpriteGizmo.h" />

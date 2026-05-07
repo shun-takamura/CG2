@@ -14,6 +14,11 @@
 #include "SpriteInstance.h"
 #include "Object3DManager.h"
 #include "Object3DInstance.h"
+#include "AnimatedModelInstance.h"
+#include "AnimatedObject3DInstance.h"
+#include "ModelManager.h"
+#include "IImGuiEditable.h"
+#include "Primitive/PrimitiveMesh.h"
 #include "Camera.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
@@ -237,6 +242,19 @@ void GameScene::Update() {
 
 	stage_->Update();
 
+	// SceneEditorWindow から追加された動的オブジェクト
+	for (auto& obj : object3DInstances_) {
+		obj->Update();
+	}
+	// 動的アニメーションモデル
+	for (auto& a : dynamicAnimated_) {
+		a->Update(deltaTime);
+	}
+	// 動的スプライト
+	for (auto& s : dynamicSprites_) {
+		s->Update();
+	}
+
 	// プレイヤー更新
 	player_->Update(input_, deltaTime);
 
@@ -322,6 +340,21 @@ void GameScene::Draw() {
 	// ステージ描画
 	stage_->Draw(dxCore_);
 
+	// SceneEditorWindow から追加された動的オブジェクト
+	for (auto& obj : object3DInstances_) {
+		obj->Draw(dxCore_);
+	}
+	// 動的アニメーションモデル（3D描画コンテキストで描画）
+	for (auto& a : dynamicAnimated_) {
+		a->Draw(dxCore_);
+	}
+#ifdef USE_IMGUI
+	// 動的アニメーションモデルのスケルトンデバッグ描画
+	for (auto& a : dynamicAnimated_) {
+		a->DrawSkeletonDebug(dxCore_);
+	}
+#endif
+
 	// プレイヤー描画（モデル＋弾）
 	player_->Draw(dxCore_);
 
@@ -335,6 +368,10 @@ void GameScene::Draw() {
 	spriteManager_->DrawSetting();
 	operation_->Draw();
 	for (const auto& s : sprites_) {
+		s->Draw();
+	}
+	// 動的スプライト
+	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
 
@@ -565,4 +602,88 @@ void GameScene::CheckCollisions()
 	// if (CollisionHelper::IsCollisionAABBAABB(playerCollider_, enemyCollider_)) {
 	//     // 押し返し処理など
 	// }
+}
+
+// =============================================================
+// 動的オブジェクトの追加・削除（SceneEditorWindow 経由）
+// =============================================================
+void GameScene::AddDynamicObject(const std::string& dirPath, const std::string& filename) {
+	auto obj = std::make_unique<Object3DInstance>();
+	obj->Initialize(object3DManager_, dxCore_, dirPath, filename);
+	obj->SetCamera(camera_.get());
+	object3DInstances_.push_back(std::move(obj));
+}
+
+void GameScene::RemoveDynamicObject(const std::string& name) {
+	auto it = std::find_if(object3DInstances_.begin(), object3DInstances_.end(),
+		[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; });
+	if (it != object3DInstances_.end()) {
+		// GPU 使用中対策で 1 フレーム遅延破棄（BaseScene::ProcessAsyncLoads で clear される）
+		deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(it->release()));
+		object3DInstances_.erase(it);
+	}
+}
+
+void GameScene::AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) {
+	auto sprite = std::make_unique<SpriteInstance>();
+	sprite->Initialize(spriteManager_, texturePath);
+	sprite->SetPosition({ clientX, clientY });
+	dynamicSprites_.push_back(std::move(sprite));
+}
+
+void GameScene::RemoveDynamicSprite(const std::string& name) {
+	auto it = std::find_if(dynamicSprites_.begin(), dynamicSprites_.end(),
+		[&name](const std::unique_ptr<SpriteInstance>& s) { return s->GetName() == name; });
+	if (it != dynamicSprites_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(it->release()));
+		dynamicSprites_.erase(it);
+		return;
+	}
+	// シーン初期化済みの sprites_ ベクター（汎用スプライト）
+	auto it2 = std::find_if(sprites_.begin(), sprites_.end(),
+		[&name](const std::unique_ptr<SpriteInstance>& s) { return s->GetName() == name; });
+	if (it2 != sprites_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(it2->release()));
+		sprites_.erase(it2);
+		return;
+	}
+}
+
+void GameScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
+	// 枠組み実装：AnimatedModelInstance を作って AnimatedObject3DInstance に渡す
+	auto model = std::make_unique<AnimatedModelInstance>();
+	model->Initialize(ModelManager::GetInstance()->GetModelCore(), dirPath, filename);
+
+	auto obj = std::make_unique<AnimatedObject3DInstance>();
+	obj->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_,
+		model.get(), filename);
+
+	dynamicAnimatedModels_.push_back(std::move(model));
+	dynamicAnimated_.push_back(std::move(obj));
+}
+
+void GameScene::RemoveDynamicAnimated(const std::string& name) {
+	auto it = std::find_if(dynamicAnimated_.begin(), dynamicAnimated_.end(),
+		[&name](const std::unique_ptr<AnimatedObject3DInstance>& a) { return a->GetName() == name; });
+	if (it != dynamicAnimated_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(it->release()));
+		dynamicAnimated_.erase(it);
+	}
+}
+
+bool GameScene::IsDynamicObject(IImGuiEditable* editable) const {
+	for (const auto& obj : object3DInstances_) {
+		if (static_cast<IImGuiEditable*>(obj.get()) == editable) return true;
+	}
+	for (const auto& s : dynamicSprites_) {
+		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
+	}
+	for (const auto& a : dynamicAnimated_) {
+		if (static_cast<IImGuiEditable*>(a.get()) == editable) return true;
+	}
+	// シーン初期化済みの汎用スプライトも × の対象に
+	for (const auto& s : sprites_) {
+		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
+	}
+	return false;
 }

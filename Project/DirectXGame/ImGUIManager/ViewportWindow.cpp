@@ -3,6 +3,11 @@
 #include "SRVManager.h"
 #include "imgui.h"
 
+#include "SceneEditorWindow.h"  // ModelDropPayload / SpriteDropPayload / AnimatedDropPayload
+#include "SceneManager.h"
+#include "BaseScene.h"
+#include "WindowsApplication.h"  // kClientWidth / kClientHeight
+
 void ViewportWindow::OnDraw() {
     if (!renderTexture_ || !srvManager_) {
         ImGui::Text("RenderTexture not set");
@@ -47,4 +52,37 @@ void ViewportWindow::OnDraw() {
 
     // ホバー状態を更新
     isHovered_ = ImGui::IsItemHovered();
+
+    // SceneEditorWindow からのドラッグを受け取り、現在のシーンに動的エンティティを追加
+    if (ImGui::BeginDragDropTarget()) {
+        BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+
+        // 静的モデル（.obj）
+        if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(MODEL_DROP_PAYLOAD_TYPE)) {
+            const ModelDropPayload* p = static_cast<const ModelDropPayload*>(payload->Data);
+            if (scene) scene->AddDynamicObject(p->dirPath, p->filename);
+        }
+        // スプライト（.png）— ドロップ位置をクライアント座標に変換
+        else if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+            const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+            if (scene && imageScreenSize_.x > 0 && imageScreenSize_.y > 0) {
+                ImVec2 mouse = ImGui::GetMousePos();
+                float relX = (mouse.x - imageScreenPos_.x) / imageScreenSize_.x;
+                float relY = (mouse.y - imageScreenPos_.y) / imageScreenSize_.y;
+                float clientX = relX * static_cast<float>(WindowsApplication::kClientWidth);
+                float clientY = relY * static_cast<float>(WindowsApplication::kClientHeight);
+                scene->AddDynamicSprite(p->texturePath, clientX, clientY);
+            }
+        }
+        // アニメーションモデル（.gltf / .glb / .fbx）
+        else if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(ANIMATED_DROP_PAYLOAD_TYPE)) {
+            const AnimatedDropPayload* p = static_cast<const AnimatedDropPayload*>(payload->Data);
+            if (scene) scene->AddDynamicAnimated(p->dirPath, p->filename);
+        }
+
+        ImGui::EndDragDropTarget();
+    }
 }

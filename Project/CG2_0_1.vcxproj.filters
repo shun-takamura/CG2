@@ -138,6 +138,9 @@
     <ClCompile Include="DirectXGame\ImGUIManager\InspectorWindow.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\ImGUIManager\SceneEditorWindow.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\ImGUIManager\ViewportWindow.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -477,6 +480,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\ImGUIManager\InspectorWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\ImGUIManager\SceneEditorWindow.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\ImGUIManager\ViewportWindow.h">

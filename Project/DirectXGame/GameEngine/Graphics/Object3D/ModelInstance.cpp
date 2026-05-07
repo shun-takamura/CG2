@@ -3,32 +3,46 @@
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
-	modelCore_ = modelCore;
+	// CPU フェーズ → GPU フェーズの順で同期実行
+	LoadCPU(directorPath, filename);
+	InitializeGPU(modelCore, modelCore->GetDXCore());
+}
 
-	// モデル読み込み
-	LoadModel(directorPath, filename);
+void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string& filename)
+{
+	// 多重ロード防止
+	if (loadState_ != LoadState::Unloaded) return;
 
-	// 頂点データ作成
-	CreateVertexData(modelCore_->GetDXCore());
+	// Assimp パース。modelData_ を埋めるだけで GPU 呼び出しは行わない
+	// ※ バックグラウンドスレッドからも呼ばれるため、ここでは assert を使わない
+	LoadModel(directoryPath, filename);
 
-	// インデックスデータ作成
-	CreateIndexData(modelCore_->GetDXCore());
-
-	// マテリアルデータ作成
-	CreateMaterialData(modelCore_->GetDXCore());
-
-	// objファイルの参照しているテクスチャファイルの読み込み
+	// テクスチャファイルパスは文字列コピーのみ（GPUロードはGPUフェーズで検証する）
 	textureFilePath_ = modelData_.materialData.textureFilePath;
 
-	// デバッグ: ファイルパスが空でないか確認
+	loadState_ = LoadState::CPUReady;
+}
+
+void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
+{
+	// 既に GPU まで完了済みなら何もしない
+	if (loadState_ == LoadState::GPUReady) return;
+
+	// CPU パースが終わっていることを保証
+	assert(loadState_ == LoadState::CPUReady && "InitializeGPU called before LoadCPU");
 	assert(!textureFilePath_.empty() && "textureFilePath is empty!");
 
-	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
-	//ここで停止する原因はテクスチャマネージャーの生成順だったからちょっと資料と変えた
+	modelCore_ = modelCore;
 
-	// 読み込んだテクスチャの番号を取得
-	/*modelData_.materialData.textureIndex =
-		TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData_.materialData.textureFilePath);*/
+	// 頂点 / インデックス / マテリアル GPU リソースの作成
+	CreateVertexData(dxCore);
+	CreateIndexData(dxCore);
+	CreateMaterialData(dxCore);
+
+	// テクスチャを TextureManager に登録（GPU リソース作成）
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+
+	loadState_ = LoadState::GPUReady;
 }
 
 void ModelInstance::Draw(DirectXCore* dxCore)

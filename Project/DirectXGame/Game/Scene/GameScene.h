@@ -13,6 +13,9 @@ class DebugCamera;
 class SpriteInstance;
 class Object3DInstance;
 class Camera;
+class AnimatedModelInstance;
+class AnimatedObject3DInstance;
+class IImGuiEditable;
 
 /// <summary>
 /// ゲームシーン
@@ -50,6 +53,15 @@ public:
 	void Draw() override;
 
 	Camera* GetCamera() override { return camera_.get(); }
+
+	// SceneEditorWindow 経由で動的にオブジェクトを追加・削除
+	void AddDynamicObject(const std::string& dirPath, const std::string& filename) override;
+	void RemoveDynamicObject(const std::string& name) override;
+	void AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) override;
+	void RemoveDynamicSprite(const std::string& name) override;
+	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename) override;
+	void RemoveDynamicAnimated(const std::string& name) override;
+	bool IsDynamicObject(IImGuiEditable* editable) const override;
 
 	// 当たり判定メソッド
 	void CheckCollisions();
@@ -135,6 +147,11 @@ private:
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
+
+	// SceneEditorWindow からドロップで追加された動的エンティティ
+	std::vector<std::unique_ptr<SpriteInstance>> dynamicSprites_;
+	std::vector<std::unique_ptr<AnimatedModelInstance>> dynamicAnimatedModels_;  // 所有保持
+	std::vector<std::unique_ptr<AnimatedObject3DInstance>> dynamicAnimated_;
 
 	// カメラ
 	std::unique_ptr<Camera> camera_;

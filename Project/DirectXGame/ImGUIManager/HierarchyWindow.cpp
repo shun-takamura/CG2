@@ -1,11 +1,16 @@
 #include "HierarchyWindow.h"
 #include "ImGuiManager.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 
 void HierarchyWindow::OnDraw() {
 #ifdef _DEBUG
 
     const auto& editables = manager_->GetEditables();
     IImGuiEditable* selected = manager_->GetSelected();
+
+    // 現在のシーン（× ボタンで Remove を呼ぶ対象）
+    BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
 
     // 検索フィルター
     static char searchBuffer[256] = "";
@@ -16,7 +21,10 @@ void HierarchyWindow::OnDraw() {
     ImGui::Text("Objects: %d", static_cast<int>(editables.size()));
     ImGui::Separator();
 
-    // オブジェクト一覧
+    // 削除ボタンの幅を確保した上で行を描画する
+    const float kRemoveButtonWidth = ImGui::GetFrameHeight();
+
+    int idCounter = 0;
     for (IImGuiEditable* editable : editables) {
         if (!editable) continue;
 
@@ -31,15 +39,41 @@ void HierarchyWindow::OnDraw() {
             }
         }
 
-        // 選択状態を判定
-        bool isSelected = (editable == selected);
+        ImGui::PushID(idCounter++);
 
-        // 表示名: [型名] オブジェクト名
+        const bool isSelected = (editable == selected);
+        const bool isRemovable = scene && scene->IsDynamicObject(editable);
         std::string displayName = "[" + typeName + "] " + name;
 
-        if (ImGui::Selectable(displayName.c_str(), isSelected)) {
+        // Selectable は × ボタンの分の幅を残して描画
+        const float availWidth = ImGui::GetContentRegionAvail().x;
+        const float selectableWidth = isRemovable
+            ? availWidth - kRemoveButtonWidth - ImGui::GetStyle().ItemSpacing.x
+            : 0.0f; // 0 を渡すと自動
+
+        if (ImGui::Selectable(displayName.c_str(), isSelected,
+            ImGuiSelectableFlags_None, ImVec2(selectableWidth, 0))) {
             manager_->SetSelected(editable);
         }
+
+        // 動的オブジェクトのみ × ボタンを右端に表示
+        if (isRemovable) {
+            ImGui::SameLine();
+            if (ImGui::Button("x", ImVec2(kRemoveButtonWidth, 0))) {
+                if (scene) {
+                    // 型名で正しい Remove メソッドへディスパッチ
+                    if (typeName == "Sprite") {
+                        scene->RemoveDynamicSprite(name);
+                    } else if (typeName == "AnimatedObject3D") {
+                        scene->RemoveDynamicAnimated(name);
+                    } else {
+                        scene->RemoveDynamicObject(name);
+                    }
+                }
+            }
+        }
+
+        ImGui::PopID();
     }
 
 #endif // DEBUG

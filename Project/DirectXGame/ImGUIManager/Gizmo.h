@@ -37,12 +37,17 @@ private:
     float DistancePointToLineSegment(ImVec2 p, ImVec2 a, ImVec2 b);
 
     // ドラッグ状態
-    int activeAxis_ = -1;          // 0=X, 1=Y, 2=Z, -1=なし
+    int activeAxis_ = -1;          // 0=X, 1=Y, 2=Z, 3=Center(自由移動), -1=なし
     ImVec2 dragStartMousePos_{};   // ドラッグ開始時のマウス位置
     Vector3 dragStartTranslate_{}; // ドラッグ開始時のオブジェクト位置
+
+    // 自由移動用：ドラッグ開始時のカメラ右・上ベクトル（ワールド空間）
+    Vector3 dragCameraRight_{};
+    Vector3 dragCameraUp_{};
 
     // ハンドル設定
     static constexpr float kHandleLength = 1.5f;        // ワールド単位
     static constexpr float kHandleHitThreshold = 8.0f;  // ピクセル単位（ヒット判定半径）
     static constexpr float kHandleThickness = 4.0f;     // 線の太さ
+    static constexpr float kCenterRadius = 6.0f;        // 中央ハンドル（白円）の半径
 };
