@@ -5,8 +5,21 @@
 #include "LogWindow.h"
 #include "HierarchyWindow.h"
 #include "InspectorWindow.h"
+#include "ViewportWindow.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
+#include "RenderTexture.h"
+#include "Camera.h"
+#include "WindowsApplication.h"
+
+// CallbackWindow 経由で呼ぶデバッグUI群
+#include "Game.h"
+#include "LightManager.h"
+#include "PostEffect.h"
+#include "GPUParticleManager.h"
+#include "TransitionManager.h"
+#include "CameraCapture.h"
+#include "QRCodeReader.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -35,6 +48,10 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
+    // Dockingを有効化
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
     // Win32初期化
     ImGui_ImplWin32_Init(hwnd);
 
@@ -49,11 +66,42 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         srvManager_->GetGPUDescriptorHandle(srvIndex_)
     );
 
+    // フォントアトラスを明示的にビルド（docking版のレガシーAPI対応）
+    unsigned char* pixels;
+    int width, height;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
     // 各ウィンドウを生成
+    windows_.push_back(std::make_unique<ViewportWindow>(srvManager_));
     windows_.push_back(std::make_unique<FPSWindow>());
     windows_.push_back(std::make_unique<LogWindow>());
     windows_.push_back(std::make_unique<HierarchyWindow>(this));
     windows_.push_back(std::make_unique<InspectorWindow>(this));
+
+    // デバッグUI群を CallbackWindow 経由で登録
+    windows_.push_back(std::make_unique<CallbackWindow>("Camera",
+        [this]() { if (camera_) camera_->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Light",
+        []() { LightManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("PostEffect",
+        []() { if (auto* p = Game::GetPostEffect()) p->ShowImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Particle",
+        [this]() {
+            if (gpuParticleManager_) {
+                gpuParticleManager_->OnImGui();
+            } else {
+                ImGui::TextDisabled("GPUParticleManager is not active in the current scene.");
+            }
+        }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Transition",
+        []() { TransitionManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("WebCam Devices",
+        []() { CameraCapture::GetInstance()->LogDevicesToImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("QR Code",
+        []() { QRCodeReader::GetInstance()->OnImGui(); }));
+
+    // ViewportWindowをメンバに保存（後で参照するため）
+    viewportWindow_ = dynamic_cast<ViewportWindow*>(windows_[0].get());
 
     isInitialized_ = true;
 
@@ -93,12 +141,33 @@ void ImGuiManager::EndFrame() {
 
     if (!isInitialized_) return;
 
+    // DockSpaceの設定
+    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
+
     // メニューバー描画
     DrawMenuBar();
 
     // 全ウィンドウ描画
     for (auto& window : windows_) {
         window->Draw();
+    }
+
+    // ギズモ描画（選択オブジェクトがあり、ビューポートが有効な場合）
+    if (selectedObject_ && viewportWindow_ && viewportWindow_->IsOpen()) {
+        ImVec2 imgPos = viewportWindow_->GetImageScreenPos();
+        ImVec2 imgSize = viewportWindow_->GetImageScreenSize();
+        if (imgSize.x > 0 && imgSize.y > 0) {
+            // 2D（Sprite）ギズモが優先（GetEditable2DPosition がnullptrでなければ）
+            if (selectedObject_->GetEditable2DPosition()) {
+                spriteGizmo_.Draw(selectedObject_, imgPos, imgSize,
+                    (float)WindowsApplication::kClientWidth,
+                    (float)WindowsApplication::kClientHeight);
+            }
+            // 3Dギズモ（Translate がnullptrでなければ、かつカメラがあれば）
+            else if (selectedObject_->GetEditableTranslate() && camera_) {
+                gizmo_.Draw(selectedObject_, camera_, imgPos, imgSize);
+            }
+        }
     }
 
     // ImGui描画
@@ -157,4 +226,12 @@ void ImGuiManager::DrawMenuBar() {
     }
 
 #endif // DEBUG
+}
+
+void ImGuiManager::SetViewportRenderTexture(RenderTexture* renderTexture) {
+#ifdef _DEBUG
+    if (viewportWindow_) {
+        viewportWindow_->SetRenderTexture(renderTexture);
+    }
+#endif // _DEBUG
 }

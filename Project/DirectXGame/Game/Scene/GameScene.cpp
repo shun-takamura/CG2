@@ -340,15 +340,6 @@ void GameScene::Draw() {
 
 	// ===== UI描画 =====
 	DrawUI();
-	
-	// パーティクルのImGui表示
-#ifdef _DEBUG
-	ParticleManager::GetInstance()->OnImGui();
-
-	// カメラのImGui
-	camera_->OnImGui();
-#endif // _DEBUG
-
 }
 
 // =============================================================

@@ -6,8 +6,8 @@
 class WindowsApplication{
 public:
     
-    static const int32_t kClientWidth = 1280;
-    static const int32_t kClientHeight = 720;
+    static const int32_t kClientWidth = 1600;
+    static const int32_t kClientHeight = 900;
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 

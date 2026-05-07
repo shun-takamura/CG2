@@ -7,6 +7,10 @@
 #include "Log.h"
 #include <cassert>
 
+#ifdef USE_IMGUI
+#include "imgui.h"
+#endif
+
 void GPUParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager, const std::string& textureFilePath)
 {
     dxCore_ = dxCore;
@@ -67,6 +71,37 @@ void GPUParticleManager::SetEmitterTranslate(const Vector3& translate)
     if (emitterData_) {
         emitterData_->translate = translate;
     }
+}
+
+void GPUParticleManager::OnImGui()
+{
+#ifdef USE_IMGUI
+    ImGui::Text("Max Particles: %u", kMaxParticles);
+    ImGui::Text("Elapsed Time: %.2f s", elapsedTime_);
+    ImGui::Separator();
+
+    if (!emitterData_) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Emitter not initialized");
+        return;
+    }
+
+    if (ImGui::CollapsingHeader("Emitter", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat3("Translate", &emitterData_->translate.x, 0.1f);
+        ImGui::DragFloat("Radius", &emitterData_->radius, 0.05f, 0.0f, 100.0f);
+
+        int count = static_cast<int>(emitterData_->count);
+        if (ImGui::DragInt("Count per Emit", &count, 1, 0, static_cast<int>(kMaxParticles))) {
+            emitterData_->count = static_cast<uint32_t>(count);
+        }
+
+        ImGui::DragFloat("Frequency (s)", &emitterData_->frequency, 0.01f, 0.01f, 10.0f);
+        ImGui::Text("Frequency Time: %.3f", emitterData_->frequencyTime);
+
+        if (ImGui::Button("Emit Now")) {
+            emitterData_->emit = 1;
+        }
+    }
+#endif
 }
 
 void GPUParticleManager::Update(const Camera* camera)

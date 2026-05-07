@@ -524,8 +524,6 @@ void PostEffect::ApplyDamageEffect(float damageRatio)
 void PostEffect::ShowImGui()
 {
 #ifdef USE_IMGUI
-	ImGui::Begin("Post Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
 	ImGui::Text("Drag to reorder, check to enable");
 	ImGui::Separator();
 
@@ -572,8 +570,6 @@ void PostEffect::ShowImGui()
 	if (ImGui::Button("Reset All")) {
 		ResetEffects();
 	}
-
-	ImGui::End();
 #endif
 }
 

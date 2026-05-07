@@ -271,10 +271,6 @@ void CharacterSelect::Draw()
 	// 3Dオブジェクトの共通描画設定
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
-#ifdef _DEBUG
-
-	LightManager::GetInstance()->OnImGui();
-#endif // _DEBUG
 
 	// 3Dオブジェクト描画
 	for (const auto& obj : object3DInstances_) {
@@ -296,13 +292,4 @@ void CharacterSelect::Draw()
 	sprite_->Draw();
 	playerQRNormal_->Draw();
 	playerQRCharge_->Draw();
-#ifdef _DEBUG
-
-	// パーティクルのImGui表示
-	ParticleManager::GetInstance()->OnImGui();
-
-	// カメラのImGui
-	camera_->OnImGui();
-
-#endif // _DEBUG
 }

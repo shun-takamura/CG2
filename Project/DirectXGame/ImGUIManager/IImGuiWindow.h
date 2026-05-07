@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <functional>
+#include <utility>
 #include "imgui.h"
 
 /// <summary>
@@ -29,6 +31,11 @@ public:
 
         if (!isOpen_) return;
 
+        // 初回起動時のサイズを指定
+        if (initialSize_.x > 0 && initialSize_.y > 0) {
+            ImGui::SetNextWindowSize(initialSize_, ImGuiCond_FirstUseEver);
+        }
+
         if (ImGui::Begin(name_.c_str(), &isOpen_)) {
             OnDraw();
         }
@@ -36,6 +43,11 @@ public:
 
 #endif // DEBUG
     }
+
+    /// <summary>
+    /// 初期サイズを設定（FirstUseEver）
+    /// </summary>
+    void SetInitialSize(const ImVec2& size) { initialSize_ = size; }
 
     /// <summary>
     /// ウィンドウ名を取得
@@ -60,4 +72,22 @@ protected:
 
     std::string name_;
     bool isOpen_;
+    ImVec2 initialSize_ = ImVec2(0, 0);
+};
+
+/// <summary>
+/// 任意の関数オブジェクトを描画コールバックとして受け取る汎用ウィンドウ
+/// </summary>
+class CallbackWindow : public IImGuiWindow {
+public:
+    CallbackWindow(const std::string& name, std::function<void()> draw)
+        : IImGuiWindow(name), draw_(std::move(draw)) {}
+
+protected:
+    void OnDraw() override {
+        if (draw_) draw_();
+    }
+
+private:
+    std::function<void()> draw_;
 };

@@ -9,6 +9,7 @@ class DirectXCore;
 class SRVManager;
 class InputManager;
 class SkinningComputeManager;
+class Camera;
 
 /// <summary>
 /// シーンの基底クラス
@@ -39,6 +40,12 @@ public:
 	/// 描画
 	/// </summary>
 	virtual void Draw() = 0;
+
+	/// <summary>
+	/// シーンが使用しているアクティブなCameraを返す（無ければnullptr）
+	/// SceneManager が ImGuiManager に通知するために使う
+	/// </summary>
+	virtual Camera* GetCamera() { return nullptr; }
 
 	//====================
 	// セッター

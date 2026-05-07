@@ -26,6 +26,7 @@
 #include "QRCodeReader.h"
 #include "TextureManager.h"
 #include"Game.h"
+#include "ImGuiManager.h"
 #include "Skybox.h"
 #include "Primitive/PrimitiveMesh.h"
 #include "Primitive/PrimitiveGenerator.h"
@@ -231,9 +232,18 @@ void DemoScene::Initialize() {
 	);
 	animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
 	animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
+
+#ifdef _DEBUG
+	// Camera/RenderTextureはBaseScene::GetCamera経由とGame::Initialize側で中央化済み
+	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
+#endif
 }
 
 void DemoScene::Finalize() {
+
+#ifdef _DEBUG
+	ImGuiManager::Instance().SetGPUParticleManager(nullptr);
+#endif
 
 	if (gpuParticleManager_) {
 		gpuParticleManager_->Finalize();
@@ -584,7 +594,6 @@ void DemoScene::Draw() {
 	// 3Dオブジェクトの共通描画設定
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
-	LightManager::GetInstance()->OnImGui();
 
 	// 3Dオブジェクト描画
 	for (const auto& obj : object3DInstances_) {
@@ -643,13 +652,8 @@ void DemoScene::Draw() {
 		s->Draw();
 	}
 
-	camera_->OnImGui();
-
 	// カメラスプライトが存在する場合のみ描画
 	if (cameraSprite_) {
 		cameraSprite_->Draw();
 	}
-
-	// パーティクルのImGui表示
-	ParticleManager::GetInstance()->OnImGui();
 }
