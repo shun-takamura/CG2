@@ -306,6 +306,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\Quaternion.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp" />
@@ -432,6 +433,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Quaternion.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />

@@ -381,6 +381,9 @@ void CharacterSelect::RemoveDynamicAnimated(const std::string& name) {
 }
 
 bool CharacterSelect::IsDynamicObject(IImGuiEditable* editable) const {
+	// 基底（プリミティブ）でヒットすれば早期 return
+	if (BaseScene::IsDynamicObject(editable)) return true;
+
 	for (const auto& obj : object3DInstances_) {
 		if (static_cast<IImGuiEditable*>(obj.get()) == editable) return true;
 	}

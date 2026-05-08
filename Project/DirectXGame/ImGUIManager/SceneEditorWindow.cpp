@@ -1,6 +1,7 @@
 #include "SceneEditorWindow.h"
 #include "ImGuiManager.h"
 #include "ModelManager.h"
+#include "PrimitiveInstance.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -218,6 +219,33 @@ void SceneEditorWindow::OnDraw() {
                 SafeCopy(payload.texturePath, sizeof(payload.texturePath), entry.filePath);
                 ImGui::SetDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
                 ImGui::TextUnformatted(entry.displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            ImGui::PopID();
+        }
+    }
+
+    // ============================================
+    // Primitives セクション（Plane / Box / Sphere / Ring / Cylinder）
+    // ============================================
+    if (ImGui::CollapsingHeader("Primitives", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("drag onto Viewport to add");
+
+        const int kPrimitiveCount = static_cast<int>(PrimitiveInstance::PrimitiveType::kCount);
+        for (int i = 0; i < kPrimitiveCount; ++i) {
+            const auto type = static_cast<PrimitiveInstance::PrimitiveType>(i);
+            const char* label = PrimitiveInstance::PrimitiveTypeToString(type);
+
+            ImGui::PushID(i + 400000);
+
+            ImGui::Selectable(label, false);
+
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                PrimitiveDropPayload payload{};
+                payload.primitiveType = i;
+                ImGui::SetDragDropPayload(PRIMITIVE_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(label);
                 ImGui::EndDragDropSource();
             }
 

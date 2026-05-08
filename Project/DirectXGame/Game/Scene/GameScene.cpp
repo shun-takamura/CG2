@@ -254,6 +254,8 @@ void GameScene::Update() {
 	for (auto& s : dynamicSprites_) {
 		s->Update();
 	}
+	// 動的プリミティブ（基底ヘルパー）
+	UpdateDynamicPrimitives();
 
 	// プレイヤー更新
 	player_->Update(input_, deltaTime);
@@ -360,6 +362,9 @@ void GameScene::Draw() {
 
 	// 敵描画
 	enemy_->Draw(dxCore_);
+
+	// 動的プリミティブ描画（基底ヘルパー）
+	DrawDynamicPrimitives();
 
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
@@ -672,6 +677,9 @@ void GameScene::RemoveDynamicAnimated(const std::string& name) {
 }
 
 bool GameScene::IsDynamicObject(IImGuiEditable* editable) const {
+	// 基底（プリミティブ）でヒットすれば早期 return
+	if (BaseScene::IsDynamicObject(editable)) return true;
+
 	for (const auto& obj : object3DInstances_) {
 		if (static_cast<IImGuiEditable*>(obj.get()) == editable) return true;
 	}

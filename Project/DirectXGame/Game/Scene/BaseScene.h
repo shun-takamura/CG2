@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+// PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
+#include "Primitive/PrimitiveInstance.h"
+
 // 前方宣言
 class SpriteManager;
 class Object3DManager;
@@ -21,8 +24,9 @@ class BaseScene {
 public:
 	/// <summary>
 	/// 仮想デストラクタ
+	/// （PrimitiveInstance の incomplete type 問題回避のため cpp で定義）
 	/// </summary>
-	virtual ~BaseScene() = default;
+	virtual ~BaseScene();
 
 	/// <summary>
 	/// 初期化
@@ -82,6 +86,16 @@ public:
 	virtual void RemoveDynamicAnimated(const std::string& name);
 
 	/// <summary>
+	/// シーンに動的にプリミティブを追加（PrimitiveInstance::PrimitiveType を int で受け取る）
+	/// </summary>
+	virtual void AddDynamicPrimitive(int primitiveType);
+
+	/// <summary>
+	/// シーンから動的プリミティブを削除
+	/// </summary>
+	virtual void RemoveDynamicPrimitive(const std::string& name);
+
+	/// <summary>
 	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か
 	/// HierarchyWindow から × ボタンを出すかどうかの判定に使う
 	/// </summary>
@@ -120,10 +134,23 @@ public:
 	void SetInputManager(InputManager* input) { input_ = input; }
 	void SetSkinningComputeManager(SkinningComputeManager* manager) { skinningComputeManager_ = manager; }
 protected:
+	/// <summary>
+	/// 動的プリミティブの更新（派生シーンの Update から呼ぶ）
+	/// </summary>
+	void UpdateDynamicPrimitives();
+
+	/// <summary>
+	/// 動的プリミティブの描画（派生シーンの Draw から呼ぶ）
+	/// </summary>
+	void DrawDynamicPrimitives();
+
 	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
 	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する
 	// 型消去で Object3DInstance.h の include を BaseScene.h に持ち込まない
 	std::vector<std::shared_ptr<void>> deferredDeletes_;
+
+	// 動的プリミティブ（SceneEditorWindow からのドロップで追加される）
+	std::vector<std::unique_ptr<PrimitiveInstance>> dynamicPrimitives_;
 
 	// 各マネージャーへのポインタ（Frameworkから受け取る）
 	SpriteManager* spriteManager_ = nullptr;

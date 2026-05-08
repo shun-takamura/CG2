@@ -93,6 +93,12 @@ void ViewportWindow::OnDraw() {
             const AnimatedDropPayload* p = static_cast<const AnimatedDropPayload*>(payload->Data);
             if (scene) scene->AddDynamicAnimated(p->dirPath, p->filename);
         }
+        // プリミティブ（Plane / Box / Sphere / Ring / Cylinder）
+        else if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(PRIMITIVE_DROP_PAYLOAD_TYPE)) {
+            const PrimitiveDropPayload* p = static_cast<const PrimitiveDropPayload*>(payload->Data);
+            if (scene) scene->AddDynamicPrimitive(p->primitiveType);
+        }
 
         ImGui::EndDragDropTarget();
     }
