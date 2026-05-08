@@ -1,6 +1,10 @@
 #include "BaseScene.h"
 #include "ModelManager.h"
 #include "DirectXCore.h"
+#include "Primitive/PrimitiveInstance.h"
+#include <algorithm>
+
+BaseScene::~BaseScene() = default;
 
 void BaseScene::ProcessAsyncLoads()
 {
@@ -47,7 +51,54 @@ void BaseScene::RemoveDynamicAnimated(const std::string& name) {
 	(void)name;
 }
 
+void BaseScene::AddDynamicPrimitive(int primitiveType) {
+	const int kCount = static_cast<int>(PrimitiveInstance::PrimitiveType::kCount);
+	if (primitiveType < 0 || primitiveType >= kCount) return;
+
+	const auto type = static_cast<PrimitiveInstance::PrimitiveType>(primitiveType);
+
+	// 同名衝突を避けて連番を付ける（例: "Box (1)"）
+	const char* baseName = PrimitiveInstance::PrimitiveTypeToString(type);
+	std::string name = baseName;
+	int suffix = 1;
+	while (std::any_of(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+		[&name](const std::unique_ptr<PrimitiveInstance>& p) { return p->GetName() == name; })) {
+		name = std::string(baseName) + " (" + std::to_string(suffix++) + ")";
+	}
+
+	auto prim = std::make_unique<PrimitiveInstance>();
+	prim->Initialize(type, name);
+	prim->SetCamera(GetCamera());
+	dynamicPrimitives_.push_back(std::move(prim));
+}
+
+void BaseScene::RemoveDynamicPrimitive(const std::string& name) {
+	auto it = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+		[&name](const std::unique_ptr<PrimitiveInstance>& p) { return p->GetName() == name; });
+	if (it != dynamicPrimitives_.end()) {
+		// GPU 使用中対策で 1 フレーム遅延破棄
+		deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(it->release()));
+		dynamicPrimitives_.erase(it);
+	}
+}
+
 bool BaseScene::IsDynamicObject(IImGuiEditable* editable) const {
-	(void)editable;
+	for (const auto& p : dynamicPrimitives_) {
+		if (static_cast<IImGuiEditable*>(p.get()) == editable) return true;
+	}
 	return false;
+}
+
+void BaseScene::UpdateDynamicPrimitives() {
+	for (auto& p : dynamicPrimitives_) {
+		// Camera が後から差し替わった場合に追従させる
+		p->SetCamera(GetCamera());
+		p->Update();
+	}
+}
+
+void BaseScene::DrawDynamicPrimitives() {
+	for (auto& p : dynamicPrimitives_) {
+		p->Draw();
+	}
 }

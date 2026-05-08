@@ -522,6 +522,7 @@ void DemoScene::Update() {
 	}
 
 	// SceneEditorWindow からドロップで追加された動的エンティティ
+	UpdateDynamicPrimitives();
 	for (auto& a : dynamicAnimated_) {
 		a->Update(GetScaledDeltaTime());
 	}
@@ -617,6 +618,9 @@ void DemoScene::Draw() {
 	for (auto& a : dynamicAnimated_) {
 		a->Draw(dxCore_);
 	}
+
+	// 動的プリミティブ
+	DrawDynamicPrimitives();
 
 	// アニメーション付きオブジェクトの描画
 	if (sneakWalkInstance_) {
@@ -773,6 +777,9 @@ void DemoScene::RemoveDynamicAnimated(const std::string& name) {
 }
 
 bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
+	// 基底（プリミティブ）でヒットすれば早期 return
+	if (BaseScene::IsDynamicObject(editable)) return true;
+
 	for (const auto& obj : object3DInstances_) {
 		if (static_cast<IImGuiEditable*>(obj.get()) == editable) return true;
 	}

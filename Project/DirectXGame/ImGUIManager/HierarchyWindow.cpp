@@ -66,6 +66,8 @@ void HierarchyWindow::OnDraw() {
                         scene->RemoveDynamicSprite(name);
                     } else if (typeName == "AnimatedObject3D") {
                         scene->RemoveDynamicAnimated(name);
+                    } else if (typeName == "Primitive") {
+                        scene->RemoveDynamicPrimitive(name);
                     } else {
                         scene->RemoveDynamicObject(name);
                     }

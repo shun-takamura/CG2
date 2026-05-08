@@ -16,6 +16,7 @@ class ImGuiManager;
 #define MODEL_DROP_PAYLOAD_TYPE     "MODEL_DROP"
 #define SPRITE_DROP_PAYLOAD_TYPE    "SPRITE_DROP"
 #define ANIMATED_DROP_PAYLOAD_TYPE  "ANIMATED_DROP"
+#define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
@@ -31,6 +32,11 @@ struct SpriteDropPayload {
 struct AnimatedDropPayload {
     char dirPath[256];
     char filename[128];
+};
+
+// プリミティブ（PrimitiveInstance::PrimitiveType を int で運ぶ）
+struct PrimitiveDropPayload {
+    int primitiveType;
 };
 
 /// <summary>
