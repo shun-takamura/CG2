@@ -57,8 +57,18 @@ void Game::Initialize() {
 		WindowsApplication::kClientHeight);
 
 #ifdef _DEBUG
-	// ViewportWindow にシーン共通の RenderTexture を渡す（PostEffect は全シーン共通）
-	ImGuiManager::Instance().SetViewportRenderTexture(postEffect_->GetSceneRenderTarget());
+	// Debug ビルド: PostEffect 適用後の最終出力先として、Viewport表示専用 RenderTexture を作成
+	// クリアカラーのアルファ=1.0 にして、エフェクトOFF/各シーン端でImGui背景が透けないようにする
+	viewportRenderTexture_ = std::make_unique<RenderTexture>();
+	const float viewportClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	viewportRenderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
+		WindowsApplication::kClientWidth,
+		WindowsApplication::kClientHeight,
+		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+		viewportClearColor);
+
+	// ViewportWindow にはエフェクト適用後の最終出力 RenderTexture を渡す
+	ImGuiManager::Instance().SetViewportRenderTexture(viewportRenderTexture_.get());
 #endif
 }
 
@@ -109,9 +119,16 @@ void Game::Draw() {
 		postEffect_->SetProjectionMatrix(cam->GetProjectionMatrix());
 	}
 
-	// 3. マルチパスでエフェクト適用 → Swapchainに出力
-	// ※ Debugビルド（エディタモード）ではSwapchainには描画せず、ImGuiのViewportWindow内で表示する
-#ifndef _DEBUG
+	// 3. マルチパスでエフェクト適用
+	// Releaseビルド: Swapchainへ直接出力
+	// Debugビルド  : Viewport表示用 RenderTexture へ出力 → ImGui::Image で表示
+#ifdef _DEBUG
+	postEffect_->Draw(dxCore_->GetCommandList(), viewportRenderTexture_.get());
+	// PostEffect::Draw 内で RTV が viewportRenderTexture_ に切り替えられたので、
+	// ImGui を Swapchain に描画するために RTV を戻す
+	dxCore_->RestoreSwapchainRenderTarget(dxCore_->GetCommandList());
+	srvManager_->PreDraw();
+#else
 	postEffect_->Draw(dxCore_->GetCommandList());
 #endif
 
@@ -132,6 +149,12 @@ void Game::Finalize() {
 	if (postEffect_) {
 		postEffect_->Finalize();
 	}
+
+#ifdef _DEBUG
+	if (viewportRenderTexture_) {
+		viewportRenderTexture_->Finalize();
+	}
+#endif
 
 	//===================================
 	// 基底クラスの終了処理

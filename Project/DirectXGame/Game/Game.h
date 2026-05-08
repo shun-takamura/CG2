@@ -2,6 +2,7 @@
 
 #include "Framework.h"
 #include "PostEffect.h"
+#include "RenderTexture.h"
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
@@ -48,4 +49,9 @@ private:
 
 	// ポストエフェクト（RenderTextureも内部で管理）
 	static std::unique_ptr<PostEffect> postEffect_;
+
+#ifdef _DEBUG
+	// Debug ビルド専用: ImGui ViewportWindow に表示する PostEffect 適用後の最終出力
+	std::unique_ptr<RenderTexture> viewportRenderTexture_;
+#endif
 };
