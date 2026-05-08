@@ -110,7 +110,8 @@ void LineRenderer::CreatePipelineState() {
     blend.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
     blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
     blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+    // 透過部分(src.a=0)で destAlpha を保持し、ImGui Viewport 表示時に下のImGui背景が透けないようにする
+    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
     blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
 
     // 深度テストはする・書き込みはしない（既存メッシュに埋もれない見せ方）

@@ -330,8 +330,21 @@ void PostEffect::EndSceneRender(ID3D12GraphicsCommandList* commandList)
 // マルチパス描画
 // ===================================================================
 
-void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
+void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* outputTarget)
 {
+	// 最終出力先がViewport用RTか、Swapchainかで分岐するためのヘルパ
+	const bool useOutputTarget = (outputTarget != nullptr);
+
+	// 最終出力RTVをセットする処理（Swapchain or 指定された RenderTexture）
+	auto bindFinalOutputRTV = [&]() {
+		if (useOutputTarget) {
+			outputTarget->BeginRender(commandList);
+		} else {
+			dxCore_->RestoreSwapchainRenderTarget(commandList);
+		}
+		srvManager_->PreDraw();
+	};
+
 	// ONになっているエフェクトを集める
 	std::vector<BaseFilterEffect*> activeEffects;
 	bool needsDepth = false;
@@ -351,10 +364,18 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 
 	// 全エフェクトOFF → コピーだけ
 	if (activeEffects.empty()) {
+		// outputTarget が指定されている場合は、ここで RTV を切り替えてから描画する
+		// （Swapchain出力時は呼び出し側で BeginDraw 済みなので RTV はセット済み）
+		if (useOutputTarget) {
+			bindFinalOutputRTV();
+		}
 		DrawCopy(commandList, renderTextureA_.get());
 	}
 	// 1つだけ → 直接Swapchainに描画
 	else if (activeEffects.size() == 1) {
+		if (useOutputTarget) {
+			bindFinalOutputRTV();
+		}
 		DrawEffect(commandList, activeEffects[0], renderTextureA_.get());
 	}
 	else {
@@ -366,9 +387,8 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 			bool isLast = (i == activeEffects.size() - 1);
 
 			if (isLast) {
-				// 最後のパス: SwapchainのRTVに戻して描画
-				dxCore_->RestoreSwapchainRenderTarget(commandList);
-				srvManager_->PreDraw();
+				// 最後のパス: 最終出力RTV（Swapchain or outputTarget）にセットして描画
+				bindFinalOutputRTV();
 				DrawEffect(commandList, activeEffects[i], currentInput);
 			}
 			else {
@@ -384,6 +404,12 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList)
 				currentOutput = temp;
 			}
 		}
+	}
+
+	// outputTarget を使った場合は、PIXEL_SHADER_RESOURCE 状態に戻して
+	// ImGui::Image でSRVとして読めるようにする
+	if (useOutputTarget) {
+		outputTarget->EndRender(commandList);
 	}
 
 	// depthを次フレームのために書き込み可能状態に戻す

@@ -49,7 +49,10 @@ public:
 	/// <summary>
 	/// マルチパス描画
 	/// </summary>
-	void Draw(ID3D12GraphicsCommandList* commandList);
+	/// <param name="commandList">コマンドリスト</param>
+	/// <param name="outputTarget">最終出力先のRenderTexture（nullptr ならSwapchainに出力）。
+	/// Debugビルドで ImGui の ViewportWindow に表示するときに使う。</param>
+	void Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* outputTarget = nullptr);
 
 	/// <summary>
 	/// 終了処理
