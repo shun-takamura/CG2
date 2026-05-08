@@ -14,7 +14,7 @@ void PrimitiveMesh::Initialize(const MeshData& meshData) {
 void PrimitiveMesh::Update(Camera* camera) {
 
     // --- UV変換の累積 ---
-    const float deltaTime = PrimitivePipeline::GetInstance()->GetDxCore()->GetDeltaTime();
+    const float deltaTime = PrimitivePipeline::GetInstance()->GetDxCore()->GetScaledDeltaTime();
     uvScrollAccumulated_.x += uvScrollSpeed_.x * deltaTime;
     uvScrollAccumulated_.y += uvScrollSpeed_.y * deltaTime;
 

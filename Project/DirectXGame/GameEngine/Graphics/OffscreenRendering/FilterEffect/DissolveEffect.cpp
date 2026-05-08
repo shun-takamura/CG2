@@ -48,7 +48,7 @@ void DissolveEffect::UpdateConstantBuffer()
 
 	// GPUノイズモードのときだけSeedを変化させるための経過時間を進める
 	if (maskMode_ == MaskMode::GPUNoise && dxCore_) {
-		noiseTime_ += dxCore_->GetDeltaTime();
+		noiseTime_ += dxCore_->GetScaledDeltaTime();
 	}
 
 	DissolveParamsCB cb{};

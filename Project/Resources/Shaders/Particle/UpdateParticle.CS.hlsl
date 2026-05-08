@@ -32,7 +32,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
         // alphaが0のParticleは死んでいるとみなして更新しない
         if (gParticles[particleIndex].color.a != 0)
         {
-            gParticles[particleIndex].translate += gParticles[particleIndex].velocity;
+            // velocityは「1秒あたりの移動量（速度）」として運用する
+            gParticles[particleIndex].translate += gParticles[particleIndex].velocity * gPerFrame.deltaTime;
             gParticles[particleIndex].currentTime += gPerFrame.deltaTime;
             float alpha = 1.0f - (gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
             gParticles[particleIndex].color.a = saturate(alpha);

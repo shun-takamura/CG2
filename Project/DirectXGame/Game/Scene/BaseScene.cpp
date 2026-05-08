@@ -1,5 +1,6 @@
 #include "BaseScene.h"
 #include "ModelManager.h"
+#include "DirectXCore.h"
 
 void BaseScene::ProcessAsyncLoads()
 {
@@ -9,6 +10,12 @@ void BaseScene::ProcessAsyncLoads()
 
 	if (!dxCore_) return;
 	ModelManager::GetInstance()->FlushGPUUpload(dxCore_, 1);
+}
+
+float BaseScene::GetScaledDeltaTime() const
+{
+	if (!dxCore_) return 0.0f;
+	return dxCore_->GetScaledDeltaTime() * sceneTimeScale_;
 }
 
 // ====================================================================

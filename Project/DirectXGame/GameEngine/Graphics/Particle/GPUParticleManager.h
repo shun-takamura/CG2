@@ -25,7 +25,8 @@ public:
     void Finalize();
 
     // 描画前の毎フレーム更新（PerView/PerFrame/Emitterの書き込み）
-    void Update(const Camera* camera);
+    // deltaTime はタイムスケール適用済みの値を呼び出し側から受け取る
+    void Update(const Camera* camera, float deltaTime);
 
     // 描画。最初の呼び出し時に初期化CSのDispatchも行う
     void Draw();

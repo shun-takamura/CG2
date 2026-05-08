@@ -60,7 +60,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
                     gEmitter.translate + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
                 gParticles[particleIndex].color.rgb = generator.Generate3d();
                 gParticles[particleIndex].color.a = 1.0f;
-                gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 0.05f;
+                // velocityは「1秒あたりの移動量（速度）」。60FPS時にこれまでの 0.05/フレーム と同じ見た目になるよう 0.05*60=3.0
+                gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 3.0f;
                 gParticles[particleIndex].lifeTime = 1.0f;
                 gParticles[particleIndex].currentTime = 0.0f;
             }

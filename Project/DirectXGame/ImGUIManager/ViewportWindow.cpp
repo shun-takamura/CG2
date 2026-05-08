@@ -14,6 +14,17 @@ void ViewportWindow::OnDraw() {
         return;
     }
 
+    // --- 再生/停止コントロール（現在シーンの sceneTimeScale を 0/1 に切り替え） ---
+    {
+        BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+        const bool isPaused = scene && scene->GetSceneTimeScale() == 0.0f;
+        if (ImGui::Button(isPaused ? "Play" : "Pause")) {
+            if (scene) scene->SetSceneTimeScale(isPaused ? 1.0f : 0.0f);
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(isPaused ? "[ Paused ]" : "[ Playing ]");
+    }
+
     // ウィンドウサイズを取得（ImGuiウィンドウ内の利用可能領域）
     ImVec2 windowSize = ImGui::GetContentRegionAvail();
 

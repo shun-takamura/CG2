@@ -104,9 +104,9 @@ void GPUParticleManager::OnImGui()
 #endif
 }
 
-void GPUParticleManager::Update(const Camera* camera)
+void GPUParticleManager::Update(const Camera* camera, float deltaTime)
 {
-    const float dt = dxCore_->GetDeltaTime();
+    const float dt = deltaTime;
     elapsedTime_ += dt;
 
     // PerFrame更新
