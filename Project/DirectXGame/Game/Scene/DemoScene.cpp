@@ -235,6 +235,8 @@ void DemoScene::Initialize() {
 	animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
 	animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 
+	//dxCore_->SetUseFixedFrameRate(false);
+
 #ifdef _DEBUG
 	// Camera/RenderTextureはBaseScene::GetCamera経由とGame::Initialize側で中央化済み
 	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
@@ -379,7 +381,7 @@ void DemoScene::Update() {
 
 	// 音源が半径8で円周上を回る（ドップラー・定位の確認用）
 	if (sound3DOrbitActive_) {
-		sound3DOrbitTime_ += dxCore_->GetDeltaTime();
+		sound3DOrbitTime_ += GetScaledDeltaTime();
 		const float orbitRadius = 8.0f;
 		const float orbitSpeed = 1.5f; // ラジアン/秒
 		float angle = sound3DOrbitTime_ * orbitSpeed;
@@ -444,7 +446,7 @@ void DemoScene::Update() {
 	}
 
 	// --- HitEffectPlanes の更新 ---
-	const float deltaTime = dxCore_->GetDeltaTime();
+	const float deltaTime = GetScaledDeltaTime();
 
 	for (auto it = hitEffectPlanes_.begin(); it != hitEffectPlanes_.end();) {
 		it->currentTime += deltaTime;
@@ -521,7 +523,7 @@ void DemoScene::Update() {
 
 	// SceneEditorWindow からドロップで追加された動的エンティティ
 	for (auto& a : dynamicAnimated_) {
-		a->Update(dxCore_->GetDeltaTime());
+		a->Update(GetScaledDeltaTime());
 	}
 	for (auto& s : dynamicSprites_) {
 		s->Update();
@@ -529,27 +531,27 @@ void DemoScene::Update() {
 
 	// アニメーション付きオブジェクトの更新
 	if (sneakWalkInstance_) {
-		sneakWalkInstance_->Update(dxCore_->GetDeltaTime());
+		sneakWalkInstance_->Update(GetScaledDeltaTime());
 	}
 
 	// アニメーション付きオブジェクトの更新
 	if (animatedCubeInstance_) {
-		animatedCubeInstance_->Update(dxCore_->GetDeltaTime());
+		animatedCubeInstance_->Update(GetScaledDeltaTime());
 	}
 
 	// Skybox更新を追加
 	skybox_->Update();
 
 	// パーティクル更新処理
-	ParticleManager::GetInstance()->Update();
+	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 
 	// GPU Particle 更新（PerView書き込み）
 	if (gpuParticleManager_) {
-		gpuParticleManager_->Update(camera_.get());
+		gpuParticleManager_->Update(camera_.get(), GetScaledDeltaTime());
 	}
 
 	//// 1秒間に発生させる量を自動制御
-	//emitTimer_ += dxCore_->GetDeltaTime();
+	//emitTimer_ += GetScaledDeltaTime();
 	//float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
 	//if (emitRate > 0.0f) {
 	//	float emitInterval = 1.0f / emitRate;

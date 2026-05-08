@@ -251,15 +251,12 @@ void ParticleManager::Emit(const std::string& name, const EmitParam& param)
     }
 }
 
-void ParticleManager::Update()
+void ParticleManager::Update(float deltaTime)
 {
     // カメラ取得
     if (!camera_) {
         return;
     }
-
-    // デルタタイムを取得
-    const float kDeltaTime = dxCore_->GetDeltaTime();
 
     Matrix4x4 viewMatrix = camera_->GetViewMatrix();
     Matrix4x4 projectionMatrix = camera_->GetProjectionMatrix();
@@ -288,7 +285,7 @@ void ParticleManager::Update()
             Particle& particle = *it;
 
             // 経過時間を加算
-            particle.currentTime += 1.0f / 60.0f;
+            particle.currentTime += deltaTime;
 
             // 寿命に達していたらグループから外す
             if (particle.currentTime >= particle.lifeTime) {
@@ -300,16 +297,16 @@ void ParticleManager::Update()
             if (isAccelerationFieldEnabled_) {
                 // Fieldの範囲内のParticleには加速度を適用する
                 if (IsCollision(accelerationField_.area, particle.transform.translate)) {
-                    particle.velocity.x += accelerationField_.acceleration.x * kDeltaTime;
-                    particle.velocity.y += accelerationField_.acceleration.y * kDeltaTime;
-                    particle.velocity.z += accelerationField_.acceleration.z * kDeltaTime;
+                    particle.velocity.x += accelerationField_.acceleration.x * deltaTime;
+                    particle.velocity.y += accelerationField_.acceleration.y * deltaTime;
+                    particle.velocity.z += accelerationField_.acceleration.z * deltaTime;
                 }
             }
 
             // 移動処理（速度を座標に加算）
-            particle.transform.translate.x += particle.velocity.x * kDeltaTime;
-            particle.transform.translate.y += particle.velocity.y * kDeltaTime;
-            particle.transform.translate.z += particle.velocity.z * kDeltaTime;
+            particle.transform.translate.x += particle.velocity.x * deltaTime;
+            particle.transform.translate.y += particle.velocity.y * deltaTime;
+            particle.transform.translate.z += particle.velocity.z * deltaTime;
 
             Matrix4x4 scaleMatrix = MakeScaleMatrix(particle.transform);
             Matrix4x4 translateMatrix = MakeTranslateMatrix(particle.transform);

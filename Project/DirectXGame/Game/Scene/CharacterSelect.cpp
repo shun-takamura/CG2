@@ -253,14 +253,14 @@ void CharacterSelect::Update()
 
 	// SceneEditorWindow からドロップで追加された動的エンティティ
 	for (auto& a : dynamicAnimated_) {
-		a->Update(dxCore_->GetDeltaTime());
+		a->Update(GetScaledDeltaTime());
 	}
 	for (auto& s : dynamicSprites_) {
 		s->Update();
 	}
 
 	// パーティクル更新処理
-	ParticleManager::GetInstance()->Update();
+	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 
 	sprite_->Update();
 	playerQRNormal_->Update();

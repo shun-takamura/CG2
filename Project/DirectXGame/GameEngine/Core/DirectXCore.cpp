@@ -12,7 +12,7 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     winApp_ = winApp;
 
     // システムタイマーの分解能を上げる
-    timeBeginPeriod(1);
+    timeBeginPeriod(1); 
 
     // ウィンドウサイズ取得
     int32_t width = WindowsApplication::kClientWidth;

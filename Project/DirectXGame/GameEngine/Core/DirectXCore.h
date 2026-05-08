@@ -111,8 +111,15 @@ public:
 	// Depthリソースの状態を遷移する
 	void TransitionDepthState(ID3D12GraphicsCommandList* commandList, D3D12_RESOURCE_STATES afterState);
 
-	// デルタタイムの取得
+	// デルタタイムの取得（生の値）
 	float GetDeltaTime() const { return deltaTime_; }
+
+	// タイムスケール適用済みデルタタイム
+	float GetScaledDeltaTime() const { return deltaTime_ * timeScale_; }
+
+	// グローバルタイムスケール
+	float GetTimeScale() const { return timeScale_; }
+	void SetTimeScale(float scale) { timeScale_ = (scale < 0.0f) ? 0.0f : scale; }
 
 	// 固定/可変フレームレートの切り替え
 	void SetUseFixedFrameRate(bool useFixed) { useFixedFrameRate_ = useFixed; }
@@ -175,6 +182,9 @@ private:
 	std::chrono::steady_clock::time_point lastFrameTime_;
 	float deltaTime_ = 1.0f / 60.0f;
 	bool useFixedFrameRate_ = true; // true: 固定, false: 可変
+
+	// グローバルタイムスケール（0で停止、1で等速、0.5でスロー、2で倍速）
+	float timeScale_ = 1.0f;
 
 	HANDLE fenceEvent_ = nullptr;
 	UINT frameIndex_ = 0;

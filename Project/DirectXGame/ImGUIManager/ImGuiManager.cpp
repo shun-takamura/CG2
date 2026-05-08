@@ -21,6 +21,8 @@
 #include "TransitionManager.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -96,6 +98,47 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("TimeControl",
+        [this]() {
+            // --- グローバル ---
+            ImGui::TextUnformatted("Global");
+            ImGui::Separator();
+            float globalScale = dxCore_ ? dxCore_->GetTimeScale() : 1.0f;
+            if (ImGui::SliderFloat("Global TimeScale", &globalScale, 0.0f, 4.0f, "%.2f")) {
+                if (dxCore_) dxCore_->SetTimeScale(globalScale);
+            }
+            if (ImGui::Button("Pause")) { if (dxCore_) dxCore_->SetTimeScale(0.0f); }
+            ImGui::SameLine();
+            if (ImGui::Button("0.25x")) { if (dxCore_) dxCore_->SetTimeScale(0.25f); }
+            ImGui::SameLine();
+            if (ImGui::Button("0.5x"))  { if (dxCore_) dxCore_->SetTimeScale(0.5f); }
+            ImGui::SameLine();
+            if (ImGui::Button("1x"))    { if (dxCore_) dxCore_->SetTimeScale(1.0f); }
+            ImGui::SameLine();
+            if (ImGui::Button("2x"))    { if (dxCore_) dxCore_->SetTimeScale(2.0f); }
+
+            ImGui::Spacing();
+
+            // --- 現在シーン ---
+            BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+            ImGui::TextUnformatted("Current Scene");
+            ImGui::Separator();
+            if (scene) {
+                float sceneScale = scene->GetSceneTimeScale();
+                if (ImGui::SliderFloat("Scene TimeScale", &sceneScale, 0.0f, 4.0f, "%.2f")) {
+                    scene->SetSceneTimeScale(sceneScale);
+                }
+                if (ImGui::Button("Scene Pause")) scene->SetSceneTimeScale(0.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("Scene Play"))  scene->SetSceneTimeScale(1.0f);
+
+                ImGui::Spacing();
+                ImGui::Text("Effective dt = %.4f s",
+                    scene->GetScaledDeltaTime());
+            } else {
+                ImGui::TextDisabled("No active scene.");
+            }
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("WebCam Devices",
         []() { CameraCapture::GetInstance()->LogDevicesToImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("QR Code",

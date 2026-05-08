@@ -93,6 +93,22 @@ public:
 	void ProcessAsyncLoads();
 
 	//====================
+	// タイムスケール
+	//====================
+
+	/// <summary>
+	/// グローバル × シーンローカルを合算したデルタタイムを返す。
+	/// シーンの Update から各オブジェクトに渡すのはこれ。
+	/// </summary>
+	float GetScaledDeltaTime() const;
+
+	/// <summary>
+	/// シーン単位のタイムスケール（0で停止、1で等速、0.5でスローなど）
+	/// </summary>
+	float GetSceneTimeScale() const { return sceneTimeScale_; }
+	void SetSceneTimeScale(float scale) { sceneTimeScale_ = (scale < 0.0f) ? 0.0f : scale; }
+
+	//====================
 	// セッター
 	//====================
 
@@ -117,4 +133,7 @@ protected:
 	SRVManager* srvManager_ = nullptr;
 	InputManager* input_ = nullptr;
 	SkinningComputeManager* skinningComputeManager_ = nullptr;
+
+	// シーンローカルのタイムスケール（DirectXCoreのグローバルとは別に乗算される）
+	float sceneTimeScale_ = 1.0f;
 };

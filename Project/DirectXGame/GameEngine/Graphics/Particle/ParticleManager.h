@@ -109,8 +109,8 @@ public:
     // パーティクル発生（EmitParam版）
     void Emit(const std::string& name, const EmitParam& param);
 
-    // 更新
-    void Update();
+    // 更新（呼び出し側からタイムスケール適用済みのdeltaTimeを受け取る）
+    void Update(float deltaTime);
 
     // 描画
     void Draw();

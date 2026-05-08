@@ -199,7 +199,7 @@ void GameScene::Finalize() {
 
 void GameScene::Update() {
 
-	float deltaTime = dxCore_->GetDeltaTime();
+	float deltaTime = GetScaledDeltaTime();
 
 	// ===== スマブラ風カメラ（X軸 + ズーム + Y補正） =====
 	{
@@ -321,7 +321,7 @@ void GameScene::Update() {
 	reloadGauge_->Update();
 
 	// パーティクル更新
-	ParticleManager::GetInstance()->Update();
+	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 }
 
 void GameScene::Draw() {

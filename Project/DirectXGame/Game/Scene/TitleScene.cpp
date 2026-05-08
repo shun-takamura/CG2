@@ -129,7 +129,7 @@ void TitleScene::Update() {
 	space_->Update();
 
 	// パーティクル更新処理
-	ParticleManager::GetInstance()->Update();
+	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 
 	
 
