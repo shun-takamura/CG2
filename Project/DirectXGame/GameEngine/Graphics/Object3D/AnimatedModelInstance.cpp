@@ -1,16 +1,21 @@
 #include "AnimatedModelInstance.h"
 #include <filesystem>
+#include <cstring>
 #include "SkinCluster.h"
 
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
     modelCore_ = modelCore;
 
-    // モデル読み込み
-    LoadModel(directoryPath, filename);
-
-    // アニメーション読み込み（同じファイルをもう一度読む。後でリファクタリング予定）
-    animation_ = LoadAnimationFile(directoryPath, filename);
+    // 拡張子で分岐: .mesh は Cooker 出力の 4 分割形式、その他は assimp 互換経路
+    std::filesystem::path p(filename);
+    if (p.extension() == ".mesh") {
+        LoadModelV2(directoryPath, filename);
+        // animation_ は LoadModelV2 内で .anim から読み込まれる
+    } else {
+        LoadModel(directoryPath, filename);
+        animation_ = LoadAnimationFile(directoryPath, filename);
+    }
 
     // 頂点データ作成
     CreateVertexData(modelCore_->GetDXCore());
@@ -213,5 +218,273 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
     }
 
     modelData_.rootNode = ReadNode(scene->mRootNode);
+    assert(!modelData_.indices.empty() && "indices is empty!");
+}
+
+// =====================================================================
+// .mesh / .skel / .mat / .anim 統合ローダー（Cooker v2 形式）
+// =====================================================================
+
+namespace {
+
+// .mat から base_color テクスチャパスを取り出すヘルパー
+std::string ReadMatBaseColorPath_V2(const std::string& matPath)
+{
+    std::ifstream f(matPath, std::ios::binary);
+    if (!f) return {};
+    char magic[4]{};
+    f.read(magic, 4);
+    if (std::memcmp(magic, "MATL", 4) != 0) return {};
+    uint32_t version = 0;
+    f.read(reinterpret_cast<char*>(&version), 4);
+    if (version != 1) return {};
+    char path[256]{};
+    f.read(path, 256);
+    return std::string(path);
+}
+
+// .skel の Joint 1 個ぶん（172 バイト）
+struct SkelJoint {
+    char       name[64];
+    int32_t    parent_index;
+    Matrix4x4  inverse_bind_matrix;
+    Vector3    bind_translation;
+    Vector4    bind_rotation;
+    Vector3    bind_scale;
+};
+
+// .skel を読んでフラットなジョイント配列を返す。失敗時は空。
+std::vector<SkelJoint> ReadSkelFile(const std::string& skelPath)
+{
+    std::vector<SkelJoint> joints;
+    std::ifstream f(skelPath, std::ios::binary);
+    if (!f) return joints;
+
+    char magic[4]{};
+    f.read(magic, 4);
+    if (std::memcmp(magic, "SKEL", 4) != 0) return joints;
+    uint32_t version = 0, jointCount = 0, reserved = 0;
+    f.read(reinterpret_cast<char*>(&version), 4);
+    f.read(reinterpret_cast<char*>(&jointCount), 4);
+    f.read(reinterpret_cast<char*>(&reserved), 4);
+    if (version != 1) return joints;
+
+    joints.resize(jointCount);
+    for (uint32_t i = 0; i < jointCount; ++i) {
+        f.read(reinterpret_cast<char*>(&joints[i]), sizeof(SkelJoint));
+    }
+    return joints;
+}
+
+// フラットなジョイント配列から Node 階層を組み立てる。
+// .skel はトポロジカル順序（親 index < 自 index）と仮定する。
+Node BuildNodeTreeFromSkel(const std::vector<SkelJoint>& joints)
+{
+    if (joints.empty()) {
+        Node empty;
+        empty.localMatrix = MakeIdentity4x4();
+        return empty;
+    }
+
+    // まず全 Node を作って中身を埋める
+    std::vector<Node> tempNodes(joints.size());
+    for (size_t i = 0; i < joints.size(); ++i) {
+        const auto& j = joints[i];
+        tempNodes[i].name = std::string(j.name);
+        tempNodes[i].transform.translate = j.bind_translation;
+        tempNodes[i].transform.rotate = { j.bind_rotation.x, j.bind_rotation.y,
+                                          j.bind_rotation.z, j.bind_rotation.w };
+        tempNodes[i].transform.scale = j.bind_scale;
+        tempNodes[i].localMatrix = MakeAffineMatrix(
+            tempNodes[i].transform.scale,
+            tempNodes[i].transform.rotate,
+            tempNodes[i].transform.translate);
+    }
+
+    // 逆順（大きい index = 子側）から親の children へ移す
+    // → トポロジカル順序を仮定すれば、ある index を処理するときその子は既に
+    //   自分の中に集約済みになっている
+    int rootIdx = -1;
+    for (int i = static_cast<int>(joints.size()) - 1; i >= 0; --i) {
+        int parent = joints[i].parent_index;
+        if (parent < 0) {
+            rootIdx = i;
+        } else {
+            tempNodes[parent].children.push_back(std::move(tempNodes[i]));
+        }
+    }
+
+    if (rootIdx < 0) rootIdx = 0; // フォールバック
+    return std::move(tempNodes[rootIdx]);
+}
+
+// .anim を読んで Animation を構築する
+Animation ReadAnimFile(const std::string& animPath)
+{
+    Animation anim{};
+    anim.duration = 0.0f;
+    std::ifstream f(animPath, std::ios::binary);
+    if (!f) return anim;
+
+    char magic[4]{};
+    f.read(magic, 4);
+    if (std::memcmp(magic, "ANIM", 4) != 0) return anim;
+    uint32_t version = 0, channelCount = 0, channelsOffset = 0, reserved = 0;
+    float duration = 0.0f;
+    f.read(reinterpret_cast<char*>(&version), 4);
+    f.read(reinterpret_cast<char*>(&duration), 4);
+    f.read(reinterpret_cast<char*>(&channelCount), 4);
+    f.read(reinterpret_cast<char*>(&channelsOffset), 4);
+    f.read(reinterpret_cast<char*>(&reserved), 4);
+    if (version != 1) return anim;
+
+    anim.duration = duration;
+
+    // Channel テーブルを全部読み込む
+    struct ChannelHeader {
+        char     joint_name[64];
+        uint32_t t_count, r_count, s_count;
+        uint32_t t_offset, r_offset, s_offset;
+    };
+    std::vector<ChannelHeader> channelHeaders(channelCount);
+    f.seekg(channelsOffset);
+    for (uint32_t i = 0; i < channelCount; ++i) {
+        f.read(reinterpret_cast<char*>(&channelHeaders[i]), sizeof(ChannelHeader));
+    }
+
+    // 各チャンネルのキーフレームを読み込む
+    for (const auto& ch : channelHeaders) {
+        std::string jointName(ch.joint_name);
+        NodeAnimation& na = anim.nodeAnimations[jointName];
+
+        na.translate.keyframes.resize(ch.t_count);
+        f.seekg(ch.t_offset);
+        for (uint32_t i = 0; i < ch.t_count; ++i) {
+            float t; Vector3 v;
+            f.read(reinterpret_cast<char*>(&t), 4);
+            f.read(reinterpret_cast<char*>(&v), sizeof(Vector3));
+            na.translate.keyframes[i] = { t, v };
+        }
+        na.rotate.keyframes.resize(ch.r_count);
+        f.seekg(ch.r_offset);
+        for (uint32_t i = 0; i < ch.r_count; ++i) {
+            float t; float q[4];
+            f.read(reinterpret_cast<char*>(&t), 4);
+            f.read(reinterpret_cast<char*>(q), sizeof(q));
+            na.rotate.keyframes[i] = { t, Quaternion(q[0], q[1], q[2], q[3]) };
+        }
+        na.scale.keyframes.resize(ch.s_count);
+        f.seekg(ch.s_offset);
+        for (uint32_t i = 0; i < ch.s_count; ++i) {
+            float t; Vector3 v;
+            f.read(reinterpret_cast<char*>(&t), 4);
+            f.read(reinterpret_cast<char*>(&v), sizeof(Vector3));
+            na.scale.keyframes[i] = { t, v };
+        }
+    }
+    return anim;
+}
+
+} // anonymous namespace
+
+void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const std::string& filename)
+{
+    const std::string meshPath = directoryPath + "/" + filename;
+    std::ifstream f(meshPath, std::ios::binary);
+    assert(f && "failed to open .mesh file");
+
+    char magic[4]{};
+    f.read(magic, 4);
+    assert(std::memcmp(magic, "MESH", 4) == 0);
+
+    uint32_t version = 0, flags = 0;
+    uint32_t vertexCount = 0, indexCount = 0, submeshCount = 0;
+    uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
+    f.read(reinterpret_cast<char*>(&version), 4);
+    f.read(reinterpret_cast<char*>(&flags), 4);
+    f.read(reinterpret_cast<char*>(&vertexCount), 4);
+    f.read(reinterpret_cast<char*>(&indexCount), 4);
+    f.read(reinterpret_cast<char*>(&submeshCount), 4);
+    f.read(reinterpret_cast<char*>(&vertexOffset), 4);
+    f.read(reinterpret_cast<char*>(&indexOffset), 4);
+    f.read(reinterpret_cast<char*>(&skinOffset), 4);
+    f.read(reinterpret_cast<char*>(&submeshOffset), 4);
+    assert(version == 2 && "expected .mesh v2");
+
+    char skeletonPathBuf[256]{};
+    f.read(skeletonPathBuf, 256);
+    std::string skeletonPath(skeletonPathBuf);
+
+    const bool hasSkinning = (flags & 0x1) != 0;
+
+    // --- 頂点 ---
+    modelData_.vertices.resize(vertexCount);
+    f.seekg(vertexOffset);
+    f.read(reinterpret_cast<char*>(modelData_.vertices.data()),
+           static_cast<std::streamsize>(vertexCount) * sizeof(VertexData));
+
+    // --- インデックス ---
+    modelData_.indices.resize(indexCount);
+    f.seekg(indexOffset);
+    f.read(reinterpret_cast<char*>(modelData_.indices.data()),
+           static_cast<std::streamsize>(indexCount) * sizeof(uint32_t));
+
+    // --- .skel を読んで rootNode を構築 ---
+    std::vector<SkelJoint> skelJoints;
+    if (!skeletonPath.empty()) {
+        skelJoints = ReadSkelFile(skeletonPath);
+    }
+    modelData_.rootNode = BuildNodeTreeFromSkel(skelJoints);
+    if (skelJoints.empty()) {
+        modelData_.rootNode.localMatrix = MakeIdentity4x4();
+    }
+
+    // --- スキニングデータを per-vertex から per-joint (skinClusterData) に展開 ---
+    if (hasSkinning && !skelJoints.empty()) {
+        // 一頂点あたり (joint_indices[4], weights[4]) = 32 バイト
+        struct SkinVertex {
+            uint32_t joint_indices[4];
+            float    weights[4];
+        };
+        std::vector<SkinVertex> skinData(vertexCount);
+        f.seekg(skinOffset);
+        f.read(reinterpret_cast<char*>(skinData.data()),
+               static_cast<std::streamsize>(vertexCount) * sizeof(SkinVertex));
+
+        for (uint32_t v = 0; v < vertexCount; ++v) {
+            for (int k = 0; k < 4; ++k) {
+                float w = skinData[v].weights[k];
+                if (w <= 0.0f) continue;
+                uint32_t jointIdx = skinData[v].joint_indices[k];
+                if (jointIdx >= skelJoints.size()) continue;
+                const std::string jointName(skelJoints[jointIdx].name);
+                auto& jwd = modelData_.skinClusterData[jointName];
+                jwd.inverseBindPoseMatrix = skelJoints[jointIdx].inverse_bind_matrix;
+                jwd.vertexWeights.push_back({ w, v });
+            }
+        }
+    }
+
+    // --- submesh[0] の material_path を読んで .mat へアクセス ---
+    if (submeshCount > 0) {
+        f.seekg(submeshOffset);
+        uint32_t idxStart = 0, idxCount = 0;
+        f.read(reinterpret_cast<char*>(&idxStart), 4);
+        f.read(reinterpret_cast<char*>(&idxCount), 4);
+        char matPath[256]{};
+        f.read(matPath, 256);
+
+        std::string baseColor = ReadMatBaseColorPath_V2(std::string(matPath));
+        modelData_.materialData.textureFilePath = baseColor;
+    }
+
+    // --- 同階層の .anim を探して読み込む（あれば）---
+    std::filesystem::path animPath =
+        std::filesystem::path(directoryPath) /
+        (std::filesystem::path(filename).stem().string() + ".anim");
+    if (std::filesystem::exists(animPath)) {
+        animation_ = ReadAnimFile(animPath.string());
+    }
+
     assert(!modelData_.indices.empty() && "indices is empty!");
 }
