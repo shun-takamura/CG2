@@ -74,4 +74,7 @@ private:
 
     Node ReadNode(aiNode* node);
     void LoadModel(const std::string& directoryPath, const std::string& filename);
+
+    // Cooker が出力した .mesh + .skel + .mat + .anim をまとめて読む新経路
+    void LoadModelV2(const std::string& directoryPath, const std::string& filename);
 };
