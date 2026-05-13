@@ -1,4 +1,5 @@
 #include "TextureManager.h"
+#include "DDSHeader.h"
 //TextureManager* TextureManager::instance = nullptr;
 
 uint32_t TextureManager::kSRVIndexTop = 1;
@@ -85,6 +86,9 @@ void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r,
         textureData.metadata.format,
         static_cast<UINT>(textureData.metadata.mipLevels)
     );
+
+    // 同期で完了するパスなので GPUReady 状態に遷移させる
+    textureData.loadState = TextureData::LoadState::GPUReady;
 
     OutputDebugStringA(("TextureManager: Created solid color texture: " + name + "\n").c_str());
 }
@@ -204,6 +208,9 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
         1
     );
 
+    // 同期で完了するパスなので GPUReady 状態に遷移させる
+    textureData.loadState = TextureData::LoadState::GPUReady;
+
     OutputDebugStringA("TextureManager: Dynamic texture created successfully\n");
 }
 
@@ -291,99 +298,25 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
     commandList->ResourceBarrier(1, &barrier);
 }
 
-void TextureManager::LoadTexture(const std::string& filePath)
+// =====================================================================
+// 非同期ロード (CPU/GPU 二段分離)
+// =====================================================================
+
+void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
 {
-    OutputDebugStringA(("LoadTexture called: " + filePath + "\n").c_str());
-
-    // 読み込み済みテクスチャを検索
-    if (textureDatas.contains(filePath)) {
-        // 既に読み込み済みなので何もしない
-        OutputDebugStringA("  -> Already exists, skipping\n");
-        return;
+    // 既にエントリがある（CPU/GPU いずれかのフェーズが進行中 or 完了）なら何もしない
+    {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        if (textureDatas.contains(filePath)) {
+            return;
+        }
+        // プレースホルダエントリを置いて多重ロードを防ぐ
+        TextureData& slot = textureDatas[filePath];
+        slot.loadState = TextureData::LoadState::Unloaded;
+        slot.isLinear = linear;
     }
 
-    OutputDebugStringA("  -> Loading from file...\n");
-
-    // テクスチャ枚数上限チェック
-    assert(srvManager_->CanAllocate());
-
-    // テクスチャファイルを読み込んでプログラムで扱えるようにする
-    DirectX::ScratchImage image{};
-    std::wstring filePathW = ConvertString(filePath);
-
-	// 拡張子.ddsであればLoadFromDDSFileを使う
-    HRESULT hr;
-    if(filePathW.ends_with(L".dds")) {
-        hr = DirectX::LoadFromDDSFile(
-            filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
-    } else {
-        hr = DirectX::LoadFromWICFile(
-            filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
-    }
-
-    assert(SUCCEEDED(hr));
-
-    // ミップマップの作成
-    DirectX::ScratchImage mipImages{};
-    if (DirectX::IsCompressed(image.GetMetadata().format)) {
-		// BC6Hなどの圧縮フォーマットはGenerateMipMapsが使えないため、そのまま使う
-		// 圧縮フォーマットの場合すでにミップマップが入っていることが多い
-        // std::moveでimageの所有権をmipImagesに移す
-        mipImages = std::move(image);
-    } else {
-        hr = DirectX::GenerateMipMaps(
-            image.GetImages(), image.GetImageCount(), image.GetMetadata(),
-            DirectX::TEX_FILTER_SRGB, 0, mipImages);
-        assert(SUCCEEDED(hr));
-    }
-
-    // テクスチャデータの作成
-    TextureData& textureData = textureDatas[filePath];
-    textureData.metadata = mipImages.GetMetadata();
-
-    // テクスチャリソース生成
-    textureData.resource = spriteManager_->CreateTextureResource(
-        dxCore_->GetDevice(),
-        textureData.metadata
-    );
-
-    // テクスチャデータ転送
-    spriteManager_->UploadTextureData(
-        textureData.resource.Get(),
-        mipImages,
-        dxCore_->GetDevice(),
-        dxCore_->GetCommandList()
-    );
-
-    // SRVインデックスを確保
-    textureData.srvIndex = srvManager_->Allocate();
-
-    if (textureData.metadata.IsCubemap()) {
-        srvManager_->CreateSRVForCubemap(
-            textureData.srvIndex,
-            textureData.resource.Get(),
-            textureData.metadata.format,
-            static_cast<UINT>(textureData.metadata.mipLevels)
-        );
-    } else {
-        srvManager_->CreateSRVForTexture2D(
-            textureData.srvIndex,
-            textureData.resource.Get(),
-            textureData.metadata.format,
-            static_cast<UINT>(textureData.metadata.mipLevels)
-        );
-    }
-
-}
-
-void TextureManager::LoadTextureLinear(const std::string& filePath)
-{
-    if (textureDatas.contains(filePath)) {
-        return;
-    }
-
-    assert(srvManager_->CanAllocate());
-
+    // --- ロックを外して重い WIC/DDS デコードを実行（スレッド安全な部分）---
     DirectX::ScratchImage image{};
     std::wstring filePathW = ConvertString(filePath);
 
@@ -391,48 +324,126 @@ void TextureManager::LoadTextureLinear(const std::string& filePath)
     if (filePathW.ends_with(L".dds")) {
         hr = DirectX::LoadFromDDSFile(
             filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
-    }
-    else {
-        // SRGBに強制せず線形値として扱う
+    } else {
+        auto wicFlags = linear ? DirectX::WIC_FLAGS_IGNORE_SRGB : DirectX::WIC_FLAGS_FORCE_SRGB;
         hr = DirectX::LoadFromWICFile(
-            filePathW.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
+            filePathW.c_str(), wicFlags, nullptr, image);
     }
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr)) {
+        // 失敗したらプレースホルダを撤回
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        textureDatas.erase(filePath);
+        return;
+    }
 
     DirectX::ScratchImage mipImages{};
     if (DirectX::IsCompressed(image.GetMetadata().format)) {
+        // 圧縮フォーマット（BC7/BC6H など）は既存ミップを使う
         mipImages = std::move(image);
-    }
-    else {
-        // 線形のまま縮小
+    } else {
+        auto filter = linear ? DirectX::TEX_FILTER_DEFAULT : DirectX::TEX_FILTER_SRGB;
         hr = DirectX::GenerateMipMaps(
             image.GetImages(), image.GetImageCount(), image.GetMetadata(),
-            DirectX::TEX_FILTER_DEFAULT, 0, mipImages);
-        assert(SUCCEEDED(hr));
+            filter, 0, mipImages);
+        if (FAILED(hr)) {
+            std::lock_guard<std::mutex> lock(textureDatasMutex_);
+            textureDatas.erase(filePath);
+            return;
+        }
     }
 
-    TextureData& textureData = textureDatas[filePath];
-    textureData.metadata = mipImages.GetMetadata();
+    // --- 結果を書き戻す ---
+    {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        auto it = textureDatas.find(filePath);
+        if (it == textureDatas.end()) return;
+        it->second.metadata = mipImages.GetMetadata();
+        it->second.cpuImage = std::move(mipImages);
+        it->second.loadState = TextureData::LoadState::CPUReady;
+    }
+}
 
-    textureData.resource = spriteManager_->CreateTextureResource(
-        dxCore_->GetDevice(),
-        textureData.metadata
-    );
+void TextureManager::LoadTextureGPU(const std::string& filePath)
+{
+    // メインスレッド専用。CPU フェーズが先に完了している前提。
+    TextureData* data = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        auto it = textureDatas.find(filePath);
+        if (it == textureDatas.end()) return;
+        if (it->second.loadState == TextureData::LoadState::GPUReady) return;
+        assert(it->second.loadState == TextureData::LoadState::CPUReady
+               && "LoadTextureGPU called before LoadTextureCPU");
+        data = &it->second;
+    }
+    // ※ unordered_map は要素を挿入してもポインタ無効化しないため
+    //   ロック外で data を経由して触ってよい（同じエントリへは他から触らない契約）
+
+    assert(srvManager_->CanAllocate());
+
+    data->resource = spriteManager_->CreateTextureResource(
+        dxCore_->GetDevice(), data->metadata);
 
     spriteManager_->UploadTextureData(
-        textureData.resource.Get(),
-        mipImages,
-        dxCore_->GetDevice(),
-        dxCore_->GetCommandList()
-    );
+        data->resource.Get(), data->cpuImage,
+        dxCore_->GetDevice(), dxCore_->GetCommandList());
 
-    textureData.srvIndex = srvManager_->Allocate();
-    srvManager_->CreateSRVForTexture2D(
-        textureData.srvIndex,
-        textureData.resource.Get(),
-        textureData.metadata.format,
-        static_cast<UINT>(textureData.metadata.mipLevels)
-    );
+    data->srvIndex = srvManager_->Allocate();
+
+    if (data->metadata.IsCubemap()) {
+        srvManager_->CreateSRVForCubemap(
+            data->srvIndex, data->resource.Get(),
+            data->metadata.format,
+            static_cast<UINT>(data->metadata.mipLevels));
+    } else {
+        srvManager_->CreateSRVForTexture2D(
+            data->srvIndex, data->resource.Get(),
+            data->metadata.format,
+            static_cast<UINT>(data->metadata.mipLevels));
+    }
+
+    // CPU 側 ScratchImage はもう不要、解放
+    data->cpuImage = DirectX::ScratchImage{};
+    data->loadState = TextureData::LoadState::GPUReady;
+}
+
+bool TextureManager::IsCPUReady(const std::string& filePath) const
+{
+    std::lock_guard<std::mutex> lock(textureDatasMutex_);
+    auto it = textureDatas.find(filePath);
+    return it != textureDatas.end()
+        && it->second.loadState >= TextureData::LoadState::CPUReady;
+}
+
+bool TextureManager::IsGPUReady(const std::string& filePath) const
+{
+    std::lock_guard<std::mutex> lock(textureDatasMutex_);
+    auto it = textureDatas.find(filePath);
+    return it != textureDatas.end()
+        && it->second.loadState == TextureData::LoadState::GPUReady;
+}
+
+// =====================================================================
+// 同期ラッパー（既存 API 互換）
+// =====================================================================
+
+void TextureManager::LoadTexture(const std::string& filePath)
+{
+    OutputDebugStringA(("LoadTexture called: " + filePath + "\n").c_str());
+    if (IsGPUReady(filePath)) {
+        OutputDebugStringA("  -> Already exists, skipping\n");
+        return;
+    }
+    OutputDebugStringA("  -> Loading from file...\n");
+    LoadTextureCPU(filePath, false);
+    LoadTextureGPU(filePath);
+}
+
+void TextureManager::LoadTextureLinear(const std::string& filePath)
+{
+    if (IsGPUReady(filePath)) return;
+    LoadTextureCPU(filePath, true);
+    LoadTextureGPU(filePath);
 }
 
 TextureManager* TextureManager::GetInstance()

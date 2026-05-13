@@ -3,6 +3,7 @@
 #include "DirectXTex.h"
 #include <wrl.h>
 #include <d3d12.h>
+#include <mutex>
 #include <unordered_map>
 #include "SpriteManager.h"
 #include "DirectXCore.h"
@@ -15,6 +16,10 @@ private:
 
 	// 既存のprivateセクションのTextureData構造体を修正:
 	struct TextureData {
+		// CPU/GPU 二段ロードの状態。Unloaded → CPUReady → GPUReady と遷移する。
+		enum class LoadState { Unloaded, CPUReady, GPUReady };
+		LoadState loadState = LoadState::Unloaded;
+
 		DirectX::TexMetadata metadata;
 		Microsoft::WRL::ComPtr<ID3D12Resource> resource;
 		Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer;  // 追加: 動的テクスチャ用
@@ -22,6 +27,11 @@ private:
 		D3D12_CPU_DESCRIPTOR_HANDLE srvHandleCPU;
 		D3D12_GPU_DESCRIPTOR_HANDLE srvHandleGPU;
 		bool isDynamic = false;  // 追加: 動的テクスチャフラグ
+
+		// CPU フェーズで作成し GPU フェーズで消費するデコード済み画像。
+		// GPU アップロード後は解放してメモリを返す。
+		DirectX::ScratchImage cpuImage;
+		bool isLinear = false;  // 線形読み込み（マスク等）なら true
 	};
 
 	// SRVインデックスの開始番号(0番はImGui)
@@ -41,6 +51,10 @@ private:
 	//std::vector<TextureData> textureDatas;
 	std::unordered_map<std::string, TextureData>textureDatas;
 
+	// textureDatas への並行アクセス保護（バックグラウンドスレッドの CPU フェーズと
+	// メインスレッドのクエリ・GPU フェーズが競合しないようにする）
+	mutable std::mutex textureDatasMutex_;
+
 	// シングルトンでインスタンスを一つだけ所有
 	//static TextureManager* instance;
 
@@ -59,12 +73,29 @@ public:
 
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore, SRVManager* srvManager);
 
+	// 同期ロード（CPU + GPU を一気に行う既存 API）
 	void LoadTexture(const std::string& filePath);
 
 	/// <summary>
 	/// SRGB変換せずに線形値として読み込む（マスク・ノーマルマップ用）
 	/// </summary>
 	void LoadTextureLinear(const std::string& filePath);
+
+	/// <summary>
+	/// CPU フェーズ: ファイルを読んで ScratchImage を作るところまで。
+	/// バックグラウンドスレッドから呼んで OK（GPU API は触らない）。
+	/// </summary>
+	void LoadTextureCPU(const std::string& filePath, bool linear = false);
+
+	/// <summary>
+	/// GPU フェーズ: ID3D12Resource 作成 / アップロード / SRV 作成。
+	/// メインスレッド専用。事前に LoadTextureCPU を呼んでおくこと。
+	/// </summary>
+	void LoadTextureGPU(const std::string& filePath);
+
+	// 非同期ロードの状態クエリ
+	bool IsCPUReady(const std::string& filePath) const;
+	bool IsGPUReady(const std::string& filePath) const;
 
 	/// <summary>
 	/// 動的テクスチャを作成（カメラ映像など毎フレーム更新するテクスチャ用）
