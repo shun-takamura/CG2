@@ -99,7 +99,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent
+python tools\Python\cook_assets.py</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -139,7 +140,8 @@ python tools\Python\package_release.py</Command>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent
+python tools\Python\cook_assets.py</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -181,7 +183,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent</Command>
+python tools\Python\convert_hdr_to_dds.py --silent
+python tools\Python\cook_assets.py</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Converting HDR to Cubemap DDS...</Message>
@@ -418,6 +421,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\TextureManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\DDSHeader.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\SRVManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h" />

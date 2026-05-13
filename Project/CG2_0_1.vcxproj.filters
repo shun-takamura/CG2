@@ -422,6 +422,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\TextureManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\DDSHeader.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
