@@ -24,27 +24,6 @@
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_demo.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_draw.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_impl_dx12.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_impl_win32.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_tables.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
-    <ClCompile Include="externals\ImGUI\imgui_widgets.cpp">
-      <Filter>InGUI</Filter>
-    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Core\ResourceObject.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -313,6 +292,27 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\imgui.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\imgui_demo.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\imgui_draw.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\backends\imgui_impl_dx12.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\backends\imgui_impl_win32.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\imgui_tables.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="externals\ImGui_Docking\imgui_widgets.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
@@ -740,5 +740,6 @@
     <None Include="Resources\Shaders\Sprite\Sprite.hlsli" />
     <None Include="Resources\Shaders\Primitive\Primitive.hlsli" />
     <None Include="tools\Python\convert_hdr_to_dds.py" />
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

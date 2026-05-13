@@ -156,7 +156,7 @@ void DemoScene::Initialize() {
 	ringParams.uvHorizon = true;
 
 	testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
-	testRing_->SetTexture("Resources/Textures/white1x1.png");
+	testRing_->SetTexture("Assets/Textures/white1x1.png");
 	testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
 	testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
 	//testRing_->SetUVScroll({ 0.0f, 1.0f });

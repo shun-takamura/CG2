@@ -45,19 +45,19 @@ void CharacterSelect::Initialize()
 	Game::GetPostEffect()->ResetEffects();
 	// スプライトの初期化
 	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "Resources/Textures/CharacterSelect_UI_QR.png");
+	sprite_->Initialize(spriteManager_, "Assets/Textures/CharacterSelect_UI_QR.png");
 	sprite_->SetAnchorPoint({ 0.5f,0.0f });
 	sprite_->SetPosition({ 640.0f, 64.0f });
 	sprite_->SetSize({ 640.0f, 360.0f });
 
 	playerQRNormal_ = std::make_unique<SpriteInstance>();
-	playerQRNormal_->Initialize(spriteManager_, "Resources/Textures/QR_player1.png");
+	playerQRNormal_->Initialize(spriteManager_, "Assets/Textures/QR_player1.png");
 	playerQRNormal_->SetAnchorPoint({ 0.0f,1.0f });
 	playerQRNormal_->SetPosition({ 0.0f, 720.0f });
 	playerQRNormal_->SetSize({ 200.0f, 200.0f });
 
 	playerQRCharge_ = std::make_unique<SpriteInstance>();
-	playerQRCharge_->Initialize(spriteManager_, "Resources/Textures/QR_player2.png");
+	playerQRCharge_->Initialize(spriteManager_, "Assets/Textures/QR_player2.png");
 	playerQRCharge_->SetAnchorPoint({ 1.0f,1.0f });
 	playerQRCharge_->SetPosition({ 1280.0f, 720.0f });
 	playerQRCharge_->SetSize({ 200.0f, 200.0f });
@@ -70,7 +70,7 @@ void CharacterSelect::Initialize()
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/Textures/Particle.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Assets/Textures/Particle.png");
 
 	// 3Dオブジェクトを配列で管理
 	const std::string modelFiles[] = { "player1.obj", "player2.obj"};
@@ -81,7 +81,7 @@ void CharacterSelect::Initialize()
 		obj->Initialize(
 			object3DManager_,
 			dxCore_,
-			"Resources/Models/Player",
+			"Assets/Models/Player",
 			modelFiles[i],
 			objectNames[i]
 		);

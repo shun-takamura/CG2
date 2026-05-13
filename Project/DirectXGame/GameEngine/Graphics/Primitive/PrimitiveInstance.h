@@ -75,7 +75,7 @@ public:
     /// <summary>
     /// デフォルトテクスチャパス（白1x1）
     /// </summary>
-    static const char* GetDefaultTexturePath() { return "Resources/Textures/white1x1.png"; }
+    static const char* GetDefaultTexturePath() { return "Assets/Textures/white1x1.png"; }
 
 private:
     PrimitiveMesh mesh_;
