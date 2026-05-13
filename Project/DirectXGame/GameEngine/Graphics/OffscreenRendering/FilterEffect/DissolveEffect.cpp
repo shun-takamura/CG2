@@ -1,4 +1,4 @@
-#include "DissolveEffect.h"
+﻿#include "DissolveEffect.h"
 #include "DirectXCore.h"
 #include "TextureManager.h"
 #include <cassert>
@@ -97,11 +97,11 @@ void DissolveEffect::ShowImGui()
 	if (maskMode_ == MaskMode::Texture) {
 		ImGui::TextDisabled("Mask: %s", maskTexturePath_.c_str());
 		if (ImGui::Button("noise0##Dissolve")) {
-			SetMaskTexture("Resources/Textures/MaskTexture/noise0.png");
+			SetMaskTexture("Resources/Textures/MaskTexture/noise0.dds");
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("noise1##Dissolve")) {
-			SetMaskTexture("Resources/Textures/MaskTexture/noise1.png");
+			SetMaskTexture("Resources/Textures/MaskTexture/noise1.dds");
 		}
 	}
 	else {

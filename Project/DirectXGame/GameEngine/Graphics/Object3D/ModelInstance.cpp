@@ -1,5 +1,6 @@
 #include "ModelInstance.h"
 #include <filesystem> // std::filesystem::path を使うために必要
+#include <cstring>
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -13,9 +14,14 @@ void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string&
 	// 多重ロード防止
 	if (loadState_ != LoadState::Unloaded) return;
 
-	// Assimp パース。modelData_ を埋めるだけで GPU 呼び出しは行わない
+	// 拡張子で経路分岐: .mesh は Cooker が出した直読みバイナリ、それ以外は assimp
 	// ※ バックグラウンドスレッドからも呼ばれるため、ここでは assert を使わない
-	LoadModel(directoryPath, filename);
+	std::filesystem::path fname(filename);
+	if (fname.extension() == ".mesh") {
+		LoadMeshBinary(directoryPath, filename);
+	} else {
+		LoadModel(directoryPath, filename);
+	}
 
 	// テクスチャファイルパスは文字列コピーのみ（GPUロードはGPUフェーズで検証する）
 	textureFilePath_ = modelData_.materialData.textureFilePath;
@@ -158,6 +164,55 @@ Node ModelInstance::ReadNode(aiNode* node)
 		result.children[childIndex] = ReadNode(node->mChildren[childIndex]);
 	}
 	return result;
+}
+
+void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::string& filename)
+{
+	// Cooker (tools/Python/cook_assets.py) が出力した .mesh バイナリを直読みする。
+	// フォーマット:
+	//   [Header 280B] magic("MESH") + version + vertex_count + index_count
+	//                 + vertex_offset + index_offset + texture_path[256]
+	//   [Vertex Data] VertexData × vertex_count
+	//   [Index Data]  uint32 × index_count
+	// 頂点は既に LH 座標系・V 反転済み、インデックスも winding 反転済み。
+	std::string filePath = directoryPath + "/" + filename;
+	std::ifstream file(filePath, std::ios::binary);
+	if (!file) return;
+
+	char magic[4]{};
+	file.read(magic, 4);
+	if (std::memcmp(magic, "MESH", 4) != 0) return;
+
+	uint32_t version = 0;
+	uint32_t vertexCount = 0;
+	uint32_t indexCount = 0;
+	uint32_t vertexOffset = 0;
+	uint32_t indexOffset = 0;
+	file.read(reinterpret_cast<char*>(&version), 4);
+	file.read(reinterpret_cast<char*>(&vertexCount), 4);
+	file.read(reinterpret_cast<char*>(&indexCount), 4);
+	file.read(reinterpret_cast<char*>(&vertexOffset), 4);
+	file.read(reinterpret_cast<char*>(&indexOffset), 4);
+
+	char texturePath[256]{};
+	file.read(texturePath, 256);
+	modelData_.materialData.textureFilePath = std::string(texturePath);
+
+	// 静的 .mesh はノード階層を持たないので rootNode の localMatrix を単位行列にしておく
+	// （Object3DInstance::Update が localMatrix を掛けるため、未設定だとゼロ行列で潰れる）
+	modelData_.rootNode.localMatrix = MakeIdentity4x4();
+
+	// 頂点
+	modelData_.vertices.resize(vertexCount);
+	file.seekg(vertexOffset);
+	file.read(reinterpret_cast<char*>(modelData_.vertices.data()),
+	          static_cast<std::streamsize>(vertexCount) * sizeof(VertexData));
+
+	// インデックス
+	modelData_.indices.resize(indexCount);
+	file.seekg(indexOffset);
+	file.read(reinterpret_cast<char*>(modelData_.indices.data()),
+	          static_cast<std::streamsize>(indexCount) * sizeof(uint32_t));
 }
 
 void ModelInstance::LoadModel(const std::string& directoryPath, const std::string& filename)

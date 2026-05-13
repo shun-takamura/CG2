@@ -1,4 +1,4 @@
-#include "DemoScene.h"
+﻿#include "DemoScene.h"
 #include "SceneManager.h"
 #include <algorithm>
 
@@ -156,7 +156,7 @@ void DemoScene::Initialize() {
 	ringParams.uvHorizon = true;
 
 	testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
-	testRing_->SetTexture("Resources/Textures/white1x1.png");
+	testRing_->SetTexture("Resources/Textures/white1x1.dds");
 	testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
 	testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
 	//testRing_->SetUVScroll({ 0.0f, 1.0f });
@@ -180,8 +180,8 @@ void DemoScene::Initialize() {
 	sneakWalkModel->Initialize(
 		object3DManager_,
 		dxCore_,
-		"DistributionAssets/",
-		"Models/human/sneakWalk.gltf",
+		"Resources/Models/Animated",
+		"sneakWalk.glb",
 		"sneakWalk"
 	);
 	sneakWalkModel->SetScale({ 100.0f, 100.0f, 100.0f });
@@ -194,8 +194,8 @@ void DemoScene::Initialize() {
 	sneakWalk = std::make_unique<AnimatedModelInstance>();
 	sneakWalk->Initialize(
 		ModelManager::GetInstance()->GetModelCore(),
-		"DistributionAssets/Models/human",
-		"sneakWalk.gltf"
+		"Resources/Models/Animated",
+		"sneakWalk.glb"
 	);
 
 	// sneakWalkのインスタンスを作成

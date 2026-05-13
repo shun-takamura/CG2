@@ -1,4 +1,4 @@
-#include "FadeTransition.h"
+﻿#include "FadeTransition.h"
 #include "SpriteManager.h"
 #include "SpriteInstance.h"
 #include "DirectXCore.h"
@@ -12,7 +12,7 @@ void FadeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCor
 
 	// フェード用スプライト作成
 	fadeSprite_ = std::make_unique<SpriteInstance>();
-	fadeSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.png", "FadeTransition");
+	fadeSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "FadeTransition");
 	fadeSprite_->SetPosition({ 0.0f, 0.0f });
 	fadeSprite_->SetSize({ screenWidth_, screenHeight_ });
 	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f }); // 黒、最初は透明

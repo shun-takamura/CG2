@@ -1,4 +1,4 @@
-#include "TransitionManager.h"
+﻿#include "TransitionManager.h"
 #include "StripeTransition.h"
 #include "FadeTransition.h"
 #include "TextureManager.h"
@@ -20,10 +20,10 @@ void TransitionManager::Initialize(SpriteManager* spriteManager, DirectXCore* dx
 	screenHeight_ = screenHeight;
 
 	// トランジション用の白テクスチャを生成（トランジション初期化より先に！）
-	TextureManager::GetInstance()->CreateSolidColorTexture("Resources/Textures/white1x1.png", 255, 255, 255, 255);
+	TextureManager::GetInstance()->CreateSolidColorTexture("Resources/Textures/white1x1.dds", 255, 255, 255, 255);
 
 	// テクスチャが正しく生成されたか確認
-	if (!TextureManager::GetInstance()->HasTexture("Resources/Textures/white1x1.png")) {
+	if (!TextureManager::GetInstance()->HasTexture("Resources/Textures/white1x1.dds")) {
 		OutputDebugStringA("TransitionManager: Failed to create white texture!\n");
 		return;
 	}
