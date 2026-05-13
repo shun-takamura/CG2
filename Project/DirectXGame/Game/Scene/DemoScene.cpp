@@ -23,8 +23,6 @@
 #include "Debug.h"
 #include "LightManager.h"
 #include "KeyboardInput.h"
-#include "CameraCapture.h"
-#include "QRCodeReader.h"
 #include "TextureManager.h"
 #include"Game.h"
 #include "ImGuiManager.h"
@@ -266,41 +264,9 @@ void DemoScene::Finalize() {
 
 void DemoScene::Update() {
 
-	// カメラスプライトの初期化（カメラが開かれてテクスチャが作成されたら）
-	if (cameraSprite_ == nullptr && CameraCapture::GetInstance()->IsOpened()) {
-		if (TextureManager::GetInstance()->HasTexture(CameraCapture::GetTextureName())) {
-			cameraSprite_ = std::make_unique<SpriteInstance>();
-			cameraSprite_->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
-			cameraSprite_->SetPosition({ 0.0f, 0.0f });
-			cameraSprite_->SetSize({ 640.0f, 480.0f });
-			cameraSprite_->SetTextureLeftTop({ 0.0f, 0.0f });
-			cameraSprite_->SetTextureSize({
-				static_cast<float>(CameraCapture::GetInstance()->GetFrameWidth()),
-				static_cast<float>(CameraCapture::GetInstance()->GetFrameHeight())
-				});
-		}
-	}
-
-	// カメラが閉じられたらスプライトを削除
-	if (cameraSprite_ != nullptr && !CameraCapture::GetInstance()->IsOpened()) {
-		cameraSprite_.reset();
-		QRCodeReader::GetInstance()->Reset();
-	}
-
-	// カメラスプライトが存在する場合のみ更新
-	if (cameraSprite_) {
-		cameraSprite_->Update();
-
-		// QRコード読み取り
-		const auto& frameData = CameraCapture::GetInstance()->GetFrameData();
-		if (!frameData.empty()) {
-			QRCodeReader::GetInstance()->Decode(
-				frameData.data(),
-				CameraCapture::GetInstance()->GetFrameWidth(),
-				CameraCapture::GetInstance()->GetFrameHeight()
-			);
-		}
-	}
+	// カメラプレビューとQRコード読み取り（BaseSceneが自動で更新・描画する）
+	UseCameraCapture(true);
+	UseQRCodeReader(true);
 
 	// --- キーボード入力 ---
 	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
@@ -570,11 +536,6 @@ void DemoScene::Update() {
 	//	ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
 	//}
 
-	// カメラスプライトが存在する場合のみ更新
-	if (cameraSprite_) {
-		cameraSprite_->Update();
-	}
-
 	for (const auto& s : sprites_) {
 		s->Update();
 	}
@@ -595,12 +556,6 @@ void DemoScene::Draw() {
 
 	skyboxManager_->DrawSetting();
 	skybox_->Draw(dxCore_);
-
-	// 描画の最初にカメラテクスチャを更新
-	if (CameraCapture::GetInstance()->IsOpened()) {
-		OutputDebugStringA("Updating camera texture...\n");
-		CameraCapture::GetInstance()->UpdateTexture();
-	}
 
 	// Object3D以降は通常DSVに切り替え（深度書き込みを有効化）
 	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
@@ -682,11 +637,6 @@ void DemoScene::Draw() {
 	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
-
-	// カメラスプライトが存在する場合のみ描画
-	if (cameraSprite_) {
-		cameraSprite_->Draw();
-	}
 }
 
 // =============================================================
@@ -736,10 +686,6 @@ void DemoScene::RemoveDynamicSprite(const std::string& name) {
 	// 3. 名前付きスプライトメンバ
 	if (sprite_ && sprite_->GetName() == name) {
 		deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(sprite_.release()));
-		return;
-	}
-	if (cameraSprite_ && cameraSprite_->GetName() == name) {
-		deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(cameraSprite_.release()));
 		return;
 	}
 }
@@ -794,7 +740,6 @@ bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
 	}
 	if (sprite_ && static_cast<IImGuiEditable*>(sprite_.get()) == editable) return true;
-	if (cameraSprite_ && static_cast<IImGuiEditable*>(cameraSprite_.get()) == editable) return true;
 	if (sneakWalkInstance_ && static_cast<IImGuiEditable*>(sneakWalkInstance_.get()) == editable) return true;
 	if (animatedCubeInstance_ && static_cast<IImGuiEditable*>(animatedCubeInstance_.get()) == editable) return true;
 	return false;

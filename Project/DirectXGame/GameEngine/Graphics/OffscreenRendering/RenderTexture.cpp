@@ -186,8 +186,10 @@ void RenderTexture::EndRender(ID3D12GraphicsCommandList* commandList)
 
 void RenderTexture::Finalize()
 {
-	// ComPtrが自動で解放するので、明示的な処理は不要
-	// 必要に応じてリソースの参照をクリア
+	if (srvManager_ && srvIndex_ != UINT32_MAX) {
+		srvManager_->Free(srvIndex_);
+		srvIndex_ = UINT32_MAX;
+	}
 	resource_.Reset();
 	rtvHeap_.Reset();
 }

@@ -139,7 +139,7 @@ void Game::Draw() {
 
 	// 5. 終了
 	dxCore_->EndDraw();
-	spriteManager_->ClearIntermediateResources();
+	dxCore_->TickIntermediateResources();
 }
 
 void Game::Finalize() {

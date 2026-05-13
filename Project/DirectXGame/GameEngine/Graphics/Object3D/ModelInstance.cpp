@@ -78,22 +78,18 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 
 void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
-	vertexResource_ = dxCore->CreateBufferResource(sizeof(VertexData) * modelData_.vertices.size());
+	const size_t sizeInBytes = sizeof(VertexData) * modelData_.vertices.size();
 
-	// リソースの先頭アドレスから使用
+	// DEFAULT heap に頂点バッファを作成（中間 UPLOAD バッファ経由でアップロード）
+	vertexResource_ = dxCore->CreateDefaultBuffer(
+		sizeInBytes,
+		modelData_.vertices.data(),
+		dxCore->GetCommandList(),
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+
 	vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-
-	// 使用するリソースのサイズ
-	vertexBufferView_.SizeInBytes = UINT(sizeof(VertexData) * modelData_.vertices.size());
-
-	// 1頂点当たりのサイズ
+	vertexBufferView_.SizeInBytes = UINT(sizeInBytes);
 	vertexBufferView_.StrideInBytes = sizeof(VertexData);
-
-	// 書き込むためのアドレスを取得
-	vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
-
-	// 取得したアドレスに書き込む
-	std::memcpy(vertexData_, modelData_.vertices.data(), sizeof(VertexData) * modelData_.vertices.size());
 }
 
 void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
@@ -125,16 +121,17 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)
 {
-	indexResource_ = dxCore->CreateBufferResource(sizeof(uint32_t) * modelData_.indices.size());
+	const size_t sizeInBytes = sizeof(uint32_t) * modelData_.indices.size();
+
+	indexResource_ = dxCore->CreateDefaultBuffer(
+		sizeInBytes,
+		modelData_.indices.data(),
+		dxCore->GetCommandList(),
+		D3D12_RESOURCE_STATE_INDEX_BUFFER);
 
 	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
-	indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * modelData_.indices.size());
+	indexBufferView_.SizeInBytes = UINT(sizeInBytes);
 	indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
-
-	uint32_t* indexData = nullptr;
-	indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
-	std::memcpy(indexData, modelData_.indices.data(), sizeof(uint32_t) * modelData_.indices.size());
-	indexResource_->Unmap(0, nullptr);
 }
 
 Node ModelInstance::ReadNode(aiNode* node)

@@ -1,7 +1,8 @@
 #pragma once
 #include"DirectXCore.h"
 #include <wrl.h>
-#include<cassert>
+#include <cassert>
+#include <queue>
 
 // 前方宣言
 class DirectXCore;
@@ -16,8 +17,11 @@ class SRVManager
 	// SRV用のディスクリプタヒープ
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap_;
 
-	// 次に使用するSRVインデックス
-	uint32_t useIndex = 0;
+	// 未使用スロットの先頭（一度も使っていない領域の先頭）
+	uint32_t nextFresh_ = 0;
+
+	// 解放済みスロットの再利用待ちキュー
+	std::queue<uint32_t> freeList_;
 
 public:
 
@@ -32,9 +36,12 @@ public:
 
 	uint32_t Allocate();
 
+	// スロットを返却する（テクスチャ破棄時に呼ぶ）
+	void Free(uint32_t index);
+
 	// 確保可能かチェック
 	bool CanAllocate() const {
-		return useIndex < kMaxSRVCount;
+		return !freeList_.empty() || nextFresh_ < kMaxSRVCount;
 	}
 
 	// SRV生成(テクスチャ用)

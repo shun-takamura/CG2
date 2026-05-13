@@ -4,16 +4,21 @@ const uint32_t SRVManager::kMaxSRVCount = 512;
 
 uint32_t SRVManager::Allocate()
 {
-	// 上限に達していないかチェック
-	//assert()
+	assert(CanAllocate());
 
-	// 返す番号を一旦記録
-	int index = useIndex;
+	if (!freeList_.empty()) {
+		uint32_t index = freeList_.front();
+		freeList_.pop();
+		return index;
+	}
 
-	// 次回のために番号をひとつ進める
-	++useIndex;
+	return nextFresh_++;
+}
 
-	return index;
+void SRVManager::Free(uint32_t index)
+{
+	assert(index < nextFresh_);
+	freeList_.push(index);
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE SRVManager::GetCPUDescriptorHandle(uint32_t index)

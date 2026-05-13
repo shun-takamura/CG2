@@ -16,6 +16,7 @@ class InputManager;
 class SkinningComputeManager;
 class Camera;
 class IImGuiEditable;
+class CameraPreviewSprite;
 
 /// <summary>
 /// シーンの基底クラス
@@ -23,9 +24,10 @@ class IImGuiEditable;
 class BaseScene {
 public:
 	/// <summary>
-	/// 仮想デストラクタ
-	/// （PrimitiveInstance の incomplete type 問題回避のため cpp で定義）
+	/// コンストラクタ / 仮想デストラクタ
+	/// （PrimitiveInstance, CameraPreviewSprite の incomplete type 問題回避のため cpp で定義）
 	/// </summary>
+	BaseScene();
 	virtual ~BaseScene();
 
 	/// <summary>
@@ -107,6 +109,34 @@ public:
 	void ProcessAsyncLoads();
 
 	//====================
+	// シーン共通サービス（カメラキャプチャ / QRコード）
+	//====================
+
+	/// <summary>
+	/// カメラ映像プレビューを使うかどうか。
+	/// シーンの Update 内で UseCameraCapture(true) を呼べば自動でスプライトの
+	/// 更新・描画が走る。カメラ自体の開閉は ImGui 等から行う前提。
+	/// </summary>
+	void UseCameraCapture(bool enabled);
+
+	/// <summary>
+	/// QRコード読み取りを使うかどうか。
+	/// 有効中はカメラのフレームを毎フレーム QRCodeReader にデコードさせる。
+	/// false にしたタイミングで検出状態をリセットする。
+	/// </summary>
+	void UseQRCodeReader(bool enabled);
+
+	/// <summary>
+	/// シーン共通サービスの更新（SceneManager が Update 後に呼ぶ）
+	/// </summary>
+	void UpdateSceneServices();
+
+	/// <summary>
+	/// シーン共通サービスの描画（SceneManager が Draw 後に呼ぶ）
+	/// </summary>
+	void DrawSceneServices();
+
+	//====================
 	// タイムスケール
 	//====================
 
@@ -163,4 +193,9 @@ protected:
 
 	// シーンローカルのタイムスケール（DirectXCoreのグローバルとは別に乗算される）
 	float sceneTimeScale_ = 1.0f;
+
+	// シーン共通サービス
+	std::unique_ptr<CameraPreviewSprite> cameraPreview_;
+	bool useCameraCapture_ = false;
+	bool useQRCodeReader_ = false;
 };

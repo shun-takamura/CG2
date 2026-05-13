@@ -60,7 +60,7 @@ class ModelInstance
 
 	ModelCore* modelCore_;
 
-	VertexData* vertexData_ = nullptr;
+	// VertexData は CPU 側 modelData_.vertices に保持。GPU バッファは DEFAULT heap で書き換え不可
 	Material* material_ = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;

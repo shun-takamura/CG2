@@ -2,9 +2,19 @@
 #include "ModelManager.h"
 #include "DirectXCore.h"
 #include "Primitive/PrimitiveInstance.h"
+#include "CameraPreviewSprite.h"
+#include "CameraCapture.h"
+#include "QRCodeReader.h"
 #include <algorithm>
 
-BaseScene::~BaseScene() = default;
+BaseScene::BaseScene() = default;
+
+BaseScene::~BaseScene() {
+	// QRをONのまま破棄されたら検出状態を残さない
+	if (useQRCodeReader_) {
+		QRCodeReader::GetInstance()->Reset();
+	}
+}
 
 void BaseScene::ProcessAsyncLoads()
 {
@@ -100,5 +110,48 @@ void BaseScene::UpdateDynamicPrimitives() {
 void BaseScene::DrawDynamicPrimitives() {
 	for (auto& p : dynamicPrimitives_) {
 		p->Draw();
+	}
+}
+
+// ====================================================================
+// シーン共通サービス
+// ====================================================================
+
+void BaseScene::UseCameraCapture(bool enabled) {
+	useCameraCapture_ = enabled;
+	if (enabled && !cameraPreview_) {
+		cameraPreview_ = std::make_unique<CameraPreviewSprite>();
+		cameraPreview_->Initialize(spriteManager_);
+	}
+}
+
+void BaseScene::UseQRCodeReader(bool enabled) {
+	// trueからfalseに変わったタイミングで検出状態をリセット
+	if (useQRCodeReader_ && !enabled) {
+		QRCodeReader::GetInstance()->Reset();
+	}
+	useQRCodeReader_ = enabled;
+}
+
+void BaseScene::UpdateSceneServices() {
+	if (useCameraCapture_ && cameraPreview_) {
+		cameraPreview_->Update();
+	}
+	if (useQRCodeReader_) {
+		auto* cam = CameraCapture::GetInstance();
+		const auto& frame = cam->GetFrameData();
+		if (!frame.empty()) {
+			QRCodeReader::GetInstance()->Decode(
+				frame.data(),
+				cam->GetFrameWidth(),
+				cam->GetFrameHeight()
+			);
+		}
+	}
+}
+
+void BaseScene::DrawSceneServices() {
+	if (useCameraCapture_ && cameraPreview_) {
+		cameraPreview_->Draw();
 	}
 }

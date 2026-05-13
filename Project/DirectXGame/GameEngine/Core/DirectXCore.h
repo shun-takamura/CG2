@@ -6,6 +6,8 @@
 #include <cassert>
 #include <chrono>
 #include <thread>
+#include <utility>
+#include <vector>
 #include "ConvertStringClass.h"
 #include "WindowsApplication.h"
 
@@ -125,10 +127,31 @@ public:
 	void SetUseFixedFrameRate(bool useFixed) { useFixedFrameRate_ = useFixed; }
 	bool IsUsingFixedFrameRate() const { return useFixedFrameRate_; }
 
+	// このフレーム末に Signal される予定の fenceValue（中間バッファの解放判定用）
+	uint64_t GetNextFenceValue() const { return fenceValue_ + 1; }
+
+	// GPU が完了したフェンス値（これ以下の fenceValue で記録された中間バッファは解放OK）
+	uint64_t GetCompletedFenceValue() const { return fence_ ? fence_->GetCompletedValue() : 0; }
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
 
 	// UAV用のバッファResource（DEFAULT heap、ALLOW_UNORDERED_ACCESSフラグ、初期StateはCOMMON）
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateUavBufferResource(size_t sizeInBytes);
+
+	// DEFAULT heap バッファを作成し、initialData を UPLOAD 中間バッファ経由でコピーして
+	// finalState に遷移させる。中間バッファは内部で TrackIntermediateResource に積まれる
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(
+		size_t sizeInBytes,
+		const void* initialData,
+		ID3D12GraphicsCommandList* commandList,
+		D3D12_RESOURCE_STATES finalState);
+
+	// アップロード用中間バッファをこのフレームの fenceValue とペアで保持する
+	// （次フレーム以降の TickIntermediateResources で GPU 完了後に解放される）
+	void TrackIntermediateResource(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
+
+	// 完了済みフェンス値以下の中間バッファを解放（毎フレーム末に呼ぶ）
+	void TickIntermediateResources();
 
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
@@ -190,6 +213,10 @@ private:
 	UINT frameIndex_ = 0;
 	UINT rtvDescriptorSize_ = 0;
 	uint64_t fenceValue_ = 0;
+
+	// テクスチャ/バッファアップロード用の中間 UPLOAD バッファ。
+	// 各エントリは「この値以下の fenceValue が完了したら解放してよい」というペア。
+	std::vector<std::pair<uint64_t, Microsoft::WRL::ComPtr<ID3D12Resource>>> intermediateResources_;
 	WindowsApplication* winApp_ = nullptr;
 	// スワップチェイン設定の記録用
 	UINT bufferCount_ = 2;

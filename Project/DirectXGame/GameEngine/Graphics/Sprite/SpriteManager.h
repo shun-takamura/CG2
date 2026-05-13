@@ -5,6 +5,8 @@
 #include "DirectXTex.h"
 #include <dxcapi.h>  
 #include <array>
+#include <utility>
+#include <vector>
 #include"SRVManager.h"
 
 class SpriteManager {  
@@ -62,10 +64,9 @@ public:
    void DrawSetting();  
    void SetBlendMode(BlendMode blendMode);
 
-   std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> intermediateResources_;
-   void ClearIntermediateResources();
+   // 中間バッファは DirectXCore に集約（テクスチャ/バッファ共通の fence pairing 機構）
 
-   DirectXCore* GetDxCore() const { return dxCore_; }   
+   DirectXCore* GetDxCore() const { return dxCore_; }
    BlendMode GetBlendMode() const { return blendMode_; }  
 
    ~SpriteManager();

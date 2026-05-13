@@ -120,9 +120,8 @@ private:
 	// RTVのCPUハンドル（描画先として設定する際に使用）
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle_{};
 
-	// SRVのインデックス（SRVManagerで管理）
-	// シェーダーからテクスチャとして読む際に使用
-	uint32_t srvIndex_ = 0;
+	// SRVのインデックス（SRVManagerで管理）。UINT32_MAXは未割り当て
+	uint32_t srvIndex_ = UINT32_MAX;
 
 	// テクスチャの幅
 	uint32_t width_ = 0;

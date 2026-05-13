@@ -67,7 +67,6 @@ private:
 	std::unique_ptr<DebugCamera> debugCamera_;
 
 	// スプライト関連
-	std::unique_ptr<SpriteInstance> cameraSprite_;
 	std::unique_ptr<SpriteInstance> sprite_;
 	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
 

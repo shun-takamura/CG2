@@ -30,11 +30,6 @@ void SpriteManager::SetBlendMode(BlendMode blendMode)
     pipelineState_ = pipelineStates_[currentBlendMode_];
 }
 
-void SpriteManager::ClearIntermediateResources()
-{
-    intermediateResources_.clear();
-}
-
 void SpriteManager::CreateRootSignature()
 {
     HRESULT hr;
@@ -243,8 +238,6 @@ SpriteManager::~SpriteManager()
     for (auto& p : pipelineStates_) {
         p.Reset();
     }
-
-    intermediateResources_.clear();
 }
 
 Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::CreateTextureResource(Microsoft::WRL::ComPtr<ID3D12Device> device, const DirectX::TexMetadata& metadata)
@@ -284,7 +277,8 @@ Microsoft::WRL::ComPtr<ID3D12Resource> SpriteManager::UploadTextureData(Microsof
     Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCore_->CreateBufferResource(intermediateSize);
     UpdateSubresources(commandList, texture.Get(), intermediateResource.Get(), 0, 0, UINT(subresources.size()), subresources.data());
 
-    intermediateResources_.push_back(intermediateResource);
+    // 中間バッファは DirectXCore で fence pairing 管理（次フレーム以降に GPU 完了後解放）
+    dxCore_->TrackIntermediateResource(intermediateResource);
 
     D3D12_RESOURCE_BARRIER barrier{};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;

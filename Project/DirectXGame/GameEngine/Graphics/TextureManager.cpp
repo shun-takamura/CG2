@@ -358,8 +358,6 @@ void TextureManager::LoadTexture(const std::string& filePath)
     // SRVインデックスを確保
     textureData.srvIndex = srvManager_->Allocate();
 
-    // SRVを生成
-    textureData.srvIndex = srvManager_->Allocate();
     if (textureData.metadata.IsCubemap()) {
         srvManager_->CreateSRVForCubemap(
             textureData.srvIndex,

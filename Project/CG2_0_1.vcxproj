@@ -194,6 +194,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClCompile Include="DirectXGame\Game\Scene\CharacterSelect.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\CameraCapture.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\CameraPreviewSprite.cpp" />
     <ClCompile Include="DirectXGame\Debug\Debug.cpp" />
     <ClCompile Include="DirectXGame\Debug\LogBuffer.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
@@ -335,6 +336,7 @@ python tools\Python\convert_hdr_to_dds.py --silent</Command>
     <ClInclude Include="DirectXGame\Game\Scene\CharacterSelect.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
     <ClInclude Include="DirectXGame\GameEngine\CameraCapture.h" />
+    <ClInclude Include="DirectXGame\GameEngine\CameraPreviewSprite.h" />
     <ClInclude Include="DirectXGame\Debug\Debug.h" />
     <ClInclude Include="DirectXGame\Debug\LogBuffer.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\ControllerInput.h" />

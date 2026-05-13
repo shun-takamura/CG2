@@ -1,6 +1,8 @@
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include <cassert>
+#include <algorithm>
+#include <cstring>
 #include <dxgidebug.h>
 #include <iostream>
 
@@ -241,6 +243,90 @@ Microsoft::WRL::ComPtr<ID3D12Resource> DirectXCore::CreateUavBufferResource(size
     assert(SUCCEEDED(hr));
 
     return uavResource;
+}
+
+ComPtr<ID3D12Resource> DirectXCore::CreateDefaultBuffer(
+    size_t sizeInBytes,
+    const void* initialData,
+    ID3D12GraphicsCommandList* commandList,
+    D3D12_RESOURCE_STATES finalState)
+{
+    assert(sizeInBytes > 0);
+    assert(initialData != nullptr);
+    assert(commandList != nullptr);
+
+    // DEFAULT heap 本体（初期 State は COPY_DEST）
+    D3D12_HEAP_PROPERTIES defaultHeap{};
+    defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC desc{};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = sizeInBytes;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    // D3D12 仕様上、バッファの InitialState は強制的に COMMON 扱いになる。
+    // CopyBufferRegion 実行時に暗黙的に COPY_DEST へプロモートされる。
+    ComPtr<ID3D12Resource> defaultBuffer;
+    HRESULT hr = device_->CreateCommittedResource(
+        &defaultHeap, D3D12_HEAP_FLAG_NONE,
+        &desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+        IID_PPV_ARGS(&defaultBuffer));
+    assert(SUCCEEDED(hr));
+
+    // UPLOAD 中間バッファ
+    D3D12_HEAP_PROPERTIES uploadHeap{};
+    uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    ComPtr<ID3D12Resource> intermediate;
+    hr = device_->CreateCommittedResource(
+        &uploadHeap, D3D12_HEAP_FLAG_NONE,
+        &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+        IID_PPV_ARGS(&intermediate));
+    assert(SUCCEEDED(hr));
+
+    // CPU から中間バッファへコピー
+    void* mapped = nullptr;
+    hr = intermediate->Map(0, nullptr, &mapped);
+    assert(SUCCEEDED(hr));
+    std::memcpy(mapped, initialData, sizeInBytes);
+    intermediate->Unmap(0, nullptr);
+
+    // 中間 → DEFAULT へ GPU 上でコピー
+    commandList->CopyBufferRegion(defaultBuffer.Get(), 0, intermediate.Get(), 0, sizeInBytes);
+
+    // 指定された最終 State へ遷移
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = defaultBuffer.Get();
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = finalState;
+    commandList->ResourceBarrier(1, &barrier);
+
+    // 中間バッファは GPU が使い終わるまで生存させる必要があるのでフェンスペアで保持
+    TrackIntermediateResource(intermediate);
+
+    return defaultBuffer;
+}
+
+void DirectXCore::TrackIntermediateResource(ComPtr<ID3D12Resource> resource)
+{
+    intermediateResources_.emplace_back(GetNextFenceValue(), std::move(resource));
+}
+
+void DirectXCore::TickIntermediateResources()
+{
+    if (intermediateResources_.empty()) return;
+
+    const uint64_t completed = GetCompletedFenceValue();
+    auto newEnd = std::remove_if(
+        intermediateResources_.begin(), intermediateResources_.end(),
+        [completed](const auto& entry) { return entry.first <= completed; });
+    intermediateResources_.erase(newEnd, intermediateResources_.end());
 }
 
 IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t* profile)

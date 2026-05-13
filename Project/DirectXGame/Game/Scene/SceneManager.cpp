@@ -63,6 +63,9 @@ void SceneManager::Update() {
 	if (currentScene_) {
 		currentScene_->Update();
 
+		// シーン共通サービス（カメラプレビュー / QR）の更新
+		currentScene_->UpdateSceneServices();
+
 		// 非同期ロードキューの GPU フェーズを進める（毎フレーム1件）
 		currentScene_->ProcessAsyncLoads();
 	}
@@ -71,6 +74,9 @@ void SceneManager::Update() {
 void SceneManager::Draw() {
 	if (currentScene_) {
 		currentScene_->Draw();
+
+		// シーン共通サービス（カメラプレビュー）の描画
+		currentScene_->DrawSceneServices();
 	}
 
 	// トランジションの描画（最前面）
