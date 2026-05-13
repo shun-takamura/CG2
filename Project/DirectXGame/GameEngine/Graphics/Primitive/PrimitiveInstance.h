@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "PrimitiveMesh.h"
 #include "IImGuiEditable.h"
 #include "Vector2.h"
@@ -75,7 +75,7 @@ public:
     /// <summary>
     /// デフォルトテクスチャパス（白1x1）
     /// </summary>
-    static const char* GetDefaultTexturePath() { return "Assets/Textures/white1x1.png"; }
+    static const char* GetDefaultTexturePath() { return "Resources/Textures/white1x1.dds"; }
 
 private:
     PrimitiveMesh mesh_;

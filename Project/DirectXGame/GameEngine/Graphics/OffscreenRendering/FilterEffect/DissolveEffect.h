@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "BaseFilterEffect.h"
 #include <string>
 
@@ -86,7 +86,7 @@ private:
 	float noiseScale_ = 16.0f;
 	float noiseTime_ = 0.0f;
 
-	std::string maskTexturePath_ = "Assets/Textures/MaskTexture/noise0.png";
+	std::string maskTexturePath_ = "Resources/Textures/MaskTexture/noise0.dds";
 	uint32_t maskSrvIndex_ = 0;
 
 	DirectXCore* dxCore_ = nullptr;

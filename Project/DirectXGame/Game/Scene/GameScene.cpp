@@ -1,4 +1,4 @@
-#include "GameScene.h"
+﻿#include "GameScene.h"
 #include "SceneManager.h"
 #include <cmath>
 #include <algorithm>
@@ -48,7 +48,7 @@ void GameScene::Initialize() {
 
 	// スプライトの初期化
 	operation_ = std::make_unique<SpriteInstance>();
-	operation_->Initialize(spriteManager_, "Resources/Textures/operation.png");
+	operation_->Initialize(spriteManager_, "Resources/Textures/operation.dds");
 	operation_->SetAnchorPoint({ 0.0f,0.0f });
 	operation_->SetSize({ 1280.0f,720.0f });
 	operation_->SetPosition({ 0.0f,0.0f });
@@ -61,34 +61,34 @@ void GameScene::Initialize() {
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/Textures/circle.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/Textures/circle.dds");
 
 	// ===== UI用スプライト初期化 =====
 
     // プレイヤーHP用
 	hpGaugeBack_ = std::make_unique<SpriteInstance>();
-	hpGaugeBack_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.png", "HPGaugeBack");
+	hpGaugeBack_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.dds", "HPGaugeBack");
 
 	hpGaugeFill_ = std::make_unique<SpriteInstance>();
-	hpGaugeFill_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.png", "HPGaugeFill");
+	hpGaugeFill_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.dds", "HPGaugeFill");
 
 	// エネミーHP用
 	hpGaugeBackEnemy_ = std::make_unique<SpriteInstance>();
-	hpGaugeBackEnemy_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.png", "HPGaugeBackEnemy");
+	hpGaugeBackEnemy_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.dds", "HPGaugeBackEnemy");
 
 	hpGaugeFillEnemy_ = std::make_unique<SpriteInstance>();
-	hpGaugeFillEnemy_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.png", "HPGaugeFillEnemy");
+	hpGaugeFillEnemy_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.dds", "HPGaugeFillEnemy");
 
 	// 弾数ゲージ用
 	ammoGaugeBack_ = std::make_unique<SpriteInstance>();
-	ammoGaugeBack_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.png", "AmmoGaugeBack");
+	ammoGaugeBack_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_back.dds", "AmmoGaugeBack");
 
 	ammoGaugeFill_ = std::make_unique<SpriteInstance>();
-	ammoGaugeFill_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.png", "AmmoGaugeFill");
+	ammoGaugeFill_->Initialize(spriteManager_, "Resources/Textures/hp_gauge_fill.dds", "AmmoGaugeFill");
 
 	// リロードゲージ
 	reloadGauge_ = std::make_unique<SpriteInstance>();
-	reloadGauge_->Initialize(spriteManager_, "Resources/Textures/white1x1.png", "ReloadGauge");
+	reloadGauge_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "ReloadGauge");
 
 	// QRから取得したデータ
 	std::string modelName = GameData::GetInstance()->GetSelectedModel();

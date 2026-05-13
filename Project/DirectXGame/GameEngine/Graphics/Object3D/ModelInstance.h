@@ -110,6 +110,10 @@ private:
 
 	//static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
 	void LoadModel(const std::string& directoryPath, const std::string& filename);
+
+	// .mesh バイナリ直読み（Cooker が生成したもの）
+	void LoadMeshBinary(const std::string& directoryPath, const std::string& filename);
+
 	static MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);
 
 };

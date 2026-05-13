@@ -1,4 +1,4 @@
-#include "TitleScene.h"
+﻿#include "TitleScene.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "SpriteManager.h"
@@ -48,15 +48,15 @@ void TitleScene::Initialize() {
 
 	// パーティクルの設定
 	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("qr", "Assets/Textures/qrcord.png");
+	ParticleManager::GetInstance()->CreateParticleGroup("qr", "Resources/Textures/qrcord.dds");
 
 	title_ = std::make_unique<Object3DInstance>();
-	title_->Initialize(object3DManager_, dxCore_, "Assets/Models/Title", "title.obj", "title");
+	title_->Initialize(object3DManager_, dxCore_, "Resources/Models/Title", "title.mesh", "title");
 	title_->SetTranslate({ 0.0f, 6.0f, 0.0f });
 	title_->SetRotate({ 3.14f/2.0f,3.14f,0.0f });
 
 	space_ = std::make_unique<Object3DInstance>();
-	space_->Initialize(object3DManager_, dxCore_, "Assets/Models/Space", "space.obj", "space");
+	space_->Initialize(object3DManager_, dxCore_, "Resources/Models/Space", "space.mesh", "space");
 	space_->SetTranslate({ 0.0f, 3.0f, 0.0f });
 	space_->SetRotate({ 3.14f / 2.0f,3.14f,0.0f });
 

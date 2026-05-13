@@ -65,7 +65,7 @@ void SceneEditorWindow::WorkerFunc() {
                 const fs::path& p = it->path();
                 const std::string ext = toLowerExt(p);
 
-                if (ext == ".obj") {
+                if (ext == ".mesh") {
                     ModelEntry e;
                     e.dirPath = p.parent_path().generic_string();
                     e.filename = p.filename().string();
@@ -82,7 +82,7 @@ void SceneEditorWindow::WorkerFunc() {
         }
 
         // ============================================
-        // Phase 1b: Resources/Textures 配下を再帰スキャン（.png）
+        // Phase 1b: Resources/Textures 配下を再帰スキャン（.dds）
         // ============================================
         const fs::path texturesRoot = fs::path("Resources") / "Textures";
         std::vector<TextureEntry> foundTextures;
@@ -94,7 +94,7 @@ void SceneEditorWindow::WorkerFunc() {
 
                 const fs::path& p = it->path();
                 const std::string ext = toLowerExt(p);
-                if (ext != ".png") continue;
+                if (ext != ".dds") continue;
 
                 TextureEntry e;
                 e.filePath = p.generic_string();
@@ -171,9 +171,9 @@ void SceneEditorWindow::OnDraw() {
     };
 
     // ============================================
-    // Models セクション（Object3D 用 .obj）
+    // Models セクション（Object3D 用 .mesh）
     // ============================================
-    if (ImGui::CollapsingHeader("Models  (.obj)", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Models  (.mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("drag onto Viewport to add");
         for (size_t i = 0; i < models.size(); ++i) {
             const auto& entry = models[i];
@@ -202,9 +202,9 @@ void SceneEditorWindow::OnDraw() {
     }
 
     // ============================================
-    // Sprites セクション（.png）
+    // Sprites セクション（.dds）
     // ============================================
-    if (ImGui::CollapsingHeader("Sprites  (.png)", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Sprites  (.dds)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("drag onto Viewport to place at cursor");
         for (size_t i = 0; i < textures.size(); ++i) {
             const auto& entry = textures[i];

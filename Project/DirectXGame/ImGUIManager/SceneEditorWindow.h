@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "IImGuiWindow.h"
 #include <string>
 #include <vector>
@@ -60,7 +60,7 @@ private:
     };
     struct TextureEntry {
         std::string displayName;  // "white1x1.png"
-        std::string filePath;     // "Resources/Textures/white1x1.png"
+        std::string filePath;     // "Resources/Textures/white1x1.dds"
     };
     struct AnimatedEntry {
         std::string displayName;  // "Animated/character.gltf"

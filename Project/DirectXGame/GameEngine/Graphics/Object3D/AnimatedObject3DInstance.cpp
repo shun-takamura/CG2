@@ -1,4 +1,4 @@
-#include "AnimatedObject3DInstance.h"
+﻿#include "AnimatedObject3DInstance.h"
 #include "imgui.h"
 #include <cmath>
 #include "PrimitiveMesh.h"
@@ -64,7 +64,7 @@ void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
             debugSpheres_[i]->Initialize(sphereMesh);
             debugSpheres_[i]->SetBlendMode(PrimitivePipeline::kBlendModeNone);
             debugSpheres_[i]->SetDepthWrite(true);
-            debugSpheres_[i]->SetTexture("Assets/Textures/white1x1.png");
+            debugSpheres_[i]->SetTexture("Resources/Textures/white1x1.dds");
         }
     }
 #endif
