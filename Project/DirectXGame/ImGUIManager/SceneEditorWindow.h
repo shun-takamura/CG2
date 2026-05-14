@@ -17,6 +17,7 @@ class ImGuiManager;
 #define SPRITE_DROP_PAYLOAD_TYPE    "SPRITE_DROP"
 #define ANIMATED_DROP_PAYLOAD_TYPE  "ANIMATED_DROP"
 #define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
+#define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
@@ -37,6 +38,11 @@ struct AnimatedDropPayload {
 // プリミティブ（PrimitiveInstance::PrimitiveType を int で運ぶ）
 struct PrimitiveDropPayload {
     int primitiveType;
+};
+
+// マテリアル（.mat ファイルパス）
+struct MaterialDropPayload {
+    char materialPath[384];
 };
 
 /// <summary>
@@ -67,6 +73,10 @@ private:
         std::string dirPath;      // "Resources/Models/Animated"
         std::string filename;     // "character.gltf"
     };
+    struct MaterialEntry {
+        std::string displayName;  // "Enemy/enemy.mat"
+        std::string filePath;     // "Resources/Models/Enemy/enemy.mat"
+    };
 
     ImGuiManager* manager_ = nullptr;
 
@@ -74,6 +84,7 @@ private:
     std::vector<ModelEntry> discoveredModels_;
     std::vector<TextureEntry> discoveredTextures_;
     std::vector<AnimatedEntry> discoveredAnimated_;
+    std::vector<MaterialEntry> discoveredMaterials_;
     mutable std::mutex discoveredMutex_;
 
     std::thread workerThread_;

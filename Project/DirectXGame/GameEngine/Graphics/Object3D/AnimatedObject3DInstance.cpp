@@ -8,6 +8,10 @@
 #include "SkinningComputeManager.h"
 #include "LightManager.h"
 #include "Object3DManager.h"
+#include "AnimatedModelInstance.h"
+#include "Material.h"
+#include "TextureManager.h"
+#include "SceneEditorWindow.h"  // ドロップペイロード定義
 
 AnimatedObject3DInstance::~AnimatedObject3DInstance() = default;
 
@@ -422,6 +426,23 @@ void AnimatedObject3DInstance::OnImGuiInspector()
         if (animatedModelInstance_) {
             Material* mat = animatedModelInstance_->GetMaterialPointer();
             if (mat) {
+                // .mat ドロップ受付
+                ImGui::Button("Drop .mat here to apply", ImVec2(-FLT_MIN, 0));
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload =
+                            ImGui::AcceptDragDropPayload(MATERIAL_DROP_PAYLOAD_TYPE)) {
+                        const auto* p = static_cast<const MaterialDropPayload*>(payload->Data);
+                        MaterialData data;
+                        if (LoadMatFile(p->materialPath, data, mat)) {
+                            if (!data.textureFilePath.empty()) {
+                                TextureManager::GetInstance()->LoadTexture(data.textureFilePath);
+                                animatedModelInstance_->SetTextureFilePath(data.textureFilePath);
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
                 bool useEnv = (mat->useEnvironmentMap != 0);
                 if (ImGui::Checkbox("Use Environment Map", &useEnv)) {
                     mat->useEnvironmentMap = useEnv ? 1 : 0;
@@ -432,6 +453,26 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                 }
                 ImGui::DragFloat("Shininess", &mat->shininess, 1.0f, 0.0f, 1000.0f);
             }
+        }
+    }
+
+    // Texture
+    if (ImGui::CollapsingHeader("Texture")) {
+        const std::string& cur = animatedModelInstance_
+            ? animatedModelInstance_->GetTextureFilePath() : std::string();
+        ImGui::Text("Current: %s", cur.empty() ? "(none)" : cur.c_str());
+
+        ImGui::Button("Drop .dds here to apply", ImVec2(-FLT_MIN, 0));
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload =
+                    ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                const auto* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                if (animatedModelInstance_) {
+                    TextureManager::GetInstance()->LoadTexture(p->texturePath);
+                    animatedModelInstance_->SetTextureFilePath(p->texturePath);
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
     }
 

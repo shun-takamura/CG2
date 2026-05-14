@@ -97,14 +97,6 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
 copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstorage.dll" "$(TargetDir)dstorage.dll"
 copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDir)dstoragecore.dll"</Command>
     </PostBuildEvent>
-    <PreBuildEvent>
-      <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent
-python tools\Python\cook_assets.py</Command>
-    </PreBuildEvent>
-    <PreBuildEvent>
-      <Message>Converting HDR to Cubemap DDS...</Message>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -138,14 +130,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
 cd /d "$(ProjectDir)"
 python tools\Python\package_release.py</Command>
     </PostBuildEvent>
-    <PreBuildEvent>
-      <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent
-python tools\Python\cook_assets.py</Command>
-    </PreBuildEvent>
-    <PreBuildEvent>
-      <Message>Converting HDR to Cubemap DDS...</Message>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
     <ClCompile>
@@ -181,14 +165,6 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
 copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstorage.dll" "$(TargetDir)dstorage.dll"
 copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDir)dstoragecore.dll"</Command>
     </PostBuildEvent>
-    <PreBuildEvent>
-      <Command>cd /d "$(ProjectDir)"
-python tools\Python\convert_hdr_to_dds.py --silent
-python tools\Python\cook_assets.py</Command>
-    </PreBuildEvent>
-    <PreBuildEvent>
-      <Message>Converting HDR to Cubemap DDS...</Message>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.cpp" />
@@ -211,6 +187,7 @@ python tools\Python\cook_assets.py</Command>
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Light\LightManager.cpp" />
@@ -353,6 +330,7 @@ python tools\Python\cook_assets.py</Command>
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\ControllerInput.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />
@@ -683,4 +661,14 @@ python tools\Python\cook_assets.py</Command>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+
+  <!-- アセットコンバーター実行（PreBuildEvent ではなく BuildDependsOn で確実に走らせる） -->
+  <PropertyGroup>
+    <BuildDependsOn>CookAssets;$(BuildDependsOn)</BuildDependsOn>
+  </PropertyGroup>
+  <Target Name="CookAssets">
+    <Message Importance="high" Text="Cooking assets..." />
+    <Exec Command="python tools\Python\convert_hdr_to_dds.py --silent" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="python tools\Python\cook_assets.py" WorkingDirectory="$(ProjectDir)" />
+  </Target>
 </Project>
