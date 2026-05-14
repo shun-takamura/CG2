@@ -329,6 +329,37 @@ void DirectXCore::TickIntermediateResources()
     intermediateResources_.erase(newEnd, intermediateResources_.end());
 }
 
+void DirectXCore::EnqueueOnFenceComplete(uint64_t fenceValue, std::function<void()> callback)
+{
+    pendingCallbacks_.emplace_back(fenceValue, std::move(callback));
+}
+
+void DirectXCore::TickPendingCallbacks()
+{
+    if (pendingCallbacks_.empty()) return;
+
+    const uint64_t completed = GetCompletedFenceValue();
+
+    // 完了した callback を抜き出して別バッファに移してから呼び出す
+    // （callback 内で更に EnqueueOnFenceComplete されても安全になるよう、
+    //  実行時はキュー本体に触らない）
+    std::vector<std::function<void()>> toRun;
+    auto newEnd = std::remove_if(
+        pendingCallbacks_.begin(), pendingCallbacks_.end(),
+        [&](auto& entry) {
+            if (entry.first <= completed) {
+                toRun.push_back(std::move(entry.second));
+                return true;
+            }
+            return false;
+        });
+    pendingCallbacks_.erase(newEnd, pendingCallbacks_.end());
+
+    for (auto& cb : toRun) {
+        cb();
+    }
+}
+
 IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t* profile)
 {
     //=========================

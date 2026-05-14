@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cassert>
 #include <chrono>
+#include <functional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -153,6 +154,14 @@ public:
 	// 完了済みフェンス値以下の中間バッファを解放（毎フレーム末に呼ぶ）
 	void TickIntermediateResources();
 
+	// 指定 fenceValue が GPU 上で完了したら callback を実行する。
+	// DirectStorage のバッチ完了通知や、async ロードの GPUReady 状態遷移等に使う想定。
+	// 現状はメインスレッドからのみ呼ばれる前提（必要になったら mutex 化）。
+	void EnqueueOnFenceComplete(uint64_t fenceValue, std::function<void()> callback);
+
+	// 完了済みフェンス値以下に登録された callback を全て実行する（毎フレーム末に呼ぶ）
+	void TickPendingCallbacks();
+
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
 	// 最大テクスチャ枚数
@@ -217,6 +226,10 @@ private:
 	// テクスチャ/バッファアップロード用の中間 UPLOAD バッファ。
 	// 各エントリは「この値以下の fenceValue が完了したら解放してよい」というペア。
 	std::vector<std::pair<uint64_t, Microsoft::WRL::ComPtr<ID3D12Resource>>> intermediateResources_;
+
+	// fenceValue 完了時に呼ぶ汎用コールバック群。EnqueueOnFenceComplete で積み、
+	// TickPendingCallbacks で完了済みのものを呼び出す。
+	std::vector<std::pair<uint64_t, std::function<void()>>> pendingCallbacks_;
 	WindowsApplication* winApp_ = nullptr;
 	// スワップチェイン設定の記録用
 	UINT bufferCount_ = 2;
