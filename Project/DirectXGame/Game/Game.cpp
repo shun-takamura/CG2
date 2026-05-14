@@ -140,6 +140,7 @@ void Game::Draw() {
 	// 5. 終了
 	dxCore_->EndDraw();
 	dxCore_->TickIntermediateResources();
+	dxCore_->TickPendingCallbacks();
 }
 
 void Game::Finalize() {
