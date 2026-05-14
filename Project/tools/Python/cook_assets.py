@@ -101,7 +101,10 @@ def classify(src: Path) -> FileTask:
         return FileTask(src, Action.CONVERT_GLTF_TO_MESH, RESOURCES_DIR / rel.with_suffix(".mesh"))
     if suffix == ".wav":
         return FileTask(src, Action.COPY, RESOURCES_DIR / rel)
-    if suffix in {".mtl", ".bin", ".hdr"}:
+    if suffix in {".mtl", ".bin", ".hdr", ".fbx"}:
+        # .mtl / .bin: .obj / .gltf 変換で吸収
+        # .hdr: convert_hdr_to_dds.py が処理
+        # .fbx: .gltf があれば冗長なので無視（DCC オーサリング用に Assets/ に残しておく前提）
         return FileTask(src, Action.SKIP, None)
     return FileTask(src, Action.UNKNOWN, None)
 

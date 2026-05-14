@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <cstring>
 #include "SkinCluster.h"
+#include "AssetLocator.h"
 
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
@@ -230,16 +231,16 @@ namespace {
 // .mat から base_color テクスチャパスを取り出すヘルパー
 std::string ReadMatBaseColorPath_V2(const std::string& matPath)
 {
-    std::ifstream f(matPath, std::ios::binary);
-    if (!f) return {};
+    auto h = AssetLocator::GetInstance()->Open(matPath);
+    if (!h.IsValid()) return {};
     char magic[4]{};
-    f.read(magic, 4);
+    h.Read(magic, 4);
     if (std::memcmp(magic, "MATL", 4) != 0) return {};
     uint32_t version = 0;
-    f.read(reinterpret_cast<char*>(&version), 4);
+    h.Read(&version, 4);
     if (version != 1) return {};
     char path[256]{};
-    f.read(path, 256);
+    h.Read(path, 256);
     return std::string(path);
 }
 
@@ -257,22 +258,20 @@ struct SkelJoint {
 std::vector<SkelJoint> ReadSkelFile(const std::string& skelPath)
 {
     std::vector<SkelJoint> joints;
-    std::ifstream f(skelPath, std::ios::binary);
-    if (!f) return joints;
+    auto h = AssetLocator::GetInstance()->Open(skelPath);
+    if (!h.IsValid()) return joints;
 
     char magic[4]{};
-    f.read(magic, 4);
+    h.Read(magic, 4);
     if (std::memcmp(magic, "SKEL", 4) != 0) return joints;
     uint32_t version = 0, jointCount = 0, reserved = 0;
-    f.read(reinterpret_cast<char*>(&version), 4);
-    f.read(reinterpret_cast<char*>(&jointCount), 4);
-    f.read(reinterpret_cast<char*>(&reserved), 4);
+    h.Read(&version, 4);
+    h.Read(&jointCount, 4);
+    h.Read(&reserved, 4);
     if (version != 1) return joints;
 
     joints.resize(jointCount);
-    for (uint32_t i = 0; i < jointCount; ++i) {
-        f.read(reinterpret_cast<char*>(&joints[i]), sizeof(SkelJoint));
-    }
+    h.Read(joints.data(), static_cast<size_t>(jointCount) * sizeof(SkelJoint));
     return joints;
 }
 
@@ -323,19 +322,19 @@ Animation ReadAnimFile(const std::string& animPath)
 {
     Animation anim{};
     anim.duration = 0.0f;
-    std::ifstream f(animPath, std::ios::binary);
-    if (!f) return anim;
+    auto h = AssetLocator::GetInstance()->Open(animPath);
+    if (!h.IsValid()) return anim;
 
     char magic[4]{};
-    f.read(magic, 4);
+    h.Read(magic, 4);
     if (std::memcmp(magic, "ANIM", 4) != 0) return anim;
     uint32_t version = 0, channelCount = 0, channelsOffset = 0, reserved = 0;
     float duration = 0.0f;
-    f.read(reinterpret_cast<char*>(&version), 4);
-    f.read(reinterpret_cast<char*>(&duration), 4);
-    f.read(reinterpret_cast<char*>(&channelCount), 4);
-    f.read(reinterpret_cast<char*>(&channelsOffset), 4);
-    f.read(reinterpret_cast<char*>(&reserved), 4);
+    h.Read(&version, 4);
+    h.Read(&duration, 4);
+    h.Read(&channelCount, 4);
+    h.Read(&channelsOffset, 4);
+    h.Read(&reserved, 4);
     if (version != 1) return anim;
 
     anim.duration = duration;
@@ -347,10 +346,8 @@ Animation ReadAnimFile(const std::string& animPath)
         uint32_t t_offset, r_offset, s_offset;
     };
     std::vector<ChannelHeader> channelHeaders(channelCount);
-    f.seekg(channelsOffset);
-    for (uint32_t i = 0; i < channelCount; ++i) {
-        f.read(reinterpret_cast<char*>(&channelHeaders[i]), sizeof(ChannelHeader));
-    }
+    h.Seek(channelsOffset);
+    h.Read(channelHeaders.data(), static_cast<size_t>(channelCount) * sizeof(ChannelHeader));
 
     // 各チャンネルのキーフレームを読み込む
     for (const auto& ch : channelHeaders) {
@@ -358,27 +355,27 @@ Animation ReadAnimFile(const std::string& animPath)
         NodeAnimation& na = anim.nodeAnimations[jointName];
 
         na.translate.keyframes.resize(ch.t_count);
-        f.seekg(ch.t_offset);
+        h.Seek(ch.t_offset);
         for (uint32_t i = 0; i < ch.t_count; ++i) {
             float t; Vector3 v;
-            f.read(reinterpret_cast<char*>(&t), 4);
-            f.read(reinterpret_cast<char*>(&v), sizeof(Vector3));
+            h.Read(&t, 4);
+            h.Read(&v, sizeof(Vector3));
             na.translate.keyframes[i] = { t, v };
         }
         na.rotate.keyframes.resize(ch.r_count);
-        f.seekg(ch.r_offset);
+        h.Seek(ch.r_offset);
         for (uint32_t i = 0; i < ch.r_count; ++i) {
             float t; float q[4];
-            f.read(reinterpret_cast<char*>(&t), 4);
-            f.read(reinterpret_cast<char*>(q), sizeof(q));
+            h.Read(&t, 4);
+            h.Read(q, sizeof(q));
             na.rotate.keyframes[i] = { t, Quaternion(q[0], q[1], q[2], q[3]) };
         }
         na.scale.keyframes.resize(ch.s_count);
-        f.seekg(ch.s_offset);
+        h.Seek(ch.s_offset);
         for (uint32_t i = 0; i < ch.s_count; ++i) {
             float t; Vector3 v;
-            f.read(reinterpret_cast<char*>(&t), 4);
-            f.read(reinterpret_cast<char*>(&v), sizeof(Vector3));
+            h.Read(&t, 4);
+            h.Read(&v, sizeof(Vector3));
             na.scale.keyframes[i] = { t, v };
         }
     }
@@ -390,44 +387,42 @@ Animation ReadAnimFile(const std::string& animPath)
 void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const std::string& filename)
 {
     const std::string meshPath = directoryPath + "/" + filename;
-    std::ifstream f(meshPath, std::ios::binary);
-    assert(f && "failed to open .mesh file");
+    auto h = AssetLocator::GetInstance()->Open(meshPath);
+    assert(h.IsValid() && "failed to open .mesh file");
 
     char magic[4]{};
-    f.read(magic, 4);
+    h.Read(magic, 4);
     assert(std::memcmp(magic, "MESH", 4) == 0);
 
     uint32_t version = 0, flags = 0;
     uint32_t vertexCount = 0, indexCount = 0, submeshCount = 0;
     uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
-    f.read(reinterpret_cast<char*>(&version), 4);
-    f.read(reinterpret_cast<char*>(&flags), 4);
-    f.read(reinterpret_cast<char*>(&vertexCount), 4);
-    f.read(reinterpret_cast<char*>(&indexCount), 4);
-    f.read(reinterpret_cast<char*>(&submeshCount), 4);
-    f.read(reinterpret_cast<char*>(&vertexOffset), 4);
-    f.read(reinterpret_cast<char*>(&indexOffset), 4);
-    f.read(reinterpret_cast<char*>(&skinOffset), 4);
-    f.read(reinterpret_cast<char*>(&submeshOffset), 4);
+    h.Read(&version, 4);
+    h.Read(&flags, 4);
+    h.Read(&vertexCount, 4);
+    h.Read(&indexCount, 4);
+    h.Read(&submeshCount, 4);
+    h.Read(&vertexOffset, 4);
+    h.Read(&indexOffset, 4);
+    h.Read(&skinOffset, 4);
+    h.Read(&submeshOffset, 4);
     assert(version == 2 && "expected .mesh v2");
 
     char skeletonPathBuf[256]{};
-    f.read(skeletonPathBuf, 256);
+    h.Read(skeletonPathBuf, 256);
     std::string skeletonPath(skeletonPathBuf);
 
     const bool hasSkinning = (flags & 0x1) != 0;
 
     // --- 頂点 ---
     modelData_.vertices.resize(vertexCount);
-    f.seekg(vertexOffset);
-    f.read(reinterpret_cast<char*>(modelData_.vertices.data()),
-           static_cast<std::streamsize>(vertexCount) * sizeof(VertexData));
+    h.ReadAt(vertexOffset, modelData_.vertices.data(),
+             static_cast<size_t>(vertexCount) * sizeof(VertexData));
 
     // --- インデックス ---
     modelData_.indices.resize(indexCount);
-    f.seekg(indexOffset);
-    f.read(reinterpret_cast<char*>(modelData_.indices.data()),
-           static_cast<std::streamsize>(indexCount) * sizeof(uint32_t));
+    h.ReadAt(indexOffset, modelData_.indices.data(),
+             static_cast<size_t>(indexCount) * sizeof(uint32_t));
 
     // --- .skel を読んで rootNode を構築 ---
     std::vector<SkelJoint> skelJoints;
@@ -447,9 +442,8 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
             float    weights[4];
         };
         std::vector<SkinVertex> skinData(vertexCount);
-        f.seekg(skinOffset);
-        f.read(reinterpret_cast<char*>(skinData.data()),
-               static_cast<std::streamsize>(vertexCount) * sizeof(SkinVertex));
+        h.ReadAt(skinOffset, skinData.data(),
+                 static_cast<size_t>(vertexCount) * sizeof(SkinVertex));
 
         for (uint32_t v = 0; v < vertexCount; ++v) {
             for (int k = 0; k < 4; ++k) {
@@ -467,12 +461,12 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
 
     // --- submesh[0] の material_path を読んで .mat へアクセス ---
     if (submeshCount > 0) {
-        f.seekg(submeshOffset);
+        h.Seek(submeshOffset);
         uint32_t idxStart = 0, idxCount = 0;
-        f.read(reinterpret_cast<char*>(&idxStart), 4);
-        f.read(reinterpret_cast<char*>(&idxCount), 4);
+        h.Read(&idxStart, 4);
+        h.Read(&idxCount, 4);
         char matPath[256]{};
-        f.read(matPath, 256);
+        h.Read(matPath, 256);
 
         std::string baseColor = ReadMatBaseColorPath_V2(std::string(matPath));
         modelData_.materialData.textureFilePath = baseColor;
@@ -482,7 +476,7 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
     std::filesystem::path animPath =
         std::filesystem::path(directoryPath) /
         (std::filesystem::path(filename).stem().string() + ".anim");
-    if (std::filesystem::exists(animPath)) {
+    if (AssetLocator::GetInstance()->Exists(animPath.string())) {
         animation_ = ReadAnimFile(animPath.string());
     }
 

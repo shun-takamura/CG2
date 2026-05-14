@@ -2,6 +2,7 @@
 #include "ImGuiManager.h"
 #include "ModelManager.h"
 #include "PrimitiveInstance.h"
+#include "AssetLocator.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -38,69 +39,90 @@ void SceneEditorWindow::WorkerFunc() {
     try {
         namespace fs = std::filesystem;
 
-        auto toLowerExt = [](const fs::path& p) {
-            std::string ext = p.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return ext;
-        };
+        auto* locator = AssetLocator::GetInstance();
 
         // ============================================
-        // Phase 1a: Resources/Models 配下を再帰スキャン
-        //   .obj                → Models カテゴリ
+        // Phase 1a: Resources/Models 配下から .mesh / .gltf / .glb / .fbx を列挙
+        //   .mesh               → Models カテゴリ
         //   .gltf / .glb / .fbx → Animated カテゴリ
-        //   どちらもフォルダ位置の制約はなし（Player/Enemy フォルダ等にも置ける）
         // ============================================
         const fs::path modelsRoot = fs::path("Resources") / "Models";
 
         std::vector<ModelEntry> foundModels;
         std::vector<AnimatedEntry> foundAnimated;
 
-        if (fs::exists(modelsRoot)) {
-            for (auto it = fs::recursive_directory_iterator(modelsRoot);
-                 it != fs::recursive_directory_iterator(); ++it) {
-                if (stopRequested_) return;
-                if (!it->is_regular_file()) continue;
+        // .mesh ヘッダーの flags bit0 = HAS_SKINNING で Models / Animated を分類
+        for (const auto& p : locator->ListByExtension(".mesh", modelsRoot.generic_string())) {
+            if (stopRequested_) return;
+            fs::path fp(p);
 
-                const fs::path& p = it->path();
-                const std::string ext = toLowerExt(p);
-
-                if (ext == ".mesh") {
-                    ModelEntry e;
-                    e.dirPath = p.parent_path().generic_string();
-                    e.filename = p.filename().string();
-                    e.displayName = fs::relative(p, modelsRoot).generic_string();
-                    foundModels.push_back(std::move(e));
-                } else if (ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                    AnimatedEntry e;
-                    e.dirPath = p.parent_path().generic_string();
-                    e.filename = p.filename().string();
-                    e.displayName = fs::relative(p, modelsRoot).generic_string();
-                    foundAnimated.push_back(std::move(e));
+            // ヘッダー先頭 12 バイトを読み、flags を取得
+            // [0..3] magic "MESH", [4..7] version, [8..11] flags
+            bool hasSkinning = false;
+            auto h = locator->Open(p);
+            if (h.IsValid()) {
+                char hdr[12]{};
+                h.Read(hdr, 12);
+                if (std::memcmp(hdr, "MESH", 4) == 0) {
+                    uint32_t flags = 0;
+                    std::memcpy(&flags, hdr + 8, 4);
+                    hasSkinning = (flags & 0x1) != 0;
                 }
+            }
+
+            if (hasSkinning) {
+                AnimatedEntry e;
+                e.dirPath = fp.parent_path().generic_string();
+                e.filename = fp.filename().string();
+                e.displayName = fs::relative(fp, modelsRoot).generic_string();
+                foundAnimated.push_back(std::move(e));
+            } else {
+                ModelEntry e;
+                e.dirPath = fp.parent_path().generic_string();
+                e.filename = fp.filename().string();
+                e.displayName = fs::relative(fp, modelsRoot).generic_string();
+                foundModels.push_back(std::move(e));
+            }
+        }
+
+        // 旧フォーマット .gltf/.glb/.fbx も拾えるようにしておく（後方互換）
+        for (const char* ext : { ".gltf", ".glb", ".fbx" }) {
+            for (const auto& p : locator->ListByExtension(ext, modelsRoot.generic_string())) {
+                if (stopRequested_) return;
+                fs::path fp(p);
+                AnimatedEntry e;
+                e.dirPath = fp.parent_path().generic_string();
+                e.filename = fp.filename().string();
+                e.displayName = fs::relative(fp, modelsRoot).generic_string();
+                foundAnimated.push_back(std::move(e));
             }
         }
 
         // ============================================
-        // Phase 1b: Resources/Textures 配下を再帰スキャン（.dds）
+        // Phase 1b: Resources/Textures 配下から .dds を列挙
         // ============================================
         const fs::path texturesRoot = fs::path("Resources") / "Textures";
         std::vector<TextureEntry> foundTextures;
-        if (fs::exists(texturesRoot)) {
-            for (auto it = fs::recursive_directory_iterator(texturesRoot);
-                 it != fs::recursive_directory_iterator(); ++it) {
-                if (stopRequested_) return;
-                if (!it->is_regular_file()) continue;
+        for (const auto& p : locator->ListByExtension(".dds", texturesRoot.generic_string())) {
+            if (stopRequested_) return;
+            fs::path fp(p);
+            TextureEntry e;
+            e.filePath = p;
+            e.displayName = fs::relative(fp, texturesRoot).generic_string();
+            foundTextures.push_back(std::move(e));
+        }
 
-                const fs::path& p = it->path();
-                const std::string ext = toLowerExt(p);
-                if (ext != ".dds") continue;
-
-                TextureEntry e;
-                e.filePath = p.generic_string();
-                e.displayName = fs::relative(p, texturesRoot).generic_string();
-                foundTextures.push_back(std::move(e));
-            }
+        // ============================================
+        // Phase 1c: Resources/Models 配下から .mat を列挙
+        // ============================================
+        std::vector<MaterialEntry> foundMaterials;
+        for (const auto& p : locator->ListByExtension(".mat", modelsRoot.generic_string())) {
+            if (stopRequested_) return;
+            fs::path fp(p);
+            MaterialEntry e;
+            e.filePath = p;
+            e.displayName = fs::relative(fp, modelsRoot).generic_string();
+            foundMaterials.push_back(std::move(e));
         }
 
         // 結果を共有領域へ
@@ -109,6 +131,7 @@ void SceneEditorWindow::WorkerFunc() {
             discoveredModels_ = std::move(foundModels);
             discoveredTextures_ = std::move(foundTextures);
             discoveredAnimated_ = std::move(foundAnimated);
+            discoveredMaterials_ = std::move(foundMaterials);
         }
         scanDone_ = true;
 
@@ -159,11 +182,13 @@ void SceneEditorWindow::OnDraw() {
     std::vector<ModelEntry> models;
     std::vector<TextureEntry> textures;
     std::vector<AnimatedEntry> animated;
+    std::vector<MaterialEntry> materials;
     {
         std::lock_guard<std::mutex> lock(discoveredMutex_);
         models = discoveredModels_;
         textures = discoveredTextures_;
         animated = discoveredAnimated_;
+        materials = discoveredMaterials_;
     }
 
     auto matchesSearch = [&](const std::string& s) {
@@ -227,6 +252,31 @@ void SceneEditorWindow::OnDraw() {
     }
 
     // ============================================
+    // Materials セクション（.mat）
+    // ============================================
+    if (ImGui::CollapsingHeader("Materials  (.mat)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("drag onto Object3D/Animated Inspector to apply");
+        for (size_t i = 0; i < materials.size(); ++i) {
+            const auto& entry = materials[i];
+            if (!matchesSearch(entry.displayName)) continue;
+
+            ImGui::PushID(static_cast<int>(i) + 500000);
+
+            ImGui::Selectable(entry.displayName.c_str(), false);
+
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                MaterialDropPayload payload{};
+                SafeCopy(payload.materialPath, sizeof(payload.materialPath), entry.filePath);
+                ImGui::SetDragDropPayload(MATERIAL_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(entry.displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            ImGui::PopID();
+        }
+    }
+
+    // ============================================
     // Primitives セクション（Plane / Box / Sphere / Ring / Cylinder）
     // ============================================
     if (ImGui::CollapsingHeader("Primitives", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -256,7 +306,7 @@ void SceneEditorWindow::OnDraw() {
     // ============================================
     // Animated セクション（.gltf / .glb / .fbx）
     // ============================================
-    if (ImGui::CollapsingHeader("Animated  (.gltf / .glb / .fbx)", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Animated  (.mesh w/ skin)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("scanned across all Resources/Models/ subfolders");
         if (animated.empty()) {
             ImGui::TextDisabled("(none found)");

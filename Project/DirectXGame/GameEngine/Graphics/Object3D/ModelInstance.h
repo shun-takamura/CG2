@@ -91,6 +91,13 @@ public:
 	// ImGui/PSO切り替えから Material にアクセスするためのGetter
 	Material* GetMaterialPointer() const { return material_; }
 
+	// Inspector からテクスチャを差し替える際に使う（GPU リソース作成は呼び出し側で行う）
+	void SetTextureFilePath(const std::string& filePath) {
+		textureFilePath_ = filePath;
+		modelData_.materialData.textureFilePath = filePath;
+	}
+	const std::string& GetTextureFilePath() const { return textureFilePath_; }
+
 	// ロード状態の確認
 	bool IsCPUReady() const { return loadState_ >= LoadState::CPUReady; }
 	bool IsGPUReady() const { return loadState_ == LoadState::GPUReady; }

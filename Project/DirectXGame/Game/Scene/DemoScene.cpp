@@ -180,7 +180,7 @@ void DemoScene::Initialize() {
 	sneakWalkModel->Initialize(
 		object3DManager_,
 		dxCore_,
-		"Resources/Models/Animated",
+		"Resources/Models/Animated/SneakWalk",
 		"sneakWalk.mesh",
 		"sneakWalk"
 	);
@@ -194,7 +194,7 @@ void DemoScene::Initialize() {
 	sneakWalk = std::make_unique<AnimatedModelInstance>();
 	sneakWalk->Initialize(
 		ModelManager::GetInstance()->GetModelCore(),
-		"Resources/Models/Animated",
+		"Resources/Models/Animated/SneakWalk",
 		"sneakWalk.mesh"
 	);
 

@@ -14,6 +14,7 @@
 #include "ConvertStringClass.h"
 #include "WindowsApplication.h"
 #include "DirectXCore.h"
+#include "AssetLocator.h"
 #include "SpriteManager.h"
 #include "Object3DManager.h"
 #include "Log.h"
@@ -68,6 +69,9 @@ void Framework::Initialize() {
 	//========================
 	// 初期化（タイトル）
 	winApp_->Initialize(L"QR");
+
+	// アセットローダー初期化（B.0: FS 経路のみ。pack 対応は B.2 以降）
+	AssetLocator::GetInstance()->InitializeFromFilesystem();
 
 	dxCore_ = std::make_unique<DirectXCore>();
 	dxCore_->Initialize(winApp_.get());

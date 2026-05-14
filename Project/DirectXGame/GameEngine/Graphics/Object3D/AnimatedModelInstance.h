@@ -64,6 +64,13 @@ public:
 
     Material* GetMaterialPointer() const { return material_; }
 
+    // Inspector からテクスチャを差し替える際に使う
+    void SetTextureFilePath(const std::string& filePath) {
+        textureFilePath_ = filePath;
+        modelData_.materialData.textureFilePath = filePath;
+    }
+    const std::string& GetTextureFilePath() const { return textureFilePath_; }
+
     SkinCluster& GetSkinCluster() { return skinCluster_; }
     bool HasSkinCluster() const { return hasSkinCluster_; }
 

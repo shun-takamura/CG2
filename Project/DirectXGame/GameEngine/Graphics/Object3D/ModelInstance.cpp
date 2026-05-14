@@ -1,6 +1,7 @@
 #include "ModelInstance.h"
 #include <filesystem> // std::filesystem::path を使うために必要
 #include <cstring>
+#include "AssetLocator.h"
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -169,19 +170,19 @@ Node ModelInstance::ReadNode(aiNode* node)
 // .mat (MATL) v1 から base_color_path を抽出するヘルパー
 static std::string ReadMatBaseColorPath(const std::string& matPath)
 {
-	std::ifstream f(matPath, std::ios::binary);
-	if (!f) return {};
+	auto h = AssetLocator::GetInstance()->Open(matPath);
+	if (!h.IsValid()) return {};
 
 	char magic[4]{};
-	f.read(magic, 4);
+	h.Read(magic, 4);
 	if (std::memcmp(magic, "MATL", 4) != 0) return {};
 
 	uint32_t version = 0;
-	f.read(reinterpret_cast<char*>(&version), 4);
+	h.Read(&version, 4);
 	if (version != 1) return {};
 
 	char baseColorPath[256]{};
-	f.read(baseColorPath, 256);
+	h.Read(baseColorPath, 256);
 	return std::string(baseColorPath);
 }
 
@@ -198,53 +199,51 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 	//   [Submesh Data]  Submesh × submesh_count (index_start + index_count + material_path[256])
 	// 頂点は既に LH 座標系・V 反転済み、インデックスも winding 反転済み。
 	std::string filePath = directoryPath + "/" + filename;
-	std::ifstream file(filePath, std::ios::binary);
-	if (!file) return;
+	auto h = AssetLocator::GetInstance()->Open(filePath);
+	if (!h.IsValid()) return;
 
 	char magic[4]{};
-	file.read(magic, 4);
+	h.Read(magic, 4);
 	if (std::memcmp(magic, "MESH", 4) != 0) return;
 
 	uint32_t version = 0, flags = 0, vertexCount = 0, indexCount = 0, submeshCount = 0;
 	uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
-	file.read(reinterpret_cast<char*>(&version), 4);
-	file.read(reinterpret_cast<char*>(&flags), 4);
-	file.read(reinterpret_cast<char*>(&vertexCount), 4);
-	file.read(reinterpret_cast<char*>(&indexCount), 4);
-	file.read(reinterpret_cast<char*>(&submeshCount), 4);
-	file.read(reinterpret_cast<char*>(&vertexOffset), 4);
-	file.read(reinterpret_cast<char*>(&indexOffset), 4);
-	file.read(reinterpret_cast<char*>(&skinOffset), 4);
-	file.read(reinterpret_cast<char*>(&submeshOffset), 4);
+	h.Read(&version, 4);
+	h.Read(&flags, 4);
+	h.Read(&vertexCount, 4);
+	h.Read(&indexCount, 4);
+	h.Read(&submeshCount, 4);
+	h.Read(&vertexOffset, 4);
+	h.Read(&indexOffset, 4);
+	h.Read(&skinOffset, 4);
+	h.Read(&submeshOffset, 4);
 
 	if (version != 2) return;  // v2 のみサポート
 
 	// skeleton_path は今は使わない（スキニングモデルは別経路）
-	file.seekg(256, std::ios::cur);
+	h.Seek(h.GetPosition() + 256);
 
 	// 静的 .mesh はノード階層を持たないので rootNode の localMatrix を単位行列にしておく
 	modelData_.rootNode.localMatrix = MakeIdentity4x4();
 
 	// 頂点
 	modelData_.vertices.resize(vertexCount);
-	file.seekg(vertexOffset);
-	file.read(reinterpret_cast<char*>(modelData_.vertices.data()),
-	          static_cast<std::streamsize>(vertexCount) * sizeof(VertexData));
+	h.ReadAt(vertexOffset, modelData_.vertices.data(),
+	         static_cast<size_t>(vertexCount) * sizeof(VertexData));
 
 	// インデックス
 	modelData_.indices.resize(indexCount);
-	file.seekg(indexOffset);
-	file.read(reinterpret_cast<char*>(modelData_.indices.data()),
-	          static_cast<std::streamsize>(indexCount) * sizeof(uint32_t));
+	h.ReadAt(indexOffset, modelData_.indices.data(),
+	         static_cast<size_t>(indexCount) * sizeof(uint32_t));
 
 	// submesh[0] のマテリアルパスを取得（マルチマテリアル未対応、最初の一つだけ使う）
 	if (submeshCount > 0) {
-		file.seekg(submeshOffset);
+		h.Seek(submeshOffset);
 		uint32_t idxStart = 0, idxCount = 0;
-		file.read(reinterpret_cast<char*>(&idxStart), 4);
-		file.read(reinterpret_cast<char*>(&idxCount), 4);
+		h.Read(&idxStart, 4);
+		h.Read(&idxCount, 4);
 		char matPath[256]{};
-		file.read(matPath, 256);
+		h.Read(matPath, 256);
 
 		// .mat を開いて base_color_path を取得
 		std::string baseColor = ReadMatBaseColorPath(std::string(matPath));
