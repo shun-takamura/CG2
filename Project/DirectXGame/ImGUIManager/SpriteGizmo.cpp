@@ -1,4 +1,4 @@
-#include "SpriteGizmo.h"
+﻿#include "SpriteGizmo.h"
 #include "IImGuiEditable.h"
 #include <cmath>
 

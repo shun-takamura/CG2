@@ -665,6 +665,7 @@ void DemoScene::AddDynamicSprite(const std::string& texturePath, float clientX, 
 	sprite->SetPosition({ clientX, clientY });
 	dynamicSprites_.push_back(std::move(sprite));
 }
+#ifdef USE_IMGUI
 
 void DemoScene::RemoveDynamicSprite(const std::string& name) {
 	// 1. ドロップで追加された動的スプライト
@@ -689,6 +690,8 @@ void DemoScene::RemoveDynamicSprite(const std::string& name) {
 		return;
 	}
 }
+
+#endif // USE_IMGUI
 
 void DemoScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
 	auto model = std::make_unique<AnimatedModelInstance>();
@@ -722,6 +725,7 @@ void DemoScene::RemoveDynamicAnimated(const std::string& name) {
 	}
 }
 
+#ifdef USE_IMGUI
 bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	// 基底（プリミティブ）でヒットすれば早期 return
 	if (BaseScene::IsDynamicObject(editable)) return true;
@@ -744,3 +748,4 @@ bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	if (animatedCubeInstance_ && static_cast<IImGuiEditable*>(animatedCubeInstance_.get()) == editable) return true;
 	return false;
 }
+#endif

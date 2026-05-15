@@ -676,6 +676,7 @@ void GameScene::RemoveDynamicAnimated(const std::string& name) {
 	}
 }
 
+#ifdef USE_IMGUI
 bool GameScene::IsDynamicObject(IImGuiEditable* editable) const {
 	// 基底（プリミティブ）でヒットすれば早期 return
 	if (BaseScene::IsDynamicObject(editable)) return true;
@@ -695,3 +696,4 @@ bool GameScene::IsDynamicObject(IImGuiEditable* editable) const {
 	}
 	return false;
 }
+#endif

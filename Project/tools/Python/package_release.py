@@ -11,9 +11,9 @@ zip の中身はラッパーフォルダ無しのフラット構成:
     CG2_X_Y.exe
     dxcompiler.dll
     dxil.dll
-    *.cso
-    Resources/
-        ...
+    dstorage.dll / dstoragecore.dll
+    Generated/Assets.pack          ← 全アセット集約
+    Resources/Shaders/             ← .hlsl のみ（DXC が実行時に読む）
 
 Windows の「すべて展開」は zip ファイル名と同じ名前のフォルダを自動で作って
 そこに中身を展開する。zip をリネームすれば展開後フォルダ名もそれに追従する。
@@ -30,7 +30,9 @@ from pathlib import Path
 # Project ルートからの相対パス（$(ProjectDir) で起動される）
 RELEASE_DIR = Path("../Generated/Output/Release")
 RESOURCES_DIR = Path("Resources")
-OUTPUT_DIR = RELEASE_DIR / "Distribution"  # Release内の専用サブフォルダに出力
+SHADERS_DIR = RESOURCES_DIR / "Shaders"           # 実行時コンパイル用 .hlsl のみ含める
+PACK_FILE = Path("../Generated/Assets.pack")       # repo ルート側 Generated/ にある
+OUTPUT_DIR = RELEASE_DIR / "Distribution"          # Release内の専用サブフォルダに出力
 
 # Release ディレクトリから取り込む拡張子
 INCLUDE_SUFFIXES = {".exe", ".dll", ".cso"}
@@ -70,13 +72,12 @@ def collect_release_files(release_dir: Path) -> list[Path]:
     #まとめたものを返す
     return files
 
-# Release配下を再帰的にすべて拾う
-def collect_resources_files(resources_dir: Path) -> list[Path]:
-
-    #なければ早期リターン
-    if not resources_dir.exists():
+# Resources/Shaders/ 配下の .hlsl など実行時に必要なファイルのみ拾う
+# （その他の Resources/* は Generated/Assets.pack に集約されている）
+def collect_shaders_files(shaders_dir: Path) -> list[Path]:
+    if not shaders_dir.exists():
         return []
-    return [f for f in resources_dir.rglob("*") if f.is_file()]
+    return [f for f in shaders_dir.rglob("*") if f.is_file()]
 
 
 def main() -> int:
@@ -86,11 +87,17 @@ def main() -> int:
     args = parser.parse_args()
 
     release_dir = RELEASE_DIR.resolve()
-    resources_dir = RESOURCES_DIR.resolve()
+    shaders_dir = SHADERS_DIR.resolve()
+    pack_file = PACK_FILE.resolve()
     output_dir = OUTPUT_DIR.resolve()
 
     if not release_dir.exists():
         print(f"[ERROR] Release ディレクトリが見つかりません: {release_dir}", file=sys.stderr)
+        return 1
+
+    if not pack_file.exists():
+        print(f"[ERROR] {PACK_FILE} が見つかりません。pack_assets.py を実行してください。",
+              file=sys.stderr)
         return 1
 
     # 日付と時刻でタイムスタンプを作る（Windowsで使えるようコロンは使わない）
@@ -99,7 +106,7 @@ def main() -> int:
     zip_path = output_dir / zip_name
 
     release_files = collect_release_files(release_dir)
-    resources_files = collect_resources_files(resources_dir)
+    shaders_files = collect_shaders_files(shaders_dir)
 
     if not release_files:
         print(f"[ERROR] Release ディレクトリに対象ファイルがありません: {release_dir}", file=sys.stderr)
@@ -109,21 +116,32 @@ def main() -> int:
     if zip_path.exists():
         zip_path.unlink()
 
+    pack_size_mb = pack_file.stat().st_size / (1024 * 1024)
     if not args.silent:
         print(f"[PACKAGE] {zip_path}")
         print(f"  timestamp: {timestamp}")
         print(f"  release:   {len(release_files)} 件")
-        print(f"  resources: {len(resources_files)} 件")
+        print(f"  shaders:   {len(shaders_files)} 件 (.hlsl 個別)")
+        print(f"  pack:      {pack_file.name} ({pack_size_mb:.2f} MB)")
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        # exe / DLL
         for f in release_files:
             arcname = f.name
             zf.write(f, arcname=arcname)
             if not args.silent:
                 print(f"  + {arcname}")
 
-        for f in resources_files:
-            rel = f.relative_to(resources_dir.parent)  # "Resources/..." の形にする
+        # Assets.pack（exe と同じ階層に配置 = AssetLocator が Generated/Assets.pack を見るので
+        #   zip 内のパスも "Generated/Assets.pack" にする）
+        pack_arcname = "Generated/Assets.pack"
+        zf.write(pack_file, arcname=pack_arcname)
+        if not args.silent:
+            print(f"  + {pack_arcname}")
+
+        # Resources/Shaders/ のみ個別ファイルとして含める
+        for f in shaders_files:
+            rel = f.relative_to(shaders_dir.parent.parent)  # "Resources/..." の形に
             arcname = rel.as_posix()
             zf.write(f, arcname=arcname)
             if not args.silent:
