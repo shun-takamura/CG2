@@ -210,18 +210,28 @@ def transform_dds_to_placed_footprint(dds: bytes) -> bytes:
 # パッキング本体
 # ============================================================
 def collect_entries(resources_root: Path) -> list[dict]:
-    """Resources/ 配下のファイルを集めて (relative_path, bytes, asset_type) のリストを返す"""
+    """Resources/ 配下のファイルを集めて (relative_path, bytes, asset_type) のリストを返す
+
+    Shaders/ 配下は除外する（実行時 DXC が個別ファイルとして読むため pack に含めない）。
+    """
     if not resources_root.exists():
         return []
 
     # プロジェクトルートからの相対パス（"Resources/..." 形式）に統一
     # AssetLocator::Open の引数と一致させる
     project_root = resources_root.parent
+    shaders_dir = resources_root / "Shaders"
 
     entries = []
     for f in sorted(resources_root.rglob("*")):
         if not f.is_file():
             continue
+        # Resources/Shaders/ 配下は pack に含めない
+        try:
+            f.relative_to(shaders_dir)
+            continue  # Shaders/ 配下なのでスキップ
+        except ValueError:
+            pass
         rel = f.relative_to(project_root).as_posix()
         data = f.read_bytes()
         asset_type = asset_type_from_path(rel)
@@ -330,8 +340,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Resources/ → .pack")
     parser.add_argument("--resources", default="Resources",
                         help="入力 Resources ディレクトリ（既定: Resources）")
-    parser.add_argument("--output", default="Generated/Assets.pack",
-                        help="出力 .pack パス（既定: Generated/Assets.pack）")
+    parser.add_argument("--output", default="../Generated/Assets.pack",
+                        help="出力 .pack パス（既定: ../Generated/Assets.pack = repo ルート側）")
     args = parser.parse_args()
 
     resources = Path(args.resources)

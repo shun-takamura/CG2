@@ -1,4 +1,4 @@
-#include "ImGuiManager.h"
+﻿#include "ImGuiManager.h"
 #include "IImGuiWindow.h"
 #include "IImGuiEditable.h"
 #include "AssetLocator.h"
