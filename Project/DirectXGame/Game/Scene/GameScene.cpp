@@ -1,4 +1,4 @@
-﻿#include "GameScene.h"
+#include "GameScene.h"
 #include "SceneManager.h"
 #include <cmath>
 #include <algorithm>
@@ -103,8 +103,8 @@ void GameScene::Initialize() {
 	enemy_->Initialize(
 		object3DManager_,
 		dxCore_,
-		"enemy.obj",
-		"enemyBullet.obj",
+		"enemy.mesh",
+		"enemyBullet.mesh",
 		Vector3{ 10.0f, 0.0f, 0.0f }  // スポーン位置
 	);
 
@@ -120,7 +120,7 @@ void GameScene::Initialize() {
 		object3DManager_,
 		dxCore_,
 		"Resources/Models/Stage",
-		"stage.obj",
+		"stage.mesh",
 		"Stage"
 	);
 	stage_->SetTranslate({ 0.0f, -1.0f, 0.0f }); // 地面の位置に合わせて調整
@@ -132,7 +132,7 @@ void GameScene::Initialize() {
 		object3DManager_,
 		dxCore_,
 		"Resources/Models/Skydome",
-		"skydome.obj",
+		"skydome.mesh",
 		"Skydome"
 	);
 	skydome_->SetTranslate({ 0.0f, 0.0f, 0.0f });
@@ -636,6 +636,7 @@ void GameScene::AddDynamicSprite(const std::string& texturePath, float clientX, 
 	dynamicSprites_.push_back(std::move(sprite));
 }
 
+#ifdef USE_IMGUI
 void GameScene::RemoveDynamicSprite(const std::string& name) {
 	auto it = std::find_if(dynamicSprites_.begin(), dynamicSprites_.end(),
 		[&name](const std::unique_ptr<SpriteInstance>& s) { return s->GetName() == name; });
@@ -653,6 +654,7 @@ void GameScene::RemoveDynamicSprite(const std::string& name) {
 		return;
 	}
 }
+#endif
 
 void GameScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
 	// 枠組み実装：AnimatedModelInstance を作って AnimatedObject3DInstance に渡す

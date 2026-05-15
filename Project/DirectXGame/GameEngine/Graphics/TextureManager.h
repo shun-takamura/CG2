@@ -32,6 +32,11 @@ private:
 		// GPU アップロード後は解放してメモリを返す。
 		DirectX::ScratchImage cpuImage;
 		bool isLinear = false;  // 線形読み込み（マスク等）なら true
+
+		// DirectStorage 経路（pack モード時のみ）。CPU メモリを経由せず VRAM へ直接ロードする。
+		bool     useDirectStorage = false;
+		uint64_t dsPayloadOffset = 0;   // pack ファイル先頭からの DDS payload 開始オフセット
+		uint32_t dsPayloadSize = 0;     // payload サイズ（DDS ヘッダーを除いた残り）
 	};
 
 	// SRVインデックスの開始番号(0番はImGui)

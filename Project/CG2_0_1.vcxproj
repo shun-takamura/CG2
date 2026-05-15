@@ -188,6 +188,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\DStorageManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Light\LightManager.cpp" />
@@ -331,6 +332,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\DStorageManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />

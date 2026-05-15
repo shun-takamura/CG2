@@ -1,6 +1,8 @@
 #include "TextureManager.h"
 #include "DDSHeader.h"
 #include "AssetLocator.h"
+#include "DStorageManager.h"
+#include <algorithm>
 //TextureManager* TextureManager::instance = nullptr;
 
 uint32_t TextureManager::kSRVIndexTop = 1;
@@ -317,11 +319,79 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
         slot.isLinear = linear;
     }
 
-    // --- ロックを外して重い WIC/DDS デコードを実行（スレッド安全な部分）---
-    // AssetLocator 経由でバイト列を取得 → 専用の Memory 系 API でデコード。
-    // これで pack モードでも同じコードが動く。
+    // --- pack モード + DirectStorage 利用可能 + .dds なら DirectStorage 経路 ---
+    // 診断用フラグ: false の間は DStorage 経路をスキップし AssetLocator::LoadAll 経由にする
+    constexpr bool kEnableDirectStoragePath = true;
+    if (kEnableDirectStoragePath) {
+        auto* loc = AssetLocator::GetInstance();
+        auto* ds = DStorageManager::GetInstance();
+        const bool isDDS =
+            filePath.size() >= 4 &&
+            (filePath.compare(filePath.size() - 4, 4, ".dds") == 0 ||
+             filePath.compare(filePath.size() - 4, 4, ".DDS") == 0);
+        if (isDDS && loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile()) {
+            uint64_t packOffset = 0, packSize = 0;
+            if (loc->GetPackEntryInfo(filePath, packOffset, packSize)) {
+                // DDS ヘッダーだけ AssetLocator 経由で読む（先頭 200B あれば DXT10 でも十分）
+                AssetHandle h = loc->Open(filePath);
+                uint8_t headerBytes[200]{};
+                const uint32_t headerReadSize = static_cast<uint32_t>(
+                    std::min<uint64_t>(sizeof(headerBytes), h.GetSize()));
+                if (h.IsValid() && h.ReadAt(0, headerBytes, headerReadSize)) {
+                    DDS::ParsedDDS info;
+                    if (DDS::ParseDDS(headerBytes, headerReadSize, info) &&
+                        info.format != DXGI_FORMAT_UNKNOWN) {
+                        // 状態に書き戻し
+                        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+                        auto it = textureDatas.find(filePath);
+                        if (it != textureDatas.end()) {
+                            DirectX::TexMetadata meta{};
+                            meta.width = info.width;
+                            meta.height = info.height;
+                            meta.depth = 1;
+                            meta.arraySize = info.arraySize;
+                            meta.mipLevels = info.mipLevels;
+                            meta.format = info.format;
+                            meta.dimension = DirectX::TEX_DIMENSION_TEXTURE2D;
+                            if (info.isCubemap) {
+                                meta.miscFlags |= DirectX::TEX_MISC_TEXTURECUBE;
+                            }
+                            it->second.metadata = meta;
+                            it->second.useDirectStorage = true;
+                            it->second.dsPayloadOffset = packOffset + info.payloadOffset;
+                            it->second.dsPayloadSize =
+                                static_cast<uint32_t>(packSize - info.payloadOffset);
+                            it->second.loadState = TextureData::LoadState::CPUReady;
+                            {
+                                char dbg[512];
+                                sprintf_s(dbg,
+                                    "[DS] %s w=%u h=%u mips=%u arr=%u fmt=%u "
+                                    "packOff=%llu hdrOff=%u dsOff=%llu dsSize=%u\n",
+                                    filePath.c_str(),
+                                    (unsigned)info.width, (unsigned)info.height,
+                                    (unsigned)info.mipLevels, (unsigned)info.arraySize,
+                                    (unsigned)info.format,
+                                    (unsigned long long)packOffset,
+                                    (unsigned)info.payloadOffset,
+                                    (unsigned long long)it->second.dsPayloadOffset,
+                                    (unsigned)it->second.dsPayloadSize);
+                                OutputDebugStringA(dbg);
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+            // ここに来たら DirectStorage 経路は使えない → フォールバック
+        }
+    }
+
+    // --- AssetLocator 経由でバイト列取得（FS/Pack 両モード対応）→ Memory API でデコード ---
     std::vector<uint8_t> bytes = AssetLocator::GetInstance()->LoadAll(filePath);
     if (bytes.empty()) {
+        OutputDebugStringA(("LoadTextureCPU: LoadAll returned empty for '" + filePath
+                            + "' (mode=" + AssetLocator::GetInstance()->GetModeName()
+                            + ")\n").c_str());
         std::lock_guard<std::mutex> lock(textureDatasMutex_);
         textureDatas.erase(filePath);
         return;
@@ -329,12 +399,12 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
 
     DirectX::ScratchImage image{};
     HRESULT hr;
-
-    // 拡張子で DDS / WIC を分岐（パスベース判定でファイル本体は触らない）
-    bool isDDS = filePath.size() >= 4 &&
+    const bool isDDS = filePath.size() >= 4 &&
         std::equal(filePath.end() - 4, filePath.end(), ".dds",
-                   [](char a, char b) { return std::tolower(static_cast<unsigned char>(a))
-                                              == std::tolower(static_cast<unsigned char>(b)); });
+                   [](char a, char b) {
+                       return std::tolower(static_cast<unsigned char>(a))
+                            == std::tolower(static_cast<unsigned char>(b));
+                   });
     if (isDDS) {
         hr = DirectX::LoadFromDDSMemory(
             bytes.data(), bytes.size(), DirectX::DDS_FLAGS_NONE, nullptr, image);
@@ -344,6 +414,10 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
             bytes.data(), bytes.size(), wicFlags, nullptr, image);
     }
     if (FAILED(hr)) {
+        char hrbuf[64];
+        sprintf_s(hrbuf, " (hr=0x%08X)", static_cast<unsigned>(hr));
+        OutputDebugStringA(("LoadTextureCPU: Decode failed for '" + filePath
+                            + "'" + hrbuf + "\n").c_str());
         std::lock_guard<std::mutex> lock(textureDatasMutex_);
         textureDatas.erase(filePath);
         return;
@@ -394,6 +468,72 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
 
     assert(srvManager_->CanAllocate());
 
+    // --- DirectStorage 経路: pack ファイルから VRAM へ直接転送 ---
+    if (data->useDirectStorage) {
+        // 1. ID3D12Resource を COMMON state で作成
+        //    （DirectStorage は新 barrier-layout モデル前提のため COMMON が必須。
+        //     既存の SpriteManager::CreateTextureResource は COPY_DEST 初期化なので使えない）
+        D3D12_RESOURCE_DESC desc{};
+        desc.Width = static_cast<UINT>(data->metadata.width);
+        desc.Height = static_cast<UINT>(data->metadata.height);
+        desc.MipLevels = static_cast<UINT16>(data->metadata.mipLevels);
+        desc.DepthOrArraySize = static_cast<UINT16>(data->metadata.arraySize);
+        desc.Format = data->metadata.format;
+        desc.SampleDesc.Count = 1;
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+        D3D12_HEAP_PROPERTIES heap{};
+        heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COMMON,
+            nullptr, IID_PPV_ARGS(&data->resource));
+        assert(SUCCEEDED(hr));
+
+        // 2. DirectStorage で payload を全 subresource に転送（同期で完了待ち）
+        //    pack ファイル側で D3D12 placed-footprint レイアウト（行256B/開始512B 整列）
+        //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエスト一括投入できる
+        auto* ds = DStorageManager::GetInstance();
+        ds->EnqueueMultipleSubresources(
+            ds->GetPackFile(),
+            data->dsPayloadOffset,
+            data->dsPayloadSize,
+            data->resource.Get(),
+            0);
+        ds->SubmitAndWait();
+
+        // 3. メインコマンドリストで COMMON → GENERIC_READ に遷移
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = data->resource.Get();
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+        dxCore_->GetCommandList()->ResourceBarrier(1, &barrier);
+
+        // 4. SRV 作成
+        data->srvIndex = srvManager_->Allocate();
+        if (data->metadata.IsCubemap()) {
+            srvManager_->CreateSRVForCubemap(
+                data->srvIndex, data->resource.Get(),
+                data->metadata.format,
+                static_cast<UINT>(data->metadata.mipLevels));
+        } else {
+            srvManager_->CreateSRVForTexture2D(
+                data->srvIndex, data->resource.Get(),
+                data->metadata.format,
+                static_cast<UINT>(data->metadata.mipLevels));
+        }
+
+        data->loadState = TextureData::LoadState::GPUReady;
+        return;
+    }
+
+    // --- 既存経路: CPU メモリ経由でアップロード ---
     data->resource = spriteManager_->CreateTextureResource(
         dxCore_->GetDevice(), data->metadata);
 
@@ -447,7 +587,9 @@ void TextureManager::LoadTexture(const std::string& filePath)
         OutputDebugStringA("  -> Already exists, skipping\n");
         return;
     }
-    OutputDebugStringA("  -> Loading from file...\n");
+    // どこから読んでいるかを明示
+    OutputDebugStringA((std::string("  -> Loading via ")
+                        + AssetLocator::GetInstance()->GetModeName() + "\n").c_str());
     LoadTextureCPU(filePath, false);
     LoadTextureGPU(filePath);
 }
@@ -510,7 +652,12 @@ D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string& f
         return srvManager_->GetGPUDescriptorHandle(it->second.srvIndex);
     }
 
-    // 見つからない場合、登録されているキーを出力
+    // 見つからない場合、要求されたパスと登録済みキーを出力
+    OutputDebugStringA(("GetSrvHandleGPU MISS: '" + filePath + "'\n").c_str());
+    OutputDebugStringA(("  Mode: " + std::string(AssetLocator::GetInstance()->GetModeName())
+                        + ", Exists in locator: "
+                        + (AssetLocator::GetInstance()->Exists(filePath) ? "YES" : "NO")
+                        + "\n").c_str());
     OutputDebugStringA("Registered textures:\n");
     for (const auto& pair : textureDatas) {
         OutputDebugStringA(("  - " + pair.first + "\n").c_str());

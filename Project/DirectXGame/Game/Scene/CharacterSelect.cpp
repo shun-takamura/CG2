@@ -1,6 +1,7 @@
-﻿#include "CharacterSelect.h"
+#include "CharacterSelect.h"
 #include "SceneManager.h"
 #include <algorithm>
+#include <cstring>
 
 //============================
 // 自作ヘッダーのインクルード
@@ -73,7 +74,7 @@ void CharacterSelect::Initialize()
 	ParticleManager::GetInstance()->CreateParticleGroup("circle", "Resources/Textures/Particle.dds");
 
 	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { "player1.obj", "player2.obj"};
+	const std::string modelFiles[] = { "player1.mesh", "player2.mesh"};
 	const std::string objectNames[] = { "Player1", "Player2"};
 
 	for (int i = 0;  i < std::size(modelFiles); ++i) {
@@ -81,7 +82,7 @@ void CharacterSelect::Initialize()
 		obj->Initialize(
 			object3DManager_,
 			dxCore_,
-			"Assets/Models/Player",
+			"Resources/Models/Player",
 			modelFiles[i],
 			objectNames[i]
 		);
@@ -192,6 +193,18 @@ void CharacterSelect::Update()
 	// QRコードでプレイヤー選択がされたら選択されたプレイヤーを保存
 	if (!isTransitioning_ && QRCodeReader::GetInstance()->HasDetected()) {
 
+		// QRに焼かれているモデル名は旧形式(.obj/.gltf)の場合があるため
+		// Cooker後の .mesh パイプラインに正規化する
+		auto toMesh = [](std::string s) -> std::string {
+			auto endsWith = [](const std::string& v, const char* suf) {
+				size_t n = std::strlen(suf);
+				return v.size() >= n && v.compare(v.size() - n, n, suf) == 0;
+			};
+			if (endsWith(s, ".obj"))  s.replace(s.size() - 4, 4, ".mesh");
+			if (endsWith(s, ".gltf")) s.replace(s.size() - 5, 5, ".mesh");
+			return s;
+		};
+
 		std::string qrData = QRCodeReader::GetInstance()->GetData();
 		std::string modelName;  // ここで宣言だけしておく
 
@@ -200,33 +213,32 @@ void CharacterSelect::Update()
 
 		if (firstComma != std::string::npos && secondComma != std::string::npos) {
 			// 3項目すべてあり
-			modelName = qrData.substr(0, firstComma);
+			modelName = toMesh(qrData.substr(0, firstComma));
 			std::string bulletMode = qrData.substr(firstComma + 1, secondComma - firstComma - 1);
-			std::string bulletModel = qrData.substr(secondComma + 1);
+			std::string bulletModel = toMesh(qrData.substr(secondComma + 1));
 
 			GameData::GetInstance()->SetSelectedModel(modelName);
 			GameData::GetInstance()->SetBulletMode(bulletMode);
 			GameData::GetInstance()->SetBulletModel(bulletModel);
 		} else if (firstComma != std::string::npos) {
 			// 2項目
-			modelName = qrData.substr(0, firstComma);
+			modelName = toMesh(qrData.substr(0, firstComma));
 			std::string bulletMode = qrData.substr(firstComma + 1);
 
 			GameData::GetInstance()->SetSelectedModel(modelName);
 			GameData::GetInstance()->SetBulletMode(bulletMode);
-			GameData::GetInstance()->SetBulletModel("playerBullet.obj");
+			GameData::GetInstance()->SetBulletModel("playerBullet.mesh");
 		} else {
 			// モデル名のみ
-			modelName = qrData;
+			modelName = toMesh(qrData);
 
 			GameData::GetInstance()->SetSelectedModel(modelName);
 			GameData::GetInstance()->SetBulletMode("normal");
-			GameData::GetInstance()->SetBulletModel("playerBullet.obj");
+			GameData::GetInstance()->SetBulletModel("playerBullet.mesh");
 		}
 
 		// modelName が有効なモデルファイルか確認
-		if (modelName.find(".obj") != std::string::npos ||
-			modelName.find(".gltf") != std::string::npos) {
+		if (modelName.find(".mesh") != std::string::npos) {
 
 			// 該当モデルの位置からパーティクルを発生
 			for (const auto& obj : object3DInstances_) {
@@ -350,6 +362,7 @@ void CharacterSelect::AddDynamicSprite(const std::string& texturePath, float cli
 	dynamicSprites_.push_back(std::move(sprite));
 }
 
+#ifdef USE_IMGUI
 void CharacterSelect::RemoveDynamicSprite(const std::string& name) {
 	auto it = std::find_if(dynamicSprites_.begin(), dynamicSprites_.end(),
 		[&name](const std::unique_ptr<SpriteInstance>& s) { return s->GetName() == name; });
@@ -358,6 +371,7 @@ void CharacterSelect::RemoveDynamicSprite(const std::string& name) {
 		dynamicSprites_.erase(it);
 	}
 }
+#endif
 
 void CharacterSelect::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
 	auto model = std::make_unique<AnimatedModelInstance>();

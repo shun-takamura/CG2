@@ -52,9 +52,9 @@ void DemoScene::Initialize() {
 	// デバッグカメラの生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 
-	// スプライトの初期化
-	sprite_ = std::make_unique<SpriteInstance>();
-	sprite_->Initialize(spriteManager_, "DistributionAssets/Textures/uvChecker.png");
+	//// スプライトの初期化
+	//sprite_ = std::make_unique<SpriteInstance>();
+	//sprite_->Initialize(spriteManager_, "DistributionAssets/Textures/uvChecker.png");
 
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
@@ -71,13 +71,13 @@ void DemoScene::Initialize() {
 	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
 
 
-	// パーティクルの設定
-	ParticleManager::GetInstance()->SetCamera(camera_.get());
-	ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+	//// パーティクルの設定
+	//ParticleManager::GetInstance()->SetCamera(camera_.get());
+	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
-	// GPU Particle 初期化
-	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
-	gpuParticleManager_->Initialize(dxCore_, srvManager_, "DistributionAssets/Textures/circle2.png");
+	//// GPU Particle 初期化
+	//gpuParticleManager_ = std::make_unique<GPUParticleManager>();
+	//gpuParticleManager_->Initialize(dxCore_, srvManager_, "DistributionAssets/Textures/circle2.png");
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -87,27 +87,27 @@ void DemoScene::Initialize() {
 	//ParticleManager::GetInstance()->SetAccelerationField(field);
 	//ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
 
-	// 交互に使うスプライト
-	const std::string textures[2] = {
-		"DistributionAssets/Textures/uvChecker.png",
-		"DistributionAssets/Models/MonsterBall/monsterBall.png"
-	};
+	//// 交互に使うスプライト
+	//const std::string textures[2] = {
+	//	"DistributionAssets/Textures/uvChecker.png",
+	//	"DistributionAssets/Models/MonsterBall/monsterBall.png"
+	//};
 
-	// 5枚生成
-	for (uint32_t i = 0; i < 5; ++i) {
-		auto newSprite = std::make_unique<SpriteInstance>();
-		const std::string& texturePath = textures[i % 2];
+	//// 5枚生成
+	//for (uint32_t i = 0; i < 5; ++i) {
+	//	auto newSprite = std::make_unique<SpriteInstance>();
+	//	const std::string& texturePath = textures[i % 2];
 
-		std::string spriteName = "Sprite_" + std::to_string(i);
-		newSprite->Initialize(spriteManager_, texturePath, spriteName);
+	//	std::string spriteName = "Sprite_" + std::to_string(i);
+	//	newSprite->Initialize(spriteManager_, texturePath, spriteName);
 
-		newSprite->SetSize({ 100.0f, 100.0f });
-		newSprite->SetPosition({ i * 2.0f, 0.0f });
-		sprites_.push_back(std::move(newSprite));
-	}
+	//	newSprite->SetSize({ 100.0f, 100.0f });
+	//	newSprite->SetPosition({ i * 2.0f, 0.0f });
+	//	sprites_.push_back(std::move(newSprite));
+	//}
 
 	// 3Dオブジェクトを配列で管理
-	const std::string modelFiles[] = { 
+	/*const std::string modelFiles[] = { 
 		"Models/MonsterBall/monsterBall.obj", 
 		"Models/Terrain/terrain.obj", 
 		"Models/Plane/plane.gltf"
@@ -130,51 +130,51 @@ void DemoScene::Initialize() {
 		);
 		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
 		object3DInstances_.push_back(std::move(obj));
-	}
+	}*/
 
 	// サウンドのロード
-	SoundManager::GetInstance()->LoadFile("fanfare", "DistributionAssets/Sounds/fanfare.wav");
+	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/Sounds/fanfare.wav");
 
-	// Ringのテスト（角度範囲指定版）
-	testRing_ = std::make_unique<PrimitiveMesh>();
+	//// Ringのテスト（角度範囲指定版）
+	//testRing_ = std::make_unique<PrimitiveMesh>();
 
-	PrimitiveGenerator::RingParams ringParams;
-	ringParams.outerRadius = 1.0f;
-	ringParams.innerRadius = 0.0f;    // 内径0にすると円盤っぽくなる
-	// 波打つ輪っか
-	ringParams.divisions = 64;
-	ringParams.outerRadiusPerDivision.clear();
-	for (int i = 0; i < 64; ++i) {
-		float angle = i / 64.0f * 2.0f * std::numbers::pi_v<float>;
-		float wave = 1.0f + 0.2f * std::sin(angle * 5.0f);  // 5波
-		ringParams.outerRadiusPerDivision.push_back(wave);
-	}
-	ringParams.innerColor = { 1.0f, 1.0f, 1.0f, 1.0f };  // 中央：白不透明
-	ringParams.outerColor = { 1.0f, 1.0f, 1.0f, 0.0f };  // 外側：白透明
-	ringParams.startAngle = 0.0f;
-	ringParams.endAngle = 2.0f * std::numbers::pi_v<float>;
-	ringParams.uvHorizon = true;
+	//PrimitiveGenerator::RingParams ringParams;
+	//ringParams.outerRadius = 1.0f;
+	//ringParams.innerRadius = 0.0f;    // 内径0にすると円盤っぽくなる
+	//// 波打つ輪っか
+	//ringParams.divisions = 64;
+	//ringParams.outerRadiusPerDivision.clear();
+	//for (int i = 0; i < 64; ++i) {
+	//	float angle = i / 64.0f * 2.0f * std::numbers::pi_v<float>;
+	//	float wave = 1.0f + 0.2f * std::sin(angle * 5.0f);  // 5波
+	//	ringParams.outerRadiusPerDivision.push_back(wave);
+	//}
+	//ringParams.innerColor = { 1.0f, 1.0f, 1.0f, 1.0f };  // 中央：白不透明
+	//ringParams.outerColor = { 1.0f, 1.0f, 1.0f, 0.0f };  // 外側：白透明
+	//ringParams.startAngle = 0.0f;
+	//ringParams.endAngle = 2.0f * std::numbers::pi_v<float>;
+	//ringParams.uvHorizon = true;
 
-	testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
-	testRing_->SetTexture("Resources/Textures/white1x1.dds");
-	testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
-	testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
-	//testRing_->SetUVScroll({ 0.0f, 1.0f });
+	//testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
+	//testRing_->SetTexture("Resources/Textures/white1x1.dds");
+	//testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+	//testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
+	////testRing_->SetUVScroll({ 0.0f, 1.0f });
 
-	// Cylinderのテスト
-	testCylinder_ = std::make_unique<PrimitiveMesh>();
-	testCylinder_->Initialize(PrimitiveGenerator::CreateCylinder(
-		1.0f, 1.0f, 3.0f, 32,
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f }
-	));
-	testCylinder_->SetTexture("DistributionAssets/Textures/gradationLine.png");
-	testCylinder_->SetBlendMode(PrimitivePipeline::kBlendModeNone);
-	testCylinder_->GetTransform().translate = { 0.0f, 2.0f, 0.0f };
-	//testCylinder_->SetDepthWrite(true);
-	testCylinder_->SetUVFlipV(true);
-	testCylinder_->SetUVScroll({ 0.1f, 0.0f });
-	testCylinder_->SetAlphaReference(0.5f);
+	//// Cylinderのテスト
+	//testCylinder_ = std::make_unique<PrimitiveMesh>();
+	//testCylinder_->Initialize(PrimitiveGenerator::CreateCylinder(
+	//	1.0f, 1.0f, 3.0f, 32,
+	//	{ 1.0f, 1.0f, 1.0f, 1.0f },
+	//	{ 1.0f, 1.0f, 1.0f, 1.0f }
+	//));
+	//testCylinder_->SetTexture("DistributionAssets/Textures/gradationLine.png");
+	//testCylinder_->SetBlendMode(PrimitivePipeline::kBlendModeNone);
+	//testCylinder_->GetTransform().translate = { 0.0f, 2.0f, 0.0f };
+	////testCylinder_->SetDepthWrite(true);
+	//testCylinder_->SetUVFlipV(true);
+	//testCylinder_->SetUVScroll({ 0.1f, 0.0f });
+	//testCylinder_->SetAlphaReference(0.5f);
 
 	auto sneakWalkModel = std::make_unique<Object3DInstance>();
 	sneakWalkModel->Initialize(
@@ -212,26 +212,26 @@ void DemoScene::Initialize() {
 	sneakWalkInstance_->SetUseEnvironmentMap(true);
 	sneakWalkInstance_->SetEnvironmentCoefficient(0.5f);
 
-	// AnimatedCubeのモデル＆アニメーション読み込み
-	animatedCubeModel_ = std::make_unique<AnimatedModelInstance>();
-	animatedCubeModel_->Initialize(
-		ModelManager::GetInstance()->GetModelCore(),
-		"DistributionAssets/Models/AnimatedCube",
-		"AnimatedCube.gltf"
-	);
+	//// AnimatedCubeのモデル＆アニメーション読み込み
+	//animatedCubeModel_ = std::make_unique<AnimatedModelInstance>();
+	//animatedCubeModel_->Initialize(
+	//	ModelManager::GetInstance()->GetModelCore(),
+	//	"DistributionAssets/Models/AnimatedCube",
+	//	"AnimatedCube.gltf"
+	//);
 
-	// AnimatedCubeのインスタンスを作成
-	animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
-	animatedCubeInstance_->Initialize(
-		object3DManager_,
-		skinningComputeManager_,
-		dxCore_,
-		srvManager_,
-		animatedCubeModel_.get(),
-		"AnimatedCube"
-	);
-	animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
-	animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
+	//// AnimatedCubeのインスタンスを作成
+	//animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
+	//animatedCubeInstance_->Initialize(
+	//	object3DManager_,
+	//	skinningComputeManager_,
+	//	dxCore_,
+	//	srvManager_,
+	//	animatedCubeModel_.get(),
+	//	"AnimatedCube"
+	//);
+	//animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
+	//animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 
 	//dxCore_->SetUseFixedFrameRate(false);
 
@@ -460,19 +460,19 @@ void DemoScene::Update() {
 		ParticleManager::GetInstance()->SetAccelerationFieldEnabled(!current);
 	}
 
-	if (sprite_) {
-		sprite_->SetAnchorPoint({ 0.f, 0.0f });
-		sprite_->SetPosition({ 0.0f,0.0f });
-		sprite_->SetSize({ 200.0f,200.0f });
-		sprite_->Update();
-		//sprite_->SetIsFlipX(true);
+	//if (sprite_) {
+	//	sprite_->SetAnchorPoint({ 0.f, 0.0f });
+	//	sprite_->SetPosition({ 0.0f,0.0f });
+	//	sprite_->SetSize({ 200.0f,200.0f });
+	//	sprite_->Update();
+	//	//sprite_->SetIsFlipX(true);
 
-		// 回転テスト
-		float rotation = sprite_->GetRotation();
-		rotation += 0.01f;
-		sprite_->SetRotation(rotation);
-		sprite_->Update();
-	}
+	//	// 回転テスト
+	//	float rotation = sprite_->GetRotation();
+	//	rotation += 0.01f;
+	//	sprite_->SetRotation(rotation);
+	//	sprite_->Update();
+	//}
 
 	// リスナー（カメラ）の位置をSoundManagerに反映
 	SoundManager::GetInstance()->UpdateListener(camera_.get());
@@ -501,10 +501,10 @@ void DemoScene::Update() {
 		sneakWalkInstance_->Update(GetScaledDeltaTime());
 	}
 
-	// アニメーション付きオブジェクトの更新
-	if (animatedCubeInstance_) {
-		animatedCubeInstance_->Update(GetScaledDeltaTime());
-	}
+	//// アニメーション付きオブジェクトの更新
+	//if (animatedCubeInstance_) {
+	//	animatedCubeInstance_->Update(GetScaledDeltaTime());
+	//}
 
 	// Skybox更新を追加
 	skybox_->Update();
