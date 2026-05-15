@@ -657,6 +657,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <None Include="Resources\Shaders\Particle\Random.hlsli" />
     <None Include="tools\Python\convert_hdr_to_dds.py" />
     <None Include="tools\Python\cook_assets.py" />
+    <None Include="tools\Python\pack_assets.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

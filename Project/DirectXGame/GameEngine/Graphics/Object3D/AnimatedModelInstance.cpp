@@ -473,11 +473,14 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
     }
 
     // --- 同階層の .anim を探して読み込む（あれば）---
+    // 注意: pack モードでの hash 一致のため、forward slash で組み立てる
+    // （filesystem::path::string() は Windows でバックスラッシュを返すため使えない）
     std::filesystem::path animPath =
         std::filesystem::path(directoryPath) /
         (std::filesystem::path(filename).stem().string() + ".anim");
-    if (AssetLocator::GetInstance()->Exists(animPath.string())) {
-        animation_ = ReadAnimFile(animPath.string());
+    std::string animPathStr = animPath.generic_string();
+    if (AssetLocator::GetInstance()->Exists(animPathStr)) {
+        animation_ = ReadAnimFile(animPathStr);
     }
 
     assert(!modelData_.indices.empty() && "indices is empty!");

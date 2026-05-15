@@ -70,8 +70,45 @@ void Framework::Initialize() {
 	// 初期化（タイトル）
 	winApp_->Initialize(L"QR");
 
-	// アセットローダー初期化（B.0: FS 経路のみ。pack 対応は B.2 以降）
-	AssetLocator::GetInstance()->InitializeFromFilesystem();
+	// アセットローダー初期化
+	// 優先順位: CLI 引数 > 環境変数 > Release ビルドのデフォルト pack > 個別ファイル直読み
+	{
+		bool usePack = false;
+#if defined(NDEBUG) && !defined(_DEBUG)
+		usePack = true;  // Release ビルドのデフォルト
+#endif
+		// CLI 引数 (--use-pack / --use-fs)
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (argv) {
+			for (int i = 1; i < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--use-pack") == 0) usePack = true;
+				else if (std::wcscmp(argv[i], L"--use-fs") == 0) usePack = false;
+			}
+			::LocalFree(argv);
+		}
+		// 環境変数
+		if (size_t needed = 0; _wgetenv_s(&needed, nullptr, 0, L"USE_PACK_ASSETS") == 0 && needed > 0) {
+			std::wstring buf(needed, L'\0');
+			if (_wgetenv_s(&needed, buf.data(), buf.size(), L"USE_PACK_ASSETS") == 0) {
+				if (!buf.empty() && buf.front() == L'1') usePack = true;
+				else if (!buf.empty() && buf.front() == L'0') usePack = false;
+			}
+		}
+
+		if (usePack) {
+			if (!AssetLocator::GetInstance()->InitializeFromPack("Generated/Assets.pack")) {
+				// pack ファイルが見つからない場合は FS にフォールバック
+				AssetLocator::GetInstance()->InitializeFromFilesystem();
+				Log("[AssetLocator] pack mode requested but Generated/Assets.pack not found; falling back to FS\n");
+			} else {
+				Log("[AssetLocator] mode = pack (Generated/Assets.pack)\n");
+			}
+		} else {
+			AssetLocator::GetInstance()->InitializeFromFilesystem();
+			Log("[AssetLocator] mode = filesystem\n");
+		}
+	}
 
 	dxCore_ = std::make_unique<DirectXCore>();
 	dxCore_->Initialize(winApp_.get());
