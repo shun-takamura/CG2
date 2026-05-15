@@ -36,6 +36,10 @@ COMP_NONE = 0
 COMP_GDEFLATE = 1
 COMP_ZSTD = 2
 
+# DirectStorage / D3D12 placed-footprint 制約
+D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256      # 行のバイト数の倍数
+D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT = 512  # subresource 開始位置の倍数
+
 # asset_type
 ASSET_OTHER = 0
 ASSET_MESH = 1
@@ -71,6 +75,138 @@ def asset_type_from_path(path: str) -> int:
 
 
 # ============================================================
+# DDS → D3D12 placed-footprint レイアウト変換
+# ============================================================
+# DirectStorage の DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES は
+# source data が「各 subresource は 512B 整列開始、行は 256B 整列」という
+# D3D12 placed-footprint 形式である前提。DDS はタイトパックなのでそのままでは
+# 動かない。pack 時にあらかじめパディングを入れておく。
+
+# BC ブロック 1 個あたりのバイト数 (DXGI_FORMAT 値)
+_BC_BYTES_PER_BLOCK = {
+    # BC1
+    70: 8, 71: 8, 72: 8,
+    # BC4
+    79: 8, 80: 8, 81: 8,
+    # BC2
+    73: 16, 74: 16, 75: 16,
+    # BC3
+    76: 16, 77: 16, 78: 16,
+    # BC5
+    82: 16, 83: 16, 84: 16,
+    # BC6H
+    94: 16, 95: 16, 96: 16,
+    # BC7
+    97: 16, 98: 16, 99: 16,
+}
+
+
+def _is_bc_format(fmt: int) -> bool:
+    return fmt in _BC_BYTES_PER_BLOCK
+
+
+def _bits_per_pixel(fmt: int) -> int:
+    """非圧縮フォーマットの bits/pixel。未対応は 0 を返す。"""
+    table = {
+        28: 32,  # R8G8B8A8_UNORM
+        29: 32,  # R8G8B8A8_UNORM_SRGB
+        87: 32,  # B8G8R8A8_UNORM
+        91: 32,  # B8G8R8A8_UNORM_SRGB
+        10: 64,  # R16G16B16A16_FLOAT
+        2:  128, # R32G32B32A32_FLOAT
+        62: 8,   # R8_UNORM
+        49: 16,  # R8G8_UNORM
+    }
+    return table.get(fmt, 0)
+
+
+def _parse_dds_header(dds: bytes) -> dict | None:
+    """DDS ヘッダーを解釈して width/height/mips/arraySize/dxgiFormat を返す。
+    DXT10 拡張ヘッダー前提。FourCC で BC1-BC5 が直接書かれている古い DDS は未対応。"""
+    if len(dds) < 148 or dds[:4] != b"DDS ":
+        return None
+    height = struct.unpack_from("<I", dds, 12)[0]
+    width  = struct.unpack_from("<I", dds, 16)[0]
+    mip_count = struct.unpack_from("<I", dds, 28)[0]
+    if mip_count == 0:
+        mip_count = 1
+    fourcc = dds[84:88]
+    if fourcc != b"DX10":
+        # 古い形式は未対応 (Cooker は texconv -dx10 相当の DXT10 拡張を出すので通常通らない)
+        return None
+    dxgi_format = struct.unpack_from("<I", dds, 128)[0]
+    misc_flag   = struct.unpack_from("<I", dds, 128 + 8)[0]
+    array_size  = struct.unpack_from("<I", dds, 128 + 12)[0]
+    if array_size == 0:
+        array_size = 1
+    is_cube = (misc_flag & 0x4) != 0   # DDS_RESOURCE_MISC_TEXTURECUBE
+    effective_array = array_size * (6 if is_cube else 1)
+    return {
+        "header_size": 148,
+        "width": width,
+        "height": height,
+        "mip_count": mip_count,
+        "array_size": effective_array,
+        "dxgi_format": dxgi_format,
+    }
+
+
+def transform_dds_to_placed_footprint(dds: bytes) -> bytes:
+    """DDS の payload を D3D12 placed-footprint レイアウトにパディングして返す。
+    変換できないフォーマット (非対応) は元データをそのまま返す。"""
+    info = _parse_dds_header(dds)
+    if info is None:
+        return dds
+
+    fmt = info["dxgi_format"]
+    is_bc = _is_bc_format(fmt)
+    if is_bc:
+        bytes_per_block = _BC_BYTES_PER_BLOCK[fmt]
+    else:
+        bpp = _bits_per_pixel(fmt)
+        if bpp == 0:
+            return dds  # 未対応フォーマットはそのまま
+        if bpp % 8 != 0:
+            return dds
+        bytes_per_pixel = bpp // 8
+
+    header_size = info["header_size"]
+    src = dds[header_size:]
+    src_cursor = 0
+
+    out = bytearray()
+    for _ in range(info["array_size"]):
+        for m in range(info["mip_count"]):
+            w = max(1, info["width"]  >> m)
+            h = max(1, info["height"] >> m)
+            if is_bc:
+                bw = max(1, (w + 3) // 4)
+                bh = max(1, (h + 3) // 4)
+                src_row_pitch = bw * bytes_per_block
+                num_rows = bh
+            else:
+                src_row_pitch = w * bytes_per_pixel
+                num_rows = h
+            dst_row_pitch = align_up(src_row_pitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT)
+            row_pad = dst_row_pitch - src_row_pitch
+            for _row in range(num_rows):
+                row_data = src[src_cursor:src_cursor + src_row_pitch]
+                if len(row_data) != src_row_pitch:
+                    # DDS が想定より短い → 異常。元データを返してフォールバック。
+                    return dds
+                src_cursor += src_row_pitch
+                out.extend(row_data)
+                if row_pad:
+                    out.extend(b"\x00" * row_pad)
+            sub_end = len(out)
+            sub_aligned = align_up(sub_end, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT)
+            if sub_aligned > sub_end:
+                out.extend(b"\x00" * (sub_aligned - sub_end))
+
+    return dds[:header_size] + bytes(out)
+
+
+# ============================================================
 # パッキング本体
 # ============================================================
 def collect_entries(resources_root: Path) -> list[dict]:
@@ -88,10 +224,15 @@ def collect_entries(resources_root: Path) -> list[dict]:
             continue
         rel = f.relative_to(project_root).as_posix()
         data = f.read_bytes()
+        asset_type = asset_type_from_path(rel)
+        # DDS は DirectStorage MULTIPLE_SUBRESOURCES に直投げできるよう
+        # D3D12 placed-footprint レイアウトに変換しておく
+        if asset_type == ASSET_TEXTURE:
+            data = transform_dds_to_placed_footprint(data)
         entries.append({
             "path": rel,
             "data": data,
-            "asset_type": asset_type_from_path(rel),
+            "asset_type": asset_type,
         })
     return entries
 

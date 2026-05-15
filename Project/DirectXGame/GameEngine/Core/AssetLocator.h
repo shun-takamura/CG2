@@ -73,6 +73,11 @@ public:
 	// 存在チェック
 	bool Exists(const std::string& path) const;
 
+	// pack 内のエントリ位置情報を取得（DirectStorage 統合用、Phase D）
+	// pack モード時のみ true を返す。FS モードでは常に false。
+	bool GetPackEntryInfo(const std::string& path,
+	                     uint64_t& outPackOffset, uint64_t& outSize) const;
+
 	// 現在のロードモード文字列（"FS" / "Pack" / "Uninitialized"）
 	const char* GetModeName() const;
 	bool IsPackMode() const;

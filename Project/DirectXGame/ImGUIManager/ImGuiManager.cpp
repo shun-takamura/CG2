@@ -281,8 +281,10 @@ void ImGuiManager::DrawMenuBar() {
                 loc->InitializeFromFilesystem();
             }
             if (ImGui::MenuItem("Pack (Generated/Assets.pack)", nullptr, loc->IsPackMode())) {
-                if (!loc->InitializeFromPack("Generated/Assets.pack")) {
-                    // 失敗したら元に戻す
+                // 開発時/配布時の両候補を試す
+                if (!loc->InitializeFromPack("Generated/Assets.pack") &&
+                    !loc->InitializeFromPack("../Generated/Assets.pack")) {
+                    // どちらも失敗したら FS に戻す
                     loc->InitializeFromFilesystem();
                 }
             }

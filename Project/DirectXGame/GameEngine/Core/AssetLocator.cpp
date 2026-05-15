@@ -216,6 +216,17 @@ std::vector<uint8_t> AssetLocator::LoadAll(const std::string& path)
 	return buf;
 }
 
+bool AssetLocator::GetPackEntryInfo(const std::string& path,
+                                    uint64_t& outPackOffset, uint64_t& outSize) const
+{
+	if (mode_ != Mode::Pack) return false;
+	PackEntry entry;
+	if (!FindPackEntry(path, entry)) return false;
+	outPackOffset = entry.payload_offset;
+	outSize = entry.uncompressed_size;
+	return true;
+}
+
 bool AssetLocator::Exists(const std::string& path) const
 {
 	if (mode_ == Mode::Filesystem) {

@@ -92,12 +92,14 @@ void BaseScene::RemoveDynamicPrimitive(const std::string& name) {
 	}
 }
 
+#ifdef USE_IMGUI
 bool BaseScene::IsDynamicObject(IImGuiEditable* editable) const {
 	for (const auto& p : dynamicPrimitives_) {
 		if (static_cast<IImGuiEditable*>(p.get()) == editable) return true;
 	}
 	return false;
 }
+#endif
 
 void BaseScene::UpdateDynamicPrimitives() {
 	for (auto& p : dynamicPrimitives_) {

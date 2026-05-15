@@ -2,6 +2,7 @@
 
 #include "DirectXTex.h"
 #include "d3dx12.h"
+#include <format>
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -15,6 +16,7 @@
 #include "WindowsApplication.h"
 #include "DirectXCore.h"
 #include "AssetLocator.h"
+#include "DStorageManager.h"
 #include "SpriteManager.h"
 #include "Object3DManager.h"
 #include "Log.h"
@@ -97,12 +99,24 @@ void Framework::Initialize() {
 		}
 
 		if (usePack) {
-			if (!AssetLocator::GetInstance()->InitializeFromPack("Generated/Assets.pack")) {
-				// pack ファイルが見つからない場合は FS にフォールバック
+			// 候補パス（先頭から試す）:
+			//   Release 配布: exe と同じ階層の Generated/Assets.pack
+			//   開発時 (CWD=Project/): リポジトリルート側の ../Generated/Assets.pack
+			const char* candidates[] = {
+				"Generated/Assets.pack",
+				"../Generated/Assets.pack",
+			};
+			bool opened = false;
+			for (const char* p : candidates) {
+				if (AssetLocator::GetInstance()->InitializeFromPack(p)) {
+					Log(std::string("[AssetLocator] mode = pack (") + p + ")\n");
+					opened = true;
+					break;
+				}
+			}
+			if (!opened) {
 				AssetLocator::GetInstance()->InitializeFromFilesystem();
-				Log("[AssetLocator] pack mode requested but Generated/Assets.pack not found; falling back to FS\n");
-			} else {
-				Log("[AssetLocator] mode = pack (Generated/Assets.pack)\n");
+				Log("[AssetLocator] pack mode requested but Assets.pack not found; falling back to FS\n");
 			}
 		} else {
 			AssetLocator::GetInstance()->InitializeFromFilesystem();
@@ -112,6 +126,28 @@ void Framework::Initialize() {
 
 	dxCore_ = std::make_unique<DirectXCore>();
 	dxCore_->Initialize(winApp_.get());
+
+	// DirectStorage 初期化（device 作成後すぐ）
+	if (DStorageManager::GetInstance()->Initialize(dxCore_->GetDevice())) {
+		// pack ファイルを開く（dev/release で候補を順に試す）
+		const char* packCandidates[] = {
+			"Generated/Assets.pack",
+			"../Generated/Assets.pack",
+		};
+		for (const char* p : packCandidates) {
+			if (DStorageManager::GetInstance()->OpenPackFile(p)) break;
+		}
+		// D.1 検証: pack ヘッダーを EnqueueMemoryRead で読んでログ出力
+		if (auto* file = DStorageManager::GetInstance()->GetPackFile()) {
+			uint32_t header[4] = {};
+			DStorageManager::GetInstance()->EnqueueMemoryRead(file, 0, sizeof(header), header);
+			DStorageManager::GetInstance()->SubmitAndWait();
+			Log("[DStorage TEST] magic=0x" + std::format("{:08X}", header[0]) +
+			    " version=" + std::to_string(header[1]) +
+			    " asset_count=" + std::to_string(header[2]) +
+			    " index_offset=" + std::to_string(header[3]) + "\n");
+		}
+	}
 
 	srvManager_ = std::make_unique<SRVManager>();
 	srvManager_->Initialize(dxCore_.get());
@@ -314,6 +350,9 @@ void Framework::Finalize() {
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();
 	LightManager::GetInstance()->Finalize();
+
+	// DirectStorage 終了（dxCore より先に Queue/Fence を解放）
+	DStorageManager::GetInstance()->Finalize();
 
 	// ImGui終了処理
 	ImGuiManager::Instance().Shutdown();
