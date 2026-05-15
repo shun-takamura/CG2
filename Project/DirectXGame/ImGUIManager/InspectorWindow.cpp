@@ -1,4 +1,4 @@
-#include "InspectorWindow.h"
+﻿#include "InspectorWindow.h"
 #include "ImGuiManager.h"
 
 void InspectorWindow::OnDraw() {

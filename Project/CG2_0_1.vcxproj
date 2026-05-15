@@ -104,14 +104,14 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;USE_IMGUI;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Effect;$(ProjectDir)DirectXGame\GameEngine\Graphics\Primitive;$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect;$(ProjectDir)DirectXGame\GameEngine\Graphics\Skybox;$(ProjectDir)DirectXGame\GameEngine\Graphics\OffscreenRendering;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\Game\Scene\Transition;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game\Actors;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\quirc;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGUI;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories);$(ProjectDir)externals\DirectStorage\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)DirectXGame\GameEngine\Graphics\Effect;$(ProjectDir)DirectXGame\GameEngine\Graphics\Primitive;$(ProjectDir)DirectXGame\GameEngine\Graphics\Particle;$(ProjectDir)DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect;$(ProjectDir)DirectXGame\GameEngine\Graphics\Skybox;$(ProjectDir)DirectXGame\GameEngine\Graphics\OffscreenRendering;$(ProjectDir)DirectXGame\GameEngine\Graphics\Object3D;$(ProjectDir)DirectXGame\GameEngine\Sound;$(ProjectDir)DirectXGame\ImGUIManager;$(ProjectDir)DirectXGame\Game\Scene\Transition;$(ProjectDir)DirectXGame\GameEngine;$(ProjectDir)DirectXGame\Game\Actors;$(ProjectDir)DirectXGame\Game\Scene;$(ProjectDir)DirectXGame\Game;$(ProjectDir)DirectXGame\Debug;$(ProjectDir)DirectXGame\GameEngine\Graphics\Sprite;$(ProjectDir)DirectXGame\Game\Entity;$(ProjectDir)DirectXGame\Game\Map;$(ProjectDir)DirectXGame\GameEngine\Entity;$(ProjectDir)DirectXGame\GameEngine\Core;$(ProjectDir)DirectXGame\GameEngine\Audio;$(ProjectDir)DirectXGame\GameEngine\Entity\Components;$(ProjectDir)DirectXGame\GameEngine\Graphics;$(ProjectDir)DirectXGame\GameEngine\Graphics\Light;$(ProjectDir)DirectXGame\GameEngine\Graphics\Camera;$(ProjectDir)DirectXGame\GameEngine\Utility;$(ProjectDir)DirectXGame\GameEngine\Math;$(ProjectDir)externals\quirc;$(ProjectDir)externals\assimp\include;$(ProjectDir)DirectXGame\GameEngine\Scene;$(ProjectDir)externals\assinp\include;$(ProjectDir)externals\DirectXTex;$(ProjectDir)externals\ImGui_Docking;$(ProjectDir)externals\ImGui_Docking\backends;$(ProjectDir)Resources\Shaders;$(ProjectDir)Resources\Shaders\hlsli;$(ProjectDir)DirectXGame\GameEngine\Core\Input;%(AdditionalIncludeDirectories);$(ProjectDir)externals\DirectStorage\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -137,7 +137,7 @@ python tools\Python\package_release.py</Command>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;USE_IMGUI;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -213,38 +213,38 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\ImGUIManager\SpriteGizmo.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\Easing.cpp" />
     <ClCompile Include="externals\ImGui_Docking\imgui.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\imgui_demo.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\imgui_draw.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\backends\imgui_impl_dx12.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\backends\imgui_impl_win32.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\imgui_tables.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="externals\ImGui_Docking\imgui_widgets.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="DirectXGame\main.cpp">
@@ -671,5 +671,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <Message Importance="high" Text="Cooking assets..." />
     <Exec Command="python tools\Python\convert_hdr_to_dds.py --silent" WorkingDirectory="$(ProjectDir)" />
     <Exec Command="python tools\Python\cook_assets.py" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="python tools\Python\pack_assets.py" WorkingDirectory="$(ProjectDir)" />
   </Target>
 </Project>

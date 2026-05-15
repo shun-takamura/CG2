@@ -97,12 +97,24 @@ void Framework::Initialize() {
 		}
 
 		if (usePack) {
-			if (!AssetLocator::GetInstance()->InitializeFromPack("Generated/Assets.pack")) {
-				// pack ファイルが見つからない場合は FS にフォールバック
+			// 候補パス（先頭から試す）:
+			//   Release 配布: exe と同じ階層の Generated/Assets.pack
+			//   開発時 (CWD=Project/): リポジトリルート側の ../Generated/Assets.pack
+			const char* candidates[] = {
+				"Generated/Assets.pack",
+				"../Generated/Assets.pack",
+			};
+			bool opened = false;
+			for (const char* p : candidates) {
+				if (AssetLocator::GetInstance()->InitializeFromPack(p)) {
+					Log(std::string("[AssetLocator] mode = pack (") + p + ")\n");
+					opened = true;
+					break;
+				}
+			}
+			if (!opened) {
 				AssetLocator::GetInstance()->InitializeFromFilesystem();
-				Log("[AssetLocator] pack mode requested but Generated/Assets.pack not found; falling back to FS\n");
-			} else {
-				Log("[AssetLocator] mode = pack (Generated/Assets.pack)\n");
+				Log("[AssetLocator] pack mode requested but Assets.pack not found; falling back to FS\n");
 			}
 		} else {
 			AssetLocator::GetInstance()->InitializeFromFilesystem();

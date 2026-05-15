@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "BaseScene.h"
 #include <memory>
@@ -55,7 +55,9 @@ public:
 	void RemoveDynamicSprite(const std::string& name) override;
 	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename) override;
 	void RemoveDynamicAnimated(const std::string& name) override;
+#ifdef USE_IMGUI
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
+#endif
 
 private:
 

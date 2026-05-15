@@ -78,11 +78,15 @@ public:
     ~SpriteInstance();
 #endif
 
+    // 名前は実行時の RemoveDynamicSprite 等でも使うので常に提供する
+    // （USE_IMGUI 時は IImGuiEditable の override となる）
 #ifdef USE_IMGUI
     std::string GetName() const override { return name_; }
     std::string GetTypeName() const override { return "Sprite"; }
     void OnImGuiInspector() override;
     Vector2* GetEditable2DPosition() override { return &position_; }
+#else
+    std::string GetName() const { return name_; }
 #endif
 
     void Initialize(SpriteManager* spriteManager, const std::string& filePath,

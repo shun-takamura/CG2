@@ -1,5 +1,6 @@
 #include "TextureManager.h"
 #include "DDSHeader.h"
+#include "AssetLocator.h"
 //TextureManager* TextureManager::instance = nullptr;
 
 uint32_t TextureManager::kSRVIndexTop = 1;
@@ -317,20 +318,32 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
     }
 
     // --- ロックを外して重い WIC/DDS デコードを実行（スレッド安全な部分）---
-    DirectX::ScratchImage image{};
-    std::wstring filePathW = ConvertString(filePath);
+    // AssetLocator 経由でバイト列を取得 → 専用の Memory 系 API でデコード。
+    // これで pack モードでも同じコードが動く。
+    std::vector<uint8_t> bytes = AssetLocator::GetInstance()->LoadAll(filePath);
+    if (bytes.empty()) {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        textureDatas.erase(filePath);
+        return;
+    }
 
+    DirectX::ScratchImage image{};
     HRESULT hr;
-    if (filePathW.ends_with(L".dds")) {
-        hr = DirectX::LoadFromDDSFile(
-            filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+
+    // 拡張子で DDS / WIC を分岐（パスベース判定でファイル本体は触らない）
+    bool isDDS = filePath.size() >= 4 &&
+        std::equal(filePath.end() - 4, filePath.end(), ".dds",
+                   [](char a, char b) { return std::tolower(static_cast<unsigned char>(a))
+                                              == std::tolower(static_cast<unsigned char>(b)); });
+    if (isDDS) {
+        hr = DirectX::LoadFromDDSMemory(
+            bytes.data(), bytes.size(), DirectX::DDS_FLAGS_NONE, nullptr, image);
     } else {
         auto wicFlags = linear ? DirectX::WIC_FLAGS_IGNORE_SRGB : DirectX::WIC_FLAGS_FORCE_SRGB;
-        hr = DirectX::LoadFromWICFile(
-            filePathW.c_str(), wicFlags, nullptr, image);
+        hr = DirectX::LoadFromWICMemory(
+            bytes.data(), bytes.size(), wicFlags, nullptr, image);
     }
     if (FAILED(hr)) {
-        // 失敗したらプレースホルダを撤回
         std::lock_guard<std::mutex> lock(textureDatasMutex_);
         textureDatas.erase(filePath);
         return;

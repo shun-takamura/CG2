@@ -1,4 +1,4 @@
-#include "IImGuiEditable.h"
+﻿#include "IImGuiEditable.h"
 #include "ImGuiManager.h"
 
 IImGuiEditable::IImGuiEditable() {

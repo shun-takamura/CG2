@@ -97,11 +97,13 @@ public:
 	/// </summary>
 	virtual void RemoveDynamicPrimitive(const std::string& name);
 
+#ifdef USE_IMGUI
 	/// <summary>
 	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か
 	/// HierarchyWindow から × ボタンを出すかどうかの判定に使う
 	/// </summary>
 	virtual bool IsDynamicObject(IImGuiEditable* editable) const;
+#endif
 
 	/// <summary>
 	/// 非同期ロードキューの GPU フェーズを進める（毎フレーム SceneManager から呼ばれる）
