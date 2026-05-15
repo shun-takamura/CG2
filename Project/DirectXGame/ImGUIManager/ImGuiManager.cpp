@@ -1,6 +1,7 @@
 #include "ImGuiManager.h"
 #include "IImGuiWindow.h"
 #include "IImGuiEditable.h"
+#include "AssetLocator.h"
 #include "FPSWindow.h"
 #include "LogWindow.h"
 #include "HierarchyWindow.h"
@@ -269,6 +270,28 @@ void ImGuiManager::DrawMenuBar() {
             }
             ImGui::EndMenu();
         }
+
+        // Assets メニュー: ロード経路（FS / Pack）の確認・切り替え
+        if (ImGui::BeginMenu("Assets")) {
+            auto* loc = AssetLocator::GetInstance();
+            ImGui::Text("Mode: %s", loc->GetModeName());
+            ImGui::Separator();
+            ImGui::TextDisabled("Switch (no auto reload):");
+            if (ImGui::MenuItem("Filesystem", nullptr, !loc->IsPackMode())) {
+                loc->InitializeFromFilesystem();
+            }
+            if (ImGui::MenuItem("Pack (Generated/Assets.pack)", nullptr, loc->IsPackMode())) {
+                if (!loc->InitializeFromPack("Generated/Assets.pack")) {
+                    // 失敗したら元に戻す
+                    loc->InitializeFromFilesystem();
+                }
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Note: existing loaded assets are NOT reloaded.");
+            ImGui::TextDisabled("Restart with --use-pack / --use-fs for clean test.");
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
 
