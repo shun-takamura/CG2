@@ -177,8 +177,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Actors\Bullet.cpp" />
     <ClCompile Include="DirectXGame\Game\Actors\Enemy.cpp" />
     <ClCompile Include="DirectXGame\Game\Actors\Player.cpp" />
-    <ClCompile Include="DirectXGame\Game\Scene\ClearScene.cpp" />
-    <ClCompile Include="DirectXGame\Game\Scene\CharacterSelect.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\CameraCapture.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\CameraPreviewSprite.cpp" />
@@ -196,7 +197,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\RenderTexture.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\BaseScene.cpp" />
-    <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneFactory.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\TitleScene.cpp" />
@@ -265,6 +265,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonValue.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonParser.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\TextureManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
@@ -282,7 +285,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="externals\quirc\quirc.c" />
     <ClCompile Include="externals\quirc\version_db.c" />
     <ClCompile Include="DirectXGame\GameEngine\QRCodeReader.cpp" />
-    <ClCompile Include="DirectXGame\Game\Scene\GameOver.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\GameData.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp" />
@@ -321,8 +323,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Actors\Bullet.h" />
     <ClInclude Include="DirectXGame\Game\Actors\Enemy.h" />
     <ClInclude Include="DirectXGame\Game\Actors\Player.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\ClearScene.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\CharacterSelect.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
     <ClInclude Include="DirectXGame\GameEngine\CameraCapture.h" />
     <ClInclude Include="DirectXGame\GameEngine\CameraPreviewSprite.h" />
@@ -349,7 +352,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h" />
     <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\BaseScene.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />
     <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h" />
@@ -400,6 +402,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\TextureManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\DDSHeader.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\SRVManager.h" />
@@ -413,7 +418,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="externals\quirc\quirc.h" />
     <ClInclude Include="externals\quirc\quirc_internal.h" />
     <ClInclude Include="DirectXGame\GameEngine\QRCodeReader.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\GameOver.h" />
     <ClInclude Include="DirectXGame\GameEngine\GameData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h" />

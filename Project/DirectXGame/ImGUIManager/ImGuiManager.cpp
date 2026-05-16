@@ -20,6 +20,8 @@
 #include "PostEffect.h"
 #include "GPUParticleManager.h"
 #include "TransitionManager.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "SceneManager.h"
@@ -99,6 +101,50 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Scene Timeline",
+        []() {
+            auto* sm = SceneManager::GetInstance();
+            BaseScene* scene = sm ? sm->GetCurrentScene() : nullptr;
+            const std::string& name = sm ? sm->GetCurrentSceneName() : std::string{};
+
+            // 現在のシーン名
+            ImGui::Text("Current Scene:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s",
+                name.empty() ? "(none)" : name.c_str());
+
+            ImGui::Separator();
+
+            if (!scene) {
+                ImGui::TextDisabled("No active scene.");
+                return;
+            }
+
+            // 経過秒の表示
+            float elapsed = scene->GetElapsedSeconds();
+            ImGui::Text("Elapsed: %.2f sec", elapsed);
+
+            // シーク用の上限（必要に応じてシーン側から取得する仕組みに置き換え予定）
+            static float seekMax = 600.0f; // デフォルト10分
+            ImGui::SliderFloat("Seek Max (sec)", &seekMax, 10.0f, 1800.0f, "%.0f");
+
+            // シーク値（毎フレーム経過秒で初期化）
+            float seekValue = elapsed;
+            if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
+                scene->Seek(seekValue);
+            }
+
+            // 細かい移動ボタン
+            if (ImGui::Button("-1s")) { scene->Seek(elapsed - 1.0f); }
+            ImGui::SameLine();
+            if (ImGui::Button("-0.1s")) { scene->Seek(elapsed - 0.1f); }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset")) { scene->Seek(0.0f); }
+            ImGui::SameLine();
+            if (ImGui::Button("+0.1s")) { scene->Seek(elapsed + 0.1f); }
+            ImGui::SameLine();
+            if (ImGui::Button("+1s")) { scene->Seek(elapsed + 1.0f); }
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("TimeControl",
         [this]() {
             // --- グローバル ---
