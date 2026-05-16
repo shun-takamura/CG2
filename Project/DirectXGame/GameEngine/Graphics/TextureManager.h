@@ -35,8 +35,10 @@ private:
 
 		// DirectStorage 経路（pack モード時のみ）。CPU メモリを経由せず VRAM へ直接ロードする。
 		bool     useDirectStorage = false;
-		uint64_t dsPayloadOffset = 0;   // pack ファイル先頭からの DDS payload 開始オフセット
-		uint32_t dsPayloadSize = 0;     // payload サイズ（DDS ヘッダーを除いた残り）
+		uint64_t dsPayloadOffset = 0;     // pack ファイル先頭からの DDS payload 開始オフセット
+		uint32_t dsPayloadSize = 0;       // pack 上の実バイト数 (圧縮ありなら圧縮済みサイズ)
+		uint32_t dsUncompressedSize = 0;  // 解凍後 payload サイズ (DDS header を除いた残り)
+		bool     dsCompressed = false;    // GDeflate 圧縮されているか
 	};
 
 	// SRVインデックスの開始番号(0番はImGui)

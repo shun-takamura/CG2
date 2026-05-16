@@ -78,6 +78,25 @@ int Compress(const std::string& inPath, const std::string& outPath) {
         return 1;
     }
 
+    // 検証: 圧縮直後に CPU で decompress して元データと一致するか確認
+    // (エンコーダ自体の整合性チェック。ここで失敗するなら codec/環境の問題)
+    std::vector<uint8_t> back(src.size());
+    size_t backSize = 0;
+    hr = codec->DecompressBuffer(
+        dst.data(), actual,
+        back.data(), back.size(), &backSize);
+    if (FAILED(hr)) {
+        std::fprintf(stderr, "[gdeflate] verify DecompressBuffer failed: 0x%08X (in=%s)\n",
+                     static_cast<unsigned>(hr), inPath.c_str());
+        return 1;
+    }
+    if (backSize != src.size() || std::memcmp(src.data(), back.data(), src.size()) != 0) {
+        std::fprintf(stderr,
+            "[gdeflate] verify roundtrip MISMATCH (in=%s, src=%zu, back=%zu)\n",
+            inPath.c_str(), src.size(), backSize);
+        return 1;
+    }
+
     if (!WriteFile(outPath, dst.data(), actual)) {
         std::fprintf(stderr, "[gdeflate] failed to write output: %s\n", outPath.c_str());
         return 1;

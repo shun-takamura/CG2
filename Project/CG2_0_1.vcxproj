@@ -673,6 +673,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <Message Importance="high" Text="Cooking assets..." />
     <Exec Command="python tools\Python\convert_hdr_to_dds.py --silent" WorkingDirectory="$(ProjectDir)" />
     <Exec Command="python tools\Python\cook_assets.py" WorkingDirectory="$(ProjectDir)" />
-    <Exec Command="python tools\Python\pack_assets.py" WorkingDirectory="$(ProjectDir)" />
+    <!-- gdeflate_compress.exe は同一ソリューション内のサブプロジェクトが先にビルド済みの想定。
+         同じ $(Configuration) の出力フォルダから拾う。 -->
+    <Exec Command="python tools\Python\pack_assets.py --gdeflate-exe ..\Generated\Output\$(Configuration)\gdeflate_compress.exe" WorkingDirectory="$(ProjectDir)" />
   </Target>
 </Project>

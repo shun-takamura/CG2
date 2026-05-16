@@ -58,6 +58,17 @@ bool DStorageManager::Initialize(ID3D12Device* device)
 	return true;
 }
 
+DSTORAGE_COMPRESSION_SUPPORT DStorageManager::QueryGDeflateSupport() const
+{
+	if (!initialized_ || !queue_) return DSTORAGE_COMPRESSION_SUPPORT_NONE;
+	// GetCompressionSupport は IDStorageQueue2 のメソッド
+	Microsoft::WRL::ComPtr<IDStorageQueue2> q2;
+	if (SUCCEEDED(queue_.As(&q2))) {
+		return q2->GetCompressionSupport(DSTORAGE_COMPRESSION_FORMAT_GDEFLATE);
+	}
+	return DSTORAGE_COMPRESSION_SUPPORT_NONE;
+}
+
 void DStorageManager::Finalize()
 {
 	if (!initialized_) return;
@@ -174,6 +185,27 @@ void DStorageManager::EnqueueMultipleSubresources(IDStorageFile* file, uint64_t 
 	req.Destination.MultipleSubresources.Resource = dst;
 	req.Destination.MultipleSubresources.FirstSubresource = firstSubresource;
 	req.UncompressedSize = size;
+
+	queue_->EnqueueRequest(&req);
+}
+
+void DStorageManager::EnqueueMultipleSubresourcesCompressed(
+	IDStorageFile* file, uint64_t srcOffset, uint32_t srcSize,
+	uint32_t uncompressedSize,
+	ID3D12Resource* dst, uint32_t firstSubresource)
+{
+	if (!initialized_ || !file || !dst || srcSize == 0) return;
+
+	DSTORAGE_REQUEST req{};
+	req.Options.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
+	req.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES;
+	req.Options.CompressionFormat = DSTORAGE_COMPRESSION_FORMAT_GDEFLATE;
+	req.Source.File.Source = file;
+	req.Source.File.Offset = srcOffset;
+	req.Source.File.Size = srcSize;          // 圧縮済みサイズ
+	req.Destination.MultipleSubresources.Resource = dst;
+	req.Destination.MultipleSubresources.FirstSubresource = firstSubresource;
+	req.UncompressedSize = uncompressedSize; // 解凍後サイズ
 
 	queue_->EnqueueRequest(&req);
 }

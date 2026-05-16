@@ -120,8 +120,8 @@ void Framework::Initialize() {
 			//   Release 配布: exe と同じ階層の Generated/Assets.pack
 			//   開発時 (CWD=Project/): リポジトリルート側の ../Generated/Assets.pack
 			const char* candidates[] = {
-				"Generated/Assets.pack",
-				"../Generated/Assets.pack",
+				"../Generated/Assets.pack",  // 開発時: CWD=Project/ から repo ルート Generated/
+				"Generated/Assets.pack",     // Release: 配布展開先 CWD と同階層 Generated/
 			};
 			bool opened = false;
 			for (const char* p : candidates) {
@@ -146,13 +146,33 @@ void Framework::Initialize() {
 
 	// DirectStorage 初期化（device 作成後すぐ）
 	if (DStorageManager::GetInstance()->Initialize(dxCore_->GetDevice())) {
+		// 診断: CWD と GDeflate GPU サポート状況をログ出力
+		{
+			std::error_code ec;
+			Log("[Diag] CWD = " + std::filesystem::current_path(ec).string() + "\n");
+		}
+		DSTORAGE_COMPRESSION_SUPPORT gdSupport =
+			DStorageManager::GetInstance()->QueryGDeflateSupport();
+		Log(std::format(
+			"[Diag] GDeflate support: GPU_OPTIMIZED={} GPU_FALLBACK={} CPU_FALLBACK={}\n",
+			(gdSupport & DSTORAGE_COMPRESSION_SUPPORT_GPU_OPTIMIZED) ? "Y" : "N",
+			(gdSupport & DSTORAGE_COMPRESSION_SUPPORT_GPU_FALLBACK)  ? "Y" : "N",
+			(gdSupport & DSTORAGE_COMPRESSION_SUPPORT_CPU_FALLBACK)  ? "Y" : "N"));
+
 		// pack ファイルを開く（dev/release で候補を順に試す）
 		const char* packCandidates[] = {
-			"Generated/Assets.pack",
-			"../Generated/Assets.pack",
+			"../Generated/Assets.pack",  // 開発時: CWD=Project/ から repo ルート Generated/
+			"Generated/Assets.pack",     // Release: 配布展開先 CWD と同階層 Generated/
 		};
 		for (const char* p : packCandidates) {
-			if (DStorageManager::GetInstance()->OpenPackFile(p)) break;
+			std::error_code ec;
+			auto sz = std::filesystem::file_size(p, ec);
+			Log(std::format("[Diag] pack candidate '{}' : {}\n",
+				p, ec ? std::string("missing") : std::format("{} bytes", sz)));
+			if (DStorageManager::GetInstance()->OpenPackFile(p)) {
+				Log(std::format("[Diag] DStorage opened '{}'\n", p));
+				break;
+			}
 		}
 		// D.1 検証: pack ヘッダーを EnqueueMemoryRead で読んでログ出力
 		if (auto* file = DStorageManager::GetInstance()->GetPackFile()) {
@@ -383,7 +403,7 @@ void Framework::Update() {
 		uint64_t packBytes = 0;
 		if (std::string(mode) == "Pack") {
 			std::error_code ec;
-			for (const char* p : { "Generated/Assets.pack", "../Generated/Assets.pack" }) {
+			for (const char* p : { "../Generated/Assets.pack", "Generated/Assets.pack" }) {
 				auto sz = std::filesystem::file_size(p, ec);
 				if (!ec) { packBytes = sz; break; }
 			}

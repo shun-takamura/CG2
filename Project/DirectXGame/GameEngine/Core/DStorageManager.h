@@ -46,6 +46,13 @@ public:
 	void EnqueueMultipleSubresources(IDStorageFile* file, uint64_t offset, uint32_t size,
 	                                 ID3D12Resource* dst, uint32_t firstSubresource);
 
+	// GDeflate 圧縮された source を解凍しつつ複数 subresource に転送する。
+	// srcSize = pack 上の圧縮済みサイズ、uncompressedSize = 解凍後サイズ。
+	void EnqueueMultipleSubresourcesCompressed(
+		IDStorageFile* file, uint64_t srcOffset, uint32_t srcSize,
+		uint32_t uncompressedSize,
+		ID3D12Resource* dst, uint32_t firstSubresource);
+
 	// バッチ送出（fence なし）
 	void Submit();
 
@@ -59,6 +66,9 @@ public:
 	void BeginBatch() { inBatch_ = true; }
 	void EndBatchAndWait();
 	bool IsInBatch() const { return inBatch_; }
+
+	// 環境が GDeflate を GPU 復号できるか確認 (KPI / 診断用)
+	DSTORAGE_COMPRESSION_SUPPORT QueryGDeflateSupport() const;
 
 	// 初期化済み かつ 明示的に無効化されていない (KPI 比較用に --no-dstorage で切れる)
 	bool IsInitialized() const { return initialized_ && enabled_; }
