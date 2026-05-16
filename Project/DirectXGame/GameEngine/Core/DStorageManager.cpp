@@ -181,12 +181,14 @@ void DStorageManager::EnqueueMultipleSubresources(IDStorageFile* file, uint64_t 
 void DStorageManager::Submit()
 {
 	if (!initialized_) return;
+	if (inBatch_) return;  // バッチ中は Enqueue だけ蓄積
 	queue_->Submit();
 }
 
 void DStorageManager::SubmitAndWait()
 {
 	if (!initialized_) return;
+	if (inBatch_) return;  // バッチ中は Enqueue だけ蓄積、EndBatchAndWait でまとめて待つ
 
 	++fenceValue_;
 	queue_->EnqueueSignal(fence_.Get(), fenceValue_);
@@ -196,4 +198,10 @@ void DStorageManager::SubmitAndWait()
 		fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
 		WaitForSingleObject(fenceEvent_, INFINITE);
 	}
+}
+
+void DStorageManager::EndBatchAndWait()
+{
+	inBatch_ = false;
+	SubmitAndWait();
 }

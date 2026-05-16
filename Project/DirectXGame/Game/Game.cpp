@@ -20,6 +20,7 @@
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
 #include "Camera.h"
+#include "DStorageManager.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -36,6 +37,10 @@ Game::~Game() {
 void Game::Initialize() {
 	// 基底クラスの初期化処理
 	Framework::Initialize();
+
+	// 初期シーンと PostEffect のロードを DStorage バッチで囲む。
+	// (シーン内の全テクスチャ/メッシュ Enqueue を蓄積 → 末尾で 1 回だけ Wait)
+	DStorageManager::GetInstance()->BeginBatch();
 
 	//===================================
 	// シーンファクトリを生成し、マネージャにセット
@@ -55,6 +60,9 @@ void Game::Initialize() {
 	postEffect_->Initialize(dxCore_.get(), srvManager_.get(),
 		WindowsApplication::kClientWidth,
 		WindowsApplication::kClientHeight);
+
+	// バッチ終了 - DStorage の全リクエストをここで 1 回だけ Submit + Wait
+	DStorageManager::GetInstance()->EndBatchAndWait();
 
 #ifdef _DEBUG
 	// Debug ビルド: PostEffect 適用後の最終出力先として、Viewport表示専用 RenderTexture を作成

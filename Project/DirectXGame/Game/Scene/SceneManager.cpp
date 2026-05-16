@@ -2,6 +2,7 @@
 #include "BaseScene.h"
 #include "AbstractSceneFactory.h"
 #include "TransitionManager.h"
+#include "DStorageManager.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -53,7 +54,10 @@ void SceneManager::Update() {
 		}
 		currentScene_ = std::move(nextScene_);
 		SetupScene(currentScene_.get());
+		// シーン読み込みは DStorage バッチで囲む
+		DStorageManager::GetInstance()->BeginBatch();
 		currentScene_->Initialize();
+		DStorageManager::GetInstance()->EndBatchAndWait();
 #ifdef _DEBUG
 		ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
 #endif
@@ -136,7 +140,10 @@ void SceneManager::ExecuteSceneChange() {
 	currentSceneName_ = pendingSceneName_;
 
 	SetupScene(currentScene_.get());
+	// シーン読み込みは DStorage バッチで囲む
+	DStorageManager::GetInstance()->BeginBatch();
 	currentScene_->Initialize();
+	DStorageManager::GetInstance()->EndBatchAndWait();
 #ifdef _DEBUG
 	ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
 #endif

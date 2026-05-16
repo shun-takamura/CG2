@@ -4,6 +4,9 @@
 #include "d3dx12.h"
 #include <format>
 #include <chrono>
+#include <psapi.h>
+#include <filesystem>
+#pragma comment(lib, "psapi.lib")
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -38,6 +41,15 @@
 void Framework::Run() {
 	// KPI: 計測起点 (Run の入り口 = 実質プロセス開始直後)
 	kpiStartTime_ = std::chrono::high_resolution_clock::now();
+	{
+		FILETIME ftCreate, ftExit, ftKernel, ftUser;
+		if (GetProcessTimes(GetCurrentProcess(), &ftCreate, &ftExit, &ftKernel, &ftUser)) {
+			ULARGE_INTEGER k{}, u{};
+			k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
+			u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
+			kpiStartCpuTime100ns_ = k.QuadPart + u.QuadPart;
+		}
+	}
 
 	// ゲームの初期化
 	Initialize();
@@ -341,8 +353,47 @@ void Framework::Update() {
 		}
 		const double vramMB = static_cast<double>(vramBytes) / (1024.0 * 1024.0);
 
-		Log(std::format("[KPI] mode={} loadTime={:.1f}ms vramUsage={:.1f}MB\n",
-			modeStr, loadMs, vramMB));
+		// プロセス RAM (Working Set / Private Bytes)
+		double wsMB = 0.0, privMB = 0.0;
+		PROCESS_MEMORY_COUNTERS_EX pmc{};
+		if (GetProcessMemoryInfo(GetCurrentProcess(),
+			reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+			wsMB   = static_cast<double>(pmc.WorkingSetSize)  / (1024.0 * 1024.0);
+			privMB = static_cast<double>(pmc.PrivateUsage)    / (1024.0 * 1024.0);
+		}
+
+		// CPU 時間 (Run() 起点から ここまでに使った Kernel+User 時間 100ns 単位 → ms)
+		double cpuMs = 0.0;
+		double cpuPct = 0.0;
+		{
+			FILETIME ftCreate, ftExit, ftKernel, ftUser;
+			if (GetProcessTimes(GetCurrentProcess(), &ftCreate, &ftExit, &ftKernel, &ftUser)) {
+				ULARGE_INTEGER k{}, u{};
+				k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
+				u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
+				const uint64_t cur100ns = k.QuadPart + u.QuadPart;
+				const uint64_t delta100ns = (cur100ns >= kpiStartCpuTime100ns_)
+					? (cur100ns - kpiStartCpuTime100ns_) : 0;
+				cpuMs = static_cast<double>(delta100ns) / 10000.0;  // 100ns → ms
+				cpuPct = (loadMs > 0.0) ? (cpuMs / loadMs * 100.0) : 0.0;
+			}
+		}
+
+		// pack ファイルサイズ (KPI モードが Pack 系のときのみ)
+		uint64_t packBytes = 0;
+		if (std::string(mode) == "Pack") {
+			std::error_code ec;
+			for (const char* p : { "Generated/Assets.pack", "../Generated/Assets.pack" }) {
+				auto sz = std::filesystem::file_size(p, ec);
+				if (!ec) { packBytes = sz; break; }
+			}
+		}
+		const double packMB = static_cast<double>(packBytes) / (1024.0 * 1024.0);
+
+		Log(std::format(
+			"[KPI] mode={} loadTime={:.1f}ms vram={:.1f}MB "
+			"ram={:.1f}MB(WS)/{:.1f}MB(Priv) cpuTime={:.1f}ms({:.0f}%) pack={:.1f}MB\n",
+			modeStr, loadMs, vramMB, wsMB, privMB, cpuMs, cpuPct, packMB));
 
 		kpiLogged_ = true;
 	}

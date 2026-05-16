@@ -82,8 +82,9 @@ protected:
 	// CLI フラグ: --no-dstorage で DStorage 経路を封じる (KPI 計測比較用)
 	bool noDStorage_ = false;
 
-	// KPI 計測: Run() の冒頭で起点を打ち、最初の Update で経過時間 + VRAM をログに出す
+	// KPI 計測: Run() の冒頭で起点を打ち、最初の Update で経過時間 + VRAM/RAM/CPU をログに出す
 	std::chrono::high_resolution_clock::time_point kpiStartTime_{};
+	uint64_t kpiStartCpuTime100ns_ = 0;  // GetProcessTimes の Kernel+User (100ns 単位)
 	bool kpiLogged_ = false;
 
 	// 基本システム
