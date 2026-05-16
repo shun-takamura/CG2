@@ -52,7 +52,10 @@ public:
 	// バッチ送出 + 同期で完了まで待つ
 	void SubmitAndWait();
 
-	bool IsInitialized() const { return initialized_; }
+	// 初期化済み かつ 明示的に無効化されていない (KPI 比較用に --no-dstorage で切れる)
+	bool IsInitialized() const { return initialized_ && enabled_; }
+	// CLI フラグ等で実体は初期化したまま経路だけ封じる
+	void SetEnabled(bool e) { enabled_ = e; }
 
 private:
 	DStorageManager() = default;
@@ -68,4 +71,5 @@ private:
 
 	Microsoft::WRL::ComPtr<IDStorageFile>    packFile_;
 	bool                                     initialized_ = false;
+	bool                                     enabled_     = true;
 };

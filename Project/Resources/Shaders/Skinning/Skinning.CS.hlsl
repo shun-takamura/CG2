@@ -17,10 +17,11 @@ struct Vertex
 };
 
 // VertexInfluence（C++のVertexInfluenceに対応）
+// .mesh のスキンセクションと同じレイアウト: int4 index → float4 weight
 struct VertexInfluence
 {
-    float4 weight;
     int4 index;
+    float4 weight;
 };
 
 // 頂点数などのちょっとした情報

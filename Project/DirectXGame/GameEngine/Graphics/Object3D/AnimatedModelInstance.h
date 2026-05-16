@@ -48,6 +48,24 @@ class AnimatedModelInstance
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
     D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
 
+    // DStorage 経路用 (pack モード + DStorage 利用可能なら true)。
+    // ON のとき modelData_.vertices / .indices / .skinClusterData は CPU に持たない。
+    bool        useDirectStorage_ = false;
+    std::string meshFilePath_;
+    uint32_t    vertexFileOffset_ = 0;
+    uint32_t    vertexCount_      = 0;
+    uint32_t    indexFileOffset_  = 0;
+    uint32_t    indexCount_       = 0;
+    uint32_t    skinFileOffset_   = 0;
+    bool        hasSkinning_      = false;
+    // .skel から読んだ joint-index 順の Inverse Bind Pose Matrix。
+    // CPU 経路では skinClusterData 経由で再構築されるが、DStorage 経路では
+    // ここをそのまま SkinCluster に渡す。
+    std::vector<Matrix4x4> jointInverseBindMatrices_;
+    // .skel と同じ順の joint 名。SkinCluster で skel-index → skeleton-index の
+    // remap テーブルを構築するのに使う。
+    std::vector<std::string> jointNames_;
+
     //==============================
     // メンバ関数
     //==============================
@@ -73,6 +91,19 @@ public:
 
     SkinCluster& GetSkinCluster() { return skinCluster_; }
     bool HasSkinCluster() const { return hasSkinCluster_; }
+
+    // DStorage 経路用のアクセサ
+    bool UseDirectStorage() const { return useDirectStorage_; }
+    uint32_t GetVertexCount() const { return vertexCount_; }
+    uint32_t GetIndexCount()  const { return indexCount_; }
+    const std::string& GetMeshFilePath() const { return meshFilePath_; }
+    uint32_t GetSkinFileOffset() const { return skinFileOffset_; }
+    bool HasSkinning() const { return hasSkinning_; }
+    ID3D12Resource* GetVertexResource() const { return vertexResource_.Get(); }
+    const std::vector<Matrix4x4>& GetJointInverseBindMatrices() const {
+        return jointInverseBindMatrices_;
+    }
+    const std::vector<std::string>& GetJointNames() const { return jointNames_; }
 
 private:
     void CreateVertexData(DirectXCore* dxCore);

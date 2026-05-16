@@ -13,14 +13,17 @@ struct Skeleton;
 struct ModelData;
 class DirectXCore;
 class SRVManager;
+class AnimatedModelInstance;
 
 // 1頂点が影響を受けるJointの最大数
 const uint32_t kNumMaxInfluence = 4;
 
-// 頂点ごとのSkinning影響度（VBVに送る）
+// 頂点ごとのSkinning影響度。
+// レイアウトは .mesh の skin セクションと完全に一致させ、DStorage で直接 GPU に流せるようにする。
+// 順番: jointIndices(int32×4) → weights(float×4)。HLSL 側 (Skinning.CS.hlsl) も同じ順。
 struct VertexInfluence {
-    std::array<float, kNumMaxInfluence>   weights;
     std::array<int32_t, kNumMaxInfluence> jointIndices;
+    std::array<float, kNumMaxInfluence>   weights;
 };
 
 // GPUに送る1Joint分の行列セット
@@ -71,14 +74,22 @@ struct SkinCluster {
 
     // 描画用の頂点数（Dispatch計算に利用）
     uint32_t numVertices = 0;
+
+    // skel-index → skeleton.joints index の remap テーブル。
+    // 非空なら palette / IBM は .skel 順 (= .mesh の影響度 joint インデックスと一致) で
+    // インデックスされ、UpdateSkinCluster はこの remap で skeleton 側の matrix を引く。
+    // 空なら従来の skeleton.joints 順 indexing。
+    std::vector<int32_t> jointSkelToSkeletonRemap;
 };
 
-// SkinClusterを生成する
+// SkinClusterを生成する。
+// model->UseDirectStorage() が true なら影響度バッファを pack から DStorage で直接ロードし、
+// 入力頂点バッファは AnimatedModelInstance 側のものを共用する。
 SkinCluster CreateSkinCluster(
     DirectXCore* dxCore,
     SRVManager* srvManager,
     const Skeleton& skeleton,
-    const ModelData& modelData);
+    AnimatedModelInstance* model);
 
 // SkinClusterを毎フレーム更新する
 void UpdateSkinCluster(SkinCluster& skinCluster, const Skeleton& skeleton);
