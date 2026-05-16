@@ -5,8 +5,13 @@
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
-#include "KeyboardInput.h"
+#include "InputAction.h"
+#include "Config/GameActions.h"
 #include "Game.h"
+
+#ifdef _DEBUG
+#include "KeyboardInput.h"
+#endif
 
 StagePlayScene::StagePlayScene() = default;
 StagePlayScene::~StagePlayScene() = default;
@@ -30,34 +35,36 @@ void StagePlayScene::Update() {
 		return;
 	}
 
-	auto* kb = input_->GetKeyboard();
+	auto* actions = input_->GetActionMap();
+	if (!actions) return;
 
-	// ESC でポーズトグル（メニュー実装は後で）
-	if (kb->TriggerKey(DIK_ESCAPE)) {
+	// Pause アクションでポーズトグル（メニュー実装は後で）
+	if (actions->IsTriggered(static_cast<int>(Action::Pause))) {
 		paused_ = !paused_;
 	}
 	if (paused_) {
 		return;
 	}
 
-	// 仮: 1キーでクリア相当(Result行き)、2キーでHubへ戻る
-	if (kb->TriggerKey(DIK_1)) {
+#ifdef _DEBUG
+	// DEBUG専用ショートカット（StagePlayScene完成時に削除）
+	auto* kb = input_->GetKeyboard();
+	if (kb->TriggerKey(DIK_F2)) {
 		SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Fade);
 		return;
 	}
-	if (kb->TriggerKey(DIK_2)) {
+	if (kb->TriggerKey(DIK_F3)) {
 		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
 		return;
 	}
-
-	// 仮: Tab でフェーズ切替（着地遷移のテスト用）
-	if (kb->TriggerKey(DIK_TAB)) {
+	if (kb->TriggerKey(DIK_F4)) {
 		switch (phase_) {
 		case Phase::Rail:    phase_ = Phase::Landing; break;
 		case Phase::Landing: phase_ = Phase::Boss;    break;
 		case Phase::Boss:    phase_ = Phase::Rail;    break;
 		}
 	}
+#endif
 
 	camera_->Update();
 }

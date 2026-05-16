@@ -11,6 +11,7 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
 {
     object3DManager_ = object3DManager;
     modelFileName_ = filename;
+    directoryPath_ = directorPath;
 
     // 名前が指定されていなければファイル名を使用
     if (name.empty()) {
@@ -65,6 +66,9 @@ void Object3DInstance::Update()
 
 void Object3DInstance::Draw(DirectXCore* dxCore)
 {
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
   // Materialのフラグに応じてPSOを切り替え
     if (modelInstance_) {
         Material* mat = modelInstance_->GetMaterialPointer();

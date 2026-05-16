@@ -58,6 +58,9 @@ void PrimitiveInstance::Update() {
 }
 
 void PrimitiveInstance::Draw() {
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
     mesh_.Draw();
 }
 

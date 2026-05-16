@@ -35,8 +35,13 @@
 #include "Json/JsonValue.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
+#include "InputAction.h"
+#include "Config/GameActions.h"
+#include "LogBuffer.h"
+#include "Primitive/DebugDraw.h"
 #include <numbers>
 #include <sstream>
+#include <filesystem>
 #include "AnimatedModelInstance.h"
 #include "AnimatedObject3DInstance.h"
 #include "ModelManager.h"
@@ -373,6 +378,63 @@ void DemoScene::Finalize() {
 }
 
 void DemoScene::Update() {
+
+	// DebugDraw 動作確認: グリッド + 球 + AABB + OBB + Cross + Spline
+	{
+		// Y=0 グリッド
+		DebugDraw::Grid({ 0,0,0 }, 20.0f, 1.0f, { 0.3f, 0.3f, 0.3f, 1.0f });
+
+		// 原点の十字（X=赤, Y=緑, Z=青 はやらず単色の小さい目印）
+		DebugDraw::Cross({ 0,0,0 }, 0.5f, { 1.0f, 1.0f, 1.0f, 1.0f });
+
+		// 黄色い球（半径1、segments=16）
+		DebugDraw::Sphere({ 3, 1, 0 }, 1.0f, { 1.0f, 0.9f, 0.2f, 1.0f });
+
+		// AABB
+		DebugDraw::AABB({ -4, 0, -1 }, { -2, 2, 1 }, { 0.4f, 1.0f, 0.4f, 1.0f });
+
+		// OBB（XY平面で45度回転、Z軸はそのまま）
+		const float c45 = 0.70710678f;
+		Vector3 axes[3] = {
+			{ c45, c45, 0.0f },
+			{-c45, c45, 0.0f },
+			{ 0.0f, 0.0f, 1.0f },
+		};
+		DebugDraw::OBB({ 0, 1, -4 }, axes, { 1.0f, 0.5f, 1.0f }, { 0.4f, 0.8f, 1.0f, 1.0f });
+
+		// Catmull-Rom スプライン（PlayerRailを想定したサンプル制御点）
+		static const std::vector<Vector3> kRailCps = {
+			{-6, 0,  5},
+			{-2, 2,  3},
+			{ 2, 1, -2},
+			{ 5, 3, -4},
+			{ 7, 0, -8},
+		};
+		DebugDraw::CatmullRomSpline(kRailCps, { 1.0f, 1.0f, 0.4f, 1.0f }, 24);
+		// 制御点を小さなクロスで可視化
+		for (const auto& p : kRailCps) {
+			DebugDraw::Cross(p, 0.25f, { 1.0f, 0.6f, 0.6f, 1.0f });
+		}
+
+		// Ray（カメラから前方）
+		DebugDraw::Ray({ 0, 5, -8 }, { 0, 0, 1 }, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
+	}
+
+	// アクション入力のログ出力（ImGuiのLogウィンドウで確認）
+	if (auto* actionMap = input_->GetActionMap()) {
+		for (int i = 0; i < static_cast<int>(Action::Count); ++i) {
+			if (actionMap->IsTriggered(i)) {
+				LogBuffer::Instance().Add(
+					std::string("Action TRIGGER: ") + std::string(GetActionName(static_cast<Action>(i))),
+					LogBuffer::Level::Info);
+			}
+			if (actionMap->IsReleased(i)) {
+				LogBuffer::Instance().Add(
+					std::string("Action RELEASE: ") + std::string(GetActionName(static_cast<Action>(i))),
+					LogBuffer::Level::Info);
+			}
+		}
+	}
 
 	// カメラプレビューとQRコード読み取り（BaseSceneが自動で更新・描画する）
 	UseCameraCapture(true);
@@ -752,10 +814,12 @@ void DemoScene::Draw() {
 // =============================================================
 // 動的オブジェクトの追加・削除（SceneEditorWindow 経由）
 // =============================================================
-void DemoScene::AddDynamicObject(const std::string& dirPath, const std::string& filename) {
+void DemoScene::AddDynamicObject(const std::string& dirPath, const std::string& filename,
+	const Vector3& worldPos) {
 	auto obj = std::make_unique<Object3DInstance>();
 	obj->Initialize(object3DManager_, dxCore_, dirPath, filename);
 	obj->SetCamera(camera_.get());
+	obj->SetTranslate(worldPos);
 	object3DInstances_.push_back(std::move(obj));
 }
 
@@ -803,13 +867,16 @@ void DemoScene::RemoveDynamicSprite(const std::string& name) {
 
 #endif // USE_IMGUI
 
-void DemoScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
+void DemoScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
+	const Vector3& worldPos) {
 	auto model = std::make_unique<AnimatedModelInstance>();
 	model->Initialize(ModelManager::GetInstance()->GetModelCore(), dirPath, filename);
 
 	auto obj = std::make_unique<AnimatedObject3DInstance>();
 	obj->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_,
 		model.get(), filename);
+	obj->SetSourcePath(dirPath, filename);
+	obj->SetTranslate(worldPos);
 
 	dynamicAnimatedModels_.push_back(std::move(model));
 	dynamicAnimated_.push_back(std::move(obj));
@@ -859,3 +926,203 @@ bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	return false;
 }
 #endif
+
+// =====================================================================
+// シーン保存 / 読込
+// =====================================================================
+
+namespace {
+	// Vector3 ↔ JSON 配列
+	JsonValue Vec3ToJson(const Vector3& v) {
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(v.x)));
+		arr.Push(JsonValue(static_cast<double>(v.y)));
+		arr.Push(JsonValue(static_cast<double>(v.z)));
+		return arr;
+	}
+	Vector3 JsonToVec3(const JsonValue& v, const Vector3& fallback = {}) {
+		if (!v.IsArray() || v.Size() < 3) return fallback;
+		return {
+			static_cast<float>(v[0].AsDouble(fallback.x)),
+			static_cast<float>(v[1].AsDouble(fallback.y)),
+			static_cast<float>(v[2].AsDouble(fallback.z))
+		};
+	}
+
+	// Transform を JSON に
+	JsonValue TransformToJson(const Vector3& s, const Vector3& r, const Vector3& t) {
+		JsonValue obj = JsonValue::MakeObject();
+		obj["scale"] = Vec3ToJson(s);
+		obj["rotate"] = Vec3ToJson(r);
+		obj["translate"] = Vec3ToJson(t);
+		return obj;
+	}
+}
+
+bool DemoScene::SaveSceneToJson(const std::string& filePath) {
+	JsonValue root = JsonValue::MakeObject();
+	root["scene"] = "DemoScene";
+
+	JsonValue arr = JsonValue::MakeArray();
+
+	// ----- Object3D（動的）-----
+	for (const auto& o : object3DInstances_) {
+		if (!o) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Object3D";
+		e["name"] = o->GetName();
+		e["tag"] = std::string(GetTagName(o->GetTag()));
+		e["dir"] = o->GetDirectoryPath();
+		e["file"] = o->GetModelFileName();
+		e["transform"] = TransformToJson(o->GetScale(), o->GetRotate(), o->GetTranslate());
+		arr.Push(std::move(e));
+	}
+
+	// ----- AnimatedObject3D（動的）-----
+	for (const auto& a : dynamicAnimated_) {
+		if (!a) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "AnimatedObject3D";
+		e["name"] = a->GetName();
+		e["tag"] = std::string(GetTagName(a->GetTag()));
+		e["dir"] = a->GetDirectoryPath();
+		e["file"] = a->GetModelFileName();
+		e["transform"] = TransformToJson(a->GetScale(), a->GetRotate(), a->GetTranslate());
+		arr.Push(std::move(e));
+	}
+
+	// ----- Primitive（動的）-----
+	for (const auto& p : dynamicPrimitives_) {
+		if (!p) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Primitive";
+		e["name"] = p->GetName();
+		e["tag"] = std::string(GetTagName(p->GetTag()));
+		e["primitiveType"] = static_cast<int64_t>(p->GetPrimitiveType());
+		const Transform& tr = p->GetMesh().GetTransform();
+		e["transform"] = TransformToJson(tr.scale, tr.rotate, tr.translate);
+		if (!p->GetTextureFilePath().empty()) {
+			e["texture"] = p->GetTextureFilePath();
+		}
+		arr.Push(std::move(e));
+	}
+
+	// ----- Sprite（動的）-----
+	for (const auto& s : dynamicSprites_) {
+		if (!s) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Sprite";
+		e["name"] = s->GetName();
+		e["tag"] = std::string(GetTagName(s->GetTag()));
+		e["texture"] = s->GetTextureFilePath();
+		const Vector2& p = s->GetPosition();
+		JsonValue pos = JsonValue::MakeArray();
+		pos.Push(JsonValue(static_cast<double>(p.x)));
+		pos.Push(JsonValue(static_cast<double>(p.y)));
+		e["pos"] = std::move(pos);
+		arr.Push(std::move(e));
+	}
+
+	root["objects"] = std::move(arr);
+
+	// 保存先ディレクトリを作成
+	std::filesystem::path path(filePath);
+	if (path.has_parent_path()) {
+		std::error_code ec;
+		std::filesystem::create_directories(path.parent_path(), ec);
+	}
+
+	bool ok = JsonWriter::WriteFile(filePath, root, { true, 2 });
+	LogBuffer::Instance().Add(
+		ok ? ("Scene saved: " + filePath)
+		   : ("Scene save FAILED: " + filePath),
+		ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
+	return ok;
+}
+
+bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
+	auto result = JsonParser::ParseFile(filePath);
+	if (!result.success) {
+		LogBuffer::Instance().Add(
+			"Scene load FAILED: " + filePath + " (" + result.errorMessage + ")",
+			LogBuffer::Level::Error);
+		return false;
+	}
+
+	// 既存の動的オブジェクトを全削除（deferredDeletes_ に退避）
+	for (auto& o : object3DInstances_) {
+		if (o) deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(o.release()));
+	}
+	object3DInstances_.clear();
+	for (auto& a : dynamicAnimated_) {
+		if (a) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
+	}
+	dynamicAnimated_.clear();
+	dynamicAnimatedModels_.clear();
+	for (auto& s : dynamicSprites_) {
+		if (s) deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(s.release()));
+	}
+	dynamicSprites_.clear();
+	for (auto& p : dynamicPrimitives_) {
+		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
+	}
+	dynamicPrimitives_.clear();
+
+	// 復元
+	const JsonValue& objs = result.value["objects"];
+	if (!objs.IsArray()) return true;
+
+	for (size_t i = 0; i < objs.Size(); ++i) {
+		const JsonValue& e = objs[i];
+		std::string type = e["type"].AsString();
+		std::string name = e["name"].AsString();
+		EntityTag tag = TagFromName(e["tag"].AsString());
+		Vector3 sc = JsonToVec3(e["transform"]["scale"], { 1,1,1 });
+		Vector3 ro = JsonToVec3(e["transform"]["rotate"], { 0,0,0 });
+		Vector3 tr = JsonToVec3(e["transform"]["translate"], { 0,0,0 });
+
+		if (type == "Object3D") {
+			AddDynamicObject(e["dir"].AsString(), e["file"].AsString(), tr);
+			if (!object3DInstances_.empty()) {
+				auto& back = object3DInstances_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+			}
+		} else if (type == "AnimatedObject3D") {
+			AddDynamicAnimated(e["dir"].AsString(), e["file"].AsString(), tr);
+			if (!dynamicAnimated_.empty()) {
+				auto& back = dynamicAnimated_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+			}
+		} else if (type == "Primitive") {
+			int primType = static_cast<int>(e["primitiveType"].AsInt());
+			AddDynamicPrimitive(primType, tr);
+			if (!dynamicPrimitives_.empty()) {
+				auto& back = dynamicPrimitives_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+				std::string tex = e["texture"].AsString();
+				if (!tex.empty()) back->SetTexture(tex);
+			}
+		} else if (type == "Sprite") {
+			float cx = static_cast<float>(e["pos"][0].AsDouble(0.0));
+			float cy = static_cast<float>(e["pos"][1].AsDouble(0.0));
+			AddDynamicSprite(e["texture"].AsString(), cx, cy);
+			if (!dynamicSprites_.empty()) {
+				auto& back = dynamicSprites_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+			}
+		}
+	}
+
+	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
+	return true;
+}

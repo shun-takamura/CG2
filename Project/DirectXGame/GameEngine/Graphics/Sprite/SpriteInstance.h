@@ -107,7 +107,7 @@ public:
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
     // セッター
-    void SetName(const std::string& name) { name_ = name; }
+    void SetName(const std::string& name) override { name_ = name; }
     void SetPosition(const Vector2& position) { position_ = position; }
     void SetAnchorPoint(const Vector2& anchorPoint) { anchorPoint_ = anchorPoint; }
     void SetRotation(const float& rotation) { rotation_ = rotation; }

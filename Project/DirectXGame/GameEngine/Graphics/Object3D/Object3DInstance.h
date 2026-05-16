@@ -51,6 +51,7 @@ class Object3DInstance : public IImGuiEditable {
     // テクスチャファイルパス（テクスチャ変更機能用）
     std::string textureFilePath_;
     std::string modelFileName_;
+    std::string directoryPath_;  // ロード時の dirPath（シーンJSON保存・再ロード用）
 
     //==============================
     // メンバ関数
@@ -79,7 +80,7 @@ public:
     //==============================
     // セッター
     //==============================
-    void SetName(const std::string& name) { name_ = name; }
+    void SetName(const std::string& name) override { name_ = name; }
     void SetModel(ModelInstance* modelInstance) { modelInstance_ = modelInstance; }
     void SetModel(const std::string& filePath);
     void SetCamera(Camera* camera) { camera_ = camera; }
@@ -125,6 +126,7 @@ public:
     const Vector3& GetTranslate() const { return transform_.translate; }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
     const std::string& GetModelFileName() const { return modelFileName_; }
+    const std::string& GetDirectoryPath() const { return directoryPath_; }
 
     //==============================
     // 初期化・更新・描画

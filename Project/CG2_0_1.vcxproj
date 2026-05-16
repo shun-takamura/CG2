@@ -186,6 +186,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Debug\Debug.cpp" />
     <ClCompile Include="DirectXGame\Debug\LogBuffer.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\Input\PhysicalBinding.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputAction.cpp" />
+    <ClCompile Include="DirectXGame\Game\Config\KeyConfig.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp" />
@@ -302,6 +305,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Math\Quaternion.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp" />
   </ItemGroup>
@@ -332,6 +336,11 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Debug\Debug.h" />
     <ClInclude Include="DirectXGame\Debug\LogBuffer.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\ControllerInput.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\Input\PhysicalBinding.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\Input\InputAction.h" />
+    <ClInclude Include="DirectXGame\Game\Config\GameActions.h" />
+    <ClInclude Include="DirectXGame\Game\Components\EntityTag.h" />
+    <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
@@ -435,6 +444,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Math\Quaternion.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.h" />
   </ItemGroup>

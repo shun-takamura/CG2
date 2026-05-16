@@ -5,7 +5,8 @@
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
-#include "KeyboardInput.h"
+#include "InputAction.h"
+#include "Config/GameActions.h"
 #include "Game.h"
 
 HubScene::HubScene() = default;
@@ -29,20 +30,21 @@ void HubScene::Update() {
 		return;
 	}
 
-	auto* kb = input_->GetKeyboard();
+	auto* actions = input_->GetActionMap();
+	if (!actions) return;
 
-	// 仮: 左右キーでタブ切替（実UIは後で実装）
-	if (kb->TriggerKey(DIK_RIGHT)) {
+	// 左右でタブ切替
+	if (actions->IsTriggered(static_cast<int>(Action::MenuRight))) {
 		int next = (static_cast<int>(currentTab_) + 1) % 5;
 		currentTab_ = static_cast<Tab>(next);
 	}
-	if (kb->TriggerKey(DIK_LEFT)) {
+	if (actions->IsTriggered(static_cast<int>(Action::MenuLeft))) {
 		int next = (static_cast<int>(currentTab_) + 4) % 5;
 		currentTab_ = static_cast<Tab>(next);
 	}
 
-	// 仮: SPACE で現在タブの動作を実行
-	if (kb->TriggerKey(DIK_SPACE) || kb->TriggerKey(DIK_RETURN)) {
+	// 決定で現在タブの動作を実行
+	if (actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
 		switch (currentTab_) {
 		case Tab::StageSelect:
 			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);

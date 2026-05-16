@@ -5,8 +5,7 @@
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
-#include "KeyboardInput.h"
-#include "ControllerInput.h"
+#include "InputAction.h"
 #include "Game.h"
 
 TitleScene::TitleScene() = default;
@@ -30,10 +29,9 @@ void TitleScene::Update() {
 		return;
 	}
 
-	// SPACE / A ボタンで Hub へ
-	bool advance = input_->GetKeyboard()->TriggerKey(DIK_SPACE)
-		|| input_->GetKeyboard()->TriggerKey(DIK_RETURN);
-	if (advance) {
+	// Press Any Button: 何らかの物理入力があれば Hub へ
+	auto* actionMap = input_->GetActionMap();
+	if (actionMap && actionMap->AnyInputTriggered()) {
 		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
 		return;
 	}
