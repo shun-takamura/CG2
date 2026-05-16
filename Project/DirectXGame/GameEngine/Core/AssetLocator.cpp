@@ -94,21 +94,22 @@ bool AssetLocator::InitializeFromPack(const std::string& packPath)
 		uint64_t name_hash;
 		uint32_t path_offset;
 		uint16_t path_length;
+		uint8_t  compression;
+		uint64_t compressed_size;
 		uint64_t uncompressed_size;
 		uint64_t payload_offset;
 	};
 	std::vector<ParsedIndex> parsed(assetCount);
 	f.seekg(indexOffset);
 	for (uint32_t i = 0; i < assetCount; ++i) {
-		uint8_t skip1, skip2;
-		uint64_t skipU64;
+		uint8_t asset_type_skip;
 		ParsedIndex& p = parsed[i];
 		f.read(reinterpret_cast<char*>(&p.name_hash), 8);
 		f.read(reinterpret_cast<char*>(&p.path_offset), 4);
 		f.read(reinterpret_cast<char*>(&p.path_length), 2);
-		f.read(reinterpret_cast<char*>(&skip1), 1);   // compression_type（pack モードでは未使用）
-		f.read(reinterpret_cast<char*>(&skip2), 1);   // asset_type
-		f.read(reinterpret_cast<char*>(&skipU64), 8); // compressed_size
+		f.read(reinterpret_cast<char*>(&p.compression), 1);    // 0=NONE, 1=GDEFLATE
+		f.read(reinterpret_cast<char*>(&asset_type_skip), 1);  // asset_type (現状未使用)
+		f.read(reinterpret_cast<char*>(&p.compressed_size), 8);
 		f.read(reinterpret_cast<char*>(&p.uncompressed_size), 8);
 		f.read(reinterpret_cast<char*>(&p.payload_offset), 8);
 	}
@@ -132,6 +133,8 @@ bool AssetLocator::InitializeFromPack(const std::string& packPath)
 		e.name_hash = p.name_hash;
 		e.payload_offset = p.payload_offset;
 		e.uncompressed_size = p.uncompressed_size;
+		e.compressed_size = p.compressed_size;
+		e.compression = p.compression;
 		e.path.assign(stringTable.data() + p.path_offset, p.path_length);
 		packIndex_.push_back(std::move(e));
 	}
@@ -181,7 +184,9 @@ AssetHandle AssetLocator::Open(const std::string& path)
 		auto stream = std::make_unique<std::ifstream>(packPath_, std::ios::binary);
 		if (!stream || !*stream) return h;
 		h.valid_ = true;
-		h.size_ = entry.uncompressed_size;
+		// pack 上の実バイト数 (圧縮なしなら uncompressed と同値)。
+		// 圧縮されたエントリでは先頭 N バイト (DDS の場合 148) のみ生で読める前提。
+		h.size_ = entry.compressed_size;
 		h.baseOffset_ = entry.payload_offset;
 		h.stream_ = std::move(stream);
 		return h;
@@ -207,10 +212,11 @@ std::vector<uint8_t> AssetLocator::LoadAll(const std::string& path)
 		if (!FindPackEntry(path, entry)) return buf;
 		std::ifstream f(packPath_, std::ios::binary);
 		if (!f) return buf;
-		buf.resize(static_cast<size_t>(entry.uncompressed_size));
+		// 圧縮エントリの場合これは「圧縮済みバイト列」を返す。呼び出し側で解凍が必要。
+		buf.resize(static_cast<size_t>(entry.compressed_size));
 		f.seekg(static_cast<std::streamoff>(entry.payload_offset));
 		f.read(reinterpret_cast<char*>(buf.data()),
-		       static_cast<std::streamsize>(entry.uncompressed_size));
+		       static_cast<std::streamsize>(entry.compressed_size));
 		return buf;
 	}
 	return buf;
@@ -224,6 +230,22 @@ bool AssetLocator::GetPackEntryInfo(const std::string& path,
 	if (!FindPackEntry(path, entry)) return false;
 	outPackOffset = entry.payload_offset;
 	outSize = entry.uncompressed_size;
+	return true;
+}
+
+bool AssetLocator::GetPackEntryInfoEx(const std::string& path,
+                                      uint64_t& outPackOffset,
+                                      uint64_t& outUncompressedSize,
+                                      uint64_t& outCompressedSize,
+                                      uint8_t&  outCompression) const
+{
+	if (mode_ != Mode::Pack) return false;
+	PackEntry entry;
+	if (!FindPackEntry(path, entry)) return false;
+	outPackOffset       = entry.payload_offset;
+	outUncompressedSize = entry.uncompressed_size;
+	outCompressedSize   = entry.compressed_size;
+	outCompression      = entry.compression;
 	return true;
 }
 

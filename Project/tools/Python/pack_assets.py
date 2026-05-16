@@ -17,8 +17,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import struct
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -151,6 +154,34 @@ def _parse_dds_header(dds: bytes) -> dict | None:
     }
 
 
+# ============================================================
+# GDeflate 圧縮（外部 EXE 呼び出し）
+# ============================================================
+# DirectStorage SDK の IDStorageCompressionCodec を C++ 側で叩く小ツールに
+# 入出力を渡す。ランタイムの DSTORAGE_COMPRESSION_FORMAT_GDEFLATE で
+# そのまま解凍できる生バイト列を出す。
+def gdeflate_compress(data: bytes, exe_path: Path) -> bytes:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tin, \
+         tempfile.NamedTemporaryFile(delete=False, suffix=".gz") as tout:
+        tin_path = Path(tin.name)
+        tout_path = Path(tout.name)
+        tin.write(data)
+    try:
+        result = subprocess.run(
+            [str(exe_path), str(tin_path), str(tout_path)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"gdeflate_compress failed (exit {result.returncode}): {result.stderr}")
+        return tout_path.read_bytes()
+    finally:
+        for p in (tin_path, tout_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
 def transform_dds_to_placed_footprint(dds: bytes) -> bytes:
     """DDS の payload を D3D12 placed-footprint レイアウトにパディングして返す。
     変換できないフォーマット (非対応) は元データをそのまま返す。"""
@@ -209,10 +240,15 @@ def transform_dds_to_placed_footprint(dds: bytes) -> bytes:
 # ============================================================
 # パッキング本体
 # ============================================================
-def collect_entries(resources_root: Path) -> list[dict]:
-    """Resources/ 配下のファイルを集めて (relative_path, bytes, asset_type) のリストを返す
+def collect_entries(resources_root: Path,
+                    gdeflate_exe: Path | None = None) -> list[dict]:
+    """Resources/ 配下のファイルを集めて (relative_path, bytes, asset_type, ...) のリストを返す
 
     Shaders/ 配下は除外する（実行時 DXC が個別ファイルとして読むため pack に含めない）。
+
+    gdeflate_exe を指定すると .dds の payload (DDS header の後ろ) を GDeflate 圧縮する。
+    pack 上のレイアウトは [148B raw DDS header] + [GDeflate compressed payload]。
+    ランタイムは先頭 148B でメタデータを取り、payload を DStorage GDEFLATE 経路で解凍する。
     """
     if not resources_root.exists():
         return []
@@ -221,6 +257,8 @@ def collect_entries(resources_root: Path) -> list[dict]:
     # AssetLocator::Open の引数と一致させる
     project_root = resources_root.parent
     shaders_dir = resources_root / "Shaders"
+
+    DDS_HEADER_SIZE = 148  # DDS magic(4) + DDS_HEADER(124) + DDS_HEADER_DXT10(20)
 
     entries = []
     for f in sorted(resources_root.rglob("*")):
@@ -235,14 +273,34 @@ def collect_entries(resources_root: Path) -> list[dict]:
         rel = f.relative_to(project_root).as_posix()
         data = f.read_bytes()
         asset_type = asset_type_from_path(rel)
-        # DDS は DirectStorage MULTIPLE_SUBRESOURCES に直投げできるよう
-        # D3D12 placed-footprint レイアウトに変換しておく
+        compression = COMP_NONE
+        uncompressed_size = len(data)
+
         if asset_type == ASSET_TEXTURE:
-            data = transform_dds_to_placed_footprint(data)
+            # DDS を D3D12 placed-footprint レイアウトに変換 (DStorage MULTIPLE_SUBRESOURCES 用)
+            transformed = transform_dds_to_placed_footprint(data)
+            uncompressed_size = len(transformed)
+            if (gdeflate_exe is not None
+                    and len(transformed) > DDS_HEADER_SIZE
+                    and transformed[:4] == b"DDS "):
+                header = transformed[:DDS_HEADER_SIZE]
+                payload = transformed[DDS_HEADER_SIZE:]
+                compressed_payload = gdeflate_compress(payload, gdeflate_exe)
+                # 圧縮で逆に大きくなる稀なケースは無圧縮で保存
+                if len(compressed_payload) < len(payload):
+                    data = header + compressed_payload
+                    compression = COMP_GDEFLATE
+                else:
+                    data = transformed
+            else:
+                data = transformed
+
         entries.append({
             "path": rel,
             "data": data,
             "asset_type": asset_type,
+            "compression": compression,
+            "uncompressed_size": uncompressed_size,
         })
     return entries
 
@@ -277,7 +335,11 @@ def write_pack(entries: list[dict], output_path: Path) -> None:
     for e in entries:
         e["payload_offset"] = cursor
         e["compressed_size"] = len(e["data"])
-        e["uncompressed_size"] = len(e["data"])
+        # uncompressed_size は collect_entries で設定済み (圧縮ならデコード後サイズ)
+        if "uncompressed_size" not in e:
+            e["uncompressed_size"] = len(e["data"])
+        if "compression" not in e:
+            e["compression"] = COMP_NONE
         cursor = align_up(cursor + len(e["data"]), PACK_PAYLOAD_ALIGN)
     total_size = cursor
 
@@ -294,7 +356,7 @@ def write_pack(entries: list[dict], output_path: Path) -> None:
                                 e["name_hash"],
                                 e["path_offset"],
                                 e["path_length"],
-                                COMP_NONE,
+                                e["compression"],
                                 e["asset_type"],
                                 e["compressed_size"],
                                 e["uncompressed_size"],
@@ -327,8 +389,21 @@ def write_pack(entries: list[dict], output_path: Path) -> None:
     for e in entries:
         type_counts[e["asset_type"]] = type_counts.get(e["asset_type"], 0) + 1
 
+    # 圧縮の効果集計 (元 = uncompressed_size 合計、後 = compressed_size 合計)
+    uncomp_sum = sum(e["uncompressed_size"] for e in entries)
+    comp_sum   = sum(e["compressed_size"]   for e in entries)
+    dds_uncomp = sum(e["uncompressed_size"] for e in entries if e["asset_type"] == ASSET_TEXTURE)
+    dds_comp   = sum(e["compressed_size"]   for e in entries if e["asset_type"] == ASSET_TEXTURE)
+
     print(f"Packed {asset_count} assets → {output_path}")
-    print(f"  Total size: {total_size:,} bytes ({total_size / 1024 / 1024:.2f} MB)")
+    print(f"  Total size:   {total_size:,} bytes ({total_size / 1024 / 1024:.2f} MB)")
+    print(f"  Payload sum:  raw={uncomp_sum / 1024 / 1024:.2f} MB → "
+          f"stored={comp_sum / 1024 / 1024:.2f} MB"
+          + (f" ({comp_sum / uncomp_sum * 100:.1f}%)" if uncomp_sum > 0 else ""))
+    if dds_uncomp > 0:
+        print(f"  DDS payload:  raw={dds_uncomp / 1024 / 1024:.2f} MB → "
+              f"stored={dds_comp / 1024 / 1024:.2f} MB "
+              f"({dds_comp / dds_uncomp * 100:.1f}%)")
     for t, c in sorted(type_counts.items()):
         print(f"  {type_names[t]:8s}  {c}")
 
@@ -342,6 +417,10 @@ def main() -> int:
                         help="入力 Resources ディレクトリ（既定: Resources）")
     parser.add_argument("--output", default="../Generated/Assets.pack",
                         help="出力 .pack パス（既定: ../Generated/Assets.pack = repo ルート側）")
+    parser.add_argument("--gdeflate-exe", default="",
+                        help="gdeflate_compress.exe のパス。指定すれば DDS payload を GDeflate 圧縮する。")
+    parser.add_argument("--no-compress", action="store_true",
+                        help="--gdeflate-exe が指定されていても圧縮しない（無圧縮 pack を作る）")
     args = parser.parse_args()
 
     resources = Path(args.resources)
@@ -352,7 +431,21 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    entries = collect_entries(resources)
+    gdeflate_exe: Path | None = None
+    if not args.no_compress and args.gdeflate_exe:
+        cand = Path(args.gdeflate_exe)
+        if not cand.exists():
+            print(f"[WARN] gdeflate_compress.exe が見つからない: {cand}. 無圧縮で続行。",
+                  file=sys.stderr)
+        else:
+            gdeflate_exe = cand
+
+    if gdeflate_exe:
+        print(f"[pack] GDeflate 圧縮 ON ({gdeflate_exe})")
+    else:
+        print("[pack] GDeflate 圧縮 OFF")
+
+    entries = collect_entries(resources, gdeflate_exe)
     if not entries:
         print("[ERROR] no assets to pack", file=sys.stderr)
         return 1

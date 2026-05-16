@@ -75,8 +75,17 @@ public:
 
 	// pack 内のエントリ位置情報を取得（DirectStorage 統合用、Phase D）
 	// pack モード時のみ true を返す。FS モードでは常に false。
+	// outSize は uncompressed_size (= 解凍後サイズ)。
 	bool GetPackEntryInfo(const std::string& path,
 	                     uint64_t& outPackOffset, uint64_t& outSize) const;
+
+	// 圧縮情報込みの拡張版（GDeflate 対応、Phase B.3）。
+	// outCompression: 0=NONE, 1=GDEFLATE。outCompressedSize は pack 上の実サイズ。
+	bool GetPackEntryInfoEx(const std::string& path,
+	                       uint64_t& outPackOffset,
+	                       uint64_t& outUncompressedSize,
+	                       uint64_t& outCompressedSize,
+	                       uint8_t&  outCompression) const;
 
 	// 現在のロードモード文字列（"FS" / "Pack" / "Uninitialized"）
 	const char* GetModeName() const;
@@ -104,6 +113,8 @@ private:
 		uint64_t name_hash;
 		uint64_t payload_offset;
 		uint64_t uncompressed_size;
+		uint64_t compressed_size;  // pack 上の実サイズ (圧縮なしなら uncompressed と同じ)
+		uint8_t  compression;      // 0=NONE, 1=GDEFLATE
 		std::string path;
 	};
 	std::string packPath_;

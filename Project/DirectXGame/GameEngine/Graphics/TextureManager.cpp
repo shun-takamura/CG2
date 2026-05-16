@@ -330,9 +330,13 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
             (filePath.compare(filePath.size() - 4, 4, ".dds") == 0 ||
              filePath.compare(filePath.size() - 4, 4, ".DDS") == 0);
         if (isDDS && loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile()) {
-            uint64_t packOffset = 0, packSize = 0;
-            if (loc->GetPackEntryInfo(filePath, packOffset, packSize)) {
-                // DDS ヘッダーだけ AssetLocator 経由で読む（先頭 200B あれば DXT10 でも十分）
+            uint64_t packOffset = 0, uncompressedSize = 0, compressedSize = 0;
+            uint8_t  compression = 0;
+            if (loc->GetPackEntryInfoEx(filePath, packOffset,
+                                        uncompressedSize, compressedSize, compression)) {
+                // DDS ヘッダーは pack 上で常に raw 格納 (148B)。
+                // Open() の AssetHandle.size_ は compressed_size を指しているが、
+                // 先頭 148B は uncompressed 領域なので普通に ReadAt 可能。
                 AssetHandle h = loc->Open(filePath);
                 uint8_t headerBytes[200]{};
                 const uint32_t headerReadSize = static_cast<uint32_t>(
@@ -341,7 +345,6 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
                     DDS::ParsedDDS info;
                     if (DDS::ParseDDS(headerBytes, headerReadSize, info) &&
                         info.format != DXGI_FORMAT_UNKNOWN) {
-                        // 状態に書き戻し
                         std::lock_guard<std::mutex> lock(textureDatasMutex_);
                         auto it = textureDatas.find(filePath);
                         if (it != textureDatas.end()) {
@@ -358,23 +361,39 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
                             }
                             it->second.metadata = meta;
                             it->second.useDirectStorage = true;
+                            // pack 上のレイアウト: [148B raw header] + [payload(無圧縮 or GDeflate)]
+                            // payload 開始 = packOffset + 148 (info.payloadOffset と一致)
                             it->second.dsPayloadOffset = packOffset + info.payloadOffset;
-                            it->second.dsPayloadSize =
-                                static_cast<uint32_t>(packSize - info.payloadOffset);
+                            it->second.dsCompressed = (compression == 1);  // 1 = GDEFLATE
+                            if (it->second.dsCompressed) {
+                                // pack 上のサイズ = compressedSize - header(148)
+                                it->second.dsPayloadSize =
+                                    static_cast<uint32_t>(compressedSize - info.payloadOffset);
+                                // 解凍後サイズ = uncompressedSize - header(148)
+                                it->second.dsUncompressedSize =
+                                    static_cast<uint32_t>(uncompressedSize - info.payloadOffset);
+                            } else {
+                                it->second.dsPayloadSize =
+                                    static_cast<uint32_t>(uncompressedSize - info.payloadOffset);
+                                it->second.dsUncompressedSize = it->second.dsPayloadSize;
+                            }
                             it->second.loadState = TextureData::LoadState::CPUReady;
                             {
                                 char dbg[512];
                                 sprintf_s(dbg,
                                     "[DS] %s w=%u h=%u mips=%u arr=%u fmt=%u "
-                                    "packOff=%llu hdrOff=%u dsOff=%llu dsSize=%u\n",
+                                    "comp=%u packOff=%llu hdrOff=%u dsOff=%llu "
+                                    "src=%u uncomp=%u\n",
                                     filePath.c_str(),
                                     (unsigned)info.width, (unsigned)info.height,
                                     (unsigned)info.mipLevels, (unsigned)info.arraySize,
                                     (unsigned)info.format,
+                                    (unsigned)compression,
                                     (unsigned long long)packOffset,
                                     (unsigned)info.payloadOffset,
                                     (unsigned long long)it->second.dsPayloadOffset,
-                                    (unsigned)it->second.dsPayloadSize);
+                                    (unsigned)it->second.dsPayloadSize,
+                                    (unsigned)it->second.dsUncompressedSize);
                                 OutputDebugStringA(dbg);
                             }
                             return;
@@ -493,16 +512,27 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
             nullptr, IID_PPV_ARGS(&data->resource));
         assert(SUCCEEDED(hr));
 
-        // 2. DirectStorage で payload を全 subresource に転送（同期で完了待ち）
-        //    pack ファイル側で D3D12 placed-footprint レイアウト（行256B/開始512B 整列）
-        //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエスト一括投入できる
+        // 2. DirectStorage で payload を全 subresource に転送
+        //    pack ファイル側で D3D12 placed-footprint レイアウト (行256B/開始512B 整列)
+        //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエストにまとめられる。
+        //    GDeflate 圧縮されているなら CompressionFormat を付ける版を使う。
         auto* ds = DStorageManager::GetInstance();
-        ds->EnqueueMultipleSubresources(
-            ds->GetPackFile(),
-            data->dsPayloadOffset,
-            data->dsPayloadSize,
-            data->resource.Get(),
-            0);
+        if (data->dsCompressed) {
+            ds->EnqueueMultipleSubresourcesCompressed(
+                ds->GetPackFile(),
+                data->dsPayloadOffset,
+                data->dsPayloadSize,
+                data->dsUncompressedSize,
+                data->resource.Get(),
+                0);
+        } else {
+            ds->EnqueueMultipleSubresources(
+                ds->GetPackFile(),
+                data->dsPayloadOffset,
+                data->dsPayloadSize,
+                data->resource.Get(),
+                0);
+        }
         ds->SubmitAndWait();
 
         // 3. メインコマンドリストで COMMON → GENERIC_READ に遷移
