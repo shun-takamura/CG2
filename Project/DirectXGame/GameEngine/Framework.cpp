@@ -3,6 +3,10 @@
 #include "DirectXTex.h"
 #include "d3dx12.h"
 #include <format>
+#include <chrono>
+#include <psapi.h>
+#include <filesystem>
+#pragma comment(lib, "psapi.lib")
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -35,6 +39,18 @@
 #include "SkinningComputeManager.h"
 
 void Framework::Run() {
+	// KPI: 計測起点 (Run の入り口 = 実質プロセス開始直後)
+	kpiStartTime_ = std::chrono::high_resolution_clock::now();
+	{
+		FILETIME ftCreate, ftExit, ftKernel, ftUser;
+		if (GetProcessTimes(GetCurrentProcess(), &ftCreate, &ftExit, &ftKernel, &ftUser)) {
+			ULARGE_INTEGER k{}, u{};
+			k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
+			u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
+			kpiStartCpuTime100ns_ = k.QuadPart + u.QuadPart;
+		}
+	}
+
 	// ゲームの初期化
 	Initialize();
 
@@ -79,13 +95,14 @@ void Framework::Initialize() {
 #if defined(NDEBUG) && !defined(_DEBUG)
 		usePack = true;  // Release ビルドのデフォルト
 #endif
-		// CLI 引数 (--use-pack / --use-fs)
+		// CLI 引数 (--use-pack / --use-fs / --no-dstorage)
 		int argc = 0;
 		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
 		if (argv) {
 			for (int i = 1; i < argc; ++i) {
 				if (std::wcscmp(argv[i], L"--use-pack") == 0) usePack = true;
 				else if (std::wcscmp(argv[i], L"--use-fs") == 0) usePack = false;
+				else if (std::wcscmp(argv[i], L"--no-dstorage") == 0) noDStorage_ = true;
 			}
 			::LocalFree(argv);
 		}
@@ -146,6 +163,11 @@ void Framework::Initialize() {
 			    " version=" + std::to_string(header[1]) +
 			    " asset_count=" + std::to_string(header[2]) +
 			    " index_offset=" + std::to_string(header[3]) + "\n");
+		}
+		// --no-dstorage: 初期化後に経路を封じる（KPI 計測用）
+		if (noDStorage_) {
+			DStorageManager::GetInstance()->SetEnabled(false);
+			Log("[DStorage] disabled by --no-dstorage (KPI measurement)\n");
 		}
 	}
 
@@ -298,6 +320,84 @@ void Framework::Initialize() {
 }
 
 void Framework::Update() {
+	// 初回 Update で KPI を 1 度だけ出力
+	// (Initialize 完了 = 最初のシーンが GPU リソース全部揃った直後の地点)
+	if (!kpiLogged_) {
+		const auto now = std::chrono::high_resolution_clock::now();
+		const auto loadMs = std::chrono::duration<double, std::milli>(
+			now - kpiStartTime_).count();
+
+		// AssetLocator のモード文字列
+		const char* mode = AssetLocator::GetInstance()->GetModeName();
+		const bool dsActive = DStorageManager::GetInstance()->IsInitialized()
+			&& DStorageManager::GetInstance()->GetPackFile() != nullptr;
+		std::string modeStr = mode;
+		if (std::string(mode) == "Pack") {
+			modeStr = dsActive ? "Pack+DStorage" : "Pack+CPU";
+		}
+
+		// VRAM 取得 (HIGH_PERFORMANCE adapter から)
+		uint64_t vramBytes = 0;
+		Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+		if (SUCCEEDED(CreateDXGIFactory(IID_PPV_ARGS(&factory)))) {
+			Microsoft::WRL::ComPtr<IDXGIAdapter3> adapter;
+			if (SUCCEEDED(factory->EnumAdapterByGpuPreference(
+				0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+				IID_PPV_ARGS(&adapter)))) {
+				DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+				if (SUCCEEDED(adapter->QueryVideoMemoryInfo(
+					0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+					vramBytes = info.CurrentUsage;
+				}
+			}
+		}
+		const double vramMB = static_cast<double>(vramBytes) / (1024.0 * 1024.0);
+
+		// プロセス RAM (Working Set / Private Bytes)
+		double wsMB = 0.0, privMB = 0.0;
+		PROCESS_MEMORY_COUNTERS_EX pmc{};
+		if (GetProcessMemoryInfo(GetCurrentProcess(),
+			reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+			wsMB   = static_cast<double>(pmc.WorkingSetSize)  / (1024.0 * 1024.0);
+			privMB = static_cast<double>(pmc.PrivateUsage)    / (1024.0 * 1024.0);
+		}
+
+		// CPU 時間 (Run() 起点から ここまでに使った Kernel+User 時間 100ns 単位 → ms)
+		double cpuMs = 0.0;
+		double cpuPct = 0.0;
+		{
+			FILETIME ftCreate, ftExit, ftKernel, ftUser;
+			if (GetProcessTimes(GetCurrentProcess(), &ftCreate, &ftExit, &ftKernel, &ftUser)) {
+				ULARGE_INTEGER k{}, u{};
+				k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
+				u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
+				const uint64_t cur100ns = k.QuadPart + u.QuadPart;
+				const uint64_t delta100ns = (cur100ns >= kpiStartCpuTime100ns_)
+					? (cur100ns - kpiStartCpuTime100ns_) : 0;
+				cpuMs = static_cast<double>(delta100ns) / 10000.0;  // 100ns → ms
+				cpuPct = (loadMs > 0.0) ? (cpuMs / loadMs * 100.0) : 0.0;
+			}
+		}
+
+		// pack ファイルサイズ (KPI モードが Pack 系のときのみ)
+		uint64_t packBytes = 0;
+		if (std::string(mode) == "Pack") {
+			std::error_code ec;
+			for (const char* p : { "Generated/Assets.pack", "../Generated/Assets.pack" }) {
+				auto sz = std::filesystem::file_size(p, ec);
+				if (!ec) { packBytes = sz; break; }
+			}
+		}
+		const double packMB = static_cast<double>(packBytes) / (1024.0 * 1024.0);
+
+		Log(std::format(
+			"[KPI] mode={} loadTime={:.1f}ms vram={:.1f}MB "
+			"ram={:.1f}MB(WS)/{:.1f}MB(Priv) cpuTime={:.1f}ms({:.0f}%) pack={:.1f}MB\n",
+			modeStr, loadMs, vramMB, wsMB, privMB, cpuMs, cpuPct, packMB));
+
+		kpiLogged_ = true;
+	}
+
 	// ウィンドウメッセージ処理
 	if (!winApp_->ProcessMessage()) {
 		endRequest_ = true;

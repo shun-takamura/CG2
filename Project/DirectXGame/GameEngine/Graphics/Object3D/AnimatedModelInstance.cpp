@@ -3,6 +3,7 @@
 #include <cstring>
 #include "SkinCluster.h"
 #include "AssetLocator.h"
+#include "DStorageManager.h"
 
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
@@ -38,7 +39,7 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
     assert(!textureFilePath_.empty() && "textureFilePath is empty in Draw!");
     assert(indexResource_ != nullptr && "indexResource is nullptr!");
     assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
-    assert(!modelData_.indices.empty() && "indices is empty in Draw!");
+    assert(indexCount_ > 0 && "indexCount is 0 in Draw!");
 
     dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
     dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
@@ -52,7 +53,7 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
     );
 
     dxCore->GetCommandList()->DrawIndexedInstanced(
-        UINT(modelData_.indices.size()), 1, 0, 0, 0);
+        indexCount_, 1, 0, 0, 0);
 }
 
 void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster)
@@ -74,17 +75,48 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
 
     // ドローコール
     dxCore->GetCommandList()->DrawIndexedInstanced(
-        UINT(modelData_.indices.size()), 1, 0, 0, 0);
+        indexCount_, 1, 0, 0, 0);
 }
 
 void AnimatedModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
-    vertexResource_ = dxCore->CreateBufferResource(sizeof(VertexData) * modelData_.vertices.size());
+    const size_t sizeInBytes = sizeof(VertexData) * vertexCount_;
+
+    if (useDirectStorage_) {
+        // DEFAULT heap に COMMON state でバッファ作成。SkinCluster の CS が SRV として
+        // 読み、bind-pose Draw 経路では VBV としても使える（暗黙プロモーションで対応）。
+        D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = sizeInBytes;
+        desc.Height = 1; desc.DepthOrArraySize = 1; desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(&vertexResource_));
+        assert(SUCCEEDED(hr));
+
+        uint64_t packOffset = 0, packSize = 0;
+        AssetLocator::GetInstance()->GetPackEntryInfo(meshFilePath_, packOffset, packSize);
+        auto* ds = DStorageManager::GetInstance();
+        ds->EnqueueBufferRead(ds->GetPackFile(),
+            packOffset + vertexFileOffset_,
+            static_cast<uint32_t>(sizeInBytes),
+            vertexResource_.Get(), 0);
+        ds->SubmitAndWait();
+        // COMMON のままにしておく（CS の SRV 読みは暗黙プロモーション対応）
+    } else {
+        // 既存パス: UPLOAD heap + Map + memcpy（CPU から書き込む）
+        vertexResource_ = dxCore->CreateBufferResource(sizeInBytes);
+        vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
+        std::memcpy(vertexData_, modelData_.vertices.data(), sizeInBytes);
+    }
+
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = UINT(sizeof(VertexData) * modelData_.vertices.size());
+    vertexBufferView_.SizeInBytes = UINT(sizeInBytes);
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
-    vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
-    std::memcpy(vertexData_, modelData_.vertices.data(), sizeof(VertexData) * modelData_.vertices.size());
 }
 
 void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
@@ -102,15 +134,50 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 void AnimatedModelInstance::CreateIndexData(DirectXCore* dxCore)
 {
-    indexResource_ = dxCore->CreateBufferResource(sizeof(uint32_t) * modelData_.indices.size());
-    indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
-    indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * modelData_.indices.size());
-    indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
+    const size_t sizeInBytes = sizeof(uint32_t) * indexCount_;
 
-    uint32_t* indexData = nullptr;
-    indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
-    std::memcpy(indexData, modelData_.indices.data(), sizeof(uint32_t) * modelData_.indices.size());
-    indexResource_->Unmap(0, nullptr);
+    if (useDirectStorage_) {
+        D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = sizeInBytes;
+        desc.Height = 1; desc.DepthOrArraySize = 1; desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(&indexResource_));
+        assert(SUCCEEDED(hr));
+
+        uint64_t packOffset = 0, packSize = 0;
+        AssetLocator::GetInstance()->GetPackEntryInfo(meshFilePath_, packOffset, packSize);
+        auto* ds = DStorageManager::GetInstance();
+        ds->EnqueueBufferRead(ds->GetPackFile(),
+            packOffset + indexFileOffset_,
+            static_cast<uint32_t>(sizeInBytes),
+            indexResource_.Get(), 0);
+        ds->SubmitAndWait();
+
+        // COMMON → INDEX_BUFFER
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource   = indexResource_.Get();
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        dxCore->GetCommandList()->ResourceBarrier(1, &barrier);
+    } else {
+        indexResource_ = dxCore->CreateBufferResource(sizeInBytes);
+        uint32_t* indexData = nullptr;
+        indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
+        std::memcpy(indexData, modelData_.indices.data(), sizeInBytes);
+        indexResource_->Unmap(0, nullptr);
+    }
+
+    indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+    indexBufferView_.SizeInBytes = UINT(sizeInBytes);
+    indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
 }
 
 Node AnimatedModelInstance::ReadNode(aiNode* node)
@@ -414,15 +481,31 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
 
     const bool hasSkinning = (flags & 0x1) != 0;
 
-    // --- 頂点 ---
-    modelData_.vertices.resize(vertexCount);
-    h.ReadAt(vertexOffset, modelData_.vertices.data(),
-             static_cast<size_t>(vertexCount) * sizeof(VertexData));
+    // GPU フェーズ / SkinCluster で使うメタ情報を保持
+    meshFilePath_     = meshPath;
+    vertexFileOffset_ = vertexOffset;
+    vertexCount_      = vertexCount;
+    indexFileOffset_  = indexOffset;
+    indexCount_       = indexCount;
+    skinFileOffset_   = skinOffset;
+    hasSkinning_      = hasSkinning;
 
-    // --- インデックス ---
-    modelData_.indices.resize(indexCount);
-    h.ReadAt(indexOffset, modelData_.indices.data(),
-             static_cast<size_t>(indexCount) * sizeof(uint32_t));
+    // pack モード + DStorage 利用可能なら CPU 経由をスキップして VRAM 直行
+    auto* loc = AssetLocator::GetInstance();
+    auto* ds  = DStorageManager::GetInstance();
+    useDirectStorage_ = loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile();
+
+    if (!useDirectStorage_) {
+        // --- 頂点 ---
+        modelData_.vertices.resize(vertexCount);
+        h.ReadAt(vertexOffset, modelData_.vertices.data(),
+                 static_cast<size_t>(vertexCount) * sizeof(VertexData));
+
+        // --- インデックス ---
+        modelData_.indices.resize(indexCount);
+        h.ReadAt(indexOffset, modelData_.indices.data(),
+                 static_cast<size_t>(indexCount) * sizeof(uint32_t));
+    }
 
     // --- .skel を読んで rootNode を構築 ---
     std::vector<SkelJoint> skelJoints;
@@ -434,8 +517,21 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
         modelData_.rootNode.localMatrix = MakeIdentity4x4();
     }
 
+    // .skel の Inverse Bind Pose Matrix と名前を joint-index 順で保持
+    // （DStorage 経路では SkinCluster がここから直接拾い、skel-index → skeleton-index
+    //   の remap を組み立てる）
+    jointInverseBindMatrices_.clear();
+    jointInverseBindMatrices_.reserve(skelJoints.size());
+    jointNames_.clear();
+    jointNames_.reserve(skelJoints.size());
+    for (const auto& j : skelJoints) {
+        jointInverseBindMatrices_.push_back(j.inverse_bind_matrix);
+        jointNames_.emplace_back(j.name);
+    }
+
     // --- スキニングデータを per-vertex から per-joint (skinClusterData) に展開 ---
-    if (hasSkinning && !skelJoints.empty()) {
+    // DStorage 経路ではこの中間表現は不要（SkinCluster が pack の skin セクションを直接読む）
+    if (!useDirectStorage_ && hasSkinning && !skelJoints.empty()) {
         // 一頂点あたり (joint_indices[4], weights[4]) = 32 バイト
         struct SkinVertex {
             uint32_t joint_indices[4];
@@ -483,5 +579,5 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
         animation_ = ReadAnimFile(animPathStr);
     }
 
-    assert(!modelData_.indices.empty() && "indices is empty!");
+    assert(indexCount_ > 0 && "indexCount is 0!");
 }

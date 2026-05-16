@@ -54,7 +54,7 @@ void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
             dxCore,
             srvManager,
             skeleton_,
-            animatedModelInstance_->GetModelData());
+            animatedModelInstance_);
         hasSkinCluster_ = true;
     }
 
@@ -116,6 +116,9 @@ void AnimatedObject3DInstance::Update(float deltaTime)
             const auto& inf = skinCluster_.mappedInfluence[0];
             float totalWeight = inf.weights[0] + inf.weights[1] + inf.weights[2] + inf.weights[3];
             isRigidAnimation = (totalWeight < 0.001f);
+        } else if (animatedModelInstance_ && animatedModelInstance_->UseDirectStorage()) {
+            // DStorage 経路では mappedInfluence が CPU 不可視。.mesh ヘッダのフラグで判定。
+            isRigidAnimation = !animatedModelInstance_->HasSkinning();
         }
 
         if (isRigidAnimation) {

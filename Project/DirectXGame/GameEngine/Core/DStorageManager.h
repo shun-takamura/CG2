@@ -52,7 +52,18 @@ public:
 	// バッチ送出 + 同期で完了まで待つ
 	void SubmitAndWait();
 
-	bool IsInitialized() const { return initialized_; }
+	// バッチモード:
+	//   BeginBatch() を呼ぶと以降の Submit / SubmitAndWait は no-op になり、
+	//   Enqueue だけが蓄積される。EndBatchAndWait() でまとめて 1 回だけ Submit + Wait。
+	//   シーン初期化全体を囲うことで NVMe の並列性と DStorage 内部スケジューラを活かす。
+	void BeginBatch() { inBatch_ = true; }
+	void EndBatchAndWait();
+	bool IsInBatch() const { return inBatch_; }
+
+	// 初期化済み かつ 明示的に無効化されていない (KPI 比較用に --no-dstorage で切れる)
+	bool IsInitialized() const { return initialized_ && enabled_; }
+	// CLI フラグ等で実体は初期化したまま経路だけ封じる
+	void SetEnabled(bool e) { enabled_ = e; }
 
 private:
 	DStorageManager() = default;
@@ -68,4 +79,6 @@ private:
 
 	Microsoft::WRL::ComPtr<IDStorageFile>    packFile_;
 	bool                                     initialized_ = false;
+	bool                                     enabled_     = true;
+	bool                                     inBatch_     = false;
 };

@@ -2,6 +2,7 @@
 #include <filesystem> // std::filesystem::path を使うために必要
 #include <cstring>
 #include "AssetLocator.h"
+#include "DStorageManager.h"
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -26,6 +27,12 @@ void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string&
 
 	// テクスチャファイルパスは文字列コピーのみ（GPUロードはGPUフェーズで検証する）
 	textureFilePath_ = modelData_.materialData.textureFilePath;
+
+	// CPU 経路のときは modelData_ から count を反映（DStorage 経路は LoadMeshBinary で設定済み）
+	if (!useDirectStorage_) {
+		vertexCount_ = static_cast<uint32_t>(modelData_.vertices.size());
+		indexCount_  = static_cast<uint32_t>(modelData_.indices.size());
+	}
 
 	loadState_ = LoadState::CPUReady;
 }
@@ -60,7 +67,7 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	// 追加：インデックスバッファが有効か確認
 	assert(indexResource_ != nullptr && "indexResource is nullptr!");
 	assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
-	assert(!modelData_.indices.empty() && "indices is empty in Draw!");
+	assert(indexCount_ > 0 && "indexCount is 0 in Draw!");
 
 	// VBVを設定
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
@@ -80,19 +87,56 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 
 	// ドローコール
 	dxCore->GetCommandList()->DrawIndexedInstanced(
-		UINT(modelData_.indices.size()), 1, 0, 0, 0);
+		indexCount_, 1, 0, 0, 0);
 }
 
 void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
-	const size_t sizeInBytes = sizeof(VertexData) * modelData_.vertices.size();
+	const size_t sizeInBytes = useDirectStorage_
+		? sizeof(VertexData) * vertexCount_
+		: sizeof(VertexData) * modelData_.vertices.size();
 
-	// DEFAULT heap に頂点バッファを作成（中間 UPLOAD バッファ経由でアップロード）
-	vertexResource_ = dxCore->CreateDefaultBuffer(
-		sizeInBytes,
-		modelData_.vertices.data(),
-		dxCore->GetCommandList(),
-		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	if (useDirectStorage_) {
+		// DEFAULT heap に COMMON state でバッファ作成（DStorage の前提）
+		D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+		D3D12_RESOURCE_DESC desc{};
+		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		desc.Width = sizeInBytes;
+		desc.Height = 1; desc.DepthOrArraySize = 1; desc.MipLevels = 1;
+		desc.SampleDesc.Count = 1;
+		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
+			&heap, D3D12_HEAP_FLAG_NONE, &desc,
+			D3D12_RESOURCE_STATE_COMMON, nullptr,
+			IID_PPV_ARGS(&vertexResource_));
+		assert(SUCCEEDED(hr));
+
+		// pack 内 .mesh のオフセットを取得して DStorage で直接 VRAM へ転送
+		uint64_t packOffset = 0, packSize = 0;
+		AssetLocator::GetInstance()->GetPackEntryInfo(meshFilePath_, packOffset, packSize);
+		auto* ds = DStorageManager::GetInstance();
+		ds->EnqueueBufferRead(ds->GetPackFile(),
+			packOffset + vertexFileOffset_,
+			static_cast<uint32_t>(sizeInBytes),
+			vertexResource_.Get(), 0);
+		ds->SubmitAndWait();
+
+		// COMMON → VERTEX_AND_CONSTANT_BUFFER
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource   = vertexResource_.Get();
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+		dxCore->GetCommandList()->ResourceBarrier(1, &barrier);
+	} else {
+		// DEFAULT heap に頂点バッファを作成（中間 UPLOAD バッファ経由でアップロード）
+		vertexResource_ = dxCore->CreateDefaultBuffer(
+			sizeInBytes,
+			modelData_.vertices.data(),
+			dxCore->GetCommandList(),
+			D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	}
 
 	vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
 	vertexBufferView_.SizeInBytes = UINT(sizeInBytes);
@@ -128,13 +172,47 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)
 {
-	const size_t sizeInBytes = sizeof(uint32_t) * modelData_.indices.size();
+	const size_t sizeInBytes = useDirectStorage_
+		? sizeof(uint32_t) * indexCount_
+		: sizeof(uint32_t) * modelData_.indices.size();
 
-	indexResource_ = dxCore->CreateDefaultBuffer(
-		sizeInBytes,
-		modelData_.indices.data(),
-		dxCore->GetCommandList(),
-		D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	if (useDirectStorage_) {
+		D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+		D3D12_RESOURCE_DESC desc{};
+		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		desc.Width = sizeInBytes;
+		desc.Height = 1; desc.DepthOrArraySize = 1; desc.MipLevels = 1;
+		desc.SampleDesc.Count = 1;
+		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
+			&heap, D3D12_HEAP_FLAG_NONE, &desc,
+			D3D12_RESOURCE_STATE_COMMON, nullptr,
+			IID_PPV_ARGS(&indexResource_));
+		assert(SUCCEEDED(hr));
+
+		uint64_t packOffset = 0, packSize = 0;
+		AssetLocator::GetInstance()->GetPackEntryInfo(meshFilePath_, packOffset, packSize);
+		auto* ds = DStorageManager::GetInstance();
+		ds->EnqueueBufferRead(ds->GetPackFile(),
+			packOffset + indexFileOffset_,
+			static_cast<uint32_t>(sizeInBytes),
+			indexResource_.Get(), 0);
+		ds->SubmitAndWait();
+
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource   = indexResource_.Get();
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+		dxCore->GetCommandList()->ResourceBarrier(1, &barrier);
+	} else {
+		indexResource_ = dxCore->CreateDefaultBuffer(
+			sizeInBytes,
+			modelData_.indices.data(),
+			dxCore->GetCommandList(),
+			D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	}
 
 	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
 	indexBufferView_.SizeInBytes = UINT(sizeInBytes);
@@ -226,15 +304,29 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 	// 静的 .mesh はノード階層を持たないので rootNode の localMatrix を単位行列にしておく
 	modelData_.rootNode.localMatrix = MakeIdentity4x4();
 
-	// 頂点
-	modelData_.vertices.resize(vertexCount);
-	h.ReadAt(vertexOffset, modelData_.vertices.data(),
-	         static_cast<size_t>(vertexCount) * sizeof(VertexData));
+	// GPU フェーズで使うメタ情報を保持
+	meshFilePath_     = filePath;
+	vertexFileOffset_ = vertexOffset;
+	vertexCount_      = vertexCount;
+	indexFileOffset_  = indexOffset;
+	indexCount_       = indexCount;
 
-	// インデックス
-	modelData_.indices.resize(indexCount);
-	h.ReadAt(indexOffset, modelData_.indices.data(),
-	         static_cast<size_t>(indexCount) * sizeof(uint32_t));
+	// pack モード + DStorage 利用可能なら CPU 経由をスキップして VRAM 直行
+	auto* loc = AssetLocator::GetInstance();
+	auto* ds  = DStorageManager::GetInstance();
+	useDirectStorage_ = loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile();
+
+	if (!useDirectStorage_) {
+		// 頂点
+		modelData_.vertices.resize(vertexCount);
+		h.ReadAt(vertexOffset, modelData_.vertices.data(),
+		         static_cast<size_t>(vertexCount) * sizeof(VertexData));
+
+		// インデックス
+		modelData_.indices.resize(indexCount);
+		h.ReadAt(indexOffset, modelData_.indices.data(),
+		         static_cast<size_t>(indexCount) * sizeof(uint32_t));
+	}
 
 	// submesh[0] のマテリアルパスを取得（マルチマテリアル未対応、最初の一つだけ使う）
 	if (submeshCount > 0) {
