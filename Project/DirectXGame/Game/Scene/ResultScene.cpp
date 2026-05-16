@@ -5,7 +5,8 @@
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
-#include "KeyboardInput.h"
+#include "InputAction.h"
+#include "Config/GameActions.h"
 #include "Game.h"
 
 ResultScene::ResultScene() = default;
@@ -30,9 +31,8 @@ void ResultScene::Update() {
 		return;
 	}
 
-	// SPACE/Enter で Hub へ戻る
-	auto* kb = input_->GetKeyboard();
-	if (kb->TriggerKey(DIK_SPACE) || kb->TriggerKey(DIK_RETURN)) {
+	auto* actions = input_->GetActionMap();
+	if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
 		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
 		return;
 	}

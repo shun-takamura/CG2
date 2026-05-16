@@ -1,0 +1,53 @@
+{
+  "scene": "DemoScene",
+  "objects": [
+    {
+      "type": "Object3D",
+      "name": "sneakWalk",
+      "tag": "None",
+      "dir": "Resources/Models/Animated/SneakWalk",
+      "file": "sneakWalk.mesh",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "AnimatedObject3D",
+      "name": "sneakWalk.mesh",
+      "tag": "None",
+      "dir": "Resources/Models/Animated/SneakWalk",
+      "file": "sneakWalk.mesh",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          -3,
+          0,
+          -0
+        ]
+      }
+    }
+  ]
+}

@@ -37,8 +37,9 @@ float BaseScene::GetScaledDeltaTime() const
 // ヘッダ内インラインだと TU 間で COMDAT 衝突を起こすケースがあるので cpp に置く
 // ====================================================================
 
-void BaseScene::AddDynamicObject(const std::string& dirPath, const std::string& filename) {
-	(void)dirPath; (void)filename;
+void BaseScene::AddDynamicObject(const std::string& dirPath, const std::string& filename,
+	const Vector3& worldPos) {
+	(void)dirPath; (void)filename; (void)worldPos;
 }
 
 void BaseScene::RemoveDynamicObject(const std::string& name) {
@@ -53,15 +54,16 @@ void BaseScene::RemoveDynamicSprite(const std::string& name) {
 	(void)name;
 }
 
-void BaseScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename) {
-	(void)dirPath; (void)filename;
+void BaseScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
+	const Vector3& worldPos) {
+	(void)dirPath; (void)filename; (void)worldPos;
 }
 
 void BaseScene::RemoveDynamicAnimated(const std::string& name) {
 	(void)name;
 }
 
-void BaseScene::AddDynamicPrimitive(int primitiveType) {
+void BaseScene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) {
 	const int kCount = static_cast<int>(PrimitiveInstance::PrimitiveType::kCount);
 	if (primitiveType < 0 || primitiveType >= kCount) return;
 
@@ -79,7 +81,18 @@ void BaseScene::AddDynamicPrimitive(int primitiveType) {
 	auto prim = std::make_unique<PrimitiveInstance>();
 	prim->Initialize(type, name);
 	prim->SetCamera(GetCamera());
+	prim->SetTranslate(worldPos);
 	dynamicPrimitives_.push_back(std::move(prim));
+}
+
+bool BaseScene::SaveSceneToJson(const std::string& filePath) {
+	(void)filePath;
+	return false;
+}
+
+bool BaseScene::LoadSceneFromJson(const std::string& filePath) {
+	(void)filePath;
+	return false;
 }
 
 void BaseScene::RemoveDynamicPrimitive(const std::string& name) {

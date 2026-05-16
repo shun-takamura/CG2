@@ -58,9 +58,10 @@ public:
 
 	/// <summary>
 	/// シーンに動的にオブジェクトを追加（SceneEditorWindow から呼ばれる）
-	/// デフォルトは no-op。受け付けるシーンが override する
+	/// worldPos: ビューポートでドロップした位置（Y=0平面で算出）。デフォルトは原点。
 	/// </summary>
-	virtual void AddDynamicObject(const std::string& dirPath, const std::string& filename);
+	virtual void AddDynamicObject(const std::string& dirPath, const std::string& filename,
+		const Vector3& worldPos = {});
 
 	/// <summary>
 	/// シーンから動的オブジェクトを削除
@@ -80,7 +81,8 @@ public:
 	/// <summary>
 	/// シーンに動的にアニメーションモデルを追加（枠組み。実装は派生で）
 	/// </summary>
-	virtual void AddDynamicAnimated(const std::string& dirPath, const std::string& filename);
+	virtual void AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
+		const Vector3& worldPos = {});
 
 	/// <summary>
 	/// シーンから動的アニメーションモデルを削除
@@ -90,7 +92,7 @@ public:
 	/// <summary>
 	/// シーンに動的にプリミティブを追加（PrimitiveInstance::PrimitiveType を int で受け取る）
 	/// </summary>
-	virtual void AddDynamicPrimitive(int primitiveType);
+	virtual void AddDynamicPrimitive(int primitiveType, const Vector3& worldPos = {});
 
 	/// <summary>
 	/// シーンから動的プリミティブを削除
@@ -109,6 +111,22 @@ public:
 	/// 非同期ロードキューの GPU フェーズを進める（毎フレーム SceneManager から呼ばれる）
 	/// </summary>
 	void ProcessAsyncLoads();
+
+	//====================
+	// シーン保存/読込（JSON）
+	//====================
+
+	/// <summary>
+	/// 現在の動的オブジェクト配置を JSON ファイルに保存。デフォルトは no-op。
+	/// 受け付けるシーンが override する。
+	/// </summary>
+	virtual bool SaveSceneToJson(const std::string& filePath);
+
+	/// <summary>
+	/// JSON ファイルから動的オブジェクト配置を復元。デフォルトは no-op。
+	/// 既存の動的オブジェクトはクリアされる前提。
+	/// </summary>
+	virtual bool LoadSceneFromJson(const std::string& filePath);
 
 	//====================
 	// シーン共通サービス（カメラキャプチャ / QRコード）

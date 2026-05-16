@@ -21,6 +21,8 @@
 #include "TransitionManager.h"
 #include "Camera.h"
 #include "DStorageManager.h"
+#include "InputAction.h"
+#include "Config/KeyConfig.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -43,6 +45,14 @@ void Game::Initialize() {
 	DStorageManager::GetInstance()->BeginBatch();
 
 	//===================================
+	// キーコンフィグの適用（InputActionMap への流し込み）
+	// シーン作成前に確定させておく。user → default → 組み込みデフォルトの優先順位。
+	//===================================
+	if (auto* actionMap = input_->GetActionMap()) {
+		KeyConfig::LoadAndApply(*actionMap, keyConfigOptions_);
+	}
+
+	//===================================
 	// シーンファクトリを生成し、マネージャにセット
 	//===================================
 	sceneFactory_ = std::make_unique<SceneFactory>();
@@ -50,7 +60,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif
@@ -88,15 +98,6 @@ void Game::Update() {
 	if (endRequest_) {
 		return;
 	}
-
-	//===================================
-	// ESCキーで終了
-	//===================================
-	if (input_->GetKeyboard()->TriggerKey(DIK_ESCAPE)) {
-		endRequest_ = true;
-		return;
-	}
-
 }
 
 void Game::Draw() {

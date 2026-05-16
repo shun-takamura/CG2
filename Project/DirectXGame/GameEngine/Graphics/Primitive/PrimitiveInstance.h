@@ -54,7 +54,7 @@ public:
     //==============================
     // セッター
     //==============================
-    void SetName(const std::string& name) { name_ = name; }
+    void SetName(const std::string& name) override { name_ = name; }
     void SetCamera(Camera* camera) { camera_ = camera; }
     void SetTexture(const std::string& filePath);
     void SetScale(const Vector3& scale) { mesh_.GetTransform().scale = scale; }
@@ -66,6 +66,8 @@ public:
     //==============================
     PrimitiveType GetPrimitiveType() const { return primitiveType_; }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
+    const PrimitiveMesh& GetMesh() const { return mesh_; }
+    PrimitiveMesh& GetMesh() { return mesh_; }
 
     /// <summary>
     /// プリミティブタイプ名（"Plane", "Box" 等）

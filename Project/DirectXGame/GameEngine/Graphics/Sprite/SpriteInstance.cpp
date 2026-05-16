@@ -103,6 +103,9 @@ void SpriteInstance::Update()
 
 void SpriteInstance::Draw()
 {
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList = spriteManager_->GetDxCore()->GetCommandList();
 
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);

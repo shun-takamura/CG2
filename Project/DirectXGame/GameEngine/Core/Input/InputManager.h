@@ -16,6 +16,7 @@ class WindowsApplication;
 class KeyboardInput;
 class MouseInput;
 class ControllerInput;
+class InputActionMap;
 
 /// <summary>
 /// 入力管理クラス
@@ -72,6 +73,11 @@ public:
 	/// </summary>
 	ControllerInput* GetController() const { return controller_; }
 
+	/// <summary>
+	/// 論理アクションマップを取得（キーコンフィグ経由のゲーム入力問い合わせ）
+	/// </summary>
+	InputActionMap* GetActionMap() const { return actionMap_; }
+
 	//====================
 	// DirectInputの取得（内部用）
 	//====================
@@ -91,4 +97,7 @@ private:
 	KeyboardInput* keyboard_ = nullptr;
 	MouseInput* mouse_ = nullptr;
 	ControllerInput* controller_ = nullptr;
+
+	// 論理アクション層（キーコンフィグ経由のゲーム入力）
+	InputActionMap* actionMap_ = nullptr;
 };

@@ -3,11 +3,14 @@
 #include "ModelManager.h"
 #include "PrimitiveInstance.h"
 #include "AssetLocator.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <cstdio>
 
 namespace {
     // 文字配列ペイロードへの安全コピー
@@ -172,6 +175,26 @@ void SceneEditorWindow::OnDraw() {
             static_cast<int>(discoveredAnimated_.size()));
     }
 
+    ImGui::Separator();
+
+    // ============================================
+    // シーン保存 / 読込
+    // ============================================
+    {
+        static char scenePathBuf[256] = "Resources/Json/Scenes/demo.json";
+        ImGui::InputText("Scene File", scenePathBuf, sizeof(scenePathBuf));
+        if (ImGui::Button("Save Scene")) {
+            if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+                scene->SaveSceneToJson(scenePathBuf);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load Scene")) {
+            if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+                scene->LoadSceneFromJson(scenePathBuf);
+            }
+        }
+    }
     ImGui::Separator();
 
     // 検索フィルタ

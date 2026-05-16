@@ -1,0 +1,30 @@
+// CG2_0_1 デフォルトキーコンフィグ
+// このファイルは配布時の初期値。ユーザー変更分は keyconfig.user.json に書き出される。
+// 各アクションには最大2スロット（[0]=主, [1]=副）の物理バインドを持たせる。
+{
+  "profile": "default",
+  "bindings": {
+    // ----- ゲームプレイ -----
+    "Fire":          [ "mouse.Left", "gp.RT" ],
+    "PrecisionAim":  [ "mouse.Right", "gp.LT" ],
+    "MeleeStrong":   [ "kb.Q", "gp.Y" ],
+    "MeleeWeak":     [ "kb.E", "gp.B" ],
+    "Dodge":         [ "kb.Space", "gp.A" ],
+    "Heal":          [ "kb.R", "gp.X" ],
+    "Ultimate":      [ "kb.F", "gp.R3" ],
+    "LockCamButton": [ "kb.Tab", "gp.LB" ],
+    "Pause":         [ "kb.Escape", "gp.Start" ],
+
+    // ----- メニュー -----
+    "MenuConfirm":   [ "kb.Enter", "gp.A" ],
+    "MenuCancel":    [ "kb.BackSpace", "gp.B" ],
+    "MenuUp":        [ "kb.Up", "gp.DPadUp" ],
+    "MenuDown":      [ "kb.Down", "gp.DPadDown" ],
+    "MenuLeft":      [ "kb.Left", "gp.DPadLeft" ],
+    "MenuRight":     [ "kb.Right", "gp.DPadRight" ]
+  },
+  "options": {
+    // 精密射撃モードの切替方式: "hold"（押している間） / "toggle"（1回押しで切替）
+    "precisionAimMode": "hold"
+  }
+}

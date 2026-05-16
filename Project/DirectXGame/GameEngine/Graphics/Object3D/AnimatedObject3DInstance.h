@@ -59,6 +59,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
 
     std::string textureFilePath_;
     std::string modelFileName_;
+    std::string directoryPath_;  // ロード元 dirPath（シーンJSON保存用。明示的に SetSourcePath で設定）
 
     //==============================
     // アニメーション関連メンバ変数
@@ -107,7 +108,7 @@ public:
     //==============================
     // セッター
     //==============================
-    void SetName(const std::string& name) { name_ = name; }
+    void SetName(const std::string& name) override { name_ = name; }
     void SetModel(AnimatedModelInstance* animatedModel) { animatedModelInstance_ = animatedModel; }
     void SetCamera(Camera* camera) { camera_ = camera; }
     void SetScale(const Vector3& scale) { transform_.scale = scale; }
@@ -140,6 +141,11 @@ public:
     const Vector3& GetTranslate() const { return transform_.translate; }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
     const std::string& GetModelFileName() const { return modelFileName_; }
+    const std::string& GetDirectoryPath() const { return directoryPath_; }
+    void SetSourcePath(const std::string& dirPath, const std::string& filename) {
+        directoryPath_ = dirPath;
+        modelFileName_ = filename;
+    }
 
     //==============================
     // 初期化・更新・描画

@@ -3,6 +3,7 @@
 #include "Framework.h"
 #include "PostEffect.h"
 #include "RenderTexture.h"
+#include "Config/KeyConfig.h"
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
@@ -43,12 +44,19 @@ public:
 	static Game* GetInstance() { return instance_; }
 	static PostEffect* GetPostEffect() { return postEffect_.get(); }
 
+	// キーコンフィグのオプション（精密射撃モードのhold/toggle など）
+	KeyConfig::Options& GetKeyConfigOptions() { return keyConfigOptions_; }
+	const KeyConfig::Options& GetKeyConfigOptions() const { return keyConfigOptions_; }
+
 private:
 
 	static Game* instance_;
 
 	// ポストエフェクト（RenderTextureも内部で管理）
 	static std::unique_ptr<PostEffect> postEffect_;
+
+	// キーコンフィグのオプション
+	KeyConfig::Options keyConfigOptions_;
 
 #ifdef _DEBUG
 	// Debug ビルド専用: ImGui ViewportWindow に表示する PostEffect 適用後の最終出力

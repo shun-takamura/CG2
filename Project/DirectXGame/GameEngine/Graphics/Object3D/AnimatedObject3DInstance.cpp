@@ -196,6 +196,9 @@ void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
 
 void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 {
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
     if (!animatedModelInstance_ || !hasSkinCluster_ || !skinningComputeManager_) {
         return;
     }

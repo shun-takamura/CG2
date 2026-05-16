@@ -1,0 +1,73 @@
+#pragma once
+
+#include <string_view>
+
+/// <summary>
+/// シーン上のエンティティを分類するタグ。
+/// 用途：当たり判定の有効/無効マトリクス、Inspector の出し分け、
+///       Hierarchy のグルーピング、シーンJSONのフィルタなど。
+/// </summary>
+enum class EntityTag : int {
+	None = 0,
+	Player,            // 自機
+	PlayerBullet,      // 自機弾
+	Enemy,             // 敵全般
+	EnemyBullet,       // 敵弾
+	Boss,              // ボス（AI/HPバー扱いを Enemy と分離したい）
+	Terrain,           // 地形・建物
+	Skybox,            // 天球
+	RailControlPoint,  // スプライン制御点
+	SpawnPoint,        // 敵スポーン位置マーカー
+	CameraPoint,       // カメラパスのキーフレーム
+	FX,                // エフェクト発生源（パーティクル等）
+
+	Count
+};
+
+inline std::string_view GetTagName(EntityTag t) {
+	switch (t) {
+	case EntityTag::None:             return "None";
+	case EntityTag::Player:           return "Player";
+	case EntityTag::PlayerBullet:     return "PlayerBullet";
+	case EntityTag::Enemy:            return "Enemy";
+	case EntityTag::EnemyBullet:      return "EnemyBullet";
+	case EntityTag::Boss:             return "Boss";
+	case EntityTag::Terrain:          return "Terrain";
+	case EntityTag::Skybox:           return "Skybox";
+	case EntityTag::RailControlPoint: return "RailControlPoint";
+	case EntityTag::SpawnPoint:       return "SpawnPoint";
+	case EntityTag::CameraPoint:      return "CameraPoint";
+	case EntityTag::FX:               return "FX";
+	default:                          return "";
+	}
+}
+
+inline EntityTag TagFromName(std::string_view name) {
+	for (int i = 0; i < static_cast<int>(EntityTag::Count); ++i) {
+		auto t = static_cast<EntityTag>(i);
+		if (GetTagName(t) == name) return t;
+	}
+	return EntityTag::None;
+}
+
+/// <summary>
+/// Hierarchy のグループ見出しなどに使う色 (RGBA 0-1)
+/// </summary>
+inline void GetTagColor(EntityTag t, float& r, float& g, float& b, float& a) {
+	a = 1.0f;
+	switch (t) {
+	case EntityTag::Player:           r = 0.40f; g = 0.85f; b = 1.00f; break; // 水色
+	case EntityTag::PlayerBullet:     r = 0.55f; g = 0.85f; b = 1.00f; break;
+	case EntityTag::Enemy:            r = 1.00f; g = 0.55f; b = 0.45f; break; // 赤
+	case EntityTag::EnemyBullet:      r = 1.00f; g = 0.70f; b = 0.55f; break;
+	case EntityTag::Boss:             r = 1.00f; g = 0.30f; b = 0.30f; break; // 濃い赤
+	case EntityTag::Terrain:          r = 0.70f; g = 0.65f; b = 0.45f; break; // 茶
+	case EntityTag::Skybox:           r = 0.55f; g = 0.55f; b = 0.85f; break;
+	case EntityTag::RailControlPoint: r = 1.00f; g = 0.90f; b = 0.40f; break; // 黄
+	case EntityTag::SpawnPoint:       r = 0.90f; g = 0.50f; b = 0.90f; break; // 紫
+	case EntityTag::CameraPoint:      r = 0.60f; g = 1.00f; b = 0.60f; break; // 緑
+	case EntityTag::FX:               r = 1.00f; g = 0.80f; b = 1.00f; break;
+	case EntityTag::None:
+	default:                          r = 0.75f; g = 0.75f; b = 0.75f; break; // 灰
+	}
+}

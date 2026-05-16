@@ -53,15 +53,21 @@ public:
 
 	Camera* GetCamera() override { return camera_.get(); }
 
-	void AddDynamicObject(const std::string& dirPath, const std::string& filename) override;
+	void AddDynamicObject(const std::string& dirPath, const std::string& filename,
+		const Vector3& worldPos = {}) override;
 	void RemoveDynamicObject(const std::string& name) override;
 	void AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) override;
 	void RemoveDynamicSprite(const std::string& name) override;
-	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename) override;
+	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
+		const Vector3& worldPos = {}) override;
 	void RemoveDynamicAnimated(const std::string& name) override;
 #ifdef USE_IMGUI
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
+
+	// シーン保存/読込
+	bool SaveSceneToJson(const std::string& filePath) override;
+	bool LoadSceneFromJson(const std::string& filePath) override;
 
 private:
 
