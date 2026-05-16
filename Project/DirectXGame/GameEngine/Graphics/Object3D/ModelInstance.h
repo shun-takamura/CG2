@@ -71,6 +71,15 @@ class ModelInstance
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
 	D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
 
+	// DStorage 経路用: .mesh が pack モード + DStorage 利用可能なら true。
+	// ON のときは modelData_.vertices/indices を CPU に持たず、pack から直接 VRAM に転送する。
+	bool        useDirectStorage_ = false;
+	std::string meshFilePath_;
+	uint32_t    vertexFileOffset_ = 0;
+	uint32_t    vertexCount_      = 0;
+	uint32_t    indexFileOffset_  = 0;
+	uint32_t    indexCount_       = 0;
+
 	//==============================
 	// メンバ関数
 	//==============================
