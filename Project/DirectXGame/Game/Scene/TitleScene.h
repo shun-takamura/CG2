@@ -1,20 +1,17 @@
 #pragma once
 #include "BaseScene.h"
 #include <memory>
-#include <vector>
-#include <string>
-#include <random>
-#include "Camera.h" 
-#include "Object3DInstance.h"
 
-// 前方宣言
-class SpriteInstance;
+class Camera;
 
 /// <summary>
 /// タイトルシーン
+/// SPACE/Enter で Hub へ遷移。
+/// 一定時間無操作でデモプレイ動画を再生する仕様（未実装）
 /// </summary>
 class TitleScene : public BaseScene {
 public:
+	TitleScene();
 	~TitleScene() override;
 
 	void Initialize() override;
@@ -22,17 +19,12 @@ public:
 	void Update() override;
 	void Draw() override;
 
-	Camera* GetCamera() override { return camera_.get(); }
+	Camera* GetCamera() override;
 
 private:
-
-	// パーティクル用乱数
-	std::mt19937 randomEngine_;
-	int particleTimer_ = 0;
-
-	std::unique_ptr<Object3DInstance> title_;
-	std::unique_ptr<Object3DInstance> space_;
-
-	// カメラ
 	std::unique_ptr<Camera> camera_;
+
+	// 無操作タイマー（秒）。閾値を超えたらデモ動画再生に遷移する予定
+	float idleSeconds_ = 0.0f;
+	static constexpr float kDemoTriggerSeconds = 10.0f;
 };

@@ -139,6 +139,31 @@ public:
 	void DrawSceneServices();
 
 	//====================
+	// シーンタイムライン（Debug用シークバー）
+	//====================
+
+	/// <summary>
+	/// シーン開始からの経過秒（SceneManager が毎フレーム加算）
+	/// </summary>
+	float GetElapsedSeconds() const { return elapsedSeconds_; }
+
+	/// <summary>
+	/// 経過秒を直接書き換える
+	/// </summary>
+	void SetElapsedSeconds(float seconds) { elapsedSeconds_ = (seconds < 0.0f) ? 0.0f : seconds; }
+
+	/// <summary>
+	/// 経過秒に delta を加算する（SceneManager から呼ばれる）
+	/// </summary>
+	void TickElapsedSeconds(float delta) { elapsedSeconds_ += delta; }
+
+	/// <summary>
+	/// 指定時刻にシーン状態を移動する（派生で override 推奨）。
+	/// デフォルトは経過秒の書き換えのみ。
+	/// </summary>
+	virtual void Seek(float seconds) { SetElapsedSeconds(seconds); }
+
+	//====================
 	// タイムスケール
 	//====================
 
@@ -195,6 +220,9 @@ protected:
 
 	// シーンローカルのタイムスケール（DirectXCoreのグローバルとは別に乗算される）
 	float sceneTimeScale_ = 1.0f;
+
+	// シーン開始からの経過秒（Debug用シークバー / 仕掛け発火タイミングの基準など）
+	float elapsedSeconds_ = 0.0f;
 
 	// シーン共通サービス
 	std::unique_ptr<CameraPreviewSprite> cameraPreview_;

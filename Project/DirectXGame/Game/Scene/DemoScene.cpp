@@ -31,7 +31,12 @@
 #include "Primitive/PrimitiveGenerator.h"
 #include "Easing.h"
 #include "Interpolator.h"
+#include "Log.h"
+#include "Json/JsonValue.h"
+#include "Json/JsonParser.h"
+#include "Json/JsonWriter.h"
 #include <numbers>
+#include <sstream>
 #include "AnimatedModelInstance.h"
 #include "AnimatedObject3DInstance.h"
 #include "ModelManager.h"
@@ -46,7 +51,112 @@ DemoScene::DemoScene() {
 DemoScene::~DemoScene() {
 }
 
+namespace {
+	// JSONライブラリの動作確認用セルフテスト
+	// 結果はOutputDebugStringに出力される（VS出力ウィンドウで確認）
+	void RunJsonSelfTest() {
+		Log("===== Json Self Test =====\n");
+
+		// 1) コメント付きJSONをパース
+		const char* source = R"(
+{
+    // これは行コメント
+    "name": "Pit",      // プレイヤー名
+    "hp": 100,
+    "ratio": 0.75,
+    /* これは
+       ブロックコメント */
+    "alive": true,
+    "tags": ["fast", "ranged", "human"],
+    "binds": {
+        "fire": "RT",
+        "dodge": "A",
+        "melee_strong": "Y"
+    },
+    "escaped": "tab=\there\nand newline",
+    "unicode": "あ"
+}
+)";
+		auto parsed = JsonParser::Parse(source);
+		if (!parsed.success) {
+			std::ostringstream oss;
+			oss << "[FAIL] Parse error at line " << parsed.errorLine
+				<< " col " << parsed.errorColumn << ": " << parsed.errorMessage << "\n";
+			Log(oss.str());
+			return;
+		}
+		Log("[OK] Parsed comment-aware JSON\n");
+
+		// 2) 値を取得して検証
+		const JsonValue& root = parsed.value;
+		{
+			std::ostringstream oss;
+			oss << "  name        = " << root["name"].AsString() << "\n"
+				<< "  hp          = " << root["hp"].AsInt() << "\n"
+				<< "  ratio       = " << root["ratio"].AsDouble() << "\n"
+				<< "  alive       = " << (root["alive"].AsBool() ? "true" : "false") << "\n"
+				<< "  tags.size   = " << root["tags"].Size() << "\n"
+				<< "  tags[0]     = " << root["tags"][0].AsString() << "\n"
+				<< "  binds.fire  = " << root["binds"]["fire"].AsString() << "\n"
+				<< "  missing     = " << root["this_key_does_not_exist"].AsString("(default)") << "\n";
+			Log(oss.str());
+		}
+
+		// 3) 書き込み（コメントは出力されない=純JSON準拠）
+		JsonValue out = JsonValue::MakeObject();
+		out["title"] = "CG2_0_1";
+		out["version"] = 2;
+		out["scale"] = 1.5;
+		out["enabled"] = false;
+
+		JsonValue list = JsonValue::MakeArray();
+		list.Push(JsonValue(1));
+		list.Push(JsonValue(2));
+		list.Push(JsonValue(3));
+		out["list"] = std::move(list);
+
+		out["nested"]["inner"]["deep"] = "via operator[] chain";
+
+		std::string pretty = JsonWriter::Write(out, { true, 2 });
+		Log("[OK] Pretty output:\n");
+		Log(pretty);
+		Log("\n");
+
+		std::string compact = JsonWriter::Write(out, { false, 0 });
+		Log("[OK] Compact output:\n");
+		Log(compact);
+		Log("\n");
+
+		// 4) ラウンドトリップ: 書き出し→再パース→値一致確認
+		auto reparsed = JsonParser::Parse(pretty);
+		if (!reparsed.success) {
+			Log("[FAIL] Roundtrip parse failed\n");
+		} else {
+			bool ok = reparsed.value["title"].AsString() == "CG2_0_1"
+				&& reparsed.value["version"].AsInt() == 2
+				&& reparsed.value["list"][1].AsInt() == 2
+				&& reparsed.value["nested"]["inner"]["deep"].AsString() == "via operator[] chain";
+			Log(ok ? "[OK] Roundtrip values match\n" : "[FAIL] Roundtrip mismatch\n");
+		}
+
+		// 5) エラー位置の確認（わざと壊れたJSONを渡す）
+		auto bad = JsonParser::Parse("{\n  \"a\": 1,\n  \"b\": ,\n}");
+		if (!bad.success) {
+			std::ostringstream oss;
+			oss << "[OK] Detected malformed JSON at line " << bad.errorLine
+				<< " col " << bad.errorColumn << " (" << bad.errorMessage << ")\n";
+			Log(oss.str());
+		} else {
+			Log("[FAIL] Malformed JSON was incorrectly accepted\n");
+		}
+
+		Log("===== Json Self Test End =====\n");
+	}
+}
+
 void DemoScene::Initialize() {
+	RunJsonSelfTest();
+
 	Game::GetPostEffect()->ResetEffects();
 
 	// デバッグカメラの生成

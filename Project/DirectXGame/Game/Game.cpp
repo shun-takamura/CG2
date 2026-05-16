@@ -50,7 +50,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
+	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif

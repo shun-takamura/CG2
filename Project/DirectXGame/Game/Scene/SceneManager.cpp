@@ -67,6 +67,9 @@ void SceneManager::Update() {
 	if (currentScene_) {
 		currentScene_->Update();
 
+		// シーン経過秒の加算（Debugシークバー / 仕掛けタイミングの基準）
+		currentScene_->TickElapsedSeconds(currentScene_->GetScaledDeltaTime());
+
 		// シーン共通サービス（カメラプレビュー / QR）の更新
 		currentScene_->UpdateSceneServices();
 
