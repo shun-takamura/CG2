@@ -1,84 +1,68 @@
 #pragma once
 #include "Vector3.h"
 #include "Matrix4x4.h"
-#include <cassert>
-#include <math.h>
-
-#define DIRECTINPUT_VERSION 0x0800 // Directinputのバージョン指定
-#include <dinput.h> // 必ずバージョン指定後にインクルード
-#pragma comment(lib,"dinput8.lib")
-#pragma comment(lib,"dxguid.lib")
+#include "MathUtility.h"
 
 /// <summary>
-/// デバッグカメラ
+/// ピボット周りを Orbit / Pan / Zoom で操作するデバッグ用カメラ。
+/// 入力は host (ImGui ウィンドウ等) が読み取り、Orbit/Pan/Zoom メソッドで適用する。
 /// </summary>
 class DebugCamera
 {
-private:
-
-	//=======================
-	// 関数の宣言
-	//=======================
-	Vector3 Add(const Vector3& v1, const Vector3& v2);
-
-	Matrix4x4 Multiply(Matrix4x4 matrix1, Matrix4x4 matrix2);
-
-	Matrix4x4 MakeRotateXMatrix(Vector3 rotate);
-
-	Matrix4x4 MakeRotateYMatrix(Vector3 rotate);
-
-	Matrix4x4 MakeRotateZMatrix(Vector3 rotate);
-
-	Matrix4x4 MakeRotateMatrix(const Vector3& rotation);
-
-	Matrix4x4 MakeTranslationMatrix(Vector3 translation);
-
-	Matrix4x4 Inverse(Matrix4x4 matrix4x4);
-
-	Matrix4x4 MakeIdentity4x4();
-
-	Vector3 Multiply(const Vector3& vec, const Matrix4x4& mat);
-
-	Vector3 Transform(const Vector3& vec, const Vector3& rotation);
-	
-
-	//=========================
-	// ローカル変数の宣言
-	//=========================
-	// X,Y,Z軸回りのローカル回転角
-	//Vector3 rotation_ = { 0.0f,0.0f,0.0f };
-
-	float distance_ = 50.0f; // ピボットからの距離
-
-	// 累積回転行列
-	Matrix4x4 matRot_ = MakeIdentity4x4();
-
-	// 注視点(ピボット位置)
-	Vector3 pivot_ = { 0.0f,0.0f,0.0f };
-
-	// ローカル座標
-	Vector3 translation_ = { 0.0f,0.0f,-50.0f };
-
-	// 射影行列
-	Matrix4x4 projectionMatrix_;
-
-	// ビュー行列
-	Matrix4x4 viewMatrix_;
-
 public:
+    DebugCamera() = default;
+    void Initialize();
 
-	/// <summary>
-	/// 初期化
-	/// </summary>
-	void Initialize();
+    /// <summary>
+    /// View / Projection を現在の状態から再構築する。毎フレーム末に呼ぶ。
+    /// </summary>
+    void Update();
 
-	/// <summary>
-	/// 更新処理
-	/// </summary>
-	void Update(BYTE* keys);
+    /// <summary>
+    /// ピボット周りに回転（カメラ右軸=pitch, ワールドY=yaw）。
+    /// </summary>
+    void Orbit(float deltaYaw, float deltaPitch);
 
-	// ゲッターロボ
-	Matrix4x4 GetViewMatrix();
+    /// <summary>
+    /// カメラの右/上ベクトル方向にピボットを動かす。値はワールド単位。
+    /// </summary>
+    void Pan(float deltaRight, float deltaUp);
 
+    /// <summary>
+    /// ピボットからの距離を変える。正で離れる、負で近づく。
+    /// </summary>
+    void Zoom(float delta);
+
+    // 設定
+    void SetAspectRatio(float ratio) { aspectRatio_ = ratio; }
+    void SetFovY(float fovY)         { fovY_ = fovY; }
+    void SetNearFar(float n, float f) { nearClip_ = n; farClip_ = f; }
+    void SetPivot(const Vector3& p)  { pivot_ = p; }
+    void SetDistance(float d)        { distance_ = d < kMinDistance ? kMinDistance : d; }
+
+    // 取得
+    const Matrix4x4& GetViewMatrix() const           { return viewMatrix_; }
+    const Matrix4x4& GetProjectionMatrix() const     { return projectionMatrix_; }
+    const Matrix4x4& GetViewProjectionMatrix() const { return viewProjectionMatrix_; }
+    const Vector3&   GetTranslate() const            { return translate_; }
+
+private:
+    static constexpr float kMinDistance = 0.1f;
+
+    // 状態
+    Matrix4x4 matRot_ = MakeIdentity4x4();
+    Vector3   pivot_  = { 0.0f, 0.0f, 0.0f };
+    float     distance_ = 10.0f;
+
+    // 投影パラメータ
+    float fovY_        = 0.45f;            // ~25.8°
+    float aspectRatio_ = 16.0f / 9.0f;
+    float nearClip_    = 0.1f;
+    float farClip_     = 1000.0f;
+
+    // キャッシュ
+    Matrix4x4 viewMatrix_           = MakeIdentity4x4();
+    Matrix4x4 projectionMatrix_     = MakeIdentity4x4();
+    Matrix4x4 viewProjectionMatrix_ = MakeIdentity4x4();
+    Vector3   translate_            = { 0.0f, 0.0f, -10.0f };
 };
-

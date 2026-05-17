@@ -28,8 +28,16 @@ public:
     // 新版: 呼び出し側が渡した deltaTime で UV スクロールが進む（TimeGroup 連動用）
     void Update(Camera* camera, float deltaTime);
 
-    // 描画
+    // プレビュー用の WVP を別CBに書き込む（メインの Update とは独立）。
+    // 同じインスタンスを Scene RT と Effect Preview RT の両方に描画するときに使う。
+    // billboard 用にカメラ位置とビュー行列、WVP合成にViewProjection行列が必要。
+    void UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos);
+
+    // 描画（メイン用 CB を bind）
     void Draw();
+
+    // プレビュー用 CB を bind して描画
+    void DrawPreview();
 
     // テクスチャ設定（パスを指定。未指定時は白テクスチャ相当の扱い）
     void SetTexture(const std::string& textureFilePath);
@@ -74,6 +82,12 @@ private:
     void CreateTransformResource();
     void CreateMaterialResource();
 
+    // 指定カメラに対するワールド行列を構築（billboardMode に応じて回転に補正がかかる）
+    Matrix4x4 BuildWorldMatrix(Camera* camera) const;
+
+    // ビュー行列とカメラ位置から billboard 補正込みのワールド行列を構築
+    Matrix4x4 BuildWorldMatrixFromMatrices(const Matrix4x4& viewMatrix, const Vector3& cameraPos) const;
+
     // GPU送信用の変換行列構造体
     struct TransformationMatrix {
         Matrix4x4 WVP;
@@ -90,9 +104,14 @@ private:
     D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
     uint32_t indexCount_ = 0;
 
-    // 変換行列バッファ
+    // 変換行列バッファ（メイン用）
     Microsoft::WRL::ComPtr<ID3D12Resource> transformResource_;
     TransformationMatrix* transformData_ = nullptr;
+
+    // 変換行列バッファ（プレビュー用）。同じワールド座標を別カメラで描画するための WVP 専用 CB。
+    // ワールド行列は同じものを格納（プレビュー描画でも World 用途に使えるよう）
+    Microsoft::WRL::ComPtr<ID3D12Resource> transformPreviewResource_;
+    TransformationMatrix* transformPreviewData_ = nullptr;
 
     // マテリアルバッファ
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;

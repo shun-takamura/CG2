@@ -34,6 +34,17 @@ public:
 	// セッター
 	void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
 	void SetTranslate(const Vector3& translate) { transform_.translate = translate; }
+
+	/// <summary>
+	/// 外部（DebugCamera等）から計算済みの行列を直接注入する。
+	/// 通常の Update() を経由せず、view/projection を上書きしたい場合に使う。
+	/// </summary>
+	void SetExternalMatrices(const Matrix4x4& view, const Matrix4x4& projection, const Vector3& translate) {
+		viewMatrix_ = view;
+		projectionMatrix_ = projection;
+		viewProjectionMatrix_ = Multiply(view, projection);
+		transform_.translate = translate;
+	}
 	void SetFovY(const float& fovY) { horizontalFovY_ = fovY; }
 	void SetAspectRatio(const float& aspectRatio) { aspectRatio_ = aspectRatio; }
 	void SetNearClip(const float& nearClip) { nearClip_ = nearClip; }
@@ -48,5 +59,9 @@ public:
 	const Vector3& GetTranslate() const { return transform_.translate; }
 	Vector3 GetForward() const { return Normalize(Vector3{ worldMatrix_.m[2][0], worldMatrix_.m[2][1], worldMatrix_.m[2][2] }); }
 	Vector3 GetUp()      const { return Normalize(Vector3{ worldMatrix_.m[1][0], worldMatrix_.m[1][1], worldMatrix_.m[1][2] }); }
+	float GetFovY() const         { return horizontalFovY_; }
+	float GetAspectRatio() const  { return aspectRatio_; }
+	float GetNearClip() const     { return nearClip_; }
+	float GetFarClip() const      { return farClip_; }
 };
 

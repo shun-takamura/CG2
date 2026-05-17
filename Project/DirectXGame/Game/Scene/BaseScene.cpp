@@ -5,7 +5,20 @@
 #include "CameraPreviewSprite.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
+#include "Camera.h"
+#include "DebugCamera.h"
+#include "LineRenderer.h"
+#include "ImGuiManager.h"
+#include "ViewportWindow.h"
+#include "MathUtility.h"
+#include "Transform.h"
+#include "Vector4.h"
 #include <algorithm>
+#include <cmath>
+
+#ifdef USE_IMGUI
+#include "imgui.h"
+#endif
 
 BaseScene::BaseScene() = default;
 
@@ -14,6 +27,172 @@ BaseScene::~BaseScene() {
 	if (useQRCodeReader_) {
 		QRCodeReader::GetInstance()->Reset();
 	}
+}
+
+//====================
+// デバッグカメラ
+//====================
+
+DebugCamera* BaseScene::GetDebugCamera() {
+	if (!debugCamera_) {
+		debugCamera_ = std::make_unique<DebugCamera>();
+		debugCamera_->Initialize();
+	}
+	return debugCamera_.get();
+}
+
+void BaseScene::SetUseDebugCamera(bool enabled) {
+	if (enabled == useDebugCamera_) return;
+	Camera* sc = GetCamera();
+	if (!sc) {
+		useDebugCamera_ = enabled;
+		return;
+	}
+
+	if (enabled) {
+		// 現在のシーンカメラ状態をスナップ
+		sceneCameraSnapshot_.translate   = sc->GetTranslate();
+		sceneCameraSnapshot_.rotate      = sc->GetRotate();
+		sceneCameraSnapshot_.fovY        = sc->GetFovY();
+		sceneCameraSnapshot_.aspectRatio = sc->GetAspectRatio();
+		sceneCameraSnapshot_.nearClip    = sc->GetNearClip();
+		sceneCameraSnapshot_.farClip     = sc->GetFarClip();
+
+		// デバッグカメラの初期配置：シーンカメラ周辺に置く
+		GetDebugCamera(); // 生成
+		debugCamera_->SetPivot({ 0.0f, 0.0f, 0.0f });
+		// シーンカメラからピボット(原点)までの距離を初期distanceに
+		const Vector3& cp = sceneCameraSnapshot_.translate;
+		float dist = std::sqrt(cp.x * cp.x + cp.y * cp.y + cp.z * cp.z);
+		if (dist < 1.0f) dist = 10.0f;
+		debugCamera_->SetDistance(dist);
+		debugCamera_->SetFovY(sceneCameraSnapshot_.fovY);
+		debugCamera_->SetAspectRatio(sceneCameraSnapshot_.aspectRatio);
+		debugCamera_->SetNearFar(sceneCameraSnapshot_.nearClip, sceneCameraSnapshot_.farClip);
+		debugCamera_->Update();
+	} else {
+		// シーンカメラのtransformを復元してUpdateさせる
+		sc->SetTranslate(sceneCameraSnapshot_.translate);
+		sc->SetRotate(sceneCameraSnapshot_.rotate);
+		sc->Update();
+	}
+	useDebugCamera_ = enabled;
+}
+
+void BaseScene::UpdateDebugCameraIfActive() {
+	if (!useDebugCamera_) return;
+	Camera* sc = GetCamera();
+	if (!sc || !debugCamera_) return;
+
+#ifdef USE_IMGUI
+	// Scene ビューポートにマウスがホバーしているときだけ入力を受け取る
+	auto* vp = ImGuiManager::Instance().GetViewportWindow();
+	bool acceptInput = vp && vp->IsHovered();
+	if (acceptInput) {
+		ImGuiIO& io = ImGui::GetIO();
+		const float orbitSpeed = 0.005f;
+		const float panSpeed   = 0.01f;
+		const float zoomSpeed  = 1.0f;
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+			ImVec2 d = io.MouseDelta;
+			debugCamera_->Orbit(d.x * orbitSpeed, d.y * orbitSpeed);
+		}
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
+			ImVec2 d = io.MouseDelta;
+			debugCamera_->Pan(-d.x * panSpeed, d.y * panSpeed);
+		}
+		if (io.MouseWheel != 0.0f) {
+			debugCamera_->Zoom(-io.MouseWheel * zoomSpeed);
+		}
+	}
+#endif
+
+	debugCamera_->Update();
+	// シーンカメラに行列を注入（subsystemsはこのカメラを参照しているため、すべてデバッグ視点になる）
+	sc->SetExternalMatrices(
+		debugCamera_->GetViewMatrix(),
+		debugCamera_->GetProjectionMatrix(),
+		debugCamera_->GetTranslate());
+}
+
+void BaseScene::DrawSceneCameraGizmo() {
+	if (!useDebugCamera_) return;
+
+	LineRenderer* lr = LineRenderer::GetInstance();
+	if (!lr) return;
+
+	// スナップしたシーンカメラの world matrix を構築
+	Transform t{};
+	t.scale     = { 1.0f, 1.0f, 1.0f };
+	t.rotate    = sceneCameraSnapshot_.rotate;
+	t.translate = sceneCameraSnapshot_.translate;
+	Matrix4x4 worldMat = MakeAffineMatrix(t);
+
+	// 視錐台のローカル座標を構築（カメラ前方を +Z とする LH 系前提）
+	const float nz = sceneCameraSnapshot_.nearClip;
+	const float fz = sceneCameraSnapshot_.farClip;
+	const float fovY = sceneCameraSnapshot_.fovY;
+	const float aspect = sceneCameraSnapshot_.aspectRatio;
+	// 遠端は実値だと長すぎるので、表示用に縮める
+	const float displayFar = std::min(fz, nz + 4.0f);
+	const float nh = nz * std::tan(fovY * 0.5f);
+	const float nw = nh * aspect;
+	const float fh = displayFar * std::tan(fovY * 0.5f);
+	const float fw = fh * aspect;
+
+	Vector3 nearLocal[4] = {
+		{ -nw, -nh, nz },
+		{  nw, -nh, nz },
+		{  nw,  nh, nz },
+		{ -nw,  nh, nz },
+	};
+	Vector3 farLocal[4] = {
+		{ -fw, -fh, displayFar },
+		{  fw, -fh, displayFar },
+		{  fw,  fh, displayFar },
+		{ -fw,  fh, displayFar },
+	};
+
+	auto toWorld = [&](const Vector3& p) {
+		return TransformCoordinate(p, worldMat);
+		};
+
+	Vector3 nearWorld[4], farWorld[4];
+	for (int i = 0; i < 4; ++i) {
+		nearWorld[i] = toWorld(nearLocal[i]);
+		farWorld[i]  = toWorld(farLocal[i]);
+	}
+	Vector3 apex = sceneCameraSnapshot_.translate;
+
+	const Vector4 colFrustum = { 1.0f, 0.7f, 0.2f, 1.0f };
+	const Vector4 colUp      = { 0.3f, 1.0f, 0.3f, 1.0f };
+
+	// 近平面の四角形
+	for (int i = 0; i < 4; ++i) {
+		lr->AddLine(nearWorld[i], nearWorld[(i + 1) % 4], colFrustum);
+	}
+	// 遠平面の四角形
+	for (int i = 0; i < 4; ++i) {
+		lr->AddLine(farWorld[i], farWorld[(i + 1) % 4], colFrustum);
+	}
+	// 近⇔遠を接続
+	for (int i = 0; i < 4; ++i) {
+		lr->AddLine(nearWorld[i], farWorld[i], colFrustum);
+	}
+	// カメラ位置から近平面の四隅へ
+	for (int i = 0; i < 4; ++i) {
+		lr->AddLine(apex, nearWorld[i], colFrustum);
+	}
+	// 上方向マーカー（近平面上辺の中央から少し上に三角形を作る）
+	Vector3 topMid = {
+		(nearWorld[2].x + nearWorld[3].x) * 0.5f,
+		(nearWorld[2].y + nearWorld[3].y) * 0.5f,
+		(nearWorld[2].z + nearWorld[3].z) * 0.5f,
+	};
+	Vector3 upTip = toWorld({ 0.0f, nh * 1.5f, nz });
+	lr->AddLine(nearWorld[3], upTip, colUp);
+	lr->AddLine(nearWorld[2], upTip, colUp);
+	lr->AddLine(topMid, upTip, colUp);
 }
 
 void BaseScene::ProcessAsyncLoads()

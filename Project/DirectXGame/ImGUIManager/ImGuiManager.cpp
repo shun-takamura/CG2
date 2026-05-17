@@ -1,4 +1,4 @@
-﻿#include "ImGuiManager.h"
+#include "ImGuiManager.h"
 #include "IImGuiWindow.h"
 #include "IImGuiEditable.h"
 #include "AssetLocator.h"
@@ -19,7 +19,11 @@
 #include "LightManager.h"
 #include "PostEffect.h"
 #include "GPUParticleManager.h"
+#include "Effect/EffectManager.h"
+#include "Effect/EffectEditorWindow.h"
 #include "TransitionManager.h"
+#include "DebugCamera.h"
+#include "Vector3.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "CameraCapture.h"
@@ -88,7 +92,43 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
     // デバッグUI群を CallbackWindow 経由で登録
     windows_.push_back(std::make_unique<CallbackWindow>("Camera",
-        [this]() { if (camera_) camera_->OnImGui(); }));
+        [this]() {
+            // ===== Debug Camera toggle =====
+            BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+            if (scene) {
+                bool useDebug = scene->GetUseDebugCamera();
+                if (ImGui::Checkbox("Use Debug Camera", &useDebug)) {
+                    scene->SetUseDebugCamera(useDebug);
+                }
+                if (useDebug) {
+                    if (DebugCamera* dc = scene->GetDebugCamera()) {
+                        ImGui::TextDisabled("L-Drag: Orbit  /  M-Drag: Pan  /  Wheel: Zoom");
+
+                        // ピボット
+                        Vector3 pivot = { 0.0f, 0.0f, 0.0f };
+                        // DebugCamera にピボットgetterが無いので、UIで編集する値を別管理。
+                        // 単純化：スライダーで毎フレームSetする（値の保持は ImGui の static で）
+                        static float pivotV[3] = { 0.0f, 0.0f, 0.0f };
+                        if (ImGui::DragFloat3("Pivot", pivotV, 0.1f)) {
+                            dc->SetPivot({ pivotV[0], pivotV[1], pivotV[2] });
+                        }
+
+                        static float distance = 10.0f;
+                        if (ImGui::DragFloat("Distance", &distance, 0.1f, 0.1f, 500.0f)) {
+                            dc->SetDistance(distance);
+                        }
+
+                        static float fovYDeg = 45.0f;
+                        if (ImGui::DragFloat("Fov Y (deg)", &fovYDeg, 0.5f, 10.0f, 120.0f)) {
+                            dc->SetFovY(fovYDeg * 3.14159265f / 180.0f);
+                        }
+                    }
+                }
+                ImGui::Separator();
+            }
+            // ===== Scene camera info =====
+            if (camera_) camera_->OnImGui();
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("Light",
         []() { LightManager::GetInstance()->OnImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("PostEffect",
@@ -103,6 +143,12 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+
+    // Effect Editor（プレビューRT付き）
+    auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_);
+    effectEditor->Initialize();
+    effectEditorWindow_ = effectEditor.get();
+    windows_.push_back(std::move(effectEditor));
     windows_.push_back(std::make_unique<CallbackWindow>("Collision",
         []() {
             auto* cm = CollisionManager::GetInstance();

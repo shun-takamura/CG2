@@ -6,6 +6,7 @@
 // PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
 #include "Primitive/PrimitiveInstance.h"
 #include "TimeGroup.h"
+#include "Vector3.h"
 
 // 前方宣言
 class SpriteManager;
@@ -16,6 +17,7 @@ class SRVManager;
 class InputManager;
 class SkinningComputeManager;
 class Camera;
+class DebugCamera;
 class IImGuiEditable;
 class CameraPreviewSprite;
 
@@ -56,6 +58,29 @@ public:
 	/// SceneManager が ImGuiManager に通知するために使う
 	/// </summary>
 	virtual Camera* GetCamera() { return nullptr; }
+
+	//====================
+	// デバッグカメラ（シーン共通機能）
+	//====================
+	/// <summary>
+	/// シーン共通の Orbit/Pan/Zoom デバッグカメラ。
+	/// 有効化すると Scene 描画は本カメラの視点で行われ、元のカメラ位置に視錐台ギズモが描かれる。
+	/// </summary>
+	DebugCamera* GetDebugCamera();
+	bool GetUseDebugCamera() const { return useDebugCamera_; }
+	void SetUseDebugCamera(bool enabled);
+
+	/// <summary>
+	/// 有効ならマウス入力をデバッグカメラに反映し、シーンカメラ行列を上書きする。
+	/// 各派生シーンの Update から、シーンカメラ Update の直後に呼ぶ。
+	/// </summary>
+	void UpdateDebugCameraIfActive();
+
+	/// <summary>
+	/// 有効ならシーンカメラ位置に視錐台ギズモを描画する（LineRenderer::Pass::Main を使用）。
+	/// 各派生シーンの Draw から、Object3D 描画後・LineRenderer::Draw の前に呼ぶ。
+	/// </summary>
+	void DrawSceneCameraGizmo();
 
 	/// <summary>
 	/// シーンに動的にオブジェクトを追加（SceneEditorWindow から呼ばれる）
@@ -286,4 +311,18 @@ protected:
 	std::unique_ptr<CameraPreviewSprite> cameraPreview_;
 	bool useCameraCapture_ = false;
 	bool useQRCodeReader_ = false;
+
+	// デバッグカメラ
+	std::unique_ptr<DebugCamera> debugCamera_;
+	bool useDebugCamera_ = false;
+
+	// 切替時にスナップショットを取って復帰時に戻す
+	struct SceneCameraSnapshot {
+		Vector3 translate;
+		Vector3 rotate;
+		float fovY = 0.0f;
+		float aspectRatio = 0.0f;
+		float nearClip = 0.0f;
+		float farClip = 0.0f;
+	} sceneCameraSnapshot_{};
 };

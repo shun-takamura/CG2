@@ -13,45 +13,50 @@ void LineRenderer::Initialize(DirectXCore* dxCore) {
     dxCore_ = dxCore;
     CreateRootSignature();
     CreatePipelineState();
-    CreateVertexResource();
-    CreateViewProjectionResource();
+    for (auto& p : passes_) {
+        CreatePassResources(p);
+    }
 }
 
 void LineRenderer::Finalize() {
     pipelineState_.Reset();
     rootSignature_.Reset();
-    vertexResource_.Reset();
-    viewProjectionResource_.Reset();
+    for (auto& p : passes_) {
+        p.vertexResource.Reset();
+        p.viewProjectionResource.Reset();
+        p.vertexData = nullptr;
+        p.viewProjectionData = nullptr;
+    }
 }
 
-void LineRenderer::AddLine(const Vector3& start, const Vector3& end, const Vector4& color) {
-    if (lineCount_ >= kMaxLineCount) return;
-    vertexData_[lineCount_ * 2 + 0].position = start;
-    vertexData_[lineCount_ * 2 + 0].color = color;
-    vertexData_[lineCount_ * 2 + 1].position = end;
-    vertexData_[lineCount_ * 2 + 1].color = color;
-    ++lineCount_;
+void LineRenderer::AddLine(const Vector3& start, const Vector3& end, const Vector4& color, Pass pass) {
+    PassState& s = passes_[static_cast<int>(pass)];
+    if (s.lineCount >= kMaxLineCount) return;
+    s.vertexData[s.lineCount * 2 + 0].position = start;
+    s.vertexData[s.lineCount * 2 + 0].color = color;
+    s.vertexData[s.lineCount * 2 + 1].position = end;
+    s.vertexData[s.lineCount * 2 + 1].color = color;
+    ++s.lineCount;
 }
 
-void LineRenderer::Draw() {
-    if (lineCount_ == 0) return;
-    if (!camera_) { lineCount_ = 0; return; }
+void LineRenderer::Draw(Pass pass) {
+    PassState& s = passes_[static_cast<int>(pass)];
+    if (s.lineCount == 0) return;
+    if (!s.camera) { s.lineCount = 0; return; }
 
-    // ViewProjectionMatrixを書き込む
-    *viewProjectionData_ = camera_->GetViewProjectionMatrix();
+    *s.viewProjectionData = s.camera->GetViewProjectionMatrix();
 
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
     commandList->SetPipelineState(pipelineState_.Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
-    commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    commandList->IASetVertexBuffers(0, 1, &s.vertexBufferView);
     commandList->SetGraphicsRootConstantBufferView(
-        0, viewProjectionResource_->GetGPUVirtualAddress());
+        0, s.viewProjectionResource->GetGPUVirtualAddress());
 
-    commandList->DrawInstanced(lineCount_ * 2, 1, 0, 0);
+    commandList->DrawInstanced(s.lineCount * 2, 1, 0, 0);
 
-    // バッファクリア
-    lineCount_ = 0;
+    s.lineCount = 0;
 }
 
 void LineRenderer::CreateRootSignature() {
@@ -138,18 +143,16 @@ void LineRenderer::CreatePipelineState() {
     assert(SUCCEEDED(hr));
 }
 
-void LineRenderer::CreateVertexResource() {
+void LineRenderer::CreatePassResources(PassState& s) {
+    // 頂点バッファ
     size_t sizeInBytes = sizeof(LineVertex) * kMaxVertexCount;
-    vertexResource_ = dxCore_->CreateBufferResource(sizeInBytes);
+    s.vertexResource = dxCore_->CreateBufferResource(sizeInBytes);
+    s.vertexBufferView.BufferLocation = s.vertexResource->GetGPUVirtualAddress();
+    s.vertexBufferView.SizeInBytes = static_cast<UINT>(sizeInBytes);
+    s.vertexBufferView.StrideInBytes = sizeof(LineVertex);
+    s.vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&s.vertexData));
 
-    vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = static_cast<UINT>(sizeInBytes);
-    vertexBufferView_.StrideInBytes = sizeof(LineVertex);
-
-    vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
-}
-
-void LineRenderer::CreateViewProjectionResource() {
-    viewProjectionResource_ = dxCore_->CreateBufferResource(sizeof(Matrix4x4));
-    viewProjectionResource_->Map(0, nullptr, reinterpret_cast<void**>(&viewProjectionData_));
+    // ViewProjection CB
+    s.viewProjectionResource = dxCore_->CreateBufferResource(sizeof(Matrix4x4));
+    s.viewProjectionResource->Map(0, nullptr, reinterpret_cast<void**>(&s.viewProjectionData));
 }

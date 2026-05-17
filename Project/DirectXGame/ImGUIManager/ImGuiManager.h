@@ -18,6 +18,7 @@ class HierarchyWindow;
 class InspectorWindow;
 class ViewportWindow;
 class SceneEditorWindow;
+class EffectEditorWindow;
 class RenderTexture;
 class Camera;
 class GPUParticleManager;
@@ -118,6 +119,22 @@ private:
 
     // ビューポートウィンドウ（参照用）
     ViewportWindow* viewportWindow_ = nullptr;
+
+    // Effect Editor ウィンドウ（参照用、所有はwindows_）
+    EffectEditorWindow* effectEditorWindow_ = nullptr;
+
+public:
+    /// <summary>
+    /// Effect Editor ウィンドウ取得（Render パスを Scene から呼び出すために使う）
+    /// </summary>
+    EffectEditorWindow* GetEffectEditorWindow() { return effectEditorWindow_; }
+
+    /// <summary>
+    /// Scene（メイン Viewport）ウィンドウ取得。マウスホバー判定等に使う。
+    /// </summary>
+    ViewportWindow* GetViewportWindow() { return viewportWindow_; }
+
+private:
 
     // 編集可能オブジェクト一覧
     std::vector<IImGuiEditable*> editables_;
