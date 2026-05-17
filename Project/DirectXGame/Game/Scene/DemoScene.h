@@ -17,6 +17,7 @@ class AnimatedModelInstance;
 class AnimatedObject3DInstance;
 class GPUParticleManager;
 class IImGuiEditable;
+class SplineCurveActor;
 
 class DemoScene :public BaseScene
 {
@@ -61,6 +62,9 @@ public:
 	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
 		const Vector3& worldPos = {}) override;
 	void RemoveDynamicAnimated(const std::string& name) override;
+	void AddDynamicSpline(int tagInt, const Vector3& worldPos = {}) override;
+	void RemoveDynamicSpline(const std::string& name) override;
+	void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) override;
 #ifdef USE_IMGUI
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
@@ -85,6 +89,7 @@ private:
 	std::vector<std::unique_ptr<SpriteInstance>> dynamicSprites_;
 	std::vector<std::unique_ptr<AnimatedModelInstance>> dynamicAnimatedModels_;
 	std::vector<std::unique_ptr<AnimatedObject3DInstance>> dynamicAnimated_;
+	std::vector<std::unique_ptr<SplineCurveActor>> dynamicSplines_;
 
 	// アニメーション付きモデル
 	std::unique_ptr<AnimatedModelInstance> sneakWalk;

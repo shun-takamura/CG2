@@ -85,6 +85,18 @@ void BaseScene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) 
 	dynamicPrimitives_.push_back(std::move(prim));
 }
 
+void BaseScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
+	(void)tagInt; (void)worldPos;
+}
+
+void BaseScene::RemoveDynamicSpline(const std::string& name) {
+	(void)name;
+}
+
+void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos) {
+	(void)prefabName; (void)worldPos;
+}
+
 bool BaseScene::SaveSceneToJson(const std::string& filePath) {
 	(void)filePath;
 	return false;

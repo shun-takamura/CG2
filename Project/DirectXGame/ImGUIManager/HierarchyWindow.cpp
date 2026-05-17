@@ -82,6 +82,8 @@ void HierarchyWindow::OnDraw() {
                         scene->RemoveDynamicAnimated(name);
                     } else if (typeName == "Primitive") {
                         scene->RemoveDynamicPrimitive(name);
+                    } else if (typeName == "Spline") {
+                        scene->RemoveDynamicSpline(name);
                     } else {
                         scene->RemoveDynamicObject(name);
                     }

@@ -99,6 +99,23 @@ public:
 	/// </summary>
 	virtual void RemoveDynamicPrimitive(const std::string& name);
 
+	/// <summary>
+	/// シーンに動的にスプラインを追加。tagInt は EntityTag を int キャストしたもの
+	/// （header の循環依存を避けるため int で受ける）。
+	/// </summary>
+	virtual void AddDynamicSpline(int tagInt, const Vector3& worldPos = {});
+
+	/// <summary>
+	/// 名前指定でスプラインを削除
+	/// </summary>
+	virtual void RemoveDynamicSpline(const std::string& name);
+
+	/// <summary>
+	/// プリファブ名でシーンに動的配置（PrefabManager から PrefabDef を引いて生成）。
+	/// デフォルトは no-op。受け付けるシーンが override する。
+	/// </summary>
+	virtual void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {});
+
 #ifdef USE_IMGUI
 	/// <summary>
 	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か

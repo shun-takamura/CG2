@@ -3,6 +3,7 @@
 #include "AbstractSceneFactory.h"
 #include "TransitionManager.h"
 #include "DStorageManager.h"
+#include "Components/CollisionManager.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -69,6 +70,9 @@ void SceneManager::Update() {
 
 		// シーン経過秒の加算（Debugシークバー / 仕掛けタイミングの基準）
 		currentScene_->TickElapsedSeconds(currentScene_->GetScaledDeltaTime());
+
+		// 全コライダーの当たり判定（Update 後、位置が確定したタイミングで）
+		CollisionManager::GetInstance()->Update();
 
 		// シーン共通サービス（カメラプレビュー / QR）の更新
 		currentScene_->UpdateSceneServices();

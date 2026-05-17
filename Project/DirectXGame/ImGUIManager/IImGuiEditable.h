@@ -3,6 +3,7 @@
 #include "Vector2.h"
 #include "Vector3.h"
 #include "Components/EntityTag.h"
+#include "Components/SphereCollider.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -51,6 +52,12 @@ public:
     bool IsVisibleInEditor() const { return visibleInEditor_; }
     void SetVisibleInEditor(bool v) { visibleInEditor_ = v; }
 
+    //====================
+    // コライダー（タグが衝突可能な場合のみ enabled を true にする運用）
+    //====================
+    const SphereCollider& GetCollider() const { return collider_; }
+    SphereCollider& GetCollider() { return collider_; }
+
     /// <summary>
     /// Inspectorでの編集UIを描画
     /// </summary>
@@ -75,4 +82,5 @@ public:
 protected:
     EntityTag tag_ = EntityTag::None;
     bool visibleInEditor_ = true;
+    SphereCollider collider_{};
 };

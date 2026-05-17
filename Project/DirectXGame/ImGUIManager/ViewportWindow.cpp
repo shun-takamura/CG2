@@ -165,6 +165,13 @@ void ViewportWindow::OnDraw() {
             if (scene) scene->AddDynamicPrimitive(p->primitiveType,
                 hasWorldPos ? worldPos : Vector3{});
         }
+        // プリファブ → Y=0 にスナップ配置
+        else if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(PREFAB_DROP_PAYLOAD_TYPE)) {
+            const PrefabDropPayload* p = static_cast<const PrefabDropPayload*>(payload->Data);
+            if (scene) scene->InstantiatePrefab(p->prefabName,
+                hasWorldPos ? worldPos : Vector3{});
+        }
 
         ImGui::EndDragDropTarget();
     }

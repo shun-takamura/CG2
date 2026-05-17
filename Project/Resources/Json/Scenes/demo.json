@@ -2,9 +2,9 @@
   "scene": "DemoScene",
   "objects": [
     {
-      "type": "Object3D",
-      "name": "sneakWalk",
-      "tag": "None",
+      "type": "AnimatedObject3D",
+      "name": "sneakWalk.mesh",
+      "tag": "Enemy",
       "dir": "Resources/Models/Animated/SneakWalk",
       "file": "sneakWalk.mesh",
       "transform": {
@@ -19,7 +19,7 @@
           0
         ],
         "translate": [
-          0,
+          -3.1076629161834717,
           0,
           0
         ]
@@ -27,10 +27,10 @@
     },
     {
       "type": "AnimatedObject3D",
-      "name": "sneakWalk.mesh",
-      "tag": "None",
-      "dir": "Resources/Models/Animated/SneakWalk",
-      "file": "sneakWalk.mesh",
+      "name": "walk.mesh",
+      "tag": "Player",
+      "dir": "Resources/Models/Animated/Walk",
+      "file": "walk.mesh",
       "transform": {
         "scale": [
           1,
@@ -43,7 +43,7 @@
           0
         ],
         "translate": [
-          -3,
+          -0,
           0,
           -0
         ]

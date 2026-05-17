@@ -26,6 +26,7 @@
 #include "QRCodeReader.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
+#include "Components/CollisionManager.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -101,6 +102,16 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Collision",
+        []() {
+            auto* cm = CollisionManager::GetInstance();
+            bool drawDebug = cm->IsDrawDebugEnabled();
+            if (ImGui::Checkbox("Draw Colliders", &drawDebug)) {
+                cm->SetDrawDebugEnabled(drawDebug);
+            }
+            ImGui::TextDisabled("- Tag-colored when not colliding");
+            ImGui::TextDisabled("- Red when colliding this frame");
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("Scene Timeline",
         []() {
             auto* sm = SceneManager::GetInstance();
