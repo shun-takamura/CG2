@@ -9,6 +9,11 @@ IImGuiEditable::IImGuiEditable() {
     CollisionManager::GetInstance()->Register(this);
 }
 
+IImGuiEditable::IImGuiEditable(NoAutoRegister) {
+    // 何もしない（Hierarchy/Collision どちらにも登録しない）
+    // EffectEditor 等、独立した Hierarchy 配下で管理する派生用
+}
+
 IImGuiEditable::~IImGuiEditable() {
     CollisionManager::GetInstance()->Unregister(this);
     ImGuiManager::Instance().Unregister(this);

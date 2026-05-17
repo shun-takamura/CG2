@@ -4,13 +4,15 @@
 #include "SRVManager.h"
 #include "LineRenderer.h"
 #include "EffectManager.h"
+#include "ImGuiManager.h"
+#include "SceneEditorWindow.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include "imgui.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace {
-    // RT のサイズはあまりに細かい変化で再生成しないようキリのいい値に丸める
     constexpr uint32_t kRtSizeStep = 32;
     constexpr uint32_t kRtMin = 128;
     constexpr uint32_t kRtMax = 2048;
@@ -35,13 +37,13 @@ EffectEditorWindow::~EffectEditorWindow() {
 void EffectEditorWindow::Initialize() {
     debugCamera_.Initialize();
     debugCamera_.SetAspectRatio(1.0f);
-    // 少し引いた位置から見下ろす（DemoScene のメインカメラに近い構図）
     debugCamera_.SetPivot({ 0.0f, 0.0f, 0.0f });
     debugCamera_.SetDistance(10.0f);
-    debugCamera_.Orbit(0.0f, 0.5f); // ピッチ 0.5rad（約28°）見下ろし
+    debugCamera_.Orbit(0.0f, 0.5f);
 
-    // 初期 RT
     EnsureRenderTextureSize(512, 512);
+
+    NewEffect();
 }
 
 void EffectEditorWindow::Finalize() {
@@ -58,11 +60,7 @@ void EffectEditorWindow::Finalize() {
 void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height) {
     if (width == rtWidth_ && height == rtHeight_ && renderTexture_) return;
 
-    // 既に RT が存在する場合：このまま破棄するとコマンドリスト確定前にリソースが死ぬので
-    // 古い方を1フレーム保持する側に退避してから新規作成する。
     if (renderTexture_) {
-        // さらに前のフレームから持ち越した分は念のためここで解放
-        // （実際は Render() 冒頭でクリアされるが二重保険）
         if (oldRenderTexture_) {
             oldRenderTexture_->Finalize();
             oldRenderTexture_.reset();
@@ -71,13 +69,12 @@ void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height
     }
 
     renderTexture_ = std::make_unique<RenderTexture>();
-    const float clear[4] = { 0.15f, 0.15f, 0.18f, 1.0f }; // ダークグレー
+    const float clear[4] = { 0.15f, 0.15f, 0.18f, 1.0f };
     renderTexture_->Initialize(dxCore_, srvManager_, width, height,
         DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clear);
     rtWidth_ = width;
     rtHeight_ = height;
 
-    // カメラのアスペクトを更新
     debugCamera_.SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
 }
 
@@ -89,19 +86,14 @@ void EffectEditorWindow::HandleMouseInput() {
     const float panSpeed   = 0.005f;
     const float zoomSpeed  = 0.5f;
 
-    // 左ドラッグ: Orbit
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
         ImVec2 d = io.MouseDelta;
         debugCamera_.Orbit(d.x * orbitSpeed, d.y * orbitSpeed);
     }
-    // 中ドラッグ: Pan
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
         ImVec2 d = io.MouseDelta;
-        // distance 依存でスケール
-        float scale = panSpeed; // 簡易：距離に応じてスケールしてもよい
-        debugCamera_.Pan(-d.x * scale, d.y * scale);
+        debugCamera_.Pan(-d.x * panSpeed, d.y * panSpeed);
     }
-    // ホイール: Zoom
     if (io.MouseWheel != 0.0f) {
         debugCamera_.Zoom(-io.MouseWheel * zoomSpeed);
     }
@@ -130,12 +122,10 @@ void EffectEditorWindow::AddGridLines() {
 }
 
 void EffectEditorWindow::Render() {
-    // 1フレーム前の OnDraw で要求されたリサイズをここで安全に処理する
     if (pendingWidth_ > 0 && pendingHeight_ > 0 &&
         (pendingWidth_ != rtWidth_ || pendingHeight_ != rtHeight_)) {
         EnsureRenderTextureSize(pendingWidth_, pendingHeight_);
     }
-    // 前フレームの古い RT は GPU が使い終わっているはずなので解放
     if (oldRenderTexture_) {
         oldRenderTexture_->Finalize();
         oldRenderTexture_.reset();
@@ -143,7 +133,6 @@ void EffectEditorWindow::Render() {
 
     if (!renderTexture_ || !isOpen_) return;
 
-    // DebugCamera を更新して Camera に注入
     debugCamera_.Update();
     camera_.SetExternalMatrices(
         debugCamera_.GetViewMatrix(),
@@ -151,12 +140,9 @@ void EffectEditorWindow::Render() {
         debugCamera_.GetTranslate());
 
     auto* commandList = dxCore_->GetCommandList();
-
-    // プレビュー RT へ描画開始
     D3D12_CPU_DESCRIPTOR_HANDLE dsv = dxCore_->GetDsvHandle();
     renderTexture_->BeginRender(commandList, &dsv);
 
-    // ビューポート/シザーを RT サイズに合わせて設定
     D3D12_VIEWPORT vp{};
     vp.Width = static_cast<float>(rtWidth_);
     vp.Height = static_cast<float>(rtHeight_);
@@ -166,10 +152,8 @@ void EffectEditorWindow::Render() {
     D3D12_RECT sc{ 0, 0, static_cast<LONG>(rtWidth_), static_cast<LONG>(rtHeight_) };
     commandList->RSSetScissorRects(1, &sc);
 
-    // 深度クリア（プレビューRT専用なので一旦クリアする）
     commandList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    // グリッド線（Preview パスを使い、Scene 用ラインと干渉させない）
     LineRenderer* lr = LineRenderer::GetInstance();
     if (lr) {
         lr->SetCamera(&camera_, LineRenderer::Pass::Preview);
@@ -177,7 +161,6 @@ void EffectEditorWindow::Render() {
         lr->Draw(LineRenderer::Pass::Preview);
     }
 
-    // EffectManager にプレビューカメラを渡してプレビュー描画
     EffectManager::GetInstance()->SetPreviewCamera(&camera_);
     EffectManager::GetInstance()->DrawPreview();
 
@@ -191,43 +174,84 @@ void EffectEditorWindow::OnDraw() {
         return;
     }
 
-    // 上部：再生制御
-    EffectManager* em = EffectManager::GetInstance();
-    ImGui::Text("Active: %zu  /  Defs: %zu", em->GetActiveInstanceCount(), em->ListDefNames().size());
+    // 前フレームの Inspector で立った削除要求をここで安全に処理
+    if (!pendingRemovals_.empty()) {
+        // index 大きい順に消す（小さい index から消すと後続のIDがずれる）
+        std::sort(pendingRemovals_.begin(), pendingRemovals_.end(),
+            [](const PendingRemoval& a, const PendingRemoval& b) { return a.index > b.index; });
+        for (const auto& r : pendingRemovals_) {
+            auto inRange = [](int i, size_t n) { return i >= 0 && i < static_cast<int>(n); };
+            switch (r.kind) {
+            case EffectComponentEditable::Kind::Primitive:
+                if (inRange(r.index, editBuffer_.primitives.size()))
+                    editBuffer_.primitives.erase(editBuffer_.primitives.begin() + r.index);
+                break;
+            case EffectComponentEditable::Kind::Particle:
+                if (inRange(r.index, editBuffer_.particles.size()))
+                    editBuffer_.particles.erase(editBuffer_.particles.begin() + r.index);
+                break;
+            case EffectComponentEditable::Kind::Light:
+                if (inRange(r.index, editBuffer_.lights.size()))
+                    editBuffer_.lights.erase(editBuffer_.lights.begin() + r.index);
+                break;
+            case EffectComponentEditable::Kind::Sound:
+                if (inRange(r.index, editBuffer_.sounds.size()))
+                    editBuffer_.sounds.erase(editBuffer_.sounds.begin() + r.index);
+                break;
+            }
+        }
+        pendingRemovals_.clear();
+        editBufferDirty_ = true;
+        ImGuiManager::Instance().SetSelected(nullptr);
+        RebuildEditables();
+    }
 
+    EffectManager* em = EffectManager::GetInstance();
+
+    // ============ 上部：定義選択 + Save + Play ============
     auto defs = em->ListDefNames();
-    if (selectedEffect_.empty() && !defs.empty()) selectedEffect_ = defs.front();
+    if (selectedEffect_.empty() && !defs.empty()) {
+        selectedEffect_ = defs.front();
+        LoadIntoBuffer(selectedEffect_);
+    }
 
     if (ImGui::BeginCombo("Effect", selectedEffect_.c_str())) {
         for (const auto& name : defs) {
             bool sel = (name == selectedEffect_);
             if (ImGui::Selectable(name.c_str(), sel)) {
                 selectedEffect_ = name;
+                LoadIntoBuffer(name);
             }
         }
         ImGui::EndCombo();
     }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("New")) {
+        NewEffect();
+    }
 
-    ImGui::DragFloat3("Position", playPos_, 0.1f);
+    ImGui::InputText("Name", editNameInput_, IM_ARRAYSIZE(editNameInput_));
+    if (ImGui::Button("Save")) SaveCurrent();
+    ImGui::SameLine();
+    if (editBufferDirty_) ImGui::TextColored(ImVec4(1, 0.7f, 0.2f, 1), "(modified)");
 
+    ImGui::DragFloat("Total Duration", &editBuffer_.totalDuration, 0.05f, 0.0f, 60.0f);
+
+    ImGui::Separator();
+    ImGui::DragFloat3("Play Pos", playPos_, 0.1f);
     if (ImGui::Button("Play")) {
-        if (!selectedEffect_.empty()) {
-            em->Play(selectedEffect_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
-        }
+        // editBuffer の現在の状態をそのまま再生（未保存でも反映）
+        em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Stop All")) {
-        em->StopAll();
-    }
+    if (ImGui::Button("Stop All")) em->StopAll();
 
     ImGui::Separator();
 
-    // 画像領域：ImGuiウィンドウの残り領域いっぱい
+    // ============ Viewport（残り領域いっぱい） ============
     ImVec2 avail = ImGui::GetContentRegionAvail();
     uint32_t newW = SnapRtSize(avail.x);
     uint32_t newH = SnapRtSize(avail.y);
-    // 即時再生成すると同フレームで recorded コマンドが死亡参照になるので
-    // 「望ましいサイズ」だけ保存して、次フレームの Render() で反映する。
     if (newW > 0 && newH > 0) {
         pendingWidth_ = newW;
         pendingHeight_ = newH;
@@ -236,11 +260,10 @@ void EffectEditorWindow::OnDraw() {
     uint32_t srvIndex = renderTexture_->GetSRVIndex();
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = srvManager_->GetGPUDescriptorHandle(srvIndex);
 
-    // アスペクト維持で表示
     float texW = (float)renderTexture_->GetWidth();
     float texH = (float)renderTexture_->GetHeight();
     float texAspect = texW / texH;
-    float winAspect = avail.x / avail.y;
+    float winAspect = (avail.y > 0) ? avail.x / avail.y : 1.0f;
     ImVec2 imgSize;
     if (winAspect > texAspect) {
         imgSize.y = avail.y;
@@ -256,9 +279,107 @@ void EffectEditorWindow::OnDraw() {
     ImGui::Image((ImTextureID)gpuHandle.ptr, imgSize, ImVec2(0,0), ImVec2(1,1));
     isHovered_ = ImGui::IsItemHovered();
 
-    // マウス入力 → カメラ
+    // ===== Drop: Effect Component =====
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(EFFECT_COMP_DROP_PAYLOAD_TYPE)) {
+            const EffectComponentDropPayload* p = static_cast<const EffectComponentDropPayload*>(payload->Data);
+            AddComponent(static_cast<EffectComponentEditable::Kind>(p->kind));
+        }
+        ImGui::EndDragDropTarget();
+    }
+
     HandleMouseInput();
 
     ImGui::TextDisabled("L-Drag: Orbit  /  M-Drag: Pan  /  Wheel: Zoom");
 #endif
+}
+
+//==========================================================
+// Editor logic
+//==========================================================
+
+void EffectEditorWindow::LoadIntoBuffer(const std::string& defName) {
+    const EffectDef* src = EffectManager::GetInstance()->FindDef(defName);
+    if (!src) {
+        NewEffect();
+        return;
+    }
+    editBuffer_ = *src;
+    editBufferDirty_ = false;
+    std::snprintf(editNameInput_, sizeof(editNameInput_), "%s", editBuffer_.name.c_str());
+    RebuildEditables();
+}
+
+void EffectEditorWindow::NewEffect() {
+    editBuffer_ = EffectDef{};
+    editBuffer_.name = "Untitled";
+    editBuffer_.totalDuration = 1.0f;
+    editBufferDirty_ = true;
+    std::snprintf(editNameInput_, sizeof(editNameInput_), "%s", editBuffer_.name.c_str());
+    RebuildEditables();
+}
+
+void EffectEditorWindow::SaveCurrent() {
+    editBuffer_.name = editNameInput_;
+    std::string finalName = EffectManager::GetInstance()->SaveDef(editBuffer_);
+    if (!finalName.empty()) {
+        editBuffer_.name = finalName;
+        std::snprintf(editNameInput_, sizeof(editNameInput_), "%s", finalName.c_str());
+        selectedEffect_ = finalName;
+        editBufferDirty_ = false;
+    }
+}
+
+void EffectEditorWindow::AddComponent(EffectComponentEditable::Kind kind) {
+    switch (kind) {
+    case EffectComponentEditable::Kind::Primitive: editBuffer_.primitives.push_back({}); break;
+    case EffectComponentEditable::Kind::Particle:  editBuffer_.particles.push_back({});  break;
+    case EffectComponentEditable::Kind::Light:     editBuffer_.lights.push_back({});     break;
+    case EffectComponentEditable::Kind::Sound:     editBuffer_.sounds.push_back({});     break;
+    }
+    editBufferDirty_ = true;
+    RebuildEditables();
+}
+
+void EffectEditorWindow::RemoveComponent(EffectComponentEditable::Kind kind, int index) {
+    // 即時に erase + RebuildEditables を呼ぶと、現在 OnImGuiInspector 中の
+    // EffectComponentEditable 自身が削除されて use-after-free になる。
+    // 次の OnDraw 冒頭で安全に処理するため pending キューへ。
+    pendingRemovals_.push_back({ kind, index });
+}
+
+void EffectEditorWindow::RebuildEditables() {
+    // 選択中の Editable があれば、その kind+index を覚えておいて再構築後に対応する Editable を再選択
+    ImGuiManager& mgr = ImGuiManager::Instance();
+    EffectComponentEditable::Kind selKind = EffectComponentEditable::Kind::Primitive;
+    int selIndex = -1;
+    if (auto* sel = dynamic_cast<EffectComponentEditable*>(mgr.GetSelected())) {
+        selKind = sel->GetKind();
+        selIndex = sel->GetIndex();
+    }
+
+    editables_.clear();
+    for (int i = 0; i < static_cast<int>(editBuffer_.primitives.size()); ++i) {
+        editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Primitive, i));
+    }
+    for (int i = 0; i < static_cast<int>(editBuffer_.particles.size()); ++i) {
+        editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Particle, i));
+    }
+    for (int i = 0; i < static_cast<int>(editBuffer_.lights.size()); ++i) {
+        editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Light, i));
+    }
+    for (int i = 0; i < static_cast<int>(editBuffer_.sounds.size()); ++i) {
+        editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Sound, i));
+    }
+
+    // 選択復元
+    mgr.SetSelected(nullptr);
+    if (selIndex >= 0) {
+        for (auto& e : editables_) {
+            if (e->GetKind() == selKind && e->GetIndex() == selIndex) {
+                mgr.SetSelected(e.get());
+                break;
+            }
+        }
+    }
 }

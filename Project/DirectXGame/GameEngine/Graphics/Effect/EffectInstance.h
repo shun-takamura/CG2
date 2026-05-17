@@ -17,9 +17,9 @@ class GPUParticleManager;
 class EffectInstance {
 public:
     /// <summary>
-    /// 初期化。defへのポインタは EffectManager 側で寿命管理されている前提（生ポインタ参照）。
+    /// 初期化。defはインスタンスにコピーして所有する（呼び出し元のdef破棄に依存しない）。
     /// </summary>
-    void Initialize(const EffectDef* def, const Vector3& worldPos, GPUParticleManager* gpu);
+    void Initialize(const EffectDef& def, const Vector3& worldPos, GPUParticleManager* gpu);
 
     void Update(Camera* camera, float deltaTime);
     void Draw();
@@ -40,7 +40,7 @@ public:
     void Cleanup();
 
 private:
-    const EffectDef* def_ = nullptr;
+    EffectDef def_{};
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
     float elapsedTime_ = 0.0f;
     bool finished_ = false;
@@ -65,4 +65,11 @@ private:
         bool isSpot = false;
     };
     std::vector<LightRuntime> lights_;
+
+    struct SoundRuntime {
+        bool started = false;
+        bool finished = false;
+        uint32_t handle = 0;  // SoundManager::Play3DSound のハンドル（0=無効）
+    };
+    std::vector<SoundRuntime> sounds_;
 };

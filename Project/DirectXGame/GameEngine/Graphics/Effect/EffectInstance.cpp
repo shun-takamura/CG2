@@ -2,6 +2,7 @@
 #include "GPUParticleManager.h"
 #include "LightManager.h"
 #include "PrimitivePipeline.h"
+#include "SoundManager.h"
 
 namespace {
     // 0-1 にクランプ
@@ -28,31 +29,28 @@ namespace {
     float LerpF(float a, float b, float t) { return a + (b - a) * t; }
 }
 
-void EffectInstance::Initialize(const EffectDef* def, const Vector3& worldPos, GPUParticleManager* gpu) {
+void EffectInstance::Initialize(const EffectDef& def, const Vector3& worldPos, GPUParticleManager* gpu) {
     def_ = def;
     worldPos_ = worldPos;
     elapsedTime_ = 0.0f;
     finished_ = false;
     gpu_ = gpu;
 
-    if (!def_) return;
-
-    primitives_.resize(def_->primitives.size());
-    particles_.resize(def_->particles.size());
-    lights_.resize(def_->lights.size());
+    primitives_.resize(def_.primitives.size());
+    particles_.resize(def_.particles.size());
+    lights_.resize(def_.lights.size());
+    sounds_.resize(def_.sounds.size());
     for (auto& l : lights_) {
         l.slot = kInvalidLightSlot;
     }
 }
 
 void EffectInstance::Update(Camera* camera, float deltaTime) {
-    if (!def_) { finished_ = true; return; }
-
     elapsedTime_ += deltaTime;
 
     // ===== Primitive =====
-    for (size_t i = 0; i < def_->primitives.size(); ++i) {
-        const EffectPrimitiveComponent& pc = def_->primitives[i];
+    for (size_t i = 0; i < def_.primitives.size(); ++i) {
+        const EffectPrimitiveComponent& pc = def_.primitives[i];
         PrimitiveRuntime& rt = primitives_[i];
         if (rt.finished) continue;
 
@@ -66,6 +64,18 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
             rt.renderer->SetBillboardMode(pc.billboardMode);
             rt.renderer->SetRotate(pc.rotate);
+
+            // 静的マテリアル
+            rt.renderer->SetDepthWrite(pc.depthWrite);
+            rt.renderer->SetAlphaReference(pc.alphaReference);
+            rt.renderer->SetCullBackface(pc.cullBackface);
+            rt.renderer->SetSamplerMode(pc.samplerMode);
+            // UV
+            rt.renderer->SetUVScroll(pc.uvAutoScroll ? pc.uvScrollSpeed : Vector2{ 0.0f, 0.0f });
+            rt.renderer->SetUVOffset(pc.uvOffset);
+            rt.renderer->SetUVScale(pc.uvScale);
+            rt.renderer->SetUVFlipU(pc.uvFlipU);
+            rt.renderer->SetUVFlipV(pc.uvFlipV);
             rt.started = true;
         }
 
@@ -89,8 +99,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
     }
 
     // ===== Particle =====
-    for (size_t i = 0; i < def_->particles.size(); ++i) {
-        const EffectParticleComponent& pc = def_->particles[i];
+    for (size_t i = 0; i < def_.particles.size(); ++i) {
+        const EffectParticleComponent& pc = def_.particles[i];
         ParticleRuntime& rt = particles_[i];
         if (rt.burstFired) continue;
         if (!gpu_) { rt.burstFired = true; continue; }
@@ -107,8 +117,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 
     // ===== Light =====
     LightManager* lm = LightManager::GetInstance();
-    for (size_t i = 0; i < def_->lights.size(); ++i) {
-        const EffectLightComponent& lc = def_->lights[i];
+    for (size_t i = 0; i < def_.lights.size(); ++i) {
+        const EffectLightComponent& lc = def_.lights[i];
         LightRuntime& rt = lights_[i];
         if (rt.finished) continue;
 
@@ -167,6 +177,34 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         }
     }
 
+    // ===== Sound =====
+    SoundManager* sm = SoundManager::GetInstance();
+    for (size_t i = 0; i < def_.sounds.size(); ++i) {
+        const EffectSoundComponent& sc = def_.sounds[i];
+        SoundRuntime& rt = sounds_[i];
+        if (rt.finished) continue;
+
+        if (!rt.started) {
+            if (elapsedTime_ < sc.startTime) continue;
+            Vector3 pos = { worldPos_.x + sc.offset.x, worldPos_.y + sc.offset.y, worldPos_.z + sc.offset.z };
+            rt.handle = sm->Play3DSound(sc.soundName, pos, { 0.0f, 0.0f, 0.0f }, sc.distanceScale);
+            rt.started = true;
+            if (rt.handle == 0) {
+                // 再生失敗（音源未ロード等）。リトライしない。
+                rt.finished = true;
+                continue;
+            }
+        }
+
+        // 毎フレーム位置を追従（エフェクトが動いていなくても、リスナーが動けば必要）
+        if (rt.handle != 0) {
+            Vector3 pos = { worldPos_.x + sc.offset.x, worldPos_.y + sc.offset.y, worldPos_.z + sc.offset.z };
+            sm->UpdateEmitter(rt.handle, pos, { 0.0f, 0.0f, 0.0f });
+        }
+        // SoundManager 側で再生が終わったハンドルは自動でクリーンアップされる想定だが、
+        // EffectInstance としては totalDuration 経過で「自分の役目は終わり」と判定する
+    }
+
     // 全コンポーネント完了判定
     bool allDone = true;
     for (auto& rt : primitives_) { if (!rt.finished) { allDone = false; break; } }
@@ -176,7 +214,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
     if (allDone) {
         for (auto& rt : lights_) { if (!rt.finished) { allDone = false; break; } }
     }
-    if (allDone && elapsedTime_ >= def_->totalDuration) {
+    if (allDone) {
+        for (auto& rt : sounds_) { if (!rt.started) { allDone = false; break; } }
+    }
+    if (allDone && elapsedTime_ >= def_.totalDuration) {
         finished_ = true;
     }
 }
@@ -206,10 +247,7 @@ void EffectInstance::DrawPreview() {
 }
 
 void EffectInstance::Cleanup() {
-    // ライトのスロット予約だけはその場で返す（GPU描画が参照しないため安全）。
-    // Primitive renderer の破棄は EffectInstance のデストラクタに任せる。
-    // この Cleanup() が ImGui コールバック等の Draw 中に呼ばれる可能性があるため、
-    // renderer のリソース解放はマネージャ側で1フレーム遅延させる前提。
+    // ライトのスロット予約はその場で返す（GPU描画が参照しないため安全）。
     LightManager* lm = LightManager::GetInstance();
     for (auto& rt : lights_) {
         if (rt.slot != kInvalidLightSlot) {
@@ -219,4 +257,16 @@ void EffectInstance::Cleanup() {
             rt.finished = true;
         }
     }
+    // 再生中の3D サウンドも停止
+    SoundManager* sm = SoundManager::GetInstance();
+    for (auto& rt : sounds_) {
+        if (rt.handle != 0) {
+            sm->Stop3DSound(rt.handle);
+            rt.handle = 0;
+        }
+        rt.finished = true;
+    }
+    // Primitive renderer の破棄は EffectInstance のデストラクタ任せ。
+    // この Cleanup() が ImGui コールバック等の Draw 中に呼ばれる可能性があるため、
+    // renderer のリソース解放はマネージャ側で1フレーム遅延させる前提。
 }

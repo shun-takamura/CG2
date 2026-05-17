@@ -76,6 +76,38 @@ const EffectDef* EffectManager::FindDef(const std::string& name) const {
     return it == defs_.end() ? nullptr : &it->second;
 }
 
+EffectDef* EffectManager::FindDefMutable(const std::string& name) {
+    auto it = defs_.find(name);
+    return it == defs_.end() ? nullptr : &it->second;
+}
+
+std::string EffectManager::SaveDef(EffectDef def) {
+    // 名前のサニタイズ：空なら "Untitled"
+    std::string baseName = def.name.empty() ? std::string("Untitled") : def.name;
+    std::string finalName = baseName;
+    // 重複チェック（自分自身の名前なら上書き扱いで衝突とみなさない）
+    int suffix = 1;
+    while (defs_.find(finalName) != defs_.end() && finalName != def.name) {
+        finalName = baseName + "(" + std::to_string(suffix++) + ")";
+    }
+    def.name = finalName;
+
+    // JSONファイル書き出し
+    const std::string filePath = "Resources/Json/Effects/" + finalName + ".json";
+    if (!EffectDefIO::SaveToFile(filePath, def)) {
+        Log(std::string("EffectManager: SaveToFile failed for ") + filePath);
+        return std::string();
+    }
+
+    // メモリ上のmapへ登録（上書き含む）
+    defs_[finalName] = std::move(def);
+    return finalName;
+}
+
+void EffectManager::UnregisterDef(const std::string& name) {
+    defs_.erase(name);
+}
+
 std::vector<std::string> EffectManager::ListDefNames() const {
     std::vector<std::string> names;
     names.reserve(defs_.size());
@@ -93,6 +125,12 @@ void EffectManager::Play(const std::string& effectName, const Vector3& worldPos)
         Log(std::string("EffectManager: Play — no def for ") + effectName);
         return;
     }
+    auto inst = std::make_unique<EffectInstance>();
+    inst->Initialize(*def, worldPos, gpuParticleManager_);
+    activeInstances_.push_back(std::move(inst));
+}
+
+void EffectManager::PlayWithDef(const EffectDef& def, const Vector3& worldPos) {
     auto inst = std::make_unique<EffectInstance>();
     inst->Initialize(def, worldPos, gpuParticleManager_);
     activeInstances_.push_back(std::move(inst));

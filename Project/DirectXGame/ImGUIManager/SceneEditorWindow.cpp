@@ -394,6 +394,34 @@ void SceneEditorWindow::OnDraw() {
     }
 
     // ============================================
+    // Effect Components セクション（EffectEditor ビューポートにドロップ）
+    // ============================================
+    if (ImGui::CollapsingHeader("Effect Components", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("drag onto EffectEditor viewport to add");
+
+        struct CompEntry { const char* label; int kind; };
+        const CompEntry entries[] = {
+            { "Primitive", 0 },
+            { "Particle",  1 },
+            { "Light",     2 },
+            { "Sound",     3 },
+        };
+
+        for (int i = 0; i < static_cast<int>(std::size(entries)); ++i) {
+            ImGui::PushID(i + 600000);
+            ImGui::Selectable(entries[i].label, false);
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                EffectComponentDropPayload payload{};
+                payload.kind = entries[i].kind;
+                ImGui::SetDragDropPayload(EFFECT_COMP_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(entries[i].label);
+                ImGui::EndDragDropSource();
+            }
+            ImGui::PopID();
+        }
+    }
+
+    // ============================================
     // Animated セクション（.gltf / .glb / .fbx）
     // ============================================
     if (ImGui::CollapsingHeader("Animated  (.mesh w/ skin)", ImGuiTreeNodeFlags_DefaultOpen)) {

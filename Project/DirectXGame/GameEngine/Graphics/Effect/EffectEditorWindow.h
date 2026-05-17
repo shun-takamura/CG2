@@ -2,8 +2,11 @@
 #include "IImGuiWindow.h"
 #include "Camera.h"
 #include "DebugCamera.h"
+#include "EffectDef.h"
+#include "EffectComponentEditable.h"
 #include <memory>
 #include <string>
+#include <vector>
 
 class DirectXCore;
 class SRVManager;
@@ -11,8 +14,8 @@ class RenderTexture;
 
 /// <summary>
 /// Effect Editor 用ウィンドウ。
-/// 内部に RenderTexture と Orbit/Pan/Zoom 可能なカメラを持ち、
-/// 登録済みエフェクトをプレビュー再生・編集する。
+/// 表示は viewport（プレビュー）と最小限の操作（Effect選択 / Save / Play）。
+/// コンポーネント編集は EffectHierarchyWindow → Inspector に集約。
 /// </summary>
 class EffectEditorWindow : public IImGuiWindow {
 public:
@@ -27,23 +30,35 @@ public:
     /// </summary>
     void Render();
 
-    /// <summary>
-    /// エンジン API（EffectManager 等）が使えるよう、DebugCamera を反映済みの Camera を返す。
-    /// </summary>
     Camera* GetCamera() { return &camera_; }
+
+    // ===== editBuffer アクセス（Editable から呼ばれる） =====
+    EffectDef&       GetEditBuffer()       { return editBuffer_; }
+    const EffectDef& GetEditBuffer() const { return editBuffer_; }
+    void MarkEditBufferDirty() { editBufferDirty_ = true; }
+
+    // ===== コンポーネント操作 =====
+    void AddComponent(EffectComponentEditable::Kind kind);
+    // 即時削除ではなく、次の OnDraw 冒頭で削除する（OnImGuiInspector 中の self-destroy 回避）
+    void RemoveComponent(EffectComponentEditable::Kind kind, int index);
+
+    // Editable 一覧（EffectHierarchyWindow から参照される）
+    const std::vector<std::unique_ptr<EffectComponentEditable>>& GetEditables() const { return editables_; }
+
+    const std::string& GetCurrentName() const { return editBuffer_.name; }
 
 protected:
     void OnDraw() override;
 
 private:
-    // 必要に応じて RT を再生成（リサイズ対応）
     void EnsureRenderTextureSize(uint32_t width, uint32_t height);
-
-    // マウス入力をカメラに反映
     void HandleMouseInput();
-
-    // グリッド線をLineRendererに積む
     void AddGridLines();
+
+    void LoadIntoBuffer(const std::string& defName);
+    void NewEffect();
+    void SaveCurrent();
+    void RebuildEditables();
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager*  srvManager_ = nullptr;
@@ -52,22 +67,32 @@ private:
     uint32_t rtWidth_  = 0;
     uint32_t rtHeight_ = 0;
 
-    // ImGui 側で計測した「望ましいサイズ」。Render() 冒頭で反映する。
     uint32_t pendingWidth_  = 0;
     uint32_t pendingHeight_ = 0;
-
-    // 前フレームから持ち越した古い RT。Render() 冒頭で安全に解放する。
     std::unique_ptr<RenderTexture> oldRenderTexture_;
 
     DebugCamera debugCamera_;
-    Camera      camera_;     // DebugCamera から行列を注入したものをエンジン API に渡す
+    Camera      camera_;
 
-    // ImGui::Image の表示状態
     ImVec2 imageScreenPos_  = { 0.0f, 0.0f };
     ImVec2 imageScreenSize_ = { 0.0f, 0.0f };
     bool   isHovered_       = false;
 
-    // 再生制御
     std::string selectedEffect_;
     float playPos_[3] = { 0.0f, 0.0f, 0.0f };
+
+    // ===== 編集状態 =====
+    EffectDef editBuffer_;
+    bool editBufferDirty_ = false;
+    char editNameInput_[128] = {};
+
+    // editBuffer のコンポーネントごとの Editable
+    std::vector<std::unique_ptr<EffectComponentEditable>> editables_;
+
+    // 次フレームに反映する削除要求（self-destroy 回避のため）
+    struct PendingRemoval {
+        EffectComponentEditable::Kind kind;
+        int index;
+    };
+    std::vector<PendingRemoval> pendingRemovals_;
 };

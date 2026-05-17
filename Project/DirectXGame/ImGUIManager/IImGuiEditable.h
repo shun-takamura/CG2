@@ -20,6 +20,13 @@ public:
     IImGuiEditable();
 
     /// <summary>
+    /// 自動登録をスキップしたい場合用のタグ
+    /// （EffectEditor 等、独立した Hierarchy で管理する派生で使う）
+    /// </summary>
+    struct NoAutoRegister {};
+    IImGuiEditable(NoAutoRegister);
+
+    /// <summary>
     /// デストラクタ（自動登録解除）
     /// </summary>
     virtual ~IImGuiEditable();

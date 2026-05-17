@@ -2,6 +2,7 @@
 #include "PrimitiveMesh.h"
 #include "PrimitivePipeline.h"
 #include "BillboardMode.h"
+#include "Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Matrix4x4.h"
@@ -43,6 +44,13 @@ public:
     void SetCullBackface(bool e)                      { mesh_.SetCullBackface(e); }
     void SetAlphaReference(float v)                   { mesh_.SetAlphaReference(v); }
     void SetSamplerMode(int m)                        { mesh_.SetSamplerMode(m); }
+
+    void SetUVScroll(const Vector2& v) { mesh_.SetUVScroll(v); }
+    void SetUVOffset(const Vector2& v) { mesh_.SetUVOffset(v); }
+    void SetUVScale(const Vector2& v)  { mesh_.SetUVScale(v); }
+    void SetUVFlipU(bool b)            { mesh_.SetUVFlipU(b); }
+    void SetUVFlipV(bool b)            { mesh_.SetUVFlipV(b); }
+    void SetTexture(const std::string& path) { mesh_.SetTexture(path); }
 
 private:
     PrimitiveMesh mesh_;

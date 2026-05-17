@@ -45,11 +45,33 @@ public:
     bool HasDef(const std::string& name) const;
     const EffectDef* FindDef(const std::string& name) const;
 
+    /// <summary>
+    /// 編集用にミュータブル参照を返す（Effect Editor 用）。無ければ nullptr。
+    /// </summary>
+    EffectDef* FindDefMutable(const std::string& name);
+
+    /// <summary>
+    /// def を Resources/Json/Effects/ に保存し、メモリ上の defs_ にも同名で登録する。
+    /// 既存名が衝突するときは (1)(2)... を付与する。最終的に使用された名前を返す。
+    /// </summary>
+    std::string SaveDef(EffectDef def);
+
+    /// <summary>
+    /// 登録済み定義を削除（ファイル削除はしない）。
+    /// </summary>
+    void UnregisterDef(const std::string& name);
+
     // ===== 再生 =====
     /// <summary>
     /// 指定名のエフェクトを worldPos に再生開始。defがなければ何もしない。
     /// </summary>
     void Play(const std::string& effectName, const Vector3& worldPos);
+
+    /// <summary>
+    /// 指定 def をそのまま使ってインスタンス再生（未保存の editBuffer プレビュー用）。
+    /// EffectManager の defs_ には登録されない。
+    /// </summary>
+    void PlayWithDef(const EffectDef& def, const Vector3& worldPos);
 
     /// <summary>
     /// 再生中のすべてのエフェクトを即終了させる
