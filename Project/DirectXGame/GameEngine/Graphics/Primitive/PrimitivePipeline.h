@@ -28,7 +28,7 @@ public:
     SRVManager* GetSRVManager() const { return srvManager_; }
 
     // 描画前の共通設定（RootSig / PSO / Topology をセット）
-    void PreDraw(BlendMode blendMode, bool depthWrite = false);
+    void PreDraw(BlendMode blendMode, bool depthWrite = false, bool cullBackface = false);
 
     ID3D12RootSignature* GetRootSignature() const { return rootSignature_.Get(); }
 
@@ -39,11 +39,12 @@ private:
     PrimitivePipeline& operator=(const PrimitivePipeline&) = delete;
 
     void CreateRootSignature();
-    void CreateGraphicsPipelineState(BlendMode mode, bool depthWrite);
+    void CreateGraphicsPipelineState(BlendMode mode, bool depthWrite, bool cullBackface);
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
 
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
-    std::array<std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, 2>, kCountOfBlendMode> pipelineStates_;
+    // pipelineStates_[BlendMode][DepthWrite(0/1)][CullBackface(0/1)]
+    std::array<std::array<std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, 2>, 2>, kCountOfBlendMode> pipelineStates_;
 };

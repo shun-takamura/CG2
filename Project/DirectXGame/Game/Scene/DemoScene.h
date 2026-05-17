@@ -75,8 +75,7 @@ public:
 
 private:
 
-	// デバッグカメラ
-	std::unique_ptr<DebugCamera> debugCamera_;
+	// DebugCamera は BaseScene が管理（GetDebugCamera() で取得）
 
 	// スプライト関連
 	std::unique_ptr<SpriteInstance> sprite_;

@@ -308,21 +308,23 @@ namespace PrimitiveGenerator {
         return mesh;
     }
 
-    MeshData CreateCylinder(float topRadius, float bottomRadius, float height,
-        uint32_t divisions,
-        const Vector4& topColor, const Vector4& bottomColor) {
+    MeshData CreateCylinder(const CylinderParams& params) {
         MeshData mesh;
 
+        uint32_t divisions = params.divisions;
         if (divisions < 3) divisions = 3;
 
-        const float radianPerDivide = 2.0f * 3.14159265358979323846f / static_cast<float>(divisions);
-        const float halfHeight = height * 0.5f;
+        const float halfHeight = params.height * 0.5f;
+        const float angleRange = params.endAngle - params.startAngle;
+        const float radianPerDivide = angleRange / static_cast<float>(divisions);
 
         for (uint32_t index = 0; index < divisions; ++index) {
-            float sin = std::sin(index * radianPerDivide);
-            float cos = std::cos(index * radianPerDivide);
-            float sinNext = std::sin((index + 1) * radianPerDivide);
-            float cosNext = std::cos((index + 1) * radianPerDivide);
+            float angle0 = params.startAngle + index * radianPerDivide;
+            float angle1 = params.startAngle + (index + 1) * radianPerDivide;
+            float sin = std::sin(angle0);
+            float cos = std::cos(angle0);
+            float sinNext = std::sin(angle1);
+            float cosNext = std::cos(angle1);
             float u = static_cast<float>(index) / static_cast<float>(divisions);
             float uNext = static_cast<float>(index + 1) / static_cast<float>(divisions);
 
@@ -330,26 +332,26 @@ namespace PrimitiveGenerator {
             MeshVertex v0{}, v1{}, v2{}, v3{};
 
             // 上側（Y = +halfHeight）
-            v0.position = { -sin * topRadius, halfHeight, cos * topRadius };
+            v0.position = { -sin * params.topRadius, halfHeight, cos * params.topRadius };
             v0.texcoord = { u, 0.0f };
             v0.normal = { -sin, 0.0f, cos };
-            v0.color = topColor;
+            v0.color = params.topColor;
 
-            v1.position = { -sinNext * topRadius, halfHeight, cosNext * topRadius };
+            v1.position = { -sinNext * params.topRadius, halfHeight, cosNext * params.topRadius };
             v1.texcoord = { uNext, 0.0f };
             v1.normal = { -sinNext, 0.0f, cosNext };
-            v1.color = topColor;
+            v1.color = params.topColor;
 
             // 下側（Y = -halfHeight）
-            v2.position = { -sin * bottomRadius, -halfHeight, cos * bottomRadius };
+            v2.position = { -sin * params.bottomRadius, -halfHeight, cos * params.bottomRadius };
             v2.texcoord = { u, 1.0f };
             v2.normal = { -sin, 0.0f, cos };
-            v2.color = bottomColor;
+            v2.color = params.bottomColor;
 
-            v3.position = { -sinNext * bottomRadius, -halfHeight, cosNext * bottomRadius };
+            v3.position = { -sinNext * params.bottomRadius, -halfHeight, cosNext * params.bottomRadius };
             v3.texcoord = { uNext, 1.0f };
             v3.normal = { -sinNext, 0.0f, cosNext };
-            v3.color = bottomColor;
+            v3.color = params.bottomColor;
 
             uint32_t baseIdx = static_cast<uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back(v0);
@@ -369,6 +371,20 @@ namespace PrimitiveGenerator {
         }
 
         return mesh;
+    }
+
+    // 既存シグネチャは Params 版にデリゲート
+    MeshData CreateCylinder(float topRadius, float bottomRadius, float height,
+        uint32_t divisions,
+        const Vector4& topColor, const Vector4& bottomColor) {
+        CylinderParams params;
+        params.topRadius = topRadius;
+        params.bottomRadius = bottomRadius;
+        params.height = height;
+        params.divisions = divisions;
+        params.topColor = topColor;
+        params.bottomColor = bottomColor;
+        return CreateCylinder(params);
     }
 
     MeshData CreateSphere(float radius, uint32_t divisions, const Vector4& color) {
@@ -423,6 +439,129 @@ namespace PrimitiveGenerator {
                 mesh.indices.push_back(i3);
             }
         }
+        return mesh;
+    }
+
+    MeshData CreateHelix(const HelixParams& params) {
+        MeshData mesh;
+
+        const float kPi = 3.14159265358979323846f;
+
+        uint32_t circleSegments = params.circleSegments < 3 ? 3 : params.circleSegments;
+        uint32_t lengthSegments = params.lengthSegments < 1 ? 1 : params.lengthSegments;
+
+        const float totalHeight = params.pitch * params.turns;
+        const float yOffset = -totalHeight * 0.5f; // 中心が原点
+        const float angularSpeed = 2.0f * kPi * params.turns; // dθ/dt（t∈[0,1]）
+
+        // 線形補間ヘルパ
+        auto lerpf = [](float a, float b, float t) { return a + (b - a) * t; };
+        auto lerpV4 = [](const Vector4& a, const Vector4& b, float t) {
+            return Vector4{
+                a.x + (b.x - a.x) * t,
+                a.y + (b.y - a.y) * t,
+                a.z + (b.z - a.z) * t,
+                a.w + (b.w - a.w) * t
+            };
+            };
+
+        auto normalize3 = [](const Vector3& v) -> Vector3 {
+            float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            if (len < 1e-6f) return { 1.0f, 0.0f, 0.0f };
+            return { v.x / len, v.y / len, v.z / len };
+            };
+        auto cross3 = [](const Vector3& a, const Vector3& b) -> Vector3 {
+            return {
+                a.y * b.z - a.z * b.y,
+                a.z * b.x - a.x * b.z,
+                a.x * b.y - a.y * b.x
+            };
+            };
+
+        // (lengthSegments+1) × (circleSegments+1) のグリッドで頂点生成
+        const uint32_t ringVertCount = circleSegments + 1;
+
+        for (uint32_t i = 0; i <= lengthSegments; ++i) {
+            float t = static_cast<float>(i) / static_cast<float>(lengthSegments);
+            float theta = angularSpeed * t;
+            float sinT = std::sin(theta);
+            float cosT = std::cos(theta);
+
+            float helixR = lerpf(params.startHelixRadius, params.endHelixRadius, t);
+            float tubeR  = lerpf(params.startTubeRadius,  params.endTubeRadius,  t);
+            Vector4 col  = lerpV4(params.startColor, params.endColor, t);
+
+            // 螺旋の中心点 P(t) = (helixR*cosθ, totalHeight*t + yOffset, helixR*sinθ)
+            Vector3 center = {
+                helixR * cosT,
+                totalHeight * t + yOffset,
+                helixR * sinT
+            };
+
+            // 接線 dP/dt
+            // dHelixR/dt = (end - start)
+            float dHelixR = (params.endHelixRadius - params.startHelixRadius);
+            Vector3 tangent = {
+                dHelixR * cosT - helixR * sinT * angularSpeed,
+                totalHeight,
+                dHelixR * sinT + helixR * cosT * angularSpeed
+            };
+            Vector3 T = normalize3(tangent);
+
+            // 安定したフレーム：Yワールドが接線とほぼ平行なときはXに切り替え
+            Vector3 up = (std::abs(T.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            Vector3 N = normalize3(cross3(T, up));
+            Vector3 B = cross3(N, T); // 既に正規直交
+
+            // 円周頂点
+            for (uint32_t j = 0; j <= circleSegments; ++j) {
+                float phi = 2.0f * kPi * static_cast<float>(j) / static_cast<float>(circleSegments);
+                float sinP = std::sin(phi);
+                float cosP = std::cos(phi);
+
+                // 外向き法線
+                Vector3 normal = {
+                    N.x * cosP + B.x * sinP,
+                    N.y * cosP + B.y * sinP,
+                    N.z * cosP + B.z * sinP
+                };
+
+                MeshVertex v{};
+                v.position = {
+                    center.x + tubeR * normal.x,
+                    center.y + tubeR * normal.y,
+                    center.z + tubeR * normal.z
+                };
+                v.normal = normal;
+                v.color  = col;
+                // U=長さ方向（スクロールで「流れる」演出）、V=円周方向
+                v.texcoord = {
+                    t,
+                    static_cast<float>(j) / static_cast<float>(circleSegments)
+                };
+                mesh.vertices.push_back(v);
+            }
+        }
+
+        // インデックス生成（グリッドを2三角形ずつ繋ぐ）
+        for (uint32_t i = 0; i < lengthSegments; ++i) {
+            for (uint32_t j = 0; j < circleSegments; ++j) {
+                uint32_t i0 = i * ringVertCount + j;
+                uint32_t i1 = i0 + 1;
+                uint32_t i2 = i0 + ringVertCount;
+                uint32_t i3 = i2 + 1;
+
+                // 表側：外向き法線で見える側
+                mesh.indices.push_back(i0);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i1);
+
+                mesh.indices.push_back(i1);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i3);
+            }
+        }
+
         return mesh;
     }
 }

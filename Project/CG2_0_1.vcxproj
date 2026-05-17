@@ -212,6 +212,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ImGuiManager.cpp" />
+    <ClCompile Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\InspectorWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\SceneEditorWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ViewportWindow.cpp" />
@@ -277,6 +278,12 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectDef.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectInstance.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Sound\SoundManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\MouseInput.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
@@ -319,6 +326,12 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\BillboardMode.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectDef.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\MeshData.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMaterial.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxTransformationMatrix.h" />
@@ -352,6 +365,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DStorageManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\TimeGroup.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />
@@ -380,6 +394,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiEditable.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ImGuiManager.h" />
+    <ClInclude Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\InspectorWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\SceneEditorWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ViewportWindow.h" />

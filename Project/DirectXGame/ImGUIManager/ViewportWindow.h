@@ -11,7 +11,7 @@ class SRVManager;
 class ViewportWindow : public IImGuiWindow {
 public:
     ViewportWindow(SRVManager* srvManager)
-        : IImGuiWindow("Viewport"), srvManager_(srvManager) {
+        : IImGuiWindow("Scene"), srvManager_(srvManager) {
         SetInitialSize(ImVec2(960, 540));  // 16:9 の初期サイズ
     }
 

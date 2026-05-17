@@ -5,52 +5,35 @@
 #include "Material.h"
 #include "VertexData.h"
 #include "Log.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 #include <cassert>
 
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
 
-void GPUParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager, const std::string& textureFilePath)
+void GPUParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 {
     dxCore_ = dxCore;
     srvManager_ = srvManager;
-    textureFilePath_ = textureFilePath;
 
-    // テクスチャ読み込み
-    TextureManager::GetInstance()->LoadTexture(textureFilePath_);
-    textureSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex(textureFilePath_);
-
-    CreateParticleResource();
-    CreateFreeListResources();
+    // 共通パイプラインとリソース
     CreateInitializePipeline();
     CreateEmitPipeline();
     CreateUpdatePipeline();
     CreateDrawPipeline();
     CreateVertexData();
-    CreatePerView();
-    CreatePerFrame();
-    CreateEmitter();
     CreateMaterial();
 }
 
 void GPUParticleManager::Finalize()
 {
-    if (perViewResource_) {
-        perViewResource_->Unmap(0, nullptr);
-        perViewData_ = nullptr;
+    for (auto& pair : groups_) {
+        ReleaseGroupResources(pair.second);
     }
-    if (perFrameResource_) {
-        perFrameResource_->Unmap(0, nullptr);
-        perFrameData_ = nullptr;
-    }
-    if (emitterResource_) {
-        emitterResource_->Unmap(0, nullptr);
-        emitterData_ = nullptr;
-    }
-    perViewResource_.Reset();
-    perFrameResource_.Reset();
-    emitterResource_.Reset();
+    groups_.clear();
+
     materialResource_.Reset();
     vertexResource_.Reset();
     drawPSO_.Reset();
@@ -61,233 +44,382 @@ void GPUParticleManager::Finalize()
     emitRootSig_.Reset();
     initPSO_.Reset();
     initRootSig_.Reset();
-    freeListResource_.Reset();
-    freeListIndexResource_.Reset();
-    particleResource_.Reset();
 }
 
-void GPUParticleManager::SetEmitterTranslate(const Vector3& translate)
+//==========================================================
+// グループ管理
+//==========================================================
+
+void GPUParticleManager::CreateGroup(const std::string& name, const std::string& texturePath)
 {
-    if (emitterData_) {
-        emitterData_->translate = translate;
+    if (groups_.find(name) != groups_.end()) return;
+
+    GPUParticleGroup g{};
+    CreateGroupResources(g, texturePath);
+    groups_.emplace(name, std::move(g));
+}
+
+void GPUParticleManager::RemoveGroup(const std::string& name)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    ReleaseGroupResources(it->second);
+    groups_.erase(it);
+}
+
+bool GPUParticleManager::HasGroup(const std::string& name) const
+{
+    return groups_.find(name) != groups_.end();
+}
+
+//==========================================================
+// 発射API
+//==========================================================
+
+void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.emitterData) return;
+
+    auto& e = *it->second.emitterData;
+    // emit 以外（CB は今フレームで一度しか書かないフィールド）はここで直接書く
+    e.translate = position;
+    e.radius = radius;
+    e.count = count;
+    // emit フラグは Update() で CB に転写する（CPU/GPU レース回避）
+    it->second.pendingBurst = true;
+}
+
+void GPUParticleManager::SetContinuousEmit(const std::string& name, bool enabled, float frequency, uint32_t countPerEmit, float radius)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    it->second.continuousEnabled = enabled;
+    if (it->second.emitterData) {
+        it->second.emitterData->frequency = frequency;
+        it->second.emitterData->count = countPerEmit;
+        it->second.emitterData->radius = radius;
+    }
+}
+
+void GPUParticleManager::SetEmitterTranslate(const std::string& name, const Vector3& translate)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.emitterData) return;
+    it->second.emitterData->translate = translate;
+}
+
+//==========================================================
+// ビルボード / TimeGroup
+//==========================================================
+
+void GPUParticleManager::SetGroupBillboardMode(const std::string& name, BillboardMode mode)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    it->second.billboardMode = mode;
+}
+
+void GPUParticleManager::SetGroupTimeGroup(const std::string& name, TimeGroup group)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    it->second.timeGroup = group;
+}
+
+//==========================================================
+// 毎フレーム
+//==========================================================
+
+void GPUParticleManager::Update(const Camera* camera, float deltaTime)
+{
+    // 共通：カメラからview/billboard行列を作る
+    if (camera) {
+        viewProjectionMatrix_ = camera->GetViewProjectionMatrix();
+        const Matrix4x4& view = camera->GetViewMatrix();
+        Matrix4x4 b = MakeIdentity4x4();
+        b.m[0][0] = view.m[0][0]; b.m[0][1] = view.m[1][0]; b.m[0][2] = view.m[2][0];
+        b.m[1][0] = view.m[0][1]; b.m[1][1] = view.m[1][1]; b.m[1][2] = view.m[2][1];
+        b.m[2][0] = view.m[0][2]; b.m[2][1] = view.m[1][2]; b.m[2][2] = view.m[2][2];
+        fullBillboardMatrix_ = b;
+        cameraPosition_ = camera->GetTranslate();
+    }
+
+    // シーン取得（TimeGroup連動dt用）
+    BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+
+    // 各グループのCBを更新
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+
+        float dt = scene ? scene->GetScaledDeltaTime(g.timeGroup) : deltaTime;
+        g.elapsedTime += dt;
+
+        // PerFrame
+        if (g.perFrameData) {
+            g.perFrameData->time = g.elapsedTime;
+            g.perFrameData->deltaTime = dt;
+        }
+
+        // Emitter の emit フラグをこのフレームの最終値で確定させる
+        //   - pendingBurst が立っていれば 1（その後フラグを下ろす）
+        //   - 連続発射なら frequency に従って 0/1
+        //   - それ以外は 0
+        if (g.emitterData) {
+            if (g.pendingBurst) {
+                g.emitterData->emit = 1;
+                g.pendingBurst = false;
+            } else if (g.continuousEnabled) {
+                g.emitterData->frequencyTime += dt;
+                if (g.emitterData->frequency <= g.emitterData->frequencyTime) {
+                    g.emitterData->frequencyTime -= g.emitterData->frequency;
+                    g.emitterData->emit = 1;
+                } else {
+                    g.emitterData->emit = 0;
+                }
+            } else {
+                g.emitterData->emit = 0;
+            }
+        }
+
+        // PerView
+        if (g.perViewData) {
+            g.perViewData->viewProjection = viewProjectionMatrix_;
+            g.perViewData->billboardMatrix = fullBillboardMatrix_;
+            g.perViewData->cameraPosition = cameraPosition_;
+            g.perViewData->billboardMode = static_cast<uint32_t>(g.billboardMode);
+        }
+    }
+}
+
+void GPUParticleManager::UpdatePreviewView(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos)
+{
+    // プレビューカメラから billboard / cameraPosition / VP を計算してプレビュー用CBに書き込む
+    Matrix4x4 bb = MakeIdentity4x4();
+    bb.m[0][0] = viewMatrix.m[0][0]; bb.m[0][1] = viewMatrix.m[1][0]; bb.m[0][2] = viewMatrix.m[2][0];
+    bb.m[1][0] = viewMatrix.m[0][1]; bb.m[1][1] = viewMatrix.m[1][1]; bb.m[1][2] = viewMatrix.m[2][1];
+    bb.m[2][0] = viewMatrix.m[0][2]; bb.m[2][1] = viewMatrix.m[1][2]; bb.m[2][2] = viewMatrix.m[2][2];
+
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (!g.perViewPreviewData) continue;
+        g.perViewPreviewData->viewProjection = viewProjectionMatrix;
+        g.perViewPreviewData->billboardMatrix = bb;
+        g.perViewPreviewData->cameraPosition = cameraPos;
+        g.perViewPreviewData->billboardMode = static_cast<uint32_t>(g.billboardMode);
+    }
+}
+
+void GPUParticleManager::DrawPreview()
+{
+    if (groups_.empty()) return;
+
+    auto commandList = dxCore_->GetCommandList();
+
+    // 注意: メインの Draw() が同フレーム内で先に呼ばれていることを前提にする。
+    // メインの Draw() の末尾で Particle リソースは NPS 状態になっているため、ここでは遷移不要。
+    // Emit/Update CS は走らせない（シミュレーションはメイン1回のみ）。
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (!g.initializedOnGPU) continue;  // 未初期化グループはスキップ
+
+        commandList->SetGraphicsRootSignature(drawRootSig_.Get());
+        commandList->SetPipelineState(drawPSO_.Get());
+        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
+        // プレビュー用 PerView CB をbind
+        commandList->SetGraphicsRootConstantBufferView(1, g.perViewPreviewResource->GetGPUVirtualAddress());
+        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+
+        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+    }
+}
+
+void GPUParticleManager::Draw()
+{
+    if (groups_.empty()) return;
+
+    auto commandList = dxCore_->GetCommandList();
+
+    // 各グループを単独のサイクルで処理する
+    //   未初期化:  COMMON -> UAV + Init CS + UAV barrier
+    //   初期化済:  NPS    -> UAV
+    //   共通:      Emit CS -> UAV barrier -> Update CS -> UAV -> NPS -> Draw
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+
+        if (!g.initializedOnGPU) {
+            // COMMON -> UAV へ遷移
+            D3D12_RESOURCE_BARRIER toUav[3] = {};
+            toUav[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            toUav[0].Transition.pResource = g.particleResource.Get();
+            toUav[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+            toUav[0].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            toUav[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            toUav[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            toUav[1].Transition.pResource = g.freeListIndexResource.Get();
+            toUav[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+            toUav[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            toUav[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            toUav[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            toUav[2].Transition.pResource = g.freeListResource.Get();
+            toUav[2].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+            toUav[2].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            toUav[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            commandList->ResourceBarrier(3, toUav);
+
+            DispatchInitializeCS(g);
+
+            // Init後のUAVバリアでEmit前の書き込みを保証
+            D3D12_RESOURCE_BARRIER initUavBarrier[3] = {};
+            initUavBarrier[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            initUavBarrier[0].UAV.pResource = g.particleResource.Get();
+            initUavBarrier[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            initUavBarrier[1].UAV.pResource = g.freeListIndexResource.Get();
+            initUavBarrier[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            initUavBarrier[2].UAV.pResource = g.freeListResource.Get();
+            commandList->ResourceBarrier(3, initUavBarrier);
+
+            g.initializedOnGPU = true;
+            // ここでは Particle は UAV 状態（NPS には行っていない）
+        } else {
+            // 既に init 済み：前フレーム描画後の NPS から UAV に戻す
+            TransitionParticle(g, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+
+        // Emit （emit フラグは Update で確定済み。Draw中に CB を書き換えると GPU 実行前にレースするので触らない）
+        DispatchEmitCS(g);
+
+        {
+            D3D12_RESOURCE_BARRIER barriers[3] = {};
+            barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barriers[0].UAV.pResource = g.particleResource.Get();
+            barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barriers[1].UAV.pResource = g.freeListIndexResource.Get();
+            barriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barriers[2].UAV.pResource = g.freeListResource.Get();
+            commandList->ResourceBarrier(3, barriers);
+        }
+
+        // Update
+        DispatchUpdateCS(g);
+
+        // 描画用 NPS へ
+        TransitionParticle(g, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        // 描画
+        commandList->SetGraphicsRootSignature(drawRootSig_.Get());
+        commandList->SetPipelineState(drawPSO_.Get());
+        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
+        commandList->SetGraphicsRootConstantBufferView(1, g.perViewResource->GetGPUVirtualAddress());
+        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+
+        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
     }
 }
 
 void GPUParticleManager::OnImGui()
 {
 #ifdef USE_IMGUI
-    ImGui::Text("Max Particles: %u", kMaxParticles);
-    ImGui::Text("Elapsed Time: %.2f s", elapsedTime_);
+    ImGui::Text("Groups: %zu", groups_.size());
     ImGui::Separator();
 
-    if (!emitterData_) {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Emitter not initialized");
-        return;
-    }
+    const char* billboardItems[] = { "None", "Full", "YAxis" };
+    const char* timeGroupItems[] = { "World", "Player", "UI" };
 
-    if (ImGui::CollapsingHeader("Emitter", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::DragFloat3("Translate", &emitterData_->translate.x, 0.1f);
-        ImGui::DragFloat("Radius", &emitterData_->radius, 0.05f, 0.0f, 100.0f);
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        ImGui::PushID(pair.first.c_str());
+        if (ImGui::CollapsingHeader(pair.first.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Texture: %s", g.textureFilePath.c_str());
+            ImGui::Text("Elapsed: %.2f s", g.elapsedTime);
 
-        int count = static_cast<int>(emitterData_->count);
-        if (ImGui::DragInt("Count per Emit", &count, 1, 0, static_cast<int>(kMaxParticles))) {
-            emitterData_->count = static_cast<uint32_t>(count);
+            int bIdx = static_cast<int>(g.billboardMode);
+            if (ImGui::Combo("Billboard", &bIdx, billboardItems, IM_ARRAYSIZE(billboardItems))) {
+                g.billboardMode = static_cast<BillboardMode>(bIdx);
+            }
+            int tg = static_cast<int>(g.timeGroup);
+            if (ImGui::Combo("Time Group", &tg, timeGroupItems, IM_ARRAYSIZE(timeGroupItems))) {
+                g.timeGroup = static_cast<TimeGroup>(tg);
+            }
+
+            ImGui::Checkbox("Continuous Emit", &g.continuousEnabled);
+            if (g.emitterData) {
+                ImGui::DragFloat3("Translate", &g.emitterData->translate.x, 0.1f);
+                ImGui::DragFloat("Radius", &g.emitterData->radius, 0.05f, 0.0f, 100.0f);
+                int count = static_cast<int>(g.emitterData->count);
+                if (ImGui::DragInt("Count per Emit", &count, 1, 0, static_cast<int>(kMaxParticles))) {
+                    g.emitterData->count = static_cast<uint32_t>(count);
+                }
+                ImGui::DragFloat("Frequency (s)", &g.emitterData->frequency, 0.01f, 0.01f, 10.0f);
+                if (ImGui::Button("Burst Now")) {
+                    g.pendingBurst = true;
+                }
+            }
         }
-
-        ImGui::DragFloat("Frequency (s)", &emitterData_->frequency, 0.01f, 0.01f, 10.0f);
-        ImGui::Text("Frequency Time: %.3f", emitterData_->frequencyTime);
-
-        if (ImGui::Button("Emit Now")) {
-            emitterData_->emit = 1;
-        }
+        ImGui::PopID();
     }
 #endif
 }
 
-void GPUParticleManager::Update(const Camera* camera, float deltaTime)
-{
-    const float dt = deltaTime;
-    elapsedTime_ += dt;
+//==========================================================
+// CS Dispatch
+//==========================================================
 
-    // PerFrame更新
-    if (perFrameData_) {
-        perFrameData_->time = elapsedTime_;
-        perFrameData_->deltaTime = dt;
-    }
-
-    // Emitterの更新（CPU側）
-    if (emitterData_) {
-        emitterData_->frequencyTime += dt;
-        if (emitterData_->frequency <= emitterData_->frequencyTime) {
-            emitterData_->frequencyTime -= emitterData_->frequency;
-            emitterData_->emit = 1; // 射出許可
-        }
-        else {
-            emitterData_->emit = 0;
-        }
-    }
-
-    // PerView更新
-    if (camera && perViewData_) {
-        perViewData_->viewProjection = camera->GetViewProjectionMatrix();
-
-        // billboardMatrix
-        const Matrix4x4& view = camera->GetViewMatrix();
-        Matrix4x4 billboard = MakeIdentity4x4();
-        billboard.m[0][0] = view.m[0][0];
-        billboard.m[0][1] = view.m[1][0];
-        billboard.m[0][2] = view.m[2][0];
-        billboard.m[1][0] = view.m[0][1];
-        billboard.m[1][1] = view.m[1][1];
-        billboard.m[1][2] = view.m[2][1];
-        billboard.m[2][0] = view.m[0][2];
-        billboard.m[2][1] = view.m[1][2];
-        billboard.m[2][2] = view.m[2][2];
-        perViewData_->billboardMatrix = billboard;
-    }
-}
-
-void GPUParticleManager::Draw()
-{
-    auto commandList = dxCore_->GetCommandList();
-
-    // 初回はInit CSも実行する
-    if (!initializedOnGPU_) {
-        // COMMON -> UAV へ遷移（FreeListIndex / FreeListは以降ずっとUAV）
-        D3D12_RESOURCE_BARRIER toUav[3] = {};
-        toUav[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toUav[0].Transition.pResource = particleResource_.Get();
-        toUav[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        toUav[0].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        toUav[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        toUav[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toUav[1].Transition.pResource = freeListIndexResource_.Get();
-        toUav[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        toUav[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        toUav[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        toUav[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toUav[2].Transition.pResource = freeListResource_.Get();
-        toUav[2].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        toUav[2].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        toUav[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        commandList->ResourceBarrier(3, toUav);
-
-        DispatchInitializeCS();
-
-        // Init CSの書き込みを後段のEmit CS前に確実にするUAV barrier（3つ全部）
-        D3D12_RESOURCE_BARRIER initUavBarrier[3] = {};
-        initUavBarrier[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        initUavBarrier[0].UAV.pResource = particleResource_.Get();
-        initUavBarrier[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        initUavBarrier[1].UAV.pResource = freeListIndexResource_.Get();
-        initUavBarrier[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        initUavBarrier[2].UAV.pResource = freeListResource_.Get();
-        commandList->ResourceBarrier(3, initUavBarrier);
-
-        initializedOnGPU_ = true;
-    }
-    else {
-        // 描画用のNPS_RESOURCEからUAVへ戻す（ParticleのみNPSと往復する）
-        TransitionParticle(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    }
-
-    // ====== EmitParticle ======
-    DispatchEmitCS();
-
-    // EmitとUpdateの間：3つともUpdateで触るのでUAV Barrierを張る
-    {
-        D3D12_RESOURCE_BARRIER barriers[3] = {};
-        barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        barriers[0].UAV.pResource = particleResource_.Get();
-        barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        barriers[1].UAV.pResource = freeListIndexResource_.Get();
-        barriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        barriers[2].UAV.pResource = freeListResource_.Get();
-        commandList->ResourceBarrier(3, barriers);
-    }
-
-    // ====== UpdateParticle ======
-    DispatchUpdateCS();
-
-    // ====== Particleを描画用stateへ ======
-    TransitionParticle(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    // 描画
-    commandList->SetGraphicsRootSignature(drawRootSig_.Get());
-    commandList->SetPipelineState(drawPSO_.Get());
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
-
-    // [0] VS: Particle StructuredBuffer (t0)
-    srvManager_->SetGraphicsRootDescriptorTable(0, particleSrvIndex_);
-    // [1] VS: PerView CBV (b0)
-    commandList->SetGraphicsRootConstantBufferView(1, perViewResource_->GetGPUVirtualAddress());
-    // [2] PS: Material CBV (b0)
-    commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
-    // [3] PS: Texture (t0)
-    srvManager_->SetGraphicsRootDescriptorTable(3, textureSrvIndex_);
-
-    commandList->DrawInstanced(6, kMaxParticles, 0, 0);
-}
-
-void GPUParticleManager::DispatchInitializeCS()
+void GPUParticleManager::DispatchInitializeCS(GPUParticleGroup& g)
 {
     auto commandList = dxCore_->GetCommandList();
     commandList->SetComputeRootSignature(initRootSig_.Get());
     commandList->SetPipelineState(initPSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(particleUavIndex_));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(freeListIndexUavIndex_));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(freeListUavIndex_));
+    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
 
-    // 1024 / numthreads(1024) = 1
     commandList->Dispatch(1, 1, 1);
 }
 
-void GPUParticleManager::DispatchEmitCS()
+void GPUParticleManager::DispatchEmitCS(GPUParticleGroup& g)
 {
     auto commandList = dxCore_->GetCommandList();
     commandList->SetComputeRootSignature(emitRootSig_.Get());
     commandList->SetPipelineState(emitPSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(particleUavIndex_));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(freeListIndexUavIndex_));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(freeListUavIndex_));
-    commandList->SetComputeRootConstantBufferView(3, emitterResource_->GetGPUVirtualAddress());
-    commandList->SetComputeRootConstantBufferView(4, perFrameResource_->GetGPUVirtualAddress());
+    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
+    commandList->SetComputeRootConstantBufferView(3, g.emitterResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootConstantBufferView(4, g.perFrameResource->GetGPUVirtualAddress());
 
     commandList->Dispatch(1, 1, 1);
 }
 
-void GPUParticleManager::DispatchUpdateCS()
+void GPUParticleManager::DispatchUpdateCS(GPUParticleGroup& g)
 {
     auto commandList = dxCore_->GetCommandList();
     commandList->SetComputeRootSignature(updateRootSig_.Get());
     commandList->SetPipelineState(updatePSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(particleUavIndex_));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(freeListIndexUavIndex_));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(freeListUavIndex_));
-    commandList->SetComputeRootConstantBufferView(3, perFrameResource_->GetGPUVirtualAddress());
+    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
+    commandList->SetComputeRootConstantBufferView(3, g.perFrameResource->GetGPUVirtualAddress());
 
-    // 1024 / numthreads(1024) = 1
     commandList->Dispatch(1, 1, 1);
 }
 
-void GPUParticleManager::UavBarrierParticle()
-{
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrier.UAV.pResource = particleResource_.Get();
-    dxCore_->GetCommandList()->ResourceBarrier(1, &barrier);
-}
-
-void GPUParticleManager::TransitionParticle(D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+void GPUParticleManager::TransitionParticle(GPUParticleGroup& g, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
 {
     D3D12_RESOURCE_BARRIER barrier{};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = particleResource_.Get();
+    barrier.Transition.pResource = g.particleResource.Get();
     barrier.Transition.StateBefore = before;
     barrier.Transition.StateAfter = after;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -295,52 +427,116 @@ void GPUParticleManager::TransitionParticle(D3D12_RESOURCE_STATES before, D3D12_
 }
 
 //==========================================================
-// 内部ヘルパー
+// グループ別リソース確保・解放
 //==========================================================
 
-void GPUParticleManager::CreateParticleResource()
+void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::string& texturePath)
 {
-    particleResource_ = dxCore_->CreateUavBufferResource(sizeof(ParticleCS) * kMaxParticles);
+    // テクスチャ
+    g.textureFilePath = texturePath;
+    TextureManager::GetInstance()->LoadTexture(texturePath);
+    g.textureSrvIndex = TextureManager::GetInstance()->GetSrvIndex(texturePath);
 
-    particleUavIndex_ = srvManager_->Allocate();
-    srvManager_->CreateUAVForStructuredBuffer(particleUavIndex_, particleResource_.Get(), kMaxParticles, sizeof(ParticleCS));
+    // Particle DEFAULT heap
+    g.particleResource = dxCore_->CreateUavBufferResource(sizeof(ParticleCS) * kMaxParticles);
+    g.particleUavIndex = srvManager_->Allocate();
+    srvManager_->CreateUAVForStructuredBuffer(g.particleUavIndex, g.particleResource.Get(), kMaxParticles, sizeof(ParticleCS));
+    g.particleSrvIndex = srvManager_->Allocate();
+    srvManager_->CreateSRVForStructuredBuffer(g.particleSrvIndex, g.particleResource.Get(), kMaxParticles, sizeof(ParticleCS));
 
-    particleSrvIndex_ = srvManager_->Allocate();
-    srvManager_->CreateSRVForStructuredBuffer(particleSrvIndex_, particleResource_.Get(), kMaxParticles, sizeof(ParticleCS));
+    // FreeListIndex
+    g.freeListIndexResource = dxCore_->CreateUavBufferResource(sizeof(int32_t));
+    g.freeListIndexUavIndex = srvManager_->Allocate();
+    srvManager_->CreateUAVForStructuredBuffer(g.freeListIndexUavIndex, g.freeListIndexResource.Get(), 1, sizeof(int32_t));
+
+    // FreeList
+    g.freeListResource = dxCore_->CreateUavBufferResource(sizeof(uint32_t) * kMaxParticles);
+    g.freeListUavIndex = srvManager_->Allocate();
+    srvManager_->CreateUAVForStructuredBuffer(g.freeListUavIndex, g.freeListResource.Get(), kMaxParticles, sizeof(uint32_t));
+
+    // Emitter CB
+    g.emitterResource = dxCore_->CreateBufferResource(sizeof(EmitterSphere));
+    g.emitterResource->Map(0, nullptr, reinterpret_cast<void**>(&g.emitterData));
+    g.emitterData->translate = { 0.0f, 0.0f, 0.0f };
+    g.emitterData->radius = 1.0f;
+    g.emitterData->count = 10;
+    g.emitterData->frequency = 0.5f;
+    g.emitterData->frequencyTime = 0.0f;
+    g.emitterData->emit = 0;
+
+    // PerFrame CB
+    g.perFrameResource = dxCore_->CreateBufferResource(sizeof(PerFrame));
+    g.perFrameResource->Map(0, nullptr, reinterpret_cast<void**>(&g.perFrameData));
+    g.perFrameData->time = 0.0f;
+    g.perFrameData->deltaTime = 0.0f;
+    g.perFrameData->pad[0] = 0.0f;
+    g.perFrameData->pad[1] = 0.0f;
+
+    // PerView CB（メイン用）
+    g.perViewResource = dxCore_->CreateBufferResource(sizeof(PerView));
+    g.perViewResource->Map(0, nullptr, reinterpret_cast<void**>(&g.perViewData));
+    g.perViewData->viewProjection = MakeIdentity4x4();
+    g.perViewData->billboardMatrix = MakeIdentity4x4();
+    g.perViewData->cameraPosition = { 0.0f, 0.0f, 0.0f };
+    g.perViewData->billboardMode = static_cast<uint32_t>(BillboardMode::Full);
+
+    // PerView CB（プレビュー用）
+    g.perViewPreviewResource = dxCore_->CreateBufferResource(sizeof(PerView));
+    g.perViewPreviewResource->Map(0, nullptr, reinterpret_cast<void**>(&g.perViewPreviewData));
+    g.perViewPreviewData->viewProjection = MakeIdentity4x4();
+    g.perViewPreviewData->billboardMatrix = MakeIdentity4x4();
+    g.perViewPreviewData->cameraPosition = { 0.0f, 0.0f, 0.0f };
+    g.perViewPreviewData->billboardMode = static_cast<uint32_t>(BillboardMode::Full);
 }
 
-void GPUParticleManager::CreateFreeListResources()
+void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
 {
-    // FreeListIndex: int32_t × 1
-    freeListIndexResource_ = dxCore_->CreateUavBufferResource(sizeof(int32_t));
-    freeListIndexUavIndex_ = srvManager_->Allocate();
-    srvManager_->CreateUAVForStructuredBuffer(freeListIndexUavIndex_, freeListIndexResource_.Get(), 1, sizeof(int32_t));
-
-    // FreeList: uint32_t × kMaxParticles
-    freeListResource_ = dxCore_->CreateUavBufferResource(sizeof(uint32_t) * kMaxParticles);
-    freeListUavIndex_ = srvManager_->Allocate();
-    srvManager_->CreateUAVForStructuredBuffer(freeListUavIndex_, freeListResource_.Get(), kMaxParticles, sizeof(uint32_t));
+    if (g.emitterResource && g.emitterData) {
+        g.emitterResource->Unmap(0, nullptr);
+        g.emitterData = nullptr;
+    }
+    if (g.perFrameResource && g.perFrameData) {
+        g.perFrameResource->Unmap(0, nullptr);
+        g.perFrameData = nullptr;
+    }
+    if (g.perViewResource && g.perViewData) {
+        g.perViewResource->Unmap(0, nullptr);
+        g.perViewData = nullptr;
+    }
+    if (g.perViewPreviewResource && g.perViewPreviewData) {
+        g.perViewPreviewResource->Unmap(0, nullptr);
+        g.perViewPreviewData = nullptr;
+    }
+    g.emitterResource.Reset();
+    g.perFrameResource.Reset();
+    g.perViewResource.Reset();
+    g.perViewPreviewResource.Reset();
+    g.freeListResource.Reset();
+    g.freeListIndexResource.Reset();
+    g.particleResource.Reset();
+    // SRV/UAV インデックスは SRVManager に返却するAPIがないため保持しない（リーク扱い、Finalize時のみ問題）
 }
+
+//==========================================================
+// 共通パイプライン・リソース生成
+//==========================================================
 
 void GPUParticleManager::CreateInitializePipeline()
 {
     HRESULT hr;
 
-    // u0 (Particle UAV)
     D3D12_DESCRIPTOR_RANGE rangeParticle[1] = {};
     rangeParticle[0].BaseShaderRegister = 0;
     rangeParticle[0].NumDescriptors = 1;
     rangeParticle[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeParticle[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    // u1 (FreeListIndex UAV)
     D3D12_DESCRIPTOR_RANGE rangeListIndex[1] = {};
     rangeListIndex[0].BaseShaderRegister = 1;
     rangeListIndex[0].NumDescriptors = 1;
     rangeListIndex[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeListIndex[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    // u2 (FreeList UAV)
     D3D12_DESCRIPTOR_RANGE rangeList[1] = {};
     rangeList[0].BaseShaderRegister = 2;
     rangeList[0].NumDescriptors = 1;
@@ -352,12 +548,10 @@ void GPUParticleManager::CreateInitializePipeline()
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
     rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-
     rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
     rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-
     rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
@@ -414,26 +608,21 @@ void GPUParticleManager::CreateEmitPipeline()
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_ROOT_PARAMETER rootParameters[5] = {};
-    // [0] u0 Particle
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
     rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    // [1] u1 FreeListIndex
     rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
     rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-    // [2] u2 FreeList
     rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
     rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-    // [3] b0 EmitterSphere
     rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[3].Descriptor.ShaderRegister = 0;
-    // [4] b1 PerFrame
     rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[4].Descriptor.ShaderRegister = 1;
@@ -489,22 +678,18 @@ void GPUParticleManager::CreateUpdatePipeline()
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_ROOT_PARAMETER rootParameters[4] = {};
-    // [0] u0 Particle
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
     rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    // [1] u1 FreeListIndex
     rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
     rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-    // [2] u2 FreeList
     rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
     rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-    // [3] b0 PerFrame
     rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[3].Descriptor.ShaderRegister = 0;
@@ -554,26 +739,20 @@ void GPUParticleManager::CreateDrawPipeline()
     rangeTexture[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_ROOT_PARAMETER rootParameters[5] = {};
-
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticleSrv;
     rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-
     rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     rootParameters[1].Descriptor.ShaderRegister = 0;
-
     rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[2].Descriptor.ShaderRegister = 0;
-
     rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[3].DescriptorTable.pDescriptorRanges = rangeTexture;
     rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
-
-    // 既存Particle.PS.hlslの宣言に合わせるだけで未使用
     rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[4].Descriptor.ShaderRegister = 1;
@@ -641,7 +820,6 @@ void GPUParticleManager::CreateDrawPipeline()
     blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
     blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
     blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-    // 透過部分(src.a=0)で destAlpha を保持し、ImGui Viewport 表示時に下のImGui背景が透けないようにする
     blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
 
     D3D12_DEPTH_STENCIL_DESC depth{};
@@ -704,38 +882,6 @@ void GPUParticleManager::CreateVertexData()
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
     vertexBufferView_.SizeInBytes = sizeof(VertexData) * 6;
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
-}
-
-void GPUParticleManager::CreatePerView()
-{
-    perViewResource_ = dxCore_->CreateBufferResource(sizeof(PerView));
-    perViewResource_->Map(0, nullptr, reinterpret_cast<void**>(&perViewData_));
-    perViewData_->viewProjection = MakeIdentity4x4();
-    perViewData_->billboardMatrix = MakeIdentity4x4();
-}
-
-void GPUParticleManager::CreatePerFrame()
-{
-    perFrameResource_ = dxCore_->CreateBufferResource(sizeof(PerFrame));
-    perFrameResource_->Map(0, nullptr, reinterpret_cast<void**>(&perFrameData_));
-    perFrameData_->time = 0.0f;
-    perFrameData_->deltaTime = 0.0f;
-    perFrameData_->pad[0] = 0.0f;
-    perFrameData_->pad[1] = 0.0f;
-}
-
-void GPUParticleManager::CreateEmitter()
-{
-    emitterResource_ = dxCore_->CreateBufferResource(sizeof(EmitterSphere));
-    emitterResource_->Map(0, nullptr, reinterpret_cast<void**>(&emitterData_));
-
-    // テキストの初期値
-    emitterData_->translate = { 0.0f, 0.0f, 0.0f };
-    emitterData_->radius = 1.0f;
-    emitterData_->count = 10;
-    emitterData_->frequency = 0.5f;
-    emitterData_->frequencyTime = 0.0f;
-    emitterData_->emit = 0;
 }
 
 void GPUParticleManager::CreateMaterial()

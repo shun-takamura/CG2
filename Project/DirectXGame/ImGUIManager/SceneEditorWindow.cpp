@@ -289,7 +289,7 @@ void SceneEditorWindow::OnDraw() {
     // Models セクション（Object3D 用 .mesh）
     // ============================================
     if (ImGui::CollapsingHeader("Models  (.mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("drag onto Viewport to add");
+        ImGui::TextDisabled("drag onto Scene to add");
         for (size_t i = 0; i < models.size(); ++i) {
             const auto& entry = models[i];
             if (!matchesSearch(entry.displayName)) continue;
@@ -320,7 +320,7 @@ void SceneEditorWindow::OnDraw() {
     // Sprites セクション（.dds）
     // ============================================
     if (ImGui::CollapsingHeader("Sprites  (.dds)", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("drag onto Viewport to place at cursor");
+        ImGui::TextDisabled("drag onto Scene to place at cursor");
         for (size_t i = 0; i < textures.size(); ++i) {
             const auto& entry = textures[i];
             if (!matchesSearch(entry.displayName)) continue;
@@ -370,7 +370,7 @@ void SceneEditorWindow::OnDraw() {
     // Primitives セクション（Plane / Box / Sphere / Ring / Cylinder）
     // ============================================
     if (ImGui::CollapsingHeader("Primitives", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("drag onto Viewport to add");
+        ImGui::TextDisabled("drag onto Scene to add");
 
         const int kPrimitiveCount = static_cast<int>(PrimitiveInstance::PrimitiveType::kCount);
         for (int i = 0; i < kPrimitiveCount; ++i) {
@@ -389,6 +389,34 @@ void SceneEditorWindow::OnDraw() {
                 ImGui::EndDragDropSource();
             }
 
+            ImGui::PopID();
+        }
+    }
+
+    // ============================================
+    // Effect Components セクション（EffectEditor ビューポートにドロップ）
+    // ============================================
+    if (ImGui::CollapsingHeader("Effect Components", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("drag onto EffectEditor viewport to add");
+
+        struct CompEntry { const char* label; int kind; };
+        const CompEntry entries[] = {
+            { "Primitive", 0 },
+            { "Particle",  1 },
+            { "Light",     2 },
+            { "Sound",     3 },
+        };
+
+        for (int i = 0; i < static_cast<int>(std::size(entries)); ++i) {
+            ImGui::PushID(i + 600000);
+            ImGui::Selectable(entries[i].label, false);
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                EffectComponentDropPayload payload{};
+                payload.kind = entries[i].kind;
+                ImGui::SetDragDropPayload(EFFECT_COMP_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(entries[i].label);
+                ImGui::EndDragDropSource();
+            }
             ImGui::PopID();
         }
     }

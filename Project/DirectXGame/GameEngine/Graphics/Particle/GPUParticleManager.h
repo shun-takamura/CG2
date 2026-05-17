@@ -4,35 +4,61 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Matrix4x4.h"
+#include "BillboardMode.h"
+#include "TimeGroup.h"
 #include <wrl.h>
 #include <d3d12.h>
 #include <string>
+#include <unordered_map>
 #include <cstdint>
 
 class Camera;
 
 // GPU Particle 管理クラス
-// - 1024個のParticleをDEFAULT heapに保持
-// - 初期化はComputeShader (InitializeParticle.CS.hlsl)
-// - Emitter発生はComputeShader (EmitParticle.CS.hlsl)
-// - 描画はStructuredBufferをVSで参照してインスタンシング描画
+// - グループ名でN個のパーティクルプールを管理
+// - 各グループ 1024個のParticleをDEFAULT heapに保持
+// - 初期化/Emit/Update は ComputeShader で行い、描画はStructuredBufferをVSで参照
 class GPUParticleManager
 {
 public:
     static const uint32_t kMaxParticles = 1024;
 
-    void Initialize(DirectXCore* dxCore, SRVManager* srvManager, const std::string& textureFilePath);
+    void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
     void Finalize();
 
-    // 描画前の毎フレーム更新（PerView/PerFrame/Emitterの書き込み）
-    // deltaTime はタイムスケール適用済みの値を呼び出し側から受け取る
-    void Update(const Camera* camera, float deltaTime);
+    // ===== グループ管理 =====
+    /// <summary>
+    /// 新しいパーティクルグループを生成。同名が既にあれば何もしない。
+    /// </summary>
+    void CreateGroup(const std::string& name, const std::string& texturePath);
+    void RemoveGroup(const std::string& name);
+    bool HasGroup(const std::string& name) const;
 
-    // 描画。最初の呼び出し時に初期化CSのDispatchも行う
+    // ===== 発射API =====
+    /// <summary>
+    /// 1回だけバースト発射（次フレームの Emit CS で N個を一括生成）
+    /// </summary>
+    void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius = 0.5f);
+
+    /// <summary>
+    /// 連続発射のON/OFFと頻度設定
+    /// </summary>
+    void SetContinuousEmit(const std::string& name, bool enabled, float frequency = 0.5f, uint32_t countPerEmit = 10, float radius = 1.0f);
+    void SetEmitterTranslate(const std::string& name, const Vector3& translate);
+
+    // ===== ビルボード / TimeGroup =====
+    void SetGroupBillboardMode(const std::string& name, BillboardMode mode);
+    void SetGroupTimeGroup(const std::string& name, TimeGroup group);
+
+    // ===== 毎フレーム =====
+    void Update(const Camera* camera, float deltaTime);
     void Draw();
 
-    // Emitter位置のセッター
-    void SetEmitterTranslate(const Vector3& translate);
+    // プレビュー用 PerView を更新（メインの Update とは独立）
+    void UpdatePreviewView(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos);
+
+    // プレビュー用 PerView を使って描画（Emit/Update CS は走らない、SRV化された粒子データを描画するだけ）
+    void DrawPreview();
 
     // ImGui デバッグUI
     void OnImGui();
@@ -52,7 +78,9 @@ private:
     struct PerView
     {
         Matrix4x4 viewProjection;
-        Matrix4x4 billboardMatrix;
+        Matrix4x4 billboardMatrix;     // Full ビルボード用
+        Vector3   cameraPosition;      // YAxis ビルボード用
+        uint32_t  billboardMode;       // 0=None, 1=Full, 2=YAxis
     };
 
     struct EmitterSphere
@@ -72,84 +100,92 @@ private:
         float pad[2];
     };
 
+    // 1グループ分のリソース束
+    struct GPUParticleGroup
+    {
+        // パーティクル本体（DEFAULT heap）
+        Microsoft::WRL::ComPtr<ID3D12Resource> particleResource;
+        uint32_t particleUavIndex = 0;
+        uint32_t particleSrvIndex = 0;
+        bool initializedOnGPU = false;
+
+        // FreeList
+        Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexResource;
+        uint32_t freeListIndexUavIndex = 0;
+        Microsoft::WRL::ComPtr<ID3D12Resource> freeListResource;
+        uint32_t freeListUavIndex = 0;
+
+        // Emitter CB
+        Microsoft::WRL::ComPtr<ID3D12Resource> emitterResource;
+        EmitterSphere* emitterData = nullptr;
+
+        // PerFrame CB（TimeGroup によって dt が異なるため per-group）
+        Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource;
+        PerFrame* perFrameData = nullptr;
+
+        // PerView CB（メイン用）
+        Microsoft::WRL::ComPtr<ID3D12Resource> perViewResource;
+        PerView* perViewData = nullptr;
+
+        // PerView CB（プレビュー用、同じ粒子をプレビュー RT に別カメラで描画する）
+        Microsoft::WRL::ComPtr<ID3D12Resource> perViewPreviewResource;
+        PerView* perViewPreviewData = nullptr;
+
+        // テクスチャ
+        std::string textureFilePath;
+        uint32_t textureSrvIndex = 0;
+
+        // 状態
+        BillboardMode billboardMode = BillboardMode::Full;
+        TimeGroup     timeGroup     = TimeGroup::World;
+        bool          continuousEnabled = false;
+        float         elapsedTime = 0.0f;
+
+        // バースト要求（Update で CB.emit に転写）。
+        // CPU 側で持つ理由：CB は persistent-mapped で、GPU が Emit CS を実行する前に CPU が書き換えるとレースになる。
+        bool          pendingBurst = false;
+    };
+
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
 
-    // パーティクル本体（DEFAULT heap）
-    Microsoft::WRL::ComPtr<ID3D12Resource> particleResource_;
-    uint32_t particleUavIndex_ = 0;
-    uint32_t particleSrvIndex_ = 0;
-    bool initializedOnGPU_ = false;
-
-    // FreeList管理（DEFAULT heap, UAVのみ）
-    // gFreeListIndex: 次に取り出す位置を指すインデックス（要素1）
-    // gFreeList:      空きParticleIndexの一覧（要素kMaxParticles）
-    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexResource_;
-    uint32_t freeListIndexUavIndex_ = 0;
-    Microsoft::WRL::ComPtr<ID3D12Resource> freeListResource_;
-    uint32_t freeListUavIndex_ = 0;
-
-    // 初期化CS
+    // 共通パイプライン
     Microsoft::WRL::ComPtr<ID3D12RootSignature> initRootSig_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> initPSO_;
-
-    // Emit CS
     Microsoft::WRL::ComPtr<ID3D12RootSignature> emitRootSig_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> emitPSO_;
-
-    // Update CS
     Microsoft::WRL::ComPtr<ID3D12RootSignature> updateRootSig_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> updatePSO_;
-
-    // Emitter CB (UPLOAD)
-    Microsoft::WRL::ComPtr<ID3D12Resource> emitterResource_;
-    EmitterSphere* emitterData_ = nullptr;
-
-    // PerFrame CB (UPLOAD)
-    Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource_;
-    PerFrame* perFrameData_ = nullptr;
-
-    // 描画
     Microsoft::WRL::ComPtr<ID3D12RootSignature> drawRootSig_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> drawPSO_;
 
-    // 板ポリ6頂点
+    // 共通リソース
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
-
-    // PerView CBV (UPLOAD)
-    Microsoft::WRL::ComPtr<ID3D12Resource> perViewResource_;
-    PerView* perViewData_ = nullptr;
-
-    // Material CBV（既存Particle.PS.hlslの要件を満たすため）
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
 
-    // テクスチャ
-    std::string textureFilePath_;
-    uint32_t textureSrvIndex_ = 0;
+    // 描画時に必要な共通行列（毎フレーム算出）
+    Matrix4x4 viewProjectionMatrix_ = {};
+    Matrix4x4 fullBillboardMatrix_ = {};
+    Vector3   cameraPosition_ = { 0.0f, 0.0f, 0.0f };
 
-    // CPUで管理する経過時間（PerFrame.timeに送る）
-    float elapsedTime_ = 0.0f;
+    // グループ群
+    std::unordered_map<std::string, GPUParticleGroup> groups_;
 
-    void CreateParticleResource();
-    void CreateFreeListResources();
+    // 内部ヘルパ
     void CreateInitializePipeline();
     void CreateEmitPipeline();
     void CreateUpdatePipeline();
     void CreateDrawPipeline();
     void CreateVertexData();
-    void CreatePerView();
-    void CreatePerFrame();
-    void CreateEmitter();
     void CreateMaterial();
 
-    void DispatchInitializeCS();
-    void DispatchEmitCS();
-    void DispatchUpdateCS();
+    void CreateGroupResources(GPUParticleGroup& g, const std::string& texturePath);
+    void ReleaseGroupResources(GPUParticleGroup& g);
 
-    // ParticleResourceのstateを切り替えるヘルパ
-    void TransitionParticle(D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+    void DispatchInitializeCS(GPUParticleGroup& g);
+    void DispatchEmitCS(GPUParticleGroup& g);
+    void DispatchUpdateCS(GPUParticleGroup& g);
 
-    // ParticleResource用のUAV Barrier（同じUAV間での依存関係を伝えるため）
-    void UavBarrierParticle();
+    void TransitionParticle(GPUParticleGroup& g, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 };

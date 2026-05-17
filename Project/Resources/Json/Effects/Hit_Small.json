@@ -1,0 +1,45 @@
+{
+    "name": "Hit_Small",
+    "totalDuration": 0.5,
+
+    "primitives": [
+        {
+            "meshType": 0,
+            "offset": [0.0, 0.0, 0.0],
+            "rotate": [0.0, 0.0, 0.0],
+            "startTime": 0.0,
+            "lifetime": 0.2,
+            "startScale": [0.4, 0.4, 1.0],
+            "endScale":   [1.4, 1.4, 1.0],
+            "startColor": [1.0, 0.9, 0.5, 1.0],
+            "endColor":   [1.0, 0.6, 0.2, 0.0],
+            "texturePath": "Resources/Textures/white1x1.dds",
+            "blendMode": 2,
+            "billboardMode": "Full"
+        }
+    ],
+
+    "particles": [
+        {
+            "gpuParticleGroupName": "spark",
+            "offset": [0.0, 0.0, 0.0],
+            "startTime": 0.0,
+            "duration": 0.0,
+            "burstCount": 32,
+            "billboardMode": "Full"
+        }
+    ],
+
+    "lights": [
+        {
+            "kind": "Point",
+            "offset": [0.0, 0.2, 0.0],
+            "startTime": 0.0,
+            "lifetime": 0.15,
+            "color": [1.0, 0.8, 0.5, 1.0],
+            "startIntensity": 5.0,
+            "endIntensity": 0.0,
+            "range": 4.0
+        }
+    ]
+}

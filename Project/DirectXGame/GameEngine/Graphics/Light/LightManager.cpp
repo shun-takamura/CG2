@@ -86,6 +86,51 @@ void LightManager::BindLights(ID3D12GraphicsCommandList* commandList) {
     );
 }
 
+// ===== 動的予約API =====
+
+uint32_t LightManager::AcquirePointLight() {
+    for (uint32_t i = 0; i < kMaxPointLights; ++i) {
+        if (!pointReserved_[i]) {
+            pointReserved_[i] = true;
+            // 初期化：強度0で確保する（Effect 側で改めて設定する想定）
+            pointLightGroupData_->lights[i].intensity = 0.0f;
+            // activeCount を確保したスロットまで広げる（縮みはしない）
+            if (i + 1 > pointLightGroupData_->activeCount) {
+                pointLightGroupData_->activeCount = i + 1;
+            }
+            return i;
+        }
+    }
+    return kInvalidLightSlot;
+}
+
+uint32_t LightManager::AcquireSpotLight() {
+    for (uint32_t i = 0; i < kMaxSpotLights; ++i) {
+        if (!spotReserved_[i]) {
+            spotReserved_[i] = true;
+            spotLightGroupData_->lights[i].intensity = 0.0f;
+            if (i + 1 > spotLightGroupData_->activeCount) {
+                spotLightGroupData_->activeCount = i + 1;
+            }
+            return i;
+        }
+    }
+    return kInvalidLightSlot;
+}
+
+void LightManager::ReleasePointLight(uint32_t slot) {
+    if (slot >= kMaxPointLights) return;
+    pointReserved_[slot] = false;
+    pointLightGroupData_->lights[slot].intensity = 0.0f;
+    // activeCount は縮めない（シェーダ側は intensity=0 のスロットを処理しても無害）
+}
+
+void LightManager::ReleaseSpotLight(uint32_t slot) {
+    if (slot >= kMaxSpotLights) return;
+    spotReserved_[slot] = false;
+    spotLightGroupData_->lights[slot].intensity = 0.0f;
+}
+
 // ===== PointLight設定関数 =====
 void LightManager::SetPointLightCount(uint32_t count) {
     pointLightGroupData_->activeCount = (count > kMaxPointLights) ? kMaxPointLights : count;

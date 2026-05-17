@@ -19,6 +19,8 @@ class ImGuiManager;
 #define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
 #define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
 #define PREFAB_DROP_PAYLOAD_TYPE    "PREFAB_DROP"
+// Effect Editor 用：エフェクトのコンポーネント種別だけを運ぶ
+#define EFFECT_COMP_DROP_PAYLOAD_TYPE "EFFECT_COMP_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
@@ -49,6 +51,11 @@ struct MaterialDropPayload {
 // プリファブ名
 struct PrefabDropPayload {
     char prefabName[128];
+};
+
+// Effect Component（種別だけ運ぶ。0=Primitive, 1=Particle, 2=Light, 3=Sound）
+struct EffectComponentDropPayload {
+    int kind;
 };
 
 /// <summary>

@@ -4,9 +4,13 @@
 #include "PointLight.h"
 #include "SpotLight.h"
 #include "MathUtility.h"
+#include <array>
 #include <numbers>
 #include <cmath>
 #include <wrl.h>
+
+// Acquire 失敗時に返す無効スロット値
+static constexpr uint32_t kInvalidLightSlot = UINT32_MAX;
 
 class LightManager {
 private:
@@ -26,6 +30,10 @@ private:
     // SpotLightGroup (複数対応)
     Microsoft::WRL::ComPtr<ID3D12Resource> spotLightResource_;
     SpotLightGroup* spotLightGroupData_ = nullptr;
+
+    // 動的予約フラグ（Acquire/Release で管理）
+    std::array<bool, kMaxPointLights> pointReserved_{};
+    std::array<bool, kMaxSpotLights>  spotReserved_{};
 
     // コンストラクタ（private）
     LightManager() = default;
@@ -60,6 +68,15 @@ public:
     void SetPointLightIntensity(uint32_t index, float intensity);
     void SetPointLightRadius(uint32_t index, float radius);
     void SetPointLightDecay(uint32_t index, float decay);
+
+    // ===== 動的予約API（Effect Editor 用） =====
+    // 空きスロットを確保し、そのインデックスを返す。空き無しなら kInvalidLightSlot。
+    // 確保した時点で intensity=0 にリセットされる。
+    uint32_t AcquirePointLight();
+    uint32_t AcquireSpotLight();
+    // スロットを解放（intensity=0 にして予約フラグを下ろす）。
+    void ReleasePointLight(uint32_t slot);
+    void ReleaseSpotLight(uint32_t slot);
 
     // ===== SpotLight設定 (インデックス指定) =====
     void SetSpotLightCount(uint32_t count);

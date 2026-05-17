@@ -16,6 +16,7 @@
 #include "SRVManager.h"
 #include "ParticleManager.h"
 #include "GPUParticleManager.h"
+#include "Effect/EffectManager.h"
 #include "SoundManager.h"
 #include "ControllerInput.h"
 #include "MouseInput.h"
@@ -50,6 +51,7 @@
 #include "ModelManager.h"
 #include "IImGuiEditable.h"
 #include "LineRenderer.h"
+#include "Effect/EffectEditorWindow.h"
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -167,8 +169,7 @@ void DemoScene::Initialize() {
 
 	Game::GetPostEffect()->ResetEffects();
 
-	// デバッグカメラの生成
-	debugCamera_ = std::make_unique<DebugCamera>();
+	// デバッグカメラは BaseScene 側で必要時に生成（GetDebugCamera で生成）
 
 	//// スプライトの初期化
 	//sprite_ = std::make_unique<SpriteInstance>();
@@ -193,9 +194,15 @@ void DemoScene::Initialize() {
 	//ParticleManager::GetInstance()->SetCamera(camera_.get());
 	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
-	//// GPU Particle 初期化
-	//gpuParticleManager_ = std::make_unique<GPUParticleManager>();
-	//gpuParticleManager_->Initialize(dxCore_, srvManager_, "DistributionAssets/Textures/circle2.png");
+	// GPU Particle 初期化（Effect Editor のテスト用）
+	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
+	gpuParticleManager_->Initialize(dxCore_, srvManager_);
+	gpuParticleManager_->CreateGroup("spark", "Resources/Textures/circle.dds");
+
+	// Effect Editor 初期化
+	EffectManager::GetInstance()->Initialize(gpuParticleManager_.get());
+	EffectManager::GetInstance()->SetCamera(camera_.get());
+	EffectManager::GetInstance()->LoadAllDefsInDirectory("Resources/Json/Effects");
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -370,6 +377,9 @@ void DemoScene::Finalize() {
 #ifdef _DEBUG
 	ImGuiManager::Instance().SetGPUParticleManager(nullptr);
 #endif
+
+	// EffectManager: 再生中インスタンスのライト解放を含めるため GPU 終了前に呼ぶ
+	EffectManager::GetInstance()->Finalize();
 
 	if (gpuParticleManager_) {
 		gpuParticleManager_->Finalize();
@@ -667,6 +677,8 @@ void DemoScene::Update() {
 
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();
+	// useDebugCamera が ON ならここで camera_ の行列がデバッグカメラの視点に上書きされる
+	UpdateDebugCameraIfActive();
 
 	// 3Dオブジェクトの更新
 	for (const auto& obj : object3DInstances_) {
@@ -698,6 +710,9 @@ void DemoScene::Update() {
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 
+	// Effect Editor 更新（GPU Particle へのEmit予約はここで行う）
+	EffectManager::GetInstance()->Update(GetScaledDeltaTime());
+
 	// GPU Particle 更新（PerView書き込み）
 	if (gpuParticleManager_) {
 		gpuParticleManager_->Update(camera_.get(), GetScaledDeltaTime());
@@ -726,7 +741,7 @@ void DemoScene::Update() {
 		s->Update();
 	}
 
-	debugCamera_->Update(input_->GetKeyboard()->keys_);
+	// debug camera の更新は BaseScene::UpdateDebugCameraIfActive() で行う
 }
 
 void DemoScene::Draw() {
@@ -793,6 +808,9 @@ void DemoScene::Draw() {
 		gpuParticleManager_->Draw();
 	}
 
+	// Effect Editor 描画（Primitiveコンポーネント）
+	EffectManager::GetInstance()->Draw();
+
 #ifdef USE_IMGUI
 	// Skeletonのデバッグ描画（全モデル描画完了後にまとめて行う）
 	if (sneakWalkInstance_) {
@@ -809,6 +827,9 @@ void DemoScene::Draw() {
 	}
 #endif
 
+	// デバッグカメラ有効時はシーンカメラ位置に視錐台ギズモを描画
+	DrawSceneCameraGizmo();
+
 	// 線描画（Skeletonデバッグ用 など）
 	LineRenderer::GetInstance()->SetCamera(camera_.get());
 	LineRenderer::GetInstance()->Draw();
@@ -823,6 +844,27 @@ void DemoScene::Draw() {
 	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
+
+#ifdef _DEBUG
+	// Effect Editor プレビュー RT への描画（Scene RT が確定した後、ImGuiレンダ前に行う）
+	if (auto* edit = ImGuiManager::Instance().GetEffectEditorWindow()) {
+		edit->Render();
+
+		// Scene RT に戻して、以降の描画が Effect Editor RT へ漏れないようにする
+		auto* commandList = dxCore_->GetCommandList();
+		auto rtv = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+		auto dsv = dxCore_->GetDsvHandle();
+		commandList->OMSetRenderTargets(1, &rtv, false, &dsv);
+		// ビューポート/シザーも Scene サイズへ戻す
+		D3D12_VIEWPORT vp{};
+		vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
+		vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
+		vp.MaxDepth = 1.0f;
+		commandList->RSSetViewports(1, &vp);
+		D3D12_RECT sc{ 0, 0, static_cast<LONG>(WindowsApplication::kClientWidth), static_cast<LONG>(WindowsApplication::kClientHeight) };
+		commandList->RSSetScissorRects(1, &sc);
+	}
+#endif
 }
 
 // =============================================================

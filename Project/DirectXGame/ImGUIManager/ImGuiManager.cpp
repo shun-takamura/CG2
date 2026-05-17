@@ -1,4 +1,4 @@
-﻿#include "ImGuiManager.h"
+#include "ImGuiManager.h"
 #include "IImGuiWindow.h"
 #include "IImGuiEditable.h"
 #include "AssetLocator.h"
@@ -19,7 +19,12 @@
 #include "LightManager.h"
 #include "PostEffect.h"
 #include "GPUParticleManager.h"
+#include "Effect/EffectManager.h"
+#include "Effect/EffectEditorWindow.h"
+#include "EffectHierarchyWindow.h"
 #include "TransitionManager.h"
+#include "DebugCamera.h"
+#include "Vector3.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "CameraCapture.h"
@@ -27,6 +32,7 @@
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "Components/CollisionManager.h"
+#include "TimeGroup.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -87,7 +93,43 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
     // デバッグUI群を CallbackWindow 経由で登録
     windows_.push_back(std::make_unique<CallbackWindow>("Camera",
-        [this]() { if (camera_) camera_->OnImGui(); }));
+        [this]() {
+            // ===== Debug Camera toggle =====
+            BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+            if (scene) {
+                bool useDebug = scene->GetUseDebugCamera();
+                if (ImGui::Checkbox("Use Debug Camera", &useDebug)) {
+                    scene->SetUseDebugCamera(useDebug);
+                }
+                if (useDebug) {
+                    if (DebugCamera* dc = scene->GetDebugCamera()) {
+                        ImGui::TextDisabled("L-Drag: Orbit  /  M-Drag: Pan  /  Wheel: Zoom");
+
+                        // ピボット
+                        Vector3 pivot = { 0.0f, 0.0f, 0.0f };
+                        // DebugCamera にピボットgetterが無いので、UIで編集する値を別管理。
+                        // 単純化：スライダーで毎フレームSetする（値の保持は ImGui の static で）
+                        static float pivotV[3] = { 0.0f, 0.0f, 0.0f };
+                        if (ImGui::DragFloat3("Pivot", pivotV, 0.1f)) {
+                            dc->SetPivot({ pivotV[0], pivotV[1], pivotV[2] });
+                        }
+
+                        static float distance = 10.0f;
+                        if (ImGui::DragFloat("Distance", &distance, 0.1f, 0.1f, 500.0f)) {
+                            dc->SetDistance(distance);
+                        }
+
+                        static float fovYDeg = 45.0f;
+                        if (ImGui::DragFloat("Fov Y (deg)", &fovYDeg, 0.5f, 10.0f, 120.0f)) {
+                            dc->SetFovY(fovYDeg * 3.14159265f / 180.0f);
+                        }
+                    }
+                }
+                ImGui::Separator();
+            }
+            // ===== Scene camera info =====
+            if (camera_) camera_->OnImGui();
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("Light",
         []() { LightManager::GetInstance()->OnImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("PostEffect",
@@ -102,6 +144,15 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+
+    // Effect Editor（プレビューRT付き）
+    auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_);
+    effectEditor->Initialize();
+    effectEditorWindow_ = effectEditor.get();
+    windows_.push_back(std::move(effectEditor));
+
+    // Effect Hierarchy（編集中エフェクトのコンポーネントを種類別表示）
+    windows_.push_back(std::make_unique<EffectHierarchyWindow>(this, effectEditorWindow_));
     windows_.push_back(std::make_unique<CallbackWindow>("Collision",
         []() {
             auto* cm = CollisionManager::GetInstance();
@@ -182,17 +233,52 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             ImGui::TextUnformatted("Current Scene");
             ImGui::Separator();
             if (scene) {
-                float sceneScale = scene->GetSceneTimeScale();
-                if (ImGui::SliderFloat("Scene TimeScale", &sceneScale, 0.0f, 4.0f, "%.2f")) {
-                    scene->SetSceneTimeScale(sceneScale);
+                // ----- グループ別 TimeScale -----
+                ImGui::TextUnformatted("Time Groups");
+                for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+                    TimeGroup g = static_cast<TimeGroup>(i);
+                    float s = scene->GetTimeScale(g);
+                    char label[32];
+                    std::snprintf(label, sizeof(label), "%s##ts", GetTimeGroupName(g));
+                    if (ImGui::SliderFloat(label, &s, 0.0f, 4.0f, "%.2f")) {
+                        scene->SetTimeScale(g, s);
+                    }
                 }
-                if (ImGui::Button("Scene Pause")) scene->SetSceneTimeScale(0.0f);
+                ImGui::Spacing();
+
+                // ----- プリセット -----
+                if (ImGui::Button("All Pause")) {
+                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                        scene->SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
+                }
                 ImGui::SameLine();
-                if (ImGui::Button("Scene Play"))  scene->SetSceneTimeScale(1.0f);
+                if (ImGui::Button("All Play")) {
+                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                        scene->SetTimeScale(static_cast<TimeGroup>(i), 1.0f);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("HitStop")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.05f);
+                    scene->SetTimeScale(TimeGroup::Player, 0.05f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
+                if (ImGui::Button("Just Dodge")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.3f);
+                    scene->SetTimeScale(TimeGroup::Player, 1.0f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("BotW Rush")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.2f);
+                    scene->SetTimeScale(TimeGroup::Player, 1.5f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
 
                 ImGui::Spacing();
-                ImGui::Text("Effective dt = %.4f s",
-                    scene->GetScaledDeltaTime());
+                ImGui::Text("dt World=%.4f Player=%.4f UI=%.4f",
+                    scene->GetScaledDeltaTime(TimeGroup::World),
+                    scene->GetScaledDeltaTime(TimeGroup::Player),
+                    scene->GetScaledDeltaTime(TimeGroup::UI));
             } else {
                 ImGui::TextDisabled("No active scene.");
             }

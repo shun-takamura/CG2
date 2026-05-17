@@ -13,29 +13,34 @@ void PrimitivePipeline::Initialize(DirectXCore* dxCore, SRVManager* srvManager) 
 
     CreateRootSignature();
 
-    // BlendMode × DepthWrite の2軸でPSOを作成
+    // BlendMode × DepthWrite × CullBackface の3軸でPSOを作成
     for (int i = 0; i < kCountOfBlendMode; ++i) {
-        CreateGraphicsPipelineState(static_cast<BlendMode>(i), false); // DepthWrite OFF
-        CreateGraphicsPipelineState(static_cast<BlendMode>(i), true);  // DepthWrite ON
+        BlendMode bm = static_cast<BlendMode>(i);
+        CreateGraphicsPipelineState(bm, false, false);
+        CreateGraphicsPipelineState(bm, false, true);
+        CreateGraphicsPipelineState(bm, true,  false);
+        CreateGraphicsPipelineState(bm, true,  true);
     }
 }
 
 void PrimitivePipeline::Finalize() {
-    for (auto& row : pipelineStates_) {
-        for (auto& pso : row) {
-            pso.Reset();
+    for (auto& dim2 : pipelineStates_) {
+        for (auto& dim1 : dim2) {
+            for (auto& pso : dim1) {
+                pso.Reset();
+            }
         }
     }
 }
 
-void PrimitivePipeline::PreDraw(BlendMode blendMode, bool depthWrite) {
+void PrimitivePipeline::PreDraw(BlendMode blendMode, bool depthWrite, bool cullBackface) {
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
 
-    // 深度バッファの書き込みの有無でPSOを切り替える
-    int depthIndex = depthWrite ? 1 : 0;
+    int depthIndex = depthWrite   ? 1 : 0;
+    int cullIndex  = cullBackface ? 1 : 0;
 
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
-    commandList->SetPipelineState(pipelineStates_[blendMode][depthIndex].Get());
+    commandList->SetPipelineState(pipelineStates_[blendMode][depthIndex][cullIndex].Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
@@ -67,16 +72,25 @@ void PrimitivePipeline::CreateRootSignature() {
     rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
     rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
 
-    // Sampler
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-    staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    // Sampler 3種類（material.samplerMode で PS 側が選択）
+    //   s0: WRAP U  / WRAP V  （タイリング用）
+    //   s1: WRAP U  / CLAMP V （Ring/Cylinder 用。中心側に白いリング型のアーティファクトが出るのを防ぐ）
+    //   s2: CLAMP U / CLAMP V （非繰り返し）
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        staticSamplers[i].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+        staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        staticSamplers[i].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        staticSamplers[i].MaxLOD = D3D12_FLOAT32_MAX;
+        staticSamplers[i].ShaderRegister = i;
+        staticSamplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    }
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[0].ShaderRegister = 0;
-    staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    staticSamplers[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[2].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[2].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -102,7 +116,7 @@ void PrimitivePipeline::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
-void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool depthWrite) {
+void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool depthWrite, bool cullBackface) {
     // シェーダーコンパイル
     IDxcBlob* vs = dxCore_->CompileShader(
         L"Resources/Shaders/Primitive/Primitive.VS.hlsl",
@@ -139,9 +153,9 @@ void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool de
     inputLayout.pInputElementDescs = inputElements;
     inputLayout.NumElements = _countof(inputElements);
 
-    // Rasterizer（カリング無効：両面描画）
+    // Rasterizer（cullBackface でカリング切替）
     D3D12_RASTERIZER_DESC rasterizer{};
-    rasterizer.CullMode = D3D12_CULL_MODE_NONE;
+    rasterizer.CullMode = cullBackface ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
     rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
 
     // BlendState
@@ -212,8 +226,9 @@ void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool de
     desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     desc.SampleDesc.Count = 1;
 
-    int depthIndex = depthWrite ? 1 : 0;
+    int depthIndex = depthWrite   ? 1 : 0;
+    int cullIndex  = cullBackface ? 1 : 0;
     HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(
-        &desc, IID_PPV_ARGS(&pipelineStates_[blendMode][depthIndex]));
+        &desc, IID_PPV_ARGS(&pipelineStates_[blendMode][depthIndex][cullIndex]));
     assert(SUCCEEDED(hr));
 }

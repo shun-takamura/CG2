@@ -40,5 +40,5 @@ struct EmitParam {
     float lifeTimeRandomRange = 0.0f; // ±のゆらぎ
 
     // --- ビルボード設定 ---
-    BillboardMode billboardMode = BillboardMode::Billboard;
+    BillboardMode billboardMode = BillboardMode::Full;
 };
