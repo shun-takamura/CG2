@@ -173,8 +173,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp" />
-    <ClCompile Include="DirectXGame\GameEngine\Math\CollisionManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Actors\Bullet.cpp" />
+    <ClCompile Include="DirectXGame\Game\Actors\SplineCurveActor.cpp" />
     <ClCompile Include="DirectXGame\Game\Actors\Enemy.cpp" />
     <ClCompile Include="DirectXGame\Game\Actors\Player.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
@@ -189,6 +189,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\PhysicalBinding.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputAction.cpp" />
     <ClCompile Include="DirectXGame\Game\Config\KeyConfig.cpp" />
+    <ClCompile Include="DirectXGame\Game\Components\CollisionManager.cpp" />
+    <ClCompile Include="DirectXGame\Game\Components\PrefabManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp" />
@@ -321,10 +323,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMaterial.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxTransformationMatrix.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxVertexData.h" />
-    <ClInclude Include="DirectXGame\GameEngine\Math\CollisionManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Interpolator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\QuaternionTransform.h" />
     <ClInclude Include="DirectXGame\Game\Actors\Bullet.h" />
+    <ClInclude Include="DirectXGame\Game\Actors\SplineCurveActor.h" />
     <ClInclude Include="DirectXGame\Game\Actors\Enemy.h" />
     <ClInclude Include="DirectXGame\Game\Actors\Player.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
@@ -340,6 +342,11 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\InputAction.h" />
     <ClInclude Include="DirectXGame\Game\Config\GameActions.h" />
     <ClInclude Include="DirectXGame\Game\Components\EntityTag.h" />
+    <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
+    <ClInclude Include="DirectXGame\Game\Components\CollisionMatrix.h" />
+    <ClInclude Include="DirectXGame\Game\Components\CollisionManager.h" />
+    <ClInclude Include="DirectXGame\Game\Components\Prefab.h" />
+    <ClInclude Include="DirectXGame\Game\Components\PrefabManager.h" />
     <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />

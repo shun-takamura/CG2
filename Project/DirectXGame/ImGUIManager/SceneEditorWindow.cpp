@@ -5,6 +5,9 @@
 #include "AssetLocator.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
+#include "Components/EntityTag.h"
+#include "Components/PrefabManager.h"
+#include "Components/Prefab.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -192,6 +195,70 @@ void SceneEditorWindow::OnDraw() {
         if (ImGui::Button("Load Scene")) {
             if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
                 scene->LoadSceneFromJson(scenePathBuf);
+            }
+        }
+    }
+    ImGui::Separator();
+
+    // ============================================
+    // プリファブ一覧（ボタンをドラッグ元として使う）
+    // ============================================
+    {
+        // 初回だけ自動スキャン
+        static bool prefabScanned = false;
+        if (!prefabScanned) {
+            PrefabManager::GetInstance()->Rescan();
+            prefabScanned = true;
+        }
+        ImGui::TextUnformatted("Prefabs:");
+        ImGui::SameLine();
+        if (ImGui::Button("Rescan##prefabs")) {
+            PrefabManager::GetInstance()->Rescan();
+        }
+        const auto& prefabs = PrefabManager::GetInstance()->GetAll();
+        if (prefabs.empty()) {
+            ImGui::TextDisabled("(none in %s)", PrefabManager::GetPrefabDir());
+        } else {
+            for (const auto& p : prefabs) {
+                ImGui::PushID(p.name.c_str());
+                ImGui::Button(p.name.c_str());
+                if (ImGui::BeginDragDropSource()) {
+                    PrefabDropPayload pld{};
+                    SafeCopy(pld.prefabName, sizeof(pld.prefabName), p.name);
+                    ImGui::SetDragDropPayload(PREFAB_DROP_PAYLOAD_TYPE, &pld, sizeof(pld));
+                    ImGui::Text("Prefab: %s", p.name.c_str());
+                    ImGui::TextDisabled("[%s] %s/%s",
+                        std::string(GetTagName(p.tag)).c_str(),
+                        p.modelDir.c_str(), p.modelFile.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                ImGui::PopID();
+            }
+        }
+    }
+    ImGui::Separator();
+
+    // ============================================
+    // スプライン追加（役割タグごとに4ボタン）
+    // ============================================
+    {
+        ImGui::TextUnformatted("Add Spline:");
+        struct SplineKind {
+            const char* label;
+            EntityTag tag;
+        };
+        const SplineKind kinds[] = {
+            { "PlayerRail",   EntityTag::PlayerRailSpline },
+            { "EnemyPath",    EntityTag::EnemyPathSpline },
+            { "FloatingPath", EntityTag::FloatingPathSpline },
+            { "CameraPath",   EntityTag::CameraPathSpline },
+        };
+        for (size_t i = 0; i < std::size(kinds); ++i) {
+            if (i > 0) ImGui::SameLine();
+            if (ImGui::Button(kinds[i].label)) {
+                if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+                    scene->AddDynamicSpline(static_cast<int>(kinds[i].tag));
+                }
             }
         }
     }

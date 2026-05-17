@@ -39,6 +39,9 @@
 #include "Config/GameActions.h"
 #include "LogBuffer.h"
 #include "Primitive/DebugDraw.h"
+#include "Actors/SplineCurveActor.h"
+#include "Components/PrefabManager.h"
+#include "Components/Prefab.h"
 #include <numbers>
 #include <sstream>
 #include <filesystem>
@@ -354,6 +357,12 @@ void DemoScene::Initialize() {
 	// Camera/RenderTextureはBaseScene::GetCamera経由とGame::Initialize側で中央化済み
 	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
 #endif
+
+	// 前回保存したシーン配置があれば自動ロード（ファイル無しは何もしない）
+	const std::string kAutoLoadPath = "Resources/Json/Scenes/demo.json";
+	if (std::filesystem::exists(kAutoLoadPath)) {
+		LoadSceneFromJson(kAutoLoadPath);
+	}
 }
 
 void DemoScene::Finalize() {
@@ -418,6 +427,11 @@ void DemoScene::Update() {
 
 		// Ray（カメラから前方）
 		DebugDraw::Ray({ 0, 5, -8 }, { 0, 0, 1 }, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
+	}
+
+	// すべての動的スプラインを DebugDraw キューに積む（Visible(Debug) が ON のもののみ描画される）
+	for (const auto& sp : dynamicSplines_) {
+		if (sp) sp->DrawDebug();
 	}
 
 	// アクション入力のログ出力（ImGuiのLogウィンドウで確認）
@@ -902,6 +916,72 @@ void DemoScene::RemoveDynamicAnimated(const std::string& name) {
 	}
 }
 
+void DemoScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
+	auto spline = std::make_unique<SplineCurveActor>();
+	spline->SetTag(static_cast<EntityTag>(tagInt));
+
+	// 一意な名前を割り振る（"Spline (1)", "Spline (2)" ...）
+	std::string base = "Spline";
+	std::string name = base;
+	int suffix = 1;
+	while (std::any_of(dynamicSplines_.begin(), dynamicSplines_.end(),
+		[&name](const std::unique_ptr<SplineCurveActor>& s) { return s->GetName() == name; })) {
+		name = base + " (" + std::to_string(suffix++) + ")";
+	}
+	spline->SetName(name);
+
+	// ドロップ位置に合わせて全制御点を平行移動
+	for (auto& p : spline->MutablePoints()) {
+		p.x += worldPos.x;
+		p.y += worldPos.y;
+		p.z += worldPos.z;
+	}
+
+	dynamicSplines_.push_back(std::move(spline));
+}
+
+void DemoScene::RemoveDynamicSpline(const std::string& name) {
+	auto it = std::find_if(dynamicSplines_.begin(), dynamicSplines_.end(),
+		[&name](const std::unique_ptr<SplineCurveActor>& s) { return s->GetName() == name; });
+	if (it != dynamicSplines_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(it->release()));
+		dynamicSplines_.erase(it);
+	}
+}
+
+void DemoScene::InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos) {
+	const PrefabDef* def = PrefabManager::GetInstance()->Find(prefabName);
+	if (!def) {
+		LogBuffer::Instance().Add("Prefab not found: " + prefabName, LogBuffer::Level::Warning);
+		return;
+	}
+
+	// プリファブ → 既存の AddDynamicObject フローで生成
+	AddDynamicObject(def->modelDir, def->modelFile, worldPos);
+	if (object3DInstances_.empty()) return;
+
+	auto& back = object3DInstances_.back();
+	// 名前は重複しないよう "<PrefabName> (N)"
+	std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
+	std::string name = base;
+	int suffix = 1;
+	while (std::any_of(object3DInstances_.begin(), object3DInstances_.end() - 1,
+		[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; })) {
+		name = base + " (" + std::to_string(suffix++) + ")";
+	}
+	back->SetName(name);
+	back->SetTag(def->tag);
+	back->SetScale(def->defaultScale);
+	back->SetRotate(def->defaultRotate);
+
+	if (def->hasCollider) {
+		auto& c = back->GetCollider();
+		c.enabled = true;
+		c.radius = def->colliderRadius;
+		c.offset = def->colliderOffset;
+	}
+}
+
 #ifdef USE_IMGUI
 bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	// 基底（プリミティブ）でヒットすれば早期 return
@@ -915,6 +995,9 @@ bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	}
 	for (const auto& a : dynamicAnimated_) {
 		if (static_cast<IImGuiEditable*>(a.get()) == editable) return true;
+	}
+	for (const auto& sp : dynamicSplines_) {
+		if (static_cast<IImGuiEditable*>(sp.get()) == editable) return true;
 	}
 	// シーン初期化済み（sprites_ ベクター + 名前付き animated/sprite メンバ）も削除可能
 	for (const auto& s : sprites_) {
@@ -1023,6 +1106,21 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		arr.Push(std::move(e));
 	}
 
+	// ----- Spline（動的）-----
+	for (const auto& sp : dynamicSplines_) {
+		if (!sp) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Spline";
+		e["name"] = sp->GetName();
+		e["tag"] = std::string(GetTagName(sp->GetTag()));
+		JsonValue ptsArr = JsonValue::MakeArray();
+		for (const auto& p : sp->GetPoints()) {
+			ptsArr.Push(Vec3ToJson(p));
+		}
+		e["points"] = std::move(ptsArr);
+		arr.Push(std::move(e));
+	}
+
 	root["objects"] = std::move(arr);
 
 	// 保存先ディレクトリを作成
@@ -1058,6 +1156,11 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 		if (a) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
 	}
 	dynamicAnimated_.clear();
+	// AnimatedModelInstance（GPUリソース所有）も即時破棄せず deferredDeletes_ 経由で次フレームに回す。
+	// これをやらないと ImGui からの Load 実行時に「コマンドリスト記録中のリソースが先に削除された」エラーになる
+	for (auto& m : dynamicAnimatedModels_) {
+		if (m) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedModelInstance>(m.release()));
+	}
 	dynamicAnimatedModels_.clear();
 	for (auto& s : dynamicSprites_) {
 		if (s) deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(s.release()));
@@ -1067,6 +1170,10 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
 	}
 	dynamicPrimitives_.clear();
+	for (auto& sp : dynamicSplines_) {
+		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
+	}
+	dynamicSplines_.clear();
 
 	// 復元
 	const JsonValue& objs = result.value["objects"];
@@ -1119,6 +1226,20 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 				auto& back = dynamicSprites_.back();
 				back->SetName(name);
 				back->SetTag(tag);
+			}
+		} else if (type == "Spline") {
+			AddDynamicSpline(static_cast<int>(tag));
+			if (!dynamicSplines_.empty()) {
+				auto& back = dynamicSplines_.back();
+				back->SetName(name);
+				// JSON の制御点列で上書き
+				back->MutablePoints().clear();
+				const JsonValue& pts = e["points"];
+				if (pts.IsArray()) {
+					for (size_t pi = 0; pi < pts.Size(); ++pi) {
+						back->AddPoint(JsonToVec3(pts[pi]));
+					}
+				}
 			}
 		}
 	}

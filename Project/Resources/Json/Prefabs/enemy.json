@@ -1,0 +1,27 @@
+{
+  "model": {
+    "dir": "Resources/Models/Enemy",
+    "file": "enemy.mesh"
+  },
+  "tag": "Enemy",
+  "defaults": {
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "collider": {
+    "radius": 1,
+    "offset": [
+      0,
+      0,
+      0
+    ]
+  }
+}

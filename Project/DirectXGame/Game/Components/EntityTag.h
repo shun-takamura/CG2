@@ -16,10 +16,16 @@ enum class EntityTag : int {
 	Boss,              // ボス（AI/HPバー扱いを Enemy と分離したい）
 	Terrain,           // 地形・建物
 	Skybox,            // 天球
-	RailControlPoint,  // スプライン制御点
+	RailControlPoint,  // スプライン制御点（内部用、廃止予定。Spline系タグに置換中）
 	SpawnPoint,        // 敵スポーン位置マーカー
 	CameraPoint,       // カメラパスのキーフレーム
 	FX,                // エフェクト発生源（パーティクル等）
+
+	// ----- スプライン経路（役割ごとに分けて混在を防ぐ）-----
+	PlayerRailSpline,    // プレイヤー機（およびレールカメラ）の走行レール
+	EnemyPathSpline,     // 敵の移動経路
+	FloatingPathSpline,  // 装飾オブジェクトの浮遊経路
+	CameraPathSpline,    // カメラだけの独立経路（レールと分離したい時）
 
 	Count
 };
@@ -38,6 +44,10 @@ inline std::string_view GetTagName(EntityTag t) {
 	case EntityTag::SpawnPoint:       return "SpawnPoint";
 	case EntityTag::CameraPoint:      return "CameraPoint";
 	case EntityTag::FX:               return "FX";
+	case EntityTag::PlayerRailSpline:   return "PlayerRailSpline";
+	case EntityTag::EnemyPathSpline:    return "EnemyPathSpline";
+	case EntityTag::FloatingPathSpline: return "FloatingPathSpline";
+	case EntityTag::CameraPathSpline:   return "CameraPathSpline";
 	default:                          return "";
 	}
 }
@@ -67,6 +77,10 @@ inline void GetTagColor(EntityTag t, float& r, float& g, float& b, float& a) {
 	case EntityTag::SpawnPoint:       r = 0.90f; g = 0.50f; b = 0.90f; break; // 紫
 	case EntityTag::CameraPoint:      r = 0.60f; g = 1.00f; b = 0.60f; break; // 緑
 	case EntityTag::FX:               r = 1.00f; g = 0.80f; b = 1.00f; break;
+	case EntityTag::PlayerRailSpline:   r = 0.30f; g = 0.85f; b = 1.00f; break; // 水色
+	case EntityTag::EnemyPathSpline:    r = 1.00f; g = 0.45f; b = 0.45f; break; // 赤
+	case EntityTag::FloatingPathSpline: r = 0.70f; g = 1.00f; b = 0.70f; break; // 黄緑
+	case EntityTag::CameraPathSpline:   r = 1.00f; g = 1.00f; b = 0.40f; break; // 黄
 	case EntityTag::None:
 	default:                          r = 0.75f; g = 0.75f; b = 0.75f; break; // 灰
 	}

@@ -18,6 +18,7 @@ class ImGuiManager;
 #define ANIMATED_DROP_PAYLOAD_TYPE  "ANIMATED_DROP"
 #define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
 #define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
+#define PREFAB_DROP_PAYLOAD_TYPE    "PREFAB_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
@@ -43,6 +44,11 @@ struct PrimitiveDropPayload {
 // マテリアル（.mat ファイルパス）
 struct MaterialDropPayload {
     char materialPath[384];
+};
+
+// プリファブ名
+struct PrefabDropPayload {
+    char prefabName[128];
 };
 
 /// <summary>
