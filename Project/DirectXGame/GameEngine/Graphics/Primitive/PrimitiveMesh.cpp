@@ -12,9 +12,14 @@ void PrimitiveMesh::Initialize(const MeshData& meshData) {
 }
 
 void PrimitiveMesh::Update(Camera* camera) {
+    // 旧API: dxCore のグローバル時間
+    const float dt = PrimitivePipeline::GetInstance()->GetDxCore()->GetScaledDeltaTime();
+    Update(camera, dt);
+}
+
+void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
 
     // --- UV変換の累積 ---
-    const float deltaTime = PrimitivePipeline::GetInstance()->GetDxCore()->GetScaledDeltaTime();
     uvScrollAccumulated_.x += uvScrollSpeed_.x * deltaTime;
     uvScrollAccumulated_.y += uvScrollSpeed_.y * deltaTime;
 
@@ -61,15 +66,16 @@ void PrimitiveMesh::Update(Camera* camera) {
     transformData_->WVP = wvpMatrix;
     transformData_->World = worldMatrix;
 
-    // マテリアルの色とalphaReferenceを更新
+    // マテリアルの色・alphaReference・samplerMode を更新
     materialData_->color = color_;
     materialData_->alphaReference = alphaReference_;
+    materialData_->samplerMode = samplerMode_;
 
 }
 
 void PrimitiveMesh::Draw() {
     // パイプラインの事前設定
-    PrimitivePipeline::GetInstance()->PreDraw(blendMode_, depthWrite_);
+    PrimitivePipeline::GetInstance()->PreDraw(blendMode_, depthWrite_, cullBackface_);
 
     DirectXCore* dxCore = PrimitivePipeline::GetInstance()->GetDxCore();
     ID3D12GraphicsCommandList* commandList = dxCore->GetCommandList();
@@ -165,7 +171,7 @@ void PrimitiveMesh::CreateMaterialResource() {
     materialData_->color = color_;
     materialData_->enableLighting = 0;
     materialData_->alphaReference = alphaReference_;
-    materialData_->padding[0] = 0.0f;
-    materialData_->padding[1] = 0.0f;
+    materialData_->samplerMode = samplerMode_;
+    materialData_->padding = 0.0f;
     materialData_->uvTransform = MakeIdentity4x4();
 }

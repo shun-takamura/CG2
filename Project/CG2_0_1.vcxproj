@@ -352,6 +352,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DStorageManager.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\TimeGroup.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\ConvertStringClass.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />

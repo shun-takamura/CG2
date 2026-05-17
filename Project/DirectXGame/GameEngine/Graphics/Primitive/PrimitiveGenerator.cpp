@@ -308,21 +308,23 @@ namespace PrimitiveGenerator {
         return mesh;
     }
 
-    MeshData CreateCylinder(float topRadius, float bottomRadius, float height,
-        uint32_t divisions,
-        const Vector4& topColor, const Vector4& bottomColor) {
+    MeshData CreateCylinder(const CylinderParams& params) {
         MeshData mesh;
 
+        uint32_t divisions = params.divisions;
         if (divisions < 3) divisions = 3;
 
-        const float radianPerDivide = 2.0f * 3.14159265358979323846f / static_cast<float>(divisions);
-        const float halfHeight = height * 0.5f;
+        const float halfHeight = params.height * 0.5f;
+        const float angleRange = params.endAngle - params.startAngle;
+        const float radianPerDivide = angleRange / static_cast<float>(divisions);
 
         for (uint32_t index = 0; index < divisions; ++index) {
-            float sin = std::sin(index * radianPerDivide);
-            float cos = std::cos(index * radianPerDivide);
-            float sinNext = std::sin((index + 1) * radianPerDivide);
-            float cosNext = std::cos((index + 1) * radianPerDivide);
+            float angle0 = params.startAngle + index * radianPerDivide;
+            float angle1 = params.startAngle + (index + 1) * radianPerDivide;
+            float sin = std::sin(angle0);
+            float cos = std::cos(angle0);
+            float sinNext = std::sin(angle1);
+            float cosNext = std::cos(angle1);
             float u = static_cast<float>(index) / static_cast<float>(divisions);
             float uNext = static_cast<float>(index + 1) / static_cast<float>(divisions);
 
@@ -330,26 +332,26 @@ namespace PrimitiveGenerator {
             MeshVertex v0{}, v1{}, v2{}, v3{};
 
             // 上側（Y = +halfHeight）
-            v0.position = { -sin * topRadius, halfHeight, cos * topRadius };
+            v0.position = { -sin * params.topRadius, halfHeight, cos * params.topRadius };
             v0.texcoord = { u, 0.0f };
             v0.normal = { -sin, 0.0f, cos };
-            v0.color = topColor;
+            v0.color = params.topColor;
 
-            v1.position = { -sinNext * topRadius, halfHeight, cosNext * topRadius };
+            v1.position = { -sinNext * params.topRadius, halfHeight, cosNext * params.topRadius };
             v1.texcoord = { uNext, 0.0f };
             v1.normal = { -sinNext, 0.0f, cosNext };
-            v1.color = topColor;
+            v1.color = params.topColor;
 
             // 下側（Y = -halfHeight）
-            v2.position = { -sin * bottomRadius, -halfHeight, cos * bottomRadius };
+            v2.position = { -sin * params.bottomRadius, -halfHeight, cos * params.bottomRadius };
             v2.texcoord = { u, 1.0f };
             v2.normal = { -sin, 0.0f, cos };
-            v2.color = bottomColor;
+            v2.color = params.bottomColor;
 
-            v3.position = { -sinNext * bottomRadius, -halfHeight, cosNext * bottomRadius };
+            v3.position = { -sinNext * params.bottomRadius, -halfHeight, cosNext * params.bottomRadius };
             v3.texcoord = { uNext, 1.0f };
             v3.normal = { -sinNext, 0.0f, cosNext };
-            v3.color = bottomColor;
+            v3.color = params.bottomColor;
 
             uint32_t baseIdx = static_cast<uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back(v0);
@@ -369,6 +371,20 @@ namespace PrimitiveGenerator {
         }
 
         return mesh;
+    }
+
+    // 既存シグネチャは Params 版にデリゲート
+    MeshData CreateCylinder(float topRadius, float bottomRadius, float height,
+        uint32_t divisions,
+        const Vector4& topColor, const Vector4& bottomColor) {
+        CylinderParams params;
+        params.topRadius = topRadius;
+        params.bottomRadius = bottomRadius;
+        params.height = height;
+        params.divisions = divisions;
+        params.topColor = topColor;
+        params.bottomColor = bottomColor;
+        return CreateCylinder(params);
     }
 
     MeshData CreateSphere(float radius, uint32_t divisions, const Vector4& color) {

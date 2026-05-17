@@ -428,6 +428,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Core\DStorageManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Core\TimeGroup.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

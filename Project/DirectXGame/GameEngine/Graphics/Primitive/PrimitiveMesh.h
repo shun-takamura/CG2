@@ -22,7 +22,10 @@ public:
     void Initialize(const MeshData& meshData);
 
     // 毎フレーム更新（WVP行列計算）
+    // 旧版: dxCore のグローバル時間で UV スクロールが進む
     void Update(Camera* camera);
+    // 新版: 呼び出し側が渡した deltaTime で UV スクロールが進む（TimeGroup 連動用）
+    void Update(Camera* camera, float deltaTime);
 
     // 描画
     void Draw();
@@ -33,10 +36,15 @@ public:
     // 各種設定
     void SetBlendMode(PrimitivePipeline::BlendMode mode) { blendMode_ = mode; }
     void SetDepthWrite(bool enable) { depthWrite_ = enable; }
+    void SetCullBackface(bool enable) { cullBackface_ = enable; }
     void SetColor(const Vector4& color) { color_ = color; }
 
     // α値がこれ以下のピクセルはdiscardされる（0.0でdiscardなし）
     void SetAlphaReference(float value) { alphaReference_ = value; }
+
+    // サンプラーモード（0=WrapAll, 1=WrapU+ClampV, 2=ClampAll）
+    void SetSamplerMode(int mode) { samplerMode_ = mode; }
+    int  GetSamplerMode() const { return samplerMode_; }
 
     // UV変換設定
     void SetUVScroll(const Vector2& scrollPerSec) { uvScrollSpeed_ = scrollPerSec; }
@@ -103,10 +111,12 @@ private:
     bool uvFlipU_ = false;
     bool uvFlipV_ = false;
     float alphaReference_ = 0.0f; // デフォルト：discardしない
+    int   samplerMode_ = 0;       // 0=WrapAll, 1=WrapU+ClampV, 2=ClampAll
 
     // 描画設定
     PrimitivePipeline::BlendMode blendMode_ = PrimitivePipeline::kBlendModeAdd;
     bool depthWrite_ = false;
+    bool cullBackface_ = false; // true で背面カリング、false で両面描画
 
     // テクスチャ（SRVインデックスで管理）
     uint32_t textureSrvIndex_ = 0;

@@ -1,6 +1,8 @@
 #include "PrimitiveInstance.h"
 #include "PrimitiveGenerator.h"
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
+#include "SceneManager.h"
+#include "BaseScene.h"
 #include "imgui.h"
 
 const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
@@ -33,10 +35,10 @@ void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) 
         meshData = PrimitiveGenerator::CreateSphere();
         break;
     case PrimitiveType::Ring:
-        meshData = PrimitiveGenerator::CreateRing();
+        meshData = PrimitiveGenerator::CreateRing(ringParams_);
         break;
     case PrimitiveType::Cylinder:
-        meshData = PrimitiveGenerator::CreateCylinder();
+        meshData = PrimitiveGenerator::CreateCylinder(cylinderParams_);
         break;
     default:
         meshData = PrimitiveGenerator::CreatePlane();
@@ -49,12 +51,49 @@ void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) 
     mesh_.SetBlendMode(PrimitivePipeline::kBlendModeNormal);
     mesh_.SetDepthWrite(true);
 
+    // Ring / Cylinder は中心側の白アーティファクト回避のため WrapU+ClampV をデフォルトに
+    if (type == PrimitiveType::Ring || type == PrimitiveType::Cylinder) {
+        samplerMode_ = 1;
+    } else {
+        samplerMode_ = 0;
+    }
+    mesh_.SetSamplerMode(samplerMode_);
+
     // デフォルトテクスチャを適用
     SetTexture(GetDefaultTexturePath());
 }
 
+void PrimitiveInstance::RegenerateGeometry() {
+    MeshData meshData;
+    switch (primitiveType_) {
+    case PrimitiveType::Ring:
+        meshData = PrimitiveGenerator::CreateRing(ringParams_);
+        break;
+    case PrimitiveType::Cylinder:
+        meshData = PrimitiveGenerator::CreateCylinder(cylinderParams_);
+        break;
+    default:
+        return; // 他の形状はパラメータを持たないので何もしない
+    }
+    mesh_.Initialize(meshData);
+}
+
 void PrimitiveInstance::Update() {
-    mesh_.Update(camera_);
+    // Inspector で形状パラメータが変わっていれば、まずここで再生成（前フレームの
+    // コマンドリストは既に Close+Submit 済みなので安全）
+    if (regenPending_) {
+        regenPending_ = false;
+        RegenerateGeometry();
+    }
+
+    // 現在シーンの TimeGroup 連動デルタタイムを使って UV スクロール等を進める。
+    // シーン未取得時は dxCore のグローバル時間にフォールバック
+    float dt = 0.0f;
+    auto* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+    if (scene) {
+        dt = scene->GetScaledDeltaTime(timeGroup_);
+    }
+    mesh_.Update(camera_, dt);
 }
 
 void PrimitiveInstance::Draw() {
@@ -76,7 +115,56 @@ void PrimitiveInstance::OnImGuiInspector() {
 
     // タイプ表示
     ImGui::Text("Type: %s", PrimitiveTypeToString(primitiveType_));
+
+    // TimeGroup（UVスクロール等の進行倍率に影響）
+    {
+        const char* items[] = { "World", "Player", "UI" };
+        int idx = static_cast<int>(timeGroup_);
+        if (ImGui::Combo("Time Group", &idx, items, IM_ARRAYSIZE(items))) {
+            timeGroup_ = static_cast<TimeGroup>(idx);
+        }
+    }
     ImGui::Separator();
+
+    // Geometry（Ring / Cylinder のみ）
+    if (primitiveType_ == PrimitiveType::Ring || primitiveType_ == PrimitiveType::Cylinder) {
+        if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+            bool regen = false;
+
+            if (primitiveType_ == PrimitiveType::Ring) {
+                regen |= ImGui::DragFloat("Outer Radius", &ringParams_.outerRadius, 0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Inner Radius", &ringParams_.innerRadius, 0.01f, 0.0f, 100.0f);
+                int div = static_cast<int>(ringParams_.divisions);
+                if (ImGui::DragInt("Divisions", &div, 1.0f, 3, 256)) {
+                    ringParams_.divisions = static_cast<uint32_t>(div);
+                    regen = true;
+                }
+                regen |= ImGui::ColorEdit4("Inner Color", &ringParams_.innerColor.x);
+                regen |= ImGui::ColorEdit4("Outer Color", &ringParams_.outerColor.x);
+                regen |= ImGui::SliderAngle("Start Angle", &ringParams_.startAngle, 0.0f, 360.0f);
+                regen |= ImGui::SliderAngle("End Angle",   &ringParams_.endAngle,   0.0f, 360.0f);
+            } else { // Cylinder
+                regen |= ImGui::DragFloat("Top Radius",    &cylinderParams_.topRadius,    0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Bottom Radius", &cylinderParams_.bottomRadius, 0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Height",        &cylinderParams_.height,       0.01f, 0.0f, 100.0f);
+                int div = static_cast<int>(cylinderParams_.divisions);
+                if (ImGui::DragInt("Divisions", &div, 1.0f, 3, 256)) {
+                    cylinderParams_.divisions = static_cast<uint32_t>(div);
+                    regen = true;
+                }
+                regen |= ImGui::ColorEdit4("Top Color",    &cylinderParams_.topColor.x);
+                regen |= ImGui::ColorEdit4("Bottom Color", &cylinderParams_.bottomColor.x);
+                regen |= ImGui::SliderAngle("Start Angle", &cylinderParams_.startAngle, 0.0f, 360.0f);
+                regen |= ImGui::SliderAngle("End Angle",   &cylinderParams_.endAngle,   0.0f, 360.0f);
+            }
+
+            if (regen) {
+                // 即時再生成すると ImGui Draw 中にリソース解放→D3D12 ERROR #921 になるため
+                // フラグを立てて、次フレームの Update 冒頭で安全に再生成する。
+                regenPending_ = true;
+            }
+        }
+    }
 
     // Transform
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -115,6 +203,22 @@ void PrimitiveInstance::OnImGuiInspector() {
         bool depthWrite = mesh_.GetDepthWrite();
         if (ImGui::Checkbox("DepthWrite", &depthWrite)) {
             mesh_.SetDepthWrite(depthWrite);
+        }
+
+        // Discard 閾値（このα値以下はピクセル破棄）
+        if (ImGui::SliderFloat("Alpha Discard", &alphaReference_, 0.0f, 1.0f, "%.3f")) {
+            mesh_.SetAlphaReference(alphaReference_);
+        }
+
+        // 背面カリング
+        if (ImGui::Checkbox("Cull Backface", &cullBackface_)) {
+            mesh_.SetCullBackface(cullBackface_);
+        }
+
+        // サンプラーモード（Ring/Cylinder の中心アーティファクト対策）
+        const char* samplerItems[] = { "Wrap U / Wrap V", "Wrap U / Clamp V", "Clamp U / Clamp V" };
+        if (ImGui::Combo("Sampler", &samplerMode_, samplerItems, IM_ARRAYSIZE(samplerItems))) {
+            mesh_.SetSamplerMode(samplerMode_);
         }
     }
 

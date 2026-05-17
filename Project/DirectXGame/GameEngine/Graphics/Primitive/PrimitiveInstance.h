@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "PrimitiveMesh.h"
+#include "PrimitiveGenerator.h"  // RingParams / CylinderParams
 #include "IImGuiEditable.h"
+#include "TimeGroup.h"
 #include "Vector2.h"
 #include <string>
 
@@ -94,4 +96,24 @@ private:
     Vector2 uvScale_          = { 1.0f, 1.0f };
     bool   flipU_             = false;
     bool   flipV_             = false;
+
+    // Ring / Cylinder のジオメトリパラメータ（Inspector で編集 → 再生成）
+    PrimitiveGenerator::RingParams     ringParams_;
+    PrimitiveGenerator::CylinderParams cylinderParams_;
+
+    // discard 閾値 / 背面カリング / サンプラーモード（Inspector で編集）
+    float alphaReference_ = 0.0f;
+    bool  cullBackface_   = false;
+    int   samplerMode_    = 0; // 0=WrapAll, 1=WrapU+ClampV, 2=ClampAll
+
+    // このプリミティブの時間グループ（UV スクロール等の進行速度を切り替える）
+    TimeGroup timeGroup_ = TimeGroup::World;
+
+    // Inspector のスライダー編集中にメッシュを即時再生成すると、
+    // 描画中コマンドリストが参照中のリソースが解放されて D3D12 ERROR #921 になる。
+    // ImGui からは「次フレーム再生成」フラグだけ立てて、Update 冒頭で実行する。
+    bool regenPending_ = false;
+
+    // 形状ごとのパラメータからメッシュを再生成（Ring/Cylinder のみ）
+    void RegenerateGeometry();
 };

@@ -29,6 +29,7 @@ struct Material
     float4 color;
     int enableLighting;
     float alphaReference;
-    float2 padding;
+    int samplerMode;       // 0=WrapAll / 1=WrapU+ClampV / 2=ClampAll
+    float padding;
     float4x4 uvTransform;
 };

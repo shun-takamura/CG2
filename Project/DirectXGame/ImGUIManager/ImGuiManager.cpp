@@ -27,6 +27,7 @@
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "Components/CollisionManager.h"
+#include "TimeGroup.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -182,17 +183,52 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             ImGui::TextUnformatted("Current Scene");
             ImGui::Separator();
             if (scene) {
-                float sceneScale = scene->GetSceneTimeScale();
-                if (ImGui::SliderFloat("Scene TimeScale", &sceneScale, 0.0f, 4.0f, "%.2f")) {
-                    scene->SetSceneTimeScale(sceneScale);
+                // ----- グループ別 TimeScale -----
+                ImGui::TextUnformatted("Time Groups");
+                for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+                    TimeGroup g = static_cast<TimeGroup>(i);
+                    float s = scene->GetTimeScale(g);
+                    char label[32];
+                    std::snprintf(label, sizeof(label), "%s##ts", GetTimeGroupName(g));
+                    if (ImGui::SliderFloat(label, &s, 0.0f, 4.0f, "%.2f")) {
+                        scene->SetTimeScale(g, s);
+                    }
                 }
-                if (ImGui::Button("Scene Pause")) scene->SetSceneTimeScale(0.0f);
+                ImGui::Spacing();
+
+                // ----- プリセット -----
+                if (ImGui::Button("All Pause")) {
+                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                        scene->SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
+                }
                 ImGui::SameLine();
-                if (ImGui::Button("Scene Play"))  scene->SetSceneTimeScale(1.0f);
+                if (ImGui::Button("All Play")) {
+                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                        scene->SetTimeScale(static_cast<TimeGroup>(i), 1.0f);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("HitStop")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.05f);
+                    scene->SetTimeScale(TimeGroup::Player, 0.05f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
+                if (ImGui::Button("Just Dodge")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.3f);
+                    scene->SetTimeScale(TimeGroup::Player, 1.0f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("BotW Rush")) {
+                    scene->SetTimeScale(TimeGroup::World,  0.2f);
+                    scene->SetTimeScale(TimeGroup::Player, 1.5f);
+                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                }
 
                 ImGui::Spacing();
-                ImGui::Text("Effective dt = %.4f s",
-                    scene->GetScaledDeltaTime());
+                ImGui::Text("dt World=%.4f Player=%.4f UI=%.4f",
+                    scene->GetScaledDeltaTime(TimeGroup::World),
+                    scene->GetScaledDeltaTime(TimeGroup::Player),
+                    scene->GetScaledDeltaTime(TimeGroup::UI));
             } else {
                 ImGui::TextDisabled("No active scene.");
             }

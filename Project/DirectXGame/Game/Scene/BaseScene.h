@@ -5,6 +5,7 @@
 
 // PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
 #include "Primitive/PrimitiveInstance.h"
+#include "TimeGroup.h"
 
 // 前方宣言
 class SpriteManager;
@@ -209,10 +210,31 @@ public:
 	float GetScaledDeltaTime() const;
 
 	/// <summary>
-	/// シーン単位のタイムスケール（0で停止、1で等速、0.5でスローなど）
+	/// シーン単位のタイムスケール（World グループの倍率を扱う互換API）
 	/// </summary>
-	float GetSceneTimeScale() const { return sceneTimeScale_; }
-	void SetSceneTimeScale(float scale) { sceneTimeScale_ = (scale < 0.0f) ? 0.0f : scale; }
+	float GetSceneTimeScale() const { return timeScales_[static_cast<int>(TimeGroup::World)]; }
+	void SetSceneTimeScale(float scale) {
+		timeScales_[static_cast<int>(TimeGroup::World)] = (scale < 0.0f) ? 0.0f : scale;
+	}
+
+	//====================
+	// グループ別タイムスケール（World/Player/UI の独立制御）
+	//====================
+	float GetTimeScale(TimeGroup g) const {
+		int i = static_cast<int>(g);
+		if (i < 0 || i >= static_cast<int>(TimeGroup::Count)) return 1.0f;
+		return timeScales_[i];
+	}
+	void SetTimeScale(TimeGroup g, float scale) {
+		int i = static_cast<int>(g);
+		if (i < 0 || i >= static_cast<int>(TimeGroup::Count)) return;
+		timeScales_[i] = (scale < 0.0f) ? 0.0f : scale;
+	}
+
+	/// <summary>
+	/// グループに紐づくスケール済みデルタタイムを返す（dxCore のグローバル × group倍率）
+	/// </summary>
+	float GetScaledDeltaTime(TimeGroup g) const;
 
 	//====================
 	// セッター
@@ -253,8 +275,9 @@ protected:
 	InputManager* input_ = nullptr;
 	SkinningComputeManager* skinningComputeManager_ = nullptr;
 
-	// シーンローカルのタイムスケール（DirectXCoreのグローバルとは別に乗算される）
-	float sceneTimeScale_ = 1.0f;
+	// グループ別タイムスケール（DirectXCoreのグローバルとは別に乗算される）
+	// [0]=World, [1]=Player, [2]=UI
+	float timeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f };
 
 	// シーン開始からの経過秒（Debug用シークバー / 仕掛け発火タイミングの基準など）
 	float elapsedSeconds_ = 0.0f;

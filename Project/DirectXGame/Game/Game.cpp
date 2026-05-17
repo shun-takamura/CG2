@@ -78,7 +78,8 @@ void Game::Initialize() {
 	// Debug ビルド: PostEffect 適用後の最終出力先として、Viewport表示専用 RenderTexture を作成
 	// クリアカラーのアルファ=1.0 にして、エフェクトOFF/各シーン端でImGui背景が透けないようにする
 	viewportRenderTexture_ = std::make_unique<RenderTexture>();
-	const float viewportClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	// シーンの空きをわかりやすくする水色背景（透明だとPostEffect結果と区別しづらいため）
+	const float viewportClearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
 	viewportRenderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
 		WindowsApplication::kClientWidth,
 		WindowsApplication::kClientHeight,

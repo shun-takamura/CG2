@@ -29,7 +29,15 @@ void BaseScene::ProcessAsyncLoads()
 float BaseScene::GetScaledDeltaTime() const
 {
 	if (!dxCore_) return 0.0f;
-	return dxCore_->GetScaledDeltaTime() * sceneTimeScale_;
+	return dxCore_->GetScaledDeltaTime() * timeScales_[static_cast<int>(TimeGroup::World)];
+}
+
+float BaseScene::GetScaledDeltaTime(TimeGroup g) const
+{
+	if (!dxCore_) return 0.0f;
+	int i = static_cast<int>(g);
+	if (i < 0 || i >= static_cast<int>(TimeGroup::Count)) return dxCore_->GetScaledDeltaTime();
+	return dxCore_->GetScaledDeltaTime() * timeScales_[i];
 }
 
 // ====================================================================

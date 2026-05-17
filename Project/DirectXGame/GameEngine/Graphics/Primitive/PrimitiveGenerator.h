@@ -52,6 +52,22 @@ namespace PrimitiveGenerator {
     // RingParams版（拡張機能を利用可能）
     MeshData CreateRing(const RingParams& params);
 
+    // Cylinderの生成パラメータ
+    struct CylinderParams {
+        float topRadius = 1.0f;
+        float bottomRadius = 1.0f;
+        float height = 3.0f;
+        uint32_t divisions = 32;
+
+        // 上下別カラー（縦グラデーション）
+        Vector4 topColor    = { 1.0f, 1.0f, 1.0f, 1.0f };
+        Vector4 bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        // 角度範囲（ラジアン。デフォルトは円全周）
+        float startAngle = 0.0f;
+        float endAngle   = 2.0f * 3.14159265358979323846f;
+    };
+
     // Cylinderを生成（Y軸方向の筒、上下面なし、中心が原点）
     MeshData CreateCylinder(
         float topRadius = 1.0f,
@@ -61,6 +77,9 @@ namespace PrimitiveGenerator {
         const Vector4& topColor = { 1.0f, 1.0f, 1.0f, 1.0f },
         const Vector4& bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
+
+    // CylinderParams版（角度範囲・上下カラー）
+    MeshData CreateCylinder(const CylinderParams& params);
 
     // Sphere（UV球）を生成（中心が原点）
     MeshData CreateSphere(
