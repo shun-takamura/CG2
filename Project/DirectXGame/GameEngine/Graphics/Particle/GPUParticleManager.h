@@ -4,6 +4,8 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Matrix4x4.h"
+#include "BillboardMode.h"
+#include "TimeGroup.h"
 #include <wrl.h>
 #include <d3d12.h>
 #include <string>
@@ -52,7 +54,9 @@ private:
     struct PerView
     {
         Matrix4x4 viewProjection;
-        Matrix4x4 billboardMatrix;
+        Matrix4x4 billboardMatrix;     // Full ビルボード用
+        Vector3   cameraPosition;      // YAxis ビルボード用
+        uint32_t  billboardMode;       // 0=None, 1=Full, 2=YAxis
     };
 
     struct EmitterSphere
@@ -130,6 +134,12 @@ private:
 
     // CPUで管理する経過時間（PerFrame.timeに送る）
     float elapsedTime_ = 0.0f;
+
+    // ビルボードモード（全パーティクル共通）
+    BillboardMode billboardMode_ = BillboardMode::Full;
+
+    // 時間グループ（dt倍率に影響）
+    TimeGroup timeGroup_ = TimeGroup::World;
 
     void CreateParticleResource();
     void CreateFreeListResources();

@@ -5,6 +5,8 @@
 #include "Material.h"
 #include "VertexData.h"
 #include "Log.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 #include <cassert>
 
 #ifdef USE_IMGUI
@@ -78,6 +80,21 @@ void GPUParticleManager::OnImGui()
 #ifdef USE_IMGUI
     ImGui::Text("Max Particles: %u", kMaxParticles);
     ImGui::Text("Elapsed Time: %.2f s", elapsedTime_);
+
+    {
+        const char* billboardItems[] = { "None", "Full", "YAxis" };
+        int bIdx = static_cast<int>(billboardMode_);
+        if (ImGui::Combo("Billboard", &bIdx, billboardItems, IM_ARRAYSIZE(billboardItems))) {
+            billboardMode_ = static_cast<BillboardMode>(bIdx);
+        }
+    }
+    {
+        const char* timeGroupItems[] = { "World", "Player", "UI" };
+        int tg = static_cast<int>(timeGroup_);
+        if (ImGui::Combo("Time Group", &tg, timeGroupItems, IM_ARRAYSIZE(timeGroupItems))) {
+            timeGroup_ = static_cast<TimeGroup>(tg);
+        }
+    }
     ImGui::Separator();
 
     if (!emitterData_) {
@@ -106,7 +123,9 @@ void GPUParticleManager::OnImGui()
 
 void GPUParticleManager::Update(const Camera* camera, float deltaTime)
 {
-    const float dt = deltaTime;
+    // シーン取得できればTimeGroup連動dtで上書き
+    BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+    const float dt = scene ? scene->GetScaledDeltaTime(timeGroup_) : deltaTime;
     elapsedTime_ += dt;
 
     // PerFrame更新
@@ -131,7 +150,7 @@ void GPUParticleManager::Update(const Camera* camera, float deltaTime)
     if (camera && perViewData_) {
         perViewData_->viewProjection = camera->GetViewProjectionMatrix();
 
-        // billboardMatrix
+        // billboardMatrix（Full 用、共通）
         const Matrix4x4& view = camera->GetViewMatrix();
         Matrix4x4 billboard = MakeIdentity4x4();
         billboard.m[0][0] = view.m[0][0];
@@ -144,6 +163,10 @@ void GPUParticleManager::Update(const Camera* camera, float deltaTime)
         billboard.m[2][1] = view.m[1][2];
         billboard.m[2][2] = view.m[2][2];
         perViewData_->billboardMatrix = billboard;
+
+        // YAxis 用にカメラ位置とモードを送る
+        perViewData_->cameraPosition = camera->GetTranslate();
+        perViewData_->billboardMode = static_cast<uint32_t>(billboardMode_);
     }
 }
 

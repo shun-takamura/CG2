@@ -9,6 +9,7 @@
 #include <d3d12.h>
 #include <string>
 #include "Vector2.h"
+#include "BillboardMode.h"
 
 // 前方宣言
 class Camera;
@@ -45,6 +46,10 @@ public:
     // サンプラーモード（0=WrapAll, 1=WrapU+ClampV, 2=ClampAll）
     void SetSamplerMode(int mode) { samplerMode_ = mode; }
     int  GetSamplerMode() const { return samplerMode_; }
+
+    // ビルボードモード（None / Full / YAxis）
+    void SetBillboardMode(BillboardMode mode) { billboardMode_ = mode; }
+    BillboardMode GetBillboardMode() const { return billboardMode_; }
 
     // UV変換設定
     void SetUVScroll(const Vector2& scrollPerSec) { uvScrollSpeed_ = scrollPerSec; }
@@ -117,6 +122,9 @@ private:
     PrimitivePipeline::BlendMode blendMode_ = PrimitivePipeline::kBlendModeAdd;
     bool depthWrite_ = false;
     bool cullBackface_ = false; // true で背面カリング、false で両面描画
+
+    // ビルボードモード
+    BillboardMode billboardMode_ = BillboardMode::None;
 
     // テクスチャ（SRVインデックスで管理）
     uint32_t textureSrvIndex_ = 0;

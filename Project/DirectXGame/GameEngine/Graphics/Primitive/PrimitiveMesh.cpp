@@ -3,6 +3,7 @@
 #include "TextureManager.h"
 #include "MathUtility.h"
 #include <cassert>
+#include <cmath>
 
 void PrimitiveMesh::Initialize(const MeshData& meshData) {
     CreateVertexResource(meshData);
@@ -50,8 +51,45 @@ void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
     uvMat.m[3][1] = ty;
     materialData_->uvTransform = uvMat;
 
-    // World行列（SRT）
-    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_);
+    // World行列（SRT、ビルボードモードに応じて補正）
+    Matrix4x4 worldMatrix;
+    if (billboardMode_ == BillboardMode::None || !camera) {
+        worldMatrix = MakeAffineMatrix(transform_);
+    } else {
+        // Scale → Rotate（自己回転）→ Billboard → Translate
+        Matrix4x4 scaleMat     = MakeScaleMatrix(transform_);
+        Matrix4x4 rotateMat    = MakeRotateMatrix(transform_.rotate);
+        Matrix4x4 translateMat = MakeTranslateMatrix(transform_);
+
+        Matrix4x4 billboardMat = MakeIdentity4x4();
+        if (billboardMode_ == BillboardMode::Full) {
+            const Matrix4x4& view = camera->GetViewMatrix();
+            billboardMat.m[0][0] = view.m[0][0];
+            billboardMat.m[0][1] = view.m[1][0];
+            billboardMat.m[0][2] = view.m[2][0];
+            billboardMat.m[1][0] = view.m[0][1];
+            billboardMat.m[1][1] = view.m[1][1];
+            billboardMat.m[1][2] = view.m[2][1];
+            billboardMat.m[2][0] = view.m[0][2];
+            billboardMat.m[2][1] = view.m[1][2];
+            billboardMat.m[2][2] = view.m[2][2];
+        } else { // YAxis
+            Vector3 camPos = camera->GetTranslate();
+            float fx = camPos.x - transform_.translate.x;
+            float fz = camPos.z - transform_.translate.z;
+            float len = std::sqrt(fx * fx + fz * fz);
+            if (len < 1e-5f) { fx = 0.0f; fz = 1.0f; }
+            else             { fx /= len; fz /= len; }
+            // forward=(fx,0,fz)、up=(0,1,0)、right=cross(up,forward)=(fz,0,-fx)
+            billboardMat.m[0][0] = fz;   billboardMat.m[0][1] = 0.0f; billboardMat.m[0][2] = -fx;
+            billboardMat.m[1][0] = 0.0f; billboardMat.m[1][1] = 1.0f; billboardMat.m[1][2] = 0.0f;
+            billboardMat.m[2][0] = fx;   billboardMat.m[2][1] = 0.0f; billboardMat.m[2][2] = fz;
+        }
+
+        worldMatrix = Multiply(
+            Multiply(Multiply(scaleMat, rotateMat), billboardMat),
+            translateMat);
+    }
 
     // WVP行列
     Matrix4x4 wvpMatrix;

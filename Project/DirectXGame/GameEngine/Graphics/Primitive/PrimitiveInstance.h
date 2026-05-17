@@ -24,6 +24,7 @@ public:
         Sphere,
         Ring,
         Cylinder,
+        Helix,
         kCount,
     };
 
@@ -97,9 +98,10 @@ private:
     bool   flipU_             = false;
     bool   flipV_             = false;
 
-    // Ring / Cylinder のジオメトリパラメータ（Inspector で編集 → 再生成）
+    // Ring / Cylinder / Helix のジオメトリパラメータ（Inspector で編集 → 再生成）
     PrimitiveGenerator::RingParams     ringParams_;
     PrimitiveGenerator::CylinderParams cylinderParams_;
+    PrimitiveGenerator::HelixParams    helixParams_;
 
     // discard 閾値 / 背面カリング / サンプラーモード（Inspector で編集）
     float alphaReference_ = 0.0f;

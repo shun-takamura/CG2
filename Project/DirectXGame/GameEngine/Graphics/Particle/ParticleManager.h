@@ -13,6 +13,7 @@
 #include "Transform.h"
 #include "EmitParam.h"
 #include "BillboardMode.h"
+#include "TimeGroup.h"
 #include <random>
 
 // 前方宣言
@@ -25,7 +26,7 @@ struct Particle {
     Vector4 color;
     float lifeTime;
     float currentTime;
-    BillboardMode billboardMode = BillboardMode::Billboard;
+    BillboardMode billboardMode = BillboardMode::Full;
 };
 
 // AABB
@@ -70,6 +71,9 @@ struct ParticleGroup {
     Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource;
     uint32_t instanceCount;
     ParticleForGPU* instancingData;
+
+    // このグループの時間グループ（World/Player/UI 別倍率）
+    TimeGroup timeGroup = TimeGroup::World;
 };
 
 class ParticleManager
@@ -144,6 +148,9 @@ public:
 
     // セッター
     void SetVelocityScale(float scale) { emitterSettings_.velocityScale = scale; }
+
+    // パーティクルグループのTimeGroup設定
+    void SetParticleGroupTimeGroup(const std::string& name, TimeGroup group);
     void SetParticleScale(float scale) { particleScale_ = scale; }
     void SetVelocityDirection(const Vector3& dir) {
         customDirection_ = dir;

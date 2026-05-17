@@ -5,7 +5,10 @@
 #include "VertexData.h"
 #include "Material.h"
 #include "Log.h"
+#include "SceneManager.h"
+#include "BaseScene.h"
 #include <cassert>
+#include <cmath>
 #include "imgui.h"
 
 ParticleManager* ParticleManager::GetInstance()
@@ -261,8 +264,9 @@ void ParticleManager::Update(float deltaTime)
     Matrix4x4 viewMatrix = camera_->GetViewMatrix();
     Matrix4x4 projectionMatrix = camera_->GetProjectionMatrix();
     Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
+    Vector3 cameraPos = camera_->GetTranslate();
 
-    // ビルボード行列の計算
+    // Full ビルボード行列（全パーティクル共通）
     Matrix4x4 billboardMatrix = MakeIdentity4x4();
     billboardMatrix.m[0][0] = viewMatrix.m[0][0];
     billboardMatrix.m[0][1] = viewMatrix.m[1][0];
@@ -274,10 +278,35 @@ void ParticleManager::Update(float deltaTime)
     billboardMatrix.m[2][1] = viewMatrix.m[1][2];
     billboardMatrix.m[2][2] = viewMatrix.m[2][2];
 
+    // YAxis ビルボード行列（パーティクル位置に依存するためラムダで都度計算）
+    auto makeYAxisBillboard = [&](const Vector3& objPos) -> Matrix4x4 {
+        float fx = cameraPos.x - objPos.x;
+        float fz = cameraPos.z - objPos.z;
+        float len = std::sqrt(fx * fx + fz * fz);
+        if (len < 1e-5f) {
+            // カメラが真上/真下にいる退避ケース：Z+方向を向ける
+            fx = 0.0f; fz = 1.0f;
+        } else {
+            fx /= len; fz /= len;
+        }
+        // forward=(fx,0,fz)、up=(0,1,0)、right=cross(up,forward)=(fz,0,-fx)
+        Matrix4x4 m = MakeIdentity4x4();
+        m.m[0][0] = fz;   m.m[0][1] = 0.0f; m.m[0][2] = -fx;
+        m.m[1][0] = 0.0f; m.m[1][1] = 1.0f; m.m[1][2] = 0.0f;
+        m.m[2][0] = fx;   m.m[2][1] = 0.0f; m.m[2][2] = fz;
+        return m;
+        };
+
+    // シーンが取得できればグループ別TimeGroupでdtを上書きする
+    BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+
     // 全てのパーティクルグループについて処理する
     for (auto& pair : particleGroups_) {
         ParticleGroup& group = pair.second;
         uint32_t instanceIndex = 0;
+
+        // このグループの実dt（TimeGroup連動）
+        float groupDt = scene ? scene->GetScaledDeltaTime(group.timeGroup) : deltaTime;
 
         // グループ内の全てのパーティクルについて処理する
         auto it = group.particles.begin();
@@ -285,7 +314,7 @@ void ParticleManager::Update(float deltaTime)
             Particle& particle = *it;
 
             // 経過時間を加算
-            particle.currentTime += deltaTime;
+            particle.currentTime += groupDt;
 
             // 寿命に達していたらグループから外す
             if (particle.currentTime >= particle.lifeTime) {
@@ -297,16 +326,16 @@ void ParticleManager::Update(float deltaTime)
             if (isAccelerationFieldEnabled_) {
                 // Fieldの範囲内のParticleには加速度を適用する
                 if (IsCollision(accelerationField_.area, particle.transform.translate)) {
-                    particle.velocity.x += accelerationField_.acceleration.x * deltaTime;
-                    particle.velocity.y += accelerationField_.acceleration.y * deltaTime;
-                    particle.velocity.z += accelerationField_.acceleration.z * deltaTime;
+                    particle.velocity.x += accelerationField_.acceleration.x * groupDt;
+                    particle.velocity.y += accelerationField_.acceleration.y * groupDt;
+                    particle.velocity.z += accelerationField_.acceleration.z * groupDt;
                 }
             }
 
             // 移動処理（速度を座標に加算）
-            particle.transform.translate.x += particle.velocity.x * deltaTime;
-            particle.transform.translate.y += particle.velocity.y * deltaTime;
-            particle.transform.translate.z += particle.velocity.z * deltaTime;
+            particle.transform.translate.x += particle.velocity.x * groupDt;
+            particle.transform.translate.y += particle.velocity.y * groupDt;
+            particle.transform.translate.z += particle.velocity.z * groupDt;
 
             Matrix4x4 scaleMatrix = MakeScaleMatrix(particle.transform);
             Matrix4x4 translateMatrix = MakeTranslateMatrix(particle.transform);
@@ -316,10 +345,15 @@ void ParticleManager::Update(float deltaTime)
 
             // ビルボードの適用有無で処理を分岐
             Matrix4x4 worldMatrix;
-            if (particle.billboardMode == BillboardMode::Billboard) {
+            if (particle.billboardMode == BillboardMode::Full) {
                 // Scale → Rotate（自己回転）→ Billboard（カメラ向き）→ Translate
                 worldMatrix = Multiply(
                     Multiply(Multiply(scaleMatrix, rotateMatrix), billboardMatrix),
+                    translateMatrix);
+            } else if (particle.billboardMode == BillboardMode::YAxis) {
+                Matrix4x4 yBillboard = makeYAxisBillboard(particle.transform.translate);
+                worldMatrix = Multiply(
+                    Multiply(Multiply(scaleMatrix, rotateMatrix), yBillboard),
                     translateMatrix);
             } else {
                 // Scale → Rotate → Translate（ビルボードなし）
@@ -385,9 +419,31 @@ void ParticleManager::Draw()
     }
 }
 
+void ParticleManager::SetParticleGroupTimeGroup(const std::string& name, TimeGroup group)
+{
+    auto it = particleGroups_.find(name);
+    if (it != particleGroups_.end()) {
+        it->second.timeGroup = group;
+    }
+}
+
 void ParticleManager::OnImGui()
 {
 #ifdef _DEBUG
+    if (!particleGroups_.empty()) {
+        if (ImGui::CollapsingHeader("Particle Groups")) {
+            const char* timeGroupItems[] = { "World", "Player", "UI" };
+            for (auto& pair : particleGroups_) {
+                ImGui::PushID(pair.first.c_str());
+                ImGui::Text("%s (%zu)", pair.first.c_str(), pair.second.particles.size());
+                int tg = static_cast<int>(pair.second.timeGroup);
+                if (ImGui::Combo("Time Group", &tg, timeGroupItems, IM_ARRAYSIZE(timeGroupItems))) {
+                    pair.second.timeGroup = static_cast<TimeGroup>(tg);
+                }
+                ImGui::PopID();
+            }
+        }
+    }
 
     //if (ImGui::Begin("Particle Settings")) {
     //    // エミッター設定

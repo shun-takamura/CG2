@@ -12,6 +12,7 @@ const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
     case PrimitiveType::Sphere:   return "Sphere";
     case PrimitiveType::Ring:     return "Ring";
     case PrimitiveType::Cylinder: return "Cylinder";
+    case PrimitiveType::Helix:    return "Helix";
     default:                      return "Unknown";
     }
 }
@@ -39,6 +40,9 @@ void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) 
         break;
     case PrimitiveType::Cylinder:
         meshData = PrimitiveGenerator::CreateCylinder(cylinderParams_);
+        break;
+    case PrimitiveType::Helix:
+        meshData = PrimitiveGenerator::CreateHelix(helixParams_);
         break;
     default:
         meshData = PrimitiveGenerator::CreatePlane();
@@ -71,6 +75,9 @@ void PrimitiveInstance::RegenerateGeometry() {
         break;
     case PrimitiveType::Cylinder:
         meshData = PrimitiveGenerator::CreateCylinder(cylinderParams_);
+        break;
+    case PrimitiveType::Helix:
+        meshData = PrimitiveGenerator::CreateHelix(helixParams_);
         break;
     default:
         return; // 他の形状はパラメータを持たないので何もしない
@@ -124,10 +131,21 @@ void PrimitiveInstance::OnImGuiInspector() {
             timeGroup_ = static_cast<TimeGroup>(idx);
         }
     }
+
+    // Billboard（面プリミティブのみ：Plane / Ring）
+    if (primitiveType_ == PrimitiveType::Plane || primitiveType_ == PrimitiveType::Ring) {
+        const char* billboardItems[] = { "None", "Full", "YAxis" };
+        int bIdx = static_cast<int>(mesh_.GetBillboardMode());
+        if (ImGui::Combo("Billboard", &bIdx, billboardItems, IM_ARRAYSIZE(billboardItems))) {
+            mesh_.SetBillboardMode(static_cast<BillboardMode>(bIdx));
+        }
+    }
     ImGui::Separator();
 
-    // Geometry（Ring / Cylinder のみ）
-    if (primitiveType_ == PrimitiveType::Ring || primitiveType_ == PrimitiveType::Cylinder) {
+    // Geometry（Ring / Cylinder / Helix のみ）
+    if (primitiveType_ == PrimitiveType::Ring ||
+        primitiveType_ == PrimitiveType::Cylinder ||
+        primitiveType_ == PrimitiveType::Helix) {
         if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
             bool regen = false;
 
@@ -143,7 +161,7 @@ void PrimitiveInstance::OnImGuiInspector() {
                 regen |= ImGui::ColorEdit4("Outer Color", &ringParams_.outerColor.x);
                 regen |= ImGui::SliderAngle("Start Angle", &ringParams_.startAngle, 0.0f, 360.0f);
                 regen |= ImGui::SliderAngle("End Angle",   &ringParams_.endAngle,   0.0f, 360.0f);
-            } else { // Cylinder
+            } else if (primitiveType_ == PrimitiveType::Cylinder) {
                 regen |= ImGui::DragFloat("Top Radius",    &cylinderParams_.topRadius,    0.01f, 0.0f, 100.0f);
                 regen |= ImGui::DragFloat("Bottom Radius", &cylinderParams_.bottomRadius, 0.01f, 0.0f, 100.0f);
                 regen |= ImGui::DragFloat("Height",        &cylinderParams_.height,       0.01f, 0.0f, 100.0f);
@@ -156,6 +174,27 @@ void PrimitiveInstance::OnImGuiInspector() {
                 regen |= ImGui::ColorEdit4("Bottom Color", &cylinderParams_.bottomColor.x);
                 regen |= ImGui::SliderAngle("Start Angle", &cylinderParams_.startAngle, 0.0f, 360.0f);
                 regen |= ImGui::SliderAngle("End Angle",   &cylinderParams_.endAngle,   0.0f, 360.0f);
+            } else { // Helix
+                regen |= ImGui::DragFloat("Start Helix Radius", &helixParams_.startHelixRadius, 0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("End Helix Radius",   &helixParams_.endHelixRadius,   0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Start Tube Radius",  &helixParams_.startTubeRadius,  0.005f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("End Tube Radius",    &helixParams_.endTubeRadius,    0.005f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Pitch", &helixParams_.pitch, 0.01f, 0.0f, 100.0f);
+                regen |= ImGui::DragFloat("Turns", &helixParams_.turns, 0.05f, 0.0f, 100.0f);
+
+                int circleSeg = static_cast<int>(helixParams_.circleSegments);
+                if (ImGui::DragInt("Circle Segments", &circleSeg, 1.0f, 3, 64)) {
+                    helixParams_.circleSegments = static_cast<uint32_t>(circleSeg);
+                    regen = true;
+                }
+                int lenSeg = static_cast<int>(helixParams_.lengthSegments);
+                if (ImGui::DragInt("Length Segments", &lenSeg, 1.0f, 1, 1024)) {
+                    helixParams_.lengthSegments = static_cast<uint32_t>(lenSeg);
+                    regen = true;
+                }
+
+                regen |= ImGui::ColorEdit4("Start Color", &helixParams_.startColor.x);
+                regen |= ImGui::ColorEdit4("End Color",   &helixParams_.endColor.x);
             }
 
             if (regen) {
