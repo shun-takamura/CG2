@@ -338,7 +338,9 @@ void EffectEditorWindow::NewEffect() {
 
 void EffectEditorWindow::SaveCurrent() {
     editBuffer_.name = editNameInput_;
-    std::string finalName = EffectManager::GetInstance()->SaveDef(editBuffer_);
+    // 編集元と同じ名前なら上書き保存。そうでなければ衝突時にサフィックス。
+    const bool allowOverwrite = (editBuffer_.name == selectedEffect_);
+    std::string finalName = EffectManager::GetInstance()->SaveDef(editBuffer_, allowOverwrite);
     if (!finalName.empty()) {
         editBuffer_.name = finalName;
         std::snprintf(editNameInput_, sizeof(editNameInput_), "%s", finalName.c_str());
@@ -362,6 +364,10 @@ void EffectEditorWindow::RemoveComponent(EffectComponentEditable::Kind kind, int
     // 即時に erase + RebuildEditables を呼ぶと、現在 OnImGuiInspector 中の
     // EffectComponentEditable 自身が削除されて use-after-free になる。
     // 次の OnDraw 冒頭で安全に処理するため pending キューへ。
+    // 同フレームで重複してクリックされた場合の二重登録を弾く
+    for (const auto& r : pendingRemovals_) {
+        if (r.kind == kind && r.index == index) return;
+    }
     pendingRemovals_.push_back({ kind, index });
 }
 

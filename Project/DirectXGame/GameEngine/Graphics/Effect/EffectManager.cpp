@@ -81,25 +81,25 @@ EffectDef* EffectManager::FindDefMutable(const std::string& name) {
     return it == defs_.end() ? nullptr : &it->second;
 }
 
-std::string EffectManager::SaveDef(EffectDef def) {
-    // 名前のサニタイズ：空なら "Untitled"
+std::string EffectManager::SaveDef(EffectDef def, bool allowOverwrite) {
     std::string baseName = def.name.empty() ? std::string("Untitled") : def.name;
     std::string finalName = baseName;
-    // 重複チェック（自分自身の名前なら上書き扱いで衝突とみなさない）
-    int suffix = 1;
-    while (defs_.find(finalName) != defs_.end() && finalName != def.name) {
-        finalName = baseName + "(" + std::to_string(suffix++) + ")";
+
+    // allowOverwrite=false の場合、衝突したらサフィックスを付ける
+    if (!allowOverwrite) {
+        int suffix = 1;
+        while (defs_.find(finalName) != defs_.end()) {
+            finalName = baseName + "(" + std::to_string(suffix++) + ")";
+        }
     }
     def.name = finalName;
 
-    // JSONファイル書き出し
     const std::string filePath = "Resources/Json/Effects/" + finalName + ".json";
     if (!EffectDefIO::SaveToFile(filePath, def)) {
         Log(std::string("EffectManager: SaveToFile failed for ") + filePath);
         return std::string();
     }
 
-    // メモリ上のmapへ登録（上書き含む）
     defs_[finalName] = std::move(def);
     return finalName;
 }

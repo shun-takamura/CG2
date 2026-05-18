@@ -52,9 +52,11 @@ public:
 
     /// <summary>
     /// def を Resources/Json/Effects/ に保存し、メモリ上の defs_ にも同名で登録する。
-    /// 既存名が衝突するときは (1)(2)... を付与する。最終的に使用された名前を返す。
+    /// allowOverwrite=false の場合、既存名と衝突したら (1)(2)... を付与してユニーク化。
+    /// 編集中のものを保存（同名で上書き）したい場合は allowOverwrite=true を渡す。
+    /// 最終的に使用された名前を返す。
     /// </summary>
-    std::string SaveDef(EffectDef def);
+    std::string SaveDef(EffectDef def, bool allowOverwrite = false);
 
     /// <summary>
     /// 登録済み定義を削除（ファイル削除はしない）。
