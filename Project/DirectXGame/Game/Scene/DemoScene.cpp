@@ -40,7 +40,7 @@
 #include "Config/GameActions.h"
 #include "LogBuffer.h"
 #include "Primitive/DebugDraw.h"
-#include "Actors/SplineCurveActor.h"
+#include "Spline/SplineCurveActor.h"
 #include "Components/PrefabManager.h"
 #include "Components/Prefab.h"
 #include <numbers>
@@ -194,15 +194,7 @@ void DemoScene::Initialize() {
 	//ParticleManager::GetInstance()->SetCamera(camera_.get());
 	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
-	// GPU Particle 初期化（Effect Editor のテスト用）
-	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
-	gpuParticleManager_->Initialize(dxCore_, srvManager_);
-	gpuParticleManager_->CreateGroup("spark", "Resources/Textures/circle.dds");
-
-	// Effect Editor 初期化
-	EffectManager::GetInstance()->Initialize(gpuParticleManager_.get());
-	EffectManager::GetInstance()->SetCamera(camera_.get());
-	EffectManager::GetInstance()->LoadAllDefsInDirectory("Resources/Json/Effects");
+	// GPU Particle + EffectManager は Game が共通管理する（BaseScene::UpdateGlobalEffects 経由で使用）
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -360,10 +352,8 @@ void DemoScene::Initialize() {
 
 	//dxCore_->SetUseFixedFrameRate(false);
 
-#ifdef _DEBUG
 	// Camera/RenderTextureはBaseScene::GetCamera経由とGame::Initialize側で中央化済み
-	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
-#endif
+	// ImGui への GPUParticleManager 通知も Game::Initialize で行う
 
 	// 前回保存したシーン配置があれば自動ロード（ファイル無しは何もしない）
 	const std::string kAutoLoadPath = "Resources/Json/Scenes/demo.json";
@@ -373,18 +363,7 @@ void DemoScene::Initialize() {
 }
 
 void DemoScene::Finalize() {
-
-#ifdef _DEBUG
-	ImGuiManager::Instance().SetGPUParticleManager(nullptr);
-#endif
-
-	// EffectManager: 再生中インスタンスのライト解放を含めるため GPU 終了前に呼ぶ
-	EffectManager::GetInstance()->Finalize();
-
-	if (gpuParticleManager_) {
-		gpuParticleManager_->Finalize();
-		gpuParticleManager_.reset();
-	}
+	// EffectManager / GPUParticle の終了は Game::Finalize 側で実施
 
 	animatedCubeInstance_.reset();
 	animatedCubeModel_.reset();
@@ -710,13 +689,8 @@ void DemoScene::Update() {
 	// パーティクル更新処理
 	ParticleManager::GetInstance()->Update(GetScaledDeltaTime());
 
-	// Effect Editor 更新（GPU Particle へのEmit予約はここで行う）
-	EffectManager::GetInstance()->Update(GetScaledDeltaTime());
-
-	// GPU Particle 更新（PerView書き込み）
-	if (gpuParticleManager_) {
-		gpuParticleManager_->Update(camera_.get(), GetScaledDeltaTime());
-	}
+	// 全シーン共通の EffectManager + GPUParticle を更新
+	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
 
 	//// 1秒間に発生させる量を自動制御
 	//emitTimer_ += GetScaledDeltaTime();
@@ -803,13 +777,8 @@ void DemoScene::Draw() {
 	// パーティクル描画
 	ParticleManager::GetInstance()->Draw();
 
-	// GPU Particle 描画
-	if (gpuParticleManager_) {
-		gpuParticleManager_->Draw();
-	}
-
-	// Effect Editor 描画（Primitiveコンポーネント）
-	EffectManager::GetInstance()->Draw();
+	// 全シーン共通の GPUParticle + Effect Editor 描画
+	DrawGlobalEffects();
 
 #ifdef USE_IMGUI
 	// Skeletonのデバッグ描画（全モデル描画完了後にまとめて行う）

@@ -272,6 +272,21 @@ public:
 	void SetSRVManager(SRVManager* srvManager) { srvManager_ = srvManager; }
 	void SetInputManager(InputManager* input) { input_ = input; }
 	void SetSkinningComputeManager(SkinningComputeManager* manager) { skinningComputeManager_ = manager; }
+
+	//====================
+	// 全シーン共通のエフェクト系（Game が所有）— ヘルパで Update/Draw を呼ぶだけ
+	//====================
+	/// <summary>
+	/// EffectManager にこのフレームのカメラをセットし、EffectManager と GPUParticle を Update する。
+	/// シーンの Update から自分のカメラと scaled dt を渡して呼ぶ。
+	/// </summary>
+	void UpdateGlobalEffects(Camera* camera, float deltaTime);
+
+	/// <summary>
+	/// GPUParticle と EffectManager を Draw する。シーン側で描画順の好きな位置に挿入する。
+	/// </summary>
+	void DrawGlobalEffects();
+
 protected:
 	/// <summary>
 	/// 動的プリミティブの更新（派生シーンの Update から呼ぶ）

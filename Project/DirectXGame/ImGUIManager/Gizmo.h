@@ -23,6 +23,11 @@ public:
     void Draw(IImGuiEditable* selected, const Camera* camera,
               ImVec2 imagePos, ImVec2 imageSize);
 
+    /// <summary>
+    /// 軸ハンドルをドラッグ中か。Debugカメラの左ドラッグ回転を抑止する判定に使う。
+    /// </summary>
+    bool IsDragging() const { return activeAxis_ >= 0; }
+
 private:
     /// <summary>
     /// ワールド座標 → スクリーン座標への変換

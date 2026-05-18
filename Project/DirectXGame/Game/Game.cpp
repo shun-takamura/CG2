@@ -23,9 +23,12 @@
 #include "DStorageManager.h"
 #include "InputAction.h"
 #include "Config/KeyConfig.h"
+#include "GPUParticleManager.h"
+#include "Effect/EffectManager.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
+std::unique_ptr<GPUParticleManager> Game::gpuParticleManager_ = nullptr;
 Game* Game::instance_ = nullptr;
 
 Game::Game() {
@@ -53,6 +56,21 @@ void Game::Initialize() {
 	}
 
 	//===================================
+	// 全シーン共通の GPU パーティクル + EffectManager を先に初期化。
+	// シーン側はカメラセット + Update/Draw を呼ぶだけで済む。
+	//===================================
+	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
+	gpuParticleManager_->Initialize(dxCore_.get(), srvManager_.get());
+	gpuParticleManager_->CreateGroup("spark", "Resources/Textures/circle.dds");
+
+	EffectManager::GetInstance()->Initialize(gpuParticleManager_.get());
+	EffectManager::GetInstance()->LoadAllDefsInDirectory("Resources/Json/Effects");
+
+#ifdef _DEBUG
+	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
+#endif
+
+	//===================================
 	// シーンファクトリを生成し、マネージャにセット
 	//===================================
 	sceneFactory_ = std::make_unique<SceneFactory>();
@@ -60,7 +78,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
+	SceneManager::GetInstance()->ChangeSceneImmediate("STAGEPLAY");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif
@@ -154,6 +172,20 @@ void Game::Draw() {
 }
 
 void Game::Finalize() {
+#ifdef _DEBUG
+	ImGuiManager::Instance().SetGPUParticleManager(nullptr);
+#endif
+
+	//===================================
+	// 全シーン共通のエフェクト系を GPU 停止前に解放
+	//===================================
+	EffectManager::GetInstance()->Finalize();
+
+	if (gpuParticleManager_) {
+		gpuParticleManager_->Finalize();
+		gpuParticleManager_.reset();
+	}
+
 	//===================================
 	// PostEffectの終了処理
 	//===================================

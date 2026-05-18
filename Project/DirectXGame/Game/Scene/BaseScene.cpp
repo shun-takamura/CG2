@@ -1,4 +1,7 @@
 #include "BaseScene.h"
+#include "Game.h"
+#include "GPUParticleManager.h"
+#include "Effect/EffectManager.h"
 #include "ModelManager.h"
 #include "DirectXCore.h"
 #include "Primitive/PrimitiveInstance.h"
@@ -39,6 +42,21 @@ DebugCamera* BaseScene::GetDebugCamera() {
 		debugCamera_->Initialize();
 	}
 	return debugCamera_.get();
+}
+
+void BaseScene::UpdateGlobalEffects(Camera* camera, float deltaTime) {
+	EffectManager::GetInstance()->SetCamera(camera);
+	EffectManager::GetInstance()->Update(deltaTime);
+	if (auto* gpu = Game::GetGPUParticleManager()) {
+		gpu->Update(camera, deltaTime);
+	}
+}
+
+void BaseScene::DrawGlobalEffects() {
+	if (auto* gpu = Game::GetGPUParticleManager()) {
+		gpu->Draw();
+	}
+	EffectManager::GetInstance()->Draw();
 }
 
 void BaseScene::SetUseDebugCamera(bool enabled) {
@@ -93,7 +111,9 @@ void BaseScene::UpdateDebugCameraIfActive() {
 		const float orbitSpeed = 0.005f;
 		const float panSpeed   = 0.01f;
 		const float zoomSpeed  = 1.0f;
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+		// ギズモのハンドルをドラッグ中はカメラ回転を抑止する
+		const bool gizmoDragging = ImGuiManager::Instance().GetGizmo().IsDragging();
+		if (!gizmoDragging && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
 			ImVec2 d = io.MouseDelta;
 			debugCamera_->Orbit(d.x * orbitSpeed, d.y * orbitSpeed);
 		}
