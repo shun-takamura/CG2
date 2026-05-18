@@ -424,6 +424,14 @@ void Framework::Update() {
 		return;
 	}
 
+	// WM_SIZE があったらここで Swapchain を作り直す（描画コマンドを積む前の安全地点）
+	{
+		int32_t newW = 0, newH = 0;
+		if (winApp_->ConsumePendingResize(newW, newH)) {
+			dxCore_->Resize(newW, newH);
+		}
+	}
+
 	// ===== ImGuiフレーム開始 =====
 	ImGuiManager::Instance().BeginFrame();
 
