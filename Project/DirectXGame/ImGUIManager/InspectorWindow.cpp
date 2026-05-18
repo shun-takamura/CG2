@@ -6,6 +6,7 @@
 #include "Components/Prefab.h"
 #include "Components/PrefabManager.h"
 #include "Object3DInstance.h"
+#include "AnimatedObject3DInstance.h"
 #include "LogBuffer.h"
 
 #include <cstring>
@@ -67,11 +68,33 @@ void InspectorWindow::OnDraw() {
         const EntityTag tag = selected->GetTag();
         if (CollisionMatrix::IsCollidableTag(tag) && selected->GetEditableTranslate()) {
             if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen)) {
-                SphereCollider& c = selected->GetCollider();
+                Collider& c = selected->GetCollider();
                 ImGui::Checkbox("OnCollision", &c.enabled);
                 if (c.enabled) {
-                    ImGui::DragFloat("Radius", &c.radius, 0.05f, 0.0f, 100.0f, "%.2f");
+                    // 形状コンボ
+                    const char* shapeNames[] = { "Sphere", "OBB", "Capsule" };
+                    int shapeIdx = static_cast<int>(c.shape);
+                    if (ImGui::Combo("Shape", &shapeIdx, shapeNames, IM_ARRAYSIZE(shapeNames))) {
+                        c.shape = static_cast<ColliderShape>(shapeIdx);
+                    }
+
+                    // 共通: オフセット
                     ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
+
+                    // 形状別パラメータ
+                    switch (c.shape) {
+                    case ColliderShape::Sphere:
+                        ImGui::DragFloat("Radius", &c.radius, 0.05f, 0.0f, 100.0f, "%.2f");
+                        break;
+                    case ColliderShape::OBB:
+                        ImGui::DragFloat3("Half Extents", &c.halfExtents.x, 0.05f, 0.0f, 100.0f, "%.2f");
+                        break;
+                    case ColliderShape::Capsule:
+                        ImGui::DragFloat("Capsule Radius", &c.capsuleRadius, 0.05f, 0.0f, 100.0f, "%.2f");
+                        ImGui::DragFloat("Capsule Height", &c.capsuleHeight, 0.05f, 0.0f, 100.0f, "%.2f");
+                        break;
+                    }
+
                     ImGui::Checkbox("Show Debug", &c.showDebug);
                 }
             }
@@ -82,43 +105,66 @@ void InspectorWindow::OnDraw() {
     // 各オブジェクトが実装した編集UIを描画
     selected->OnImGuiInspector();
 
-    // ----- Save as Prefab（Object3D のみ） -----
-    if (selected->GetTypeName() == "Object3D") {
-        ImGui::Separator();
-        if (ImGui::CollapsingHeader("Prefab", ImGuiTreeNodeFlags_DefaultOpen)) {
-            static char prefabNameBuf[128] = "";
-            // 初期値として現在のオブジェクト名を入れておく
-            static IImGuiEditable* lastSelected = nullptr;
-            if (selected != lastSelected) {
-                std::snprintf(prefabNameBuf, sizeof(prefabNameBuf), "%s",
-                    selected->GetName().c_str());
-                lastSelected = selected;
-            }
-            ImGui::InputText("Prefab Name", prefabNameBuf, sizeof(prefabNameBuf));
-            if (ImGui::Button("Save as Prefab")) {
-                auto* obj = static_cast<Object3DInstance*>(selected);
-                PrefabDef def{};
-                def.name = prefabNameBuf;
-                def.modelDir = obj->GetDirectoryPath();
-                def.modelFile = obj->GetModelFileName();
-                def.tag = obj->GetTag();
-                def.defaultScale = obj->GetScale();
-                def.defaultRotate = obj->GetRotate();
-                const auto& col = obj->GetCollider();
-                if (col.enabled) {
-                    def.hasCollider = true;
-                    def.colliderRadius = col.radius;
-                    def.colliderOffset = col.offset;
+    // ----- Save as Prefab（Object3D / AnimatedObject3D 両対応） -----
+    {
+        const std::string typeName = selected->GetTypeName();
+        const bool isObj3D    = (typeName == "Object3D");
+        const bool isAnimated = (typeName == "AnimatedObject3D");
+        if (isObj3D || isAnimated) {
+            ImGui::Separator();
+            if (ImGui::CollapsingHeader("Prefab", ImGuiTreeNodeFlags_DefaultOpen)) {
+                static char prefabNameBuf[128] = "";
+                static IImGuiEditable* lastSelected = nullptr;
+                if (selected != lastSelected) {
+                    std::snprintf(prefabNameBuf, sizeof(prefabNameBuf), "%s",
+                        selected->GetName().c_str());
+                    lastSelected = selected;
                 }
-                std::string path = std::string(PrefabManager::GetPrefabDir())
-                    + "/" + def.name + ".json";
-                bool ok = PrefabManager::Save(def, path);
-                LogBuffer::Instance().Add(
-                    ok ? ("Prefab saved: " + path)
-                       : ("Prefab save FAILED: " + path),
-                    ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
-                if (ok) {
-                    PrefabManager::GetInstance()->Rescan();
+                ImGui::InputText("Prefab Name", prefabNameBuf, sizeof(prefabNameBuf));
+                if (ImGui::Button("Save as Prefab")) {
+                    PrefabDef def{};
+                    def.name = prefabNameBuf;
+                    def.tag = selected->GetTag();
+                    def.isAnimated = isAnimated;
+
+                    if (isObj3D) {
+                        auto* obj = static_cast<Object3DInstance*>(selected);
+                        def.modelDir = obj->GetDirectoryPath();
+                        def.modelFile = obj->GetModelFileName();
+                        def.defaultScale = obj->GetScale();
+                        def.defaultRotate = obj->GetRotate();
+                    } else {
+                        auto* obj = static_cast<AnimatedObject3DInstance*>(selected);
+                        def.modelDir = obj->GetDirectoryPath();
+                        def.modelFile = obj->GetModelFileName();
+                        def.defaultScale = obj->GetScale();
+                        def.defaultRotate = obj->GetRotate();
+                        // 現在のモデルが読んでいる .anim をデフォルトとして覚える
+                        // （instantiate 時に PlayAnimation で適用）
+                        // AnimatedObject3DInstance 経由ではなくモデル側に保持しているので
+                        // ここでは空のままにしておき、必要なら別途編集する。
+                    }
+
+                    const auto& col = selected->GetCollider();
+                    if (col.enabled) {
+                        def.hasCollider = true;
+                        def.colliderShape = col.shape;
+                        def.colliderOffset = col.offset;
+                        def.colliderRadius = col.radius;
+                        def.colliderHalfExtents = col.halfExtents;
+                        def.colliderCapsuleRadius = col.capsuleRadius;
+                        def.colliderCapsuleHeight = col.capsuleHeight;
+                    }
+                    std::string path = std::string(PrefabManager::GetPrefabDir())
+                        + "/" + def.name + ".json";
+                    bool ok = PrefabManager::Save(def, path);
+                    LogBuffer::Instance().Add(
+                        ok ? ("Prefab saved: " + path)
+                           : ("Prefab save FAILED: " + path),
+                        ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
+                    if (ok) {
+                        PrefabManager::GetInstance()->Rescan();
+                    }
                 }
             }
         }

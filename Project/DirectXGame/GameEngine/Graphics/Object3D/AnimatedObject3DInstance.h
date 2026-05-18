@@ -18,6 +18,7 @@
 #include "Camera.h"
 #include "CameraForGPU.h"
 #include "Skeleton.h"
+#include "Animation.h"
 #include <memory>
 #include "SkinCluster.h"
 #include <vector>
@@ -69,6 +70,15 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     bool isLoop_ = true;               // ループ再生フラグ
     float playbackSpeed_ = 1.0f;       // 再生速度（1.0が等倍）
 
+    // ----- クロスフェード状態 -----
+    // PlayAnimation で旧クリップを prev に snapshot し、fadeDuration_ 秒かけて新クリップへ補間する。
+    Animation prevAnimation_{};
+    float prevAnimationTime_ = 0.0f;
+    bool  hasPrevAnimation_ = false;
+    float fadeTimer_ = 0.0f;           // フェード経過秒
+    float fadeDuration_ = 0.0f;        // 0 ならフェード未進行
+    float defaultFadeTime_ = 0.25f;    // .anim ドロップ時のデフォルト
+
     //==============================
     // Skeleton関連
     //==============================
@@ -104,6 +114,7 @@ public:
     std::string GetTypeName() const override { return "AnimatedObject3D"; }
     void OnImGuiInspector() override;
     Vector3* GetEditableTranslate() override { return &transform_.translate; }
+    const Vector3* GetEditableRotate() const override { return &transform_.rotate; }
 
     //==============================
     // セッター
@@ -132,6 +143,17 @@ public:
     void SetPlaybackSpeed(float speed) { playbackSpeed_ = speed; }
     float GetPlaybackSpeed() const { return playbackSpeed_; }
     bool IsPlaying() const { return isPlaying_; }
+
+    /// <summary>
+    /// 別の .anim へクロスフェード付きで切り替える。
+    /// fadeTime > 0 のとき、現在のアニメーションを snapshot して fadeTime 秒かけて補間。
+    /// fadeTime = 0 のときは即座に差し替え。
+    /// </summary>
+    void PlayAnimation(const std::string& animPath, float fadeTime);
+
+    bool IsFading() const { return hasPrevAnimation_; }
+    float GetDefaultFadeTime() const { return defaultFadeTime_; }
+    void  SetDefaultFadeTime(float t) { defaultFadeTime_ = (t < 0.0f) ? 0.0f : t; }
 
     //==============================
     // ゲッター

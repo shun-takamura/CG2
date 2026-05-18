@@ -19,6 +19,7 @@ class ImGuiManager;
 #define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
 #define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
 #define PREFAB_DROP_PAYLOAD_TYPE    "PREFAB_DROP"
+#define ANIM_DROP_PAYLOAD_TYPE      "ANIM_DROP"
 // Effect Editor 用：エフェクトのコンポーネント種別だけを運ぶ
 #define EFFECT_COMP_DROP_PAYLOAD_TYPE "EFFECT_COMP_DROP"
 
@@ -46,6 +47,11 @@ struct PrimitiveDropPayload {
 // マテリアル（.mat ファイルパス）
 struct MaterialDropPayload {
     char materialPath[384];
+};
+
+// アニメーション（.anim ファイルパス）
+struct AnimDropPayload {
+    char animPath[384];
 };
 
 // プリファブ名
@@ -90,6 +96,10 @@ private:
         std::string displayName;  // "Enemy/enemy.mat"
         std::string filePath;     // "Resources/Models/Enemy/enemy.mat"
     };
+    struct AnimEntry {
+        std::string displayName;  // "Animated/Walk/walk.anim"
+        std::string filePath;     // "Resources/Models/Animated/Walk/walk.anim"
+    };
 
     ImGuiManager* manager_ = nullptr;
 
@@ -98,6 +108,7 @@ private:
     std::vector<TextureEntry> discoveredTextures_;
     std::vector<AnimatedEntry> discoveredAnimated_;
     std::vector<MaterialEntry> discoveredMaterials_;
+    std::vector<AnimEntry> discoveredAnims_;
     mutable std::mutex discoveredMutex_;
 
     std::thread workerThread_;

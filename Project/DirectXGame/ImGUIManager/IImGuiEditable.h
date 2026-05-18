@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include "Vector2.h"
 #include "Vector3.h"
@@ -65,6 +66,12 @@ public:
     const SphereCollider& GetCollider() const { return collider_; }
     SphereCollider& GetCollider() { return collider_; }
 
+    //====================
+    // ObjectID（自動採番、0 は予約＝未割当 / マスク対象外）。
+    // ジャスト回避演出など、特定インスタンスをハイライトするためのキーに使う。
+    //====================
+    uint8_t GetObjectId() const { return objectId_; }
+
     /// <summary>
     /// Inspectorでの編集UIを描画
     /// </summary>
@@ -75,6 +82,12 @@ public:
     /// 3Dオブジェクトはオーバーライドして transform_.translate のアドレスを返す
     /// </summary>
     virtual Vector3* GetEditableTranslate() { return nullptr; }
+
+    /// <summary>
+    /// OBB/Capsule コライダーの向き計算用にオーナーの rotate を返す（オイラー角・ラジアン）。
+    /// nullptr の場合は単位回転扱い。3Dオブジェクトは override 推奨。
+    /// </summary>
+    virtual const Vector3* GetEditableRotate() const { return nullptr; }
 
     /// <summary>
     /// 2Dギズモ操作用：スクリーン座標(Vector2)へのポインタを返す（nullptrなら非対応）
@@ -90,4 +103,7 @@ protected:
     EntityTag tag_ = EntityTag::None;
     bool visibleInEditor_ = true;
     SphereCollider collider_{};
+
+    // 0 は予約。コンストラクタで採番される。256 を超えたら 1..255 をラップ（実用上問題ない範囲）
+    uint8_t objectId_ = 0;
 };

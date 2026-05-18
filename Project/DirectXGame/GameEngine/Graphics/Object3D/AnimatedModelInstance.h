@@ -29,6 +29,7 @@ class AnimatedModelInstance
     // メンバ変数
     //==============================
     std::string textureFilePath_;
+    std::string animationPath_;   // 現在ロード中の .anim パス（空＝モデル付属のデフォルト）
 
     ModelData modelData_;
     Animation animation_;
@@ -88,6 +89,13 @@ public:
         modelData_.materialData.textureFilePath = filePath;
     }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
+
+    /// <summary>
+    /// 別の .anim ファイルでアニメーションを差し替える。Inspector ドロップから呼ばれる。
+    /// 失敗時（ファイル無し等）は何もしない。
+    /// </summary>
+    void ReplaceAnimation(const std::string& animPath);
+    const std::string& GetAnimationPath() const { return animationPath_; }
 
     SkinCluster& GetSkinCluster() { return skinCluster_; }
     bool HasSkinCluster() const { return hasSkinCluster_; }

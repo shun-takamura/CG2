@@ -264,6 +264,9 @@
     <ClCompile Include="DirectXGame\Game\Spline\RailCameraController.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Actors\Player.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -277,6 +280,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp">
@@ -695,6 +701,9 @@
     <ClInclude Include="DirectXGame\Game\Spline\RailCameraController.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\UI\Reticle.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Actors\Player.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -708,6 +717,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h">

@@ -25,6 +25,8 @@
 #include "Config/KeyConfig.h"
 #include "GPUParticleManager.h"
 #include "Effect/EffectManager.h"
+#include "Components/PrefabManager.h"
+#include "Scene/BaseScene.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -70,6 +72,9 @@ void Game::Initialize() {
 	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
 #endif
 
+	// プリファブ一覧を先に取り込む（シーン Initialize で InstantiatePrefab を使えるように）
+	PrefabManager::GetInstance()->Rescan();
+
 	//===================================
 	// シーンファクトリを生成し、マネージャにセット
 	//===================================
@@ -78,7 +83,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("STAGEPLAY");
+	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif
@@ -136,6 +141,39 @@ void Game::Draw() {
 	SceneManager::GetInstance()->Draw();
 
 	postEffect_->EndSceneRender(dxCore_->GetCommandList());
+
+	// ----- ID Pass：ハイライト対象を idMaskRT に書き込む -----
+	if (BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+		if (!scene->GetHighlights().empty()) {
+			auto* cmd = dxCore_->GetCommandList();
+			postEffect_->BeginIdPass(cmd);
+
+			// RTV + DSV をバインド
+			auto rtv = postEffect_->GetIdMaskRT()->GetRTVHandle();
+			auto dsv = dxCore_->GetDsvHandle();
+			cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
+
+			D3D12_VIEWPORT vp{};
+			vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
+			vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
+			vp.MaxDepth = 1.0f;
+			cmd->RSSetViewports(1, &vp);
+			D3D12_RECT sc{ 0, 0,
+				static_cast<LONG>(WindowsApplication::kClientWidth),
+				static_cast<LONG>(WindowsApplication::kClientHeight) };
+			cmd->RSSetScissorRects(1, &sc);
+
+			srvManager_->PreDraw();
+			scene->RunIdPass(cmd);
+
+			postEffect_->EndIdPass(cmd);
+		} else {
+			// ハイライト無し時も idMaskRT を SRV 可能状態に維持（0でクリアして遷移）
+			auto* cmd = dxCore_->GetCommandList();
+			postEffect_->BeginIdPass(cmd);
+			postEffect_->EndIdPass(cmd);
+		}
+	}
 
 	// 2. Swapchainに切り替え
 	dxCore_->BeginDraw();

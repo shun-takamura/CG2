@@ -76,6 +76,10 @@ public:
     std::string GetTypeName() const override { return "Object3D"; }
     void OnImGuiInspector() override;
     Vector3* GetEditableTranslate() override { return &transform_.translate; }
+    const Vector3* GetEditableRotate() const override { return &transform_.rotate; }
+
+    // ID Pass 用：idMaskRT に objectId_ を書き込む
+    void DrawIdPass(class DirectXCore* dxCore);
 
     //==============================
     // セッター

@@ -18,6 +18,7 @@
 #include "DissolveEffect.h"
 #include "OutlineDepthEffect.h"
 #include "OutlineNormalEffect.h"
+#include "MaskedGrayscaleEffect.h"
 #include "Matrix4x4.h"
 
 // 前方宣言
@@ -77,6 +78,18 @@ public:
 	// シーン描画先のRenderTextureを取得（Skyboxなどで使用）
 	RenderTexture* GetSceneRenderTarget() const { return renderTextureA_.get(); }
 
+	// IDマスク用 RT（R8_UINT）。シーン描画後の ID Pass で書き込み、MaskedGrayscale 等の参照対象。
+	RenderTexture* GetIdMaskRT() const { return idMaskRT_.get(); }
+
+	/// <summary>
+	/// ID Pass の開始：idMaskRT を RT としてバインドし 0 でクリア。シーン描画後・PostEffect Draw 前に呼ぶ。
+	/// </summary>
+	void BeginIdPass(ID3D12GraphicsCommandList* commandList);
+	/// <summary>
+	/// ID Pass の終了：idMaskRT を PIXEL_SHADER_RESOURCE 状態に遷移。
+	/// </summary>
+	void EndIdPass(ID3D12GraphicsCommandList* commandList);
+
 	/// <summary>
 	/// ダメージ演出を適用
 	/// </summary>
@@ -99,6 +112,7 @@ public:
 	DissolveEffect* dissolve = nullptr;
 	OutlineDepthEffect* outlineDepth = nullptr;
 	OutlineNormalEffect* outlineNormal = nullptr;
+	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
 
 private:
 	void CreateRootSignatures();
@@ -116,6 +130,9 @@ private:
 	// ピンポンRenderTexture
 	std::unique_ptr<RenderTexture> renderTextureA_;
 	std::unique_ptr<RenderTexture> renderTextureB_;
+
+	// IDマスク RT（R8_UINT、シーン描画後の ID Pass で書き込まれる）
+	std::unique_ptr<RenderTexture> idMaskRT_;
 
 	// ルートシグネチャ（3種類）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;

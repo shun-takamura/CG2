@@ -27,6 +27,7 @@
 #include "Vector3.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
+#include "StagePlayScene.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "SceneManager.h"
@@ -144,6 +145,62 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Transition",
         []() { TransitionManager::GetInstance()->OnImGui(); }));
+    windows_.push_back(std::make_unique<CallbackWindow>("Highlights",
+        [this]() {
+            auto* sm = SceneManager::GetInstance();
+            BaseScene* scene = sm ? sm->GetCurrentScene() : nullptr;
+            if (!scene) {
+                ImGui::TextDisabled("No active scene.");
+                return;
+            }
+            // PostEffect トグル
+            if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+                bool en = pe->maskedGrayscale->IsEnabled();
+                if (ImGui::Checkbox("Enable MaskedGrayscale", &en)) {
+                    pe->maskedGrayscale->SetEnabled(en);
+                }
+                float intensity = pe->maskedGrayscale->GetIntensity();
+                if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 1.0f)) {
+                    pe->maskedGrayscale->SetIntensity(intensity);
+                    pe->maskedGrayscale->UpdateConstantBuffer();
+                }
+            }
+            ImGui::Separator();
+
+            IImGuiEditable* selected = GetSelected();
+            ImGui::Text("Selected: %s",
+                selected ? selected->GetName().c_str() : "(none)");
+            if (ImGui::Button("Add Selected") && selected) {
+                scene->AddHighlight(selected);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Selected") && selected) {
+                scene->RemoveHighlight(selected);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear")) {
+                scene->ClearHighlights();
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Highlighted (%d):",
+                static_cast<int>(scene->GetHighlights().size()));
+            for (auto* e : scene->GetHighlights()) {
+                if (e) ImGui::BulletText("[%u] %s",
+                    static_cast<unsigned>(e->GetObjectId()),
+                    e->GetName().c_str());
+            }
+        }));
+    windows_.push_back(std::make_unique<CallbackWindow>("StagePlay Tuning",
+        []() {
+            auto* sm = SceneManager::GetInstance();
+            auto* scene = sm ? sm->GetCurrentScene() : nullptr;
+            if (auto* stage = dynamic_cast<StagePlayScene*>(scene)) {
+                stage->OnImGuiTuning();
+            } else {
+                ImGui::TextDisabled("Active only in StagePlay scene.");
+            }
+        }));
 
     // Effect Editor（プレビューRT付き）
     auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_);

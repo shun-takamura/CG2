@@ -184,4 +184,61 @@ namespace DebugDraw {
 		}
 	}
 
+	void Capsule(const Vector3& center, const Vector3 axes[3],
+		float height, float radius, const Vector4& color, int segments)
+	{
+		if (segments < 4) segments = 4;
+		auto* lr = LineRenderer::GetInstance();
+		const float step = 2.0f * kPi / static_cast<float>(segments);
+
+		// 軸（X=右、Y=長手、Z=前）
+		const Vector3& ax = axes[0];
+		const Vector3& ay = axes[1];
+		const Vector3& az = axes[2];
+
+		const float halfH = 0.5f * height;
+		const Vector3 top    = Add(center, Scale(ay, +halfH));  // 円柱上端の中心
+		const Vector3 bottom = Add(center, Scale(ay, -halfH));  // 円柱下端の中心
+
+		// 円柱端の2リング（XZ平面、軸 ay 周り）
+		for (int side = 0; side < 2; ++side) {
+			const Vector3& c = (side == 0) ? top : bottom;
+			for (int i = 0; i < segments; ++i) {
+				float a0 = step * i;
+				float a1 = step * (i + 1);
+				Vector3 p0 = Add(c, Add(Scale(ax, std::cos(a0) * radius), Scale(az, std::sin(a0) * radius)));
+				Vector3 p1 = Add(c, Add(Scale(ax, std::cos(a1) * radius), Scale(az, std::sin(a1) * radius)));
+				lr->AddLine(p0, p1, color);
+			}
+		}
+
+		// 円柱の母線（4本：X+, X-, Z+, Z-）
+		Vector3 axPlus  = Scale(ax,  radius);
+		Vector3 axMinus = Scale(ax, -radius);
+		Vector3 azPlus  = Scale(az,  radius);
+		Vector3 azMinus = Scale(az, -radius);
+		lr->AddLine(Add(top, axPlus),  Add(bottom, axPlus),  color);
+		lr->AddLine(Add(top, axMinus), Add(bottom, axMinus), color);
+		lr->AddLine(Add(top, azPlus),  Add(bottom, azPlus),  color);
+		lr->AddLine(Add(top, azMinus), Add(bottom, azMinus), color);
+
+		// 半球（上下）: XY/ZY それぞれの半円
+		auto drawHalfCircle = [&](const Vector3& c, const Vector3& right, const Vector3& upDir) {
+			// upDir は半球の「開いている側」と逆向き＝ドーム頂点側
+			for (int i = 0; i < segments; ++i) {
+				float a0 = kPi * static_cast<float>(i) / static_cast<float>(segments);
+				float a1 = kPi * static_cast<float>(i + 1) / static_cast<float>(segments);
+				Vector3 p0 = Add(c, Add(Scale(right, std::cos(a0) * radius), Scale(upDir, std::sin(a0) * radius)));
+				Vector3 p1 = Add(c, Add(Scale(right, std::cos(a1) * radius), Scale(upDir, std::sin(a1) * radius)));
+				lr->AddLine(p0, p1, color);
+			}
+		};
+		// 上半球（ay 方向に膨らむ）
+		drawHalfCircle(top, ax, ay);
+		drawHalfCircle(top, az, ay);
+		// 下半球（-ay 方向に膨らむ）
+		drawHalfCircle(bottom, ax, Scale(ay, -1.0f));
+		drawHalfCircle(bottom, az, Scale(ay, -1.0f));
+	}
+
 } // namespace DebugDraw

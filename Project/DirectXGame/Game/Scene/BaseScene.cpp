@@ -3,6 +3,15 @@
 #include "GPUParticleManager.h"
 #include "Effect/EffectManager.h"
 #include "ModelManager.h"
+#include "Object3DInstance.h"
+#include "SpriteInstance.h"
+#include "AnimatedObject3DInstance.h"
+#include "AnimatedModelInstance.h"
+#include "Spline/SplineCurveActor.h"
+#include "Components/PrefabManager.h"
+#include "Components/Prefab.h"
+#include "Components/EntityTag.h"
+#include "LogBuffer.h"
 #include "DirectXCore.h"
 #include "Primitive/PrimitiveInstance.h"
 #include "CameraPreviewSprite.h"
@@ -42,6 +51,37 @@ DebugCamera* BaseScene::GetDebugCamera() {
 		debugCamera_->Initialize();
 	}
 	return debugCamera_.get();
+}
+
+void BaseScene::AddHighlight(IImGuiEditable* e) {
+	if (!e) return;
+	if (std::find(highlightedEntities_.begin(), highlightedEntities_.end(), e)
+		!= highlightedEntities_.end()) return;
+	highlightedEntities_.push_back(e);
+}
+
+void BaseScene::RemoveHighlight(IImGuiEditable* e) {
+	auto it = std::find(highlightedEntities_.begin(), highlightedEntities_.end(), e);
+	if (it != highlightedEntities_.end()) highlightedEntities_.erase(it);
+}
+
+void BaseScene::ClearHighlights() {
+	highlightedEntities_.clear();
+}
+
+void BaseScene::RunIdPass(ID3D12GraphicsCommandList* commandList) {
+	if (highlightedEntities_.empty()) return;
+
+	// ハイライト対象のうち Object3DInstance を ID で書き込む（Animated/Primitive は後日対応）
+	for (IImGuiEditable* e : highlightedEntities_) {
+		if (!e) continue;
+		for (const auto& obj : object3DInstances_) {
+			if (static_cast<IImGuiEditable*>(obj.get()) == e) {
+				obj->DrawIdPass(dxCore_);
+				break;
+			}
+		}
+	}
 }
 
 void BaseScene::UpdateGlobalEffects(Camera* camera, float deltaTime) {
@@ -246,28 +286,60 @@ float BaseScene::GetScaledDeltaTime(TimeGroup g) const
 
 void BaseScene::AddDynamicObject(const std::string& dirPath, const std::string& filename,
 	const Vector3& worldPos) {
-	(void)dirPath; (void)filename; (void)worldPos;
+	auto obj = std::make_unique<Object3DInstance>();
+	obj->Initialize(object3DManager_, dxCore_, dirPath, filename);
+	obj->SetCamera(GetCamera());
+	obj->SetTranslate(worldPos);
+	object3DInstances_.push_back(std::move(obj));
 }
 
 void BaseScene::RemoveDynamicObject(const std::string& name) {
-	(void)name;
+	auto it = std::find_if(object3DInstances_.begin(), object3DInstances_.end(),
+		[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; });
+	if (it != object3DInstances_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(it->release()));
+		object3DInstances_.erase(it);
+	}
 }
 
 void BaseScene::AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) {
-	(void)texturePath; (void)clientX; (void)clientY;
+	auto sprite = std::make_unique<SpriteInstance>();
+	sprite->Initialize(spriteManager_, texturePath);
+	sprite->SetPosition({ clientX, clientY });
+	dynamicSprites_.push_back(std::move(sprite));
 }
 
 void BaseScene::RemoveDynamicSprite(const std::string& name) {
-	(void)name;
+	auto it = std::find_if(dynamicSprites_.begin(), dynamicSprites_.end(),
+		[&name](const std::unique_ptr<SpriteInstance>& s) { return s->GetName() == name; });
+	if (it != dynamicSprites_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(it->release()));
+		dynamicSprites_.erase(it);
+	}
 }
 
 void BaseScene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
 	const Vector3& worldPos) {
-	(void)dirPath; (void)filename; (void)worldPos;
+	auto model = std::make_unique<AnimatedModelInstance>();
+	model->Initialize(ModelManager::GetInstance()->GetModelCore(), dirPath, filename);
+
+	auto obj = std::make_unique<AnimatedObject3DInstance>();
+	obj->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_,
+		model.get(), filename);
+	obj->SetSourcePath(dirPath, filename);
+	obj->SetTranslate(worldPos);
+
+	dynamicAnimatedModels_.push_back(std::move(model));
+	dynamicAnimated_.push_back(std::move(obj));
 }
 
 void BaseScene::RemoveDynamicAnimated(const std::string& name) {
-	(void)name;
+	auto it = std::find_if(dynamicAnimated_.begin(), dynamicAnimated_.end(),
+		[&name](const std::unique_ptr<AnimatedObject3DInstance>& a) { return a->GetName() == name; });
+	if (it != dynamicAnimated_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(it->release()));
+		dynamicAnimated_.erase(it);
+	}
 }
 
 void BaseScene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) {
@@ -293,15 +365,88 @@ void BaseScene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) 
 }
 
 void BaseScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
-	(void)tagInt; (void)worldPos;
+	auto spline = std::make_unique<SplineCurveActor>();
+	spline->SetTag(static_cast<EntityTag>(tagInt));
+
+	std::string base = "Spline";
+	std::string name = base;
+	int suffix = 1;
+	while (std::any_of(dynamicSplines_.begin(), dynamicSplines_.end(),
+		[&name](const std::unique_ptr<SplineCurveActor>& s) { return s->GetName() == name; })) {
+		name = base + " (" + std::to_string(suffix++) + ")";
+	}
+	spline->SetName(name);
+
+	for (auto& p : spline->MutablePoints()) {
+		p.x += worldPos.x;
+		p.y += worldPos.y;
+		p.z += worldPos.z;
+	}
+
+	dynamicSplines_.push_back(std::move(spline));
 }
 
 void BaseScene::RemoveDynamicSpline(const std::string& name) {
-	(void)name;
+	auto it = std::find_if(dynamicSplines_.begin(), dynamicSplines_.end(),
+		[&name](const std::unique_ptr<SplineCurveActor>& s) { return s->GetName() == name; });
+	if (it != dynamicSplines_.end()) {
+		deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(it->release()));
+		dynamicSplines_.erase(it);
+	}
 }
 
 void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos) {
-	(void)prefabName; (void)worldPos;
+	const PrefabDef* def = PrefabManager::GetInstance()->Find(prefabName);
+	if (!def) {
+		LogBuffer::Instance().Add("Prefab not found: " + prefabName, LogBuffer::Level::Warning);
+		return;
+	}
+
+	auto applyCollider = [&](Collider& c) {
+		c.enabled = true;
+		c.shape = def->colliderShape;
+		c.offset = def->colliderOffset;
+		c.radius = def->colliderRadius;
+		c.halfExtents = def->colliderHalfExtents;
+		c.capsuleRadius = def->colliderCapsuleRadius;
+		c.capsuleHeight = def->colliderCapsuleHeight;
+	};
+
+	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
+
+	if (def->isAnimated) {
+		AddDynamicAnimated(def->modelDir, def->modelFile, worldPos);
+		if (dynamicAnimated_.empty()) return;
+
+		auto& back = dynamicAnimated_.back();
+		std::string name = base;
+		int suffix = 1;
+		while (std::any_of(dynamicAnimated_.begin(), dynamicAnimated_.end() - 1,
+			[&name](const std::unique_ptr<AnimatedObject3DInstance>& o) { return o->GetName() == name; })) {
+			name = base + " (" + std::to_string(suffix++) + ")";
+		}
+		back->SetName(name);
+		back->SetTag(def->tag);
+		back->SetScale(def->defaultScale);
+		back->SetRotate(def->defaultRotate);
+		if (def->hasCollider) applyCollider(back->GetCollider());
+	} else {
+		AddDynamicObject(def->modelDir, def->modelFile, worldPos);
+		if (object3DInstances_.empty()) return;
+
+		auto& back = object3DInstances_.back();
+		std::string name = base;
+		int suffix = 1;
+		while (std::any_of(object3DInstances_.begin(), object3DInstances_.end() - 1,
+			[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; })) {
+			name = base + " (" + std::to_string(suffix++) + ")";
+		}
+		back->SetName(name);
+		back->SetTag(def->tag);
+		back->SetScale(def->defaultScale);
+		back->SetRotate(def->defaultRotate);
+		if (def->hasCollider) applyCollider(back->GetCollider());
+	}
 }
 
 bool BaseScene::SaveSceneToJson(const std::string& filePath) {
@@ -329,9 +474,78 @@ bool BaseScene::IsDynamicObject(IImGuiEditable* editable) const {
 	for (const auto& p : dynamicPrimitives_) {
 		if (static_cast<IImGuiEditable*>(p.get()) == editable) return true;
 	}
+	for (const auto& o : object3DInstances_) {
+		if (static_cast<IImGuiEditable*>(o.get()) == editable) return true;
+	}
+	for (const auto& s : dynamicSprites_) {
+		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
+	}
+	for (const auto& a : dynamicAnimated_) {
+		if (static_cast<IImGuiEditable*>(a.get()) == editable) return true;
+	}
+	for (const auto& sp : dynamicSplines_) {
+		if (static_cast<IImGuiEditable*>(sp.get()) == editable) return true;
+	}
 	return false;
 }
 #endif
+
+void BaseScene::UpdateDynamicObjects() {
+	for (auto& o : object3DInstances_) {
+		o->SetCamera(GetCamera());
+		o->Update();
+	}
+}
+
+void BaseScene::DrawDynamicObjects() {
+	for (auto& o : object3DInstances_) {
+		o->Draw(dxCore_);
+	}
+}
+
+void BaseScene::UpdateDynamicAnimated(float deltaTime) {
+	for (auto& a : dynamicAnimated_) {
+		a->Update(deltaTime);
+	}
+}
+
+void BaseScene::DispatchDynamicAnimatedSkinning() {
+	for (auto& a : dynamicAnimated_) {
+		a->DispatchSkinning(dxCore_);
+	}
+}
+
+void BaseScene::DrawDynamicAnimated() {
+	for (auto& a : dynamicAnimated_) {
+		a->Draw(dxCore_);
+	}
+}
+
+void BaseScene::DrawDynamicAnimatedSkeletonDebug() {
+#ifdef USE_IMGUI
+	for (auto& a : dynamicAnimated_) {
+		a->DrawSkeletonDebug(dxCore_);
+	}
+#endif
+}
+
+void BaseScene::UpdateDynamicSprites() {
+	for (auto& s : dynamicSprites_) {
+		s->Update();
+	}
+}
+
+void BaseScene::DrawDynamicSprites() {
+	for (auto& s : dynamicSprites_) {
+		s->Draw();
+	}
+}
+
+void BaseScene::DrawDynamicSplinesDebug() {
+	for (const auto& sp : dynamicSplines_) {
+		if (sp) sp->DrawDebug();
+	}
+}
 
 void BaseScene::UpdateDynamicPrimitives() {
 	for (auto& p : dynamicPrimitives_) {
