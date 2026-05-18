@@ -64,6 +64,24 @@ private:
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;
 
+	// ----- ジャスト回避演出 -----
+	bool  justDodgeActive_ = false;
+	float justDodgeTimer_ = 0.0f;
+	float justDodgeDuration_ = 1.5f;
+	float justDodgeFadeIn_ = 0.15f;
+	float justDodgeFadeOut_ = 0.3f;
+	IImGuiEditable* justDodgeTarget_ = nullptr;
+
+	void UpdateJustDodgeEffect(float dt);
+
+public:
+	/// <summary>
+	/// ジャスト回避演出を発動する。プレイヤー + targetEnemy 以外のオブジェクトを
+	/// duration 秒間グレースケール化する（最初/最後で短くフェード）。
+	/// </summary>
+	void PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float duration = 1.5f);
+private:
+
 	Phase phase_ = Phase::Rail;
 
 	void LoadTuningFromJson();

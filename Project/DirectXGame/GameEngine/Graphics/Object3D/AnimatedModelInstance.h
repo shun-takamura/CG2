@@ -78,6 +78,10 @@ public:
     // ComputeShaderでSkinning済みのVBVを使って描画（Object3DManagerのRootSignatureを使用）
     void DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster);
 
+    // ID Pass 用：Skinning 済み VBV と IBV をバインドして DrawIndexedInstanced するだけ。
+    // RootSig / PSO / Transformation CB / RootConstant の設定は呼び出し側が行う。
+    void DrawIdPass(DirectXCore* dxCore, const SkinCluster& skinCluster);
+
     const ModelData& GetModelData() const { return modelData_; }
     const Animation& GetAnimation() const { return animation_; }
 

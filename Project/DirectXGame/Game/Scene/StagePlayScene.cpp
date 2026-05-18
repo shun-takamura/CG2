@@ -11,6 +11,8 @@
 #include "Game.h"
 #include "Skybox.h"
 #include "DirectXCore.h"
+#include "PostEffect.h"
+#include "MaskedGrayscaleEffect.h"
 #include "Primitive/LineRenderer.h"
 #include "Spline/SplineCurveActor.h"
 #include "Spline/RailCameraController.h"
@@ -38,6 +40,8 @@
 
 #ifdef _DEBUG
 #include "imgui.h"
+#include "ImGuiManager.h"
+#include "IImGuiEditable.h"
 #endif
 
 namespace {
@@ -116,6 +120,66 @@ void StagePlayScene::SaveTuningToJson() const {
 	JsonWriter::WriteFile(kStagePlayTuningPath, root, { true, 2 });
 }
 
+void StagePlayScene::PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float duration)
+{
+	justDodgeActive_ = true;
+	justDodgeTimer_ = 0.0f;
+	justDodgeDuration_ = duration;
+	justDodgeTarget_ = targetEnemy;
+
+	// プレイヤー + 対象敵をハイライト登録
+	ClearHighlights();
+	if (player_) AddHighlight(player_);
+	if (targetEnemy) AddHighlight(targetEnemy);
+
+	// PostEffect の MaskedGrayscale を有効化（intensity は Update で制御）
+	if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+		pe->maskedGrayscale->SetEnabled(true);
+		pe->maskedGrayscale->SetIntensity(0.0f);
+		pe->maskedGrayscale->UpdateConstantBuffer();
+	}
+}
+
+void StagePlayScene::UpdateJustDodgeEffect(float dt)
+{
+	if (!justDodgeActive_) return;
+
+	justDodgeTimer_ += dt;
+
+	// 0→fadeIn→duration-fadeOut→duration で 0/1/1/0 にスムーズ補間
+	float intensity = 1.0f;
+	const float t = justDodgeTimer_;
+	const float D = justDodgeDuration_;
+	const float fi = justDodgeFadeIn_;
+	const float fo = justDodgeFadeOut_;
+
+	if (t < fi && fi > 0.0f) {
+		intensity = t / fi;
+	} else if (t > D - fo && fo > 0.0f) {
+		intensity = (std::max)(0.0f, (D - t) / fo);
+	}
+
+	if (t >= D) {
+		// 終了
+		justDodgeActive_ = false;
+		justDodgeTimer_ = 0.0f;
+		justDodgeTarget_ = nullptr;
+		ClearHighlights();
+		if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+			pe->maskedGrayscale->SetEnabled(false);
+			pe->maskedGrayscale->SetIntensity(1.0f);
+			pe->maskedGrayscale->UpdateConstantBuffer();
+		}
+		return;
+	}
+
+	// intensity 反映
+	if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+		pe->maskedGrayscale->SetIntensity(intensity);
+		pe->maskedGrayscale->UpdateConstantBuffer();
+	}
+}
+
 void StagePlayScene::OnImGuiTuning() {
 #ifdef _DEBUG
 	bool changed = false;
@@ -144,6 +208,22 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 
 	if (changed) SaveTuningToJson();
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("Just Dodge Effect (debug)");
+	ImGui::DragFloat("Duration (s)", &justDodgeDuration_, 0.05f, 0.1f, 10.0f, "%.2f");
+	ImGui::DragFloat("Fade In (s)", &justDodgeFadeIn_, 0.01f, 0.0f, 2.0f, "%.2f");
+	ImGui::DragFloat("Fade Out (s)", &justDodgeFadeOut_, 0.01f, 0.0f, 2.0f, "%.2f");
+
+	IImGuiEditable* sel = ImGuiManager::Instance().GetSelected();
+	ImGui::Text("Target (Inspector 選択): %s",
+		sel ? sel->GetName().c_str() : "(none)");
+	if (ImGui::Button("Play Just Dodge")) {
+		PlayJustDodgeEffect(sel, justDodgeDuration_);
+	}
+	if (justDodgeActive_) {
+		ImGui::Text("Active: %.2f / %.2f s", justDodgeTimer_, justDodgeDuration_);
+	}
 #endif
 }
 
@@ -399,6 +479,9 @@ void StagePlayScene::Update() {
 
 	// 全シーン共通の EffectManager + GPUParticle を更新
 	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
+
+	// ジャスト回避演出のタイマ更新（World グループ dt に従う）
+	UpdateJustDodgeEffect(GetScaledDeltaTime());
 
 	// レティクル：Viewport 内でマウスが動いたときだけワープ（ImGui 操作と衝突させない）
 	if (reticle_) {

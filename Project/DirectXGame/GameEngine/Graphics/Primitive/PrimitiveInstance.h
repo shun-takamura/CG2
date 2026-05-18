@@ -46,6 +46,11 @@ public:
     /// </summary>
     void Draw();
 
+    /// <summary>
+    /// ID Pass：idMaskRT に objectId_ を書き込む
+    /// </summary>
+    void DrawIdPass();
+
     //==============================
     // IImGuiEditable 実装
     //==============================
@@ -53,6 +58,7 @@ public:
     std::string GetTypeName() const override { return "Primitive"; }
     void OnImGuiInspector() override;
     Vector3* GetEditableTranslate() override { return &mesh_.GetTransform().translate; }
+    const Vector3* GetEditableRotate() const override { return &mesh_.GetTransform().rotate; }
 
     //==============================
     // セッター

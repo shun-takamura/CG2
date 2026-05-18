@@ -70,17 +70,33 @@ void BaseScene::ClearHighlights() {
 }
 
 void BaseScene::RunIdPass(ID3D12GraphicsCommandList* commandList) {
+	(void)commandList;
 	if (highlightedEntities_.empty()) return;
 
-	// ハイライト対象のうち Object3DInstance を ID で書き込む（Animated/Primitive は後日対応）
 	for (IImGuiEditable* e : highlightedEntities_) {
 		if (!e) continue;
+		// Object3D
 		for (const auto& obj : object3DInstances_) {
 			if (static_cast<IImGuiEditable*>(obj.get()) == e) {
 				obj->DrawIdPass(dxCore_);
-				break;
+				goto next;
 			}
 		}
+		// Animated
+		for (const auto& a : dynamicAnimated_) {
+			if (static_cast<IImGuiEditable*>(a.get()) == e) {
+				a->DrawIdPass(dxCore_);
+				goto next;
+			}
+		}
+		// Primitive
+		for (const auto& p : dynamicPrimitives_) {
+			if (static_cast<IImGuiEditable*>(p.get()) == e) {
+				p->DrawIdPass();
+				goto next;
+			}
+		}
+	next: ;
 	}
 }
 

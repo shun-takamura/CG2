@@ -36,6 +36,9 @@ public:
     // 描画（メイン用 CB を bind）
     void Draw();
 
+    // ID Pass：idMaskRT に objectId を書き込む
+    void DrawIdPass(uint32_t objectId);
+
     // プレビュー用 CB を bind して描画
     void DrawPreview();
 

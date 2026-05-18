@@ -174,6 +174,27 @@ void PrimitiveMesh::Draw() {
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void PrimitiveMesh::DrawIdPass(uint32_t objectId) {
+    if (!transformResource_) return;
+
+    auto* pp = PrimitivePipeline::GetInstance();
+    auto* cmd = pp->GetDxCore()->GetCommandList();
+
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(pp->GetIdRootSignature());
+    cmd->SetPipelineState(pp->GetIdPipelineState());
+
+    cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    cmd->IASetIndexBuffer(&indexBufferView_);
+
+    // VS CBV b0 = TransformationMatrix
+    cmd->SetGraphicsRootConstantBufferView(0, transformResource_->GetGPUVirtualAddress());
+    // PS Root Constant b0 = objectId
+    cmd->SetGraphicsRoot32BitConstant(1, objectId, 0);
+
+    cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void PrimitiveMesh::DrawPreview() {
     if (!transformPreviewResource_) return;
 
