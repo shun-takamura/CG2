@@ -89,6 +89,17 @@ public:
     /// </summary>
 	void RestoreSwapchainRenderTarget(ID3D12GraphicsCommandList* commandList);
 
+	/// <summary>
+	/// WM_SIZE 経由で受け取った新クライアントサイズに合わせて Swapchain と RTV を作り直す。
+	/// 内部で GPU 完了待機を行うため、フレーム描画コマンドを積んでいない安全なタイミングで呼ぶこと。
+	/// 深度バッファとオフスクリーンRT（PostEffect等）は更新しない（ゲーム解像度は固定）。
+	/// </summary>
+	void Resize(int32_t width, int32_t height);
+
+	// 現在の Swapchain サイズ（ウィンドウのクライアント領域に追従）
+	int32_t GetSwapChainWidth() const { return swapChainWidth_; }
+	int32_t GetSwapChainHeight() const { return swapChainHeight_; }
+
 	// DSVハンドルの取得
 	D3D12_CPU_DESCRIPTOR_HANDLE GetDsvHandle() const {
 		return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
@@ -234,5 +245,12 @@ private:
 	// スワップチェイン設定の記録用
 	UINT bufferCount_ = 2;
 	DXGI_FORMAT backBufferFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	// 現在の Swapchain サイズ。Resize() で書き換わる。
+	int32_t swapChainWidth_ = WindowsApplication::kClientWidth;
+	int32_t swapChainHeight_ = WindowsApplication::kClientHeight;
+
+	// GPU 完了待機（Resize 用）
+	void WaitForGpu();
 
 };

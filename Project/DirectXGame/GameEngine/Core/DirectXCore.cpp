@@ -16,9 +16,11 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     // システムタイマーの分解能を上げる
     timeBeginPeriod(1); 
 
-    // ウィンドウサイズ取得
-    int32_t width = WindowsApplication::kClientWidth;
-    int32_t height = WindowsApplication::kClientHeight;
+    // ウィンドウサイズ取得（初期サイズはゲーム解像度と一致）
+    int32_t width = winApp_->GetClientWidth();
+    int32_t height = winApp_->GetClientHeight();
+    swapChainWidth_ = width;
+    swapChainHeight_ = height;
     HWND hwnd = winApp_->GetHwnd();  // ここでハンドル取得
 
     // 1. DXGIファクトリの生成
@@ -81,17 +83,17 @@ void DirectXCore::BeginDraw() {
 
     commandList_->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
-    // ビューポート・シザー設定
+    // ビューポート・シザー設定（Swapchain への描画用なのでウィンドウ実サイズに追従）
     D3D12_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(WindowsApplication::kClientWidth);
-    viewport.Height = static_cast<float>(WindowsApplication::kClientHeight);
+    viewport.Width = static_cast<float>(swapChainWidth_);
+    viewport.Height = static_cast<float>(swapChainHeight_);
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     commandList_->RSSetViewports(1, &viewport);
 
     D3D12_RECT scissorRect{};
-    scissorRect.right = WindowsApplication::kClientWidth;
-    scissorRect.bottom = WindowsApplication::kClientHeight;
+    scissorRect.right = swapChainWidth_;
+    scissorRect.bottom = swapChainHeight_;
     commandList_->RSSetScissorRects(1, &scissorRect);
 
     // クリア処理
@@ -163,16 +165,65 @@ void DirectXCore::RestoreSwapchainRenderTarget(ID3D12GraphicsCommandList* comman
     commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
     D3D12_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(WindowsApplication::kClientWidth);
-    viewport.Height = static_cast<float>(WindowsApplication::kClientHeight);
+    viewport.Width = static_cast<float>(swapChainWidth_);
+    viewport.Height = static_cast<float>(swapChainHeight_);
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     commandList->RSSetViewports(1, &viewport);
 
     D3D12_RECT scissorRect{};
-    scissorRect.right = WindowsApplication::kClientWidth;
-    scissorRect.bottom = WindowsApplication::kClientHeight;
+    scissorRect.right = swapChainWidth_;
+    scissorRect.bottom = swapChainHeight_;
     commandList->RSSetScissorRects(1, &scissorRect);
+}
+
+void DirectXCore::WaitForGpu() {
+    if (!commandQueue_ || !fence_) return;
+    ++fenceValue_;
+    commandQueue_->Signal(fence_.Get(), fenceValue_);
+    if (fence_->GetCompletedValue() < fenceValue_) {
+        fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
+        WaitForSingleObject(fenceEvent_, INFINITE);
+    }
+}
+
+void DirectXCore::Resize(int32_t width, int32_t height) {
+    if (width <= 0 || height <= 0) return;
+    if (width == swapChainWidth_ && height == swapChainHeight_) return;
+    if (!swapChain_) return;
+
+    // 進行中の GPU 作業が backBuffers_ を参照している可能性があるので完了待ち
+    WaitForGpu();
+
+    // バックバッファを解放してから ResizeBuffers
+    for (UINT i = 0; i < bufferCount_; ++i) {
+        backBuffers_[i].Reset();
+    }
+
+    HRESULT hr = swapChain_->ResizeBuffers(
+        bufferCount_, static_cast<UINT>(width), static_cast<UINT>(height),
+        backBufferFormat_, 0);
+    assert(SUCCEEDED(hr));
+
+    // RTV を既存ヒープに作り直す
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+    rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+
+    D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+    for (UINT i = 0; i < bufferCount_; ++i) {
+        hr = swapChain_->GetBuffer(i, IID_PPV_ARGS(&backBuffers_[i]));
+        assert(SUCCEEDED(hr));
+        device_->CreateRenderTargetView(backBuffers_[i].Get(), &rtvDesc, handle);
+        handle.ptr += rtvDescriptorSize_;
+    }
+
+    swapChainWidth_ = width;
+    swapChainHeight_ = height;
+
+    // 深度バッファ・オフスクリーンRT・ゲーム用ビューポートは触らない。
+    // ゲームは固定 1600×900 で描き、Debug ビルドでは ImGui::Image が
+    // viewportRenderTexture をウィンドウサイズに合わせて拡縮表示する。
 }
 
 //==============================
