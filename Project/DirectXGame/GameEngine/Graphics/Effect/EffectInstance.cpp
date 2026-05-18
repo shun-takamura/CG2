@@ -3,6 +3,9 @@
 #include "LightManager.h"
 #include "PrimitivePipeline.h"
 #include "SoundManager.h"
+#include <algorithm>
+#define NOMINMAX
+#include<cmath>
 
 namespace {
     // 0-1 にクランプ
@@ -79,8 +82,11 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.started = true;
         }
 
-        // 補間
+        // 寿命は Effect の totalDuration でクランプ（Effect 終了後は残らない）
+        float maxLife = max(0.0001f, def_.totalDuration - pc.startTime);
         float life = pc.lifetime > 0.0001f ? pc.lifetime : 0.0001f;
+        if (life > maxLife) life = maxLife;
+
         float t = Saturate(local / life);
         Vector3 scale = LerpV3(pc.startScale, pc.endScale, t);
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
@@ -91,8 +97,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         rt.renderer->SetColor(color);
         rt.renderer->Update(camera, deltaTime);
 
-        // 寿命終了
-        if (local >= pc.lifetime) {
+        // 寿命終了（totalDuration を超えた場合も含む）
+        if (local >= life || elapsedTime_ >= def_.totalDuration) {
             rt.renderer.reset();
             rt.finished = true;
         }
@@ -110,9 +116,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (gpu_->HasGroup(pc.gpuParticleGroupName)) {
             gpu_->SetGroupBillboardMode(pc.gpuParticleGroupName, pc.billboardMode);
             Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+            // 粒子寿命は Effect の totalDuration を超えないようにクランプ
+            float remaining = max(0.0001f, def_.totalDuration - pc.startTime);
+            float particleLife = min(1.0f, remaining); // 標準寿命 1.0秒 を上限に
             gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount, 0.5f,
                             static_cast<uint32_t>(pc.colorMode), pc.startColor, pc.endColor,
-                            pc.scaleMin, pc.scaleMax, pc.uniformScale);
+                            pc.scaleMin, pc.scaleMax, pc.uniformScale, particleLife);
         }
         rt.burstFired = true;
     }
@@ -146,8 +155,11 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 
         if (rt.slot == kInvalidLightSlot) continue;
 
-        // 補間
+        // 寿命を totalDuration でクランプ
+        float maxLife = max(0.0001f, def_.totalDuration - lc.startTime);
         float life = lc.lifetime > 0.0001f ? lc.lifetime : 0.0001f;
+        if (life > maxLife) life = maxLife;
+
         float t = Saturate(local / life);
         float intensity = LerpF(lc.startIntensity, lc.endIntensity, t);
         Vector3 pos = { worldPos_.x + lc.offset.x, worldPos_.y + lc.offset.y, worldPos_.z + lc.offset.z };
@@ -167,8 +179,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             lm->SetPointLightRadius(rt.slot, lc.range);
         }
 
-        // 寿命終了：解放
-        if (local >= lc.lifetime) {
+        // 寿命終了：解放（totalDuration 超過も含む）
+        if (local >= life || elapsedTime_ >= def_.totalDuration) {
             if (rt.isSpot) {
                 lm->ReleaseSpotLight(rt.slot);
             } else {
@@ -203,8 +215,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             Vector3 pos = { worldPos_.x + sc.offset.x, worldPos_.y + sc.offset.y, worldPos_.z + sc.offset.z };
             sm->UpdateEmitter(rt.handle, pos, { 0.0f, 0.0f, 0.0f });
         }
-        // SoundManager 側で再生が終わったハンドルは自動でクリーンアップされる想定だが、
-        // EffectInstance としては totalDuration 経過で「自分の役目は終わり」と判定する
+        // Effect の totalDuration を超えたら音を強制停止する（Effect の時間を絶対とする）
+        if (rt.handle != 0 && elapsedTime_ >= def_.totalDuration) {
+            sm->Stop3DSound(rt.handle);
+            rt.handle = 0;
+            rt.finished = true;
+        }
     }
 
     // 全コンポーネント完了判定

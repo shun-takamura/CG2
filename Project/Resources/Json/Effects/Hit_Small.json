@@ -1,6 +1,6 @@
 {
   "name": "Hit_Small",
-  "totalDuration": 0.5,
+  "totalDuration": 0.75,
   "primitives": [
     {
       "displayName": "flash",
@@ -63,7 +63,7 @@
       "uvFlipV": false
     },
     {
-      "displayName": "",
+      "displayName": "impuct",
       "meshType": 3,
       "offset": [
         0,
@@ -123,7 +123,7 @@
       "uvFlipV": false
     },
     {
-      "displayName": "",
+      "displayName": "slash(1)",
       "meshType": 0,
       "offset": [
         0,
@@ -183,7 +183,7 @@
       "uvFlipV": false
     },
     {
-      "displayName": "",
+      "displayName": "slash(2)",
       "meshType": 0,
       "offset": [
         0,
@@ -253,7 +253,7 @@
         0
       ],
       "startTime": 0,
-      "duration": 0,
+      "duration": 0.75,
       "burstCount": 32,
       "billboardMode": "Full",
       "colorMode": 1,
@@ -282,7 +282,7 @@
   ],
   "lights": [
     {
-      "displayName": "",
+      "displayName": "flashPointLight",
       "kind": "Point",
       "offset": [
         0,
@@ -295,7 +295,7 @@
         0
       ],
       "startTime": 0,
-      "lifetime": 0.15000000596046448,
+      "lifetime": 0.20000000298023224,
       "color": [
         1,
         0.80000001192092896,
