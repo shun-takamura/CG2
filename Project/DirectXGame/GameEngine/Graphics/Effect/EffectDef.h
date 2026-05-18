@@ -96,6 +96,17 @@ struct EffectParticleComponent {
 
     // ビルボード
     BillboardMode billboardMode = BillboardMode::Full;
+
+    // ----- 色設定 -----
+    // 0=Random（startColor/endColor無視）、1=Fixed（startColor→endColorで補間）
+    int     colorMode = 0;
+    Vector4 startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4 endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
+
+    // ----- スケール（粒子サイズ） -----
+    Vector2 scaleMin = { 0.1f, 0.1f }; // 最小サイズ（幅, 高さ）
+    Vector2 scaleMax = { 0.5f, 0.5f }; // 最大サイズ（幅, 高さ）
+    bool    uniformScale = true;        // true なら 幅=高さ を強制（Xレンジを共用）
 };
 
 /// <summary>

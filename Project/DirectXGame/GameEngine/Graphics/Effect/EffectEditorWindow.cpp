@@ -244,7 +244,24 @@ void EffectEditorWindow::OnDraw() {
         em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Stop All")) em->StopAll();
+    if (ImGui::Button("Restart")) {
+        em->StopAll();
+        em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Stop")) em->StopAll();
+
+    // Timeline：最初の再生中インスタンスの経過時間 / 総寿命をプログレスバーで表示
+    {
+        EffectInstance* inst = em->GetFirstActiveInstance();
+        float elapsed = inst ? inst->GetElapsedTime() : 0.0f;
+        float total   = inst ? inst->GetTotalDuration() : editBuffer_.totalDuration;
+        if (total < 0.0001f) total = 0.0001f;
+        float ratio = std::clamp(elapsed / total, 0.0f, 1.0f);
+        char overlay[64];
+        std::snprintf(overlay, sizeof(overlay), "%.2f / %.2f s", elapsed, total);
+        ImGui::ProgressBar(ratio, ImVec2(-FLT_MIN, 0), overlay);
+    }
 
     ImGui::Separator();
 

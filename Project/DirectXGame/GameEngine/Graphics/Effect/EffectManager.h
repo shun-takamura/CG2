@@ -92,6 +92,14 @@ public:
     // 再生中インスタンス数（デバッグ用）
     size_t GetActiveInstanceCount() const { return activeInstances_.size(); }
 
+    /// <summary>
+    /// 先頭の再生中インスタンスを返す（Timeline表示用）。無ければnullptr。
+    /// </summary>
+    EffectInstance* GetFirstActiveInstance() {
+        for (auto& inst : activeInstances_) if (inst) return inst.get();
+        return nullptr;
+    }
+
     // 登録済みエフェクト名一覧（デバッグ用）
     std::vector<std::string> ListDefNames() const;
 

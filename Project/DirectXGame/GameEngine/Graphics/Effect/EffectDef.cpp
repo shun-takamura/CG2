@@ -114,6 +114,12 @@ namespace {
         c.duration   = AsFloat(o["duration"], c.duration);
         c.burstCount = AsUInt(o["burstCount"], c.burstCount);
         c.billboardMode = AsBillboardMode(o["billboardMode"], c.billboardMode);
+        c.colorMode  = AsInt(o["colorMode"], c.colorMode);
+        c.startColor = AsVec4(o["startColor"], c.startColor);
+        c.endColor   = AsVec4(o["endColor"], c.endColor);
+        c.scaleMin   = AsVec2(o["scaleMin"], c.scaleMin);
+        c.scaleMax   = AsVec2(o["scaleMax"], c.scaleMax);
+        if (o["uniformScale"].IsBool()) c.uniformScale = o["uniformScale"].AsBool(c.uniformScale);
     }
 
     void ParseSound(const JsonValue& o, EffectSoundComponent& c) {
@@ -293,6 +299,12 @@ namespace EffectDefIO {
             o["duration"]   = static_cast<double>(c.duration);
             o["burstCount"] = static_cast<int64_t>(c.burstCount);
             o["billboardMode"] = std::string(BillboardModeStr(c.billboardMode));
+            o["colorMode"]  = static_cast<int64_t>(c.colorMode);
+            o["startColor"] = Vec4ToJson(c.startColor);
+            o["endColor"]   = Vec4ToJson(c.endColor);
+            o["scaleMin"]   = Vec2ToJson(c.scaleMin);
+            o["scaleMax"]   = Vec2ToJson(c.scaleMax);
+            o["uniformScale"] = c.uniformScale;
             partArr.Push(std::move(o));
         }
         root["particles"] = std::move(partArr);

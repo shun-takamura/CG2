@@ -35,6 +35,12 @@ public:
     bool IsFinished() const { return finished_; }
 
     /// <summary>
+    /// Timeline 表示用
+    /// </summary>
+    float GetElapsedTime() const  { return elapsedTime_; }
+    float GetTotalDuration() const { return def_.totalDuration; }
+
+    /// <summary>
     /// 残った確保中ライト等を解放（マネージャ側から呼ぶ）。
     /// </summary>
     void Cleanup();
