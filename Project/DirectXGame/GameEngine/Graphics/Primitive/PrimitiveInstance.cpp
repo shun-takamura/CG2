@@ -110,6 +110,13 @@ void PrimitiveInstance::Draw() {
     mesh_.Draw();
 }
 
+void PrimitiveInstance::DrawIdPass() {
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    mesh_.DrawIdPass(static_cast<uint32_t>(objectId_));
+}
+
 void PrimitiveInstance::SetTexture(const std::string& filePath) {
     textureFilePath_ = filePath;
     mesh_.SetTexture(filePath);

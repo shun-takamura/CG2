@@ -32,6 +32,10 @@ public:
 
     ID3D12RootSignature* GetRootSignature() const { return rootSignature_.Get(); }
 
+    // ID Pass
+    ID3D12RootSignature* GetIdRootSignature() const { return idRootSignature_.Get(); }
+    ID3D12PipelineState* GetIdPipelineState() const { return idPipelineState_.Get(); }
+
 private:
     PrimitivePipeline() = default;
     ~PrimitivePipeline() = default;
@@ -40,6 +44,7 @@ private:
 
     void CreateRootSignature();
     void CreateGraphicsPipelineState(BlendMode mode, bool depthWrite, bool cullBackface);
+    void CreateIdPassObjects();
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
@@ -47,4 +52,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
     // pipelineStates_[BlendMode][DepthWrite(0/1)][CullBackface(0/1)]
     std::array<std::array<std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, 2>, 2>, kCountOfBlendMode> pipelineStates_;
+
+    // ID Pass 用
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> idRootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> idPipelineState_;
 };

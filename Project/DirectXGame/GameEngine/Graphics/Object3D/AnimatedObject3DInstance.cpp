@@ -298,6 +298,24 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
     animatedModelInstance_->DrawSkinning(dxCore, skinCluster_);
 }
 
+void AnimatedObject3DInstance::DrawIdPass(DirectXCore* dxCore)
+{
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!animatedModelInstance_ || !hasSkinCluster_ || !object3DManager_) return;
+
+    auto* cmd = dxCore->GetCommandList();
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(object3DManager_->GetIdRootSignature());
+    cmd->SetPipelineState(object3DManager_->GetIdPipelineState());
+
+    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRoot32BitConstant(1, static_cast<UINT>(objectId_), 0);
+
+    animatedModelInstance_->DrawIdPass(dxCore, skinCluster_);
+}
+
 #ifdef USE_IMGUI
 void AnimatedObject3DInstance::DrawSkeletonDebug(DirectXCore* dxCore)
 {

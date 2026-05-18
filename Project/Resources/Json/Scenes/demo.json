@@ -2,6 +2,30 @@
   "scene": "DemoScene",
   "objects": [
     {
+      "type": "Object3D",
+      "name": "enemy.mesh",
+      "tag": "None",
+      "dir": "Resources/Models/Enemy",
+      "file": "enemy.mesh",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          -6,
+          0,
+          1
+        ]
+      }
+    },
+    {
       "type": "AnimatedObject3D",
       "name": "sneakWalk.mesh",
       "tag": "Enemy",
@@ -48,6 +72,30 @@
           0
         ]
       }
+    },
+    {
+      "type": "Primitive",
+      "name": "Cylinder",
+      "tag": "None",
+      "primitiveType": 4,
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          -4,
+          0,
+          5
+        ]
+      },
+      "texture": "Resources/Textures/gradationLine.dds"
     }
   ]
 }

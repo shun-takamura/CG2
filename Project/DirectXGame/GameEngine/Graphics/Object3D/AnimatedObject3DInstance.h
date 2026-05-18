@@ -186,6 +186,9 @@ public:
 
     void Draw(DirectXCore* dxCore);
 
+    // ID Pass 用（Skinning 済み VBV を再利用、Object3DManager の ID PSO を使用）
+    void DrawIdPass(DirectXCore* dxCore);
+
 #ifdef USE_IMGUI
     // Skeletonのデバッグ描画（全モデル描画後に呼ぶ）
     void DrawSkeletonDebug(DirectXCore* dxCore);

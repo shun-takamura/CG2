@@ -78,6 +78,13 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
         indexCount_, 1, 0, 0, 0);
 }
 
+void AnimatedModelInstance::DrawIdPass(DirectXCore* dxCore, const SkinCluster& skinCluster)
+{
+    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
+    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void AnimatedModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
     const size_t sizeInBytes = sizeof(VertexData) * vertexCount_;
