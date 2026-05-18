@@ -55,6 +55,14 @@ public:
                    const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale);
 
     /// <summary>
+    /// 粒子寿命まで指定するバージョン。Effect の totalDuration でクランプしたいとき等に使う。
+    /// </summary>
+    void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                   uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
+                   const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale,
+                   float particleLifeTime);
+
+    /// <summary>
     /// 連続発射のON/OFFと頻度設定
     /// </summary>
     void SetContinuousEmit(const std::string& name, bool enabled, float frequency = 0.5f, uint32_t countPerEmit = 10, float radius = 1.0f);
@@ -114,7 +122,8 @@ private:
         Vector2 scaleMin;       // 80..88
         Vector2 scaleMax;       // 88..96
         uint32_t uniformScale;  // 96..100
-        float pad1[3];          // 100..112
+        float particleLifeTime; // 100..104（emit時に各粒子に設定される寿命）
+        float pad1[2];          // 104..112
     };
 
     struct PerFrame

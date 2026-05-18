@@ -29,7 +29,8 @@ struct EmitterSphere
     float2 scaleMin;
     float2 scaleMax;
     uint   uniformScale;  // 0=per-axis ランダム, 1=幅=高さ強制
-    float3 pad1;
+    float  particleLifeTime; // emit時に各粒子へ設定する寿命
+    float2 pad1;
 };
 
 struct PerFrame
@@ -80,7 +81,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 gParticles[particleIndex].translate =
                     gEmitter.translate + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
                 gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 3.0f;
-                gParticles[particleIndex].lifeTime = 1.0f;
+                gParticles[particleIndex].lifeTime = gEmitter.particleLifeTime;
                 gParticles[particleIndex].currentTime = 0.0f;
 
                 // 色モード

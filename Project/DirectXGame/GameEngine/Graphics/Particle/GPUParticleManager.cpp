@@ -94,6 +94,15 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
                                     uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
                                     const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale)
 {
+    BurstEmit(name, position, count, radius, colorMode, startColor, endColor,
+              scaleMin, scaleMax, uniformScale, 1.0f);
+}
+
+void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                                    uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
+                                    const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale,
+                                    float particleLifeTime)
+{
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.emitterData) return;
 
@@ -107,6 +116,7 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
     e.scaleMin = scaleMin;
     e.scaleMax = scaleMax;
     e.uniformScale = uniformScale ? 1u : 0u;
+    e.particleLifeTime = (particleLifeTime > 0.0001f) ? particleLifeTime : 0.0001f;
     // emit フラグは Update() で CB に転写（CPU/GPU レース回避）
     it->second.pendingBurst = true;
 }
@@ -493,9 +503,9 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.emitterData->scaleMin = { 0.1f, 0.1f };
     g.emitterData->scaleMax = { 0.5f, 0.5f };
     g.emitterData->uniformScale = 1;
+    g.emitterData->particleLifeTime = 1.0f;
     g.emitterData->pad1[0] = 0.0f;
     g.emitterData->pad1[1] = 0.0f;
-    g.emitterData->pad1[2] = 0.0f;
 
     // PerFrame CB
     g.perFrameResource = dxCore_->CreateBufferResource(sizeof(PerFrame));
