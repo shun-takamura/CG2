@@ -3,6 +3,9 @@
 #include <memory>
 
 class Camera;
+class Skybox;
+class SplineCurveActor;
+class RailCameraController;
 
 /// <summary>
 /// ステージプレイシーン
@@ -25,10 +28,20 @@ public:
 	void Update() override;
 	void Draw() override;
 
+	// シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する。
+	void Seek(float seconds) override;
+
 	Camera* GetCamera() override;
 
 private:
 	std::unique_ptr<Camera> camera_;
+	std::unique_ptr<Skybox> skybox_;
+
+	// レールカメラ用の 2 本のスプライン（cameraPath=位置 / lookAtPath=注視点）
+	std::unique_ptr<SplineCurveActor> cameraPath_;
+	std::unique_ptr<SplineCurveActor> lookAtPath_;
+	std::unique_ptr<RailCameraController> railCamera_;
+
 	Phase phase_ = Phase::Rail;
 
 	// ポーズ状態（後でメニュー実装）

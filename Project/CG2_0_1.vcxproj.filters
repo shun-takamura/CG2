@@ -258,7 +258,10 @@
     <ClCompile Include="DirectXGame\Game\Actors\Bullet.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\Game\Actors\SplineCurveActor.cpp">
+    <ClCompile Include="DirectXGame\Game\Spline\SplineCurveActor.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Spline\RailCameraController.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Actors\Player.cpp">
@@ -686,7 +689,10 @@
     <ClInclude Include="DirectXGame\Game\Actors\Bullet.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Actors\SplineCurveActor.h">
+    <ClInclude Include="DirectXGame\Game\Spline\SplineCurveActor.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Spline\RailCameraController.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Actors\Player.h">

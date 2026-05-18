@@ -26,6 +26,7 @@ enum class EntityTag : int {
 	EnemyPathSpline,     // 敵の移動経路
 	FloatingPathSpline,  // 装飾オブジェクトの浮遊経路
 	CameraPathSpline,    // カメラだけの独立経路（レールと分離したい時）
+	CameraLookAtSpline,  // カメラの注視点用経路。CameraPathSpline と同じ t を共有して target を決める
 
 	Count
 };
@@ -48,6 +49,7 @@ inline std::string_view GetTagName(EntityTag t) {
 	case EntityTag::EnemyPathSpline:    return "EnemyPathSpline";
 	case EntityTag::FloatingPathSpline: return "FloatingPathSpline";
 	case EntityTag::CameraPathSpline:   return "CameraPathSpline";
+	case EntityTag::CameraLookAtSpline: return "CameraLookAtSpline";
 	default:                          return "";
 	}
 }
@@ -81,6 +83,7 @@ inline void GetTagColor(EntityTag t, float& r, float& g, float& b, float& a) {
 	case EntityTag::EnemyPathSpline:    r = 1.00f; g = 0.45f; b = 0.45f; break; // 赤
 	case EntityTag::FloatingPathSpline: r = 0.70f; g = 1.00f; b = 0.70f; break; // 黄緑
 	case EntityTag::CameraPathSpline:   r = 1.00f; g = 1.00f; b = 0.40f; break; // 黄
+	case EntityTag::CameraLookAtSpline: r = 1.00f; g = 0.55f; b = 0.10f; break; // 橙（カメラパスと並走する注視点用）
 	case EntityTag::None:
 	default:                          r = 0.75f; g = 0.75f; b = 0.75f; break; // 灰
 	}

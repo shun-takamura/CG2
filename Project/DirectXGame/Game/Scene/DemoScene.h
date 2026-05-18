@@ -120,8 +120,7 @@ private:
 	// HitEffect（Plane版）の管理配列
 	std::vector<HitEffectPlane> hitEffectPlanes_;
 
-	// GPU Particle (CS版)
-	std::unique_ptr<GPUParticleManager> gpuParticleManager_;
+	// GPUParticleManager は Game が共通保持（Game::GetGPUParticleManager()）
 
 	// パーティクル用タイマー
 	float emitTimer_ = 0.0f;

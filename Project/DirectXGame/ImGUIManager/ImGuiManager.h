@@ -150,6 +150,9 @@ private:
     // ギズモ
     Gizmo gizmo_;
     SpriteGizmo spriteGizmo_;
+public:
+    const Gizmo& GetGizmo() const { return gizmo_; }
+private:
     Camera* camera_ = nullptr;
 
     // シーン保有のGPUParticleManagerへの参照（非所有）
