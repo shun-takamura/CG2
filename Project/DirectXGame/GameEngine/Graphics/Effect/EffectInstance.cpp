@@ -110,7 +110,9 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (gpu_->HasGroup(pc.gpuParticleGroupName)) {
             gpu_->SetGroupBillboardMode(pc.gpuParticleGroupName, pc.billboardMode);
             Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
-            gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount);
+            gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount, 0.5f,
+                            static_cast<uint32_t>(pc.colorMode), pc.startColor, pc.endColor,
+                            pc.scaleMin, pc.scaleMax, pc.uniformScale);
         }
         rt.burstFired = true;
     }

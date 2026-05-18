@@ -8,6 +8,8 @@ struct Particle
     float3 velocity;
     float currentTime;
     float4 color;
+    float4 startColor;
+    float4 endColor;
 };
 
 static const uint kMaxParticles = 1024;

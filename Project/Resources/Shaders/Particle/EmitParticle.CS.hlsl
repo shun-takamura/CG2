@@ -10,6 +10,8 @@ struct Particle
     float3 velocity;
     float currentTime;
     float4 color;
+    float4 startColor;
+    float4 endColor;
 };
 
 struct EmitterSphere
@@ -20,6 +22,14 @@ struct EmitterSphere
     float frequency;
     float frequencyTime;
     uint emit;
+    uint colorMode;       // 0=Random, 1=Fixed
+    float3 pad0;
+    float4 startColor;
+    float4 endColor;
+    float2 scaleMin;
+    float2 scaleMax;
+    uint   uniformScale;  // 0=per-axis ランダム, 1=幅=高さ強制
+    float3 pad1;
 };
 
 struct PerFrame
@@ -46,28 +56,49 @@ void main(uint3 DTid : SV_DispatchThreadID)
     {
         for (uint countIndex = 0; countIndex < gEmitter.count; ++countIndex)
         {
-            // FreeListIndexを1つ前に進めて、減算前のIndexを取得
             int freeListIndex;
             InterlockedAdd(gFreeListIndex[0], -1, freeListIndex);
 
             if (0 <= freeListIndex && freeListIndex < (int) kMaxParticles)
             {
-                // 取得できた空きスロット
                 uint particleIndex = gFreeList[freeListIndex];
 
-                gParticles[particleIndex].scale = generator.Generate3d() * 0.5f;
+                // スケール：uniform フラグで「幅=高さ」を強制 or per-axis
+                float3 randTriple = generator.Generate3d();
+                float sx, sy;
+                if (gEmitter.uniformScale != 0) {
+                    // 単一のランダム値で W=H に統一
+                    float t = randTriple.x;
+                    sx = lerp(gEmitter.scaleMin.x, gEmitter.scaleMax.x, t);
+                    sy = sx;
+                } else {
+                    sx = lerp(gEmitter.scaleMin.x, gEmitter.scaleMax.x, randTriple.x);
+                    sy = lerp(gEmitter.scaleMin.y, gEmitter.scaleMax.y, randTriple.y);
+                }
+                // ビルボード時 z は不要だが、None モード時の見た目維持で x と同じに
+                gParticles[particleIndex].scale = float3(sx, sy, sx);
                 gParticles[particleIndex].translate =
                     gEmitter.translate + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
-                gParticles[particleIndex].color.rgb = generator.Generate3d();
-                gParticles[particleIndex].color.a = 1.0f;
-                // velocityは「1秒あたりの移動量（速度）」。60FPS時にこれまでの 0.05/フレーム と同じ見た目になるよう 0.05*60=3.0
                 gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 3.0f;
                 gParticles[particleIndex].lifeTime = 1.0f;
                 gParticles[particleIndex].currentTime = 0.0f;
+
+                // 色モード
+                if (gEmitter.colorMode == 0) {
+                    // Random：startは乱数RGB+α1.0、endは同色α0でフェードアウト
+                    float3 rnd = generator.Generate3d();
+                    gParticles[particleIndex].startColor = float4(rnd, 1.0f);
+                    gParticles[particleIndex].endColor   = float4(rnd, 0.0f);
+                } else {
+                    // Fixed：エミッタ指定の start→end を使う
+                    gParticles[particleIndex].startColor = gEmitter.startColor;
+                    gParticles[particleIndex].endColor   = gEmitter.endColor;
+                }
+                // 初期の現在色は startColor
+                gParticles[particleIndex].color = gParticles[particleIndex].startColor;
             }
             else
             {
-                // 空きが取れなかった。減らした分を戻して、以降の射出は諦める
                 InterlockedAdd(gFreeListIndex[0], 1);
                 break;
             }

@@ -176,6 +176,26 @@ void EffectComponentEditable::OnImGuiInspector() {
             c.billboardMode = static_cast<BillboardMode>(bb);
             dirty = true;
         }
+
+        // ===== Color =====
+        ImGui::Separator();
+        const char* colorModeNames[] = { "Random", "Fixed" };
+        dirty |= ImGui::Combo("Color Mode", &c.colorMode, colorModeNames, IM_ARRAYSIZE(colorModeNames));
+        if (c.colorMode == 1) {
+            dirty |= ImGui::ColorEdit4("Start Color", &c.startColor.x);
+            dirty |= ImGui::ColorEdit4("End Color",   &c.endColor.x);
+        } else {
+            ImGui::TextDisabled("(Random: 色は GPU 側でランダム生成)");
+        }
+
+        // ===== Scale Range =====
+        ImGui::Separator();
+        dirty |= ImGui::Checkbox("Uniform Scale (W=H)", &c.uniformScale);
+        dirty |= ImGui::DragFloat2("Scale Min (W/H)", &c.scaleMin.x, 0.01f, 0.0f, 100.0f);
+        dirty |= ImGui::DragFloat2("Scale Max (W/H)", &c.scaleMax.x, 0.01f, 0.0f, 100.0f);
+        if (c.uniformScale) {
+            ImGui::TextDisabled("(Uniform: Min/Max の X 範囲のみ使われ、W=H に固定)");
+        }
     }
     else if (kind_ == Kind::Light) {
         if (index_ < 0 || index_ >= static_cast<int>(buf.lights.size())) { ImGui::Text("(removed)"); return; }

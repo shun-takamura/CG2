@@ -1,45 +1,313 @@
 {
-    "name": "Hit_Small",
-    "totalDuration": 0.5,
-
-    "primitives": [
-        {
-            "meshType": 0,
-            "offset": [0.0, 0.0, 0.0],
-            "rotate": [0.0, 0.0, 0.0],
-            "startTime": 0.0,
-            "lifetime": 0.2,
-            "startScale": [0.4, 0.4, 1.0],
-            "endScale":   [1.4, 1.4, 1.0],
-            "startColor": [1.0, 0.9, 0.5, 1.0],
-            "endColor":   [1.0, 0.6, 0.2, 0.0],
-            "texturePath": "Resources/Textures/white1x1.dds",
-            "blendMode": 2,
-            "billboardMode": "Full"
-        }
-    ],
-
-    "particles": [
-        {
-            "gpuParticleGroupName": "spark",
-            "offset": [0.0, 0.0, 0.0],
-            "startTime": 0.0,
-            "duration": 0.0,
-            "burstCount": 32,
-            "billboardMode": "Full"
-        }
-    ],
-
-    "lights": [
-        {
-            "kind": "Point",
-            "offset": [0.0, 0.2, 0.0],
-            "startTime": 0.0,
-            "lifetime": 0.15,
-            "color": [1.0, 0.8, 0.5, 1.0],
-            "startIntensity": 5.0,
-            "endIntensity": 0.0,
-            "range": 4.0
-        }
-    ]
+  "name": "Hit_Small",
+  "totalDuration": 0.5,
+  "primitives": [
+    {
+      "displayName": "flash",
+      "meshType": 0,
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 0.20000000298023224,
+      "startScale": [
+        1,
+        1,
+        1
+      ],
+      "endScale": [
+        5,
+        5,
+        1
+      ],
+      "startColor": [
+        1,
+        0.89999997615814209,
+        0.5,
+        1
+      ],
+      "endColor": [
+        1,
+        0.60000002384185791,
+        0.20000000298023224,
+        0
+      ],
+      "texturePath": "Resources/Textures/circle.dds",
+      "blendMode": 2,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false
+    },
+    {
+      "displayName": "",
+      "meshType": 3,
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 0.20000000298023224,
+      "startScale": [
+        1,
+        1,
+        1
+      ],
+      "endScale": [
+        2,
+        2,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "texturePath": "Resources/Textures/gradationLine.dds",
+      "blendMode": 2,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false
+    },
+    {
+      "displayName": "",
+      "meshType": 0,
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 0.30000001192092896,
+      "startScale": [
+        0.5,
+        5,
+        1
+      ],
+      "endScale": [
+        0.5,
+        5,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "texturePath": "Resources/Textures/circle.dds",
+      "blendMode": 2,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false
+    },
+    {
+      "displayName": "",
+      "meshType": 0,
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 0.30000001192092896,
+      "startScale": [
+        5,
+        0.5,
+        1
+      ],
+      "endScale": [
+        5,
+        0.5,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "texturePath": "Resources/Textures/circle.dds",
+      "blendMode": 2,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false
+    }
+  ],
+  "particles": [
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "spark",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0,
+      "burstCount": 32,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        0.35294118523597717,
+        0,
+        0.19607843458652496
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.5,
+        0.5
+      ],
+      "uniformScale": true
+    }
+  ],
+  "lights": [
+    {
+      "displayName": "",
+      "kind": "Point",
+      "offset": [
+        0,
+        0.20000000298023224,
+        0
+      ],
+      "direction": [
+        0,
+        -1,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 0.15000000596046448,
+      "color": [
+        1,
+        0.80000001192092896,
+        0.5,
+        1
+      ],
+      "startIntensity": 5,
+      "endIntensity": 0,
+      "range": 4,
+      "spotCosAngle": 0.5,
+      "spotCosFalloffStart": 0.69999998807907104
+    }
+  ],
+  "sounds": []
 }

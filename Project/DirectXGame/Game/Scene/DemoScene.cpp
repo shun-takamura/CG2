@@ -582,7 +582,7 @@ void DemoScene::Update() {
 			// Plane生成
 			p.mesh = std::make_unique<PrimitiveMesh>();
 			p.mesh->Initialize(PrimitiveGenerator::CreatePlane(1.0f, 1.0f));
-			p.mesh->SetTexture("DistributionAssets/Textures/circle2.png");
+			p.mesh->SetTexture("Resources/Textures/circle.dds");
 			p.mesh->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
 
 			// 縦長スケール（初期値）

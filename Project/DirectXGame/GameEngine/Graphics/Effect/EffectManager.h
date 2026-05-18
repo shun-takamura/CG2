@@ -52,9 +52,11 @@ public:
 
     /// <summary>
     /// def を Resources/Json/Effects/ に保存し、メモリ上の defs_ にも同名で登録する。
-    /// 既存名が衝突するときは (1)(2)... を付与する。最終的に使用された名前を返す。
+    /// allowOverwrite=false の場合、既存名と衝突したら (1)(2)... を付与してユニーク化。
+    /// 編集中のものを保存（同名で上書き）したい場合は allowOverwrite=true を渡す。
+    /// 最終的に使用された名前を返す。
     /// </summary>
-    std::string SaveDef(EffectDef def);
+    std::string SaveDef(EffectDef def, bool allowOverwrite = false);
 
     /// <summary>
     /// 登録済み定義を削除（ファイル削除はしない）。
@@ -91,6 +93,14 @@ public:
 
     // 再生中インスタンス数（デバッグ用）
     size_t GetActiveInstanceCount() const { return activeInstances_.size(); }
+
+    /// <summary>
+    /// 先頭の再生中インスタンスを返す（Timeline表示用）。無ければnullptr。
+    /// </summary>
+    EffectInstance* GetFirstActiveInstance() {
+        for (auto& inst : activeInstances_) if (inst) return inst.get();
+        return nullptr;
+    }
 
     // 登録済みエフェクト名一覧（デバッグ用）
     std::vector<std::string> ListDefNames() const;

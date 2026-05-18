@@ -78,15 +78,36 @@ bool GPUParticleManager::HasGroup(const std::string& name) const
 
 void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius)
 {
+    // 色指定なしは Random モードで委譲
+    BurstEmit(name, position, count, radius, 0, Vector4{ 1, 1, 1, 1 }, Vector4{ 1, 1, 1, 0 });
+}
+
+void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                                    uint32_t colorMode, const Vector4& startColor, const Vector4& endColor)
+{
+    // スケール範囲なしの版は現状のCB既定値（0.1〜0.5, uniform=true）に委譲
+    BurstEmit(name, position, count, radius, colorMode, startColor, endColor,
+              Vector2{ 0.1f, 0.1f }, Vector2{ 0.5f, 0.5f }, true);
+}
+
+void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                                    uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
+                                    const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale)
+{
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.emitterData) return;
 
     auto& e = *it->second.emitterData;
-    // emit 以外（CB は今フレームで一度しか書かないフィールド）はここで直接書く
     e.translate = position;
     e.radius = radius;
     e.count = count;
-    // emit フラグは Update() で CB に転写する（CPU/GPU レース回避）
+    e.colorMode = colorMode;
+    e.startColor = startColor;
+    e.endColor = endColor;
+    e.scaleMin = scaleMin;
+    e.scaleMax = scaleMax;
+    e.uniformScale = uniformScale ? 1u : 0u;
+    // emit フラグは Update() で CB に転写（CPU/GPU レース回避）
     it->second.pendingBurst = true;
 }
 
@@ -463,6 +484,18 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.emitterData->frequency = 0.5f;
     g.emitterData->frequencyTime = 0.0f;
     g.emitterData->emit = 0;
+    g.emitterData->colorMode = 0;
+    g.emitterData->pad0[0] = 0.0f;
+    g.emitterData->pad0[1] = 0.0f;
+    g.emitterData->pad0[2] = 0.0f;
+    g.emitterData->startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    g.emitterData->endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
+    g.emitterData->scaleMin = { 0.1f, 0.1f };
+    g.emitterData->scaleMax = { 0.5f, 0.5f };
+    g.emitterData->uniformScale = 1;
+    g.emitterData->pad1[0] = 0.0f;
+    g.emitterData->pad1[1] = 0.0f;
+    g.emitterData->pad1[2] = 0.0f;
 
     // PerFrame CB
     g.perFrameResource = dxCore_->CreateBufferResource(sizeof(PerFrame));

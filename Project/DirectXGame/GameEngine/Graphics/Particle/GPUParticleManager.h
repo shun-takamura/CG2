@@ -1,6 +1,7 @@
 #pragma once
 #include "DirectXCore.h"
 #include "SRVManager.h"
+#include"Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Matrix4x4.h"
@@ -41,6 +42,19 @@ public:
     void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius = 0.5f);
 
     /// <summary>
+    /// 色指定付きのバースト発射。colorMode=0でRandom（startColor/endColor無視）、=1でstartColor→endColor補間
+    /// </summary>
+    void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                   uint32_t colorMode, const Vector4& startColor, const Vector4& endColor);
+
+    /// <summary>
+    /// 色 + サイズ範囲指定のバースト。uniformScale=true で幅=高さ（Xレンジを共用）。
+    /// </summary>
+    void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
+                   uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
+                   const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale);
+
+    /// <summary>
     /// 連続発射のON/OFFと頻度設定
     /// </summary>
     void SetContinuousEmit(const std::string& name, bool enabled, float frequency = 0.5f, uint32_t countPerEmit = 10, float radius = 1.0f);
@@ -72,7 +86,9 @@ private:
         float lifeTime;
         Vector3 velocity;
         float currentTime;
-        Vector4 color;
+        Vector4 color;       // 現在色（Update CS が毎フレーム計算）
+        Vector4 startColor;  // 補間始点
+        Vector4 endColor;    // 補間終点
     };
 
     struct PerView
@@ -91,6 +107,14 @@ private:
         float frequency;
         float frequencyTime;
         uint32_t emit;
+        uint32_t colorMode;     // 0=Random, 1=Fixed
+        float pad0[3];          // 16-byte align for startColor
+        Vector4 startColor;
+        Vector4 endColor;
+        Vector2 scaleMin;       // 80..88
+        Vector2 scaleMax;       // 88..96
+        uint32_t uniformScale;  // 96..100
+        float pad1[3];          // 100..112
     };
 
     struct PerFrame

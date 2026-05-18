@@ -244,7 +244,24 @@ void EffectEditorWindow::OnDraw() {
         em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Stop All")) em->StopAll();
+    if (ImGui::Button("Restart")) {
+        em->StopAll();
+        em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Stop")) em->StopAll();
+
+    // Timeline：最初の再生中インスタンスの経過時間 / 総寿命をプログレスバーで表示
+    {
+        EffectInstance* inst = em->GetFirstActiveInstance();
+        float elapsed = inst ? inst->GetElapsedTime() : 0.0f;
+        float total   = inst ? inst->GetTotalDuration() : editBuffer_.totalDuration;
+        if (total < 0.0001f) total = 0.0001f;
+        float ratio = std::clamp(elapsed / total, 0.0f, 1.0f);
+        char overlay[64];
+        std::snprintf(overlay, sizeof(overlay), "%.2f / %.2f s", elapsed, total);
+        ImGui::ProgressBar(ratio, ImVec2(-FLT_MIN, 0), overlay);
+    }
 
     ImGui::Separator();
 
@@ -321,7 +338,9 @@ void EffectEditorWindow::NewEffect() {
 
 void EffectEditorWindow::SaveCurrent() {
     editBuffer_.name = editNameInput_;
-    std::string finalName = EffectManager::GetInstance()->SaveDef(editBuffer_);
+    // 編集元と同じ名前なら上書き保存。そうでなければ衝突時にサフィックス。
+    const bool allowOverwrite = (editBuffer_.name == selectedEffect_);
+    std::string finalName = EffectManager::GetInstance()->SaveDef(editBuffer_, allowOverwrite);
     if (!finalName.empty()) {
         editBuffer_.name = finalName;
         std::snprintf(editNameInput_, sizeof(editNameInput_), "%s", finalName.c_str());
@@ -345,6 +364,10 @@ void EffectEditorWindow::RemoveComponent(EffectComponentEditable::Kind kind, int
     // 即時に erase + RebuildEditables を呼ぶと、現在 OnImGuiInspector 中の
     // EffectComponentEditable 自身が削除されて use-after-free になる。
     // 次の OnDraw 冒頭で安全に処理するため pending キューへ。
+    // 同フレームで重複してクリックされた場合の二重登録を弾く
+    for (const auto& r : pendingRemovals_) {
+        if (r.kind == kind && r.index == index) return;
+    }
     pendingRemovals_.push_back({ kind, index });
 }
 

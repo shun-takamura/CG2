@@ -1,4 +1,4 @@
-// GPU Particle: Particleの位置・寿命・アルファを毎フレーム更新するCS（FreeList版）
+// GPU Particle: Particleの位置・寿命・色を毎フレーム更新するCS（FreeList版）
 
 struct Particle
 {
@@ -8,6 +8,8 @@ struct Particle
     float3 velocity;
     float currentTime;
     float4 color;
+    float4 startColor;
+    float4 endColor;
 };
 
 struct PerFrame
@@ -29,31 +31,34 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint particleIndex = DTid.x;
     if (particleIndex < kMaxParticles)
     {
-        // alphaが0のParticleは死んでいるとみなして更新しない
-        if (gParticles[particleIndex].color.a != 0)
+        // lifeTime > 0 を生存条件とする（Init CS 直後は全粒子 lifeTime=0 で死亡扱い）
+        if (gParticles[particleIndex].lifeTime > 0.0f)
         {
-            // velocityは「1秒あたりの移動量（速度）」として運用する
             gParticles[particleIndex].translate += gParticles[particleIndex].velocity * gPerFrame.deltaTime;
             gParticles[particleIndex].currentTime += gPerFrame.deltaTime;
-            float alpha = 1.0f - (gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
-            gParticles[particleIndex].color.a = saturate(alpha);
 
-            // 今フレームで寿命が尽きた場合、FreeListに戻す
-            if (gParticles[particleIndex].color.a == 0)
+            // 寿命比率で色補間
+            float t = saturate(gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
+            gParticles[particleIndex].color = lerp(
+                gParticles[particleIndex].startColor,
+                gParticles[particleIndex].endColor,
+                t);
+
+            // 寿命を超えたら FreeList に返す
+            if (gParticles[particleIndex].currentTime >= gParticles[particleIndex].lifeTime)
             {
-                // VertexShader出力で潰されるようにscale=0にしておく
-                gParticles[particleIndex].scale = float3(0.0f, 0.0f, 0.0f);
+                gParticles[particleIndex].lifeTime = 0.0f;          // 死亡フラグ
+                gParticles[particleIndex].scale    = float3(0, 0, 0); // VS で潰す
+                gParticles[particleIndex].color.a  = 0.0f;          // PS discard
 
                 int freeListIndex;
                 InterlockedAdd(gFreeListIndex[0], 1, freeListIndex);
                 if ((freeListIndex + 1) < (int) kMaxParticles)
                 {
-                    // 加算後の天辺に死んだIndexを登録
                     gFreeList[freeListIndex + 1] = particleIndex;
                 }
                 else
                 {
-                    // 来るはずがないが安全策。加算をなかったことにする
                     InterlockedAdd(gFreeListIndex[0], -1);
                 }
             }
