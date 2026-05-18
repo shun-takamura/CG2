@@ -171,6 +171,10 @@ struct EffectDef {
     std::string name;
     float       totalDuration = 1.0f;
 
+    // true ならエフェクト終了時に自動的に最初から再生し直す（弾丸の trail 等）。
+    // 寿命を外から制御したい場合は EffectManager::Stop(handle) で止める。
+    bool        loop = false;
+
     std::vector<EffectPrimitiveComponent> primitives;
     std::vector<EffectParticleComponent>  particles;
     std::vector<EffectLightComponent>     lights;

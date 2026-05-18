@@ -161,6 +161,7 @@ namespace EffectDefIO {
             out.name = root["name"].AsString();
         }
         out.totalDuration = AsFloat(root["totalDuration"], out.totalDuration);
+        if (root["loop"].IsBool()) out.loop = root["loop"].AsBool(out.loop);
 
         // primitives
         const JsonValue& prims = root["primitives"];
@@ -256,6 +257,7 @@ namespace EffectDefIO {
         JsonValue root = JsonValue::MakeObject();
         root["name"] = def.name;
         root["totalDuration"] = static_cast<double>(def.totalDuration);
+        root["loop"] = def.loop;
 
         JsonValue primArr = JsonValue::MakeArray();
         for (const auto& c : def.primitives) {

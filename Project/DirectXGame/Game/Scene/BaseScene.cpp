@@ -430,7 +430,25 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
 
-	if (def->isAnimated) {
+	if (def->kind == PrefabKind::Primitive) {
+		AddDynamicPrimitive(def->primitiveParams.primitiveType, worldPos);
+		if (dynamicPrimitives_.empty()) return;
+
+		auto& back = dynamicPrimitives_.back();
+		std::string name = base;
+		int suffix = 1;
+		while (std::any_of(dynamicPrimitives_.begin(), dynamicPrimitives_.end() - 1,
+			[&name](const std::unique_ptr<PrimitiveInstance>& o) { return o->GetName() == name; })) {
+			name = base + " (" + std::to_string(suffix++) + ")";
+		}
+		back->SetName(name);
+		back->SetTag(def->tag);
+		back->ApplyPrefabParams(def->primitiveParams);
+		back->SetScale(def->defaultScale);
+		back->SetRotate(def->defaultRotate);
+		back->SetTranslate(worldPos);
+		if (def->hasCollider) applyCollider(back->GetCollider());
+	} else if (def->kind == PrefabKind::Animated || def->isAnimated) {
 		AddDynamicAnimated(def->modelDir, def->modelFile, worldPos);
 		if (dynamicAnimated_.empty()) return;
 

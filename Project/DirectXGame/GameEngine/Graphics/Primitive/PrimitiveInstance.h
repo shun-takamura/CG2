@@ -8,6 +8,7 @@
 
 // 前方宣言
 class Camera;
+struct PrimitivePrefabParams;
 
 /// <summary>
 /// シーン内に配置できるプリミティブ（Plane/Box/Sphere/Ring/Cylinder）。
@@ -77,6 +78,28 @@ public:
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
     const PrimitiveMesh& GetMesh() const { return mesh_; }
     PrimitiveMesh& GetMesh() { return mesh_; }
+
+    // ----- プリファブ保存 / 復元に必要な内部状態の公開 -----
+    TimeGroup GetTimeGroup() const { return timeGroup_; }
+    void SetTimeGroup(TimeGroup g) { timeGroup_ = g; }
+    bool   GetAutoScroll() const { return autoScrollEnabled_; }
+    Vector2 GetScrollSpeed() const { return scrollSpeed_; }
+    Vector2 GetManualUVOffset() const { return manualUVOffset_; }
+    Vector2 GetUVScale() const { return uvScale_; }
+    bool   GetFlipU() const { return flipU_; }
+    bool   GetFlipV() const { return flipV_; }
+    float  GetAlphaReference() const { return alphaReference_; }
+    bool   GetCullBackface() const { return cullBackface_; }
+    int    GetSamplerMode() const { return samplerMode_; }
+    const PrimitiveGenerator::RingParams&     GetRingParams() const { return ringParams_; }
+    const PrimitiveGenerator::CylinderParams& GetCylinderParams() const { return cylinderParams_; }
+    const PrimitiveGenerator::HelixParams&    GetHelixParams() const { return helixParams_; }
+
+    /// <summary>
+    /// プリファブから読み込んだパラメータを適用する。
+    /// Initialize 直後に呼ぶ想定（必要に応じてメッシュを再生成する）。
+    /// </summary>
+    void ApplyPrefabParams(const PrimitivePrefabParams& p);
 
     /// <summary>
     /// プリミティブタイプ名（"Plane", "Box" 等）

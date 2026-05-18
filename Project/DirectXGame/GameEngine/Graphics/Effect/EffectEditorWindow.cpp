@@ -236,6 +236,16 @@ void EffectEditorWindow::OnDraw() {
     if (editBufferDirty_) ImGui::TextColored(ImVec4(1, 0.7f, 0.2f, 1), "(modified)");
 
     ImGui::DragFloat("Total Duration", &editBuffer_.totalDuration, 0.05f, 0.0f, 60.0f);
+    if (ImGui::Checkbox("Loop", &editBuffer_.loop)) {
+        editBufferDirty_ = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("ON にすると Total Duration 経過後に最初から再生し直す。\n"
+                          "弾丸の trail のように寿命を外から制御したい場合は\n"
+                          "EffectManager::Stop(handle) で停止する。");
+    }
 
     ImGui::Separator();
     ImGui::DragFloat3("Play Pos", playPos_, 0.1f);

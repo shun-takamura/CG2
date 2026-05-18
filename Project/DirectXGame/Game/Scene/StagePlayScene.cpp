@@ -19,6 +19,7 @@
 #include <cmath>
 #include "Components/EntityTag.h"
 #include "AnimatedObject3DInstance.h"
+#include "LightManager.h"
 #include "Components/SphereCollider.h"
 #include "KeyboardInput.h"
 #include "ControllerInput.h"
@@ -535,6 +536,10 @@ void StagePlayScene::Draw() {
 
 	// 3Dオブジェクトの共通描画設定（Object3D / Animated 描画前に必要）
 	object3DManager_->DrawSetting();
+
+	// rootParameter[3]=DirectionalLight / [5]=PointLight / [6]=SpotLight を bind
+	// （Object3DInstance::Draw はライト系を bind しないため、ここで一括設定しないと GBV #935 が出る）
+	LightManager::GetInstance()->BindLights(commandList);
 
 	// BaseScene の動的エンティティ描画
 	DrawDynamicObjects();
