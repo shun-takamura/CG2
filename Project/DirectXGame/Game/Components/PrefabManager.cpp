@@ -77,6 +77,7 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 
 	out.modelDir = root["model"]["dir"].AsString();
 	out.modelFile = root["model"]["file"].AsString();
+	out.isAnimated = root["model"]["animated"].AsBool(false);
 	out.tag = TagFromName(root["tag"].AsString());
 
 	out.defaultScale = JsonToVec3(root["defaults"]["scale"], { 1,1,1 });
@@ -85,8 +86,17 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 	const JsonValue& col = root["collider"];
 	out.hasCollider = col.IsObject() && col.GetType() != JsonValue::Type::Null;
 	if (out.hasCollider) {
-		out.colliderRadius = static_cast<float>(col["radius"].AsDouble(1.0));
+		// shape: "Sphere" / "OBB" / "Capsule"。未指定なら Sphere（旧形式互換）。
+		std::string shapeStr = col["shape"].AsString("Sphere");
+		if (shapeStr == "OBB")      out.colliderShape = ColliderShape::OBB;
+		else if (shapeStr == "Capsule") out.colliderShape = ColliderShape::Capsule;
+		else                            out.colliderShape = ColliderShape::Sphere;
+
 		out.colliderOffset = JsonToVec3(col["offset"], { 0,0,0 });
+		out.colliderRadius = static_cast<float>(col["radius"].AsDouble(1.0));
+		out.colliderHalfExtents = JsonToVec3(col["halfExtents"], { 0.5f, 0.5f, 0.5f });
+		out.colliderCapsuleRadius = static_cast<float>(col["capsuleRadius"].AsDouble(0.5));
+		out.colliderCapsuleHeight = static_cast<float>(col["capsuleHeight"].AsDouble(1.0));
 	}
 	return true;
 }
@@ -97,6 +107,7 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 	JsonValue modelObj = JsonValue::MakeObject();
 	modelObj["dir"] = def.modelDir;
 	modelObj["file"] = def.modelFile;
+	modelObj["animated"] = def.isAnimated;
 	root["model"] = std::move(modelObj);
 
 	root["tag"] = std::string(GetTagName(def.tag));
@@ -108,8 +119,18 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 
 	if (def.hasCollider) {
 		JsonValue colObj = JsonValue::MakeObject();
-		colObj["radius"] = static_cast<double>(def.colliderRadius);
+		const char* shapeStr = "Sphere";
+		switch (def.colliderShape) {
+		case ColliderShape::OBB:     shapeStr = "OBB"; break;
+		case ColliderShape::Capsule: shapeStr = "Capsule"; break;
+		case ColliderShape::Sphere:  shapeStr = "Sphere"; break;
+		}
+		colObj["shape"] = std::string(shapeStr);
 		colObj["offset"] = Vec3ToJson(def.colliderOffset);
+		colObj["radius"] = static_cast<double>(def.colliderRadius);
+		colObj["halfExtents"] = Vec3ToJson(def.colliderHalfExtents);
+		colObj["capsuleRadius"] = static_cast<double>(def.colliderCapsuleRadius);
+		colObj["capsuleHeight"] = static_cast<double>(def.colliderCapsuleHeight);
 		root["collider"] = std::move(colObj);
 	}
 

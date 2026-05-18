@@ -54,22 +54,11 @@ public:
 
 	Camera* GetCamera() override { return camera_.get(); }
 
-	void AddDynamicObject(const std::string& dirPath, const std::string& filename,
-		const Vector3& worldPos = {}) override;
-	void RemoveDynamicObject(const std::string& name) override;
-	void AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) override;
-	void RemoveDynamicSprite(const std::string& name) override;
-	void AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
-		const Vector3& worldPos = {}) override;
-	void RemoveDynamicAnimated(const std::string& name) override;
-	void AddDynamicSpline(int tagInt, const Vector3& worldPos = {}) override;
-	void RemoveDynamicSpline(const std::string& name) override;
-	void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) override;
 #ifdef USE_IMGUI
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
 
-	// シーン保存/読込
+	// シーン保存/読込（BaseScene の動的エンティティ群を JSON へ）
 	bool SaveSceneToJson(const std::string& filePath) override;
 	bool LoadSceneFromJson(const std::string& filePath) override;
 
@@ -77,18 +66,11 @@ private:
 
 	// DebugCamera は BaseScene が管理（GetDebugCamera() で取得）
 
+	// 動的エンティティ群（Object3D / Sprite / Animated / Spline / Primitive）は BaseScene に集約済み
+
 	// スプライト関連
 	std::unique_ptr<SpriteInstance> sprite_;
 	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
-
-	// 3Dオブジェクト
-	std::vector<std::unique_ptr<Object3DInstance>> object3DInstances_;
-
-	// SceneEditorWindow からドロップで追加された動的エンティティ
-	std::vector<std::unique_ptr<SpriteInstance>> dynamicSprites_;
-	std::vector<std::unique_ptr<AnimatedModelInstance>> dynamicAnimatedModels_;
-	std::vector<std::unique_ptr<AnimatedObject3DInstance>> dynamicAnimated_;
-	std::vector<std::unique_ptr<SplineCurveActor>> dynamicSplines_;
 
 	// アニメーション付きモデル
 	std::unique_ptr<AnimatedModelInstance> sneakWalk;

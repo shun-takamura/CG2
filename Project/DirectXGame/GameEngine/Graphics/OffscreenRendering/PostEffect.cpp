@@ -30,6 +30,12 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	renderTextureB_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
 
+	// IDマスク用 RT（uint8、0 で初期化）。MaskedGrayscale 等が参照する
+	float idClear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	idMaskRT_ = std::make_unique<RenderTexture>();
+	idMaskRT_->Initialize(dxCore_, srvManager_, width, height,
+		DXGI_FORMAT_R8_UINT, idClear);
+
 	CreateRootSignatures();
 	CreateBasePsoDesc();
 	InitializeEffects();
@@ -310,6 +316,37 @@ void PostEffect::InitializeEffects()
 		effectOrder_.push_back(dissolve);
 		effectOwners_.push_back(std::move(dissolveEffect));
 	}
+
+	// ----- MaskedGrayscale（idMaskRT_ を t1 に参照）-----
+	{
+		auto mg = std::make_unique<MaskedGrayscaleEffect>();
+		mg->InitializeMasked(dxCore_, outlineRootSignature_.Get(), basePsoDesc_, idMaskRT_.get());
+		maskedGrayscale = mg.get();
+		effectOrder_.push_back(maskedGrayscale);
+		effectOwners_.push_back(std::move(mg));
+	}
+}
+
+// ===================================================================
+// ID Pass の開始/終了
+// ===================================================================
+
+void PostEffect::BeginIdPass(ID3D12GraphicsCommandList* commandList)
+{
+	if (!idMaskRT_) return;
+	// 0 でクリアして開始
+	const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	idMaskRT_->BeginRender(commandList);
+	// BeginRender 内で ClearRenderTargetView は init 時の clear color で行われるはず
+	// 念のため明示クリア（カラー指定でゼロにする）
+	auto rtv = idMaskRT_->GetRTVHandle();
+	commandList->ClearRenderTargetView(rtv, clear, 0, nullptr);
+}
+
+void PostEffect::EndIdPass(ID3D12GraphicsCommandList* commandList)
+{
+	if (!idMaskRT_) return;
+	idMaskRT_->EndRender(commandList);
 }
 
 // ===================================================================
@@ -618,4 +655,5 @@ void PostEffect::Finalize()
 
 	if (renderTextureA_) renderTextureA_->Finalize();
 	if (renderTextureB_) renderTextureB_->Finalize();
+	if (idMaskRT_)       idMaskRT_->Finalize();
 }

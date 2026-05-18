@@ -95,6 +95,9 @@ public:
 
 	void Draw(DirectXCore* dxCore);
 
+	// ID Pass 用：VBV/IBV をバインドして DrawIndexedInstanced するだけの軽量版。
+	void DrawIdPass(DirectXCore* dxCore);
+
 	const ModelData& GetModelData() const { return modelData_; }
 
 	// ImGui/PSO切り替えから Material にアクセスするためのGetter

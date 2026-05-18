@@ -577,7 +577,16 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
     std::string animPathStr = animPath.generic_string();
     if (AssetLocator::GetInstance()->Exists(animPathStr)) {
         animation_ = ReadAnimFile(animPathStr);
+        animationPath_ = animPathStr;
     }
 
     assert(indexCount_ > 0 && "indexCount is 0!");
+}
+
+void AnimatedModelInstance::ReplaceAnimation(const std::string& animPath)
+{
+    if (animPath.empty()) return;
+    if (!AssetLocator::GetInstance()->Exists(animPath)) return;
+    animation_ = ReadAnimFile(animPath);
+    animationPath_ = animPath;
 }

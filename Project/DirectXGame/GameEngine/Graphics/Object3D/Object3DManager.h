@@ -71,6 +71,11 @@ private:
     // グラフィックパイプラインの生成（引数追加）
     void CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode);
 
+    // ID Pass 用：Object3d.VS + WriteID.PS、出力 R8_UINT、深度テストあり書き込み無し
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> idRootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> idPipelineState_;
+    void CreateIdPassObjects();
+
 public:
   
 	void Initialize(DirectXCore* dxCore);
@@ -96,6 +101,10 @@ public:
             }
         }
     }
+
+    // ID Pass の PSO / RootSignature
+    ID3D12PipelineState* GetIdPipelineState() const { return idPipelineState_.Get(); }
+    ID3D12RootSignature* GetIdRootSignature() const { return idRootSignature_.Get(); }
 
     // セッター
     void SetDefaultCamera(Camera* camera) { defaultCamera_ = camera; }

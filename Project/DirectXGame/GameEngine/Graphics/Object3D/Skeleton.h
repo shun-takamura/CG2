@@ -41,3 +41,12 @@ void UpdateSkeleton(Skeleton& skeleton);
 
 // SkeletonにAnimationを適用する（Joint.transformに値を流し込む）
 void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animationTime);
+
+/// <summary>
+/// 2つのアニメーションをブレンドして適用する（クロスフェード用）。
+/// weight: 0.0 で a そのまま、1.0 で b そのまま。translate/scale は Lerp、rotate は Slerp。
+/// </summary>
+void ApplyAnimationBlended(Skeleton& skeleton,
+    const Animation& a, float timeA,
+    const Animation& b, float timeB,
+    float weight);

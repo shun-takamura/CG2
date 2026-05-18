@@ -131,6 +131,19 @@ void SceneEditorWindow::WorkerFunc() {
             foundMaterials.push_back(std::move(e));
         }
 
+        // ============================================
+        // Phase 1d: Resources/Models 配下から .anim を列挙
+        // ============================================
+        std::vector<AnimEntry> foundAnims;
+        for (const auto& p : locator->ListByExtension(".anim", modelsRoot.generic_string())) {
+            if (stopRequested_) return;
+            fs::path fp(p);
+            AnimEntry e;
+            e.filePath = p;
+            e.displayName = fs::relative(fp, modelsRoot).generic_string();
+            foundAnims.push_back(std::move(e));
+        }
+
         // 結果を共有領域へ
         {
             std::lock_guard<std::mutex> lock(discoveredMutex_);
@@ -138,6 +151,7 @@ void SceneEditorWindow::WorkerFunc() {
             discoveredTextures_ = std::move(foundTextures);
             discoveredAnimated_ = std::move(foundAnimated);
             discoveredMaterials_ = std::move(foundMaterials);
+            discoveredAnims_ = std::move(foundAnims);
         }
         scanDone_ = true;
 
@@ -273,12 +287,14 @@ void SceneEditorWindow::OnDraw() {
     std::vector<TextureEntry> textures;
     std::vector<AnimatedEntry> animated;
     std::vector<MaterialEntry> materials;
+    std::vector<AnimEntry> anims;
     {
         std::lock_guard<std::mutex> lock(discoveredMutex_);
         models = discoveredModels_;
         textures = discoveredTextures_;
         animated = discoveredAnimated_;
         materials = discoveredMaterials_;
+        anims = discoveredAnims_;
     }
 
     auto matchesSearch = [&](const std::string& s) {
@@ -424,6 +440,31 @@ void SceneEditorWindow::OnDraw() {
     // ============================================
     // Animated セクション（.gltf / .glb / .fbx）
     // ============================================
+    // ============================================
+    // Animations セクション（.anim）— AnimatedObject3D Inspector へ D&D で適用
+    // ============================================
+    if (ImGui::CollapsingHeader("Animations  (.anim)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("drag onto AnimatedObject's Animation slot");
+        if (anims.empty()) {
+            ImGui::TextDisabled("(none found)");
+        }
+        for (size_t i = 0; i < anims.size(); ++i) {
+            const auto& entry = anims[i];
+            if (!matchesSearch(entry.displayName)) continue;
+
+            ImGui::PushID(static_cast<int>(i) + 400000);
+            ImGui::Selectable(entry.displayName.c_str(), false);
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                AnimDropPayload payload{};
+                SafeCopy(payload.animPath, sizeof(payload.animPath), entry.filePath);
+                ImGui::SetDragDropPayload(ANIM_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(entry.displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+            ImGui::PopID();
+        }
+    }
+
     if (ImGui::CollapsingHeader("Animated  (.mesh w/ skin)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("scanned across all Resources/Models/ subfolders");
         if (animated.empty()) {

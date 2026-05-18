@@ -98,6 +98,28 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
     }
 }
 
+void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
+{
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!modelInstance_) return;
+
+    auto* cmd = dxCore->GetCommandList();
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(object3DManager_->GetIdRootSignature());
+    cmd->SetPipelineState(object3DManager_->GetIdPipelineState());
+
+    // VS CBV b0 = TransformationMatrix
+    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+
+    // PS Root Constant b0 = objectId
+    const UINT idValue = static_cast<UINT>(objectId_);
+    cmd->SetGraphicsRoot32BitConstant(1, idValue, 0);
+
+    modelInstance_->DrawIdPass(dxCore);
+}
+
 void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     // サイズを設定

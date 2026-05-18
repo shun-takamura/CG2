@@ -19,15 +19,15 @@
           0
         ],
         "translate": [
-          -3.1076629161834717,
-          0,
-          0
+          1.0402414798736572,
+          0.55134844779968262,
+          1.015813946723938
         ]
       }
     },
     {
       "type": "AnimatedObject3D",
-      "name": "walk.mesh",
+      "name": "player",
       "tag": "Player",
       "dir": "Resources/Models/Animated/Walk",
       "file": "walk.mesh",
@@ -43,9 +43,9 @@
           0
         ],
         "translate": [
-          -0,
           0,
-          -0
+          0,
+          0
         ]
       }
     }

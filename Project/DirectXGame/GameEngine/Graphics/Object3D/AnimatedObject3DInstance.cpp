@@ -75,6 +75,30 @@ void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
 
 }
 
+void AnimatedObject3DInstance::PlayAnimation(const std::string& animPath, float fadeTime)
+{
+    if (!animatedModelInstance_) return;
+    if (animPath.empty()) return;
+
+    if (fadeTime > 0.0f) {
+        // 現在のアニメを snapshot して旧クリップ側に。フェード中の再ドロップは prev を上書き
+        prevAnimation_ = animatedModelInstance_->GetAnimation();
+        prevAnimationTime_ = animationTime_;
+        hasPrevAnimation_ = (prevAnimation_.duration > 0.0f);
+        fadeTimer_ = 0.0f;
+        fadeDuration_ = fadeTime;
+    } else {
+        hasPrevAnimation_ = false;
+        prevAnimation_ = Animation{};
+        fadeTimer_ = 0.0f;
+        fadeDuration_ = 0.0f;
+    }
+
+    animatedModelInstance_->ReplaceAnimation(animPath);
+    animationTime_ = 0.0f;
+    isPlaying_ = true;
+}
+
 void AnimatedObject3DInstance::Update(float deltaTime)
 {
     // アニメーション再生時刻の更新
@@ -94,9 +118,36 @@ void AnimatedObject3DInstance::Update(float deltaTime)
         }
     }
 
+    // フェード中は旧アニメーションの時刻も進める（自然に動き続けて見せる）
+    if (hasPrevAnimation_) {
+        prevAnimationTime_ += deltaTime * playbackSpeed_;
+        if (prevAnimation_.duration > 0.0f) {
+            prevAnimationTime_ = std::fmod(prevAnimationTime_, prevAnimation_.duration);
+            if (prevAnimationTime_ < 0.0f) {
+                prevAnimationTime_ += prevAnimation_.duration;
+            }
+        }
+        fadeTimer_ += deltaTime;
+        if (fadeTimer_ >= fadeDuration_) {
+            // フェード完了 → 旧アニメ破棄
+            hasPrevAnimation_ = false;
+            prevAnimation_ = Animation{};
+            fadeTimer_ = 0.0f;
+            fadeDuration_ = 0.0f;
+        }
+    }
+
     // SkeletonにAnimationを適用しSkeleton全体を更新
     if (animatedModelInstance_ && hasSkeleton_) {
-        ApplyAnimation(skeleton_, animatedModelInstance_->GetAnimation(), animationTime_);
+        if (hasPrevAnimation_ && fadeDuration_ > 0.0f) {
+            const float w = fadeTimer_ / fadeDuration_;
+            ApplyAnimationBlended(skeleton_,
+                prevAnimation_, prevAnimationTime_,
+                animatedModelInstance_->GetAnimation(), animationTime_,
+                w);
+        } else {
+            ApplyAnimation(skeleton_, animatedModelInstance_->GetAnimation(), animationTime_);
+        }
         UpdateSkeleton(skeleton_);
 
         // SkinClusterの更新
@@ -351,6 +402,24 @@ void AnimatedObject3DInstance::OnImGuiInspector()
     if (ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (animatedModelInstance_) {
             const Animation& animation = animatedModelInstance_->GetAnimation();
+
+            // ----- .anim ドロップ受付 -----
+            const std::string& curAnim = animatedModelInstance_->GetAnimationPath();
+            ImGui::Text("Current: %s", curAnim.empty() ? "(model default)" : curAnim.c_str());
+            ImGui::DragFloat("Fade Time", &defaultFadeTime_, 0.01f, 0.0f, 5.0f, "%.2f s");
+            ImGui::Button("Drop .anim here to play (with fade)", ImVec2(-FLT_MIN, 0));
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload =
+                        ImGui::AcceptDragDropPayload(ANIM_DROP_PAYLOAD_TYPE)) {
+                    const auto* p = static_cast<const AnimDropPayload*>(payload->Data);
+                    PlayAnimation(p->animPath, defaultFadeTime_);
+                }
+                ImGui::EndDragDropTarget();
+            }
+            if (hasPrevAnimation_ && fadeDuration_ > 0.0f) {
+                ImGui::Text("Fading: %.2f / %.2f s", fadeTimer_, fadeDuration_);
+            }
+            ImGui::Separator();
 
             // 再生/一時停止ボタン
             if (isPlaying_) {

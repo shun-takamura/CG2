@@ -20,6 +20,11 @@ class Camera;
 class DebugCamera;
 class IImGuiEditable;
 class CameraPreviewSprite;
+class Object3DInstance;
+class SpriteInstance;
+class AnimatedObject3DInstance;
+class AnimatedModelInstance;
+class SplineCurveActor;
 
 /// <summary>
 /// シーンの基底クラス
@@ -287,6 +292,23 @@ public:
 	/// </summary>
 	void DrawGlobalEffects();
 
+	//====================
+	// ID Pass（ハイライト対象を idMaskRT に書き込む）
+	//====================
+
+	/// <summary>
+	/// ハイライト対象を追加。重複は無視。
+	/// </summary>
+	void AddHighlight(IImGuiEditable* e);
+	void RemoveHighlight(IImGuiEditable* e);
+	void ClearHighlights();
+	const std::vector<IImGuiEditable*>& GetHighlights() const { return highlightedEntities_; }
+
+	/// <summary>
+	/// Game::Draw から呼ばれる：ハイライト対象だけを idMaskRT に書き込む。
+	/// </summary>
+	void RunIdPass(class ID3D12GraphicsCommandList* commandList);
+
 protected:
 	/// <summary>
 	/// 動的プリミティブの更新（派生シーンの Update から呼ぶ）
@@ -298,6 +320,27 @@ protected:
 	/// </summary>
 	void DrawDynamicPrimitives();
 
+	/// <summary>
+	/// 動的 Object3D の Update / Draw（dirty な Camera 追従も内部で）。派生 Update/Draw から呼ぶ。
+	/// </summary>
+	void UpdateDynamicObjects();
+	void DrawDynamicObjects();
+
+	/// <summary>
+	/// 動的 AnimatedObject3D の Update（dt 必須） / DispatchSkinning / Draw / SkeletonDebug
+	/// </summary>
+	void UpdateDynamicAnimated(float deltaTime);
+	void DispatchDynamicAnimatedSkinning();
+	void DrawDynamicAnimated();
+	void DrawDynamicAnimatedSkeletonDebug();
+
+	/// <summary>動的スプライトの Update / Draw</summary>
+	void UpdateDynamicSprites();
+	void DrawDynamicSprites();
+
+	/// <summary>動的スプラインの DebugDraw キュー積み</summary>
+	void DrawDynamicSplinesDebug();
+
 	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
 	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する
 	// 型消去で Object3DInstance.h の include を BaseScene.h に持ち込まない
@@ -305,6 +348,16 @@ protected:
 
 	// 動的プリミティブ（SceneEditorWindow からのドロップで追加される）
 	std::vector<std::unique_ptr<PrimitiveInstance>> dynamicPrimitives_;
+
+	// ハイライト対象（ID Pass の書き込み対象）
+	std::vector<IImGuiEditable*> highlightedEntities_;
+
+	// 動的 3D オブジェクト / Sprite / Animated / Spline（プレハブ含む）
+	std::vector<std::unique_ptr<Object3DInstance>>          object3DInstances_;
+	std::vector<std::unique_ptr<SpriteInstance>>            dynamicSprites_;
+	std::vector<std::unique_ptr<AnimatedModelInstance>>     dynamicAnimatedModels_;
+	std::vector<std::unique_ptr<AnimatedObject3DInstance>>  dynamicAnimated_;
+	std::vector<std::unique_ptr<SplineCurveActor>>          dynamicSplines_;
 
 	// 各マネージャーへのポインタ（Frameworkから受け取る）
 	SpriteManager* spriteManager_ = nullptr;

@@ -10,7 +10,8 @@
       "Bash(externals/texconv/Texconv.exe --help)",
       "Bash(python tools/Python/cook_assets.py)",
       "PowerShell(& \"${env:ProgramFiles}\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"Project\\\\CG2_0_1.sln\" /t:Build /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal 2>&1 | Select-Object -Last 6)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" Project/CG2_0_1.sln -p:Configuration=Debug -p:Platform=x64 -m -nologo -v:minimal)"
     ]
   }
 }

@@ -70,3 +70,37 @@ void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animat
         }
     }
 }
+
+void ApplyAnimationBlended(Skeleton& skeleton,
+    const Animation& a, float timeA,
+    const Animation& b, float timeB,
+    float weight)
+{
+    // weight を [0, 1] に拘束
+    if (weight < 0.0f) weight = 0.0f;
+    if (weight > 1.0f) weight = 1.0f;
+
+    for (Joint& joint : skeleton.joints) {
+        // a 側: 無ければ現在の transform をそのまま使う
+        QuaternionTransform va = joint.transform;
+        if (auto it = a.nodeAnimations.find(joint.name); it != a.nodeAnimations.end()) {
+            const NodeAnimation& na = it->second;
+            va.translate = CalculateValue(na.translate.keyframes, timeA);
+            va.rotate    = CalculateValue(na.rotate.keyframes, timeA);
+            va.scale     = CalculateValue(na.scale.keyframes, timeA);
+        }
+
+        // b 側
+        QuaternionTransform vb = va;  // a を初期値にしておけば、b 側に無いキーは a を維持
+        if (auto it = b.nodeAnimations.find(joint.name); it != b.nodeAnimations.end()) {
+            const NodeAnimation& nb = it->second;
+            vb.translate = CalculateValue(nb.translate.keyframes, timeB);
+            vb.rotate    = CalculateValue(nb.rotate.keyframes, timeB);
+            vb.scale     = CalculateValue(nb.scale.keyframes, timeB);
+        }
+
+        joint.transform.translate = Lerp(va.translate, vb.translate, weight);
+        joint.transform.rotate    = Slerp(va.rotate,    vb.rotate,    weight);
+        joint.transform.scale     = Lerp(va.scale,     vb.scale,     weight);
+    }
+}
