@@ -19,6 +19,12 @@
 #include <cmath>
 #include "Components/EntityTag.h"
 #include "AnimatedObject3DInstance.h"
+#include "AnimatedModelInstance.h"
+#include "Object3DInstance.h"
+#include "Primitive/PrimitiveInstance.h"
+#include "SpriteInstance.h"
+#include "LightManager.h"
+#include "LogBuffer.h"
 #include "Components/SphereCollider.h"
 #include "KeyboardInput.h"
 #include "ControllerInput.h"
@@ -86,6 +92,25 @@ void StagePlayScene::LoadTuningFromJson() {
 		playerClipMargin_.x = static_cast<float>(mar[0].AsDouble(playerClipMargin_.x));
 		playerClipMargin_.y = static_cast<float>(mar[1].AsDouble(playerClipMargin_.y));
 	}
+
+	// ----- shooting -----
+	const JsonValue& sh = root["shooting"];
+	if (sh.IsObject()) {
+		bulletSpeed_           = static_cast<float>(sh["bulletSpeed"].AsDouble(bulletSpeed_));
+		bulletLifetime_        = static_cast<float>(sh["bulletLifetime"].AsDouble(bulletLifetime_));
+		fireRate_              = static_cast<float>(sh["fireRate"].AsDouble(fireRate_));
+		bulletColliderGrowth_  = static_cast<float>(sh["colliderGrowthPerMeter"].AsDouble(bulletColliderGrowth_));
+		bulletHomingStrength_  = static_cast<float>(sh["homingStrength"].AsDouble(bulletHomingStrength_));
+		bulletHomingLockOnBoost_ = static_cast<float>(sh["homingLockOnBoost"].AsDouble(bulletHomingLockOnBoost_));
+	}
+
+	// ----- aim -----
+	const JsonValue& aim = root["aim"];
+	if (aim.IsObject()) {
+		aimPlaneDistance_     = static_cast<float>(aim["planeDistance"].AsDouble(aimPlaneDistance_));
+		aimSmoothTime_        = static_cast<float>(aim["smoothTime"].AsDouble(aimSmoothTime_));
+		aimAssistPixelScale_  = static_cast<float>(aim["assistPixelScale"].AsDouble(aimAssistPixelScale_));
+	}
 }
 
 void StagePlayScene::SaveTuningToJson() const {
@@ -111,6 +136,21 @@ void StagePlayScene::SaveTuningToJson() const {
 	JsonValue camObj = JsonValue::MakeObject();
 	camObj["speed"] = static_cast<double>(railCameraSpeed_);
 	root["camera"] = std::move(camObj);
+
+	JsonValue shObj = JsonValue::MakeObject();
+	shObj["bulletSpeed"]            = static_cast<double>(bulletSpeed_);
+	shObj["bulletLifetime"]         = static_cast<double>(bulletLifetime_);
+	shObj["fireRate"]               = static_cast<double>(fireRate_);
+	shObj["colliderGrowthPerMeter"] = static_cast<double>(bulletColliderGrowth_);
+	shObj["homingStrength"]         = static_cast<double>(bulletHomingStrength_);
+	shObj["homingLockOnBoost"]      = static_cast<double>(bulletHomingLockOnBoost_);
+	root["shooting"] = std::move(shObj);
+
+	JsonValue aimObj = JsonValue::MakeObject();
+	aimObj["planeDistance"]    = static_cast<double>(aimPlaneDistance_);
+	aimObj["smoothTime"]       = static_cast<double>(aimSmoothTime_);
+	aimObj["assistPixelScale"] = static_cast<double>(aimAssistPixelScale_);
+	root["aim"] = std::move(aimObj);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -207,6 +247,48 @@ void StagePlayScene::OnImGuiTuning() {
 		if (railCamera_) railCamera_->SetSpeed(railCameraSpeed_);
 	}
 
+	ImGui::Separator();
+	ImGui::TextUnformatted("Shooting");
+	ImGui::DragFloat("Bullet Speed", &bulletSpeed_, 1.0f, 1.0f, 500.0f, "%.1f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Bullet Lifetime (s)", &bulletLifetime_, 0.05f, 0.1f, 10.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Fire Rate (s/shot)", &fireRate_, 0.005f, 0.02f, 1.0f, "%.3f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Collider Growth /m", &bulletColliderGrowth_, 0.005f, 0.0f, 1.0f, "%.3f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("弾が 1m 進むごとに collider 半径を + この値。\n0 で固定半径、0.02 だと 50m 進むと半径 +1.0。");
+	}
+
+	ImGui::DragFloat("Homing Strength /s",     &bulletHomingStrength_,    0.05f, 0.0f, 20.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Homing Strength (Lock)", &bulletHomingLockOnBoost_, 0.05f, 0.0f, 20.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("弾の進行方向を target に向ける指数収束 [/sec]。\n0 でホーミング無効、4.0 で約 0.25 秒で大半が向く。\nLock 側はロックオン中の弾の倍率（必殺技でも同じ仕組みを使う）。");
+	}
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("Aim / Lock-on");
+	ImGui::DragFloat("Aim Plane Distance (m)", &aimPlaneDistance_, 1.0f, 5.0f, 500.0f, "%.1f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("カメラからの『狙いの面』距離。\n"
+		                  "弾速・寿命とは独立。\n"
+		                  "非ロックオン時、レティクルが指すこの面上の点へ弾が向かう。");
+	}
+	ImGui::DragFloat("Smooth Time (s)", &aimSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
 	if (changed) SaveTuningToJson();
 
 	ImGui::Separator();
@@ -282,16 +364,36 @@ void StagePlayScene::Initialize() {
 	phase_ = Phase::Rail;
 	paused_ = false;
 
-	// プレイヤープレハブを生成（カメラの子として毎フレ配置）
-	InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
-	if (!dynamicAnimated_.empty()) {
-		player_ = dynamicAnimated_.back().get();
-		player_->SetName("Player");
-	}
-
 	// レティクル
 	reticle_ = std::make_unique<Reticle>();
 	reticle_->Initialize(spriteManager_);
+
+	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
+	{
+		const std::string kAutoLoadPath = "Resources/Json/Scenes/StagePlay.json";
+		if (std::filesystem::exists(kAutoLoadPath)) {
+			LoadSceneFromJson(kAutoLoadPath);
+		}
+	}
+
+	// auto-load で Player が復元されていなければデフォルトのプレイヤープレハブを生成
+	if (!player_) {
+		InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
+		if (!dynamicAnimated_.empty()) {
+			player_ = dynamicAnimated_.back().get();
+			player_->SetName("Player");
+		}
+	}
+
+	// ウェーブ定義ロード（存在しなければ空のまま=何も湧かない）
+	{
+		const std::string wavePath = "Resources/Json/Waves/stage1.json";
+		if (std::filesystem::exists(wavePath)) {
+			if (WaveDefIO::LoadFromFile(wavePath, currentWave_)) {
+				waveFired_.assign(currentWave_.entries.size(), false);
+			}
+		}
+	}
 }
 
 void StagePlayScene::Finalize() {}
@@ -467,7 +569,7 @@ void StagePlayScene::Update() {
 			  playerLocalOffset_.z },
 			camWorld);
 		player_->SetTranslate(worldPos);
-		player_->SetRotate(camera_->GetRotate());
+		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
 	}
 
 	// BaseScene の動的エンティティ群（プレハブ生成物含む）の Update
@@ -515,6 +617,235 @@ void StagePlayScene::Update() {
 		reticle_->Update(mouseHovered, mouseClient, mouseMoved,
 			input_->GetController(), GetScaledDeltaTime());
 	}
+
+	// ----- 照準ターゲット計算（プレイヤー回転 + 発射方向の元） -----
+	if (player_ && reticle_ && camera_) {
+		const Vector2 rp = reticle_->GetPosition();
+		const float ndcX = (rp.x / float(WindowsApplication::kClientWidth)) * 2.0f - 1.0f;
+		const float ndcY = 1.0f - (rp.y / float(WindowsApplication::kClientHeight)) * 2.0f;
+		const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
+		const Vector3 farWorld = TransformCoordinate(Vector3{ ndcX, ndcY, 1.0f }, invVP);
+		const Vector3 camPos = camera_->GetTranslate();
+		Vector3 rayDir{ farWorld.x - camPos.x, farWorld.y - camPos.y, farWorld.z - camPos.z };
+		const float rayLen = std::sqrt(rayDir.x * rayDir.x + rayDir.y * rayDir.y + rayDir.z * rayDir.z);
+		if (rayLen > 1e-6f) {
+			rayDir.x /= rayLen; rayDir.y /= rayLen; rayDir.z /= rayLen;
+		}
+
+		// 敵レイヒット判定（Enemy タグ、Sphere collider のみ）
+		bool hitEnemy = false;
+		// bestT は「最も近い候補までの距離」。aimPlaneDistance_ は target 用なので使わない。
+		float bestT = (std::numeric_limits<float>::max)();
+		float hitEnemyRadius = 0.0f;
+		// 軽ホーミング用：レティクル中心から最近の敵を画面距離で追跡
+		IImGuiEditable* nearestLocal = nullptr;
+		float nearestPx = (std::numeric_limits<float>::max)();
+		// ロックオン対象（強ホーミング用）
+		IImGuiEditable* lockedLocal = nullptr;
+		Vector3 desiredTarget{
+			camPos.x + rayDir.x * aimPlaneDistance_,
+			camPos.y + rayDir.y * aimPlaneDistance_,
+			camPos.z + rayDir.z * aimPlaneDistance_,
+		};
+
+		// 敵中心をワールド→スクリーン pixel に投影
+		const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+		auto projectToPixel = [&](const Vector3& w, Vector2& outPx, float& outClipW) -> bool {
+			const float wx = w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0];
+			const float wy = w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1];
+			const float ww = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
+			if (ww <= 1e-4f) return false; // カメラ後方
+			const float ndcX = wx / ww;
+			const float ndcY = wy / ww;
+			outPx.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(WindowsApplication::kClientWidth);
+			outPx.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(WindowsApplication::kClientHeight);
+			outClipW = ww;
+			return true;
+		};
+
+		const Matrix4x4& projMat = camera_->GetProjectionMatrix();
+		const float invTanHalfFovY = projMat.m[1][1];
+		const float clientH = static_cast<float>(WindowsApplication::kClientHeight);
+
+		auto checkEnemy = [&](IImGuiEditable* e, const Vector3& pos) {
+			if (!e || e->GetTag() != EntityTag::Enemy) return;
+			const auto& col = e->GetCollider();
+			if (!col.enabled || col.shape != ColliderShape::Sphere) return;
+			const Vector3 center{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
+
+			// 敵中心をスクリーン投影
+			Vector2 enemyPx{};
+			float clipW = 0.0f;
+			if (!projectToPixel(center, enemyPx, clipW)) return;
+
+			// カメラから敵中心までの距離
+			const Vector3 toEnemy{ center.x - camPos.x, center.y - camPos.y, center.z - camPos.z };
+			const float dist = std::sqrt(toEnemy.x * toEnemy.x + toEnemy.y * toEnemy.y + toEnemy.z * toEnemy.z);
+			if (dist < 1e-4f) return;
+
+			// 敵の見かけ半径(px)
+			const float pixelRadius = col.radius * clientH * invTanHalfFovY * 0.5f / dist;
+
+			// レティクルとの pixel 距離
+			const float dx = enemyPx.x - rp.x;
+			const float dy = enemyPx.y - rp.y;
+			const float dPx = std::sqrt(dx * dx + dy * dy);
+
+			// 許容範囲：見かけ半径 × アシスト倍率
+			const float assistThreshold = pixelRadius * aimAssistPixelScale_;
+
+			// 画面上最近の敵を更新（軽ホーミング先候補）
+			if (dPx < nearestPx) {
+				nearestPx = dPx;
+				nearestLocal = e;
+			}
+
+			if (dPx <= assistThreshold && dist < bestT) {
+				bestT = dist;
+				// ロックオン時は敵中心へ吸い込み（パルテナ式）
+				desiredTarget = center;
+				hitEnemyRadius = col.radius;
+				hitEnemy = true;
+				lockedLocal = e;
+			}
+		};
+
+		for (auto& p : dynamicPrimitives_) {
+			if (p) checkEnemy(p.get(), *p->GetEditableTranslate());
+		}
+		for (auto& a : dynamicAnimated_) {
+			if (a) checkEnemy(a.get(), a->GetTranslate());
+		}
+		for (auto& o : object3DInstances_) {
+			if (o) checkEnemy(o.get(), *o->GetEditableTranslate());
+		}
+
+		// 弾発射用は Lerp 前の即時 target（ロックオン直後でも遅れずに敵へ向かう）
+		firingTarget_ = desiredTarget;
+
+		// プレイヤー回転用は Lerp でぬるっと追従
+		if (!aimInitialized_) {
+			aimTarget_ = desiredTarget;
+			aimInitialized_ = true;
+		} else {
+			const float dtP = GetScaledDeltaTime(TimeGroup::Player);
+			const float alpha = (aimSmoothTime_ > 1e-4f)
+				? (1.0f - std::exp(-dtP / aimSmoothTime_))
+				: 1.0f;
+			aimTarget_.x += (desiredTarget.x - aimTarget_.x) * alpha;
+			aimTarget_.y += (desiredTarget.y - aimTarget_.y) * alpha;
+			aimTarget_.z += (desiredTarget.z - aimTarget_.z) * alpha;
+		}
+
+		// プレイヤー回転を player → aimTarget 方向に
+		const Vector3 playerPos = player_->GetTranslate();
+		const Vector3 toAim{ aimTarget_.x - playerPos.x, aimTarget_.y - playerPos.y, aimTarget_.z - playerPos.z };
+		const float horiz = std::sqrt(toAim.x * toAim.x + toAim.z * toAim.z);
+		if (horiz > 1e-4f || std::abs(toAim.y) > 1e-4f) {
+			const float yaw = std::atan2(toAim.x, toAim.z);
+			const float pitch = -std::atan2(toAim.y, horiz);
+			player_->SetRotate({ pitch, yaw, 0.0f });
+		}
+
+		// ロックオン時：敵の見かけサイズ（スクリーンpixel半径）を計算してレティクルへ
+		if (hitEnemy && reticle_) {
+			// 敵中心までのカメラからの距離（ray の t をそのまま使える）
+			const float distToEnemy = bestT;
+			// projection の m[1][1] = 1 / tan(fovY/2) なので、
+			// pixelRadius = radius * clientHeight * m[1][1] / (2 * dist)
+			const Matrix4x4& proj = camera_->GetProjectionMatrix();
+			const float invTanHalfFovY = proj.m[1][1];
+			const float pixelRadius = (distToEnemy > 1e-4f)
+				? (hitEnemyRadius * static_cast<float>(WindowsApplication::kClientHeight)
+					* invTanHalfFovY * 0.5f / distToEnemy)
+				: 0.0f;
+			// レティクルは外周マージン付きで少し大きめに（敵を囲む見た目に）
+			constexpr float kReticleMargin = 1.25f;
+			reticle_->SetLockOnTargetSize(pixelRadius * 2.0f * kReticleMargin);
+		}
+		reticle_->SetLockOn(hitEnemy);
+
+		// 弾発射時のホーミング選択用にメンバへ反映
+		lockedEnemy_  = lockedLocal;
+		nearestEnemy_ = nearestLocal;
+	}
+
+	// ゲーム時間が止まっている時はゲームロジック（射撃／弾の進行）をスキップ。
+	// TimeScale=0（"Pause" ボタン等）でシーンに敵を配置するときに弾が湧き続けないようにする。
+	const float worldDt = GetScaledDeltaTime(TimeGroup::World);
+	const bool gameFrozen = worldDt <= 0.0001f;
+
+	// ----- 射撃（プレイヤー位置から aim ターゲット方向へ） -----
+	if (!gameFrozen) {
+		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
+		fireTimer_ -= dtP;
+		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
+
+		bool firePressed = actions->IsPressed(static_cast<int>(Action::Fire));
+#ifdef _DEBUG
+		// Debug ビルドでは、マウスが Viewport 上に無く、かつ別の ImGui ウィンドウ
+		// （Save ボタン等）がマウスをキャプチャ中の時は Fire を抑制する。
+		// Viewport ホバー中はそのまま通す（Viewport も ImGui ウィンドウだから WantCaptureMouse は常に true）
+		{
+			bool mouseOverViewport = false;
+			if (auto* vp = ImGuiManager::Instance().GetViewportWindow()) {
+				mouseOverViewport = vp->IsHovered();
+			}
+			if (!mouseOverViewport && ImGui::GetIO().WantCaptureMouse) {
+				firePressed = false;
+			}
+		}
+#endif
+		if (firePressed && fireTimer_ <= 0.0f && player_) {
+			const Vector3 origin = player_->GetTranslate();
+			// 発射方向は Lerp 前の即時 target を使う（ロックオン直後の弾が遅れて飛ぶのを防ぐ）
+			Vector3 dir{ firingTarget_.x - origin.x, firingTarget_.y - origin.y, firingTarget_.z - origin.z };
+			const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+			if (len > 1e-6f) {
+				dir.x /= len; dir.y /= len; dir.z /= len;
+				// ロックオン中なら強ホーミング、外なら画面上最近の敵に軽ホーミング
+				IImGuiEditable* homeTarget = lockedEnemy_ ? lockedEnemy_ : nearestEnemy_;
+				const float homeStrength = lockedEnemy_
+					? bulletHomingLockOnBoost_
+					: (homeTarget ? bulletHomingStrength_ : 0.0f);
+				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
+				SpawnPlayerBullet(origin, dir, bulletSpeed_, bulletLifetime_,
+					bulletColliderGrowth_, homeTarget, homeStrength,
+					aimPlaneDistance_);
+				fireTimer_ = fireRate_;
+			}
+		}
+	}
+
+	// 弾の進行と寿命処理（World 時間軸で動かす）
+	if (!gameFrozen) {
+		UpdateBullets(worldDt);
+	}
+
+	// ウェーブ：経過秒で未発火エントリを発火
+	if (!gameFrozen) {
+		const float elapsed = GetElapsedSeconds();
+		for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
+			if (i >= waveFired_.size() || waveFired_[i]) continue;
+			const WaveEntry& we = currentWave_.entries[i];
+			if (elapsed >= we.time) {
+				SplineCurveActor* sp = FindDynamicSplineByName(we.splineName);
+				if (sp) {
+					SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd);
+				} else {
+					LogBuffer::Instance().Add(
+						std::string("Wave: spline not found in scene: ") + we.splineName,
+						LogBuffer::Level::Warning);
+				}
+				waveFired_[i] = true;
+			}
+		}
+	}
+
+	// スプライン追従敵の進行
+	if (!gameFrozen) {
+		UpdateMovingEnemies(worldDt);
+	}
 }
 
 void StagePlayScene::Draw() {
@@ -535,6 +866,10 @@ void StagePlayScene::Draw() {
 
 	// 3Dオブジェクトの共通描画設定（Object3D / Animated 描画前に必要）
 	object3DManager_->DrawSetting();
+
+	// rootParameter[3]=DirectionalLight / [5]=PointLight / [6]=SpotLight を bind
+	// （Object3DInstance::Draw はライト系を bind しないため、ここで一括設定しないと GBV #935 が出る）
+	LightManager::GetInstance()->BindLights(commandList);
 
 	// BaseScene の動的エンティティ描画
 	DrawDynamicObjects();
@@ -593,8 +928,281 @@ void StagePlayScene::Seek(float seconds) {
 		railCamera_->Update(0.0f);
 		camera_->Update();
 	}
+
+	// ----- ゲーム状態を Seek 先に合わせてリセット -----
+	// 現在生きている敵・弾・スプライン追従敵をすべて掃除
+	movingEnemies_.clear();
+	bullets_.clear();
+	for (auto& p : dynamicPrimitives_) {
+		if (!p) continue;
+		const EntityTag t = p->GetTag();
+		if (t == EntityTag::Enemy || t == EntityTag::Boss
+			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyBullet) {
+			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
+		}
+	}
+	dynamicPrimitives_.erase(
+		std::remove_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+			[](const std::unique_ptr<PrimitiveInstance>& p) { return !p; }),
+		dynamicPrimitives_.end());
+
+	for (auto& a : dynamicAnimated_) {
+		if (!a) continue;
+		const EntityTag t = a->GetTag();
+		if (t == EntityTag::Enemy || t == EntityTag::Boss) {
+			deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
+		}
+	}
+	dynamicAnimated_.erase(
+		std::remove_if(dynamicAnimated_.begin(), dynamicAnimated_.end(),
+			[](const std::unique_ptr<AnimatedObject3DInstance>& a) { return !a; }),
+		dynamicAnimated_.end());
+
+	// Wave 発火フラグを Seek 先に合わせて再構築：
+	// time <= seconds の entry は既発火扱い、それ以降は未発火（巻き戻して再発火可能に）
+	if (waveFired_.size() != currentWave_.entries.size()) {
+		waveFired_.assign(currentWave_.entries.size(), false);
+	}
+	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
+		waveFired_[i] = (currentWave_.entries[i].time <= seconds);
+	}
 }
 
 Camera* StagePlayScene::GetCamera() {
 	return camera_.get();
+}
+
+// =====================================================================
+// シーン保存 / 読込（DemoScene の実装を流用）
+// =====================================================================
+namespace {
+	JsonValue Vec3ToJson(const Vector3& v) {
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(v.x)));
+		arr.Push(JsonValue(static_cast<double>(v.y)));
+		arr.Push(JsonValue(static_cast<double>(v.z)));
+		return arr;
+	}
+	Vector3 JsonToVec3(const JsonValue& v, const Vector3& fallback = {}) {
+		if (!v.IsArray() || v.Size() < 3) return fallback;
+		return {
+			static_cast<float>(v[0].AsDouble(fallback.x)),
+			static_cast<float>(v[1].AsDouble(fallback.y)),
+			static_cast<float>(v[2].AsDouble(fallback.z))
+		};
+	}
+	JsonValue TransformToJson(const Vector3& s, const Vector3& r, const Vector3& t) {
+		JsonValue obj = JsonValue::MakeObject();
+		obj["scale"] = Vec3ToJson(s);
+		obj["rotate"] = Vec3ToJson(r);
+		obj["translate"] = Vec3ToJson(t);
+		return obj;
+	}
+}
+
+bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
+	JsonValue root = JsonValue::MakeObject();
+	root["scene"] = "StagePlayScene";
+
+	JsonValue arr = JsonValue::MakeArray();
+
+	for (const auto& o : object3DInstances_) {
+		if (!o) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Object3D";
+		e["name"] = o->GetName();
+		e["tag"] = std::string(GetTagName(o->GetTag()));
+		e["dir"] = o->GetDirectoryPath();
+		e["file"] = o->GetModelFileName();
+		e["transform"] = TransformToJson(o->GetScale(), o->GetRotate(), o->GetTranslate());
+		arr.Push(std::move(e));
+	}
+	for (const auto& a : dynamicAnimated_) {
+		if (!a) continue;
+		// プレイヤーは常にプレハブから復元するので保存しない（collider 等のプレハブ属性を確実に反映するため）
+		if (a->GetTag() == EntityTag::Player) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "AnimatedObject3D";
+		e["name"] = a->GetName();
+		e["tag"] = std::string(GetTagName(a->GetTag()));
+		e["dir"] = a->GetDirectoryPath();
+		e["file"] = a->GetModelFileName();
+		e["transform"] = TransformToJson(a->GetScale(), a->GetRotate(), a->GetTranslate());
+		arr.Push(std::move(e));
+	}
+	for (const auto& p : dynamicPrimitives_) {
+		if (!p) continue;
+		// 弾は一時オブジェクトなのでシーン保存に含めない
+		const EntityTag t = p->GetTag();
+		if (t == EntityTag::PlayerBullet || t == EntityTag::EnemyBullet) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Primitive";
+		e["name"] = p->GetName();
+		e["tag"] = std::string(GetTagName(t));
+		e["primitiveType"] = static_cast<int64_t>(p->GetPrimitiveType());
+		const Transform& tr = p->GetMesh().GetTransform();
+		e["transform"] = TransformToJson(tr.scale, tr.rotate, tr.translate);
+		if (!p->GetTextureFilePath().empty()) {
+			e["texture"] = p->GetTextureFilePath();
+		}
+		arr.Push(std::move(e));
+	}
+	for (const auto& s : dynamicSprites_) {
+		if (!s) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Sprite";
+		e["name"] = s->GetName();
+		e["tag"] = std::string(GetTagName(s->GetTag()));
+		e["texture"] = s->GetTextureFilePath();
+		const Vector2& pos = s->GetPosition();
+		JsonValue p = JsonValue::MakeArray();
+		p.Push(JsonValue(static_cast<double>(pos.x)));
+		p.Push(JsonValue(static_cast<double>(pos.y)));
+		e["pos"] = std::move(p);
+		arr.Push(std::move(e));
+	}
+	for (const auto& sp : dynamicSplines_) {
+		if (!sp) continue;
+		JsonValue e = JsonValue::MakeObject();
+		e["type"] = "Spline";
+		e["name"] = sp->GetName();
+		e["tag"] = std::string(GetTagName(sp->GetTag()));
+		JsonValue ptsArr = JsonValue::MakeArray();
+		for (const auto& pt : sp->GetPoints()) {
+			ptsArr.Push(Vec3ToJson(pt));
+		}
+		e["points"] = std::move(ptsArr);
+		arr.Push(std::move(e));
+	}
+
+	root["objects"] = std::move(arr);
+
+	std::filesystem::path path(filePath);
+	if (path.has_parent_path()) {
+		std::error_code ec;
+		std::filesystem::create_directories(path.parent_path(), ec);
+	}
+
+	bool ok = JsonWriter::WriteFile(filePath, root, { true, 2 });
+	LogBuffer::Instance().Add(
+		ok ? ("Scene saved: " + filePath)
+		   : ("Scene save FAILED: " + filePath),
+		ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
+	return ok;
+}
+
+bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
+	auto result = JsonParser::ParseFile(filePath);
+	if (!result.success) {
+		LogBuffer::Instance().Add(
+			"Scene load FAILED: " + filePath + " (" + result.errorMessage + ")",
+			LogBuffer::Level::Error);
+		return false;
+	}
+
+	// 既存の動的オブジェクトを全削除
+	for (auto& o : object3DInstances_) {
+		if (o) deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(o.release()));
+	}
+	object3DInstances_.clear();
+	for (auto& a : dynamicAnimated_) {
+		if (a) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
+	}
+	dynamicAnimated_.clear();
+	for (auto& m : dynamicAnimatedModels_) {
+		if (m) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedModelInstance>(m.release()));
+	}
+	dynamicAnimatedModels_.clear();
+	for (auto& s : dynamicSprites_) {
+		if (s) deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(s.release()));
+	}
+	dynamicSprites_.clear();
+	for (auto& p : dynamicPrimitives_) {
+		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
+	}
+	dynamicPrimitives_.clear();
+	for (auto& sp : dynamicSplines_) {
+		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
+	}
+	dynamicSplines_.clear();
+
+	// LoadScene で全エンティティが消えたので参照ポインタもリセット
+	player_ = nullptr;
+	movingEnemies_.clear();
+	bullets_.clear();
+
+	const JsonValue& objs = result.value["objects"];
+	if (!objs.IsArray()) return true;
+
+	for (size_t i = 0; i < objs.Size(); ++i) {
+		const JsonValue& e = objs[i];
+		std::string type = e["type"].AsString();
+		std::string name = e["name"].AsString();
+		EntityTag tag = TagFromName(e["tag"].AsString());
+		Vector3 sc = JsonToVec3(e["transform"]["scale"], { 1,1,1 });
+		Vector3 ro = JsonToVec3(e["transform"]["rotate"], { 0,0,0 });
+		Vector3 tr = JsonToVec3(e["transform"]["translate"], { 0,0,0 });
+
+		if (type == "Object3D") {
+			AddDynamicObject(e["dir"].AsString(), e["file"].AsString(), tr);
+			if (!object3DInstances_.empty()) {
+				auto& back = object3DInstances_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+			}
+		} else if (type == "AnimatedObject3D") {
+			AddDynamicAnimated(e["dir"].AsString(), e["file"].AsString(), tr);
+			if (!dynamicAnimated_.empty()) {
+				auto& back = dynamicAnimated_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+				if (tag == EntityTag::Player) player_ = back.get();
+			}
+		} else if (type == "Primitive") {
+			// 弾は一時オブジェクトなのでロードでも無視（過去の汚れた save 対策）
+			if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyBullet) {
+				continue;
+			}
+			int primType = static_cast<int>(e["primitiveType"].AsInt());
+			AddDynamicPrimitive(primType, tr);
+			if (!dynamicPrimitives_.empty()) {
+				auto& back = dynamicPrimitives_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+				back->SetScale(sc);
+				back->SetRotate(ro);
+				std::string tex = e["texture"].AsString();
+				if (!tex.empty()) back->SetTexture(tex);
+			}
+		} else if (type == "Sprite") {
+			float cx = static_cast<float>(e["pos"][0].AsDouble(0.0));
+			float cy = static_cast<float>(e["pos"][1].AsDouble(0.0));
+			AddDynamicSprite(e["texture"].AsString(), cx, cy);
+			if (!dynamicSprites_.empty()) {
+				auto& back = dynamicSprites_.back();
+				back->SetName(name);
+				back->SetTag(tag);
+			}
+		} else if (type == "Spline") {
+			AddDynamicSpline(static_cast<int>(tag));
+			if (!dynamicSplines_.empty()) {
+				auto& back = dynamicSplines_.back();
+				back->SetName(name);
+				back->MutablePoints().clear();
+				const JsonValue& pts = e["points"];
+				if (pts.IsArray()) {
+					for (size_t pi = 0; pi < pts.Size(); ++pi) {
+						back->AddPoint(JsonToVec3(pts[pi]));
+					}
+				}
+			}
+		}
+	}
+
+	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
+	return true;
 }

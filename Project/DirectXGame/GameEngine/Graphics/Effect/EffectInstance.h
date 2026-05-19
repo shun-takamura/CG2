@@ -45,11 +45,33 @@ public:
     /// </summary>
     void Cleanup();
 
+    // ----- ハンドル経由の外部制御 -----
+    void SetHandle(uint64_t h) { handle_ = h; }
+    uint64_t GetHandle() const { return handle_; }
+
+    /// <summary>
+    /// 弾丸など、エフェクト中心を毎フレーム動かしたいケース用。
+    /// 次の Update から新しい worldPos が使われる。
+    /// </summary>
+    void SetWorldPosition(const Vector3& pos) { worldPos_ = pos; }
+
+    /// <summary>
+    /// 外部から終了を要求。次の Update で loop を抜けて finished にする。
+    /// </summary>
+    void RequestStop() { stopRequested_ = true; }
+
 private:
+    /// <summary>
+    /// loop 用：elapsedTime と各 runtime をリセット（現在確保中のリソースは解放）。
+    /// </summary>
+    void ResetForLoop();
+
     EffectDef def_{};
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
     float elapsedTime_ = 0.0f;
     bool finished_ = false;
+    bool stopRequested_ = false;
+    uint64_t handle_ = 0;
     GPUParticleManager* gpu_ = nullptr;
 
     struct PrimitiveRuntime {

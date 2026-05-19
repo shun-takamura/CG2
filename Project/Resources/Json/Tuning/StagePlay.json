@@ -17,5 +17,18 @@
   },
   "camera": {
     "speed": 0.10000000149011612
+  },
+  "shooting": {
+    "bulletSpeed": 750,
+    "bulletLifetime": 2,
+    "fireRate": 0.11999999731779099,
+    "colliderGrowthPerMeter": 0.019999999552965164,
+    "homingStrength": 0.15000000596046448,
+    "homingLockOnBoost": 2
+  },
+  "aim": {
+    "planeDistance": 200,
+    "smoothTime": 0.079999998211860657,
+    "assistPixelScale": 1.3999999761581421
   }
 }

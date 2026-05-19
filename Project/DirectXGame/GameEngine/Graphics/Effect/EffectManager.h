@@ -11,6 +11,14 @@ class Camera;
 class GPUParticleManager;
 
 /// <summary>
+/// 再生中のエフェクトを外部から制御するためのハンドル。
+/// Play 系 API が返す値で、Stop / SetPosition / IsAlive に使う。
+/// 0 は無効値。
+/// </summary>
+using EffectHandle = uint64_t;
+constexpr EffectHandle kInvalidEffectHandle = 0;
+
+/// <summary>
 /// エフェクト定義の登録・再生・更新を担うシングルトン。
 /// </summary>
 class EffectManager {
@@ -65,15 +73,32 @@ public:
 
     // ===== 再生 =====
     /// <summary>
-    /// 指定名のエフェクトを worldPos に再生開始。defがなければ何もしない。
+    /// 指定名のエフェクトを worldPos に再生開始。defがなければ kInvalidEffectHandle。
+    /// 戻り値は外部から Stop / SetPosition に使うハンドル。
     /// </summary>
-    void Play(const std::string& effectName, const Vector3& worldPos);
+    EffectHandle Play(const std::string& effectName, const Vector3& worldPos);
 
     /// <summary>
     /// 指定 def をそのまま使ってインスタンス再生（未保存の editBuffer プレビュー用）。
     /// EffectManager の defs_ には登録されない。
     /// </summary>
-    void PlayWithDef(const EffectDef& def, const Vector3& worldPos);
+    EffectHandle PlayWithDef(const EffectDef& def, const Vector3& worldPos);
+
+    /// <summary>
+    /// 指定ハンドルのエフェクトが再生中なら停止要求を出す（次フレームで終了）。
+    /// loop エフェクトを外から終わらせる場合に使う。
+    /// </summary>
+    void Stop(EffectHandle handle);
+
+    /// <summary>
+    /// 指定ハンドルのエフェクト中心位置を更新（弾丸の追従用）。
+    /// </summary>
+    void SetPosition(EffectHandle handle, const Vector3& pos);
+
+    /// <summary>
+    /// 指定ハンドルが現在もアクティブなインスタンスを指しているか
+    /// </summary>
+    bool IsAlive(EffectHandle handle) const;
 
     /// <summary>
     /// 再生中のすべてのエフェクトを即終了させる
@@ -117,6 +142,12 @@ private:
 
     std::unordered_map<std::string, EffectDef> defs_;
     std::vector<std::unique_ptr<EffectInstance>> activeInstances_;
+
+    // ハンドル発行用カウンタ（0は無効値なので 1 から開始）
+    EffectHandle nextHandle_ = 1;
+
+    // ハンドル → activeInstances_ の生ポインタ。インスタンス破棄時に erase する。
+    std::unordered_map<EffectHandle, EffectInstance*> handleToInstance_;
 
     // 破棄予約：このフレームの Draw で参照されたPrimitiveMeshリソースを
     // CloseCommandList より先に解放すると D3D12 ERROR #921 になるため、

@@ -7,6 +7,7 @@
 #include "Components/PrefabManager.h"
 #include "Object3DInstance.h"
 #include "AnimatedObject3DInstance.h"
+#include "PrimitiveInstance.h"
 #include "LogBuffer.h"
 
 #include <cstring>
@@ -105,12 +106,13 @@ void InspectorWindow::OnDraw() {
     // 各オブジェクトが実装した編集UIを描画
     selected->OnImGuiInspector();
 
-    // ----- Save as Prefab（Object3D / AnimatedObject3D 両対応） -----
+    // ----- Save as Prefab（Object3D / AnimatedObject3D / Primitive 対応） -----
     {
         const std::string typeName = selected->GetTypeName();
         const bool isObj3D    = (typeName == "Object3D");
         const bool isAnimated = (typeName == "AnimatedObject3D");
-        if (isObj3D || isAnimated) {
+        const bool isPrimitive = (typeName == "Primitive");
+        if (isObj3D || isAnimated || isPrimitive) {
             ImGui::Separator();
             if (ImGui::CollapsingHeader("Prefab", ImGuiTreeNodeFlags_DefaultOpen)) {
                 static char prefabNameBuf[128] = "";
@@ -125,24 +127,51 @@ void InspectorWindow::OnDraw() {
                     PrefabDef def{};
                     def.name = prefabNameBuf;
                     def.tag = selected->GetTag();
-                    def.isAnimated = isAnimated;
 
                     if (isObj3D) {
+                        def.kind = PrefabKind::Object3D;
+                        def.isAnimated = false;
                         auto* obj = static_cast<Object3DInstance*>(selected);
                         def.modelDir = obj->GetDirectoryPath();
                         def.modelFile = obj->GetModelFileName();
                         def.defaultScale = obj->GetScale();
                         def.defaultRotate = obj->GetRotate();
-                    } else {
+                    } else if (isAnimated) {
+                        def.kind = PrefabKind::Animated;
+                        def.isAnimated = true;
                         auto* obj = static_cast<AnimatedObject3DInstance*>(selected);
                         def.modelDir = obj->GetDirectoryPath();
                         def.modelFile = obj->GetModelFileName();
                         def.defaultScale = obj->GetScale();
                         def.defaultRotate = obj->GetRotate();
-                        // 現在のモデルが読んでいる .anim をデフォルトとして覚える
-                        // （instantiate 時に PlayAnimation で適用）
-                        // AnimatedObject3DInstance 経由ではなくモデル側に保持しているので
-                        // ここでは空のままにしておき、必要なら別途編集する。
+                    } else { // isPrimitive
+                        def.kind = PrefabKind::Primitive;
+                        def.isAnimated = false;
+                        auto* prim = static_cast<PrimitiveInstance*>(selected);
+                        const auto& tr = prim->GetMesh().GetTransform();
+                        def.defaultScale = tr.scale;
+                        def.defaultRotate = tr.rotate;
+
+                        auto& pp = def.primitiveParams;
+                        pp.primitiveType = static_cast<int>(prim->GetPrimitiveType());
+                        pp.texturePath   = prim->GetTextureFilePath();
+                        pp.color         = prim->GetMesh().GetColor();
+                        pp.blendMode     = static_cast<int>(prim->GetMesh().GetBlendMode());
+                        pp.depthWrite    = prim->GetMesh().GetDepthWrite();
+                        pp.alphaReference = prim->GetAlphaReference();
+                        pp.cullBackface  = prim->GetCullBackface();
+                        pp.samplerMode   = prim->GetSamplerMode();
+                        pp.uvAutoScroll  = prim->GetAutoScroll();
+                        pp.uvScrollSpeed = prim->GetScrollSpeed();
+                        pp.uvOffset      = prim->GetManualUVOffset();
+                        pp.uvScale       = prim->GetUVScale();
+                        pp.uvFlipU       = prim->GetFlipU();
+                        pp.uvFlipV       = prim->GetFlipV();
+                        pp.billboardMode = prim->GetMesh().GetBillboardMode();
+                        pp.timeGroup     = prim->GetTimeGroup();
+                        pp.ringParams     = prim->GetRingParams();
+                        pp.cylinderParams = prim->GetCylinderParams();
+                        pp.helixParams    = prim->GetHelixParams();
                     }
 
                     const auto& col = selected->GetCollider();

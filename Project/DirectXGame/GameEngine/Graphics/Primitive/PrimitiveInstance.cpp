@@ -3,6 +3,7 @@
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "SceneManager.h"
 #include "BaseScene.h"
+#include "Components/Prefab.h"
 #include "imgui.h"
 
 const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
@@ -120,6 +121,51 @@ void PrimitiveInstance::DrawIdPass() {
 void PrimitiveInstance::SetTexture(const std::string& filePath) {
     textureFilePath_ = filePath;
     mesh_.SetTexture(filePath);
+}
+
+void PrimitiveInstance::ApplyPrefabParams(const PrimitivePrefabParams& p) {
+    // 形状パラメータをコピーしてから再生成（Ring/Cylinder/Helix のみ実体に影響）
+    ringParams_     = p.ringParams;
+    cylinderParams_ = p.cylinderParams;
+    helixParams_    = p.helixParams;
+    if (primitiveType_ == PrimitiveType::Ring ||
+        primitiveType_ == PrimitiveType::Cylinder ||
+        primitiveType_ == PrimitiveType::Helix) {
+        RegenerateGeometry();
+    }
+
+    // テクスチャ
+    if (!p.texturePath.empty()) {
+        SetTexture(p.texturePath);
+    }
+
+    // マテリアル
+    mesh_.SetColor(p.color);
+    mesh_.SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(p.blendMode));
+    mesh_.SetDepthWrite(p.depthWrite);
+    mesh_.SetAlphaReference(p.alphaReference);
+    mesh_.SetCullBackface(p.cullBackface);
+    mesh_.SetSamplerMode(p.samplerMode);
+    mesh_.SetBillboardMode(p.billboardMode);
+
+    // UV
+    mesh_.SetUVScroll(p.uvAutoScroll ? p.uvScrollSpeed : Vector2{ 0.0f, 0.0f });
+    mesh_.SetUVOffset(p.uvOffset);
+    mesh_.SetUVScale(p.uvScale);
+    mesh_.SetUVFlipU(p.uvFlipU);
+    mesh_.SetUVFlipV(p.uvFlipV);
+
+    // Inspector 側に保持している二重管理メンバも同期
+    autoScrollEnabled_ = p.uvAutoScroll;
+    scrollSpeed_       = p.uvScrollSpeed;
+    manualUVOffset_    = p.uvOffset;
+    uvScale_           = p.uvScale;
+    flipU_             = p.uvFlipU;
+    flipV_             = p.uvFlipV;
+    alphaReference_    = p.alphaReference;
+    cullBackface_      = p.cullBackface;
+    samplerMode_       = p.samplerMode;
+    timeGroup_         = p.timeGroup;
 }
 
 void PrimitiveInstance::OnImGuiInspector() {

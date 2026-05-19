@@ -223,6 +223,19 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         }
     }
 
+    // 外部からの停止要求：即終了させる
+    if (stopRequested_) {
+        Cleanup();
+        finished_ = true;
+        return;
+    }
+
+    // ループ：totalDuration を超えたら全 runtime を片付けて最初から再生し直す
+    if (def_.loop && elapsedTime_ >= def_.totalDuration) {
+        ResetForLoop();
+        return;
+    }
+
     // 全コンポーネント完了判定
     bool allDone = true;
     for (auto& rt : primitives_) { if (!rt.finished) { allDone = false; break; } }
@@ -238,6 +251,36 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
     if (allDone && elapsedTime_ >= def_.totalDuration) {
         finished_ = true;
     }
+}
+
+void EffectInstance::ResetForLoop() {
+    // 現在確保中のライト・サウンドはここで解放（Primitive renderer は Update 内で
+    // 自分の finished と共に reset 済みなので再生成される）
+    LightManager* lm = LightManager::GetInstance();
+    for (auto& rt : lights_) {
+        if (rt.slot != kInvalidLightSlot) {
+            if (rt.isSpot) lm->ReleaseSpotLight(rt.slot);
+            else           lm->ReleasePointLight(rt.slot);
+        }
+        rt = LightRuntime{};
+        rt.slot = kInvalidLightSlot;
+    }
+    SoundManager* sm = SoundManager::GetInstance();
+    for (auto& rt : sounds_) {
+        if (rt.handle != 0) {
+            sm->Stop3DSound(rt.handle);
+        }
+        rt = SoundRuntime{};
+    }
+    for (auto& rt : primitives_) {
+        rt.renderer.reset();
+        rt.started = false;
+        rt.finished = false;
+    }
+    for (auto& rt : particles_) {
+        rt.burstFired = false;
+    }
+    elapsedTime_ = 0.0f;
 }
 
 void EffectInstance::Draw() {

@@ -147,6 +147,41 @@ public:
 	/// </summary>
 	virtual void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {});
 
+	/// <summary>
+	/// プレイヤー弾を1発スポーン。Primitive プレハブから生成し、velocity と寿命を関連付ける。
+	/// 進行と寿命処理は UpdateBullets() が毎フレーム行う。
+	/// colliderGrowthPerMeter > 0 のとき、弾が原点から離れるほど collider 半径を線形に拡大する。
+	/// homingTarget != nullptr かつ homingStrength > 0 のとき、target の動的位置へ毎フレ補正する
+	/// （軽ホーミング。ロックオンや必殺技で同じ仕組みを共有する）。
+	/// </summary>
+	virtual void SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
+		float speed = 80.0f, float lifetime = 2.0f,
+		float colliderGrowthPerMeter = 0.0f,
+		IImGuiEditable* homingTarget = nullptr,
+		float homingStrength = 0.0f,
+		float maxTravelDistance = 0.0f, // 0 で無制限
+		const std::string& prefabName = "TemporaryPlayerBullet");
+
+	/// <summary>
+	/// 動的エンティティ（Object3D / Animated / Primitive）を遅延破棄キューへ移送する。
+	/// 衝突コールバック等から安全に呼べる（次フレームの ProcessAsyncLoads で実体破棄）。
+	/// 該当が見つからなければ何もしない。
+	/// </summary>
+	void DestroyDynamicEntity(IImGuiEditable* e);
+
+	/// <summary>
+	/// 指定プレハブから敵を1体スポーンし、指定スプラインに沿って speed[t/sec] で進ませる。
+	/// 進行と寿命処理は UpdateMovingEnemies() が毎フレーム行う。
+	/// 戻り値はスポーン直後のエンティティポインタ（失敗時 nullptr）。
+	/// </summary>
+	virtual IImGuiEditable* SpawnEnemyOnSpline(const std::string& prefabName,
+		SplineCurveActor* spline, float speed = 0.1f, bool removeAtEnd = true);
+
+	/// <summary>
+	/// シーン内の SplineCurveActor を名前で取得（無ければ nullptr）
+	/// </summary>
+	SplineCurveActor* FindDynamicSplineByName(const std::string& name);
+
 #ifdef USE_IMGUI
 	/// <summary>
 	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か
@@ -340,6 +375,42 @@ protected:
 
 	/// <summary>動的スプラインの DebugDraw キュー積み</summary>
 	void DrawDynamicSplinesDebug();
+
+	/// <summary>
+	/// 弾の進行（velocity*dt 移動）と寿命減算、死亡弾の削除。派生 Update から呼ぶ。
+	/// </summary>
+	void UpdateBullets(float deltaTime);
+
+	struct BulletRuntime {
+		PrimitiveInstance* primitive = nullptr; // dynamicPrimitives_ 内の生ポインタ
+		Vector3 velocity{ 0.0f, 0.0f, 0.0f };
+		float speed = 0.0f;                // 弾速（ホーミング時に方向だけ変えるため保持）
+		float remainingLifetime = 0.0f;
+		// 進行距離に応じた collider 拡大用
+		Vector3 originPos{ 0.0f, 0.0f, 0.0f };
+		float baseColliderRadius = 0.0f;
+		float colliderGrowthPerMeter = 0.0f;
+		// ホーミング（他システムから再利用できるよう BulletRuntime にメンバとして持つ）
+		IImGuiEditable* homingTarget = nullptr;
+		float homingStrength = 0.0f;       // [/sec] 大きいほど早く target 方向に向く
+		// 最大進行距離（origin からこれを超えたら強制消滅）。0 で無制限。
+		float maxTravelDistance = 0.0f;
+	};
+	std::vector<BulletRuntime> bullets_;
+
+	/// <summary>
+	/// スプライン追従敵の進行（t += speed*dt）と終端処理。派生 Update から呼ぶ。
+	/// </summary>
+	void UpdateMovingEnemies(float deltaTime);
+
+	struct MovingEnemy {
+		IImGuiEditable* entity = nullptr; // Primitive / Object3D / Animated いずれか
+		SplineCurveActor* spline = nullptr;
+		float t = 0.0f;
+		float speed = 0.1f;
+		bool  removeAtEnd = true;
+	};
+	std::vector<MovingEnemy> movingEnemies_;
 
 	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
 	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する

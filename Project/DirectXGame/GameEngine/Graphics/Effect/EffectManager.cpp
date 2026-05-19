@@ -18,6 +18,8 @@ void EffectManager::Initialize(GPUParticleManager* gpuParticleManager) {
     defs_.clear();
     activeInstances_.clear();
     pendingDelete_.clear();
+    handleToInstance_.clear();
+    nextHandle_ = 1;
 }
 
 void EffectManager::Finalize() {
@@ -25,6 +27,7 @@ void EffectManager::Finalize() {
     // シーン終了時は GPU が待たれている前提なので pendingDelete もここで安全に解放
     pendingDelete_.clear();
     defs_.clear();
+    handleToInstance_.clear();
 }
 
 //==========================================================
@@ -119,21 +122,45 @@ std::vector<std::string> EffectManager::ListDefNames() const {
 // 再生
 //==========================================================
 
-void EffectManager::Play(const std::string& effectName, const Vector3& worldPos) {
+EffectHandle EffectManager::Play(const std::string& effectName, const Vector3& worldPos) {
     const EffectDef* def = FindDef(effectName);
     if (!def) {
         Log(std::string("EffectManager: Play — no def for ") + effectName);
-        return;
+        return kInvalidEffectHandle;
     }
     auto inst = std::make_unique<EffectInstance>();
     inst->Initialize(*def, worldPos, gpuParticleManager_);
+    EffectHandle h = nextHandle_++;
+    inst->SetHandle(h);
+    handleToInstance_[h] = inst.get();
     activeInstances_.push_back(std::move(inst));
+    return h;
 }
 
-void EffectManager::PlayWithDef(const EffectDef& def, const Vector3& worldPos) {
+EffectHandle EffectManager::PlayWithDef(const EffectDef& def, const Vector3& worldPos) {
     auto inst = std::make_unique<EffectInstance>();
     inst->Initialize(def, worldPos, gpuParticleManager_);
+    EffectHandle h = nextHandle_++;
+    inst->SetHandle(h);
+    handleToInstance_[h] = inst.get();
     activeInstances_.push_back(std::move(inst));
+    return h;
+}
+
+void EffectManager::Stop(EffectHandle handle) {
+    auto it = handleToInstance_.find(handle);
+    if (it == handleToInstance_.end()) return;
+    if (it->second) it->second->RequestStop();
+}
+
+void EffectManager::SetPosition(EffectHandle handle, const Vector3& pos) {
+    auto it = handleToInstance_.find(handle);
+    if (it == handleToInstance_.end()) return;
+    if (it->second) it->second->SetWorldPosition(pos);
+}
+
+bool EffectManager::IsAlive(EffectHandle handle) const {
+    return handleToInstance_.find(handle) != handleToInstance_.end();
 }
 
 void EffectManager::StopAll() {
@@ -147,6 +174,7 @@ void EffectManager::StopAll() {
         if (inst) pendingDelete_.push_back(std::move(inst));
     }
     activeInstances_.clear();
+    handleToInstance_.clear();
 }
 
 //==========================================================
@@ -167,6 +195,7 @@ void EffectManager::Update(float deltaTime) {
     for (auto it = activeInstances_.begin(); it != activeInstances_.end();) {
         if (!(*it) || (*it)->IsFinished()) {
             if (*it) {
+                handleToInstance_.erase((*it)->GetHandle());
                 (*it)->Cleanup(); // ライトはここで解放してOK
                 pendingDelete_.push_back(std::move(*it));
             }
