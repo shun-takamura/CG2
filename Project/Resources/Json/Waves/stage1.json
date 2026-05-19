@@ -1,0 +1,26 @@
+{
+  "name": "stage1",
+  "entries": [
+    {
+      "time": 2.0,
+      "prefab": "dummy_enemy",
+      "splineName": "EnemyPath_01",
+      "speed": 0.15,
+      "removeAtEnd": true
+    },
+    {
+      "time": 4.0,
+      "prefab": "dummy_enemy",
+      "splineName": "EnemyPath_01",
+      "speed": 0.15,
+      "removeAtEnd": true
+    },
+    {
+      "time": 6.5,
+      "prefab": "dummy_enemy",
+      "splineName": "EnemyPath_01",
+      "speed": 0.2,
+      "removeAtEnd": true
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 #include "BaseScene.h"
 #include "Vector2.h"
 #include "Vector3.h"
+#include "Wave/WaveDef.h"
 #include <memory>
+#include <vector>
 
 class Camera;
 class Skybox;
@@ -37,6 +39,10 @@ public:
 
 	Camera* GetCamera() override;
 
+	// シーン配置（プレハブ・スプライン等）の保存/復元
+	bool SaveSceneToJson(const std::string& filePath) override;
+	bool LoadSceneFromJson(const std::string& filePath) override;
+
 private:
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
@@ -56,6 +62,33 @@ private:
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
 	Vector2 playerClipMargin_{ 0.1f, 0.1f };           // クリップ空間で許す画面外マージン（X/Y）
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い
+
+	// ----- 射撃チューニング -----
+	float bulletSpeed_    = 80.0f;   // 弾速 [units/sec]
+	float bulletLifetime_ = 2.0f;    // 寿命 [sec]
+	float fireRate_       = 0.12f;   // 連射間隔 [sec]
+	float fireTimer_      = 0.0f;    // 次に撃てるまでの残り秒（ランタイム）
+	float bulletColliderGrowth_ = 0.02f; // 進行 1m あたりの collider 半径拡大量
+	float bulletHomingStrength_ = 1.5f;   // 軽ホーミング（target 方向への指数収束 [/sec]）
+	float bulletHomingLockOnBoost_ = 4.0f; // ロックオン中の弾は強めに引き寄せる（合計値）
+
+	// ----- 照準（aim）チューニング -----
+	// カメラからの「狙いの面」までの距離。弾速・寿命とは独立。
+	// 非ロックオン時、レティクル方向のレイがこの面と交わる点を target にする。
+	// 値を増やすほど画面外の敵にもレティクルが効く（弾は当然そこまで届くとは限らない）。
+	float aimPlaneDistance_ = 80.0f;
+	float aimSmoothTime_   = 0.08f;   // Lerp 時定数（プレイヤー回転用、0.0=即時）
+	float aimAssistPixelScale_ = 1.4f; // 見かけ半径×倍率＝スクリーン上のロックオン許容ピクセル
+	// ランタイム状態
+	Vector3 aimTarget_{ 0.0f, 0.0f, 0.0f };       // Lerp 済み（プレイヤー回転用）
+	Vector3 firingTarget_{ 0.0f, 0.0f, 0.0f };    // 即時（弾の発射方向用）
+	IImGuiEditable* lockedEnemy_ = nullptr;        // 現フレームのロックオン対象（ホーミング元・強）
+	IImGuiEditable* nearestEnemy_ = nullptr;       // 画面上で最近の敵（軽ホーミング先）
+	bool    aimInitialized_ = false;
+
+	// ----- ウェーブ -----
+	WaveDef currentWave_;
+	std::vector<bool> waveFired_;     // entries と同じサイズ。発火済みフラグ
 
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };

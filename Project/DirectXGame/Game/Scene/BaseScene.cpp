@@ -27,6 +27,7 @@
 #include "Vector4.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 #ifdef USE_IMGUI
 #include "imgui.h"
@@ -480,6 +481,282 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		if (def->hasCollider) applyCollider(back->GetCollider());
+	}
+}
+
+SplineCurveActor* BaseScene::FindDynamicSplineByName(const std::string& name) {
+	for (auto& s : dynamicSplines_) {
+		if (s && s->GetName() == name) return s.get();
+	}
+	return nullptr;
+}
+
+IImGuiEditable* BaseScene::SpawnEnemyOnSpline(const std::string& prefabName,
+	SplineCurveActor* spline, float speed, bool removeAtEnd) {
+	if (!spline || spline->GetPointCount() < 2) {
+		LogBuffer::Instance().Add(
+			std::string("SpawnEnemyOnSpline: invalid spline for ") + prefabName,
+			LogBuffer::Level::Warning);
+		return nullptr;
+	}
+
+	// プレハブの種別を問わず、各 dynamic 配列のサイズ差分でスポーン対象を特定する
+	const size_t prevPrim = dynamicPrimitives_.size();
+	const size_t prevAnim = dynamicAnimated_.size();
+	const size_t prevObj  = object3DInstances_.size();
+
+	const Vector3 startPos = spline->Sample(0.0f);
+	InstantiatePrefab(prefabName, startPos);
+
+	IImGuiEditable* spawned = nullptr;
+	if (dynamicPrimitives_.size() != prevPrim) {
+		spawned = dynamicPrimitives_.back().get();
+		// transform CB を即時反映（弾と同じ理由）
+		dynamicPrimitives_.back()->Update();
+	} else if (dynamicAnimated_.size() != prevAnim) {
+		spawned = dynamicAnimated_.back().get();
+	} else if (object3DInstances_.size() != prevObj) {
+		spawned = object3DInstances_.back().get();
+	}
+
+	if (!spawned) {
+		LogBuffer::Instance().Add(
+			std::string("SpawnEnemyOnSpline: prefab not found or not instantiable: ") + prefabName,
+			LogBuffer::Level::Warning);
+		return nullptr;
+	}
+
+	movingEnemies_.push_back(MovingEnemy{ spawned, spline, 0.0f, speed, removeAtEnd });
+	return spawned;
+}
+
+void BaseScene::UpdateMovingEnemies(float deltaTime) {
+	if (movingEnemies_.empty()) return;
+
+	for (auto& m : movingEnemies_) {
+		if (!m.entity || !m.spline) continue;
+		m.t += m.speed * deltaTime;
+		const float clamped = (m.t < 0.0f) ? 0.0f : (m.t > 1.0f ? 1.0f : m.t);
+		const Vector3 pos = m.spline->Sample(clamped);
+		if (Vector3* t = m.entity->GetEditableTranslate()) {
+			*t = pos;
+		}
+	}
+
+	// 終端到達した敵を削除
+	for (auto it = movingEnemies_.begin(); it != movingEnemies_.end();) {
+		if (it->entity && it->spline && it->t >= 1.0f) {
+			if (it->removeAtEnd) {
+				DestroyDynamicEntity(it->entity);
+			}
+			it = movingEnemies_.erase(it);
+		} else if (!it->entity) {
+			// 衝突等で先に消されたケース
+			it = movingEnemies_.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
+	if (!e) return;
+
+	// movingEnemies_ から該当ポインタを無効化（衝突で先に死んだケース等）
+	for (auto& m : movingEnemies_) {
+		if (m.entity == e) m.entity = nullptr;
+	}
+	// ホーミング対象として参照している弾があれば無効化（dangling 参照防止）
+	for (auto& b : bullets_) {
+		if (b.homingTarget == e) b.homingTarget = nullptr;
+	}
+
+	// Primitive
+	{
+		auto it = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+			[e](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == e; });
+		if (it != dynamicPrimitives_.end()) {
+			// 関連する弾エントリも掃除
+			PrimitiveInstance* prim = it->get();
+			for (auto& b : bullets_) {
+				if (b.primitive == prim) b.remainingLifetime = -1.0f;
+			}
+			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(it->release()));
+			dynamicPrimitives_.erase(it);
+			return;
+		}
+	}
+	// Object3D
+	{
+		auto it = std::find_if(object3DInstances_.begin(), object3DInstances_.end(),
+			[e](const std::unique_ptr<Object3DInstance>& p) { return p.get() == e; });
+		if (it != object3DInstances_.end()) {
+			deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(it->release()));
+			object3DInstances_.erase(it);
+			return;
+		}
+	}
+	// Animated
+	{
+		auto it = std::find_if(dynamicAnimated_.begin(), dynamicAnimated_.end(),
+			[e](const std::unique_ptr<AnimatedObject3DInstance>& p) { return p.get() == e; });
+		if (it != dynamicAnimated_.end()) {
+			deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(it->release()));
+			dynamicAnimated_.erase(it);
+			return;
+		}
+	}
+}
+
+void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
+	float speed, float lifetime, float colliderGrowthPerMeter,
+	IImGuiEditable* homingTarget, float homingStrength,
+	float maxTravelDistance,
+	const std::string& prefabName) {
+	const size_t prevCount = dynamicPrimitives_.size();
+	InstantiatePrefab(prefabName, pos);
+	if (dynamicPrimitives_.size() != prevCount + 1) {
+		// プレハブが Primitive 種別でなかった、または見つからなかった
+		LogBuffer::Instance().Add(
+			std::string("SpawnPlayerBullet: prefab not spawned as primitive: ") + prefabName,
+			LogBuffer::Level::Warning);
+		return;
+	}
+
+	// velocity = direction * speed（direction は呼び出し側が正規化済みの前提）
+	const Vector3 vel{ direction.x * speed, direction.y * speed, direction.z * speed };
+
+	// 重要：UpdateDynamicPrimitives はこのフレームの早い段階で既に走り終わっている。
+	// 今 spawn した primitive は今フレームの Update がスキップされるため、
+	// transform CB が初期値 (0,0,0) のまま Draw されてしまう（弾がワールド原点で巨大に見える原因）。
+	// ここで明示的に Update を1回呼んで CB をスポーン位置で確定させる。
+	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
+	if (spawned) {
+		spawned->Update();
+
+		// 敵に当たったら弾と敵を消す + ヒットエフェクト発火
+		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+			if (!other) return;
+			// 弾が複数回ヒットしないよう、相手が Enemy/Boss の時だけ反応
+			const EntityTag tag = other->GetTag();
+			if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+
+			// ヒット位置（弾の現在位置）にヒットエフェクトを再生
+			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
+			if (const Vector3* t = spawned->GetEditableTranslate()) {
+				hitPos = *t;
+			}
+			EffectManager::GetInstance()->Play("Hit_Small", hitPos);
+
+			// この弾の bullets_ エントリを死亡フラグに（UpdateBullets が次フレームで掃除）
+			for (auto& b : bullets_) {
+				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
+			}
+			// 相手（敵）も削除
+			DestroyDynamicEntity(other);
+		};
+	}
+
+	BulletRuntime br{};
+	br.primitive = spawned;
+	br.velocity = vel;
+	br.speed = speed;
+	br.remainingLifetime = lifetime;
+	br.originPos = pos;
+	br.baseColliderRadius = spawned ? spawned->GetCollider().radius : 0.0f;
+	br.colliderGrowthPerMeter = colliderGrowthPerMeter;
+	br.homingTarget = homingTarget;
+	br.homingStrength = homingStrength;
+	br.maxTravelDistance = maxTravelDistance;
+	bullets_.push_back(br);
+}
+
+void BaseScene::UpdateBullets(float deltaTime) {
+	if (bullets_.empty()) return;
+
+	for (auto& b : bullets_) {
+		if (!b.primitive) continue;
+		Vector3* t = b.primitive->GetEditableTranslate();
+		if (!t) {
+			b.remainingLifetime -= deltaTime;
+			continue;
+		}
+
+		// ----- ホーミング（target が生きていれば velocity を target 方向へ補正） -----
+		// 弾速の大きさは保持し、方向だけを target に向けて指数減衰で寄せる。
+		if (b.homingTarget && b.homingStrength > 0.0f && b.speed > 0.0f) {
+			const Vector3* tp = b.homingTarget->GetEditableTranslate();
+			if (tp) {
+				const float dx = tp->x - t->x;
+				const float dy = tp->y - t->y;
+				const float dz = tp->z - t->z;
+				const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+				if (dist > 1e-4f) {
+					const float wantedX = dx / dist;
+					const float wantedY = dy / dist;
+					const float wantedZ = dz / dist;
+					const float curX = b.velocity.x / b.speed;
+					const float curY = b.velocity.y / b.speed;
+					const float curZ = b.velocity.z / b.speed;
+					const float alpha = 1.0f - std::exp(-b.homingStrength * deltaTime);
+					float nx = curX + (wantedX - curX) * alpha;
+					float ny = curY + (wantedY - curY) * alpha;
+					float nz = curZ + (wantedZ - curZ) * alpha;
+					const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
+					if (nlen > 1e-6f) {
+						nx /= nlen; ny /= nlen; nz /= nlen;
+						b.velocity = { nx * b.speed, ny * b.speed, nz * b.speed };
+					}
+				}
+			} else {
+				// target が消えた（コライダー側で destroy 等）→ ホーミング解除
+				b.homingTarget = nullptr;
+			}
+		}
+
+		// 移動
+		t->x += b.velocity.x * deltaTime;
+		t->y += b.velocity.y * deltaTime;
+		t->z += b.velocity.z * deltaTime;
+
+		// 進行距離（colliderGrowth と maxTravelDistance の両方で使う）
+		float traveled = 0.0f;
+		if (b.colliderGrowthPerMeter > 0.0f || b.maxTravelDistance > 0.0f) {
+			const float dx = t->x - b.originPos.x;
+			const float dy = t->y - b.originPos.y;
+			const float dz = t->z - b.originPos.z;
+			traveled = std::sqrt(dx * dx + dy * dy + dz * dz);
+		}
+
+		// 進行距離に応じて collider 半径を拡大（STG 的「遠距離ほど判定太く」）
+		if (b.colliderGrowthPerMeter > 0.0f) {
+			b.primitive->GetCollider().radius =
+				b.baseColliderRadius + traveled * b.colliderGrowthPerMeter;
+		}
+
+		// 最大到達距離（aim plane）を超えたら消滅
+		if (b.maxTravelDistance > 0.0f && traveled >= b.maxTravelDistance) {
+			b.remainingLifetime = -1.0f;
+		} else {
+			b.remainingLifetime -= deltaTime;
+		}
+	}
+
+	// 寿命切れの弾を削除：bullets_ から外し、対応する dynamicPrimitives_ も deferredDeletes_ へ
+	for (auto it = bullets_.begin(); it != bullets_.end();) {
+		if (it->remainingLifetime > 0.0f && it->primitive) {
+			++it;
+			continue;
+		}
+		// 該当 primitive を dynamicPrimitives_ から取り出す
+		PrimitiveInstance* dead = it->primitive;
+		auto pit = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+			[dead](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == dead; });
+		if (pit != dynamicPrimitives_.end()) {
+			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(pit->release()));
+			dynamicPrimitives_.erase(pit);
+		}
+		it = bullets_.erase(it);
 	}
 }
 
