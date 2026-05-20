@@ -49,9 +49,11 @@ jobs:
 
           # 1回の find 実行で全件を検索
           # 1. .git を除外
-          # 2. 不要なディレクトリを検索(-type d)し、見つけたらパスを出力(-print)し、その中身を枝刈り(-prune)
-          # 3. または (-o) 不要なファイルを検索(-type f)し、パスを出力(-print)
+          # 2. DirectStorage（bin/x64はSDK付属で必要なため除外）
+          # 3. 不要なディレクトリを検索(-type d)し、見つけたらパスを出力(-print)し、その中身を枝刈り(-prune)
+          # 4. または (-o) 不要なファイルを検索(-type f)し、パスを出力(-print)
           UNWANTED_LIST=$(find . -path "./.git" -prune -o \
+            -path "./Project/externals/DirectStorage" -prune -o \
             \( \( "${DIR_CONDITIONS[@]}" \) -type d -print -prune \) -o \
             \( \( "${NAME_CONDITIONS[@]}" \) -type f -print \)
           )
