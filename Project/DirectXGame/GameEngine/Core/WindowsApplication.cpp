@@ -54,13 +54,7 @@ void WindowsApplication::Initialize(const wchar_t* title){
     wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
     RegisterClass(&wc_);
 
-    // Debug(エディタ)ビルドのみリサイズ可能。
-    // Release はゲーム本体が 1600×900 固定で描画されるためリサイズ不可のまま残す。
-#ifdef _DEBUG
     DWORD windowStyle = WS_OVERLAPPEDWINDOW;
-#else
-    DWORD windowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-#endif
 
     RECT wrc = { 0,0,kClientWidth,kClientHeight };
     AdjustWindowRect(&wrc, windowStyle, false);

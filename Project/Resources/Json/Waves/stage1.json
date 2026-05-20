@@ -1,26 +1,29 @@
 {
   "name": "stage1",
-  "entries": [
+  "spawn_entries": [
     {
-      "time": 2.0,
+      "enemy_type": "Drone",
       "prefab": "dummy_enemy",
-      "splineName": "EnemyPath_01",
-      "speed": 0.15,
-      "removeAtEnd": true
+      "trigger_t": 0.05,
+      "retreat_t": 0.15,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.15
     },
     {
-      "time": 4.0,
+      "enemy_type": "Drone",
       "prefab": "dummy_enemy",
-      "splineName": "EnemyPath_01",
-      "speed": 0.15,
-      "removeAtEnd": true
+      "trigger_t": 0.10,
+      "retreat_t": 0.20,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.15
     },
     {
-      "time": 6.5,
+      "enemy_type": "Drone",
       "prefab": "dummy_enemy",
-      "splineName": "EnemyPath_01",
-      "speed": 0.2,
-      "removeAtEnd": true
+      "trigger_t": 0.18,
+      "retreat_t": 0.30,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.20
     }
   ]
 }

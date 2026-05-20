@@ -2,21 +2,25 @@
 
 #include <string>
 #include <vector>
+#include "Vector3.h"
 
 /// <summary>
-/// ウェーブの1エントリ。
-/// 「time 秒後に、splineName のスプラインの始点から prefab を spawn し、speed [t/sec] で進ませる」。
+/// ステージの1スポーンエントリ。
+/// カメラ進行度 t（正規化 0〜1）をトリガーに敵をスポーン/退避させる。
 /// </summary>
 struct WaveEntry {
-	float       time = 0.0f;        // ウェーブ開始からの発火秒
-	std::string prefab;             // PrefabManager に登録された名前（例: "dummy_enemy"）
-	std::string splineName;         // シーン内 SplineCurveActor の名前（EnemyPathSpline タグ想定）
-	float       speed = 0.1f;       // スプラインの t/sec
-	bool        removeAtEnd = true; // t>=1 で自動消滅するか（false ならスプライン終端で停止）
+	std::string enemyType;        // "Drone" / "Carrier" / "Rusher" など
+	std::string prefab;           // PrefabManager に登録された名前
+	float       triggerT  = 0.0f; // スポーントリガー（カメラ進行度 t）
+	float       retreatT  = -1.0f;// 退避トリガー（-1 = なし、突進型など消滅で終わるタイプ）
+	float       speed     = 0.1f; // スプライン移動速度 [t/sec]（Drone / Rusher 用）
+	std::string splineId;         // 移動スプライン名（Drone の固定ルート / Rusher の登場スプライン）
+	std::vector<Vector3> positions; // 固定位置スポーン座標（Carrier など、splineId 不使用時）
+	int         count     = 1;    // スポーン数（positions が空の場合は同一地点に count 体）
 };
 
 /// <summary>
-/// 1 wave（=1 ファイル）の定義。
+/// ステージ1本分のスポーン定義。
 /// </summary>
 struct WaveDef {
 	std::string name;
@@ -24,13 +28,6 @@ struct WaveDef {
 };
 
 namespace WaveDefIO {
-	/// <summary>
-	/// ファイルから WaveDef を読み込む。失敗時は false。
-	/// </summary>
 	bool LoadFromFile(const std::string& filePath, WaveDef& out);
-
-	/// <summary>
-	/// WaveDef をファイルに保存する。失敗時は false。
-	/// </summary>
 	bool SaveToFile(const std::string& filePath, const WaveDef& def);
 }
