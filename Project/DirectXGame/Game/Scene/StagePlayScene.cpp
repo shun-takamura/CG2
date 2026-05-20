@@ -391,6 +391,7 @@ void StagePlayScene::Initialize() {
 		if (std::filesystem::exists(wavePath)) {
 			if (WaveDefIO::LoadFromFile(wavePath, currentWave_)) {
 				waveFired_.assign(currentWave_.entries.size(), false);
+				waveKillTime_.assign(currentWave_.entries.size(), -1.0f);
 			}
 		}
 	}
@@ -809,9 +810,10 @@ void StagePlayScene::Update() {
 					? bulletHomingLockOnBoost_
 					: (homeTarget ? bulletHomingStrength_ : 0.0f);
 				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
+				const int atk = (player_ && player_->HasAttackPower()) ? player_->GetAttackPower() : 0;
 				SpawnPlayerBullet(origin, dir, bulletSpeed_, bulletLifetime_,
 					bulletColliderGrowth_, homeTarget, homeStrength,
-					aimPlaneDistance_);
+					aimPlaneDistance_, "TemporaryPlayerBullet", atk);
 				fireTimer_ = fireRate_;
 			}
 		}
@@ -820,6 +822,24 @@ void StagePlayScene::Update() {
 	// 弾の進行と寿命処理（World 時間軸で動かす）
 	if (!gameFrozen) {
 		UpdateBullets(worldDt);
+
+		// SweepDeadEntities の前に、HP がゼロになった敵のウェーブエントリに kill 時刻を記録
+		// （SweepDeadEntities が DestroyDynamicEntity 経由で movingEnemies_ の entity を null 化する前に行う）
+		{
+			const float now = GetElapsedSeconds();
+			for (auto& m : movingEnemies_) {
+				if (!m.entity) continue;
+				if (m.waveEntryIndex < 0) continue;
+				if (static_cast<size_t>(m.waveEntryIndex) >= waveKillTime_.size()) continue;
+				if (waveKillTime_[m.waveEntryIndex] >= 0.0f) continue; // 既記録
+				if (m.entity->GetHP().IsDead()) {
+					waveKillTime_[m.waveEntryIndex] = now;
+				}
+			}
+		}
+
+		// HP がゼロになった敵などを破棄キューへ
+		SweepDeadEntities();
 	}
 
 	// ウェーブ：経過秒で未発火エントリを発火
@@ -831,7 +851,7 @@ void StagePlayScene::Update() {
 			if (elapsed >= we.time) {
 				SplineCurveActor* sp = FindDynamicSplineByName(we.splineName);
 				if (sp) {
-					SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd);
+					SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd, 0.0f, static_cast<int>(i));
 				} else {
 					LogBuffer::Instance().Add(
 						std::string("Wave: spline not found in scene: ") + we.splineName,
@@ -937,7 +957,7 @@ void StagePlayScene::Seek(float seconds) {
 		if (!p) continue;
 		const EntityTag t = p->GetTag();
 		if (t == EntityTag::Enemy || t == EntityTag::Boss
-			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyBullet) {
+			|| t == EntityTag::PlayerAttack || t == EntityTag::EnemyAttack) {
 			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
 		}
 	}
@@ -958,13 +978,37 @@ void StagePlayScene::Seek(float seconds) {
 			[](const std::unique_ptr<AnimatedObject3DInstance>& a) { return !a; }),
 		dynamicAnimated_.end());
 
-	// Wave 発火フラグを Seek 先に合わせて再構築：
-	// time <= seconds の entry は既発火扱い、それ以降は未発火（巻き戻して再発火可能に）
+	// Wave 発火フラグ / kill タイムスタンプを Seek 先に合わせて再構築
 	if (waveFired_.size() != currentWave_.entries.size()) {
 		waveFired_.assign(currentWave_.entries.size(), false);
 	}
+	if (waveKillTime_.size() != currentWave_.entries.size()) {
+		waveKillTime_.assign(currentWave_.entries.size(), -1.0f);
+	}
+	// 「seek 先より後の kill」はこのタイムラインではまだ起きていないので無効化
+	for (size_t i = 0; i < waveKillTime_.size(); ++i) {
+		if (waveKillTime_[i] > seconds) waveKillTime_[i] = -1.0f;
+	}
+
+	// time <= seconds の entry は発火済み扱い、それ以降は未発火
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 		waveFired_[i] = (currentWave_.entries[i].time <= seconds);
+	}
+
+	// seek 先で「生きているはず」の敵をスプライン上の正しい位置で復元する。
+	// 復元条件: we.time <= seconds かつ未 kill かつ「まだスプラインを走り終えていない or 終端で停止する設定」
+	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
+		const WaveEntry& we = currentWave_.entries[i];
+		if (we.time > seconds) continue;
+		if (waveKillTime_[i] >= 0.0f) continue; // 既に死亡（kill time <= seconds の確定済みエントリ）
+
+		const float tOnSpline = (seconds - we.time) * we.speed;
+		if (tOnSpline >= 1.0f && we.removeAtEnd) continue; // 既に終端到達 → 退場済み
+
+		SplineCurveActor* sp = FindDynamicSplineByName(we.splineName);
+		if (!sp) continue;
+
+		SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd, tOnSpline, static_cast<int>(i));
 	}
 }
 
@@ -1034,7 +1078,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 		if (!p) continue;
 		// 弾は一時オブジェクトなのでシーン保存に含めない
 		const EntityTag t = p->GetTag();
-		if (t == EntityTag::PlayerBullet || t == EntityTag::EnemyBullet) continue;
+		if (t == EntityTag::PlayerAttack || t == EntityTag::EnemyAttack) continue;
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Primitive";
 		e["name"] = p->GetName();
@@ -1164,7 +1208,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			}
 		} else if (type == "Primitive") {
 			// 弾は一時オブジェクトなのでロードでも無視（過去の汚れた save 対策）
-			if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyBullet) {
+			if (tag == EntityTag::PlayerAttack || tag == EntityTag::EnemyAttack) {
 				continue;
 			}
 			int primType = static_cast<int>(e["primitiveType"].AsInt());

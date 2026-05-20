@@ -39,8 +39,8 @@ struct ColliderSphere {
 enum class CollisionTag {
 	Player,
 	Enemy,
-	PlayerBullet,
-	EnemyBullet,
+	PlayerAttack,
+	EnemyAttack,
 };
 
 // ===== 判定関数群 =====

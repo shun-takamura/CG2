@@ -220,13 +220,13 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             ImGui::TextDisabled("- Tag-colored when not colliding");
             ImGui::TextDisabled("- Red when colliding this frame");
         }));
-    windows_.push_back(std::make_unique<CallbackWindow>("Scene Timeline",
-        []() {
+    windows_.push_back(std::make_unique<CallbackWindow>("TimeControler",
+        [this]() {
             auto* sm = SceneManager::GetInstance();
             BaseScene* scene = sm ? sm->GetCurrentScene() : nullptr;
             const std::string& name = sm ? sm->GetCurrentSceneName() : std::string{};
 
-            // 現在のシーン名
+            // ===== シーン情報 =====
             ImGui::Text("Current Scene:");
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s",
@@ -234,110 +234,104 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
             ImGui::Separator();
 
-            if (!scene) {
-                ImGui::TextDisabled("No active scene.");
-                return;
+            // ===== シーンタイムライン（シーク） =====
+            if (ImGui::CollapsingHeader("Scene Timeline", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (!scene) {
+                    ImGui::TextDisabled("No active scene.");
+                } else {
+                    float elapsed = scene->GetElapsedSeconds();
+                    ImGui::Text("Elapsed: %.2f sec", elapsed);
+
+                    static float seekMax = 600.0f; // デフォルト10分
+                    ImGui::SliderFloat("Seek Max (sec)", &seekMax, 10.0f, 1800.0f, "%.0f");
+
+                    float seekValue = elapsed;
+                    if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
+                        scene->Seek(seekValue);
+                    }
+
+                    if (ImGui::Button("-1s")) { scene->Seek(elapsed - 1.0f); }
+                    ImGui::SameLine();
+                    if (ImGui::Button("-0.1s")) { scene->Seek(elapsed - 0.1f); }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Reset")) { scene->Seek(0.0f); }
+                    ImGui::SameLine();
+                    if (ImGui::Button("+0.1s")) { scene->Seek(elapsed + 0.1f); }
+                    ImGui::SameLine();
+                    if (ImGui::Button("+1s")) { scene->Seek(elapsed + 1.0f); }
+                }
             }
-
-            // 経過秒の表示
-            float elapsed = scene->GetElapsedSeconds();
-            ImGui::Text("Elapsed: %.2f sec", elapsed);
-
-            // シーク用の上限（必要に応じてシーン側から取得する仕組みに置き換え予定）
-            static float seekMax = 600.0f; // デフォルト10分
-            ImGui::SliderFloat("Seek Max (sec)", &seekMax, 10.0f, 1800.0f, "%.0f");
-
-            // シーク値（毎フレーム経過秒で初期化）
-            float seekValue = elapsed;
-            if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
-                scene->Seek(seekValue);
-            }
-
-            // 細かい移動ボタン
-            if (ImGui::Button("-1s")) { scene->Seek(elapsed - 1.0f); }
-            ImGui::SameLine();
-            if (ImGui::Button("-0.1s")) { scene->Seek(elapsed - 0.1f); }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset")) { scene->Seek(0.0f); }
-            ImGui::SameLine();
-            if (ImGui::Button("+0.1s")) { scene->Seek(elapsed + 0.1f); }
-            ImGui::SameLine();
-            if (ImGui::Button("+1s")) { scene->Seek(elapsed + 1.0f); }
-        }));
-    windows_.push_back(std::make_unique<CallbackWindow>("TimeControl",
-        [this]() {
-            // --- グローバル ---
-            ImGui::TextUnformatted("Global");
-            ImGui::Separator();
-            float globalScale = dxCore_ ? dxCore_->GetTimeScale() : 1.0f;
-            if (ImGui::SliderFloat("Global TimeScale", &globalScale, 0.0f, 4.0f, "%.2f")) {
-                if (dxCore_) dxCore_->SetTimeScale(globalScale);
-            }
-            if (ImGui::Button("Pause")) { if (dxCore_) dxCore_->SetTimeScale(0.0f); }
-            ImGui::SameLine();
-            if (ImGui::Button("0.25x")) { if (dxCore_) dxCore_->SetTimeScale(0.25f); }
-            ImGui::SameLine();
-            if (ImGui::Button("0.5x"))  { if (dxCore_) dxCore_->SetTimeScale(0.5f); }
-            ImGui::SameLine();
-            if (ImGui::Button("1x"))    { if (dxCore_) dxCore_->SetTimeScale(1.0f); }
-            ImGui::SameLine();
-            if (ImGui::Button("2x"))    { if (dxCore_) dxCore_->SetTimeScale(2.0f); }
 
             ImGui::Spacing();
 
-            // --- 現在シーン ---
-            BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
-            ImGui::TextUnformatted("Current Scene");
-            ImGui::Separator();
-            if (scene) {
-                // ----- グループ別 TimeScale -----
-                ImGui::TextUnformatted("Time Groups");
-                for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
-                    TimeGroup g = static_cast<TimeGroup>(i);
-                    float s = scene->GetTimeScale(g);
-                    char label[32];
-                    std::snprintf(label, sizeof(label), "%s##ts", GetTimeGroupName(g));
-                    if (ImGui::SliderFloat(label, &s, 0.0f, 4.0f, "%.2f")) {
-                        scene->SetTimeScale(g, s);
+            // ===== グローバル TimeScale =====
+            if (ImGui::CollapsingHeader("Global TimeScale", ImGuiTreeNodeFlags_DefaultOpen)) {
+                float globalScale = dxCore_ ? dxCore_->GetTimeScale() : 1.0f;
+                if (ImGui::SliderFloat("Global TimeScale", &globalScale, 0.0f, 4.0f, "%.2f")) {
+                    if (dxCore_) dxCore_->SetTimeScale(globalScale);
+                }
+                if (ImGui::Button("Pause##g"))  { if (dxCore_) dxCore_->SetTimeScale(0.0f); }
+                ImGui::SameLine();
+                if (ImGui::Button("0.25x##g")) { if (dxCore_) dxCore_->SetTimeScale(0.25f); }
+                ImGui::SameLine();
+                if (ImGui::Button("0.5x##g"))  { if (dxCore_) dxCore_->SetTimeScale(0.5f); }
+                ImGui::SameLine();
+                if (ImGui::Button("1x##g"))    { if (dxCore_) dxCore_->SetTimeScale(1.0f); }
+                ImGui::SameLine();
+                if (ImGui::Button("2x##g"))    { if (dxCore_) dxCore_->SetTimeScale(2.0f); }
+            }
+
+            ImGui::Spacing();
+
+            // ===== シーン別グループ TimeScale =====
+            if (ImGui::CollapsingHeader("Scene Time Groups", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (scene) {
+                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+                        TimeGroup g = static_cast<TimeGroup>(i);
+                        float s = scene->GetTimeScale(g);
+                        char label[32];
+                        std::snprintf(label, sizeof(label), "%s##ts", GetTimeGroupName(g));
+                        if (ImGui::SliderFloat(label, &s, 0.0f, 4.0f, "%.2f")) {
+                            scene->SetTimeScale(g, s);
+                        }
                     }
-                }
-                ImGui::Spacing();
+                    ImGui::Spacing();
 
-                // ----- プリセット -----
-                if (ImGui::Button("All Pause")) {
-                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
-                        scene->SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("All Play")) {
-                    for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
-                        scene->SetTimeScale(static_cast<TimeGroup>(i), 1.0f);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("HitStop")) {
-                    scene->SetTimeScale(TimeGroup::World,  0.05f);
-                    scene->SetTimeScale(TimeGroup::Player, 0.05f);
-                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
-                }
-                if (ImGui::Button("Just Dodge")) {
-                    scene->SetTimeScale(TimeGroup::World,  0.3f);
-                    scene->SetTimeScale(TimeGroup::Player, 1.0f);
-                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("BotW Rush")) {
-                    scene->SetTimeScale(TimeGroup::World,  0.2f);
-                    scene->SetTimeScale(TimeGroup::Player, 1.5f);
-                    scene->SetTimeScale(TimeGroup::UI,     1.0f);
-                }
+                    if (ImGui::Button("All Pause")) {
+                        for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                            scene->SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("All Play")) {
+                        for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                            scene->SetTimeScale(static_cast<TimeGroup>(i), 1.0f);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("HitStop")) {
+                        scene->SetTimeScale(TimeGroup::World,  0.05f);
+                        scene->SetTimeScale(TimeGroup::Player, 0.05f);
+                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                    }
+                    if (ImGui::Button("Just Dodge")) {
+                        scene->SetTimeScale(TimeGroup::World,  0.3f);
+                        scene->SetTimeScale(TimeGroup::Player, 1.0f);
+                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("BotW Rush")) {
+                        scene->SetTimeScale(TimeGroup::World,  0.2f);
+                        scene->SetTimeScale(TimeGroup::Player, 1.5f);
+                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                    }
 
-                ImGui::Spacing();
-                ImGui::Text("dt World=%.4f Player=%.4f UI=%.4f",
-                    scene->GetScaledDeltaTime(TimeGroup::World),
-                    scene->GetScaledDeltaTime(TimeGroup::Player),
-                    scene->GetScaledDeltaTime(TimeGroup::UI));
-            } else {
-                ImGui::TextDisabled("No active scene.");
+                    ImGui::Spacing();
+                    ImGui::Text("dt World=%.4f Player=%.4f UI=%.4f",
+                        scene->GetScaledDeltaTime(TimeGroup::World),
+                        scene->GetScaledDeltaTime(TimeGroup::Player),
+                        scene->GetScaledDeltaTime(TimeGroup::UI));
+                } else {
+                    ImGui::TextDisabled("No active scene.");
+                }
             }
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("WebCam Devices",

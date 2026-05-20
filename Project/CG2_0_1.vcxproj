@@ -357,6 +357,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\InputAction.h" />
     <ClInclude Include="DirectXGame\Game\Config\GameActions.h" />
     <ClInclude Include="DirectXGame\Game\Components\EntityTag.h" />
+    <ClInclude Include="DirectXGame\Game\Components\HP.h" />
+    <ClInclude Include="DirectXGame\Game\Components\DamageDealer.h" />
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionMatrix.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionManager.h" />

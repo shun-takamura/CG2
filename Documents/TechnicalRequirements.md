@@ -145,7 +145,7 @@ WinMain → Game (Framework派生) → SceneManager → BaseScene
 | 要素 | 役割 |
 |---|---|
 | `SphereCollider`（struct） | enabled / radius / offset / showDebug / onCollision コールバック / isCollidingThisFrame |
-| `CollisionMatrix` | IsCollidableTag, ShouldCollide（タグペア許可マトリクス）。Player↔PlayerBullet等を早期return |
+| `CollisionMatrix` | IsCollidableTag, ShouldCollide（タグペア許可マトリクス）。Player↔PlayerAttack等を早期return |
 | `CollisionManager`（シングルトン） | Register/Unregister/Update（O(N²)）、グローバル描画ON/OFF、衝突時は赤色描画 |
 
 ### 4.11 スプライン

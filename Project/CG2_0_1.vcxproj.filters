@@ -545,6 +545,12 @@
     <ClInclude Include="DirectXGame\Game\Components\EntityTag.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\HP.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\DamageDealer.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

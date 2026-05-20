@@ -3,6 +3,8 @@
 #include "Components/EntityTag.h"
 #include "Components/CollisionMatrix.h"
 #include "Components/SphereCollider.h"
+#include "Components/HP.h"
+#include "Components/DamageDealer.h"
 #include "Components/Prefab.h"
 #include "Components/PrefabManager.h"
 #include "Object3DInstance.h"
@@ -103,6 +105,50 @@ void InspectorWindow::OnDraw() {
         }
     }
 
+    // ----- HP / DamageDealer / AttackPower（バトル系コンポーネント） -----
+    {
+        if (ImGui::CollapsingHeader("Battle", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // HP
+            HP& hp = selected->GetHP();
+            ImGui::Checkbox("HP Enabled", &hp.enabled);
+            if (hp.enabled) {
+                ImGui::DragInt("Max HP", &hp.maxHP, 1, 1, 99999);
+                if (hp.currentHP > hp.maxHP) hp.currentHP = hp.maxHP;
+                ImGui::DragInt("Current HP", &hp.currentHP, 1, 0, hp.maxHP);
+                const float frac = hp.maxHP > 0
+                    ? static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP)
+                    : 0.0f;
+                ImGui::ProgressBar(frac);
+            }
+
+            ImGui::Separator();
+
+            // DamageDealer
+            DamageDealer& dd = selected->GetDamageDealer();
+            ImGui::Checkbox("DamageDealer Enabled", &dd.enabled);
+            if (dd.enabled) {
+                ImGui::DragInt("Damage", &dd.damage, 1, 0, 99999);
+                ImGui::DragFloat("Attack Multiplier", &dd.multiplier, 0.05f, 0.0f, 100.0f, "%.2f");
+                ImGui::TextDisabled("(プレイヤー攻撃: 発射時に AttackPower * Multiplier を Damage に焼き込む)");
+            }
+
+            ImGui::Separator();
+
+            // AttackPower
+            bool hasAP = selected->HasAttackPower();
+            if (ImGui::Checkbox("AttackPower Enabled", &hasAP)) {
+                selected->SetHasAttackPower(hasAP);
+            }
+            if (hasAP) {
+                int ap = selected->GetAttackPower();
+                if (ImGui::DragInt("Attack Power", &ap, 1, 0, 99999)) {
+                    selected->SetAttackPower(ap);
+                }
+            }
+        }
+        ImGui::Separator();
+    }
+
     // 各オブジェクトが実装した編集UIを描画
     selected->OnImGuiInspector();
 
@@ -183,6 +229,23 @@ void InspectorWindow::OnDraw() {
                         def.colliderHalfExtents = col.halfExtents;
                         def.colliderCapsuleRadius = col.capsuleRadius;
                         def.colliderCapsuleHeight = col.capsuleHeight;
+                    }
+
+                    // HP / DamageDealer / AttackPower をプレハブに保存
+                    const HP& hp = selected->GetHP();
+                    if (hp.enabled) {
+                        def.hasHP = true;
+                        def.maxHP = hp.maxHP;
+                    }
+                    const DamageDealer& dd = selected->GetDamageDealer();
+                    if (dd.enabled) {
+                        def.hasDamageDealer = true;
+                        def.damage = dd.damage;
+                        def.attackMultiplier = dd.multiplier;
+                    }
+                    if (selected->HasAttackPower()) {
+                        def.hasAttackPower = true;
+                        def.attackPower = selected->GetAttackPower();
                     }
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";
