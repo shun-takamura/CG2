@@ -563,6 +563,12 @@
     <ClInclude Include="DirectXGame\Game\Components\DamageDealer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\BulletParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -603,6 +609,9 @@
       <Filter>Game\Enemy\Commands</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h">
+      <Filter>Game\Enemy\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h">
       <Filter>Game\Enemy\Commands</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\MouseInput.h">

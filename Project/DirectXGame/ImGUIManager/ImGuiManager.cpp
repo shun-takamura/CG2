@@ -110,21 +110,19 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                     if (DebugCamera* dc = scene->GetDebugCamera()) {
                         ImGui::TextDisabled("L-Drag: Orbit  /  M-Drag: Pan  /  Wheel: Zoom");
 
-                        // ピボット
-                        Vector3 pivot = { 0.0f, 0.0f, 0.0f };
-                        // DebugCamera にピボットgetterが無いので、UIで編集する値を別管理。
-                        // 単純化：スライダーで毎フレームSetする（値の保持は ImGui の static で）
-                        static float pivotV[3] = { 0.0f, 0.0f, 0.0f };
+                        // ホイール/ドラッグで変わった現在値を毎フレーム反映
+                        Vector3 pivot = dc->GetPivot();
+                        float pivotV[3] = { pivot.x, pivot.y, pivot.z };
                         if (ImGui::DragFloat3("Pivot", pivotV, 0.1f)) {
                             dc->SetPivot({ pivotV[0], pivotV[1], pivotV[2] });
                         }
 
-                        static float distance = 10.0f;
-                        if (ImGui::DragFloat("Distance", &distance, 0.1f, 0.1f, 500.0f)) {
+                        float distance = dc->GetDistance();
+                        if (ImGui::DragFloat("Distance", &distance, 0.1f, 0.1f, 100000.0f)) {
                             dc->SetDistance(distance);
                         }
 
-                        static float fovYDeg = 45.0f;
+                        float fovYDeg = dc->GetFovY() * 180.0f / 3.14159265f;
                         if (ImGui::DragFloat("Fov Y (deg)", &fovYDeg, 0.5f, 10.0f, 120.0f)) {
                             dc->SetFovY(fovYDeg * 3.14159265f / 180.0f);
                         }

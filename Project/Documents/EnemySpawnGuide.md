@@ -69,7 +69,7 @@ Project/Resources/Json/Waves/stage1.json
 | `trigger_t` | float | スポーンする t 値（0.0〜1.0） |
 | `retreat_t` | float | 退避を始める t 値。`-1` で退避なし（Rusher 等） |
 | `spline_id` | string | 移動・登場に使うスプラインの **Name** |
-| `speed` | float | スプライン進行速度 [t/sec]。`0.15` で約 6.7 秒かけて踏破 |
+| `traverse_t` | float | 敵スプラインを踏破するのにかかる **カメラ t 量**。`0.15` で「カメラ t が 0.15 進む間」（120秒ステージなら18秒）かけて踏破。カメラ速度を変えても画面在留時間がステージ全体に対して一定になる |
 
 ### 3.3 種別ごとの追加フィールド
 
@@ -86,7 +86,7 @@ Project/Resources/Json/Waves/stage1.json
   "trigger_t": 0.05,
   "retreat_t": 0.20,
   "spline_id": "EnemyPath_01",
-  "speed": 0.15,
+  "traverse_t": 0.15,
   "shoot_interval_t": 0.04
 }
 ```
@@ -97,6 +97,8 @@ Project/Resources/Json/Waves/stage1.json
 |---|---|---|
 | `spawn_interval_sec` | float | ザコ生成の間隔 [秒]。**こちらは t ではなく秒** |
 | `spawn_limit` | int | 同時生成数の上限 |
+| `child_prefab` | string | 生成する子敵プレハブ名（省略時は自分自身のプレハブにフォールバック）|
+| `child_spline_id` | string | 子敵が乗るスプライン名（省略時は自分自身のスプラインにフォールバック）|
 
 ```json
 {
@@ -105,7 +107,7 @@ Project/Resources/Json/Waves/stage1.json
   "trigger_t": 0.35,
   "retreat_t": 0.55,
   "spline_id": "EnemyPath_01",
-  "speed": 0.05,
+  "traverse_t": 0.20,
   "spawn_interval_sec": 4.0,
   "spawn_limit": 3
 }
@@ -123,7 +125,7 @@ Project/Resources/Json/Waves/stage1.json
   "trigger_t": 0.60,
   "retreat_t": -1.0,
   "spline_id": "EnemyPath_01",
-  "speed": 0.40
+  "traverse_t": 0.03
 }
 ```
 

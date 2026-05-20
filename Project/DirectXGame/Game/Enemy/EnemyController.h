@@ -17,6 +17,9 @@ public:
 	IImGuiEditable* entity_         = nullptr;
 	int             waveEntryIndex_ = -1;
 
+	// MovingEnemy がスプライン終端 (t>=1.0) に到達したら true。Rusher の溜め開始トリガー等に使う。
+	bool    splineArrived_  = false;
+
 	// EnemyContext の out フィールドをフレーム間で保持するバッファ
 	bool    requestDetach_   = false;
 	Vector3 freeVelocity_    { 0.0f, 0.0f, 0.0f };

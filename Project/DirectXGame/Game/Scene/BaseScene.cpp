@@ -449,6 +449,20 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			e->SetHasAttackPower(true);
 			e->SetAttackPower(def->attackPower);
 		}
+		if (def->hasBullet) {
+			BulletParams& bp = e->GetBulletParams();
+			bp.enabled        = true;
+			bp.speed          = def->bulletSpeed;
+			bp.lifetime       = def->bulletLifetime;
+			bp.homingStrength = def->bulletHomingStrength;
+		}
+		if (def->hasCarrier) {
+			CarrierParams& cp = e->GetCarrierParams();
+			cp.enabled           = true;
+			cp.childLifetimeSec  = def->carrierChildLifetimeSec;
+			cp.childWanderRadius = def->carrierChildWanderRadius;
+			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
+		}
 	};
 
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
@@ -589,6 +603,8 @@ void BaseScene::UpdateMovingEnemies(float deltaTime) {
 	// 終端到達した敵を削除
 	for (auto it = movingEnemies_.begin(); it != movingEnemies_.end();) {
 		if (it->entity && it->spline && it->t >= 1.0f) {
+			// 紐付くコントローラに終端到達を通知
+			if (it->controller) it->controller->splineArrived_ = true;
 			if (it->removeAtEnd) {
 				DestroyDynamicEntity(it->entity);
 			}
@@ -619,6 +635,7 @@ void BaseScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		ctx.spawnLimit      = ctrl->spawnLimit_;
 		ctx.childPrefab     = ctrl->childPrefab_;
 		ctx.childSplineId   = ctrl->childSplineId_;
+		ctx.splineArrived   = ctrl->splineArrived_;
 
 		ctrl->Update(deltaTime, ctx);
 
@@ -681,10 +698,32 @@ void BaseScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 				return !c || !c->entity_ || c->IsDone();
 			}),
 		enemyControllers_.end());
+
+	// ループ中に追加された pending を本体にマージ（ここでなら安全に push_back できる）
+	if (!pendingEnemyControllers_.empty()) {
+		for (auto& c : pendingEnemyControllers_) {
+			enemyControllers_.push_back(std::move(c));
+		}
+		pendingEnemyControllers_.clear();
+	}
 }
 
 void BaseScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
-	float speed, float lifetime, const std::string& prefabName) {
+	float speed, float lifetime, const std::string& prefabName,
+	IImGuiEditable* homingTarget, float homingStrength) {
+	// 引数が負数ならプレハブの "bullet" セクションから読み込む
+	if (const PrefabDef* def = PrefabManager::GetInstance()->Find(prefabName)) {
+		if (def->hasBullet) {
+			if (speed          < 0.0f) speed          = def->bulletSpeed;
+			if (lifetime       < 0.0f) lifetime       = def->bulletLifetime;
+			if (homingStrength < 0.0f) homingStrength = def->bulletHomingStrength;
+		}
+	}
+	// プレハブに bullet 指定がなければデフォルトにフォールバック
+	if (speed          < 0.0f) speed          = 18.0f;
+	if (lifetime       < 0.0f) lifetime       = 4.0f;
+	if (homingStrength < 0.0f) homingStrength = 0.0f;
+
 	const size_t prevCount = dynamicPrimitives_.size();
 	InstantiatePrefab(prefabName, pos);
 	if (dynamicPrimitives_.size() != prevCount + 1) {
@@ -713,6 +752,8 @@ void BaseScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 	br.speed             = speed;
 	br.remainingLifetime = lifetime;
 	br.originPos         = pos;
+	br.homingTarget      = homingTarget;
+	br.homingStrength    = homingStrength;
 	if (spawned) br.baseColliderRadius = spawned->GetCollider().radius;
 	bullets_.push_back(br);
 }
@@ -722,10 +763,57 @@ IImGuiEditable* BaseScene::SpawnEnemyAt(const std::string& prefabName, const Vec
 	const size_t prevAnim = dynamicAnimated_.size();
 	const size_t prevObj  = object3DInstances_.size();
 	InstantiatePrefab(prefabName, pos);
-	if (dynamicPrimitives_.size() != prevPrim) return dynamicPrimitives_.back().get();
+	if (dynamicPrimitives_.size() != prevPrim) {
+		// CB を即座にスポーン位置で確定させる（フレーム終わりに走る Update まで原点で描画されないように）
+		dynamicPrimitives_.back()->Update();
+		return dynamicPrimitives_.back().get();
+	}
 	if (dynamicAnimated_.size()   != prevAnim) return dynamicAnimated_.back().get();
 	if (object3DInstances_.size() != prevObj)  return object3DInstances_.back().get();
 	return nullptr;
+}
+
+void BaseScene::ApplyEnemyRepulsion(IImGuiEditable* self) {
+	if (!self) return;
+	Vector3* selfPos = self->GetEditableTranslate();
+	if (!selfPos) return;
+	const float selfR = self->GetCollider().radius;
+
+	auto repelAgainst = [&](IImGuiEditable* other) {
+		if (!other || other == self) return;
+		const EntityTag tag = other->GetTag();
+		if (tag != EntityTag::Enemy) return;
+		Vector3* op = other->GetEditableTranslate();
+		if (!op) return;
+		const float otherR = other->GetCollider().radius;
+		const float minDist = selfR + otherR;
+		const float dx = selfPos->x - op->x;
+		const float dy = selfPos->y - op->y;
+		const float dz = selfPos->z - op->z;
+		float d2 = dx * dx + dy * dy + dz * dz;
+		if (d2 >= minDist * minDist) return;
+		float d = std::sqrt(d2);
+		if (d < 1e-4f) {
+			// 完全重なり: 微小ランダム方向に逃がす
+			selfPos->x += 0.01f;
+			selfPos->z += 0.01f;
+			return;
+		}
+		const float push = (minDist - d) * 0.5f; // 半分だけ自分を押す（相手は別フレームで自分を押す）
+		selfPos->x += dx / d * push;
+		selfPos->y += dy / d * push;
+		selfPos->z += dz / d * push;
+	};
+
+	for (auto& p : dynamicPrimitives_)  repelAgainst(p.get());
+	for (auto& a : dynamicAnimated_)    repelAgainst(a.get());
+	for (auto& o : object3DInstances_)  repelAgainst(o.get());
+}
+
+void BaseScene::RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) {
+	// UpdateEnemyControllers のループ中に直接 push_back するとイテレータが無効化されるため、
+	// 一旦 pending に溜めてループ終了後にマージする
+	if (ctrl) pendingEnemyControllers_.push_back(std::move(ctrl));
 }
 
 void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {

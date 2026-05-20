@@ -1,5 +1,7 @@
 #include "DebugCamera.h"
 #include "Transform.h"
+#include <algorithm>
+#include <cmath>
 
 void DebugCamera::Initialize() {
     matRot_   = MakeIdentity4x4();
@@ -28,7 +30,17 @@ void DebugCamera::Pan(float deltaRight, float deltaUp) {
 
 void DebugCamera::Zoom(float delta) {
     distance_ += delta;
-    if (distance_ < kMinDistance) distance_ = kMinDistance;
+    if (distance_ < kMinDistance) {
+        // 距離が下限を超えたぶんはピボットを視線方向（奥）へ押し出し、
+        // 「奥へ突き進む」ように見せる（dolly）
+        float excess = kMinDistance - distance_;
+        // カメラのローカル +Z は視線奥方向。matRot_ の3行目がそれをワールドに変換した向き
+        Vector3 forward = { matRot_.m[2][0], matRot_.m[2][1], matRot_.m[2][2] };
+        pivot_.x += forward.x * excess;
+        pivot_.y += forward.y * excess;
+        pivot_.z += forward.z * excess;
+        distance_ = kMinDistance;
+    }
 }
 
 void DebugCamera::Update() {
@@ -43,6 +55,8 @@ void DebugCamera::Update() {
     Matrix4x4 worldMatrix = Multiply(matRot_, MakeTranslateMatrix(tf));
 
     viewMatrix_       = Inverse(worldMatrix);
-    projectionMatrix_ = MakePerspectiveFovMatrix(fovY_, aspectRatio_, nearClip_, farClip_);
+    // ピボットがクリップされないよう farClip は distance_ の 2 倍を下限とする
+    float effectiveFar = std::max(farClip_, distance_ * 2.0f);
+    projectionMatrix_ = MakePerspectiveFovMatrix(fovY_, aspectRatio_, nearClip_, effectiveFar);
     viewProjectionMatrix_ = Multiply(viewMatrix_, projectionMatrix_);
 }

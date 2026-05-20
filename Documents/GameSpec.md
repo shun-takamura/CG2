@@ -300,10 +300,10 @@ Title  → Hub → StagePlay (道中STG → ボス戦シームレス) → Result
 | Phase | 内容 | 状態 |
 |---|---|---|
 | エンジン基盤 | 自作JSON/入力アクション/シーン/タグ/コリジョン/Spline/Prefab/Primitive拡張/TimeGroup 等 | ✅ 完了 |
-| Helix | プレイヤー弾の弾道用 | ⬜ 次 |
-| ビルボード | Full / Y軸固定 の2モード | ⬜ |
-| Effect Editor | Primitive + GPUParticle + Light 合成 | ⬜ |
-| Phase 1 (STG道中) | レール走行・自機操作・射撃・マルチロック・雑魚 | ⬜ |
+| Helix | プレイヤー弾の弾道用 | ✅ 完了 |
+| ビルボード | Full / Y軸固定 の2モード | ✅ 完了 |
+| Effect Editor | Primitive + GPUParticle + Light 合成 | ✅ 完了 |
+| Phase 1 (STG道中) | レール走行・自機操作・射撃・マルチロック・雑魚 | 🟡 進行中（敵AI 3種＋スポーンシステム完了、ボス前の道中ロジック残） |
 | Phase 2 (PP拡張案B) | オブジェクト単位ポストエフェクト | ⬜ |
 | Phase 3 (ボス戦) | シームレス着地・地上360度・フリーカメラ・分身カウンター | ⬜ |
 | Phase 4 (必殺技演出) | ハイマット → ディスラプター（世界断裂） | ⬜ |

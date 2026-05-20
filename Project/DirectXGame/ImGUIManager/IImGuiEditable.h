@@ -7,6 +7,8 @@
 #include "Components/SphereCollider.h"
 #include "Components/HP.h"
 #include "Components/DamageDealer.h"
+#include "Components/BulletParams.h"
+#include "Components/CarrierParams.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -81,6 +83,18 @@ public:
     DamageDealer& GetDamageDealer() { return damageDealer_; }
 
     //====================
+    // BulletParams（弾プレハブ用：速度・寿命）
+    //====================
+    const BulletParams& GetBulletParams() const { return bulletParams_; }
+    BulletParams& GetBulletParams() { return bulletParams_; }
+
+    //====================
+    // CarrierParams（運び屋プレハブ用：子敵パラメータ）
+    //====================
+    const CarrierParams& GetCarrierParams() const { return carrierParams_; }
+    CarrierParams& GetCarrierParams() { return carrierParams_; }
+
+    //====================
     // AttackPower（プレイヤー用の基礎攻撃力。各攻撃の倍率と乗算してダメージを決める）
     // enabled=false なら未設定。
     //====================
@@ -133,6 +147,8 @@ protected:
     SphereCollider collider_{};
     HP hp_{};
     DamageDealer damageDealer_{};
+    BulletParams bulletParams_{};
+    CarrierParams carrierParams_{};
     bool hasAttackPower_ = false;
     int  attackPower_ = 0;
 

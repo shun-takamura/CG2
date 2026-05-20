@@ -860,7 +860,11 @@ void StagePlayScene::Update() {
 					if (sp) {
 						// Rusher は終端で止まる（removeAtEnd=false）
 						const bool removeAtEnd = (we.enemyType != "Rusher");
-						spawned = SpawnEnemyOnSpline(we.prefab, sp, we.speed,
+						// traverse_t [カメラt] → スプライン速度 [enemy_t/sec] へ変換
+						// enemy_speed = railCameraSpeed_ / traverse_t
+						const float enemySpeed = (we.traverseT > 1e-5f)
+							? (railCameraSpeed_ / we.traverseT) : 0.0f;
+						spawned = SpawnEnemyOnSpline(we.prefab, sp, enemySpeed,
 							removeAtEnd, 0.0f, static_cast<int>(i));
 					} else {
 						LogBuffer::Instance().Add(
@@ -879,8 +883,9 @@ void StagePlayScene::Update() {
 					ctrl->shootIntervalT_   = we.shootIntervalT;
 					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 					ctrl->spawnLimit_       = we.spawnLimit;
-					ctrl->childPrefab_      = we.prefab; // 運び屋が生成するザコは同じプレハブ
-					ctrl->childSplineId_    = we.splineId;
+					// 子敵は明示指定があればそれを、なければ自身のプレハブ／スプラインにフォールバック
+					ctrl->childPrefab_      = we.childPrefab.empty()    ? we.prefab   : we.childPrefab;
+					ctrl->childSplineId_    = we.childSplineId.empty()  ? we.splineId : we.childSplineId;
 					ctrl->Init(EnemyCommandFactory::Create(we));
 
 					// MovingEnemy にコントローラを紐付け
@@ -1009,6 +1014,7 @@ void StagePlayScene::Seek(float seconds) {
 	// 現在生きている敵・弾・スプライン追従敵・敵コントローラをすべて掃除
 	// （enemyControllers_ は entity_ がダングリングになるので必ずクリアする）
 	enemyControllers_.clear();
+	pendingEnemyControllers_.clear();
 	movingEnemies_.clear();
 	bullets_.clear();
 	for (auto& p : dynamicPrimitives_) {
@@ -1066,16 +1072,17 @@ void StagePlayScene::Seek(float seconds) {
 		if (killAtT_[i] >= 0.0f) continue;
 		if (we.splineId.empty()) continue;
 
-		// camera t → スポーンからの経過秒 → スプライン上の t に変換
-		const float timeSinceSpawn = (seekT - we.triggerT) / railCameraSpeed_;
-		const float tOnSpline = std::clamp(timeSinceSpawn * we.speed, 0.0f, 1.0f);
+		// camera t 進行量 / traverse_t = スプライン上の t
+		if (we.traverseT < 1e-5f) continue;
+		const float tOnSpline = std::clamp((seekT - we.triggerT) / we.traverseT, 0.0f, 1.0f);
 		if (tOnSpline >= 1.0f) continue;
 
 		SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
 		if (!sp) continue;
 		const bool removeAtEnd = (we.enemyType != "Rusher");
+		const float enemySpeed = railCameraSpeed_ / we.traverseT;
 		IImGuiEditable* spawned = SpawnEnemyOnSpline(
-			we.prefab, sp, we.speed, removeAtEnd, tOnSpline, static_cast<int>(i));
+			we.prefab, sp, enemySpeed, removeAtEnd, tOnSpline, static_cast<int>(i));
 		if (!spawned) continue;
 
 		// Seek 復元された敵にも EnemyController を作って AI を再開させる
@@ -1087,8 +1094,8 @@ void StagePlayScene::Seek(float seconds) {
 		ctrl->shootIntervalT_   = we.shootIntervalT;
 		ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 		ctrl->spawnLimit_       = we.spawnLimit;
-		ctrl->childPrefab_      = we.prefab;
-		ctrl->childSplineId_    = we.splineId;
+		ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
+		ctrl->childSplineId_    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
 		ctrl->Init(EnemyCommandFactory::Create(we));
 
 		for (auto& m : movingEnemies_) {

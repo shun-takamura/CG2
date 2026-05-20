@@ -40,6 +40,7 @@ private:
 		if (len < 0.01f) return;
 		dir = { dir.x / len, dir.y / len, dir.z / len };
 
-		ctx.scene->SpawnEnemyBullet(*pos, dir);
+		// プレイヤーを homingTarget として渡す（ホーミング強度はプレハブから）
+		ctx.scene->SpawnEnemyBullet(*pos, dir, -1.0f, -1.0f, "EnemyBullet", ctx.player);
 	}
 };

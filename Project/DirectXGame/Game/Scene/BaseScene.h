@@ -187,15 +187,29 @@ public:
 
 	/// <summary>
 	/// 敵弾をスポーンする。EnemyAttack タグ付き。プレイヤーに当たるとダメージを与える。
+	/// speed / lifetime / homingStrength に負数を渡すとプレハブの "bullet" セクションの値を使う。
 	/// </summary>
 	void SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
-		float speed = 18.0f, float lifetime = 4.0f,
-		const std::string& prefabName = "EnemyBullet");
+		float speed = -1.0f, float lifetime = -1.0f,
+		const std::string& prefabName = "EnemyBullet",
+		IImGuiEditable* homingTarget = nullptr,
+		float homingStrength = -1.0f);
 
 	/// <summary>
 	/// 指定プレハブをスプラインなしで指定座標に直接スポーンする（Carrier の子スポーン等）。
 	/// </summary>
 	IImGuiEditable* SpawnEnemyAt(const std::string& prefabName, const Vector3& pos);
+
+	/// <summary>
+	/// 指定エンティティと他の Enemy エンティティとの衝突半径オーバーラップを解消する（相互排斥）。
+	/// 距離が両者の collider.radius の和より小さければ自分を押し戻す。
+	/// </summary>
+	void ApplyEnemyRepulsion(IImGuiEditable* self);
+
+	/// <summary>
+	/// EnemyController を BaseScene に登録する（コマンドからのランタイム追加用）。
+	/// </summary>
+	void RegisterEnemyController(std::unique_ptr<class EnemyController> ctrl);
 
 #ifdef USE_IMGUI
 	/// <summary>
@@ -448,6 +462,9 @@ protected:
 	void UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT);
 
 	std::vector<std::unique_ptr<class EnemyController>> enemyControllers_;
+	// イテレータ無効化防止：UpdateEnemyControllers 中の RegisterEnemyController は
+	// ここに溜まり、ループ終了後に enemyControllers_ にマージされる。
+	std::vector<std::unique_ptr<class EnemyController>> pendingEnemyControllers_;
 
 	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
 	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する
