@@ -16,7 +16,7 @@
     "smoothTime": 0.25
   },
   "camera": {
-    "speed": 0.10000000149011612
+    "speed": 0.008333333432674408
   },
   "shooting": {
     "bulletSpeed": 750,

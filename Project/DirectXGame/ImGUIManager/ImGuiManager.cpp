@@ -28,6 +28,10 @@
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "StagePlayScene.h"
+#include "Json/JsonParser.h"
+#include "Json/JsonValue.h"
+#include "Json/JsonWriter.h"
+#include <filesystem>
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "SceneManager.h"
@@ -239,11 +243,40 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                 if (!scene) {
                     ImGui::TextDisabled("No active scene.");
                 } else {
-                    float elapsed = scene->GetElapsedSeconds();
-                    ImGui::Text("Elapsed: %.2f sec", elapsed);
+                    // 設定ファイル: Resources/Json/Setting/editor_prefs.json
+                    static const char* kPrefsPath = "Resources/Json/Setting/editor_prefs.json";
+                    static float seekMax = -1.0f; // -1: 未ロード
+                    if (seekMax < 0.0f) {
+                        seekMax = 120.0f; // デフォルト: シューティングパート想定 120 秒
+                        if (std::filesystem::exists(kPrefsPath)) {
+                            auto r = JsonParser::ParseFile(kPrefsPath);
+                            if (r.success && r.value.IsObject() && r.value["seek_max"].IsNumber()) {
+                                seekMax = static_cast<float>(r.value["seek_max"].AsDouble(seekMax));
+                            }
+                        }
+                    }
 
-                    static float seekMax = 600.0f; // デフォルト10分
+                    float elapsed = scene->GetElapsedSeconds();
+                    float camT    = scene->GetCameraProgressT();
+
+                    // 経過秒 + 仮想ステージ t（120 秒前提）+ 実レールカメラ t
+                    ImGui::Text("Elapsed: %.2f sec  /  Stage t (120s): %.3f",
+                        elapsed, elapsed / 120.0f);
+                    if (camT >= 0.0f) {
+                        ImGui::Text("RailCamera t: %.3f", camT);
+                    } else {
+                        ImGui::TextDisabled("RailCamera t: (not used)");
+                    }
+
+                    float prevSeekMax = seekMax;
                     ImGui::SliderFloat("Seek Max (sec)", &seekMax, 10.0f, 1800.0f, "%.0f");
+                    if (seekMax != prevSeekMax) {
+                        std::filesystem::create_directories(
+                            std::filesystem::path(kPrefsPath).parent_path());
+                        JsonValue root = JsonValue::MakeObject();
+                        root["seek_max"] = static_cast<double>(seekMax);
+                        JsonWriter::WriteFile(kPrefsPath, root, { true, 2 });
+                    }
 
                     float seekValue = elapsed;
                     if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
