@@ -29,6 +29,9 @@
 #include "KeyboardInput.h"
 #include "ControllerInput.h"
 #include "UI/Reticle.h"
+#include "Enemy/EnemyController.h"
+#include "Enemy/EnemyCommandFactory.h"
+#include "Enemy/EnemyContext.h"
 
 #ifdef _DEBUG
 #include "ViewportWindow.h"
@@ -851,26 +854,68 @@ void StagePlayScene::Update() {
 
 			// スポーントリガー
 			if (i < spawnFired_.size() && !spawnFired_[i] && currentT >= we.triggerT) {
+				IImGuiEditable* spawned = nullptr;
 				if (!we.splineId.empty()) {
 					SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
 					if (sp) {
-						SpawnEnemyOnSpline(we.prefab, sp, we.speed, true, 0.0f, static_cast<int>(i));
+						// Rusher は終端で止まる（removeAtEnd=false）
+						const bool removeAtEnd = (we.enemyType != "Rusher");
+						spawned = SpawnEnemyOnSpline(we.prefab, sp, we.speed,
+							removeAtEnd, 0.0f, static_cast<int>(i));
 					} else {
 						LogBuffer::Instance().Add(
 							std::string("Wave: spline not found: ") + we.splineId,
 							LogBuffer::Level::Warning);
 					}
 				}
+
+				// EnemyController を生成してコマンドを設定
+				if (spawned) {
+					auto ctrl = std::make_unique<EnemyController>();
+					ctrl->entity_           = spawned;
+					ctrl->waveEntryIndex_   = static_cast<int>(i);
+					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
+					ctrl->triggerT_         = we.triggerT;
+					ctrl->shootIntervalT_   = we.shootIntervalT;
+					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
+					ctrl->spawnLimit_       = we.spawnLimit;
+					ctrl->childPrefab_      = we.prefab; // 運び屋が生成するザコは同じプレハブ
+					ctrl->childSplineId_    = we.splineId;
+					ctrl->Init(EnemyCommandFactory::Create(we));
+
+					// MovingEnemy にコントローラを紐付け
+					for (auto& m : movingEnemies_) {
+						if (m.entity == spawned) {
+							m.controller       = ctrl.get();
+							m.billboardToPlayer = ctrl->billboardToPlayer_;
+							break;
+						}
+					}
+					enemyControllers_.push_back(std::move(ctrl));
+				}
 				spawnFired_[i] = true;
 			}
 
-			// 退避トリガー（退避コマンドは敵AI実装時に追加）
+			// 退避トリガー
 			if (i < retreatFired_.size() && i < spawnFired_.size()
 				&& spawnFired_[i] && !retreatFired_[i]
 				&& we.retreatT >= 0.0f && currentT >= we.retreatT) {
+				// 対応するコントローラに退避を指示
+				for (auto& ctrl : enemyControllers_) {
+					if (ctrl && ctrl->waveEntryIndex_ == static_cast<int>(i)) {
+						ctrl->TriggerRetreat();
+						break;
+					}
+				}
 				retreatFired_[i] = true;
 			}
 		}
+	}
+
+	// 敵コントローラ更新（自由移動・ビルボード・退避完了処理）
+	if (!gameFrozen) {
+		const float cameraT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
+		UpdateEnemyControllers(worldDt, player_, cameraT);
 	}
 
 	// スプライン追従敵の進行

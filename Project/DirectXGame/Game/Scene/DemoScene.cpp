@@ -182,12 +182,13 @@ void DemoScene::Initialize() {
 	object3DManager_->SetDefaultCamera(camera_.get());
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
-	// Skybox生成
+	// Skybox生成 DirectStrageのステージングバッファがデフォルトの32MBから
+	// 256MBに増やしたけどもっとでかいやつはまたバッファを増やす必要あり
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_4k.dds");
+	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/passendorf_snow_8k.dds");
 
 	// ここで環境マップをモデルにセット
-	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_4k.dds");
+	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/passendorf_snow_8k.dds");
 
 
 	//// パーティクルの設定

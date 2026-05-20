@@ -44,7 +44,10 @@ namespace WaveDefIO {
 				entry.retreatT  = static_cast<float>(e["retreat_t"].AsDouble(entry.retreatT));
 				entry.speed     = static_cast<float>(e["speed"].AsDouble(entry.speed));
 				entry.splineId  = e["spline_id"].AsString();
-				entry.count     = static_cast<int>(e["count"].AsDouble(entry.count));
+				entry.count          = static_cast<int>(e["count"].AsDouble(entry.count));
+			entry.shootIntervalT = static_cast<float>(e["shoot_interval_t"].AsDouble(entry.shootIntervalT));
+			entry.spawnIntervalSec = static_cast<float>(e["spawn_interval_sec"].AsDouble(entry.spawnIntervalSec));
+			entry.spawnLimit     = static_cast<int>(e["spawn_limit"].AsDouble(entry.spawnLimit));
 
 				const JsonValue& pos = e["positions"];
 				if (pos.IsArray()) {
@@ -72,7 +75,10 @@ namespace WaveDefIO {
 			o["retreat_t"]  = static_cast<double>(e.retreatT);
 			o["speed"]      = static_cast<double>(e.speed);
 			o["spline_id"]  = e.splineId;
-			o["count"]      = static_cast<double>(e.count);
+			o["count"]           = static_cast<double>(e.count);
+			o["shoot_interval_t"]  = static_cast<double>(e.shootIntervalT);
+			o["spawn_interval_sec"] = static_cast<double>(e.spawnIntervalSec);
+			o["spawn_limit"]       = static_cast<double>(e.spawnLimit);
 
 			if (!e.positions.empty()) {
 				JsonValue posArr = JsonValue::MakeArray();

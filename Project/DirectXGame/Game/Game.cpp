@@ -83,7 +83,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("STAGEPLAY");
+	SceneManager::GetInstance()->ChangeSceneImmediate("DEMO");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif
