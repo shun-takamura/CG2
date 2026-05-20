@@ -16,6 +16,12 @@
     <Filter Include="InGUI">
       <UniqueIdentifier>{e289b9c0-c80e-4bee-8075-cbc447f31306}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Game\Enemy">
+      <UniqueIdentifier>{3A7F2B1C-E4D6-4F89-B3C5-1D8E9A052F74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Enemy\Commands">
+      <UniqueIdentifier>{6C4D8E3A-F7B2-4A1D-9E6C-2B0F5A187D93}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DirectXGame\main.cpp">
@@ -143,6 +149,12 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Components\PrefabManager.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\EnemyController.cpp">
+      <Filter>Game\Enemy</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\EnemyCommandFactory.cpp">
+      <Filter>Game\Enemy</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\MouseInput.cpp">
       <Filter>ソース ファイル</Filter>
@@ -568,6 +580,30 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h">
       <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\IEnemyCommand.h">
+      <Filter>Game\Enemy</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\EnemyContext.h">
+      <Filter>Game\Enemy</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\EnemyController.h">
+      <Filter>Game\Enemy</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\EnemyCommandFactory.h">
+      <Filter>Game\Enemy</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h">
+      <Filter>Game\Enemy\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h">
+      <Filter>Game\Enemy\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h">
+      <Filter>Game\Enemy\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h">
+      <Filter>Game\Enemy\Commands</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\MouseInput.h">
       <Filter>ヘッダー ファイル</Filter>

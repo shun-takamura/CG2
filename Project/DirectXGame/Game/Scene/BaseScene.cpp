@@ -1,4 +1,6 @@
 #include "BaseScene.h"
+#include "Enemy/EnemyController.h"
+#include "Enemy/EnemyContext.h"
 #include "Game.h"
 #include "GPUParticleManager.h"
 #include "Effect/EffectManager.h"
@@ -551,7 +553,14 @@ IImGuiEditable* BaseScene::SpawnEnemyOnSpline(const std::string& prefabName,
 		return nullptr;
 	}
 
-	movingEnemies_.push_back(MovingEnemy{ spawned, spline, clampedInitialT, speed, removeAtEnd, waveEntryIndex });
+	MovingEnemy me{};
+	me.entity         = spawned;
+	me.spline         = spline;
+	me.t              = clampedInitialT;
+	me.speed          = speed;
+	me.removeAtEnd    = removeAtEnd;
+	me.waveEntryIndex = waveEntryIndex;
+	movingEnemies_.push_back(me);
 	return spawned;
 }
 
@@ -565,6 +574,15 @@ void BaseScene::UpdateMovingEnemies(float deltaTime) {
 		const Vector3 pos = m.spline->Sample(clamped);
 		if (Vector3* t = m.entity->GetEditableTranslate()) {
 			*t = pos;
+		}
+
+		// ビルボード：プレイヤー方向を向く（カメラ方向ではない）
+		if (m.billboardToPlayer) {
+			const Vector3* selfPos = m.entity->GetEditableTranslate();
+			// player_ は派生クラスが持つため、コントローラ経由で player を取得できない。
+			// UpdateEnemyControllers で ctx.player を設定済みなのでここでは EnemyController の
+			// billboardToPlayer_ フラグが false に上書きされている場合は処理しない。
+			// ビルボード回転は UpdateEnemyControllers 内で行う。
 		}
 	}
 
@@ -582,6 +600,132 @@ void BaseScene::UpdateMovingEnemies(float deltaTime) {
 			++it;
 		}
 	}
+}
+
+void BaseScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT) {
+	for (auto& ctrl : enemyControllers_) {
+		if (!ctrl || !ctrl->entity_) continue;
+
+		// コンテキスト構築（in フィールド）
+		// WaveEntry の情報は EnemyController に直接持たせるか、派生クラスで設定する。
+		// ここでは ctrl 自身が持つ waveEntry 情報を使うため、派生クラスが triggerT 等を設定済みの前提。
+		EnemyContext ctx{};
+		ctx.player          = player;
+		ctx.scene           = this;
+		ctx.railT           = railT;
+		ctx.triggerT        = ctrl->triggerT_;
+		ctx.shootIntervalT  = ctrl->shootIntervalT_;
+		ctx.spawnIntervalSec = ctrl->spawnIntervalSec_;
+		ctx.spawnLimit      = ctrl->spawnLimit_;
+		ctx.childPrefab     = ctrl->childPrefab_;
+		ctx.childSplineId   = ctrl->childSplineId_;
+
+		ctrl->Update(deltaTime, ctx);
+
+		// ビルボード回転（コントローラが billboardToPlayer_=true を維持している間）
+		if (ctrl->billboardToPlayer_ && player && ctrl->entity_) {
+			Vector3* pos  = ctrl->entity_->GetEditableTranslate();
+			Vector3* ppos = player->GetEditableTranslate();
+			if (pos && ppos) {
+				const float dx = ppos->x - pos->x;
+				const float dy = ppos->y - pos->y;
+				const float dz = ppos->z - pos->z;
+				const float horiz = std::sqrt(dx * dx + dz * dz);
+				const float yaw   = std::atan2(dx, dz);
+				const float pitch = -std::atan2(dy, horiz);
+				ctrl->entity_->SetRotate({ pitch, yaw, 0.0f });
+			}
+		}
+
+		// MovingEnemy の billboardToPlayer フラグを ctrl に同期
+		for (auto& m : movingEnemies_) {
+			if (m.entity == ctrl->entity_) {
+				m.billboardToPlayer = ctrl->billboardToPlayer_;
+				break;
+			}
+		}
+
+		// 自由移動（Retreat / Rush）
+		if (ctrl->useFreeVelocity_ && ctrl->entity_) {
+			if (Vector3* pos = ctrl->entity_->GetEditableTranslate()) {
+				pos->x += ctrl->freeVelocity_.x * deltaTime;
+				pos->y += ctrl->freeVelocity_.y * deltaTime;
+				pos->z += ctrl->freeVelocity_.z * deltaTime;
+			}
+		}
+
+		// スプライン切り離し
+		if (ctrl->requestDetach_) {
+			for (auto it = movingEnemies_.begin(); it != movingEnemies_.end(); ++it) {
+				if (it->entity == ctrl->entity_) {
+					it->removeAtEnd = false;
+					it->speed = 0.0f; // 以降はコントローラが位置を制御
+					break;
+				}
+			}
+			ctrl->requestDetach_ = false;
+		}
+	}
+
+	// 完了したコントローラのエンティティを破棄
+	for (auto& ctrl : enemyControllers_) {
+		if (ctrl && ctrl->IsDone() && ctrl->entity_) {
+			DestroyDynamicEntity(ctrl->entity_);
+			ctrl->entity_ = nullptr;
+		}
+	}
+	// null 化されたコントローラを削除
+	enemyControllers_.erase(
+		std::remove_if(enemyControllers_.begin(), enemyControllers_.end(),
+			[](const std::unique_ptr<EnemyController>& c) {
+				return !c || (!c->entity_ && c->IsDone());
+			}),
+		enemyControllers_.end());
+}
+
+void BaseScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
+	float speed, float lifetime, const std::string& prefabName) {
+	const size_t prevCount = dynamicPrimitives_.size();
+	InstantiatePrefab(prefabName, pos);
+	if (dynamicPrimitives_.size() != prevCount + 1) {
+		LogBuffer::Instance().Add(
+			std::string("SpawnEnemyBullet: prefab not spawned as primitive: ") + prefabName,
+			LogBuffer::Level::Warning);
+		return;
+	}
+
+	const Vector3 vel{ direction.x * speed, direction.y * speed, direction.z * speed };
+	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
+	if (spawned) {
+		spawned->Update();
+		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+			if (!other) return;
+			if (other->GetTag() != EntityTag::Player) return;
+			for (auto& b : bullets_) {
+				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
+			}
+		};
+	}
+
+	BulletRuntime br{};
+	br.primitive         = spawned;
+	br.velocity          = vel;
+	br.speed             = speed;
+	br.remainingLifetime = lifetime;
+	br.originPos         = pos;
+	if (spawned) br.baseColliderRadius = spawned->GetCollider().radius;
+	bullets_.push_back(br);
+}
+
+IImGuiEditable* BaseScene::SpawnEnemyAt(const std::string& prefabName, const Vector3& pos) {
+	const size_t prevPrim = dynamicPrimitives_.size();
+	const size_t prevAnim = dynamicAnimated_.size();
+	const size_t prevObj  = object3DInstances_.size();
+	InstantiatePrefab(prefabName, pos);
+	if (dynamicPrimitives_.size() != prevPrim) return dynamicPrimitives_.back().get();
+	if (dynamicAnimated_.size()   != prevAnim) return dynamicAnimated_.back().get();
+	if (object3DInstances_.size() != prevObj)  return object3DInstances_.back().get();
+	return nullptr;
 }
 
 void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {

@@ -27,6 +27,15 @@ bool DStorageManager::Initialize(ID3D12Device* device)
 		return false;
 	}
 
+	// ステージングバッファサイズを拡大（デフォルト 32MB → 256MB）。
+	// 8K cubemap (BC6H, payload ≈ 35MB) のような大きな単一リクエストを通すため。
+	// Queue 作成より前に呼ぶ必要がある。
+	hr = factory_->SetStagingBufferSize(256 * 1024 * 1024);
+	if (FAILED(hr)) {
+		Log("[DStorage] SetStagingBufferSize failed\n");
+		return false;
+	}
+
 	// Queue 作成（SourceType=FILE、優先度 NORMAL、最大キャパシティ）
 	DSTORAGE_QUEUE_DESC queueDesc{};
 	queueDesc.Capacity = DSTORAGE_MAX_QUEUE_CAPACITY;

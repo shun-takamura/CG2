@@ -1,0 +1,38 @@
+{
+  "kind": "Primitive",
+  "model": { "dir": "", "file": "", "animated": false },
+  "tag": "Enemy",
+  "defaults": {
+    "scale": [1.0, 1.0, 1.0],
+    "rotate": [0, 0, 0]
+  },
+  "primitive": {
+    "primitiveType": 0,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [1.0, 0.3, 0.1, 1.0],
+    "blendMode": 1,
+    "depthWrite": true,
+    "alphaReference": 0,
+    "cullBackface": false,
+    "samplerMode": 0,
+    "uvAutoScroll": false,
+    "uvScrollSpeed": [0, 0],
+    "uvOffset": [0, 0],
+    "uvScale": [1, 1],
+    "uvFlipU": false,
+    "uvFlipV": false,
+    "billboardMode": "None",
+    "timeGroup": "World"
+  },
+  "collider": {
+    "shape": "Sphere",
+    "offset": [0, 0, 0],
+    "radius": 1.2,
+    "halfExtents": [0.8, 0.8, 0.8],
+    "capsuleRadius": 0.8,
+    "capsuleHeight": 1.0
+  },
+  "hp": {
+    "maxHP": 80
+  }
+}

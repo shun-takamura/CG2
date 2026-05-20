@@ -101,6 +101,11 @@ public:
     virtual void OnImGuiInspector() = 0;
 
     /// <summary>
+    /// 向きをオイラー角（ラジアン）で設定する。対応していない派生はデフォルトで何もしない。
+    /// </summary>
+    virtual void SetRotate(const Vector3& /*rotate*/) {}
+
+    /// <summary>
     /// 3Dギズモ操作用：Translateへのポインタを返す（nullptrならギズモ非対応）
     /// 3Dオブジェクトはオーバーライドして transform_.translate のアドレスを返す
     /// </summary>

@@ -3,27 +3,57 @@
   "spawn_entries": [
     {
       "enemy_type": "Drone",
-      "prefab": "dummy_enemy",
+      "prefab": "drone",
       "trigger_t": 0.05,
-      "retreat_t": 0.15,
-      "spline_id": "EnemyPath_01",
-      "speed": 0.15
-    },
-    {
-      "enemy_type": "Drone",
-      "prefab": "dummy_enemy",
-      "trigger_t": 0.10,
       "retreat_t": 0.20,
       "spline_id": "EnemyPath_01",
-      "speed": 0.15
+      "speed": 0.15,
+      "shoot_interval_t": 0.04
     },
     {
       "enemy_type": "Drone",
-      "prefab": "dummy_enemy",
-      "trigger_t": 0.18,
+      "prefab": "drone",
+      "trigger_t": 0.10,
+      "retreat_t": 0.25,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.15,
+      "shoot_interval_t": 0.04
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "drone",
+      "trigger_t": 0.15,
       "retreat_t": 0.30,
       "spline_id": "EnemyPath_01",
-      "speed": 0.20
+      "speed": 0.20,
+      "shoot_interval_t": 0.05
+    },
+    {
+      "enemy_type": "Carrier",
+      "prefab": "carrier",
+      "trigger_t": 0.35,
+      "retreat_t": 0.55,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.05,
+      "spawn_interval_sec": 4.0,
+      "spawn_limit": 3
+    },
+    {
+      "enemy_type": "Rusher",
+      "prefab": "rusher",
+      "trigger_t": 0.60,
+      "retreat_t": -1.0,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.40
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "drone",
+      "trigger_t": 0.75,
+      "retreat_t": 0.90,
+      "spline_id": "EnemyPath_01",
+      "speed": 0.15,
+      "shoot_interval_t": 0.03
     }
   ]
 }

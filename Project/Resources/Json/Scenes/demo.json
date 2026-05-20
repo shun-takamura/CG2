@@ -26,6 +26,30 @@
       }
     },
     {
+      "type": "Object3D",
+      "name": "player2.mesh",
+      "tag": "None",
+      "dir": "Resources/Models/Player",
+      "file": "player2.mesh",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          6,
+          0,
+          2.5
+        ]
+      }
+    },
+    {
       "type": "AnimatedObject3D",
       "name": "sneakWalk.mesh",
       "tag": "Enemy",
@@ -67,7 +91,7 @@
           0
         ],
         "translate": [
-          0,
+          -2.4977478981018066,
           0,
           0
         ]

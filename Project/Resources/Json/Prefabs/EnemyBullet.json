@@ -1,0 +1,39 @@
+{
+  "kind": "Primitive",
+  "model": { "dir": "", "file": "", "animated": false },
+  "tag": "EnemyAttack",
+  "defaults": {
+    "scale": [0.3, 0.3, 0.3],
+    "rotate": [0, 0, 0]
+  },
+  "primitive": {
+    "primitiveType": 0,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [1.0, 0.4, 0.1, 1.0],
+    "blendMode": 1,
+    "depthWrite": true,
+    "alphaReference": 0,
+    "cullBackface": false,
+    "samplerMode": 0,
+    "uvAutoScroll": false,
+    "uvScrollSpeed": [0, 0],
+    "uvOffset": [0, 0],
+    "uvScale": [1, 1],
+    "uvFlipU": false,
+    "uvFlipV": false,
+    "billboardMode": "None",
+    "timeGroup": "World"
+  },
+  "collider": {
+    "shape": "Sphere",
+    "offset": [0, 0, 0],
+    "radius": 0.3,
+    "halfExtents": [0.3, 0.3, 0.3],
+    "capsuleRadius": 0.3,
+    "capsuleHeight": 0.3
+  },
+  "damageDealer": {
+    "damage": 10,
+    "multiplier": 1.0
+  }
+}

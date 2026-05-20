@@ -185,6 +185,18 @@ public:
 	/// </summary>
 	SplineCurveActor* FindDynamicSplineByName(const std::string& name);
 
+	/// <summary>
+	/// 敵弾をスポーンする。EnemyAttack タグ付き。プレイヤーに当たるとダメージを与える。
+	/// </summary>
+	void SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
+		float speed = 18.0f, float lifetime = 4.0f,
+		const std::string& prefabName = "EnemyBullet");
+
+	/// <summary>
+	/// 指定プレハブをスプラインなしで指定座標に直接スポーンする（Carrier の子スポーン等）。
+	/// </summary>
+	IImGuiEditable* SpawnEnemyAt(const std::string& prefabName, const Vector3& pos);
+
 #ifdef USE_IMGUI
 	/// <summary>
 	/// 指定された editable がこのシーンの動的オブジェクト（Remove 可能）か
@@ -417,10 +429,20 @@ protected:
 		SplineCurveActor* spline = nullptr;
 		float t = 0.0f;
 		float speed = 0.1f;
-		bool  removeAtEnd = true;
-		int   waveEntryIndex = -1; // ウェーブエントリ index（kill 記録用、-1=未紐付）
+		bool  removeAtEnd       = true;
+		bool  billboardToPlayer = false; // true: プレイヤー方向を向く（カメラ方向ではない）
+		int   waveEntryIndex    = -1;    // ウェーブエントリ index（kill 記録用、-1=未紐付）
+		class EnemyController* controller = nullptr; // 紐付くコントローラ（なければ nullptr）
 	};
 	std::vector<MovingEnemy> movingEnemies_;
+
+	/// <summary>
+	/// 敵コントローラを更新し、自由移動・スプライン切り離し・コントローラ終了を処理する。
+	/// 派生 Update から UpdateMovingEnemies より前に呼ぶ。
+	/// </summary>
+	void UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT);
+
+	std::vector<std::unique_ptr<class EnemyController>> enemyControllers_;
 
 	// GPU がまだ使用中のリソースを即座に破棄するとコマンドリスト submit 時にエラーとなるため、
 	// Remove 時は一旦ここに退避し、次フレームの ProcessAsyncLoads で破棄する
