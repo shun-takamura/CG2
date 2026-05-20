@@ -36,6 +36,7 @@ public:
 
 	// シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する。
 	void Seek(float seconds) override;
+	float GetCameraProgressT() const override;
 
 	Camera* GetCamera() override;
 
@@ -58,7 +59,7 @@ private:
 
 	// ----- ImGui で編集可能な調整値（Resources/Json/Tuning/StagePlay.json に自動同期） -----
 	Vector3 playerLocalOffset_{ 0.0f, -0.5f, 6.0f };  // カメラローカルの中心位置（無入力時）
-	float   railCameraSpeed_ = 0.05f;                  // RailCamera の進行速度（t/秒）
+	float   railCameraSpeed_ = 1.0f / 120.0f;          // RailCamera の進行速度（t/秒）。120秒で踏破
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
 	Vector2 playerClipMargin_{ 0.1f, 0.1f };           // クリップ空間で許す画面外マージン（X/Y）
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い

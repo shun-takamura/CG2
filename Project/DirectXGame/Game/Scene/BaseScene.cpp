@@ -674,11 +674,11 @@ void BaseScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 			ctrl->entity_ = nullptr;
 		}
 	}
-	// null 化されたコントローラを削除
+	// entity_ が null（破棄済み）または全コマンド完了したコントローラを削除
 	enemyControllers_.erase(
 		std::remove_if(enemyControllers_.begin(), enemyControllers_.end(),
 			[](const std::unique_ptr<EnemyController>& c) {
-				return !c || (!c->entity_ && c->IsDone());
+				return !c || !c->entity_ || c->IsDone();
 			}),
 		enemyControllers_.end());
 }
@@ -734,6 +734,10 @@ void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
 	// movingEnemies_ から該当ポインタを無効化（衝突で先に死んだケース等）
 	for (auto& m : movingEnemies_) {
 		if (m.entity == e) m.entity = nullptr;
+	}
+	// 敵コントローラから該当ポインタを無効化（dangling 参照防止）
+	for (auto& ctrl : enemyControllers_) {
+		if (ctrl && ctrl->entity_ == e) ctrl->entity_ = nullptr;
 	}
 	// ホーミング対象として参照している弾があれば無効化（dangling 参照防止）
 	for (auto& b : bullets_) {

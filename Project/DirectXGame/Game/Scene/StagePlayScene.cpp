@@ -1006,7 +1006,9 @@ void StagePlayScene::Seek(float seconds) {
 	}
 
 	// ----- ゲーム状態を Seek 先に合わせてリセット -----
-	// 現在生きている敵・弾・スプライン追従敵をすべて掃除
+	// 現在生きている敵・弾・スプライン追従敵・敵コントローラをすべて掃除
+	// （enemyControllers_ は entity_ がダングリングになるので必ずクリアする）
+	enemyControllers_.clear();
 	movingEnemies_.clear();
 	bullets_.clear();
 	for (auto& p : dynamicPrimitives_) {
@@ -1071,12 +1073,41 @@ void StagePlayScene::Seek(float seconds) {
 
 		SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
 		if (!sp) continue;
-		SpawnEnemyOnSpline(we.prefab, sp, we.speed, true, tOnSpline, static_cast<int>(i));
+		const bool removeAtEnd = (we.enemyType != "Rusher");
+		IImGuiEditable* spawned = SpawnEnemyOnSpline(
+			we.prefab, sp, we.speed, removeAtEnd, tOnSpline, static_cast<int>(i));
+		if (!spawned) continue;
+
+		// Seek 復元された敵にも EnemyController を作って AI を再開させる
+		auto ctrl = std::make_unique<EnemyController>();
+		ctrl->entity_           = spawned;
+		ctrl->waveEntryIndex_   = static_cast<int>(i);
+		ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
+		ctrl->triggerT_         = we.triggerT;
+		ctrl->shootIntervalT_   = we.shootIntervalT;
+		ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
+		ctrl->spawnLimit_       = we.spawnLimit;
+		ctrl->childPrefab_      = we.prefab;
+		ctrl->childSplineId_    = we.splineId;
+		ctrl->Init(EnemyCommandFactory::Create(we));
+
+		for (auto& m : movingEnemies_) {
+			if (m.entity == spawned) {
+				m.controller       = ctrl.get();
+				m.billboardToPlayer = ctrl->billboardToPlayer_;
+				break;
+			}
+		}
+		enemyControllers_.push_back(std::move(ctrl));
 	}
 }
 
 Camera* StagePlayScene::GetCamera() {
 	return camera_.get();
+}
+
+float StagePlayScene::GetCameraProgressT() const {
+	return railCamera_ ? railCamera_->GetProgress() : -1.0f;
 }
 
 // =====================================================================

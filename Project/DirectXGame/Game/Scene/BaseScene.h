@@ -279,6 +279,11 @@ public:
 	/// </summary>
 	virtual void Seek(float seconds) { SetElapsedSeconds(seconds); }
 
+	/// <summary>
+	/// レールカメラの進行度 t（正規化 0..1）を返す。レールを使わないシーンは -1 を返す。
+	/// </summary>
+	virtual float GetCameraProgressT() const { return -1.0f; }
+
 	//====================
 	// タイムスケール
 	//====================
