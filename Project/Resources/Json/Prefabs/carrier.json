@@ -43,5 +43,10 @@
   },
   "hp": {
     "maxHP": 500
+  },
+  "carrier": {
+    "childLifetimeSec": 10.0,
+    "childWanderRadius": 8.0,
+    "childMoveSpeed": 5.0
   }
 }

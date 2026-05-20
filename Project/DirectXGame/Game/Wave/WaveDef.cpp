@@ -42,12 +42,14 @@ namespace WaveDefIO {
 				entry.prefab    = e["prefab"].AsString();
 				entry.triggerT  = static_cast<float>(e["trigger_t"].AsDouble(entry.triggerT));
 				entry.retreatT  = static_cast<float>(e["retreat_t"].AsDouble(entry.retreatT));
-				entry.speed     = static_cast<float>(e["speed"].AsDouble(entry.speed));
+				entry.traverseT = static_cast<float>(e["traverse_t"].AsDouble(entry.traverseT));
 				entry.splineId  = e["spline_id"].AsString();
 				entry.count          = static_cast<int>(e["count"].AsDouble(entry.count));
 			entry.shootIntervalT = static_cast<float>(e["shoot_interval_t"].AsDouble(entry.shootIntervalT));
 			entry.spawnIntervalSec = static_cast<float>(e["spawn_interval_sec"].AsDouble(entry.spawnIntervalSec));
 			entry.spawnLimit     = static_cast<int>(e["spawn_limit"].AsDouble(entry.spawnLimit));
+			entry.childPrefab    = e["child_prefab"].AsString();
+			entry.childSplineId  = e["child_spline_id"].AsString();
 
 				const JsonValue& pos = e["positions"];
 				if (pos.IsArray()) {
@@ -73,12 +75,14 @@ namespace WaveDefIO {
 			o["prefab"]     = e.prefab;
 			o["trigger_t"]  = static_cast<double>(e.triggerT);
 			o["retreat_t"]  = static_cast<double>(e.retreatT);
-			o["speed"]      = static_cast<double>(e.speed);
+			o["traverse_t"] = static_cast<double>(e.traverseT);
 			o["spline_id"]  = e.splineId;
 			o["count"]           = static_cast<double>(e.count);
 			o["shoot_interval_t"]  = static_cast<double>(e.shootIntervalT);
 			o["spawn_interval_sec"] = static_cast<double>(e.spawnIntervalSec);
 			o["spawn_limit"]       = static_cast<double>(e.spawnLimit);
+			o["child_prefab"]      = e.childPrefab;
+			o["child_spline_id"]   = e.childSplineId;
 
 			if (!e.positions.empty()) {
 				JsonValue posArr = JsonValue::MakeArray();

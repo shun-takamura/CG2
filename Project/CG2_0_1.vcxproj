@@ -363,6 +363,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Components\EntityTag.h" />
     <ClInclude Include="DirectXGame\Game\Components\HP.h" />
     <ClInclude Include="DirectXGame\Game\Components\DamageDealer.h" />
+    <ClInclude Include="DirectXGame\Game\Components\BulletParams.h" />
+    <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionMatrix.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionManager.h" />
@@ -377,6 +379,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />

@@ -13,6 +13,7 @@ struct EnemyContext {
 	IImGuiEditable* player        = nullptr;
 	BaseScene*      scene         = nullptr;
 	float           railT         = 0.0f;   // 現在のカメラ進行度 t
+	bool            splineArrived = false;  // スプライン終端到達済み（Rusher の溜め開始判定用）
 	float           triggerT      = 0.0f;   // このエントリの trigger_t（射撃間隔計算基準）
 	float           shootIntervalT = 0.04f; // 射撃間隔 [t]
 	float           spawnIntervalSec = 5.0f; // 子スポーン間隔 [秒]（Carrier 用）

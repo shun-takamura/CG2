@@ -11,7 +11,7 @@
 /// スプライン終端到達後（EnemyController に渡されてから）すぐ OnEnter が呼ばれる前提。
 /// </summary>
 class ChargeRushCommand : public IEnemyCommand {
-	enum class Phase { Charge, Rush, Done };
+	enum class Phase { Approach, Charge, Rush, Done };
 
 public:
 	explicit ChargeRushCommand(float chargeTime = 1.5f, float rushSpeed = 55.0f,
@@ -19,15 +19,26 @@ public:
 		: chargeTime_(chargeTime), rushSpeed_(rushSpeed), rushMaxDistance_(rushMaxDistance) {}
 
 	void OnEnter(IImGuiEditable* entity, EnemyContext& ctx) override {
-		phase_        = Phase::Charge;
+		phase_        = Phase::Approach;
 		chargeTimer_  = 0.0f;
 		rushTraveled_ = 0.0f;
-		ctx.requestDetach     = true;   // スプラインから切り離す
-		ctx.billboardToPlayer = true;   // 溜め中はプレイヤー方向を向く
-		if (entity) entity->GetCollider().enabled = false; // 溜め中は当たり判定 OFF
+		// Approach 中はスプライン追従に任せる（requestDetach しない）
+		ctx.billboardToPlayer = true;
+		// 溜め前は当たり判定 OFF（接触ダメージなし）
+		if (entity) entity->GetCollider().enabled = false;
 	}
 
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
+		// Approach: スプライン終端に到達するまで待機
+		if (phase_ == Phase::Approach) {
+			ctx.billboardToPlayer = true;
+			if (ctx.splineArrived) {
+				phase_ = Phase::Charge;
+				chargeTimer_ = 0.0f;
+				ctx.requestDetach = true; // 以降は自由移動
+			}
+			return;
+		}
 		if (phase_ == Phase::Charge) {
 			ctx.billboardToPlayer = true;
 			// 完了時の突進方向をプレイヤー方向で固定
@@ -66,7 +77,7 @@ public:
 	bool IsFinished() const override { return phase_ == Phase::Done; }
 
 private:
-	Phase   phase_          = Phase::Charge;
+	Phase   phase_          = Phase::Approach;
 	float   chargeTime_     = 1.5f;
 	float   chargeTimer_    = 0.0f;
 	float   rushSpeed_      = 55.0f;

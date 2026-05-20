@@ -145,6 +145,29 @@ void InspectorWindow::OnDraw() {
                     selected->SetAttackPower(ap);
                 }
             }
+
+            ImGui::Separator();
+
+            // BulletParams（弾プレハブ用：速度・寿命・ホーミング）
+            BulletParams& bp = selected->GetBulletParams();
+            ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
+            if (bp.enabled) {
+                ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
+                ImGui::DragFloat("Bullet Lifetime", &bp.lifetime, 0.1f, 0.0f, 60.0f, "%.2f sec");
+                ImGui::DragFloat("Bullet Homing Strength", &bp.homingStrength, 0.05f, 0.0f, 20.0f, "%.2f /sec");
+                ImGui::TextDisabled("(SpawnEnemyBullet 時にプレハブの bullet セクションから読まれる)");
+            }
+
+            ImGui::Separator();
+
+            // CarrierParams（運び屋プレハブ用：子敵パラメータ）
+            CarrierParams& cp = selected->GetCarrierParams();
+            ImGui::Checkbox("CarrierParams Enabled", &cp.enabled);
+            if (cp.enabled) {
+                ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
+                ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
+                ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
+            }
         }
         ImGui::Separator();
     }
@@ -246,6 +269,20 @@ void InspectorWindow::OnDraw() {
                     if (selected->HasAttackPower()) {
                         def.hasAttackPower = true;
                         def.attackPower = selected->GetAttackPower();
+                    }
+                    const BulletParams& bp = selected->GetBulletParams();
+                    if (bp.enabled) {
+                        def.hasBullet            = true;
+                        def.bulletSpeed          = bp.speed;
+                        def.bulletLifetime       = bp.lifetime;
+                        def.bulletHomingStrength = bp.homingStrength;
+                    }
+                    const CarrierParams& cp = selected->GetCarrierParams();
+                    if (cp.enabled) {
+                        def.hasCarrier               = true;
+                        def.carrierChildLifetimeSec  = cp.childLifetimeSec;
+                        def.carrierChildWanderRadius = cp.childWanderRadius;
+                        def.carrierChildMoveSpeed    = cp.childMoveSpeed;
                     }
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";

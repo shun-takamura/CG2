@@ -305,6 +305,24 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.attackPower    = static_cast<int>(apJ.AsInt(static_cast<int64_t>(out.attackPower)));
 	}
 
+	// Bullet（弾プレハブ用の速度・寿命・ホーミング）
+	const JsonValue& blJ = root["bullet"];
+	if (blJ.IsObject()) {
+		out.hasBullet            = true;
+		out.bulletSpeed          = static_cast<float>(blJ["speed"].AsDouble(out.bulletSpeed));
+		out.bulletLifetime       = static_cast<float>(blJ["lifetime"].AsDouble(out.bulletLifetime));
+		out.bulletHomingStrength = static_cast<float>(blJ["homingStrength"].AsDouble(out.bulletHomingStrength));
+	}
+
+	// Carrier（運び屋プレハブ用の子敵パラメータ）
+	const JsonValue& caJ = root["carrier"];
+	if (caJ.IsObject()) {
+		out.hasCarrier               = true;
+		out.carrierChildLifetimeSec  = static_cast<float>(caJ["childLifetimeSec"].AsDouble(out.carrierChildLifetimeSec));
+		out.carrierChildWanderRadius = static_cast<float>(caJ["childWanderRadius"].AsDouble(out.carrierChildWanderRadius));
+		out.carrierChildMoveSpeed    = static_cast<float>(caJ["childMoveSpeed"].AsDouble(out.carrierChildMoveSpeed));
+	}
+
 	return true;
 }
 
@@ -385,6 +403,22 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		JsonValue apObj = JsonValue::MakeObject();
 		apObj["value"] = static_cast<int64_t>(def.attackPower);
 		root["attackPower"] = std::move(apObj);
+	}
+
+	if (def.hasBullet) {
+		JsonValue blObj = JsonValue::MakeObject();
+		blObj["speed"]          = static_cast<double>(def.bulletSpeed);
+		blObj["lifetime"]       = static_cast<double>(def.bulletLifetime);
+		blObj["homingStrength"] = static_cast<double>(def.bulletHomingStrength);
+		root["bullet"] = std::move(blObj);
+	}
+
+	if (def.hasCarrier) {
+		JsonValue caObj = JsonValue::MakeObject();
+		caObj["childLifetimeSec"]  = static_cast<double>(def.carrierChildLifetimeSec);
+		caObj["childWanderRadius"] = static_cast<double>(def.carrierChildWanderRadius);
+		caObj["childMoveSpeed"]    = static_cast<double>(def.carrierChildMoveSpeed);
+		root["carrier"] = std::move(caObj);
 	}
 
 	// ディレクトリ作成

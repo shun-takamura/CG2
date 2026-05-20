@@ -106,4 +106,16 @@ struct PrefabDef {
 	// ----- AttackPower（プレイヤー用の基礎攻撃力） -----
 	bool          hasAttackPower = false;
 	int           attackPower = 10;
+
+	// ----- Bullet（弾プレハブ用：速度・寿命・ホーミング） -----
+	bool          hasBullet = false;
+	float         bulletSpeed          = 18.0f; // [units/sec]
+	float         bulletLifetime       = 4.0f;  // [sec]
+	float         bulletHomingStrength = 0.0f;  // [/sec] 0=直進
+
+	// ----- Carrier（運び屋プレハブ用：子敵の寿命・徘徊半径） -----
+	bool          hasCarrier             = false;
+	float         carrierChildLifetimeSec  = 10.0f;
+	float         carrierChildWanderRadius = 8.0f;
+	float         carrierChildMoveSpeed    = 5.0f;
 };

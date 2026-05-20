@@ -45,6 +45,9 @@ public:
     const Matrix4x4& GetProjectionMatrix() const     { return projectionMatrix_; }
     const Matrix4x4& GetViewProjectionMatrix() const { return viewProjectionMatrix_; }
     const Vector3&   GetTranslate() const            { return translate_; }
+    const Vector3&   GetPivot() const                { return pivot_; }
+    float            GetDistance() const             { return distance_; }
+    float            GetFovY() const                 { return fovY_; }
 
 private:
     static constexpr float kMinDistance = 0.1f;
@@ -58,7 +61,7 @@ private:
     float fovY_        = 0.45f;            // ~25.8°
     float aspectRatio_ = 16.0f / 9.0f;
     float nearClip_    = 0.1f;
-    float farClip_     = 1000.0f;
+    float farClip_     = 10000.0f;
 
     // キャッシュ
     Matrix4x4 viewMatrix_           = MakeIdentity4x4();
