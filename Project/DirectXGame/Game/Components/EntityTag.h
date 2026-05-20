@@ -10,9 +10,9 @@
 enum class EntityTag : int {
 	None = 0,
 	Player,            // 自機
-	PlayerBullet,      // 自機弾
+	PlayerAttack,      // 自機の攻撃（弾・近接・必殺技のヒット判定等）
 	Enemy,             // 敵全般
-	EnemyBullet,       // 敵弾
+	EnemyAttack,       // 敵の攻撃（弾・突進・ボスの攻撃判定等）
 	Boss,              // ボス（AI/HPバー扱いを Enemy と分離したい）
 	Terrain,           // 地形・建物
 	Skybox,            // 天球
@@ -35,9 +35,9 @@ inline std::string_view GetTagName(EntityTag t) {
 	switch (t) {
 	case EntityTag::None:             return "None";
 	case EntityTag::Player:           return "Player";
-	case EntityTag::PlayerBullet:     return "PlayerBullet";
+	case EntityTag::PlayerAttack:     return "PlayerAttack";
 	case EntityTag::Enemy:            return "Enemy";
-	case EntityTag::EnemyBullet:      return "EnemyBullet";
+	case EntityTag::EnemyAttack:      return "EnemyAttack";
 	case EntityTag::Boss:             return "Boss";
 	case EntityTag::Terrain:          return "Terrain";
 	case EntityTag::Skybox:           return "Skybox";
@@ -69,9 +69,9 @@ inline void GetTagColor(EntityTag t, float& r, float& g, float& b, float& a) {
 	a = 1.0f;
 	switch (t) {
 	case EntityTag::Player:           r = 0.40f; g = 0.85f; b = 1.00f; break; // 水色
-	case EntityTag::PlayerBullet:     r = 0.55f; g = 0.85f; b = 1.00f; break;
+	case EntityTag::PlayerAttack:     r = 0.55f; g = 0.85f; b = 1.00f; break;
 	case EntityTag::Enemy:            r = 1.00f; g = 0.55f; b = 0.45f; break; // 赤
-	case EntityTag::EnemyBullet:      r = 1.00f; g = 0.70f; b = 0.55f; break;
+	case EntityTag::EnemyAttack:      r = 1.00f; g = 0.70f; b = 0.55f; break;
 	case EntityTag::Boss:             r = 1.00f; g = 0.30f; b = 0.30f; break; // 濃い赤
 	case EntityTag::Terrain:          r = 0.70f; g = 0.65f; b = 0.45f; break; // 茶
 	case EntityTag::Skybox:           r = 0.55f; g = 0.55f; b = 0.85f; break;

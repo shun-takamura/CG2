@@ -298,6 +298,21 @@ void CollisionManager::Update() {
 			if (TestPair(ca, wA, cb, wB)) {
 				ca.isCollidingThisFrame = true;
 				cb.isCollidingThisFrame = true;
+
+				// ----- 共通ダメージ交換 -----
+				// CollisionMatrix::ShouldCollide で既にフレンドリーファイア等は除外されている前提。
+				// DamageDealer 側の damage を HP 側に適用する。両方向に成立しうる（突進敵がプレイヤーに突っ込み、
+				// 同時にプレイヤーが近接でカウンターしているケース等）。
+				{
+					DamageDealer& dda = a->GetDamageDealer();
+					HP&           hpb = b->GetHP();
+					if (dda.enabled && hpb.enabled) hpb.TakeDamage(dda.damage);
+
+					DamageDealer& ddb = b->GetDamageDealer();
+					HP&           hpa = a->GetHP();
+					if (ddb.enabled && hpa.enabled) hpa.TakeDamage(ddb.damage);
+				}
+
 				if (ca.onCollision) ca.onCollision(b);
 				if (cb.onCollision) cb.onCollision(a);
 			}

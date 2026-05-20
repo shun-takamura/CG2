@@ -5,7 +5,7 @@
     "file": "",
     "animated": false
   },
-  "tag": "PlayerBullet",
+  "tag": "PlayerAttack",
   "defaults": {
     "scale": [
       1,
@@ -126,5 +126,9 @@
     ],
     "capsuleRadius": 0.5,
     "capsuleHeight": 1
+  },
+  "damageDealer": {
+    "damage": 0,
+    "multiplier": 1.0
   }
 }

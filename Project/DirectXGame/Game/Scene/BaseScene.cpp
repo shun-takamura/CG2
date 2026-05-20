@@ -429,6 +429,26 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 		c.capsuleHeight = def->colliderCapsuleHeight;
 	};
 
+	auto applyHPAndDamage = [&](IImGuiEditable* e) {
+		if (!e) return;
+		if (def->hasHP) {
+			HP& hp = e->GetHP();
+			hp.enabled = true;
+			hp.maxHP = def->maxHP;
+			hp.currentHP = def->maxHP;
+		}
+		if (def->hasDamageDealer) {
+			DamageDealer& dd = e->GetDamageDealer();
+			dd.enabled = true;
+			dd.damage = def->damage;
+			dd.multiplier = def->attackMultiplier;
+		}
+		if (def->hasAttackPower) {
+			e->SetHasAttackPower(true);
+			e->SetAttackPower(def->attackPower);
+		}
+	};
+
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
 
 	if (def->kind == PrefabKind::Primitive) {
@@ -449,6 +469,7 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 		back->SetRotate(def->defaultRotate);
 		back->SetTranslate(worldPos);
 		if (def->hasCollider) applyCollider(back->GetCollider());
+		applyHPAndDamage(back.get());
 	} else if (def->kind == PrefabKind::Animated || def->isAnimated) {
 		AddDynamicAnimated(def->modelDir, def->modelFile, worldPos);
 		if (dynamicAnimated_.empty()) return;
@@ -465,6 +486,7 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		if (def->hasCollider) applyCollider(back->GetCollider());
+		applyHPAndDamage(back.get());
 	} else {
 		AddDynamicObject(def->modelDir, def->modelFile, worldPos);
 		if (object3DInstances_.empty()) return;
@@ -481,6 +503,7 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		if (def->hasCollider) applyCollider(back->GetCollider());
+		applyHPAndDamage(back.get());
 	}
 }
 
@@ -492,7 +515,8 @@ SplineCurveActor* BaseScene::FindDynamicSplineByName(const std::string& name) {
 }
 
 IImGuiEditable* BaseScene::SpawnEnemyOnSpline(const std::string& prefabName,
-	SplineCurveActor* spline, float speed, bool removeAtEnd) {
+	SplineCurveActor* spline, float speed, bool removeAtEnd,
+	float initialT, int waveEntryIndex) {
 	if (!spline || spline->GetPointCount() < 2) {
 		LogBuffer::Instance().Add(
 			std::string("SpawnEnemyOnSpline: invalid spline for ") + prefabName,
@@ -505,7 +529,8 @@ IImGuiEditable* BaseScene::SpawnEnemyOnSpline(const std::string& prefabName,
 	const size_t prevAnim = dynamicAnimated_.size();
 	const size_t prevObj  = object3DInstances_.size();
 
-	const Vector3 startPos = spline->Sample(0.0f);
+	const float clampedInitialT = (initialT < 0.0f) ? 0.0f : (initialT > 1.0f ? 1.0f : initialT);
+	const Vector3 startPos = spline->Sample(clampedInitialT);
 	InstantiatePrefab(prefabName, startPos);
 
 	IImGuiEditable* spawned = nullptr;
@@ -526,7 +551,7 @@ IImGuiEditable* BaseScene::SpawnEnemyOnSpline(const std::string& prefabName,
 		return nullptr;
 	}
 
-	movingEnemies_.push_back(MovingEnemy{ spawned, spline, 0.0f, speed, removeAtEnd });
+	movingEnemies_.push_back(MovingEnemy{ spawned, spline, clampedInitialT, speed, removeAtEnd, waveEntryIndex });
 	return spawned;
 }
 
@@ -612,7 +637,8 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	float speed, float lifetime, float colliderGrowthPerMeter,
 	IImGuiEditable* homingTarget, float homingStrength,
 	float maxTravelDistance,
-	const std::string& prefabName) {
+	const std::string& prefabName,
+	int attackPower) {
 	const size_t prevCount = dynamicPrimitives_.size();
 	InstantiatePrefab(prefabName, pos);
 	if (dynamicPrimitives_.size() != prevCount + 1) {
@@ -634,7 +660,13 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	if (spawned) {
 		spawned->Update();
 
-		// 敵に当たったら弾と敵を消す + ヒットエフェクト発火
+		// プレイヤー攻撃力 × プレハブの倍率で最終ダメージを確定（発射時に焼き込む）
+		DamageDealer& dd = spawned->GetDamageDealer();
+		if (dd.enabled) {
+			dd.damage = static_cast<int>(static_cast<float>(attackPower) * dd.multiplier);
+		}
+
+		// 敵に当たったら弾を消す + ヒットエフェクト発火（実ダメージ適用は CollisionManager 側）
 		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 			if (!other) return;
 			// 弾が複数回ヒットしないよう、相手が Enemy/Boss の時だけ反応
@@ -652,8 +684,7 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 			for (auto& b : bullets_) {
 				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
 			}
-			// 相手（敵）も削除
-			DestroyDynamicEntity(other);
+			// HPゼロの敵は BaseScene::SweepDeadEntities が後で破棄する
 		};
 	}
 
@@ -669,6 +700,26 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.homingStrength = homingStrength;
 	br.maxTravelDistance = maxTravelDistance;
 	bullets_.push_back(br);
+}
+
+void BaseScene::SweepDeadEntities() {
+	// 死亡エンティティを収集（破棄で配列が変わるので二段階）。Player タグは除外。
+	std::vector<IImGuiEditable*> dead;
+	dead.reserve(8);
+	auto collect = [&](IImGuiEditable* e) {
+		if (!e) return;
+		if (e->GetTag() == EntityTag::Player) return;
+		if (e->GetHP().IsDead()) dead.push_back(e);
+	};
+	for (auto& p : dynamicPrimitives_) collect(p.get());
+	for (auto& o : object3DInstances_) collect(o.get());
+	for (auto& a : dynamicAnimated_)   collect(a.get());
+
+	// DestroyDynamicEntity が movingEnemies_ / bullets_.homingTarget も
+	// 安全にクリアしてくれるので、こちらを経由して破棄する。
+	for (IImGuiEditable* e : dead) {
+		DestroyDynamicEntity(e);
+	}
 }
 
 void BaseScene::UpdateBullets(float deltaTime) {

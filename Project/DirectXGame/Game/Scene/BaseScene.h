@@ -160,7 +160,8 @@ public:
 		IImGuiEditable* homingTarget = nullptr,
 		float homingStrength = 0.0f,
 		float maxTravelDistance = 0.0f, // 0 で無制限
-		const std::string& prefabName = "TemporaryPlayerBullet");
+		const std::string& prefabName = "TemporaryPlayerBullet",
+		int attackPower = 0); // プレイヤーの基礎攻撃力。弾プレハブの multiplier と掛けて damage を確定
 
 	/// <summary>
 	/// 動的エンティティ（Object3D / Animated / Primitive）を遅延破棄キューへ移送する。
@@ -175,7 +176,9 @@ public:
 	/// 戻り値はスポーン直後のエンティティポインタ（失敗時 nullptr）。
 	/// </summary>
 	virtual IImGuiEditable* SpawnEnemyOnSpline(const std::string& prefabName,
-		SplineCurveActor* spline, float speed = 0.1f, bool removeAtEnd = true);
+		SplineCurveActor* spline, float speed = 0.1f, bool removeAtEnd = true,
+		float initialT = 0.0f,         // スプライン上の初期進行度（Seek 復元用）
+		int   waveEntryIndex = -1);    // ウェーブエントリ index（kill タイムスタンプ用、-1=未紐付）
 
 	/// <summary>
 	/// シーン内の SplineCurveActor を名前で取得（無ければ nullptr）
@@ -381,6 +384,12 @@ protected:
 	/// </summary>
 	void UpdateBullets(float deltaTime);
 
+	/// <summary>
+	/// HP が 0 以下になった動的エンティティを破棄キューへ移送。派生 Update から毎フレーム呼ぶ。
+	/// プレイヤーなど特別扱いしたいエンティティは派生側で除外（タグで判定）すること。
+	/// </summary>
+	void SweepDeadEntities();
+
 	struct BulletRuntime {
 		PrimitiveInstance* primitive = nullptr; // dynamicPrimitives_ 内の生ポインタ
 		Vector3 velocity{ 0.0f, 0.0f, 0.0f };
@@ -409,6 +418,7 @@ protected:
 		float t = 0.0f;
 		float speed = 0.1f;
 		bool  removeAtEnd = true;
+		int   waveEntryIndex = -1; // ウェーブエントリ index（kill 記録用、-1=未紐付）
 	};
 	std::vector<MovingEnemy> movingEnemies_;
 

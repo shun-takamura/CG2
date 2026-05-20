@@ -88,7 +88,10 @@ private:
 
 	// ----- ウェーブ -----
 	WaveDef currentWave_;
-	std::vector<bool> waveFired_;     // entries と同じサイズ。発火済みフラグ
+	std::vector<bool>  waveFired_;     // entries と同じサイズ。発火済みフラグ
+	// entries と同じサイズ。そのエントリから生まれた敵が倒された時刻（秒）。
+	// 負数 = まだ倒されていない。Seek で「kill 時刻 > T」なら未死亡扱いに戻る。
+	std::vector<float> waveKillTime_;
 
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };

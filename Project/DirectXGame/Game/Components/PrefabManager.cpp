@@ -279,6 +279,32 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.colliderCapsuleRadius = static_cast<float>(col["capsuleRadius"].AsDouble(0.5));
 		out.colliderCapsuleHeight = static_cast<float>(col["capsuleHeight"].AsDouble(1.0));
 	}
+
+	// HP
+	const JsonValue& hpJ = root["hp"];
+	if (hpJ.IsObject()) {
+		out.hasHP = true;
+		out.maxHP = static_cast<int>(hpJ["maxHP"].AsInt(static_cast<int64_t>(out.maxHP)));
+	}
+
+	// DamageDealer
+	const JsonValue& ddJ = root["damageDealer"];
+	if (ddJ.IsObject()) {
+		out.hasDamageDealer = true;
+		out.damage           = static_cast<int>(ddJ["damage"].AsInt(static_cast<int64_t>(out.damage)));
+		out.attackMultiplier = static_cast<float>(ddJ["multiplier"].AsDouble(out.attackMultiplier));
+	}
+
+	// AttackPower（数値直値 or オブジェクト）
+	const JsonValue& apJ = root["attackPower"];
+	if (apJ.IsObject()) {
+		out.hasAttackPower = true;
+		out.attackPower    = static_cast<int>(apJ["value"].AsInt(static_cast<int64_t>(out.attackPower)));
+	} else if (apJ.IsNumber()) {
+		out.hasAttackPower = true;
+		out.attackPower    = static_cast<int>(apJ.AsInt(static_cast<int64_t>(out.attackPower)));
+	}
+
 	return true;
 }
 
@@ -340,6 +366,25 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		colObj["capsuleRadius"] = static_cast<double>(def.colliderCapsuleRadius);
 		colObj["capsuleHeight"] = static_cast<double>(def.colliderCapsuleHeight);
 		root["collider"] = std::move(colObj);
+	}
+
+	if (def.hasHP) {
+		JsonValue hpObj = JsonValue::MakeObject();
+		hpObj["maxHP"] = static_cast<int64_t>(def.maxHP);
+		root["hp"] = std::move(hpObj);
+	}
+
+	if (def.hasDamageDealer) {
+		JsonValue ddObj = JsonValue::MakeObject();
+		ddObj["damage"]     = static_cast<int64_t>(def.damage);
+		ddObj["multiplier"] = static_cast<double>(def.attackMultiplier);
+		root["damageDealer"] = std::move(ddObj);
+	}
+
+	if (def.hasAttackPower) {
+		JsonValue apObj = JsonValue::MakeObject();
+		apObj["value"] = static_cast<int64_t>(def.attackPower);
+		root["attackPower"] = std::move(apObj);
 	}
 
 	// ディレクトリ作成

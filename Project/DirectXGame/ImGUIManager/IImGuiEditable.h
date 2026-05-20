@@ -5,6 +5,8 @@
 #include "Vector3.h"
 #include "Components/EntityTag.h"
 #include "Components/SphereCollider.h"
+#include "Components/HP.h"
+#include "Components/DamageDealer.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -67,6 +69,27 @@ public:
     SphereCollider& GetCollider() { return collider_; }
 
     //====================
+    // HP（被ダメージ側のコンポーネント。enabled=false でHPシステム非対象）
+    //====================
+    const HP& GetHP() const { return hp_; }
+    HP& GetHP() { return hp_; }
+
+    //====================
+    // DamageDealer（与ダメージ側のコンポーネント。攻撃エンティティに付与）
+    //====================
+    const DamageDealer& GetDamageDealer() const { return damageDealer_; }
+    DamageDealer& GetDamageDealer() { return damageDealer_; }
+
+    //====================
+    // AttackPower（プレイヤー用の基礎攻撃力。各攻撃の倍率と乗算してダメージを決める）
+    // enabled=false なら未設定。
+    //====================
+    bool  HasAttackPower() const { return hasAttackPower_; }
+    void  SetHasAttackPower(bool v) { hasAttackPower_ = v; }
+    int   GetAttackPower() const { return attackPower_; }
+    void  SetAttackPower(int v) { attackPower_ = v; }
+
+    //====================
     // ObjectID（自動採番、0 は予約＝未割当 / マスク対象外）。
     // ジャスト回避演出など、特定インスタンスをハイライトするためのキーに使う。
     //====================
@@ -103,6 +126,10 @@ protected:
     EntityTag tag_ = EntityTag::None;
     bool visibleInEditor_ = true;
     SphereCollider collider_{};
+    HP hp_{};
+    DamageDealer damageDealer_{};
+    bool hasAttackPower_ = false;
+    int  attackPower_ = 0;
 
     // 0 は予約。コンストラクタで採番される。256 を超えたら 1..255 をラップ（実用上問題ない範囲）
     uint8_t objectId_ = 0;

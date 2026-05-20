@@ -93,4 +93,17 @@ struct PrefabDef {
 	// Capsule
 	float         colliderCapsuleRadius = 0.5f;
 	float         colliderCapsuleHeight = 1.0f;
+
+	// ----- HP（被ダメージ。プレイヤー/敵/ボス用） -----
+	bool          hasHP = false;
+	int           maxHP = 100;
+
+	// ----- DamageDealer（与ダメージ。攻撃エンティティ用） -----
+	bool          hasDamageDealer = false;
+	int           damage = 10;             // 敵側用の固定ダメージ
+	float         attackMultiplier = 1.0f; // プレイヤー攻撃プレハブ用の倍率
+
+	// ----- AttackPower（プレイヤー用の基礎攻撃力） -----
+	bool          hasAttackPower = false;
+	int           attackPower = 10;
 };

@@ -1,4 +1,5 @@
 {
+  "kind": "Animated",
   "model": {
     "dir": "Resources/Models/Animated/Walk",
     "file": "walk.mesh",
@@ -12,8 +13,8 @@
       1
     ],
     "rotate": [
-      0,
-      0,
+      0.1249580904841423,
+      -0.41056156158447266,
       0
     ]
   },
@@ -32,5 +33,11 @@
     ],
     "capsuleRadius": 0.40000000596046448,
     "capsuleHeight": 1
+  },
+  "hp": {
+    "maxHP": 100
+  },
+  "attackPower": {
+    "value": 10
   }
 }
