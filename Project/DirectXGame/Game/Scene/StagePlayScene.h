@@ -86,12 +86,13 @@ private:
 	IImGuiEditable* nearestEnemy_ = nullptr;       // 画面上で最近の敵（軽ホーミング先）
 	bool    aimInitialized_ = false;
 
-	// ----- ウェーブ -----
+	// ----- スポーン -----
 	WaveDef currentWave_;
-	std::vector<bool>  waveFired_;     // entries と同じサイズ。発火済みフラグ
-	// entries と同じサイズ。そのエントリから生まれた敵が倒された時刻（秒）。
-	// 負数 = まだ倒されていない。Seek で「kill 時刻 > T」なら未死亡扱いに戻る。
-	std::vector<float> waveKillTime_;
+	std::vector<bool>  spawnFired_;    // entries と同じサイズ。スポーン済みフラグ
+	std::vector<bool>  retreatFired_;  // entries と同じサイズ。退避発令済みフラグ
+	// entries と同じサイズ。そのエントリから生まれた敵が倒された時の t 値。
+	// 負数 = まだ倒されていない。Seek で「killAtT_ > currentT」なら未死亡扱いに戻す。
+	std::vector<float> killAtT_;
 
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };

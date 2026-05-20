@@ -345,7 +345,7 @@ public:
 	/// <summary>
 	/// Game::Draw から呼ばれる：ハイライト対象だけを idMaskRT に書き込む。
 	/// </summary>
-	void RunIdPass(class ID3D12GraphicsCommandList* commandList);
+	void RunIdPass(struct ID3D12GraphicsCommandList* commandList);
 
 protected:
 	/// <summary>

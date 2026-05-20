@@ -390,8 +390,9 @@ void StagePlayScene::Initialize() {
 		const std::string wavePath = "Resources/Json/Waves/stage1.json";
 		if (std::filesystem::exists(wavePath)) {
 			if (WaveDefIO::LoadFromFile(wavePath, currentWave_)) {
-				waveFired_.assign(currentWave_.entries.size(), false);
-				waveKillTime_.assign(currentWave_.entries.size(), -1.0f);
+				spawnFired_.assign(currentWave_.entries.size(), false);
+				retreatFired_.assign(currentWave_.entries.size(), false);
+				killAtT_.assign(currentWave_.entries.size(), -1.0f);
 			}
 		}
 	}
@@ -823,17 +824,17 @@ void StagePlayScene::Update() {
 	if (!gameFrozen) {
 		UpdateBullets(worldDt);
 
-		// SweepDeadEntities の前に、HP がゼロになった敵のウェーブエントリに kill 時刻を記録
+		// SweepDeadEntities の前に、HP がゼロになった敵のスポーンエントリに kill t を記録
 		// （SweepDeadEntities が DestroyDynamicEntity 経由で movingEnemies_ の entity を null 化する前に行う）
 		{
-			const float now = GetElapsedSeconds();
+			const float currentT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
 			for (auto& m : movingEnemies_) {
 				if (!m.entity) continue;
 				if (m.waveEntryIndex < 0) continue;
-				if (static_cast<size_t>(m.waveEntryIndex) >= waveKillTime_.size()) continue;
-				if (waveKillTime_[m.waveEntryIndex] >= 0.0f) continue; // 既記録
+				if (static_cast<size_t>(m.waveEntryIndex) >= killAtT_.size()) continue;
+				if (killAtT_[m.waveEntryIndex] >= 0.0f) continue; // 既記録
 				if (m.entity->GetHP().IsDead()) {
-					waveKillTime_[m.waveEntryIndex] = now;
+					killAtT_[m.waveEntryIndex] = currentT;
 				}
 			}
 		}
@@ -842,22 +843,32 @@ void StagePlayScene::Update() {
 		SweepDeadEntities();
 	}
 
-	// ウェーブ：経過秒で未発火エントリを発火
+	// スポーン：カメラ進行度 t でエントリをトリガー
 	if (!gameFrozen) {
-		const float elapsed = GetElapsedSeconds();
+		const float currentT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
 		for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
-			if (i >= waveFired_.size() || waveFired_[i]) continue;
 			const WaveEntry& we = currentWave_.entries[i];
-			if (elapsed >= we.time) {
-				SplineCurveActor* sp = FindDynamicSplineByName(we.splineName);
-				if (sp) {
-					SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd, 0.0f, static_cast<int>(i));
-				} else {
-					LogBuffer::Instance().Add(
-						std::string("Wave: spline not found in scene: ") + we.splineName,
-						LogBuffer::Level::Warning);
+
+			// スポーントリガー
+			if (i < spawnFired_.size() && !spawnFired_[i] && currentT >= we.triggerT) {
+				if (!we.splineId.empty()) {
+					SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
+					if (sp) {
+						SpawnEnemyOnSpline(we.prefab, sp, we.speed, true, 0.0f, static_cast<int>(i));
+					} else {
+						LogBuffer::Instance().Add(
+							std::string("Wave: spline not found: ") + we.splineId,
+							LogBuffer::Level::Warning);
+					}
 				}
-				waveFired_[i] = true;
+				spawnFired_[i] = true;
+			}
+
+			// 退避トリガー（退避コマンドは敵AI実装時に追加）
+			if (i < retreatFired_.size() && i < spawnFired_.size()
+				&& spawnFired_[i] && !retreatFired_[i]
+				&& we.retreatT >= 0.0f && currentT >= we.retreatT) {
+				retreatFired_[i] = true;
 			}
 		}
 	}
@@ -978,37 +989,44 @@ void StagePlayScene::Seek(float seconds) {
 			[](const std::unique_ptr<AnimatedObject3DInstance>& a) { return !a; }),
 		dynamicAnimated_.end());
 
-	// Wave 発火フラグ / kill タイムスタンプを Seek 先に合わせて再構築
-	if (waveFired_.size() != currentWave_.entries.size()) {
-		waveFired_.assign(currentWave_.entries.size(), false);
-	}
-	if (waveKillTime_.size() != currentWave_.entries.size()) {
-		waveKillTime_.assign(currentWave_.entries.size(), -1.0f);
-	}
-	// 「seek 先より後の kill」はこのタイムラインではまだ起きていないので無効化
-	for (size_t i = 0; i < waveKillTime_.size(); ++i) {
-		if (waveKillTime_[i] > seconds) waveKillTime_[i] = -1.0f;
+	// スポーン/退避フラグ / kill t を Seek 先に合わせて再構築
+	const float seekT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
+
+	if (spawnFired_.size() != currentWave_.entries.size())
+		spawnFired_.assign(currentWave_.entries.size(), false);
+	if (retreatFired_.size() != currentWave_.entries.size())
+		retreatFired_.assign(currentWave_.entries.size(), false);
+	if (killAtT_.size() != currentWave_.entries.size())
+		killAtT_.assign(currentWave_.entries.size(), -1.0f);
+
+	// seek 先より後の kill は未発生扱いに戻す
+	for (size_t i = 0; i < killAtT_.size(); ++i) {
+		if (killAtT_[i] > seekT) killAtT_[i] = -1.0f;
 	}
 
-	// time <= seconds の entry は発火済み扱い、それ以降は未発火
-	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
-		waveFired_[i] = (currentWave_.entries[i].time <= seconds);
-	}
-
-	// seek 先で「生きているはず」の敵をスプライン上の正しい位置で復元する。
-	// 復元条件: we.time <= seconds かつ未 kill かつ「まだスプラインを走り終えていない or 終端で停止する設定」
+	// フラグを seekT から再構築
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 		const WaveEntry& we = currentWave_.entries[i];
-		if (we.time > seconds) continue;
-		if (waveKillTime_[i] >= 0.0f) continue; // 既に死亡（kill time <= seconds の確定済みエントリ）
+		spawnFired_[i]  = (seekT >= we.triggerT);
+		retreatFired_[i] = (we.retreatT >= 0.0f && seekT >= we.retreatT);
+	}
 
-		const float tOnSpline = (seconds - we.time) * we.speed;
-		if (tOnSpline >= 1.0f && we.removeAtEnd) continue; // 既に終端到達 → 退場済み
+	// 生存中の敵をスプライン上の正しい位置で復元
+	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
+		const WaveEntry& we = currentWave_.entries[i];
+		if (!spawnFired_[i]) continue;
+		if (retreatFired_[i]) continue;
+		if (killAtT_[i] >= 0.0f) continue;
+		if (we.splineId.empty()) continue;
 
-		SplineCurveActor* sp = FindDynamicSplineByName(we.splineName);
+		// camera t → スポーンからの経過秒 → スプライン上の t に変換
+		const float timeSinceSpawn = (seekT - we.triggerT) / railCameraSpeed_;
+		const float tOnSpline = std::clamp(timeSinceSpawn * we.speed, 0.0f, 1.0f);
+		if (tOnSpline >= 1.0f) continue;
+
+		SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
 		if (!sp) continue;
-
-		SpawnEnemyOnSpline(we.prefab, sp, we.speed, we.removeAtEnd, tOnSpline, static_cast<int>(i));
+		SpawnEnemyOnSpline(we.prefab, sp, we.speed, true, tOnSpline, static_cast<int>(i));
 	}
 }
 
