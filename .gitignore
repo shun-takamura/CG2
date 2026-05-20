@@ -332,3 +332,6 @@ git rm -r --cached "*.pdb"
 
 # imgui.iniをキャッシュから削除
 git rm --cached Project/imgui.ini
+
+# HDR ファイル（変換元、DDS化済みなので不要）
+*.hdr
