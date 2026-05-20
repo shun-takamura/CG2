@@ -14,6 +14,9 @@ on:
 # プロジェクトのニーズに合わせて、これらのリストを変更してください。
 # パターンはスペース区切りで指定します。
 env:
+  # Node.js 24を強制するための設定を追加
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  
   # 特定のファイル名（拡張子など）のパターン
   UNWANTED_NAME_PATTERNS: "*.pdb *.ilk *.iix *.user *.ncb *.suo *.log *.dmp *.zip imgui.ini desktop.ini dxcompiler.dll d3d12.dll"
 
