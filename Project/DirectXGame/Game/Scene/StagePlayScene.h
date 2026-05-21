@@ -4,6 +4,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Wave/WaveDef.h"
+#include "Effect/EffectManager.h"
 #include <memory>
 #include <vector>
 
@@ -81,6 +82,9 @@ private:
 	float aimPlaneDistance_ = 80.0f;
 	float aimSmoothTime_   = 0.08f;   // Lerp 時定数（プレイヤー回転用、0.0=即時）
 	float aimAssistPixelScale_ = 1.4f; // 見かけ半径×倍率＝スクリーン上のロックオン許容ピクセル
+	// レティクル外側パーツの中心からのオフセット範囲（pixel）
+	float reticleOuterMinPx_ = 32.0f;
+	float reticleOuterMaxPx_ = 128.0f;
 	// ランタイム状態
 	Vector3 aimTarget_{ 0.0f, 0.0f, 0.0f };       // Lerp 済み（プレイヤー回転用）
 	Vector3 firingTarget_{ 0.0f, 0.0f, 0.0f };    // 即時（弾の発射方向用）
@@ -102,6 +106,21 @@ private:
 
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;
+
+	// ----- チャージシステム -----
+	float playerChargeLevel_ = -1.0f;       // -1=チャージなし, 0.0=未達成, 1=stage1達成, 2=stage2達成
+	float chargeStage1Time_ = 3.0f;         // 1段階目完了までの秒数
+	float chargeStage2Time_ = 6.0f;         // 2段階目完了までの秒数（合計時間）
+	float chargeTimer_ = 0.0f;              // 現在のチャージ経過時間
+	EffectHandle chargeStartEffectHandle_ = kInvalidEffectHandle; // charge_start エフェクト
+	EffectHandle chargeHoldEffectHandle_ = kInvalidEffectHandle;   // charge_hold エフェクト（ループ）
+	bool chargeStage1Triggered_ = false;    // 1段階目発動済みフラグ
+	bool chargeStage2Triggered_ = false;    // 2段階目発動済みフラグ
+	// チャージアニメーション用レティクル設定
+	float outerChargeStartRadius_ = 150.0f;
+	float outerChargeEndRadius_ = 60.0f;
+	float outerChargeEasingDuration_ = 0.3f;
+	float outerRotationSpeed_ = 360.0f;
 
 	// ----- ジャスト回避演出 -----
 	bool  justDodgeActive_ = false;

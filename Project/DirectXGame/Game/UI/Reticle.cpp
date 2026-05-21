@@ -11,6 +11,7 @@ Reticle::~Reticle() = default;
 
 #include <algorithm>
 #include <cmath>
+#include <array>
 
 void Reticle::Initialize(SpriteManager* spriteManager, const std::string& texturePath) {
 	sprite_ = std::make_unique<SpriteInstance>();
@@ -19,6 +20,17 @@ void Reticle::Initialize(SpriteManager* spriteManager, const std::string& textur
 	sprite_->SetSize({ sizePx_, sizePx_ });
 
 	currentSizePx_ = sizePx_;
+
+	// 外側パーツ（4枚）を初期化
+	// アンカーポイント (0.0, 1.0) = 左下基準。各パーツに 90 度ずつ回転を設定して 4 方向に配置する
+	for (int i = 0; i < 4; ++i) {
+		outerParticles_[i] = std::make_unique<SpriteInstance>();
+		outerParticles_[i]->Initialize(spriteManager, "Resources/Textures/reticle_outside.dds", "ReticleOuter" + std::to_string(i));
+		outerParticles_[i]->SetAnchorPoint({ 0.0f, 1.0f });
+		outerParticles_[i]->SetSize({ lockOnMinPxOutside_, lockOnMinPxOutside_ });//仮で最小値で置く
+		// 0°/90°/180°/270° (rad) で各パーツの向きを固定
+		outerParticles_[i]->SetRotation(i * 3.14159265f * 0.5f);
+	}
 
 	ResetToCenter();
 }
@@ -71,10 +83,56 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 	sprite_->SetPosition(position_);
 	sprite_->SetSize({ currentSizePx_, currentSizePx_ });
 	sprite_->Update();
+
+	// ===== チャージアニメーション =====
+	if (chargeLevel_ >= 0.0f) {
+		// 中心からアンカーポイントまでのオフセット
+		float offset;
+		bool animating = (outerChargeEasingElapsed_ < outerChargeEasingDuration_);
+		if (animating) {
+			// チャージ完了直後：lockOnMaxPxOutside_ → lockOnMinPxOutside_ へ線形補間
+			outerChargeEasingElapsed_ += deltaTime;
+			float t = std::clamp(outerChargeEasingElapsed_ / outerChargeEasingDuration_, 0.0f, 1.0f);
+			offset = lockOnMaxPxOutside_ + (lockOnMinPxOutside_ - lockOnMaxPxOutside_) * t;
+		} else {
+			// 補間完了後：非ロックオン時 = 最小オフセット、ロックオン時 = 敵距離連動
+			offset = lockOnMinPxOutside_;
+			if (lockedOn_) {
+				float denom = (lockOnMaxPx_ - lockOnMinPx_);
+				float tLock = (denom > 1e-4f)
+					? std::clamp((lockOnTargetSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
+					: 0.0f;
+				offset = lockOnMinPxOutside_ + tLock * (lockOnMaxPxOutside_ - lockOnMinPxOutside_);
+			}
+		}
+
+		// 4 方向（右上 / 右下 / 左下 / 左上）にアンカーポイントを配置
+		// 各パーツの回転は Initialize 時に 0°/90°/180°/270° で固定済み
+		const Vector2 anchorOffsets[4] = {
+			{ +offset, -offset }, // パーツ 0: 中心の右上
+			{ +offset, +offset }, // パーツ 1: 中心の右下
+			{ -offset, +offset }, // パーツ 2: 中心の左下
+			{ -offset, -offset }, // パーツ 3: 中心の左上
+		};
+
+		for (int i = 0; i < 4; ++i) {
+			Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
+			outerParticles_[i]->SetPosition(partPos);
+			outerParticles_[i]->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
+			outerParticles_[i]->Update();
+		}
+	}
 }
 
 void Reticle::Draw() {
 	if (sprite_) sprite_->Draw();
+
+	// チャージ中なら外側パーツも描画
+	if (chargeLevel_ >= 0.0f) {
+		for (int i = 0; i < 4; ++i) {
+			if (outerParticles_[i]) outerParticles_[i]->Draw();
+		}
+	}
 }
 
 void Reticle::SetLockOn(bool on) {
@@ -82,4 +140,35 @@ void Reticle::SetLockOn(bool on) {
 	if (sprite_) {
 		sprite_->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
 	}
+}
+
+void Reticle::StartChargeAnimation(float startRadius, float endRadius, float duration) {
+	chargeLevel_ = 0.0f;
+	outerRadius_ = startRadius;
+	outerChargeEasingStart_ = startRadius;
+	outerChargeEasingEnd_ = endRadius;
+	outerChargeEasingDuration_ = duration > 0.0f ? duration : 0.3f;
+	outerChargeEasingElapsed_ = 0.0f;
+	outerRotation_ = 0.0f;
+
+	// 即座に最新の position_ で各パーツの位置を反映（前回フレームの古い位置で1フレーム描画される問題を回避）
+	float offset = lockOnMaxPxOutside_;
+	const Vector2 anchorOffsets[4] = {
+		{ +offset, -offset },
+		{ +offset, +offset },
+		{ -offset, +offset },
+		{ -offset, -offset },
+	};
+	for (int i = 0; i < 4; ++i) {
+		if (!outerParticles_[i]) continue;
+		Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
+		outerParticles_[i]->SetPosition(partPos);
+		outerParticles_[i]->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
+		outerParticles_[i]->Update();
+	}
+}
+
+void Reticle::EndChargeAnimation() {
+	chargeLevel_ = -1.0f;
+	outerChargeEasingElapsed_ = 0.0f;
 }

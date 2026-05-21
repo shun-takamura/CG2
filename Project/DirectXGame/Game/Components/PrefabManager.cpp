@@ -331,6 +331,14 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.carrierChildMoveSpeed    = static_cast<float>(caJ["childMoveSpeed"].AsDouble(out.carrierChildMoveSpeed));
 	}
 
+	// Charge（プレイヤープレハブ用のチャージ時間）
+	const JsonValue& chJ = root["charge"];
+	if (chJ.IsObject()) {
+		out.hasCharge        = true;
+		out.chargeStage1Time = static_cast<float>(chJ["stage1Time"].AsDouble(out.chargeStage1Time));
+		out.chargeStage2Time = static_cast<float>(chJ["stage2Time"].AsDouble(out.chargeStage2Time));
+	}
+
 	// エフェクトスロット（スロット名 → エフェクト名）
 	const JsonValue& efJ = root["effects"];
 	if (efJ.IsObject()) {
@@ -442,6 +450,13 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		caObj["childWanderRadius"] = static_cast<double>(def.carrierChildWanderRadius);
 		caObj["childMoveSpeed"]    = static_cast<double>(def.carrierChildMoveSpeed);
 		root["carrier"] = std::move(caObj);
+	}
+
+	if (def.hasCharge) {
+		JsonValue chObj = JsonValue::MakeObject();
+		chObj["stage1Time"] = static_cast<double>(def.chargeStage1Time);
+		chObj["stage2Time"] = static_cast<double>(def.chargeStage2Time);
+		root["charge"] = std::move(chObj);
 	}
 
 	// エフェクトスロット
