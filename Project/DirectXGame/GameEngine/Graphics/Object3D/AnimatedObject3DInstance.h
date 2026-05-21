@@ -130,6 +130,18 @@ public:
     void SetUseEnvironmentMap(bool use);
     void SetEnvironmentCoefficient(float coef);
 
+    /// <summary>
+    /// マテリアルカラー（GPU側 Material::color）を直接書き換える。
+    /// 被弾点滅やヒット演出など、ランタイムでティント色を変えたい時に使う。
+    /// SetModel 前は no-op。alpha < 1.0f で半透明になる。
+    /// </summary>
+    void SetMaterialColor(const Vector4& color);
+
+    /// <summary>
+    /// 現在のマテリアルカラーを取得（SetModel 前は白を返す）。
+    /// </summary>
+    Vector4 GetMaterialColor() const;
+
     //==============================
     // アニメーション制御
     //==============================

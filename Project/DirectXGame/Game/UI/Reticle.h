@@ -73,8 +73,8 @@ private:
 
 	// ロックオン演出（色 + サイズ）
 	bool lockedOn_ = false;
-	Vector4 normalColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
-	Vector4 lockOnColor_{ 1.0f, 0.25f, 0.25f, 1.0f };
+	Vector4 normalColor_{ 0.3f, 1.0f, 0.4f, 1.0f };   // 非ロック：緑（パルテナ準拠）
+	Vector4 lockOnColor_{ 1.0f, 0.25f, 0.25f, 1.0f }; // ロック中：赤
 	float lockOnTargetSizePx_ = 96.0f; // 敵の見かけサイズに応じて毎フレ外部から更新される
 	float lockOnMinPx_ = 64.0f;        // クランプ下限（敵が遠すぎて小さくなり過ぎないように）
 	float lockOnMaxPx_ = 256.0f;       // クランプ上限（敵が近すぎて画面を覆わないように）

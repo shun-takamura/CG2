@@ -1,5 +1,6 @@
 #include "InspectorWindow.h"
 #include "ImGuiManager.h"
+#include "SceneEditorWindow.h"
 #include "Components/EntityTag.h"
 #include "Components/CollisionMatrix.h"
 #include "Components/SphereCollider.h"
@@ -14,6 +15,8 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 void InspectorWindow::OnDraw() {
 #ifdef _DEBUG
@@ -172,6 +175,82 @@ void InspectorWindow::OnDraw() {
         ImGui::Separator();
     }
 
+    // ----- Effects スロット欄 -----
+    // 任意のスロット名 → EffectManager 登録名のマップを編集する。
+    // DnD ターゲット（SceneEditor の Effects 一覧から）と手入力の両対応。
+    {
+        if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto& effects = selected->GetEffects();
+
+            // タグに応じた推奨スロット名
+            const EntityTag tag = selected->GetTag();
+            std::vector<const char*> suggested;
+            if (tag == EntityTag::Player) {
+                suggested = { "charge1", "charge2" };
+            } else if (CollisionMatrix::IsCollidableTag(tag) && tag != EntityTag::Player) {
+                suggested = { "hit", "death" };
+            }
+
+            // 既存スロットを一覧表示（順序安定のためソート）
+            std::vector<std::string> keys;
+            keys.reserve(effects.size());
+            for (auto& kv : effects) keys.push_back(kv.first);
+            std::sort(keys.begin(), keys.end());
+
+            std::string slotToRemove;
+            for (const auto& key : keys) {
+                ImGui::PushID(key.c_str());
+
+                ImGui::TextUnformatted(key.c_str());
+                ImGui::SameLine(120.0f);
+
+                char valBuf[128];
+                std::snprintf(valBuf, sizeof(valBuf), "%s", effects[key].c_str());
+                ImGui::SetNextItemWidth(200.0f);
+                if (ImGui::InputText("##val", valBuf, sizeof(valBuf))) {
+                    effects[key] = valBuf;
+                }
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(EFFECT_RES_DROP_PAYLOAD_TYPE)) {
+                        const auto* pld = static_cast<const EffectResDropPayload*>(p->Data);
+                        effects[key] = pld->effectName;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("x")) {
+                    slotToRemove = key;
+                }
+                ImGui::PopID();
+            }
+            if (!slotToRemove.empty()) {
+                effects.erase(slotToRemove);
+            }
+
+            // 推奨スロットをワンクリック追加
+            ImGui::Separator();
+            for (const char* s : suggested) {
+                if (effects.count(s) == 0) {
+                    ImGui::PushID(s);
+                    if (ImGui::SmallButton((std::string("+ ") + s).c_str())) {
+                        effects[s] = "";
+                    }
+                    ImGui::PopID();
+                    ImGui::SameLine();
+                }
+            }
+            static char newSlotBuf[64] = "";
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::InputText("##newSlot", newSlotBuf, sizeof(newSlotBuf));
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Add slot") && newSlotBuf[0] != '\0') {
+                effects[newSlotBuf] = "";
+                newSlotBuf[0] = '\0';
+            }
+        }
+        ImGui::Separator();
+    }
+
     // 各オブジェクトが実装した編集UIを描画
     selected->OnImGuiInspector();
 
@@ -284,6 +363,8 @@ void InspectorWindow::OnDraw() {
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
                     }
+                    // エフェクトスロットをまるごと保存
+                    def.effects = selected->GetEffects();
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";
                     bool ok = PrefabManager::Save(def, path);

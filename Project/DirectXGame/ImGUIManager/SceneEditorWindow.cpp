@@ -8,6 +8,7 @@
 #include "Components/EntityTag.h"
 #include "Components/PrefabManager.h"
 #include "Components/Prefab.h"
+#include "Effect/EffectManager.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -176,8 +177,49 @@ void SceneEditorWindow::WorkerFunc() {
     }
 }
 
+void SceneEditorWindow::RefreshEffectsIfChanged() {
+    namespace fs = std::filesystem;
+    const fs::path effectsDir = fs::path("Resources") / "Json" / "Effects";
+    std::error_code ec;
+    if (!fs::exists(effectsDir, ec)) {
+        // ディレクトリ未作成。一覧は空のまま
+        if (!discoveredEffects_.empty()) discoveredEffects_.clear();
+        return;
+    }
+
+    // ディレクトリ自体の最終書込時刻でホットリロード判定（ファイル追加/削除/書込で更新される）
+    auto lwt = fs::last_write_time(effectsDir, ec);
+    if (ec) return;
+
+    if (effectsInitialized_ && lwt == effectsLastWriteTime_) {
+        return; // 変化なし
+    }
+    effectsLastWriteTime_ = lwt;
+    effectsInitialized_ = true;
+
+    // EffectManager に再ロードさせる（保存済み .json → defs_ にロード）
+    EffectManager::GetInstance()->LoadAllDefsInDirectory(effectsDir.generic_string());
+
+    // 一覧を再構築
+    discoveredEffects_.clear();
+    for (const auto& entry : fs::directory_iterator(effectsDir, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() != ".json") continue;
+        EffectEntry e;
+        e.displayName = entry.path().stem().string();
+        e.filePath    = entry.path().generic_string();
+        discoveredEffects_.push_back(std::move(e));
+    }
+    std::sort(discoveredEffects_.begin(), discoveredEffects_.end(),
+        [](const EffectEntry& a, const EffectEntry& b) { return a.displayName < b.displayName; });
+}
+
 void SceneEditorWindow::OnDraw() {
 #ifdef _DEBUG
+
+    // エフェクト一覧をホットリロード（ディレクトリ変更検出時のみ実行されるので軽い）
+    RefreshEffectsIfChanged();
 
     // ============================================
     // ヘッダー: スキャン状況
@@ -483,6 +525,34 @@ void SceneEditorWindow::OnDraw() {
                 SafeCopy(payload.dirPath, sizeof(payload.dirPath), entry.dirPath);
                 SafeCopy(payload.filename, sizeof(payload.filename), entry.filename);
                 ImGui::SetDragDropPayload(ANIMATED_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+                ImGui::TextUnformatted(entry.displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            ImGui::PopID();
+        }
+    }
+
+    // ============================================
+    // Effects（Effect Editor で保存したエフェクトの一覧。DnD でプレハブスロットへ）
+    // ============================================
+    if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("Resources/Json/Effects/  (saved via Effect Editor)");
+        if (discoveredEffects_.empty()) {
+            ImGui::TextDisabled("(none found)");
+        }
+        for (size_t i = 0; i < discoveredEffects_.size(); ++i) {
+            const auto& entry = discoveredEffects_[i];
+            if (!matchesSearch(entry.displayName)) continue;
+
+            ImGui::PushID(static_cast<int>(i) + 600000);
+
+            ImGui::Selectable(entry.displayName.c_str(), false);
+
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                EffectResDropPayload payload{};
+                SafeCopy(payload.effectName, sizeof(payload.effectName), entry.displayName);
+                ImGui::SetDragDropPayload(EFFECT_RES_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
                 ImGui::TextUnformatted(entry.displayName.c_str());
                 ImGui::EndDragDropSource();
             }

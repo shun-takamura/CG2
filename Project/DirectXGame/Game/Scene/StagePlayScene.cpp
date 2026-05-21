@@ -114,6 +114,25 @@ void StagePlayScene::LoadTuningFromJson() {
 		aimSmoothTime_        = static_cast<float>(aim["smoothTime"].AsDouble(aimSmoothTime_));
 		aimAssistPixelScale_  = static_cast<float>(aim["assistPixelScale"].AsDouble(aimAssistPixelScale_));
 	}
+
+	// ----- damage / invincibility -----
+	const JsonValue& dmg = root["damage"];
+	if (dmg.IsObject()) {
+		playerInvincibilityDuration_  = static_cast<float>(dmg["invincibilityDuration"].AsDouble(playerInvincibilityDuration_));
+		shootLockoutDuration_         = static_cast<float>(dmg["shootLockoutDuration"].AsDouble(shootLockoutDuration_));
+		damageBlinkFrequency_         = static_cast<float>(dmg["blinkFrequency"].AsDouble(damageBlinkFrequency_));
+		damageBlinkAlpha_             = static_cast<float>(dmg["blinkAlpha"].AsDouble(damageBlinkAlpha_));
+		damageCameraShakeIntensity_   = static_cast<float>(dmg["cameraShakeIntensity"].AsDouble(damageCameraShakeIntensity_));
+		damageCameraShakeDuration_    = static_cast<float>(dmg["cameraShakeDuration"].AsDouble(damageCameraShakeDuration_));
+	}
+
+	// ----- HP bar UI -----
+	const JsonValue& hpb = root["hpBar"];
+	if (hpb.IsObject()) {
+		hpBarMaxWidth_  = static_cast<float>(hpb["maxWidth"].AsDouble(hpBarMaxWidth_));
+		hpBarHeight_    = static_cast<float>(hpb["height"].AsDouble(hpBarHeight_));
+		hpBarLerpSpeed_ = static_cast<float>(hpb["lerpSpeed"].AsDouble(hpBarLerpSpeed_));
+	}
 }
 
 void StagePlayScene::SaveTuningToJson() const {
@@ -154,6 +173,21 @@ void StagePlayScene::SaveTuningToJson() const {
 	aimObj["smoothTime"]       = static_cast<double>(aimSmoothTime_);
 	aimObj["assistPixelScale"] = static_cast<double>(aimAssistPixelScale_);
 	root["aim"] = std::move(aimObj);
+
+	JsonValue dmgObj = JsonValue::MakeObject();
+	dmgObj["invincibilityDuration"] = static_cast<double>(playerInvincibilityDuration_);
+	dmgObj["shootLockoutDuration"]  = static_cast<double>(shootLockoutDuration_);
+	dmgObj["blinkFrequency"]        = static_cast<double>(damageBlinkFrequency_);
+	dmgObj["blinkAlpha"]            = static_cast<double>(damageBlinkAlpha_);
+	dmgObj["cameraShakeIntensity"]  = static_cast<double>(damageCameraShakeIntensity_);
+	dmgObj["cameraShakeDuration"]   = static_cast<double>(damageCameraShakeDuration_);
+	root["damage"] = std::move(dmgObj);
+
+	JsonValue hpbObj = JsonValue::MakeObject();
+	hpbObj["maxWidth"]  = static_cast<double>(hpBarMaxWidth_);
+	hpbObj["height"]    = static_cast<double>(hpBarHeight_);
+	hpbObj["lerpSpeed"] = static_cast<double>(hpBarLerpSpeed_);
+	root["hpBar"] = std::move(hpbObj);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -292,8 +326,6 @@ void StagePlayScene::OnImGuiTuning() {
 	ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
 	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
-	if (changed) SaveTuningToJson();
-
 	ImGui::Separator();
 	ImGui::TextUnformatted("Just Dodge Effect (debug)");
 	ImGui::DragFloat("Duration (s)", &justDodgeDuration_, 0.05f, 0.1f, 10.0f, "%.2f");
@@ -309,6 +341,47 @@ void StagePlayScene::OnImGuiTuning() {
 	if (justDodgeActive_) {
 		ImGui::Text("Active: %.2f / %.2f s", justDodgeTimer_, justDodgeDuration_);
 	}
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("Damage / Invincibility");
+	ImGui::DragFloat("Invincibility (s)", &playerInvincibilityDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Shoot Lockout (s)", &shootLockoutDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Blink Frequency (Hz)", &damageBlinkFrequency_, 0.5f, 0.0f, 40.0f, "%.1f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Blink Alpha", &damageBlinkAlpha_, 0.02f, 0.0f, 1.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Shake Intensity", &damageCameraShakeIntensity_, 0.02f, 0.0f, 5.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Shake Duration (s)", &damageCameraShakeDuration_, 0.02f, 0.0f, 2.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	if (ImGui::Button("Test: Take 10 Damage") && player_) {
+		OnPlayerTakeDamage(10);
+	}
+	if (player_) {
+		const HP& hp = player_->GetHP();
+		ImGui::Text("Player HP: %d / %d  (invuln=%.2f, lockout=%.2f)",
+			hp.currentHP, hp.maxHP, playerInvincibilityTimer_, shootLockoutTimer_);
+	}
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("HP Bar UI");
+	if (ImGui::DragFloat("Bar Max Width", &hpBarMaxWidth_, 2.0f, 50.0f, 1000.0f, "%.0f")) {
+		if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
+		if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+	}
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	if (ImGui::DragFloat("Bar Height", &hpBarHeight_, 1.0f, 4.0f, 80.0f, "%.0f")) {
+		if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
+		if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+	}
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	ImGui::DragFloat("Red Bar Lerp Speed", &hpBarLerpSpeed_, 0.02f, 0.0f, 5.0f, "%.2f");
+	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+	// 末尾で一括保存（変更があれば即書き出し）
+	if (changed) SaveTuningToJson();
 #endif
 }
 
@@ -399,6 +472,9 @@ void StagePlayScene::Initialize() {
 			}
 		}
 	}
+
+	// HP バー UI 初期化
+	InitializeHPBarUI();
 }
 
 void StagePlayScene::Finalize() {}
@@ -801,7 +877,7 @@ void StagePlayScene::Update() {
 			}
 		}
 #endif
-		if (firePressed && fireTimer_ <= 0.0f && player_) {
+		if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f && player_) {
 			const Vector3 origin = player_->GetTranslate();
 			// 発射方向は Lerp 前の即時 target を使う（ロックオン直後の弾が遅れて飛ぶのを防ぐ）
 			Vector3 dir{ firingTarget_.x - origin.x, firingTarget_.y - origin.y, firingTarget_.z - origin.z };
@@ -826,6 +902,9 @@ void StagePlayScene::Update() {
 	// 弾の進行と寿命処理（World 時間軸で動かす）
 	if (!gameFrozen) {
 		UpdateBullets(worldDt);
+
+		// プレイヤー被弾処理・UI更新
+		UpdatePlayerDamageAndUI(worldDt);
 
 		// SweepDeadEntities の前に、HP がゼロになった敵のスポーンエントリに kill t を記録
 		// （SweepDeadEntities が DestroyDynamicEntity 経由で movingEnemies_ の entity を null 化する前に行う）
@@ -1350,4 +1429,155 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 
 	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
 	return true;
+}
+
+void StagePlayScene::InitializeHPBarUI() {
+	hpBarBackground_ = nullptr;
+	hpBarForeground_ = nullptr;
+
+	if (!spriteManager_) return;
+
+	const Vector2 hpBarPos{ 60.0f, 30.0f };
+
+	// 赤ゲージ背景（補間で遅延追従）
+	auto bgSprite = std::make_unique<SpriteInstance>();
+	bgSprite->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "HPBarBackground");
+	bgSprite->SetPosition(hpBarPos);
+	bgSprite->SetSize({ hpBarMaxWidth_, hpBarHeight_ });
+	bgSprite->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f });
+	hpBarBackground_ = bgSprite.get();
+	dynamicSprites_.push_back(std::move(bgSprite));
+
+	// 緑ゲージ前景（現在HP に即時追従）
+	auto fgSprite = std::make_unique<SpriteInstance>();
+	fgSprite->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "HPBarForeground");
+	fgSprite->SetPosition(hpBarPos);
+	fgSprite->SetSize({ hpBarMaxWidth_, hpBarHeight_ });
+	fgSprite->SetColor({ 0.0f, 1.0f, 0.0f, 1.0f });
+	hpBarForeground_ = fgSprite.get();
+	dynamicSprites_.push_back(std::move(fgSprite));
+
+	hpBarCurrentRatio_ = 1.0f;
+	hpBarTargetRatio_ = 1.0f;
+
+	// プレイヤー HP を有効化（プレハブで enabled=false の場合に備えて）
+	if (player_) {
+		player_->GetHP().enabled = true;
+	}
+}
+
+void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
+	if (!player_) return;
+
+	// シェイクオフセットの計算を進める
+	if (camera_) {
+		camera_->UpdateShake(deltaTime);
+	}
+
+	// 無敵時間カウント・点滅エフェクト
+	if (playerInvincibilityTimer_ > 0.0f) {
+		playerInvincibilityTimer_ -= deltaTime;
+
+		// 白／赤の半透明点滅（10Hz）
+		const float blinkFreq = damageBlinkFrequency_;
+		float phase = std::fmod(playerInvincibilityTimer_ * blinkFreq, 1.0f);
+		if (phase < 0.5f) {
+			player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
+		} else {
+			player_->SetMaterialColor({ 1.0f, 0.3f, 0.3f, damageBlinkAlpha_ });
+		}
+	} else if (playerInvincibilityTimer_ > -1.0f) {
+		// 無敵終了直後に通常色に戻す（1度だけ）
+		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		playerInvincibilityTimer_ = -2.0f; // 復帰済みフラグ
+	}
+
+	// 射撃禁止タイマー
+	if (shootLockoutTimer_ > 0.0f) {
+		shootLockoutTimer_ -= deltaTime;
+	}
+
+	// 敵弾とプレイヤーの衝突判定
+	if (playerInvincibilityTimer_ <= 0.0f) {
+		const Vector3 playerPos = player_->GetTranslate();
+		const float playerR = player_->GetCollider().radius;
+
+		for (auto& b : bullets_) {
+			if (!b.primitive) continue;
+			if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+
+			const Vector3* bp = b.primitive->GetEditableTranslate();
+			if (!bp) continue;
+			const float bulletR = b.primitive->GetCollider().radius;
+
+			float dx = playerPos.x - bp->x;
+			float dy = playerPos.y - bp->y;
+			float dz = playerPos.z - bp->z;
+			float distSq = dx * dx + dy * dy + dz * dz;
+			float sumR = playerR + bulletR;
+
+			if (distSq < sumR * sumR) {
+				int damage = b.primitive->GetDamageDealer().damage;
+				if (damage <= 0) damage = 10;
+				OnPlayerTakeDamage(damage);
+
+				// 弾を消滅キューへ
+				b.remainingLifetime = -1.0f;
+				break;
+			}
+		}
+	}
+
+	UpdateHPBarUI();
+
+	// HP=0 でゲームオーバー（リトライ：シーン再ロード）
+	if (player_->GetHP().IsDead() && !gameOverTriggered_) {
+		gameOverTriggered_ = true;
+		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
+	}
+}
+
+void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
+	if (!player_) return;
+
+	player_->GetHP().TakeDamage(damageAmount);
+
+	playerInvincibilityTimer_ = playerInvincibilityDuration_;
+	shootLockoutTimer_ = shootLockoutDuration_;
+
+	if (camera_) {
+		camera_->Shake(damageCameraShakeIntensity_, damageCameraShakeDuration_);
+	}
+}
+
+void StagePlayScene::UpdateHPBarUI() {
+	if (!player_ || !hpBarForeground_ || !hpBarBackground_) return;
+
+	const HP& hp = player_->GetHP();
+	if (hp.maxHP <= 0) return;
+
+	// 現在 HP の比率（緑ゲージはこれに即時追従、赤ゲージは追従目標）
+	float currentRatio = static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP);
+	if (currentRatio < 0.0f) currentRatio = 0.0f;
+	if (currentRatio > 1.0f) currentRatio = 1.0f;
+	hpBarCurrentRatio_ = currentRatio;
+	hpBarTargetRatio_ = currentRatio;
+	hpBarForeground_->SetSize({ hpBarMaxWidth_ * currentRatio, hpBarHeight_ });
+
+	// 赤ゲージは緑ゲージへ線形に追従（双方向、必ず追いつく）
+	float dt = GetScaledDeltaTime();
+	float currentRedRatio = hpBarBackground_->GetSize().x / hpBarMaxWidth_;
+	float diff = hpBarTargetRatio_ - currentRedRatio;
+	float step = hpBarLerpSpeed_ * dt;
+	float absDiff = (diff < 0.0f) ? -diff : diff;
+	if (absDiff <= step) {
+		currentRedRatio = hpBarTargetRatio_;
+	} else if (diff < 0.0f) {
+		currentRedRatio -= step;
+	} else {
+		currentRedRatio += step;
+	}
+	if (currentRedRatio < 0.0f) currentRedRatio = 0.0f;
+	if (currentRedRatio > 1.0f) currentRedRatio = 1.0f;
+	hpBarBackground_->SetSize({ hpBarMaxWidth_ * currentRedRatio, hpBarHeight_ });
 }

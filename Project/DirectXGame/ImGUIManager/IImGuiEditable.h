@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include "Vector2.h"
 #include "Vector3.h"
 #include "Components/EntityTag.h"
@@ -104,6 +105,19 @@ public:
     void  SetAttackPower(int v) { attackPower_ = v; }
 
     //====================
+    // エフェクトスロット（スロット名 → EffectManager 登録名）
+    // 例: charge1, charge2（プレイヤー）/ hit, death（敵）
+    // Inspector の DnD で編集。空文字列はそのスロットに未割当を表す。
+    //====================
+    const std::unordered_map<std::string, std::string>& GetEffects() const { return effects_; }
+    std::unordered_map<std::string, std::string>& GetEffects() { return effects_; }
+    void SetEffect(const std::string& slot, const std::string& effectName) { effects_[slot] = effectName; }
+    std::string FindEffect(const std::string& slot) const {
+        auto it = effects_.find(slot);
+        return (it != effects_.end()) ? it->second : std::string();
+    }
+
+    //====================
     // ObjectID（自動採番、0 は予約＝未割当 / マスク対象外）。
     // ジャスト回避演出など、特定インスタンスをハイライトするためのキーに使う。
     //====================
@@ -151,6 +165,7 @@ protected:
     CarrierParams carrierParams_{};
     bool hasAttackPower_ = false;
     int  attackPower_ = 0;
+    std::unordered_map<std::string, std::string> effects_;
 
     // 0 は予約。コンストラクタで採番される。256 を超えたら 1..255 をラップ（実用上問題ない範囲）
     uint8_t objectId_ = 0;

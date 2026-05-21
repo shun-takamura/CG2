@@ -18,6 +18,12 @@ class Camera
 
 	Matrix4x4 viewProjectionMatrix_;
 
+	// カメラシェイク
+	float shakeIntensity_ = 0.0f;        // シェイク強度
+	float shakeDuration_ = 0.0f;         // シェイク継続時間
+	float shakeElapsed_ = 0.0f;          // シェイク経過時間
+	Vector3 shakeOffset_{ 0.0f, 0.0f, 0.0f }; // 適用中のオフセット（Update() で加算される）
+
 public:
 
 	// デフォルトコンストラクタ
@@ -49,6 +55,21 @@ public:
 	void SetAspectRatio(const float& aspectRatio) { aspectRatio_ = aspectRatio; }
 	void SetNearClip(const float& nearClip) { nearClip_ = nearClip; }
 	void SetFarClip(const float& farClip) { farClip_ = farClip; }
+
+	/// <summary>
+	/// カメラシェイクを開始する（intensity: 強度, duration: 継続時間[秒]）
+	/// </summary>
+	void Shake(float intensity, float duration) {
+		shakeIntensity_ = intensity;
+		shakeDuration_ = duration;
+		shakeElapsed_ = 0.0f;
+	}
+
+	/// <summary>
+	/// シェイクのオフセット計算を deltaTime 進める。
+	/// シーン側から Update() より前に呼ぶ。
+	/// </summary>
+	void UpdateShake(float deltaTime);
 
 	// ゲッター
 	const Matrix4x4& GetWorldMatrix() const { return worldMatrix_; }
