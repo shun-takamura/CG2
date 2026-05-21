@@ -132,4 +132,31 @@ private:
 
 	// ポーズ状態（後でメニュー実装）
 	bool paused_ = false;
+
+	// ----- プレイヤー被弾・無敵関連 -----
+	float playerInvincibilityTimer_ = -2.0f;    // 被弾無敵残り時間（<=0 で通常）
+	float playerInvincibilityDuration_ = 1.0f;  // 無敵継続秒数（ImGui調整可）
+	float shootLockoutTimer_ = 0.0f;            // 射撃禁止タイマー
+	float shootLockoutDuration_ = 0.5f;         // 被弾後の射撃禁止秒数（ImGui調整可）
+	float damageBlinkFrequency_ = 12.0f;        // 点滅周波数 [Hz]
+	float damageBlinkAlpha_ = 0.5f;             // 点滅時の半透明値
+	float damageCameraShakeIntensity_ = 0.12f;  // 被弾シェイクの強度
+	float damageCameraShakeDuration_ = 0.25f;   // 被弾シェイクの継続秒
+
+	// ----- HP バーUI -----
+	SpriteInstance* hpBarBackground_ = nullptr; // 赤ゲージ背景（遅延追従）
+	SpriteInstance* hpBarForeground_ = nullptr; // 緑ゲージ前景（即時追従）
+	float hpBarCurrentRatio_ = 1.0f;            // 緑ゲージの現在比率
+	float hpBarTargetRatio_ = 1.0f;             // 赤ゲージの目標比率
+	float hpBarLerpSpeed_ = 0.5f;               // 赤ゲージの線形追従速度（比率/秒）
+	float hpBarMaxWidth_ = 300.0f;              // HP バー幅（pixel）
+	float hpBarHeight_ = 20.0f;                 // HP バー高さ（pixel）
+
+	// ゲームオーバー状態
+	bool gameOverTriggered_ = false;
+
+	void UpdatePlayerDamageAndUI(float deltaTime);
+	void OnPlayerTakeDamage(int damageAmount);
+	void InitializeHPBarUI();
+	void UpdateHPBarUI();
 };

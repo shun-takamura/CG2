@@ -323,6 +323,16 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.carrierChildMoveSpeed    = static_cast<float>(caJ["childMoveSpeed"].AsDouble(out.carrierChildMoveSpeed));
 	}
 
+	// エフェクトスロット（スロット名 → エフェクト名）
+	const JsonValue& efJ = root["effects"];
+	if (efJ.IsObject()) {
+		for (const auto& kv : efJ.AsObject()) {
+			if (kv.second.IsString()) {
+				out.effects[kv.first] = kv.second.AsString();
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -419,6 +429,15 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		caObj["childWanderRadius"] = static_cast<double>(def.carrierChildWanderRadius);
 		caObj["childMoveSpeed"]    = static_cast<double>(def.carrierChildMoveSpeed);
 		root["carrier"] = std::move(caObj);
+	}
+
+	// エフェクトスロット
+	if (!def.effects.empty()) {
+		JsonValue efObj = JsonValue::MakeObject();
+		for (const auto& kv : def.effects) {
+			efObj[kv.first] = kv.second;
+		}
+		root["effects"] = std::move(efObj);
 	}
 
 	// ディレクトリ作成

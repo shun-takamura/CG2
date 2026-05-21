@@ -1,5 +1,7 @@
 #include "Camera.h"
 #include "imgui.h"
+#include "Easing.h"
+#include <random>
 
 Camera::Camera()
 	: transform_({ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} })
@@ -37,9 +39,42 @@ void Camera::OnImGui()
 #endif
 }
 
+void Camera::UpdateShake(float deltaTime)
+{
+	if (shakeIntensity_ <= 0.0f) {
+		shakeOffset_ = { 0.0f, 0.0f, 0.0f };
+		return;
+	}
+
+	shakeElapsed_ += deltaTime;
+
+	if (shakeElapsed_ < shakeDuration_) {
+		// EaseOut で減衰：最初は強く、徐々に弱く（1 - EaseOutCubic(t)）
+		float t = shakeElapsed_ / shakeDuration_;
+		float damping = 1.0f - Easing::EaseOutCubic(t);
+
+		static std::mt19937 gen(12345);
+		std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+		shakeOffset_ = {
+			dist(gen) * shakeIntensity_ * damping,
+			dist(gen) * shakeIntensity_ * damping,
+			0.0f // Z 方向は揺らさない（FOV 感が変わって見えるため）
+		};
+	} else {
+		shakeIntensity_ = 0.0f;
+		shakeOffset_ = { 0.0f, 0.0f, 0.0f };
+	}
+}
+
 void Camera::Update()
 {
-	worldMatrix_ = MakeAffineMatrix(transform_);
+	// シェイクオフセット適用済みの transform を作る
+	Transform shakingTransform = transform_;
+	shakingTransform.translate.x += shakeOffset_.x;
+	shakingTransform.translate.y += shakeOffset_.y;
+	shakingTransform.translate.z += shakeOffset_.z;
+
+	worldMatrix_ = MakeAffineMatrix(shakingTransform);
 	viewMatrix_ = Inverse(worldMatrix_);
 
 	projectionMatrix_ = MakePerspectiveFovMatrix(horizontalFovY_, aspectRatio_, nearClip_, farClip_);

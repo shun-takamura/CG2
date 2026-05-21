@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <filesystem>
 
 // 前方宣言
 class ImGuiManager;
@@ -22,6 +23,8 @@ class ImGuiManager;
 #define ANIM_DROP_PAYLOAD_TYPE      "ANIM_DROP"
 // Effect Editor 用：エフェクトのコンポーネント種別だけを運ぶ
 #define EFFECT_COMP_DROP_PAYLOAD_TYPE "EFFECT_COMP_DROP"
+// SceneEditor のエフェクト一覧から運ぶリソース名
+#define EFFECT_RES_DROP_PAYLOAD_TYPE "EFFECT_RES_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
@@ -64,6 +67,11 @@ struct EffectComponentDropPayload {
     int kind;
 };
 
+// エフェクト名（EffectManager に登録されたエフェクトの name）
+struct EffectResDropPayload {
+    char effectName[128];
+};
+
 /// <summary>
 /// シーンエディタウィンドウ
 /// Resources/Models 配下を非同期スキャン + Assimp パースし、
@@ -100,6 +108,10 @@ private:
         std::string displayName;  // "Animated/Walk/walk.anim"
         std::string filePath;     // "Resources/Models/Animated/Walk/walk.anim"
     };
+    struct EffectEntry {
+        std::string displayName;  // "ChargeStage1"（= EffectDef::name）
+        std::string filePath;     // "Resources/Json/Effects/ChargeStage1.json"
+    };
 
     ImGuiManager* manager_ = nullptr;
 
@@ -109,6 +121,10 @@ private:
     std::vector<AnimatedEntry> discoveredAnimated_;
     std::vector<MaterialEntry> discoveredMaterials_;
     std::vector<AnimEntry> discoveredAnims_;
+    std::vector<EffectEntry> discoveredEffects_;
+    // Effects ディレクトリの最終変更時刻（ホットリロード判定用）
+    std::filesystem::file_time_type effectsLastWriteTime_{};
+    bool effectsInitialized_ = false;
     mutable std::mutex discoveredMutex_;
 
     std::thread workerThread_;
@@ -124,4 +140,11 @@ private:
     ///    （.png / .gltf は表示のみ。実体はドロップ時にロード）
     /// </summary>
     void WorkerFunc();
+
+    /// <summary>
+    /// Resources/Json/Effects ディレクトリを毎フレ簡易監視。
+    /// ディレクトリの最終書込時刻が変化していたら、EffectManager に再ロードを依頼し、
+    /// discoveredEffects_ も更新する（メインスレッド呼び出し前提）。
+    /// </summary>
+    void RefreshEffectsIfChanged();
 };

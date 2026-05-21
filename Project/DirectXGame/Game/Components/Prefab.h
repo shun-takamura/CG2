@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 
 #include "EntityTag.h"
 #include "SphereCollider.h"   // ColliderShape
@@ -118,4 +119,9 @@ struct PrefabDef {
 	float         carrierChildLifetimeSec  = 10.0f;
 	float         carrierChildWanderRadius = 8.0f;
 	float         carrierChildMoveSpeed    = 5.0f;
+
+	// ----- エフェクトスロット -----
+	// スロット名 → EffectManager 登録名（charge1 / charge2 / hit / death など）。
+	// 空文字列はそのスロットに未割当を表す。Inspector の DnD で編集する。
+	std::unordered_map<std::string, std::string> effects;
 };

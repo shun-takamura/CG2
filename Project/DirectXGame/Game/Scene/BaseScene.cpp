@@ -463,6 +463,10 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			cp.childWanderRadius = def->carrierChildWanderRadius;
 			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
 		}
+		// エフェクトスロットを丸ごとコピー
+		if (!def->effects.empty()) {
+			e->GetEffects() = def->effects;
+		}
 	};
 
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;

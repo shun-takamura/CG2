@@ -391,6 +391,22 @@ void AnimatedObject3DInstance::SetEnvironmentCoefficient(float coef)
     mat->environmentCoefficient = coef;
 }
 
+void AnimatedObject3DInstance::SetMaterialColor(const Vector4& color)
+{
+    if (!animatedModelInstance_) return;
+    Material* mat = animatedModelInstance_->GetMaterialPointer();
+    if (!mat) return;
+    mat->color = color;
+}
+
+Vector4 AnimatedObject3DInstance::GetMaterialColor() const
+{
+    if (!animatedModelInstance_) return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    Material* mat = animatedModelInstance_->GetMaterialPointer();
+    if (!mat) return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    return mat->color;
+}
+
 //==============================
 // ImGui Inspector
 //==============================
