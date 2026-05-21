@@ -28,8 +28,12 @@ public:
 
 	// 描画要求を 1 フレームバッファに積む。
 	// pos は左上のピクセル座標、scale はフォントサイズ倍率。
+	// outlineThickness > 0 のとき、各グリフを 8 方向にオフセット複製してアウトラインを付ける。
+	// 太いほどメモリ消費が増える（グリフ × 9 インスタンス）ので使いどころに注意。
 	void DrawText(std::string_view utf8, const Vector2& pos, float scale = 1.0f,
-		const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
+		const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f },
+		float outlineThickness = 0.0f,
+		const Vector4& outlineColor = { 0.0f, 0.0f, 0.0f, 1.0f });
 
 	// 文字列の描画ピクセル幅を取得（レイアウト用）。
 	float MeasureWidth(std::string_view utf8, float scale = 1.0f);
@@ -63,12 +67,15 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
 
-	// インスタンス CPU/GPU バッファ
+	// インスタンス CPU/GPU バッファ。HLSL の GlyphInstance とレイアウト一致。
 	struct GlyphInstance {
 		float screenPosX, screenPosY;
 		float sizeX, sizeY;
 		float u0, v0, u1, v1;
 		float r, g, b, a;
+		float outR, outG, outB, outA;
+		float outlineWidth;
+		float _pad0, _pad1, _pad2;
 	};
 	static constexpr uint32_t kMaxInstances = 4096;
 

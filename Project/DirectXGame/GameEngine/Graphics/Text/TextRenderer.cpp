@@ -187,12 +187,13 @@ void TextRenderer::CreateScreenCB()
 	screenCBData_->pad1 = 0.0f;
 }
 
-void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float scale, const Vector4& color)
+void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float scale, const Vector4& color,
+	float outlineThickness, const Vector4& outlineColor)
 {
 	if (!initialized_ || !atlas_) return;
 	if (cpuInstances_.size() >= kMaxInstances) return;
 
-	const float baseline = atlas_->GetAscent() * scale; // ベースラインを pos.y から下に baseline ピクセル
+	const float baseline = atlas_->GetAscent() * scale;
 	float penX = pos.x;
 	const float penY = pos.y + baseline;
 
@@ -213,6 +214,9 @@ void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float sca
 			inst.sizeY = g.height * scale;
 			inst.u0 = g.u0; inst.v0 = g.v0; inst.u1 = g.u1; inst.v1 = g.v1;
 			inst.r = color.x; inst.g = color.y; inst.b = color.z; inst.a = color.w;
+			inst.outR = outlineColor.x; inst.outG = outlineColor.y;
+			inst.outB = outlineColor.z; inst.outA = outlineColor.w;
+			inst.outlineWidth = outlineThickness;
 			cpuInstances_.push_back(inst);
 		}
 		penX += g.advance * scale;

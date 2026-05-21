@@ -115,43 +115,54 @@ bool FontAtlas::BakeGlyph(uint32_t codepoint, GlyphInfo& out)
 	out.advance = adv * fontScale_;
 
 	if (glyphIndex == 0) {
-		// 該当グリフ無し。advance だけ持って描画スキップ扱い
 		out.width = out.height = 0;
 		out.u0 = out.v0 = out.u1 = out.v1 = 0.0f;
 		out.xoff = out.yoff = 0;
-		out.valid = (codepoint == 0x20); // 空白なら valid
+		out.valid = (codepoint == 0x20);
 		return true;
 	}
 
-	int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-	stbtt_GetGlyphBitmapBox(&fontInfo_->info, glyphIndex, fontScale_, fontScale_, &x0, &y0, &x1, &y1);
-	int gw = x1 - x0;
-	int gh = y1 - y0;
-	out.xoff = x0;
-	out.yoff = y0;
-	out.width = gw;
-	out.height = gh;
+	// stbtt_GetGlyphSDF：縁からの距離フィールドを焼く。
+	// padding ぶんだけ周囲に余白が追加された (gw + 2*pad) x (gh + 2*pad) のビットマップが返る。
+	// 値域は [0..255]、onedge_value が縁、+方向(内側)/-方向(外側) に pixel_dist_scale で距離が広がる。
+	constexpr int   kSdfPadding       = 4;
+	constexpr unsigned char kOnEdge   = 128;
+	constexpr float kPixelDistScale   = 32.0f; // 128 / 4 = 32 → ±4 px 範囲を 0..255 にマップ
 
-	if (gw <= 0 || gh <= 0) {
-		// 空白等（描画する画素なし）
+	int gw = 0, gh = 0;
+	int xoff = 0, yoff = 0;
+	unsigned char* sdf = stbtt_GetGlyphSDF(&fontInfo_->info, fontScale_, glyphIndex,
+		kSdfPadding, kOnEdge, kPixelDistScale,
+		&gw, &gh, &xoff, &yoff);
+
+	if (!sdf || gw <= 0 || gh <= 0) {
+		// 描画する画素なし（空白等）
+		if (sdf) stbtt_FreeSDF(sdf, nullptr);
+		out.width = out.height = 0;
 		out.u0 = out.v0 = out.u1 = out.v1 = 0.0f;
+		out.xoff = 0;
+		out.yoff = 0;
 		out.valid = true;
 		return true;
 	}
+
+	out.xoff = xoff;
+	out.yoff = yoff;
+	out.width = gw;
+	out.height = gh;
 
 	// シェルフパッキング
 	int padW = gw + kShelfPadding;
 	int padH = gh + kShelfPadding;
 
 	if (shelfX_ + padW > atlasSize_) {
-		// 改行
 		shelfY_ += shelfHeight_ + kShelfPadding;
 		shelfX_ = 1;
 		shelfHeight_ = 0;
 	}
 	if (shelfY_ + padH > atlasSize_) {
-		// アトラス満杯：失敗。今回は valid=false で返す
 		Log("[FontAtlas] atlas full, glyph dropped: U+" + std::to_string(codepoint) + "\n");
+		stbtt_FreeSDF(sdf, nullptr);
 		out.valid = false;
 		return false;
 	}
@@ -160,15 +171,14 @@ bool FontAtlas::BakeGlyph(uint32_t codepoint, GlyphInfo& out)
 	shelfX_ += padW;
 	if (padH > shelfHeight_) shelfHeight_ = padH;
 
-	// CPU 側にラスタライズ
+	// SDF を pending にコピー
 	PendingUpload up;
 	up.x = px;
 	up.y = py;
 	up.w = gw;
 	up.h = gh;
-	up.bytes.assign(static_cast<size_t>(gw) * gh, 0);
-	stbtt_MakeGlyphBitmap(&fontInfo_->info, up.bytes.data(), gw, gh, gw,
-		fontScale_, fontScale_, glyphIndex);
+	up.bytes.assign(sdf, sdf + static_cast<size_t>(gw) * gh);
+	stbtt_FreeSDF(sdf, nullptr);
 
 	out.u0 = static_cast<float>(px) / atlasSize_;
 	out.v0 = static_cast<float>(py) / atlasSize_;

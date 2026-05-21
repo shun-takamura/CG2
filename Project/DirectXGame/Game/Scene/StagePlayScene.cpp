@@ -157,6 +157,8 @@ void StagePlayScene::LoadTuningFromJson() {
 			scoreLabelOffsetX_ = static_cast<float>(lb["offsetX"].AsDouble(scoreLabelOffsetX_));
 			scoreLabelOffsetY_ = static_cast<float>(lb["offsetY"].AsDouble(scoreLabelOffsetY_));
 			readColor(lb["color"], scoreLabelColor_);
+			scoreLabelOutlineThickness_ = static_cast<float>(lb["outlineThickness"].AsDouble(scoreLabelOutlineThickness_));
+			readColor(lb["outlineColor"], scoreLabelOutlineColor_);
 		}
 		const JsonValue& nb = sc["number"];
 		if (nb.IsObject()) {
@@ -164,6 +166,8 @@ void StagePlayScene::LoadTuningFromJson() {
 			scoreNumberOffsetX_ = static_cast<float>(nb["offsetX"].AsDouble(scoreNumberOffsetX_));
 			scoreNumberOffsetY_ = static_cast<float>(nb["offsetY"].AsDouble(scoreNumberOffsetY_));
 			readColor(nb["color"], scoreNumberColor_);
+			scoreNumberOutlineThickness_ = static_cast<float>(nb["outlineThickness"].AsDouble(scoreNumberOutlineThickness_));
+			readColor(nb["outlineColor"], scoreNumberOutlineColor_);
 		}
 	}
 }
@@ -234,16 +238,20 @@ void StagePlayScene::SaveTuningToJson() const {
 	};
 	JsonValue scObj = JsonValue::MakeObject();
 	JsonValue lbObj = JsonValue::MakeObject();
-	lbObj["scale"]   = static_cast<double>(scoreLabelScale_);
-	lbObj["offsetX"] = static_cast<double>(scoreLabelOffsetX_);
-	lbObj["offsetY"] = static_cast<double>(scoreLabelOffsetY_);
-	lbObj["color"]   = colorToArr(scoreLabelColor_);
+	lbObj["scale"]            = static_cast<double>(scoreLabelScale_);
+	lbObj["offsetX"]          = static_cast<double>(scoreLabelOffsetX_);
+	lbObj["offsetY"]          = static_cast<double>(scoreLabelOffsetY_);
+	lbObj["color"]            = colorToArr(scoreLabelColor_);
+	lbObj["outlineThickness"] = static_cast<double>(scoreLabelOutlineThickness_);
+	lbObj["outlineColor"]     = colorToArr(scoreLabelOutlineColor_);
 	scObj["label"]   = std::move(lbObj);
 	JsonValue nbObj = JsonValue::MakeObject();
-	nbObj["scale"]   = static_cast<double>(scoreNumberScale_);
-	nbObj["offsetX"] = static_cast<double>(scoreNumberOffsetX_);
-	nbObj["offsetY"] = static_cast<double>(scoreNumberOffsetY_);
-	nbObj["color"]   = colorToArr(scoreNumberColor_);
+	nbObj["scale"]            = static_cast<double>(scoreNumberScale_);
+	nbObj["offsetX"]          = static_cast<double>(scoreNumberOffsetX_);
+	nbObj["offsetY"]          = static_cast<double>(scoreNumberOffsetY_);
+	nbObj["color"]            = colorToArr(scoreNumberColor_);
+	nbObj["outlineThickness"] = static_cast<double>(scoreNumberOutlineThickness_);
+	nbObj["outlineColor"]     = colorToArr(scoreNumberOutlineColor_);
 	scObj["number"]  = std::move(nbObj);
 	root["score"] = std::move(scObj);
 
@@ -464,6 +472,10 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::ColorEdit4("Color",   &scoreLabelColor_.x);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Outline Thickness", &scoreLabelOutlineThickness_, 0.1f, 0.0f, 10.0f, "%.1f px");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Outline Color", &scoreLabelOutlineColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::PopID();
 
 		ImGui::TextUnformatted("Number");
@@ -475,6 +487,10 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Offset Y", &scoreNumberOffsetY_, 1.0f, 0.0f, 2000.0f, "%.0f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::ColorEdit4("Color",   &scoreNumberColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Outline Thickness", &scoreNumberOutlineThickness_, 0.1f, 0.0f, 10.0f, "%.1f px");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Outline Color", &scoreNumberOutlineColor_.x);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::PopID();
 	}
@@ -1171,10 +1187,12 @@ void StagePlayScene::Draw() {
 
 			tr->DrawText(labelStr,
 				{ screenW - scoreLabelOffsetX_ - labelW, scoreLabelOffsetY_ },
-				scoreLabelScale_, scoreLabelColor_);
+				scoreLabelScale_, scoreLabelColor_,
+				scoreLabelOutlineThickness_, scoreLabelOutlineColor_);
 			tr->DrawText(numBuf,
 				{ screenW - scoreNumberOffsetX_ - numW, scoreNumberOffsetY_ },
-				scoreNumberScale_, scoreNumberColor_);
+				scoreNumberScale_, scoreNumberColor_,
+				scoreNumberOutlineThickness_, scoreNumberOutlineColor_);
 			tr->Flush();
 		}
 	}

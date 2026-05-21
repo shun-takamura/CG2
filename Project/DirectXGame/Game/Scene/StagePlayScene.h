@@ -150,11 +150,15 @@ private:
 	float   scoreLabelOffsetX_  = 16.0f;
 	float   scoreLabelOffsetY_  = 12.0f;
 	Vector4 scoreLabelColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
+	float   scoreLabelOutlineThickness_ = 0.0f;
+	Vector4 scoreLabelOutlineColor_{ 0.0f, 0.0f, 0.0f, 1.0f };
 
 	float   scoreNumberScale_   = 1.5f;
 	float   scoreNumberOffsetX_ = 16.0f;
 	float   scoreNumberOffsetY_ = 40.0f;
 	Vector4 scoreNumberColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
+	float   scoreNumberOutlineThickness_ = 0.0f;
+	Vector4 scoreNumberOutlineColor_{ 0.0f, 0.0f, 0.0f, 1.0f };
 
 	// ----- HP バーUI -----
 	SpriteInstance* hpBarBackground_ = nullptr; // 赤ゲージ背景（遅延追従）
