@@ -105,6 +105,12 @@ public:
     void  SetAttackPower(int v) { attackPower_ = v; }
 
     //====================
+    // ScoreValue（敵プレハブ用：撃破時の獲得スコア。Enemy/Boss タグで意味を持つ）
+    //====================
+    int  GetScoreValue() const { return scoreValue_; }
+    void SetScoreValue(int v) { scoreValue_ = v; }
+
+    //====================
     // エフェクトスロット（スロット名 → EffectManager 登録名）
     // 例: charge1, charge2（プレイヤー）/ hit, death（敵）
     // Inspector の DnD で編集。空文字列はそのスロットに未割当を表す。
@@ -165,6 +171,7 @@ protected:
     CarrierParams carrierParams_{};
     bool hasAttackPower_ = false;
     int  attackPower_ = 0;
+    int  scoreValue_ = 10; // 撃破スコア（Enemy/Boss プレハブで使用、Prefab から上書き）
     std::unordered_map<std::string, std::string> effects_;
 
     // 0 は予約。コンストラクタで採番される。256 を超えたら 1..255 をラップ（実用上問題ない範囲）

@@ -99,7 +99,7 @@ def classify(src: Path) -> FileTask:
     if suffix == ".gltf":
         # 出力代表は .mesh。実際には .mesh + .skel + .mat + .anim をまとめて吐く。
         return FileTask(src, Action.CONVERT_GLTF_TO_MESH, RESOURCES_DIR / rel.with_suffix(".mesh"))
-    if suffix == ".wav":
+    if suffix in (".wav", ".ttf"):
         return FileTask(src, Action.COPY, RESOURCES_DIR / rel)
     if suffix in {".mtl", ".bin", ".hdr", ".fbx"}:
         # .mtl / .bin: .obj / .gltf 変換で吸収
@@ -879,6 +879,16 @@ def convert_png_to_dds(task: FileTask) -> bool:
 
 
 # ============================================================
+# COPY (.wav / .ttf 等のバイナリそのまま)
+# ============================================================
+def copy_file(task: FileTask) -> bool:
+    import shutil
+    task.dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(task.src, task.dst)
+    return True
+
+
+# ============================================================
 # 実行ディスパッチ
 # ============================================================
 def perform(task: FileTask, dry_run: bool) -> bool:
@@ -892,6 +902,8 @@ def perform(task: FileTask, dry_run: bool) -> bool:
         return convert_obj_to_mesh(task)
     if task.action == Action.CONVERT_GLTF_TO_MESH:
         return convert_gltf_to_mesh(task)
+    if task.action == Action.COPY:
+        return copy_file(task)
 
     # TODO: 残りの Action は後続 Step で実装
     print(f"  [TODO] {task.action.name} はまだ未実装")

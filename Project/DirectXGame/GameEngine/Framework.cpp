@@ -28,6 +28,7 @@
 #include "ModelManager.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
+#include "TextRenderer.h"
 #include "SoundManager.h"
 #include "InputManager.h"
 #include "ImGuiManager.h"
@@ -290,6 +291,11 @@ void Framework::Initialize() {
 	// パーティクルマネージャーの初期化
 	ParticleManager::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
 
+	// テキストレンダラーの初期化（フォントは MPLUS 1p Medium、bake 32px）
+	TextRenderer::GetInstance()->Initialize(
+		dxCore_.get(), srvManager_.get(),
+		"Resources/Fonts/MPLUS1p-Medium.ttf", 32, 1024);
+
 	// プリミティブパイプラインの初期化
 	PrimitivePipeline::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
 
@@ -474,6 +480,9 @@ void Framework::Finalize() {
 
 	// パーティクル終了処理
 	ParticleManager::GetInstance()->Finalize();
+
+	// テキストレンダラー終了処理
+	TextRenderer::GetInstance()->Finalize();
 
 	// DirectXCoreよりも先に解放
 	TextureManager::GetInstance()->Finalize();

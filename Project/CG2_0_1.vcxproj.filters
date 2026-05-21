@@ -105,6 +105,18 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Text\FontAtlas.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Text\TextRenderer.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\External\stb_truetype_impl.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -531,6 +543,18 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Text\FontAtlas.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Text\TextRenderer.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Utility\Utf8.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\ScoreManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h">
