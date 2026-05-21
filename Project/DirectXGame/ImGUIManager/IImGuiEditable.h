@@ -10,6 +10,7 @@
 #include "Components/DamageDealer.h"
 #include "Components/BulletParams.h"
 #include "Components/CarrierParams.h"
+#include "Components/ChargeParams.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -96,6 +97,12 @@ public:
     CarrierParams& GetCarrierParams() { return carrierParams_; }
 
     //====================
+    // ChargeParams（プレイヤープレハブ用：チャージにかかる時間）
+    //====================
+    const ChargeParams& GetChargeParams() const { return chargeParams_; }
+    ChargeParams& GetChargeParams() { return chargeParams_; }
+
+    //====================
     // AttackPower（プレイヤー用の基礎攻撃力。各攻撃の倍率と乗算してダメージを決める）
     // enabled=false なら未設定。
     //====================
@@ -169,6 +176,7 @@ protected:
     DamageDealer damageDealer_{};
     BulletParams bulletParams_{};
     CarrierParams carrierParams_{};
+    ChargeParams chargeParams_{};
     bool hasAttackPower_ = false;
     int  attackPower_ = 0;
     int  scoreValue_ = 10; // 撃破スコア（Enemy/Boss プレハブで使用、Prefab から上書き）

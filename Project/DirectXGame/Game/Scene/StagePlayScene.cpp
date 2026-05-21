@@ -36,6 +36,7 @@
 #include "Score/ScoreManager.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
+#include "Effect/EffectManager.h"
 
 #ifdef _DEBUG
 #include "ViewportWindow.h"
@@ -117,6 +118,8 @@ void StagePlayScene::LoadTuningFromJson() {
 		aimPlaneDistance_     = static_cast<float>(aim["planeDistance"].AsDouble(aimPlaneDistance_));
 		aimSmoothTime_        = static_cast<float>(aim["smoothTime"].AsDouble(aimSmoothTime_));
 		aimAssistPixelScale_  = static_cast<float>(aim["assistPixelScale"].AsDouble(aimAssistPixelScale_));
+		reticleOuterMinPx_    = static_cast<float>(aim["reticleOuterMinPx"].AsDouble(reticleOuterMinPx_));
+		reticleOuterMaxPx_    = static_cast<float>(aim["reticleOuterMaxPx"].AsDouble(reticleOuterMaxPx_));
 	}
 
 	// ----- damage / invincibility -----
@@ -170,6 +173,15 @@ void StagePlayScene::LoadTuningFromJson() {
 			readColor(nb["outlineColor"], scoreNumberOutlineColor_);
 		}
 	}
+
+	// ----- reticle (チャージアニメーション) -----
+	const JsonValue& ret = root["reticle"];
+	if (ret.IsObject()) {
+		outerChargeStartRadius_     = static_cast<float>(ret["outerChargeStartRadius"].AsDouble(outerChargeStartRadius_));
+		outerChargeEndRadius_       = static_cast<float>(ret["outerChargeEndRadius"].AsDouble(outerChargeEndRadius_));
+		outerChargeEasingDuration_  = static_cast<float>(ret["outerChargeEasingDuration"].AsDouble(outerChargeEasingDuration_));
+		outerRotationSpeed_         = static_cast<float>(ret["outerRotationSpeed"].AsDouble(outerRotationSpeed_));
+	}
 }
 
 void StagePlayScene::SaveTuningToJson() const {
@@ -206,9 +218,11 @@ void StagePlayScene::SaveTuningToJson() const {
 	root["shooting"] = std::move(shObj);
 
 	JsonValue aimObj = JsonValue::MakeObject();
-	aimObj["planeDistance"]    = static_cast<double>(aimPlaneDistance_);
-	aimObj["smoothTime"]       = static_cast<double>(aimSmoothTime_);
-	aimObj["assistPixelScale"] = static_cast<double>(aimAssistPixelScale_);
+	aimObj["planeDistance"]      = static_cast<double>(aimPlaneDistance_);
+	aimObj["smoothTime"]         = static_cast<double>(aimSmoothTime_);
+	aimObj["assistPixelScale"]   = static_cast<double>(aimAssistPixelScale_);
+	aimObj["reticleOuterMinPx"]  = static_cast<double>(reticleOuterMinPx_);
+	aimObj["reticleOuterMaxPx"]  = static_cast<double>(reticleOuterMaxPx_);
 	root["aim"] = std::move(aimObj);
 
 	JsonValue dmgObj = JsonValue::MakeObject();
@@ -254,6 +268,14 @@ void StagePlayScene::SaveTuningToJson() const {
 	nbObj["outlineColor"]     = colorToArr(scoreNumberOutlineColor_);
 	scObj["number"]  = std::move(nbObj);
 	root["score"] = std::move(scObj);
+
+	// ----- reticle (チャージアニメーション) -----
+	JsonValue retObj = JsonValue::MakeObject();
+	retObj["outerChargeStartRadius"]    = static_cast<double>(outerChargeStartRadius_);
+	retObj["outerChargeEndRadius"]      = static_cast<double>(outerChargeEndRadius_);
+	retObj["outerChargeEasingDuration"] = static_cast<double>(outerChargeEasingDuration_);
+	retObj["outerRotationSpeed"]        = static_cast<double>(outerRotationSpeed_);
+	root["reticle"] = std::move(retObj);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -389,6 +411,21 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::Separator();
+		ImGui::TextDisabled("Reticle Outer Particle Offset");
+		ImGui::DragFloat("Outer Min Offset (px)", &reticleOuterMinPx_, 1.0f, 0.0f, 512.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Outer Max Offset (px)", &reticleOuterMaxPx_, 1.0f, 0.0f, 1024.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("レティクル外側パーツ（4枚）の中心からの最小/最大オフセット (pixel)");
+		}
+		ImGui::DragFloat("Outer Easing Duration (s)", &outerChargeEasingDuration_, 0.01f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("チャージ完了時に外側オフセットが最大→最小へ線形補間する時間 (秒)");
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Just Dodge Effect (debug)")) {
@@ -813,6 +850,8 @@ void StagePlayScene::Update() {
 			mouseMoved = (m->GetDeltaX() != 0) || (m->GetDeltaY() != 0);
 		}
 #endif
+		// 外側パーツのクランプ範囲を毎フレーム反映（ImGui で動的に変更可能）
+		reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
 		reticle_->Update(mouseHovered, mouseClient, mouseMoved,
 			input_->GetController(), GetScaledDeltaTime());
 	}
@@ -974,13 +1013,65 @@ void StagePlayScene::Update() {
 	const float worldDt = GetScaledDeltaTime(TimeGroup::World);
 	const bool gameFrozen = worldDt <= 0.0001f;
 
-	// ----- 射撃（プレイヤー位置から aim ターゲット方向へ） -----
+	// ----- 射撃・チャージシステム -----
 	if (!gameFrozen) {
 		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
 		fireTimer_ -= dtP;
 		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
 
+		// プレイヤープレハブからチャージ時間を反映（有効時のみ）
+		if (player_) {
+			const ChargeParams& chp = player_->GetChargeParams();
+			if (chp.enabled) {
+				chargeStage1Time_ = chp.stage1Time;
+				chargeStage2Time_ = chp.stage2Time;
+			}
+		}
+
 		bool firePressed = actions->IsPressed(static_cast<int>(Action::Fire));
+
+		// Fire を押していない時間でチャージ進行
+		if (!firePressed && player_) {
+			if (playerChargeLevel_ < 0.0f) {
+				// チャージ開始
+				playerChargeLevel_ = 0.0f;
+				chargeTimer_ = 0.0f;
+				chargeStage1Triggered_ = false;
+				chargeStage2Triggered_ = false;
+			}
+			chargeTimer_ += dtP;
+			if (chargeTimer_ > chargeStage2Time_) chargeTimer_ = chargeStage2Time_;
+
+			// 1段階目発動（3秒経過）→ 外側レティクル登場 + charge_start エフェクト
+			if (!chargeStage1Triggered_ && chargeTimer_ >= chargeStage1Time_) {
+				chargeStage1Triggered_ = true;
+				playerChargeLevel_ = 1.0f;
+				if (reticle_) {
+					reticle_->StartChargeAnimation(outerChargeStartRadius_, outerChargeEndRadius_, outerChargeEasingDuration_);
+					reticle_->SetOuterRotationSpeed(outerRotationSpeed_);
+				}
+				auto* effectMgr = EffectManager::GetInstance();
+				if (effectMgr) {
+					chargeStartEffectHandle_ = effectMgr->Play("charge_start", player_->GetTranslate());
+					chargeHoldEffectHandle_ = effectMgr->Play("charge_hold", player_->GetTranslate());
+				}
+			}
+
+			// 2段階目発動（6秒経過）→ 別エフェクト（charge_start2 / charge_hold2）
+			if (!chargeStage2Triggered_ && chargeTimer_ >= chargeStage2Time_) {
+				chargeStage2Triggered_ = true;
+				playerChargeLevel_ = 2.0f;
+				auto* effectMgr = EffectManager::GetInstance();
+				if (effectMgr) {
+					effectMgr->Play("charge_start2", player_->GetTranslate());
+					// charge_hold を charge_hold2 に差し替え
+					if (chargeHoldEffectHandle_ != kInvalidEffectHandle) {
+						effectMgr->Stop(chargeHoldEffectHandle_);
+					}
+					chargeHoldEffectHandle_ = effectMgr->Play("charge_hold2", player_->GetTranslate());
+				}
+			}
+		}
 #ifdef _DEBUG
 		// Debug ビルドでは、マウスが Viewport 上に無く、かつ別の ImGui ウィンドウ
 		// （Save ボタン等）がマウスをキャプチャ中の時は Fire を抑制する。
@@ -995,6 +1086,7 @@ void StagePlayScene::Update() {
 			}
 		}
 #endif
+		// Fire 押下で発射（チャージ状態でも即発射、または連射）
 		if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f && player_) {
 			const Vector3 origin = player_->GetTranslate();
 			// 発射方向は Lerp 前の即時 target を使う（ロックオン直後の弾が遅れて飛ぶのを防ぐ）
@@ -1013,6 +1105,22 @@ void StagePlayScene::Update() {
 					bulletColliderGrowth_, homeTarget, homeStrength,
 					aimPlaneDistance_, "TemporaryPlayerBullet", atk);
 				fireTimer_ = fireRate_;
+
+				// チャージ状態だった場合はリセット
+				if (playerChargeLevel_ >= 0.0f) {
+					playerChargeLevel_ = -1.0f;
+					chargeTimer_ = 0.0f;
+					chargeStage1Triggered_ = false;
+					chargeStage2Triggered_ = false;
+					if (reticle_) {
+						reticle_->EndChargeAnimation();
+					}
+					auto* effectMgr = EffectManager::GetInstance();
+					if (effectMgr && chargeHoldEffectHandle_ != kInvalidEffectHandle) {
+						effectMgr->Stop(chargeHoldEffectHandle_);
+						chargeHoldEffectHandle_ = kInvalidEffectHandle;
+					}
+				}
 			}
 		}
 	}

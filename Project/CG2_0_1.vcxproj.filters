@@ -593,6 +593,9 @@
     <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\ChargeParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

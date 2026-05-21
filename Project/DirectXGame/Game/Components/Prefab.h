@@ -124,6 +124,11 @@ struct PrefabDef {
 	float         carrierChildWanderRadius = 8.0f;
 	float         carrierChildMoveSpeed    = 5.0f;
 
+	// ----- Charge（プレイヤープレハブ用：チャージにかかる時間） -----
+	bool          hasCharge        = false;
+	float         chargeStage1Time = 3.0f; // 1段階目完了までの秒数
+	float         chargeStage2Time = 6.0f; // 2段階目完了までの秒数（合計時間）
+
 	// ----- エフェクトスロット -----
 	// スロット名 → EffectManager 登録名（charge1 / charge2 / hit / death など）。
 	// 空文字列はそのスロットに未割当を表す。Inspector の DnD で編集する。

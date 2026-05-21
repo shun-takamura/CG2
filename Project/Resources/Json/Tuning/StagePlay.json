@@ -29,7 +29,9 @@
   "aim": {
     "planeDistance": 200,
     "smoothTime": 0.079999998211860657,
-    "assistPixelScale": 1.3999999761581421
+    "assistPixelScale": 1.3999999761581421,
+    "reticleOuterMinPx": 8,
+    "reticleOuterMaxPx": 72
   },
   "damage": {
     "invincibilityDuration": 1,
@@ -83,5 +85,11 @@
         1
       ]
     }
+  },
+  "reticle": {
+    "outerChargeStartRadius": 150,
+    "outerChargeEndRadius": 60,
+    "outerChargeEasingDuration": 0.30000001192092896,
+    "outerRotationSpeed": 360
   }
 }

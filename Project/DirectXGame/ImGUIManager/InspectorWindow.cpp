@@ -172,6 +172,17 @@ void InspectorWindow::OnDraw() {
                 ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
             }
 
+            ImGui::Separator();
+
+            // ChargeParams（プレイヤープレハブ用：チャージ時間）
+            ChargeParams& chp = selected->GetChargeParams();
+            ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
+            if (chp.enabled) {
+                ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
+                ImGui::DragFloat("Charge Stage2 Time", &chp.stage2Time, 0.05f, 0.0f, 60.0f, "%.2f sec");
+                ImGui::TextDisabled("(stage2Time は合計時間。stage1Time より大きい値を設定する)");
+            }
+
             // ScoreValue（Enemy/Boss タグの時だけ表示）
             const EntityTag scoreTag = selected->GetTag();
             if (scoreTag == EntityTag::Enemy || scoreTag == EntityTag::Boss) {
@@ -373,6 +384,12 @@ void InspectorWindow::OnDraw() {
                         def.carrierChildLifetimeSec  = cp.childLifetimeSec;
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
+                    }
+                    const ChargeParams& chp = selected->GetChargeParams();
+                    if (chp.enabled) {
+                        def.hasCharge        = true;
+                        def.chargeStage1Time = chp.stage1Time;
+                        def.chargeStage2Time = chp.stage2Time;
                     }
                     // ScoreValue（インスタンスの値をそのままプレハブへ反映）
                     def.scoreValue = selected->GetScoreValue();

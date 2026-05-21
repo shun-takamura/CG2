@@ -465,6 +465,12 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			cp.childWanderRadius = def->carrierChildWanderRadius;
 			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
 		}
+		if (def->hasCharge) {
+			ChargeParams& chp = e->GetChargeParams();
+			chp.enabled    = true;
+			chp.stage1Time = def->chargeStage1Time;
+			chp.stage2Time = def->chargeStage2Time;
+		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
 			e->GetEffects() = def->effects;
