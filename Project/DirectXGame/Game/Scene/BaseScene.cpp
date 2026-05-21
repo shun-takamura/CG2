@@ -449,6 +449,8 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			e->SetHasAttackPower(true);
 			e->SetAttackPower(def->attackPower);
 		}
+		// 敵撃破スコア（タグに関わらずコピー、StagePlay 側で Enemy/Boss だけ参照する）
+		e->SetScoreValue(def->scoreValue);
 		if (def->hasBullet) {
 			BulletParams& bp = e->GetBulletParams();
 			bp.enabled        = true;

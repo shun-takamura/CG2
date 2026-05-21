@@ -16,7 +16,7 @@
     "smoothTime": 0.25
   },
   "camera": {
-    "speed": 0.008333333432674408
+    "speed": 0.0083333337679505348
   },
   "shooting": {
     "bulletSpeed": 750,
@@ -30,5 +30,58 @@
     "planeDistance": 200,
     "smoothTime": 0.079999998211860657,
     "assistPixelScale": 1.3999999761581421
+  },
+  "damage": {
+    "invincibilityDuration": 1,
+    "shootLockoutDuration": 0.5,
+    "blinkFrequency": 12,
+    "blinkAlpha": 0.5,
+    "cameraShakeIntensity": 0.11999999731779099,
+    "cameraShakeDuration": 0.25
+  },
+  "hpBar": {
+    "maxWidth": 350,
+    "height": 30,
+    "lerpSpeed": 0.5,
+    "posX": 64,
+    "posY": 32
+  },
+  "score": {
+    "label": {
+      "scale": 1.5,
+      "offsetX": 64,
+      "offsetY": 32,
+      "color": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "outlineThickness": 3,
+      "outlineColor": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "number": {
+      "scale": 3,
+      "offsetX": 64,
+      "offsetY": 64,
+      "color": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "outlineThickness": 4.5,
+      "outlineColor": [
+        0,
+        0,
+        0,
+        1
+      ]
+    }
   }
 }

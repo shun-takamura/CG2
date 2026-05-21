@@ -108,6 +108,10 @@ struct PrefabDef {
 	bool          hasAttackPower = false;
 	int           attackPower = 10;
 
+	// ----- ScoreValue（敵プレハブ用：撃破時の獲得スコア） -----
+	// Enemy/Boss タグでのみ使用。0 にすればこの敵は加点なし。
+	int           scoreValue = 10;
+
 	// ----- Bullet（弾プレハブ用：速度・寿命・ホーミング） -----
 	bool          hasBullet = false;
 	float         bulletSpeed          = 18.0f; // [units/sec]

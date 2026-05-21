@@ -171,6 +171,17 @@ void InspectorWindow::OnDraw() {
                 ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
                 ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
             }
+
+            // ScoreValue（Enemy/Boss タグの時だけ表示）
+            const EntityTag scoreTag = selected->GetTag();
+            if (scoreTag == EntityTag::Enemy || scoreTag == EntityTag::Boss) {
+                ImGui::Separator();
+                int sv = selected->GetScoreValue();
+                if (ImGui::DragInt("Score Value", &sv, 1, 0, 99999)) {
+                    selected->SetScoreValue(sv);
+                }
+                ImGui::TextDisabled("(撃破時の獲得スコア。0 で加点なし)");
+            }
         }
         ImGui::Separator();
     }
@@ -363,6 +374,8 @@ void InspectorWindow::OnDraw() {
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
                     }
+                    // ScoreValue（インスタンスの値をそのままプレハブへ反映）
+                    def.scoreValue = selected->GetScoreValue();
                     // エフェクトスロットをまるごと保存
                     def.effects = selected->GetEffects();
                     std::string path = std::string(PrefabManager::GetPrefabDir())

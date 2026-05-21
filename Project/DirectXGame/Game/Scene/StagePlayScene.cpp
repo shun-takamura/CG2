@@ -17,6 +17,7 @@
 #include "Spline/SplineCurveActor.h"
 #include "Spline/RailCameraController.h"
 #include <cmath>
+#include <cstdio>
 #include "Components/EntityTag.h"
 #include "AnimatedObject3DInstance.h"
 #include "AnimatedModelInstance.h"
@@ -32,6 +33,9 @@
 #include "Enemy/EnemyController.h"
 #include "Enemy/EnemyCommandFactory.h"
 #include "Enemy/EnemyContext.h"
+#include "Score/ScoreManager.h"
+#include "TextRenderer.h"
+#include "FontAtlas.h"
 
 #ifdef _DEBUG
 #include "ViewportWindow.h"
@@ -132,6 +136,39 @@ void StagePlayScene::LoadTuningFromJson() {
 		hpBarMaxWidth_  = static_cast<float>(hpb["maxWidth"].AsDouble(hpBarMaxWidth_));
 		hpBarHeight_    = static_cast<float>(hpb["height"].AsDouble(hpBarHeight_));
 		hpBarLerpSpeed_ = static_cast<float>(hpb["lerpSpeed"].AsDouble(hpBarLerpSpeed_));
+		hpBarPosX_      = static_cast<float>(hpb["posX"].AsDouble(hpBarPosX_));
+		hpBarPosY_      = static_cast<float>(hpb["posY"].AsDouble(hpBarPosY_));
+	}
+
+	// ----- Score UI -----
+	auto readColor = [](const JsonValue& arr, Vector4& dst) {
+		if (arr.IsArray() && arr.Size() >= 4) {
+			dst.x = static_cast<float>(arr[0].AsDouble(dst.x));
+			dst.y = static_cast<float>(arr[1].AsDouble(dst.y));
+			dst.z = static_cast<float>(arr[2].AsDouble(dst.z));
+			dst.w = static_cast<float>(arr[3].AsDouble(dst.w));
+		}
+	};
+	const JsonValue& sc = root["score"];
+	if (sc.IsObject()) {
+		const JsonValue& lb = sc["label"];
+		if (lb.IsObject()) {
+			scoreLabelScale_   = static_cast<float>(lb["scale"].AsDouble(scoreLabelScale_));
+			scoreLabelOffsetX_ = static_cast<float>(lb["offsetX"].AsDouble(scoreLabelOffsetX_));
+			scoreLabelOffsetY_ = static_cast<float>(lb["offsetY"].AsDouble(scoreLabelOffsetY_));
+			readColor(lb["color"], scoreLabelColor_);
+			scoreLabelOutlineThickness_ = static_cast<float>(lb["outlineThickness"].AsDouble(scoreLabelOutlineThickness_));
+			readColor(lb["outlineColor"], scoreLabelOutlineColor_);
+		}
+		const JsonValue& nb = sc["number"];
+		if (nb.IsObject()) {
+			scoreNumberScale_   = static_cast<float>(nb["scale"].AsDouble(scoreNumberScale_));
+			scoreNumberOffsetX_ = static_cast<float>(nb["offsetX"].AsDouble(scoreNumberOffsetX_));
+			scoreNumberOffsetY_ = static_cast<float>(nb["offsetY"].AsDouble(scoreNumberOffsetY_));
+			readColor(nb["color"], scoreNumberColor_);
+			scoreNumberOutlineThickness_ = static_cast<float>(nb["outlineThickness"].AsDouble(scoreNumberOutlineThickness_));
+			readColor(nb["outlineColor"], scoreNumberOutlineColor_);
+		}
 	}
 }
 
@@ -187,7 +224,36 @@ void StagePlayScene::SaveTuningToJson() const {
 	hpbObj["maxWidth"]  = static_cast<double>(hpBarMaxWidth_);
 	hpbObj["height"]    = static_cast<double>(hpBarHeight_);
 	hpbObj["lerpSpeed"] = static_cast<double>(hpBarLerpSpeed_);
+	hpbObj["posX"]      = static_cast<double>(hpBarPosX_);
+	hpbObj["posY"]      = static_cast<double>(hpBarPosY_);
 	root["hpBar"] = std::move(hpbObj);
+
+	auto colorToArr = [](const Vector4& c) {
+		JsonValue a = JsonValue::MakeArray();
+		a.Push(JsonValue(static_cast<double>(c.x)));
+		a.Push(JsonValue(static_cast<double>(c.y)));
+		a.Push(JsonValue(static_cast<double>(c.z)));
+		a.Push(JsonValue(static_cast<double>(c.w)));
+		return a;
+	};
+	JsonValue scObj = JsonValue::MakeObject();
+	JsonValue lbObj = JsonValue::MakeObject();
+	lbObj["scale"]            = static_cast<double>(scoreLabelScale_);
+	lbObj["offsetX"]          = static_cast<double>(scoreLabelOffsetX_);
+	lbObj["offsetY"]          = static_cast<double>(scoreLabelOffsetY_);
+	lbObj["color"]            = colorToArr(scoreLabelColor_);
+	lbObj["outlineThickness"] = static_cast<double>(scoreLabelOutlineThickness_);
+	lbObj["outlineColor"]     = colorToArr(scoreLabelOutlineColor_);
+	scObj["label"]   = std::move(lbObj);
+	JsonValue nbObj = JsonValue::MakeObject();
+	nbObj["scale"]            = static_cast<double>(scoreNumberScale_);
+	nbObj["offsetX"]          = static_cast<double>(scoreNumberOffsetX_);
+	nbObj["offsetY"]          = static_cast<double>(scoreNumberOffsetY_);
+	nbObj["color"]            = colorToArr(scoreNumberColor_);
+	nbObj["outlineThickness"] = static_cast<double>(scoreNumberOutlineThickness_);
+	nbObj["outlineColor"]     = colorToArr(scoreNumberOutlineColor_);
+	scObj["number"]  = std::move(nbObj);
+	root["score"] = std::move(scObj);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -261,124 +327,173 @@ void StagePlayScene::OnImGuiTuning() {
 #ifdef _DEBUG
 	bool changed = false;
 	ImGui::TextDisabled("Auto-saved to: %s", kStagePlayTuningPath);
-	ImGui::Separator();
 
-	ImGui::TextUnformatted("Player");
-	ImGui::DragFloat3("Local Offset", &playerLocalOffset_.x, 0.05f);
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat2("Move Speed (X/Y)", &playerMoveSpeed_.x, 0.05f, 0.0f, 50.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat2("Clip Margin (X/Y)", &playerClipMargin_.x, 0.01f, -1.0f, 2.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Smooth Time (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::Text("InputOffset: (%.2f, %.2f)  Vel: (%.2f, %.2f)",
-		playerInputOffset_.x, playerInputOffset_.y,
-		playerVelocity_.x, playerVelocity_.y);
-
-	ImGui::Separator();
-	ImGui::TextUnformatted("Rail Camera");
-	ImGui::DragFloat("Speed (t/sec)", &railCameraSpeed_, 0.005f, 0.0f, 5.0f, "%.3f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) {
-		changed = true;
-		if (railCamera_) railCamera_->SetSpeed(railCameraSpeed_);
+	if (ImGui::CollapsingHeader("Player")) {
+		ImGui::DragFloat3("Local Offset", &playerLocalOffset_.x, 0.05f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Move Speed (X/Y)", &playerMoveSpeed_.x, 0.05f, 0.0f, 50.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Clip Margin (X/Y)", &playerClipMargin_.x, 0.01f, -1.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Smooth Time (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("InputOffset: (%.2f, %.2f)  Vel: (%.2f, %.2f)",
+			playerInputOffset_.x, playerInputOffset_.y,
+			playerVelocity_.x, playerVelocity_.y);
 	}
 
-	ImGui::Separator();
-	ImGui::TextUnformatted("Shooting");
-	ImGui::DragFloat("Bullet Speed", &bulletSpeed_, 1.0f, 1.0f, 500.0f, "%.1f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Bullet Lifetime (s)", &bulletLifetime_, 0.05f, 0.1f, 10.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Fire Rate (s/shot)", &fireRate_, 0.005f, 0.02f, 1.0f, "%.3f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Collider Growth /m", &bulletColliderGrowth_, 0.005f, 0.0f, 1.0f, "%.3f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("弾が 1m 進むごとに collider 半径を + この値。\n0 で固定半径、0.02 だと 50m 進むと半径 +1.0。");
+	if (ImGui::CollapsingHeader("Rail Camera")) {
+		ImGui::DragFloat("Speed (t/sec)", &railCameraSpeed_, 0.005f, 0.0f, 5.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) {
+			changed = true;
+			if (railCamera_) railCamera_->SetSpeed(railCameraSpeed_);
+		}
 	}
 
-	ImGui::DragFloat("Homing Strength /s",     &bulletHomingStrength_,    0.05f, 0.0f, 20.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Homing Strength (Lock)", &bulletHomingLockOnBoost_, 0.05f, 0.0f, 20.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("弾の進行方向を target に向ける指数収束 [/sec]。\n0 でホーミング無効、4.0 で約 0.25 秒で大半が向く。\nLock 側はロックオン中の弾の倍率（必殺技でも同じ仕組みを使う）。");
+	if (ImGui::CollapsingHeader("Shooting")) {
+		ImGui::DragFloat("Bullet Speed", &bulletSpeed_, 1.0f, 1.0f, 500.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Bullet Lifetime (s)", &bulletLifetime_, 0.05f, 0.1f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Rate (s/shot)", &fireRate_, 0.005f, 0.02f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Collider Growth /m", &bulletColliderGrowth_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("弾が 1m 進むごとに collider 半径を + この値。\n0 で固定半径、0.02 だと 50m 進むと半径 +1.0。");
+		}
+		ImGui::DragFloat("Homing Strength /s",     &bulletHomingStrength_,    0.05f, 0.0f, 20.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Homing Strength (Lock)", &bulletHomingLockOnBoost_, 0.05f, 0.0f, 20.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("弾の進行方向を target に向ける指数収束 [/sec]。\n0 でホーミング無効、4.0 で約 0.25 秒で大半が向く。\nLock 側はロックオン中の弾の倍率（必殺技でも同じ仕組みを使う）。");
+		}
 	}
 
-	ImGui::Separator();
-	ImGui::TextUnformatted("Aim / Lock-on");
-	ImGui::DragFloat("Aim Plane Distance (m)", &aimPlaneDistance_, 1.0f, 5.0f, 500.0f, "%.1f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("カメラからの『狙いの面』距離。\n"
-		                  "弾速・寿命とは独立。\n"
-		                  "非ロックオン時、レティクルが指すこの面上の点へ弾が向かう。");
-	}
-	ImGui::DragFloat("Smooth Time (s)", &aimSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-
-	ImGui::Separator();
-	ImGui::TextUnformatted("Just Dodge Effect (debug)");
-	ImGui::DragFloat("Duration (s)", &justDodgeDuration_, 0.05f, 0.1f, 10.0f, "%.2f");
-	ImGui::DragFloat("Fade In (s)", &justDodgeFadeIn_, 0.01f, 0.0f, 2.0f, "%.2f");
-	ImGui::DragFloat("Fade Out (s)", &justDodgeFadeOut_, 0.01f, 0.0f, 2.0f, "%.2f");
-
-	IImGuiEditable* sel = ImGuiManager::Instance().GetSelected();
-	ImGui::Text("Target (Inspector 選択): %s",
-		sel ? sel->GetName().c_str() : "(none)");
-	if (ImGui::Button("Play Just Dodge")) {
-		PlayJustDodgeEffect(sel, justDodgeDuration_);
-	}
-	if (justDodgeActive_) {
-		ImGui::Text("Active: %.2f / %.2f s", justDodgeTimer_, justDodgeDuration_);
+	if (ImGui::CollapsingHeader("Aim / Lock-on")) {
+		ImGui::DragFloat("Aim Plane Distance (m)", &aimPlaneDistance_, 1.0f, 5.0f, 500.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("カメラからの『狙いの面』距離。\n"
+			                  "弾速・寿命とは独立。\n"
+			                  "非ロックオン時、レティクルが指すこの面上の点へ弾が向かう。");
+		}
+		ImGui::DragFloat("Smooth Time (s)", &aimSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	}
 
-	ImGui::Separator();
-	ImGui::TextUnformatted("Damage / Invincibility");
-	ImGui::DragFloat("Invincibility (s)", &playerInvincibilityDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Shoot Lockout (s)", &shootLockoutDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Blink Frequency (Hz)", &damageBlinkFrequency_, 0.5f, 0.0f, 40.0f, "%.1f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Blink Alpha", &damageBlinkAlpha_, 0.02f, 0.0f, 1.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Shake Intensity", &damageCameraShakeIntensity_, 0.02f, 0.0f, 5.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Shake Duration (s)", &damageCameraShakeDuration_, 0.02f, 0.0f, 2.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	if (ImGui::Button("Test: Take 10 Damage") && player_) {
-		OnPlayerTakeDamage(10);
-	}
-	if (player_) {
-		const HP& hp = player_->GetHP();
-		ImGui::Text("Player HP: %d / %d  (invuln=%.2f, lockout=%.2f)",
-			hp.currentHP, hp.maxHP, playerInvincibilityTimer_, shootLockoutTimer_);
+	if (ImGui::CollapsingHeader("Just Dodge Effect (debug)")) {
+		ImGui::DragFloat("Duration (s)", &justDodgeDuration_, 0.05f, 0.1f, 10.0f, "%.2f");
+		ImGui::DragFloat("Fade In (s)", &justDodgeFadeIn_, 0.01f, 0.0f, 2.0f, "%.2f");
+		ImGui::DragFloat("Fade Out (s)", &justDodgeFadeOut_, 0.01f, 0.0f, 2.0f, "%.2f");
+		IImGuiEditable* sel = ImGuiManager::Instance().GetSelected();
+		ImGui::Text("Target (Inspector 選択): %s",
+			sel ? sel->GetName().c_str() : "(none)");
+		if (ImGui::Button("Play Just Dodge")) {
+			PlayJustDodgeEffect(sel, justDodgeDuration_);
+		}
+		if (justDodgeActive_) {
+			ImGui::Text("Active: %.2f / %.2f s", justDodgeTimer_, justDodgeDuration_);
+		}
 	}
 
-	ImGui::Separator();
-	ImGui::TextUnformatted("HP Bar UI");
-	if (ImGui::DragFloat("Bar Max Width", &hpBarMaxWidth_, 2.0f, 50.0f, 1000.0f, "%.0f")) {
-		if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
-		if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+	if (ImGui::CollapsingHeader("Damage / Invincibility")) {
+		ImGui::DragFloat("Invincibility (s)", &playerInvincibilityDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Shoot Lockout (s)", &shootLockoutDuration_, 0.05f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blink Frequency (Hz)", &damageBlinkFrequency_, 0.5f, 0.0f, 40.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blink Alpha", &damageBlinkAlpha_, 0.02f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Shake Intensity", &damageCameraShakeIntensity_, 0.02f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Shake Duration (s)", &damageCameraShakeDuration_, 0.02f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::Button("Test: Take 10 Damage") && player_) {
+			OnPlayerTakeDamage(10);
+		}
+		if (player_) {
+			const HP& hp = player_->GetHP();
+			ImGui::Text("Player HP: %d / %d  (invuln=%.2f, lockout=%.2f)",
+				hp.currentHP, hp.maxHP, playerInvincibilityTimer_, shootLockoutTimer_);
+		}
 	}
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	if (ImGui::DragFloat("Bar Height", &hpBarHeight_, 1.0f, 4.0f, 80.0f, "%.0f")) {
-		if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
-		if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+
+	if (ImGui::CollapsingHeader("HP Bar UI")) {
+		if (ImGui::DragFloat("Bar Max Width", &hpBarMaxWidth_, 2.0f, 50.0f, 1000.0f, "%.0f")) {
+			if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
+			if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::DragFloat("Bar Height", &hpBarHeight_, 1.0f, 4.0f, 80.0f, "%.0f")) {
+			if (hpBarBackground_) hpBarBackground_->SetSize({ hpBarMaxWidth_ * hpBarTargetRatio_, hpBarHeight_ });
+			if (hpBarForeground_) hpBarForeground_->SetSize({ hpBarMaxWidth_ * hpBarCurrentRatio_, hpBarHeight_ });
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Red Bar Lerp Speed", &hpBarLerpSpeed_, 0.02f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::DragFloat("Bar Pos X", &hpBarPosX_, 1.0f, 0.0f, 2000.0f, "%.0f")) {
+			if (hpBarBackground_) hpBarBackground_->SetPosition({ hpBarPosX_, hpBarPosY_ });
+			if (hpBarForeground_) hpBarForeground_->SetPosition({ hpBarPosX_, hpBarPosY_ });
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::DragFloat("Bar Pos Y", &hpBarPosY_, 1.0f, 0.0f, 2000.0f, "%.0f")) {
+			if (hpBarBackground_) hpBarBackground_->SetPosition({ hpBarPosX_, hpBarPosY_ });
+			if (hpBarForeground_) hpBarForeground_->SetPosition({ hpBarPosX_, hpBarPosY_ });
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	}
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-	ImGui::DragFloat("Red Bar Lerp Speed", &hpBarLerpSpeed_, 0.02f, 0.0f, 5.0f, "%.2f");
-	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+	if (ImGui::CollapsingHeader("Score UI")) {
+		ImGui::Text("Score: %d", ScoreManager::GetInstance()->GetScore());
+		if (ImGui::Button("Reset Score")) ScoreManager::GetInstance()->Reset();
+		ImGui::SameLine();
+		if (ImGui::Button("+1000")) ScoreManager::GetInstance()->AddScore(1000);
+
+		ImGui::TextDisabled("位置は画面右端基準の (X, Y) オフセット");
+
+		ImGui::TextUnformatted("Label (\"SCORE\")");
+		ImGui::PushID("scoreLabel");
+		ImGui::DragFloat("Scale",    &scoreLabelScale_,   0.02f, 0.1f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Offset X", &scoreLabelOffsetX_, 1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Offset Y", &scoreLabelOffsetY_, 1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Color",   &scoreLabelColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Outline Thickness", &scoreLabelOutlineThickness_, 0.1f, 0.0f, 10.0f, "%.1f px");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Outline Color", &scoreLabelOutlineColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::PopID();
+
+		ImGui::TextUnformatted("Number");
+		ImGui::PushID("scoreNumber");
+		ImGui::DragFloat("Scale",    &scoreNumberScale_,   0.02f, 0.1f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Offset X", &scoreNumberOffsetX_, 1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Offset Y", &scoreNumberOffsetY_, 1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Color",   &scoreNumberColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Outline Thickness", &scoreNumberOutlineThickness_, 0.1f, 0.0f, 10.0f, "%.1f px");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Outline Color", &scoreNumberOutlineColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::PopID();
+	}
 
 	// 末尾で一括保存（変更があれば即書き出し）
 	if (changed) SaveTuningToJson();
@@ -387,6 +502,9 @@ void StagePlayScene::OnImGuiTuning() {
 
 void StagePlayScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
+
+	// スコアをリセット（再ロード時の累積防止）
+	ScoreManager::GetInstance()->Reset();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	LoadTuningFromJson();
@@ -917,6 +1035,8 @@ void StagePlayScene::Update() {
 				if (killAtT_[m.waveEntryIndex] >= 0.0f) continue; // 既記録
 				if (m.entity->GetHP().IsDead()) {
 					killAtT_[m.waveEntryIndex] = currentT;
+					// 撃破で加点（プレハブ側で設定された scoreValue を使う）
+					ScoreManager::GetInstance()->AddScore(m.entity->GetScoreValue());
 				}
 			}
 		}
@@ -1047,6 +1167,36 @@ void StagePlayScene::Draw() {
 	DrawDynamicSprites();
 	if (reticle_) reticle_->Draw();
 
+	// スコア表示（右上、控えめサイズ）
+	{
+		TextRenderer* tr = TextRenderer::GetInstance();
+		if (tr->IsInitialized()) {
+			// 上段「SCORE」ラベル + 下段に数値。ラベルと数値は独立に位置・サイズ・色を設定可。
+			// 位置は画面右上 (screenW, 0) から (offsetX, offsetY) のオフセット（右端基準）。
+			int rawScore = ScoreManager::GetInstance()->GetScore();
+			if (rawScore < 0) rawScore = 0;
+			if (rawScore > 99999) rawScore = 99999; // 5 桁で頭打ち
+			char numBuf[16];
+			std::snprintf(numBuf, sizeof(numBuf), "%d", rawScore);
+
+			const char* labelStr = "SCORE";
+			const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
+
+			const float labelW = tr->MeasureWidth(labelStr, scoreLabelScale_);
+			const float numW   = tr->MeasureWidth(numBuf, scoreNumberScale_);
+
+			tr->DrawText(labelStr,
+				{ screenW - scoreLabelOffsetX_ - labelW, scoreLabelOffsetY_ },
+				scoreLabelScale_, scoreLabelColor_,
+				scoreLabelOutlineThickness_, scoreLabelOutlineColor_);
+			tr->DrawText(numBuf,
+				{ screenW - scoreNumberOffsetX_ - numW, scoreNumberOffsetY_ },
+				scoreNumberScale_, scoreNumberColor_,
+				scoreNumberOutlineThickness_, scoreNumberOutlineColor_);
+			tr->Flush();
+		}
+	}
+
 	// DebugDraw（スプライン可視化など）の出力
 	LineRenderer::GetInstance()->SetCamera(camera_.get());
 	LineRenderer::GetInstance()->Draw();
@@ -1135,6 +1285,10 @@ void StagePlayScene::Seek(float seconds) {
 	for (size_t i = 0; i < killAtT_.size(); ++i) {
 		if (killAtT_[i] > seekT) killAtT_[i] = -1.0f;
 	}
+
+	// スコアは Seek では再構築しない（開発時のみ Seek を使う想定。
+	// 厳密にやるなら killAtT_ ごとに wave→prefab→scoreValue を引く必要があり実装コスト高）
+	ScoreManager::GetInstance()->Reset();
 
 	// フラグを seekT から再構築
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
@@ -1437,7 +1591,7 @@ void StagePlayScene::InitializeHPBarUI() {
 
 	if (!spriteManager_) return;
 
-	const Vector2 hpBarPos{ 60.0f, 30.0f };
+	const Vector2 hpBarPos{ hpBarPosX_, hpBarPosY_ };
 
 	// 赤ゲージ背景（補間で遅延追従）
 	auto bgSprite = std::make_unique<SpriteInstance>();

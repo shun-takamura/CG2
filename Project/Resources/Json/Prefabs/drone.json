@@ -1,47 +1,134 @@
 {
   "kind": "Primitive",
-  "model": { "dir": "", "file": "", "animated": false },
+  "model": {
+    "dir": "",
+    "file": "",
+    "animated": false
+  },
   "tag": "Enemy",
   "defaults": {
-    "scale": [1.2, 1.2, 1.2],
-    "rotate": [0, 0, 0]
+    "scale": [
+      1.2000000476837158,
+      1.2000000476837158,
+      1.2000000476837158
+    ],
+    "rotate": [
+      -0.16355660557746887,
+      3.0991816520690918,
+      0
+    ]
   },
   "primitive": {
     "primitiveType": 2,
     "texturePath": "Resources/Textures/white1x1.dds",
-    "color": [0.2, 0.5, 1.0, 1.0],
+    "color": [
+      0.20000000298023224,
+      0.5,
+      1,
+      1
+    ],
     "blendMode": 1,
     "depthWrite": true,
     "alphaReference": 0,
     "cullBackface": false,
     "samplerMode": 0,
     "uvAutoScroll": false,
-    "uvScrollSpeed": [0, 0],
-    "uvOffset": [0, 0],
-    "uvScale": [1, 1],
+    "uvScrollSpeed": [
+      0,
+      0
+    ],
+    "uvOffset": [
+      0,
+      0
+    ],
+    "uvScale": [
+      1,
+      1
+    ],
     "uvFlipU": false,
     "uvFlipV": false,
     "billboardMode": "None",
     "timeGroup": "World",
     "ring": {
-      "outerRadius": 1.2,
-      "innerRadius": 0.6,
+      "outerRadius": 1.2000000476837158,
+      "innerRadius": 0.60000002384185791,
       "divisions": 24,
-      "innerColor": [0.4, 0.7, 1.0, 1.0],
-      "outerColor": [0.2, 0.5, 1.0, 1.0],
+      "innerColor": [
+        0.40000000596046448,
+        0.69999998807907104,
+        1,
+        1
+      ],
+      "outerColor": [
+        0.20000000298023224,
+        0.5,
+        1,
+        1
+      ],
       "startAngle": 0,
       "endAngle": 6.2831854820251465
+    },
+    "cylinder": {
+      "topRadius": 1,
+      "bottomRadius": 1,
+      "height": 3,
+      "divisions": 32,
+      "topColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "bottomColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "startAngle": 0,
+      "endAngle": 6.2831854820251465
+    },
+    "helix": {
+      "startHelixRadius": 0.30000001192092896,
+      "endHelixRadius": 0.30000001192092896,
+      "startTubeRadius": 0.05000000074505806,
+      "endTubeRadius": 0.05000000074505806,
+      "pitch": 1,
+      "turns": 5,
+      "circleSegments": 8,
+      "lengthSegments": 64,
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        0.30000001192092896,
+        0,
+        0.20000000298023224
+      ]
     }
   },
   "collider": {
     "shape": "Sphere",
-    "offset": [0, 0, 0],
+    "offset": [
+      0,
+      0,
+      0
+    ],
     "radius": 1.5,
-    "halfExtents": [0.5, 0.5, 0.5],
+    "halfExtents": [
+      0.5,
+      0.5,
+      0.5
+    ],
     "capsuleRadius": 0.5,
-    "capsuleHeight": 1.0
+    "capsuleHeight": 1
   },
   "hp": {
     "maxHP": 30
-  }
+  },
+  "scoreValue": 20
 }

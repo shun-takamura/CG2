@@ -305,6 +305,14 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.attackPower    = static_cast<int>(apJ.AsInt(static_cast<int64_t>(out.attackPower)));
 	}
 
+	// ScoreValue（敵プレハブ用の撃破スコア。number or {value:int}）
+	const JsonValue& svJ = root["scoreValue"];
+	if (svJ.IsObject()) {
+		out.scoreValue = static_cast<int>(svJ["value"].AsInt(static_cast<int64_t>(out.scoreValue)));
+	} else if (svJ.IsNumber()) {
+		out.scoreValue = static_cast<int>(svJ.AsInt(static_cast<int64_t>(out.scoreValue)));
+	}
+
 	// Bullet（弾プレハブ用の速度・寿命・ホーミング）
 	const JsonValue& blJ = root["bullet"];
 	if (blJ.IsObject()) {
@@ -421,6 +429,11 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		blObj["lifetime"]       = static_cast<double>(def.bulletLifetime);
 		blObj["homingStrength"] = static_cast<double>(def.bulletHomingStrength);
 		root["bullet"] = std::move(blObj);
+	}
+
+	// Enemy/Boss のスコア（デフォルト 10 から外れていれば書き出す）
+	if (def.scoreValue != 10) {
+		root["scoreValue"] = static_cast<int64_t>(def.scoreValue);
 	}
 
 	if (def.hasCarrier) {

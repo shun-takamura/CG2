@@ -2,6 +2,7 @@
 #include "BaseScene.h"
 #include "Vector2.h"
 #include "Vector3.h"
+#include "Vector4.h"
 #include "Wave/WaveDef.h"
 #include <memory>
 #include <vector>
@@ -143,6 +144,22 @@ private:
 	float damageCameraShakeIntensity_ = 0.12f;  // 被弾シェイクの強度
 	float damageCameraShakeDuration_ = 0.25f;   // 被弾シェイクの継続秒
 
+	// ----- スコア UI -----
+	// ラベル "SCORE" と 数値を独立に調整できる。位置は画面右端基準の (X, Y) オフセット。
+	float   scoreLabelScale_    = 0.6f;
+	float   scoreLabelOffsetX_  = 16.0f;
+	float   scoreLabelOffsetY_  = 12.0f;
+	Vector4 scoreLabelColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
+	float   scoreLabelOutlineThickness_ = 0.0f;
+	Vector4 scoreLabelOutlineColor_{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+	float   scoreNumberScale_   = 1.5f;
+	float   scoreNumberOffsetX_ = 16.0f;
+	float   scoreNumberOffsetY_ = 40.0f;
+	Vector4 scoreNumberColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
+	float   scoreNumberOutlineThickness_ = 0.0f;
+	Vector4 scoreNumberOutlineColor_{ 0.0f, 0.0f, 0.0f, 1.0f };
+
 	// ----- HP バーUI -----
 	SpriteInstance* hpBarBackground_ = nullptr; // 赤ゲージ背景（遅延追従）
 	SpriteInstance* hpBarForeground_ = nullptr; // 緑ゲージ前景（即時追従）
@@ -151,6 +168,8 @@ private:
 	float hpBarLerpSpeed_ = 0.5f;               // 赤ゲージの線形追従速度（比率/秒）
 	float hpBarMaxWidth_ = 300.0f;              // HP バー幅（pixel）
 	float hpBarHeight_ = 20.0f;                 // HP バー高さ（pixel）
+	float hpBarPosX_ = 60.0f;                   // HP バー左上 X（pixel、画面左上原点）
+	float hpBarPosY_ = 30.0f;                   // HP バー左上 Y（pixel、画面左上原点）
 
 	// ゲームオーバー状態
 	bool gameOverTriggered_ = false;
