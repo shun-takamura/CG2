@@ -70,6 +70,17 @@ public:
 	void SetLockOnSizeClampOutside(float minPx, float maxPx) { lockOnMinPxOutside_ = minPx; lockOnMaxPxOutside_ = maxPx; }
 	float GetLockOnMinPxOutside() const { return lockOnMinPxOutside_; }
 	float GetLockOnMaxPxOutside() const { return lockOnMaxPxOutside_; }
+	// ImGui で直接編集するためのポインタ（オフセット）
+	float* GetLockOnMinPxOutsidePtr() { return &lockOnMinPxOutside_; }
+	float* GetLockOnMaxPxOutsidePtr() { return &lockOnMaxPxOutside_; }
+
+	// 外側パーツ用のスプライトサイズの最小・最大
+	void SetOuterSizeClamp(float minPx, float maxPx) { outerSizeMinPx_ = minPx; outerSizeMaxPx_ = maxPx; }
+	float GetOuterSizeMin() const { return outerSizeMinPx_; }
+	float GetOuterSizeMax() const { return outerSizeMaxPx_; }
+	// ImGui で直接編集するためのポインタ（サイズ）
+	float* GetOuterSizeMinPtr() { return &outerSizeMinPx_; }
+	float* GetOuterSizeMaxPtr() { return &outerSizeMaxPx_; }
 
 	/// <summary>
 	/// チャージアニメーション開始（外側パーツを出現させて、収束させる）。
@@ -108,11 +119,14 @@ private:
 	Vector4 lockOnColor_{ 1.0f, 0.25f, 0.25f, 1.0f }; // ロック中：赤
 	float lockOnTargetSizePx_ = 96.0f; // 敵の見かけサイズに応じて毎フレ外部から更新される
 	float lockOnMinPx_ = 64.0f;        // クランプ下限（敵が遠すぎて小さくなり過ぎないように）
-	float lockOnMaxPx_ = 256.0f;       // クランプ上限（敵が近すぎて画面を覆わないように）
-	float lockOnMinPxOutside_ = 32.0f;        // クランプ下限（敵が遠すぎて小さくなり過ぎないように）
-	float lockOnMaxPxOutside_ = 128.0f;       // クランプ上限（敵が近すぎて画面を覆わないように）
+	float lockOnMaxPx_ = 128.0f;       // クランプ上限（敵が近すぎて画面を覆わないように）
+	float lockOnMinPxOutside_ = 32.0f;        // 外側パーツのオフセット下限（中心からの距離）
+	float lockOnMaxPxOutside_ = 64.0f;        // 外側パーツのオフセット上限（中心からの距離）
+	float outerSizeMinPx_ = 32.0f;            // 外側パーツのスプライトサイズ下限
+	float outerSizeMaxPx_ = 64.0f;            // 外側パーツのスプライトサイズ上限
 	float sizeSmoothTime_  = 0.06f;    // サイズ遷移の Lerp 時定数（秒）
 	float currentSizePx_   = 48.0f;    // ランタイム：補間中の実サイズ
+	float outerBaseSizePx_ = 64.0f;    // 外側パーツの基準サイズ（拡大率 1.0 のときのサイズ）
 
 	// チャージアニメーション（外側パーツ制御）
 	float chargeLevel_ = -1.0f;        // -1.0=チャージなし、0.0～1.0=チャージ状態

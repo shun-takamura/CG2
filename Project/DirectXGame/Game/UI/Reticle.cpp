@@ -86,25 +86,23 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 
 	// ===== チャージアニメーション =====
 	if (chargeLevel_ >= 0.0f) {
-		// 中心からアンカーポイントまでのオフセット
-		float offset;
-		bool animating = (outerChargeEasingElapsed_ < outerChargeEasingDuration_);
-		if (animating) {
-			// チャージ完了直後：lockOnMaxPxOutside_ → lockOnMinPxOutside_ へ線形補間
+		// 内側レティクルのサイズ範囲（lockOnMinPx_ ～ lockOnMaxPx_）を 0～1 に正規化
+		// 非ロックオン時 = 0、ロックオンで敵が近いほど 1 に近づく
+		const float denom = (lockOnMaxPx_ - lockOnMinPx_);
+		const float t = (denom > 1e-4f)
+			? std::clamp((currentSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
+			: 0.0f;
+
+		// チャージ完了直後の追加広がり（startRadius → 0 へ減衰）
+		float extraSpread = 0.0f;
+		if (outerChargeEasingElapsed_ < outerChargeEasingDuration_) {
 			outerChargeEasingElapsed_ += deltaTime;
-			float t = std::clamp(outerChargeEasingElapsed_ / outerChargeEasingDuration_, 0.0f, 1.0f);
-			offset = lockOnMaxPxOutside_ + (lockOnMinPxOutside_ - lockOnMaxPxOutside_) * t;
-		} else {
-			// 補間完了後：非ロックオン時 = 最小オフセット、ロックオン時 = 敵距離連動
-			offset = lockOnMinPxOutside_;
-			if (lockedOn_) {
-				float denom = (lockOnMaxPx_ - lockOnMinPx_);
-				float tLock = (denom > 1e-4f)
-					? std::clamp((lockOnTargetSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
-					: 0.0f;
-				offset = lockOnMinPxOutside_ + tLock * (lockOnMaxPxOutside_ - lockOnMinPxOutside_);
-			}
+			float et = std::clamp(outerChargeEasingElapsed_ / outerChargeEasingDuration_, 0.0f, 1.0f);
+			extraSpread = outerChargeEasingStart_ * (1.0f - et);
 		}
+
+		// オフセット = min→max を拡大率で補間 + チャージ演出の広がり
+		const float offset = lockOnMinPxOutside_ + t * (lockOnMaxPxOutside_ - lockOnMinPxOutside_) + extraSpread;
 
 		// 4 方向（右上 / 右下 / 左下 / 左上）にアンカーポイントを配置
 		// 各パーツの回転は Initialize 時に 0°/90°/180°/270° で固定済み
@@ -115,9 +113,12 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 			{ -offset, -offset }, // パーツ 3: 中心の左上
 		};
 
+		// スプライトサイズ = min→max を拡大率で補間
+		const float outerSize = outerSizeMinPx_ + t * (outerSizeMaxPx_ - outerSizeMinPx_);
 		for (int i = 0; i < 4; ++i) {
 			Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
 			outerParticles_[i]->SetPosition(partPos);
+			outerParticles_[i]->SetSize({ outerSize, outerSize });
 			outerParticles_[i]->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
 			outerParticles_[i]->Update();
 		}
@@ -152,17 +153,26 @@ void Reticle::StartChargeAnimation(float startRadius, float endRadius, float dur
 	outerRotation_ = 0.0f;
 
 	// 即座に最新の position_ で各パーツの位置を反映（前回フレームの古い位置で1フレーム描画される問題を回避）
-	float offset = lockOnMaxPxOutside_;
+	// 内側レティクルのサイズ範囲を 0～1 に正規化
+	const float denom = (lockOnMaxPx_ - lockOnMinPx_);
+	const float t = (denom > 1e-4f)
+		? std::clamp((currentSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
+		: 0.0f;
+	// オフセット = min→max 補間 + チャージ開始時の広がり（startRadius）
+	const float offset = lockOnMinPxOutside_ + t * (lockOnMaxPxOutside_ - lockOnMinPxOutside_) + startRadius;
 	const Vector2 anchorOffsets[4] = {
 		{ +offset, -offset },
 		{ +offset, +offset },
 		{ -offset, +offset },
 		{ -offset, -offset },
 	};
+	// サイズ = min→max 補間
+	const float outerSize = outerSizeMinPx_ + t * (outerSizeMaxPx_ - outerSizeMinPx_);
 	for (int i = 0; i < 4; ++i) {
 		if (!outerParticles_[i]) continue;
 		Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
 		outerParticles_[i]->SetPosition(partPos);
+		outerParticles_[i]->SetSize({ outerSize, outerSize });
 		outerParticles_[i]->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
 		outerParticles_[i]->Update();
 	}

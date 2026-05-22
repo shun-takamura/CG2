@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 /// <summary>
 /// 弾プレハブ用パラメータ。HP / DamageDealer と同様に IImGuiEditable に持たせ、
@@ -10,4 +11,10 @@ struct BulletParams {
 	float speed          = 18.0f; // [units/sec]
 	float lifetime       = 4.0f;  // [sec]
 	float homingStrength = 0.0f;  // [/sec] 0=直進、大きいほど早くターゲット方向に向く
+	float colliderGrowth = 0.02f; // 進行 1m あたりの collider 半径拡大量
+
+	// ----- 貫通 -----
+	bool        penetrate           = false; // true で敵を貫通（消えずに進む）
+	float       penetrateDamageRate = 0.2f;  // 貫通中、同じ敵に多段ヒットする間隔 [sec]
+	std::string penetrateEffect;             // 貫通中ダメージ発生時に再生するエフェクト名
 };

@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 // PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
 #include "Primitive/PrimitiveInstance.h"
@@ -435,6 +436,12 @@ protected:
 		float homingStrength = 0.0f;       // [/sec] 大きいほど早く target 方向に向く
 		// 最大進行距離（origin からこれを超えたら強制消滅）。0 で無制限。
 		float maxTravelDistance = 0.0f;
+		// 貫通（敵を消さずに進み、damageRate ごとに多段ヒット）
+		bool        penetrate = false;
+		float       penetrateDamageRate = 0.2f; // 同じ敵への多段ヒット間隔 [sec]
+		std::string penetrateEffect;            // 貫通中ダメージ発生時のエフェクト名
+		int         penetrateDamage = 0;        // 焼き込んだダメージ（手動適用用）
+		std::unordered_map<IImGuiEditable*, float> hitCooldowns; // 敵 → 次にダメージを与えられるまでの残り秒
 	};
 	std::vector<BulletRuntime> bullets_;
 

@@ -151,14 +151,36 @@ void InspectorWindow::OnDraw() {
 
             ImGui::Separator();
 
-            // BulletParams（弾プレハブ用：速度・寿命・ホーミング）
+            // BulletParams（弾プレハブ用：速度・寿命・ホーミング・貫通）
             BulletParams& bp = selected->GetBulletParams();
             ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
             if (bp.enabled) {
                 ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
                 ImGui::DragFloat("Bullet Lifetime", &bp.lifetime, 0.1f, 0.0f, 60.0f, "%.2f sec");
                 ImGui::DragFloat("Bullet Homing Strength", &bp.homingStrength, 0.05f, 0.0f, 20.0f, "%.2f /sec");
-                ImGui::TextDisabled("(SpawnEnemyBullet 時にプレハブの bullet セクションから読まれる)");
+                ImGui::DragFloat("Collider Growth /m", &bp.colliderGrowth, 0.005f, 0.0f, 1.0f, "%.3f");
+                ImGui::Checkbox("Penetrate", &bp.penetrate);
+                if (bp.penetrate) {
+                    ImGui::DragFloat("Penetrate Damage Rate", &bp.penetrateDamageRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("貫通中、同じ敵に多段ヒットする間隔 (秒)");
+                    }
+                    // 貫通中ダメージ時のエフェクト（SceneEditor の Effects 一覧から DnD）
+                    char effBuf[128];
+                    std::snprintf(effBuf, sizeof(effBuf), "%s", bp.penetrateEffect.c_str());
+                    ImGui::SetNextItemWidth(200.0f);
+                    if (ImGui::InputText("Penetrate Effect", effBuf, sizeof(effBuf))) {
+                        bp.penetrateEffect = effBuf;
+                    }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(EFFECT_RES_DROP_PAYLOAD_TYPE)) {
+                            const auto* pld = static_cast<const EffectResDropPayload*>(p->Data);
+                            bp.penetrateEffect = pld->effectName;
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                }
+                ImGui::TextDisabled("(SpawnEnemyBullet / SpawnPlayerBullet 時にプレハブの bullet から読まれる)");
             }
 
             ImGui::Separator();
@@ -174,13 +196,47 @@ void InspectorWindow::OnDraw() {
 
             ImGui::Separator();
 
-            // ChargeParams（プレイヤープレハブ用：チャージ時間）
+            // ChargeParams（プレイヤープレハブ用：チャージ時間 + 連射間隔）
             ChargeParams& chp = selected->GetChargeParams();
             ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
             if (chp.enabled) {
                 ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
                 ImGui::DragFloat("Charge Stage2 Time", &chp.stage2Time, 0.05f, 0.0f, 60.0f, "%.2f sec");
+                ImGui::DragFloat("Fire Rate", &chp.fireRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("通常弾の連射間隔 (秒)");
+                }
                 ImGui::TextDisabled("(stage2Time は合計時間。stage1Time より大きい値を設定する)");
+            }
+
+            // 弾プレハブスロット（Player タグのみ）：通常 / charge1 / charge2
+            if (selected->GetTag() == EntityTag::Player) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Bullet Prefab Slots");
+                auto& bulletPrefabs = selected->GetBulletPrefabs();
+                const char* slotNames[3] = { "normal", "charge1", "charge2" };
+                for (const char* slot : slotNames) {
+                    ImGui::PushID(slot);
+                    ImGui::TextUnformatted(slot);
+                    ImGui::SameLine(80.0f);
+                    char buf[128];
+                    std::snprintf(buf, sizeof(buf), "%s", bulletPrefabs[slot].c_str());
+                    ImGui::SetNextItemWidth(200.0f);
+                    if (ImGui::InputText("##bp", buf, sizeof(buf))) {
+                        bulletPrefabs[slot] = buf;
+                    }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(PREFAB_DROP_PAYLOAD_TYPE)) {
+                            const auto* pld = static_cast<const PrefabDropPayload*>(p->Data);
+                            bulletPrefabs[slot] = pld->prefabName;
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                    ImGui::PopID();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("SceneEditor の Prefab 一覧から弾プレハブを DnD で割り当て");
+                }
             }
 
             // ScoreValue（Enemy/Boss タグの時だけ表示）
@@ -377,6 +433,10 @@ void InspectorWindow::OnDraw() {
                         def.bulletSpeed          = bp.speed;
                         def.bulletLifetime       = bp.lifetime;
                         def.bulletHomingStrength = bp.homingStrength;
+                        def.bulletColliderGrowth = bp.colliderGrowth;
+                        def.bulletPenetrate           = bp.penetrate;
+                        def.bulletPenetrateDamageRate = bp.penetrateDamageRate;
+                        def.bulletPenetrateEffect     = bp.penetrateEffect;
                     }
                     const CarrierParams& cp = selected->GetCarrierParams();
                     if (cp.enabled) {
@@ -390,11 +450,14 @@ void InspectorWindow::OnDraw() {
                         def.hasCharge        = true;
                         def.chargeStage1Time = chp.stage1Time;
                         def.chargeStage2Time = chp.stage2Time;
+                        def.chargeFireRate   = chp.fireRate;
                     }
                     // ScoreValue（インスタンスの値をそのままプレハブへ反映）
                     def.scoreValue = selected->GetScoreValue();
                     // エフェクトスロットをまるごと保存
                     def.effects = selected->GetEffects();
+                    // 弾プレハブスロットをまるごと保存
+                    def.bulletPrefabs = selected->GetBulletPrefabs();
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";
                     bool ok = PrefabManager::Save(def, path);

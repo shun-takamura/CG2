@@ -67,13 +67,8 @@ private:
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い
 
 	// ----- 射撃チューニング -----
-	float bulletSpeed_    = 80.0f;   // 弾速 [units/sec]
-	float bulletLifetime_ = 2.0f;    // 寿命 [sec]
-	float fireRate_       = 0.12f;   // 連射間隔 [sec]
+	// 弾パラメータは弾プレハブの BulletParams、連射間隔はプレイヤープレハブの ChargeParams.fireRate に移行済み。
 	float fireTimer_      = 0.0f;    // 次に撃てるまでの残り秒（ランタイム）
-	float bulletColliderGrowth_ = 0.02f; // 進行 1m あたりの collider 半径拡大量
-	float bulletHomingStrength_ = 1.5f;   // 軽ホーミング（target 方向への指数収束 [/sec]）
-	float bulletHomingLockOnBoost_ = 4.0f; // ロックオン中の弾は強めに引き寄せる（合計値）
 
 	// ----- 照準（aim）チューニング -----
 	// カメラからの「狙いの面」までの距離。弾速・寿命とは独立。
@@ -85,6 +80,9 @@ private:
 	// レティクル外側パーツの中心からのオフセット範囲（pixel）
 	float reticleOuterMinPx_ = 32.0f;
 	float reticleOuterMaxPx_ = 128.0f;
+	// レティクル外側パーツのスプライトサイズ範囲（pixel）
+	float reticleOuterSizeMinPx_ = 32.0f;
+	float reticleOuterSizeMaxPx_ = 64.0f;
 	// ランタイム状態
 	Vector3 aimTarget_{ 0.0f, 0.0f, 0.0f };       // Lerp 済み（プレイヤー回転用）
 	Vector3 firingTarget_{ 0.0f, 0.0f, 0.0f };    // 即時（弾の発射方向用）

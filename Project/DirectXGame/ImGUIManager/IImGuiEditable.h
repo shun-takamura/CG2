@@ -131,6 +131,19 @@ public:
     }
 
     //====================
+    // 弾プレハブスロット（スロット名 → 弾プレハブ名）
+    // プレイヤー用: normal（通常弾）/ charge1（1段階チャージ）/ charge2（2段階チャージ）
+    // Inspector の DnD（PREFAB_DROP）で編集。空文字列は未割当。
+    //====================
+    const std::unordered_map<std::string, std::string>& GetBulletPrefabs() const { return bulletPrefabs_; }
+    std::unordered_map<std::string, std::string>& GetBulletPrefabs() { return bulletPrefabs_; }
+    void SetBulletPrefab(const std::string& slot, const std::string& prefabName) { bulletPrefabs_[slot] = prefabName; }
+    std::string FindBulletPrefab(const std::string& slot) const {
+        auto it = bulletPrefabs_.find(slot);
+        return (it != bulletPrefabs_.end()) ? it->second : std::string();
+    }
+
+    //====================
     // ObjectID（自動採番、0 は予約＝未割当 / マスク対象外）。
     // ジャスト回避演出など、特定インスタンスをハイライトするためのキーに使う。
     //====================
@@ -181,6 +194,7 @@ protected:
     int  attackPower_ = 0;
     int  scoreValue_ = 10; // 撃破スコア（Enemy/Boss プレハブで使用、Prefab から上書き）
     std::unordered_map<std::string, std::string> effects_;
+    std::unordered_map<std::string, std::string> bulletPrefabs_; // プレイヤー用：弾プレハブスロット
 
     // 0 は予約。コンストラクタで採番される。256 を超えたら 1..255 をラップ（実用上問題ない範囲）
     uint8_t objectId_ = 0;

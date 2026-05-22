@@ -7,6 +7,7 @@
 /// </summary>
 struct ChargeParams {
 	bool  enabled    = false;
-	float stage1Time = 3.0f; // 1段階目完了までの秒数
-	float stage2Time = 6.0f; // 2段階目完了までの秒数（合計時間）
+	float stage1Time = 3.0f;  // 1段階目完了までの秒数
+	float stage2Time = 6.0f;  // 2段階目完了までの秒数（合計時間）
+	float fireRate   = 0.12f; // 通常弾の連射間隔 [sec]（プレイヤー武器パラメータ）
 };
