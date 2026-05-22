@@ -362,6 +362,14 @@ public:
 	/// </summary>
 	void DrawGlobalEffects();
 
+	/// <summary>
+	/// シーン凍結中（エフェクトエディタの「シーンを一時停止」ON）に、
+	/// ゲームプレイは止めたままエフェクト再生だけを進めるための更新。
+	/// 実時間 delta を使い、シーンのタイムスケールの影響を受けない。
+	/// SceneManager から呼ばれる。
+	/// </summary>
+	void UpdateFrozenEffects();
+
 	//====================
 	// ID Pass（ハイライト対象を idMaskRT に書き込む）
 	//====================

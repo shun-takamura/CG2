@@ -66,6 +66,16 @@ void SceneManager::Update() {
 
 	// 現在のシーンを更新
 	if (currentScene_) {
+#ifdef _DEBUG
+		// エフェクトエディタの「シーンを一時停止」が ON のときは、
+		// シーンのゲームプレイ更新・当たり判定・経過秒加算を凍結し、
+		// エフェクト再生だけを進める（編集中にプレイヤーが死んでリセットされるのを防ぐ）。
+		if (ImGuiManager::Instance().IsSceneEditFreeze()) {
+			currentScene_->UpdateFrozenEffects();
+			currentScene_->ProcessAsyncLoads();
+			return;
+		}
+#endif
 		currentScene_->Update();
 
 		// シーン経過秒の加算（Debugシークバー / 仕掛けタイミングの基準）
