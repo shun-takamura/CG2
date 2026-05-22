@@ -3,6 +3,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "BillboardMode.h"
+#include "PrimitiveGenerator.h"  // RingParams / CylinderParams / HelixParams
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -34,6 +35,11 @@ struct EffectPrimitiveComponent {
 
     // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5）
     int meshType = 0;
+
+    // ----- 形状ごとのジオメトリパラメータ（meshType が該当する場合のみ使用。PrimitiveInstance と同等） -----
+    PrimitiveGenerator::RingParams     ringParams;
+    PrimitiveGenerator::CylinderParams cylinderParams;
+    PrimitiveGenerator::HelixParams    helixParams;
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };

@@ -35,6 +35,12 @@ public:
 	static bool Save(const PrefabDef& def, const std::string& filePath);
 
 	/// <summary>
+	/// 名前を指定してプリファブの .json ファイルを削除する。
+	/// 成功したら true。呼び出し側で Rescan() して一覧を更新すること。
+	/// </summary>
+	static bool Delete(const std::string& name);
+
+	/// <summary>
 	/// プリファブ保存先ディレクトリ
 	/// </summary>
 	static const char* GetPrefabDir();

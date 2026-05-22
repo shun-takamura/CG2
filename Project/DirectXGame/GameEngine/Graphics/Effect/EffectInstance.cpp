@@ -63,7 +63,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         // 開始：レンダラ生成
         if (!rt.started) {
             rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
-            rt.renderer->Initialize(pc.meshType, pc.texturePath);
+            rt.renderer->Initialize(pc.meshType, pc.texturePath,
+                                    pc.ringParams, pc.cylinderParams, pc.helixParams);
             rt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
             rt.renderer->SetBillboardMode(pc.billboardMode);
             rt.renderer->SetRotate(pc.rotate);

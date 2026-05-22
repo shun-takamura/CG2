@@ -185,6 +185,22 @@ const char* PrefabManager::GetPrefabDir() {
 	return kPrefabDir;
 }
 
+bool PrefabManager::Delete(const std::string& name) {
+	if (name.empty()) return false;
+	std::filesystem::path path = std::filesystem::path(kPrefabDir) / (name + ".json");
+	std::error_code ec;
+	if (!std::filesystem::exists(path, ec)) {
+		Log(std::string("[PrefabManager] Delete: file not found: ") + path.generic_string() + "\n");
+		return false;
+	}
+	if (!std::filesystem::remove(path, ec) || ec) {
+		Log(std::string("[PrefabManager] Delete failed: ") + path.generic_string() + " (" + ec.message() + ")\n");
+		return false;
+	}
+	Log(std::string("[PrefabManager] Deleted prefab: ") + path.generic_string() + "\n");
+	return true;
+}
+
 void PrefabManager::Rescan() {
 	prefabs_.clear();
 	std::filesystem::path dir(kPrefabDir);

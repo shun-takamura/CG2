@@ -4,22 +4,29 @@
 namespace {
     // primitiveType（int）から MeshData を生成。EffectDef.h のmeshType値と互換。
     // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix
-    MeshData GenerateByType(int type) {
+    // Ring/Cylinder/Helix は渡された params でジオメトリを生成する。
+    MeshData GenerateByType(int type,
+                            const PrimitiveGenerator::RingParams& ring,
+                            const PrimitiveGenerator::CylinderParams& cyl,
+                            const PrimitiveGenerator::HelixParams& helix) {
         switch (type) {
         case 0: return PrimitiveGenerator::CreatePlane();
         case 1: return PrimitiveGenerator::CreateBox();
         case 2: return PrimitiveGenerator::CreateSphere();
-        case 3: return PrimitiveGenerator::CreateRing(PrimitiveGenerator::RingParams{});
-        case 4: return PrimitiveGenerator::CreateCylinder(PrimitiveGenerator::CylinderParams{});
-        case 5: return PrimitiveGenerator::CreateHelix(PrimitiveGenerator::HelixParams{});
+        case 3: return PrimitiveGenerator::CreateRing(ring);
+        case 4: return PrimitiveGenerator::CreateCylinder(cyl);
+        case 5: return PrimitiveGenerator::CreateHelix(helix);
         default: return PrimitiveGenerator::CreatePlane();
         }
     }
 }
 
-void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& texturePath) {
+void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& texturePath,
+                                         const PrimitiveGenerator::RingParams& ringParams,
+                                         const PrimitiveGenerator::CylinderParams& cylinderParams,
+                                         const PrimitiveGenerator::HelixParams& helixParams) {
     primitiveType_ = primitiveType;
-    MeshData md = GenerateByType(primitiveType);
+    MeshData md = GenerateByType(primitiveType, ringParams, cylinderParams, helixParams);
     mesh_.Initialize(md);
 
     // エフェクト用既定：加算ブレンド・深度書き込みなし・背面カリング無効

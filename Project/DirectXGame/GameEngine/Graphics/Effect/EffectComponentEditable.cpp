@@ -97,6 +97,61 @@ void EffectComponentEditable::OnImGuiInspector() {
             }
         }
 
+        // ===== Geometry（Ring / Cylinder / Helix のみ。PrimitiveInstance Inspector と同等） =====
+        if (c.meshType == 3 || c.meshType == 4 || c.meshType == 5) {
+            if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (c.meshType == 3) { // Ring
+                    auto& rp = c.ringParams;
+                    dirty |= ImGui::DragFloat("Outer Radius", &rp.outerRadius, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Inner Radius", &rp.innerRadius, 0.01f, 0.0f, 100.0f);
+                    int div = static_cast<int>(rp.divisions);
+                    if (ImGui::DragInt("Divisions", &div, 1.0f, 3, 256)) {
+                        rp.divisions = static_cast<uint32_t>(div);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::ColorEdit4("Inner Color", &rp.innerColor.x);
+                    dirty |= ImGui::ColorEdit4("Outer Color", &rp.outerColor.x);
+                    dirty |= ImGui::SliderAngle("Start Angle", &rp.startAngle, 0.0f, 360.0f);
+                    dirty |= ImGui::SliderAngle("End Angle",   &rp.endAngle,   0.0f, 360.0f);
+                } else if (c.meshType == 4) { // Cylinder
+                    auto& cp = c.cylinderParams;
+                    dirty |= ImGui::DragFloat("Top Radius",    &cp.topRadius,    0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Bottom Radius", &cp.bottomRadius, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Height",        &cp.height,       0.01f, 0.0f, 100.0f);
+                    int div = static_cast<int>(cp.divisions);
+                    if (ImGui::DragInt("Divisions", &div, 1.0f, 3, 256)) {
+                        cp.divisions = static_cast<uint32_t>(div);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::ColorEdit4("Top Color",    &cp.topColor.x);
+                    dirty |= ImGui::ColorEdit4("Bottom Color", &cp.bottomColor.x);
+                    dirty |= ImGui::SliderAngle("Start Angle", &cp.startAngle, 0.0f, 360.0f);
+                    dirty |= ImGui::SliderAngle("End Angle",   &cp.endAngle,   0.0f, 360.0f);
+                } else { // Helix
+                    auto& hp = c.helixParams;
+                    dirty |= ImGui::DragFloat("Start Helix Radius", &hp.startHelixRadius, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("End Helix Radius",   &hp.endHelixRadius,   0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Start Tube Radius",  &hp.startTubeRadius,  0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("End Tube Radius",    &hp.endTubeRadius,    0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Pitch", &hp.pitch, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Turns", &hp.turns, 0.05f, 0.0f, 100.0f);
+                    int circleSeg = static_cast<int>(hp.circleSegments);
+                    if (ImGui::DragInt("Circle Segments", &circleSeg, 1.0f, 3, 64)) {
+                        hp.circleSegments = static_cast<uint32_t>(circleSeg);
+                        dirty = true;
+                    }
+                    int lenSeg = static_cast<int>(hp.lengthSegments);
+                    if (ImGui::DragInt("Length Segments", &lenSeg, 1.0f, 1, 1024)) {
+                        hp.lengthSegments = static_cast<uint32_t>(lenSeg);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::ColorEdit4("Start Color", &hp.startColor.x);
+                    dirty |= ImGui::ColorEdit4("End Color",   &hp.endColor.x);
+                }
+                ImGui::TextDisabled("(変更は Restart で反映)");
+            }
+        }
+
         // ===== Material（PrimitiveInstance Inspector と同等） =====
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
             dirty |= ImGui::Combo("BlendMode", &c.blendMode, BlendModeNames, IM_ARRAYSIZE(BlendModeNames));

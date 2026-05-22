@@ -72,11 +72,54 @@ namespace {
         return fallback;
     }
 
+    // ===== 形状パラメータのパース =====
+
+    void ParseRingParams(const JsonValue& o, PrimitiveGenerator::RingParams& p) {
+        if (!o.IsObject()) return;
+        p.outerRadius = AsFloat(o["outerRadius"], p.outerRadius);
+        p.innerRadius = AsFloat(o["innerRadius"], p.innerRadius);
+        p.divisions   = AsUInt(o["divisions"], p.divisions);
+        p.innerColor  = AsVec4(o["innerColor"], p.innerColor);
+        p.outerColor  = AsVec4(o["outerColor"], p.outerColor);
+        p.startAngle  = AsFloat(o["startAngle"], p.startAngle);
+        p.endAngle    = AsFloat(o["endAngle"], p.endAngle);
+    }
+
+    void ParseCylinderParams(const JsonValue& o, PrimitiveGenerator::CylinderParams& p) {
+        if (!o.IsObject()) return;
+        p.topRadius    = AsFloat(o["topRadius"], p.topRadius);
+        p.bottomRadius = AsFloat(o["bottomRadius"], p.bottomRadius);
+        p.height       = AsFloat(o["height"], p.height);
+        p.divisions    = AsUInt(o["divisions"], p.divisions);
+        p.topColor     = AsVec4(o["topColor"], p.topColor);
+        p.bottomColor  = AsVec4(o["bottomColor"], p.bottomColor);
+        p.startAngle   = AsFloat(o["startAngle"], p.startAngle);
+        p.endAngle     = AsFloat(o["endAngle"], p.endAngle);
+    }
+
+    void ParseHelixParams(const JsonValue& o, PrimitiveGenerator::HelixParams& p) {
+        if (!o.IsObject()) return;
+        p.startHelixRadius = AsFloat(o["startHelixRadius"], p.startHelixRadius);
+        p.endHelixRadius   = AsFloat(o["endHelixRadius"], p.endHelixRadius);
+        p.startTubeRadius  = AsFloat(o["startTubeRadius"], p.startTubeRadius);
+        p.endTubeRadius    = AsFloat(o["endTubeRadius"], p.endTubeRadius);
+        p.pitch            = AsFloat(o["pitch"], p.pitch);
+        p.turns            = AsFloat(o["turns"], p.turns);
+        p.circleSegments   = AsUInt(o["circleSegments"], p.circleSegments);
+        p.lengthSegments   = AsUInt(o["lengthSegments"], p.lengthSegments);
+        p.startColor       = AsVec4(o["startColor"], p.startColor);
+        p.endColor         = AsVec4(o["endColor"], p.endColor);
+    }
+
     // ===== コンポーネント別パース =====
 
     void ParsePrimitive(const JsonValue& o, EffectPrimitiveComponent& c) {
         if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
         c.meshType   = AsInt(o["meshType"], c.meshType);
+        // 形状ごとのジオメトリパラメータ
+        ParseRingParams(o["ringParams"], c.ringParams);
+        ParseCylinderParams(o["cylinderParams"], c.cylinderParams);
+        ParseHelixParams(o["helixParams"], c.helixParams);
         c.offset     = AsVec3(o["offset"], c.offset);
         c.rotate     = AsVec3(o["rotate"], c.rotate);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
@@ -251,6 +294,44 @@ namespace EffectDefIO {
         const char* LightKindStr(EffectLightKind k) {
             return k == EffectLightKind::Spot ? "Spot" : "Point";
         }
+
+        JsonValue RingParamsToJson(const PrimitiveGenerator::RingParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["outerRadius"] = static_cast<double>(p.outerRadius);
+            o["innerRadius"] = static_cast<double>(p.innerRadius);
+            o["divisions"]   = static_cast<int64_t>(p.divisions);
+            o["innerColor"]  = Vec4ToJson(p.innerColor);
+            o["outerColor"]  = Vec4ToJson(p.outerColor);
+            o["startAngle"]  = static_cast<double>(p.startAngle);
+            o["endAngle"]    = static_cast<double>(p.endAngle);
+            return o;
+        }
+        JsonValue CylinderParamsToJson(const PrimitiveGenerator::CylinderParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["topRadius"]    = static_cast<double>(p.topRadius);
+            o["bottomRadius"] = static_cast<double>(p.bottomRadius);
+            o["height"]       = static_cast<double>(p.height);
+            o["divisions"]    = static_cast<int64_t>(p.divisions);
+            o["topColor"]     = Vec4ToJson(p.topColor);
+            o["bottomColor"]  = Vec4ToJson(p.bottomColor);
+            o["startAngle"]   = static_cast<double>(p.startAngle);
+            o["endAngle"]     = static_cast<double>(p.endAngle);
+            return o;
+        }
+        JsonValue HelixParamsToJson(const PrimitiveGenerator::HelixParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["startHelixRadius"] = static_cast<double>(p.startHelixRadius);
+            o["endHelixRadius"]   = static_cast<double>(p.endHelixRadius);
+            o["startTubeRadius"]  = static_cast<double>(p.startTubeRadius);
+            o["endTubeRadius"]    = static_cast<double>(p.endTubeRadius);
+            o["pitch"]            = static_cast<double>(p.pitch);
+            o["turns"]            = static_cast<double>(p.turns);
+            o["circleSegments"]   = static_cast<int64_t>(p.circleSegments);
+            o["lengthSegments"]   = static_cast<int64_t>(p.lengthSegments);
+            o["startColor"]       = Vec4ToJson(p.startColor);
+            o["endColor"]         = Vec4ToJson(p.endColor);
+            return o;
+        }
     }
 
     bool SaveToFile(const std::string& filePath, const EffectDef& def) {
@@ -264,6 +345,9 @@ namespace EffectDefIO {
             JsonValue o = JsonValue::MakeObject();
             o["displayName"] = c.displayName;
             o["meshType"]   = static_cast<int64_t>(c.meshType);
+            o["ringParams"]     = RingParamsToJson(c.ringParams);
+            o["cylinderParams"] = CylinderParamsToJson(c.cylinderParams);
+            o["helixParams"]    = HelixParamsToJson(c.helixParams);
             o["offset"]     = Vec3ToJson(c.offset);
             o["rotate"]     = Vec3ToJson(c.rotate);
             o["startTime"]  = static_cast<double>(c.startTime);
