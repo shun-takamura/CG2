@@ -159,6 +159,12 @@ void EffectManager::SetPosition(EffectHandle handle, const Vector3& pos) {
     if (it->second) it->second->SetWorldPosition(pos);
 }
 
+void EffectManager::SetRotation(EffectHandle handle, const Vector3& rotate) {
+    auto it = handleToInstance_.find(handle);
+    if (it == handleToInstance_.end()) return;
+    if (it->second) it->second->SetWorldRotation(rotate);
+}
+
 bool EffectManager::IsAlive(EffectHandle handle) const {
     return handleToInstance_.find(handle) != handleToInstance_.end();
 }

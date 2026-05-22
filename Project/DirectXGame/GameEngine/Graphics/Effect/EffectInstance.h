@@ -56,6 +56,12 @@ public:
     void SetWorldPosition(const Vector3& pos) { worldPos_ = pos; }
 
     /// <summary>
+    /// エフェクト全体の向き（オイラー角・ラジアン）。各コンポーネントの offset を
+    /// この回転で回し、各 Primitive の向きにも加算する。弾の進行方向追従などに使う。
+    /// </summary>
+    void SetWorldRotation(const Vector3& rotate) { worldRotation_ = rotate; }
+
+    /// <summary>
     /// 外部から終了を要求。次の Update で loop を抜けて finished にする。
     /// </summary>
     void RequestStop() { stopRequested_ = true; }
@@ -68,6 +74,7 @@ private:
 
     EffectDef def_{};
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
+    Vector3 worldRotation_ = { 0.0f, 0.0f, 0.0f }; // エフェクト全体の向き（オイラー角・ラジアン）
     float elapsedTime_ = 0.0f;
     bool finished_ = false;
     bool stopRequested_ = false;

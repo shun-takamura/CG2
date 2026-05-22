@@ -88,6 +88,9 @@ private:
     std::string selectedEffect_;
     float playPos_[3] = { 0.0f, 0.0f, 0.0f };
 
+    // プレビュー再生中のエフェクトハンドル（Timeline をシーン内の他エフェクトと混同しないため）
+    uint64_t previewHandle_ = 0;
+
     // ON の間、シーンのゲームプレイを凍結する（エフェクト再生は進める）
     bool pauseScene_ = false;
 

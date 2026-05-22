@@ -251,15 +251,15 @@ void EffectEditorWindow::OnDraw() {
     ImGui::DragFloat3("Play Pos", playPos_, 0.1f);
     if (ImGui::Button("Play")) {
         // editBuffer の現在の状態をそのまま再生（未保存でも反映）
-        em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+        previewHandle_ = em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
     }
     ImGui::SameLine();
     if (ImGui::Button("Restart")) {
         em->StopAll();
-        em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+        previewHandle_ = em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Stop")) em->StopAll();
+    if (ImGui::Button("Stop")) { em->StopAll(); previewHandle_ = 0; }
 
     // シーンのゲームプレイだけ凍結（エフェクト再生は進む）。
     // 編集中にプレイヤーが死んでシーンリセットされるのを防ぐ。
@@ -272,9 +272,11 @@ void EffectEditorWindow::OnDraw() {
                           "このウィンドウを閉じると自動的に解除される。");
     }
 
-    // Timeline：最初の再生中インスタンスの経過時間 / 総寿命をプログレスバーで表示
+    // Timeline：プレビュー再生中インスタンス（このエディタが Play したもの）の経過時間 / 総寿命を表示。
+    // シーン内の他エフェクトのタイムラインを拾わないよう、ハンドル指定で取得する。
     {
-        EffectInstance* inst = em->GetFirstActiveInstance();
+        EffectInstance* inst = (previewHandle_ != 0) ? em->GetInstanceByHandle(previewHandle_) : nullptr;
+        if (!inst) previewHandle_ = 0; // 再生終了で無効化
         float elapsed = inst ? inst->GetElapsedTime() : 0.0f;
         float total   = inst ? inst->GetTotalDuration() : editBuffer_.totalDuration;
         if (total < 0.0001f) total = 0.0001f;
