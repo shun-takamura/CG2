@@ -5,7 +5,7 @@
     "file": "",
     "animated": false
   },
-  "tag": "PlayerAttack",
+  "tag": "PlayerBullet",
   "defaults": {
     "scale": [
       1,
@@ -132,10 +132,11 @@
     "multiplier": 1
   },
   "bullet": {
-    "speed": 750,
-    "lifetime": 2,
-    "homingStrength": 0.30000001192092896,
-    "colliderGrowth": 0.0099999997764825821,
+    "speed": 650,
+    "lifetime": 4,
+    "homingStrength": 0.05000000074505806,
+    "strongHomingStrength": 0.20000000298023224,
+    "colliderGrowth": 0.004999999888241291,
     "penetrate": false,
     "penetrateDamageRate": 0.20000000298023224,
     "penetrateEffect": ""

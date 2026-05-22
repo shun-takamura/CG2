@@ -130,5 +130,9 @@
   "hp": {
     "maxHP": 30
   },
+  "damageDealer": {
+    "damage": 0,
+    "multiplier": 1
+  },
   "scoreValue": 20
 }

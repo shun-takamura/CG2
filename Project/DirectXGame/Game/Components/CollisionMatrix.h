@@ -4,7 +4,7 @@
 
 /// <summary>
 /// タグペアの当たり判定許可マトリクス。
-/// Player と PlayerAttack など、明示的に「判定しない」ペアを早期 return するための表。
+/// Player と PlayerBullet など、明示的に「判定しない」ペアを早期 return するための表。
 /// 値を変えるのは想定していないので関数ベースで定数判定する（コンパイル時最適化が効く）。
 /// </summary>
 namespace CollisionMatrix {
@@ -16,7 +16,8 @@ namespace CollisionMatrix {
 	inline bool IsCollidableTag(EntityTag t) {
 		switch (t) {
 		case EntityTag::Player:
-		case EntityTag::PlayerAttack:
+		case EntityTag::PlayerBullet:
+		case EntityTag::PlayerMelee:
 		case EntityTag::Enemy:
 		case EntityTag::EnemyAttack:
 		case EntityTag::Boss:
@@ -40,13 +41,16 @@ namespace CollisionMatrix {
 		}
 
 		// --- 明示的にスキップするペア ---
-		// 自機 vs 自機弾（自分の弾は当たらない）
-		if (a == EntityTag::Player && b == EntityTag::PlayerAttack) return false;
+		// 自機 vs 自機弾 / 自機 vs 自機近接（自分の攻撃は自分に当たらない）
+		if (a == EntityTag::Player && b == EntityTag::PlayerBullet) return false;
+		if (a == EntityTag::Player && b == EntityTag::PlayerMelee) return false;
 		// 敵 vs 敵弾、ボス vs 敵弾（敵は自分の弾に当たらない）
 		if (a == EntityTag::Enemy && b == EntityTag::EnemyAttack) return false;
 		if (a == EntityTag::EnemyAttack && b == EntityTag::Boss) return false;
-		// 弾同士の相殺は今回はやらない
-		if (a == EntityTag::PlayerAttack && b == EntityTag::EnemyAttack) return false;
+		// 自機の攻撃同士・自機攻撃 vs 敵弾は相殺しない
+		if (a == EntityTag::PlayerBullet && b == EntityTag::PlayerMelee) return false;
+		if (a == EntityTag::PlayerBullet && b == EntityTag::EnemyAttack) return false;
+		if (a == EntityTag::PlayerMelee && b == EntityTag::EnemyAttack) return false;
 		// 敵同士、ボス同士は無し
 		if (a == EntityTag::Enemy && b == EntityTag::Enemy) return false;
 		if (a == EntityTag::Enemy && b == EntityTag::Boss) return false;
@@ -54,7 +58,7 @@ namespace CollisionMatrix {
 		// 地形同士は無し
 		if (a == EntityTag::Terrain && b == EntityTag::Terrain) return false;
 
-		// それ以外（Player vs Enemy, PlayerAttack vs Enemy, *vs Terrain など）は判定する
+		// それ以外（Player vs Enemy, PlayerBullet/PlayerMelee vs Enemy, *vs Terrain など）は判定する
 		return true;
 	}
 

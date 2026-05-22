@@ -128,12 +128,17 @@
     "capsuleHeight": 0.30000001192092896
   },
   "damageDealer": {
-    "damage": 10,
+    "damage": 5,
     "multiplier": 1
   },
   "bullet": {
     "speed": 40,
     "lifetime": 8,
-    "homingStrength": 0.6
+    "homingStrength": 0.40000000596046448,
+    "strongHomingStrength": 0,
+    "colliderGrowth": 0.019999999552965164,
+    "penetrate": false,
+    "penetrateDamageRate": 0.20000000298023224,
+    "penetrateEffect": ""
   }
 }
