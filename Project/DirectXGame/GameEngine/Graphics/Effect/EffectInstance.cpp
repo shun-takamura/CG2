@@ -3,6 +3,7 @@
 #include "LightManager.h"
 #include "PrimitivePipeline.h"
 #include "SoundManager.h"
+#include "MathUtility.h"
 #include <algorithm>
 #define NOMINMAX
 #include<cmath>
@@ -91,7 +92,17 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         float t = Saturate(local / life);
         Vector3 scale = LerpV3(pc.startScale, pc.endScale, t);
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
-        Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+
+        // エフェクト全体の向き worldRotation_ を適用：
+        // offset をその回転で回し、Primitive の向きにも加算する（弾の進行方向追従など）。
+        const bool hasWorldRot = (worldRotation_.x != 0.0f || worldRotation_.y != 0.0f || worldRotation_.z != 0.0f);
+        Vector3 offset = pc.offset;
+        if (hasWorldRot) {
+            Matrix4x4 rotMat = MakeRotateMatrix(worldRotation_);
+            offset = TransformMatrix(pc.offset, rotMat);
+            rt.renderer->SetRotate({ worldRotation_.x + pc.rotate.x, worldRotation_.y + pc.rotate.y, worldRotation_.z + pc.rotate.z });
+        }
+        Vector3 pos = { worldPos_.x + offset.x, worldPos_.y + offset.y, worldPos_.z + offset.z };
 
         rt.renderer->SetTranslate(pos);
         rt.renderer->SetScale(scale);

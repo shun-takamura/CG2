@@ -22,6 +22,7 @@
 #include "Camera.h"
 #include "DebugCamera.h"
 #include "LineRenderer.h"
+#include "Primitive/DebugDraw.h"
 #include "ImGuiManager.h"
 #include "ViewportWindow.h"
 #include "MathUtility.h"
@@ -899,6 +900,16 @@ void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
 	}
 }
 
+namespace {
+	// 進行方向（正規化済み）→ オイラー角（ラジアン）。LH系・前方+Z 前提。
+	Vector3 DirectionToEuler(const Vector3& dir) {
+		const float yaw = std::atan2(dir.x, dir.z);
+		const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
+		const float pitch = std::atan2(-dir.y, horizLen);
+		return { pitch, yaw, 0.0f };
+	}
+}
+
 void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	float speed, float lifetime, float colliderGrowthPerMeter,
 	IImGuiEditable* homingTarget, float homingStrength,
@@ -932,9 +943,13 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		penetrateEffect     = bdef->bulletPenetrateEffect;
 	}
 
+	const Vector3 bulletEuler = DirectionToEuler(direction);
+
 	int penetrateDamage = 0;
 	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
 	if (spawned) {
+		// 進行方向に弾の向きを合わせる
+		spawned->SetRotate(bulletEuler);
 		spawned->Update();
 
 		// プレイヤー攻撃力 × プレハブの倍率で最終ダメージを確定（発射時に焼き込む）
@@ -1007,6 +1022,8 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		const std::string trailEff = spawned->FindEffect("trail");
 		if (!trailEff.empty()) {
 			br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
+			// エフェクトの向きを弾の進行方向に合わせる
+			EffectManager::GetInstance()->SetRotation(br.trailEffectHandle, bulletEuler);
 		}
 	}
 	bullets_.push_back(br);
@@ -1087,6 +1104,22 @@ void BaseScene::UpdateBullets(float deltaTime) {
 		t->x += b.velocity.x * deltaTime;
 		t->y += b.velocity.y * deltaTime;
 		t->z += b.velocity.z * deltaTime;
+
+		// 進行方向に弾とエフェクトの向きを合わせる（ホーミングで方向が変わるため毎フレーム更新）
+		if (b.speed > 1e-4f) {
+			const Vector3 d{ b.velocity.x / b.speed, b.velocity.y / b.speed, b.velocity.z / b.speed };
+			const Vector3 rot = DirectionToEuler(d);
+			b.primitive->SetRotate(rot);
+			if (b.trailEffectHandle != 0) {
+				EffectManager::GetInstance()->SetRotation(b.trailEffectHandle, rot);
+			}
+#ifdef USE_IMGUI
+			// デバッグ：プレイヤー弾の進行方向に線を表示（黄色）
+			if (b.primitive->GetTag() == EntityTag::PlayerAttack) {
+				DebugDraw::Ray(*t, d, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
+			}
+#endif
+		}
 
 		// trail エフェクトを弾位置に追従
 		if (b.trailEffectHandle != 0) {

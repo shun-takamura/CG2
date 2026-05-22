@@ -96,6 +96,12 @@ public:
     void SetPosition(EffectHandle handle, const Vector3& pos);
 
     /// <summary>
+    /// 指定ハンドルのエフェクト全体の向きを更新（オイラー角・ラジアン）。
+    /// 弾の進行方向にエフェクトを向ける等に使う。
+    /// </summary>
+    void SetRotation(EffectHandle handle, const Vector3& rotate);
+
+    /// <summary>
     /// 指定ハンドルが現在もアクティブなインスタンスを指しているか
     /// </summary>
     bool IsAlive(EffectHandle handle) const;
@@ -125,6 +131,14 @@ public:
     EffectInstance* GetFirstActiveInstance() {
         for (auto& inst : activeInstances_) if (inst) return inst.get();
         return nullptr;
+    }
+
+    /// <summary>
+    /// 指定ハンドルの再生中インスタンスを返す（EffectEditor のプレビュー Timeline 表示用）。無ければnullptr。
+    /// </summary>
+    EffectInstance* GetInstanceByHandle(EffectHandle handle) {
+        auto it = handleToInstance_.find(handle);
+        return (it != handleToInstance_.end()) ? it->second : nullptr;
     }
 
     // 登録済みエフェクト名一覧（デバッグ用）
