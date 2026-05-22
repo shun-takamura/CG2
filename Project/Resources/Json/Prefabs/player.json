@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      0.23306378722190857,
-      -0.13634110987186432,
+      0.11621131002902985,
+      -0.40268492698669434,
       0
     ]
   },
@@ -39,6 +39,15 @@
   },
   "attackPower": {
     "value": 10
+  },
+  "charge": {
+    "stage1Time": 3,
+    "stage2Time": 6,
+    "fireRate": 0.30000001192092896
+  },
+  "precision": {
+    "speedAdd": 200,
+    "homingAdd": 2
   },
   "effects": {
     "charge_start": "Hit_Small",

@@ -176,6 +176,27 @@ void StagePlayScene::LoadTuningFromJson() {
 		outerChargeEasingDuration_  = static_cast<float>(ret["outerChargeEasingDuration"].AsDouble(outerChargeEasingDuration_));
 		outerRotationSpeed_         = static_cast<float>(ret["outerRotationSpeed"].AsDouble(outerRotationSpeed_));
 	}
+
+	// ----- precision aim (精密射撃モード) -----
+	const JsonValue& pa = root["precision"];
+	if (pa.IsObject()) {
+		precisionFovY_            = static_cast<float>(pa["fovY"].AsDouble(precisionFovY_));
+		const JsonValue& co = pa["camOffset"];
+		if (co.IsArray() && co.Size() >= 3) {
+			precisionCamOffset_ = {
+				static_cast<float>(co[0].AsDouble(precisionCamOffset_.x)),
+				static_cast<float>(co[1].AsDouble(precisionCamOffset_.y)),
+				static_cast<float>(co[2].AsDouble(precisionCamOffset_.z)),
+			};
+		}
+		precisionFadeSpeed_       = static_cast<float>(pa["fadeSpeed"].AsDouble(precisionFadeSpeed_));
+		precisionStickScale_      = static_cast<float>(pa["stickScale"].AsDouble(precisionStickScale_));
+		precisionVignette_        = static_cast<float>(pa["vignette"].AsDouble(precisionVignette_));
+		precisionBlurIntensity_   = static_cast<float>(pa["blurIntensity"].AsDouble(precisionBlurIntensity_));
+		precisionBlurInnerRadius_ = static_cast<float>(pa["blurInnerRadius"].AsDouble(precisionBlurInnerRadius_));
+		precisionBlurFalloff_     = static_cast<float>(pa["blurFalloff"].AsDouble(precisionBlurFalloff_));
+		precisionBlurMaxPx_       = static_cast<float>(pa["blurMaxPx"].AsDouble(precisionBlurMaxPx_));
+	}
 }
 
 void StagePlayScene::SaveTuningToJson() const {
@@ -264,6 +285,23 @@ void StagePlayScene::SaveTuningToJson() const {
 	retObj["outerRotationSpeed"]        = static_cast<double>(outerRotationSpeed_);
 	root["reticle"] = std::move(retObj);
 
+	// ----- precision aim (精密射撃モード) -----
+	JsonValue paObj = JsonValue::MakeObject();
+	paObj["fovY"]            = static_cast<double>(precisionFovY_);
+	JsonValue camOffArr = JsonValue::MakeArray();
+	camOffArr.Push(JsonValue(static_cast<double>(precisionCamOffset_.x)));
+	camOffArr.Push(JsonValue(static_cast<double>(precisionCamOffset_.y)));
+	camOffArr.Push(JsonValue(static_cast<double>(precisionCamOffset_.z)));
+	paObj["camOffset"]       = std::move(camOffArr);
+	paObj["fadeSpeed"]       = static_cast<double>(precisionFadeSpeed_);
+	paObj["stickScale"]      = static_cast<double>(precisionStickScale_);
+	paObj["vignette"]        = static_cast<double>(precisionVignette_);
+	paObj["blurIntensity"]   = static_cast<double>(precisionBlurIntensity_);
+	paObj["blurInnerRadius"] = static_cast<double>(precisionBlurInnerRadius_);
+	paObj["blurFalloff"]     = static_cast<double>(precisionBlurFalloff_);
+	paObj["blurMaxPx"]       = static_cast<double>(precisionBlurMaxPx_);
+	root["precision"] = std::move(paObj);
+
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
 		std::error_code ec;
@@ -332,6 +370,87 @@ void StagePlayScene::UpdateJustDodgeEffect(float dt)
 	}
 }
 
+void StagePlayScene::UpdatePrecisionAim(InputActionMap* actions, float dt)
+{
+	if (!actions) return;
+
+	// LT / 右クリックのホールドでモード ON（トグルは将来追加）
+	bool held = actions->IsPressed(static_cast<int>(Action::PrecisionAim));
+#ifdef _DEBUG
+	// Debug：マウスが Viewport 外で ImGui がマウスをキャプチャ中なら抑制（Fire と同じ扱い）
+	{
+		bool mouseOverViewport = false;
+		if (auto* vp = ImGuiManager::Instance().GetViewportWindow()) {
+			mouseOverViewport = vp->IsHovered();
+		}
+		if (!mouseOverViewport && ImGui::GetIO().WantCaptureMouse) {
+			held = false;
+		}
+	}
+#endif
+	const float target = held ? 1.0f : 0.0f;
+
+	// blend を target へ線形フェード
+	if (precisionFadeSpeed_ <= 0.0f) {
+		precisionBlend_ = target;
+	} else {
+		const float step = precisionFadeSpeed_ * dt;
+		if (precisionBlend_ < target) precisionBlend_ = (std::min)(target, precisionBlend_ + step);
+		else                          precisionBlend_ = (std::max)(target, precisionBlend_ - step);
+	}
+
+	// FOV ズームとカメラ寄せは ApplyPrecisionCamera（プレイヤー配置後）でまとめて行う
+
+	// ----- エイム感度低下（右スティックのみ。マウスは絶対ワープなので FOV ズームで自然に精密化）-----
+	if (reticle_) {
+		const float scale = 1.0f + (precisionStickScale_ - 1.0f) * precisionBlend_;
+		reticle_->SetStickSpeed(reticleBaseStickSpeed_ * scale);
+	}
+
+	// ----- 演出（PrecisionBlur：周辺ぼかし＋周辺減光を内蔵。intensity でフェード）-----
+	if (auto* pe = Game::GetPostEffect(); pe && pe->precisionBlur) {
+		const bool active = precisionBlend_ > 0.001f;
+		pe->precisionBlur->SetEnabled(active);
+		if (active) {
+			pe->precisionBlur->SetInnerRadius(precisionBlurInnerRadius_);
+			pe->precisionBlur->SetFalloff(precisionBlurFalloff_);
+			pe->precisionBlur->SetMaxBlurPx(precisionBlurMaxPx_);
+			pe->precisionBlur->SetVignette(precisionVignette_);
+			pe->precisionBlur->SetIntensity(precisionBlurIntensity_ * precisionBlend_);
+			pe->precisionBlur->UpdateConstantBuffer();
+		}
+	}
+}
+
+void StagePlayScene::ApplyPrecisionCamera(const Vector3& playerWorldPos)
+{
+	if (!camera_) return;
+
+	// 基準（レール）カメラの状態。ここに来る時点で camera_ はレール位置・通常 FovY
+	const Vector3 baseEye = camera_->GetTranslate();
+	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 right   = { rot.m[0][0], rot.m[0][1], rot.m[0][2] };
+	const Vector3 up      = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
+	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
+
+	// プレイヤー位置を基準にした肩越しオフセット位置（カメラローカル R/U/F）
+	const Vector3 targetEye = {
+		playerWorldPos.x + right.x * precisionCamOffset_.x + up.x * precisionCamOffset_.y + forward.x * precisionCamOffset_.z,
+		playerWorldPos.y + right.y * precisionCamOffset_.x + up.y * precisionCamOffset_.y + forward.y * precisionCamOffset_.z,
+		playerWorldPos.z + right.z * precisionCamOffset_.x + up.z * precisionCamOffset_.y + forward.z * precisionCamOffset_.z,
+	};
+
+	const float b = precisionBlend_;
+	camera_->SetTranslate({
+		baseEye.x + (targetEye.x - baseEye.x) * b,
+		baseEye.y + (targetEye.y - baseEye.y) * b,
+		baseEye.z + (targetEye.z - baseEye.z) * b,
+	});
+	// FOV ズーム併用（向き＝GetRotate は変えない＝レール注視点方向を維持）
+	camera_->SetFovY(baseFovY_ + (precisionFovY_ - baseFovY_) * b);
+	camera_->Update();
+}
+
 void StagePlayScene::OnImGuiTuning() {
 #ifdef _DEBUG
 	bool changed = false;
@@ -362,6 +481,31 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Shooting")) {
 		ImGui::TextDisabled("弾パラメータ（速度/寿命/collider拡大/ホーミング/貫通）は\n弾プレハブの BulletParams で設定する。");
 		ImGui::TextDisabled("連射間隔(Fire Rate)はプレイヤープレハブの ChargeParams で設定する。");
+	}
+
+	if (ImGui::CollapsingHeader("Precision Aim (精密射撃)")) {
+		ImGui::TextDisabled("LT / 右クリック ホールドで発動。射撃間隔・チャージ・マルチロックは通常と同一。");
+		ImGui::Text("Blend: %.2f  (BaseFovY: %.3f)", precisionBlend_, baseFovY_);
+		ImGui::SeparatorText("カメラ / 操作");
+		ImGui::DragFloat3("Camera Offset (R/U/F)", &precisionCamOffset_.x, 0.05f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Zoom FovY (rad)", &precisionFovY_, 0.005f, 0.05f, 1.5f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fade Speed (/s)", &precisionFadeSpeed_, 0.1f, 0.0f, 30.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Stick Sensitivity x", &precisionStickScale_, 0.01f, 0.05f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SeparatorText("演出（周辺ぼかし＋減光）");
+		ImGui::DragFloat("Vignette", &precisionVignette_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blur Intensity", &precisionBlurIntensity_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blur Inner Radius", &precisionBlurInnerRadius_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blur Falloff", &precisionBlurFalloff_, 0.01f, 0.01f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Blur Max (px)", &precisionBlurMaxPx_, 0.1f, 0.0f, 32.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	}
 
 	if (ImGui::CollapsingHeader("Aim / Lock-on")) {
@@ -532,6 +676,7 @@ void StagePlayScene::Initialize() {
 	camera_->SetTranslate({ 0.0f, 0.0f, -20.0f });
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
+	baseFovY_ = camera_->GetFovY();   // 精密射撃モードのズーム基準（通常時 FovY）
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
 	// Skybox 生成（DemoScene と同じ Cubemap を使用）
@@ -583,6 +728,7 @@ void StagePlayScene::Initialize() {
 	// JSON から読み込んだ外側オフセット範囲・サイズ範囲を Reticle に初期反映
 	reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
 	reticle_->SetOuterSizeClamp(reticleOuterSizeMinPx_, reticleOuterSizeMaxPx_);
+	reticleBaseStickSpeed_ = reticle_->GetStickSpeed();   // 精密射撃モードの感度低下の基準
 
 	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
 	{
@@ -664,6 +810,13 @@ void StagePlayScene::Update() {
 		railCamera_->Update(GetScaledDeltaTime());
 	}
 
+	// 精密射撃モード（FOV ズーム・感度・演出）。FOV を camera_->Update() の前に反映する
+	UpdatePrecisionAim(actions, GetScaledDeltaTime());
+
+	// FovY を基準値に戻してから Update する。プレイヤー移動のクリップ判定は基準カメラの
+	// VP で行う必要があるため（前フレームのズーム済み FovY が残ると画面端で投影が拡大し、移動が固まる）。
+	// 実際のズーム描画は後段の ApplyPrecisionCamera() が改めて反映する。
+	camera_->SetFovY(baseFovY_);
 	camera_->Update();
 	UpdateDebugCameraIfActive();
 
@@ -791,6 +944,12 @@ void StagePlayScene::Update() {
 			camWorld);
 		player_->SetTranslate(worldPos);
 		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
+
+		// 精密射撃：プレイヤー配置（基準カメラ）後に表示カメラを肩越し位置へ寄せる。
+		// プレイヤーは基準カメラのまま配置済みなので移動範囲はズーム前と同じ。
+		if (!GetUseDebugCamera()) {
+			ApplyPrecisionCamera(worldPos);
+		}
 	}
 
 	// BaseScene の動的エンティティ群（プレハブ生成物含む）の Update
@@ -1098,6 +1257,9 @@ void StagePlayScene::Update() {
 				else                                  bulletPrefab = player_->FindBulletPrefab("normal");
 				if (bulletPrefab.empty()) bulletPrefab = "TemporaryPlayerBullet"; // フォールバック
 
+				// ロック中（レティクルが敵に重なっている）なら強ホーミング、最近敵のみなら軽ホーミング
+				const bool isLocked = (lockedEnemy_ != nullptr);
+
 				// 弾プレハブの BulletParams から速度・寿命・collider拡大・ホーミングを読む
 				float speed = 80.0f, lifetime = 2.0f, colliderGrowth = 0.0f, homing = 0.0f;
 				if (const PrefabDef* bdef = PrefabManager::GetInstance()->Find(bulletPrefab);
@@ -1105,8 +1267,19 @@ void StagePlayScene::Update() {
 					speed          = bdef->bulletSpeed;
 					lifetime       = bdef->bulletLifetime;
 					colliderGrowth = bdef->bulletColliderGrowth;
-					homing         = bdef->bulletHomingStrength;
+					homing         = isLocked ? bdef->bulletStrongHomingStrength : bdef->bulletHomingStrength;
 				}
+
+				// 精密射撃モードの加算（precisionBlend_ で補間）。
+				// 弾速は全弾に加算、ホーミング加算はロック中（強ホーミング）の弾だけに効かせる。
+				if (player_) {
+					const PrecisionParams& pp = player_->GetPrecisionParams();
+					if (pp.enabled && precisionBlend_ > 0.0f) {
+						speed += pp.speedAdd * precisionBlend_;
+						if (isLocked) homing += pp.homingAdd * precisionBlend_;
+					}
+				}
+
 				const float homeStrength = homeTarget ? homing : 0.0f;
 				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
 				const int atk = (player_ && player_->HasAttackPower()) ? player_->GetAttackPower() : 0;
@@ -1370,7 +1543,7 @@ void StagePlayScene::Seek(float seconds) {
 		if (!p) continue;
 		const EntityTag t = p->GetTag();
 		if (t == EntityTag::Enemy || t == EntityTag::Boss
-			|| t == EntityTag::PlayerAttack || t == EntityTag::EnemyAttack) {
+			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack) {
 			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
 		}
 	}
@@ -1532,7 +1705,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 		if (!p) continue;
 		// 弾は一時オブジェクトなのでシーン保存に含めない
 		const EntityTag t = p->GetTag();
-		if (t == EntityTag::PlayerAttack || t == EntityTag::EnemyAttack) continue;
+		if (t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack) continue;
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Primitive";
 		e["name"] = p->GetName();
@@ -1662,7 +1835,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			}
 		} else if (type == "Primitive") {
 			// 弾は一時オブジェクトなのでロードでも無視（過去の汚れた save 対策）
-			if (tag == EntityTag::PlayerAttack || tag == EntityTag::EnemyAttack) {
+			if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyAttack) {
 				continue;
 			}
 			int primType = static_cast<int>(e["primitiveType"].AsInt());

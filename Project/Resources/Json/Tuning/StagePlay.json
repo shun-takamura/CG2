@@ -18,14 +18,6 @@
   "camera": {
     "speed": 0.0083333337679505348
   },
-  "shooting": {
-    "bulletSpeed": 750,
-    "bulletLifetime": 2,
-    "fireRate": 0.11999999731779099,
-    "colliderGrowthPerMeter": 0.019999999552965164,
-    "homingStrength": 0.15000000596046448,
-    "homingLockOnBoost": 2
-  },
   "aim": {
     "planeDistance": 200,
     "smoothTime": 0.079999998211860657,
@@ -93,5 +85,20 @@
     "outerChargeEndRadius": 60,
     "outerChargeEasingDuration": 0.20000000298023224,
     "outerRotationSpeed": 360
+  },
+  "precision": {
+    "fovY": 0.30000001192092896,
+    "camOffset": [
+      0.55000001192092896,
+      1,
+      -5
+    ],
+    "fadeSpeed": 6,
+    "stickScale": 0.40000000596046448,
+    "vignette": 0.5,
+    "blurIntensity": 1,
+    "blurInnerRadius": 0.30000001192092896,
+    "blurFalloff": 0.40000000596046448,
+    "blurMaxPx": 10
   }
 }

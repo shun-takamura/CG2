@@ -465,6 +465,7 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			bp.speed          = def->bulletSpeed;
 			bp.lifetime       = def->bulletLifetime;
 			bp.homingStrength = def->bulletHomingStrength;
+			bp.strongHomingStrength = def->bulletStrongHomingStrength;
 			bp.colliderGrowth = def->bulletColliderGrowth;
 			bp.penetrate            = def->bulletPenetrate;
 			bp.penetrateDamageRate  = def->bulletPenetrateDamageRate;
@@ -483,6 +484,12 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			chp.stage1Time = def->chargeStage1Time;
 			chp.stage2Time = def->chargeStage2Time;
 			chp.fireRate   = def->chargeFireRate;
+		}
+		if (def->hasPrecision) {
+			PrecisionParams& pp = e->GetPrecisionParams();
+			pp.enabled   = true;
+			pp.speedAdd  = def->precisionSpeedAdd;
+			pp.homingAdd = def->precisionHomingAdd;
 		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
@@ -1115,7 +1122,7 @@ void BaseScene::UpdateBullets(float deltaTime) {
 			}
 #ifdef USE_IMGUI
 			// デバッグ：プレイヤー弾の進行方向に線を表示（黄色）
-			if (b.primitive->GetTag() == EntityTag::PlayerAttack) {
+			if (b.primitive->GetTag() == EntityTag::PlayerBullet) {
 				DebugDraw::Ray(*t, d, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
 			}
 #endif

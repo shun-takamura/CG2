@@ -105,6 +105,29 @@ private:
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;
 
+	// ----- 精密射撃モード（PrecisionAim：LT / 右クリック ホールド）-----
+	// 射撃間隔・チャージ・マルチロックは通常と同一仕様（ここでは何も変えない）。
+	// FOV ズーム + エイム感度低下 + 周辺ぼかし/減光（PrecisionBlurEffect）で精密射撃を演出する。
+	float precisionFovY_ = 0.30f;              // ズーム後の FovY（rad）。base より小さい＝寄る
+	// プレイヤー位置を基準にしたカメラのローカルオフセット（右肩越し）。R(+X)/U(+Y)/F(+Z=前方)
+	Vector3 precisionCamOffset_{ 0.6f, 0.4f, -2.0f };
+	float precisionFadeSpeed_ = 6.0f;          // モード ON/OFF 補間速度（/秒）
+	float precisionStickScale_ = 0.4f;         // モード中のレティクル感度倍率（右スティック）
+	float precisionVignette_ = 0.5f;           // 周辺減光の最大強度
+	float precisionBlurIntensity_ = 1.0f;      // 周辺ぼかしの最大効き
+	float precisionBlurInnerRadius_ = 0.30f;   // くっきり範囲（中央からの正規化距離）
+	float precisionBlurFalloff_ = 0.40f;       // くっきり→最大ぼかしへの遷移幅
+	float precisionBlurMaxPx_ = 10.0f;         // 周辺の最大ぼかし量（pixel）
+	// ランタイム
+	float precisionBlend_ = 0.0f;              // 0=通常, 1=精密モード全開（補間値）
+	float baseFovY_ = 0.45f;                   // 通常時 FovY（Initialize でカメラから取得）
+	float reticleBaseStickSpeed_ = 1200.0f;    // 通常時レティクル感度（Initialize で取得）
+
+	void UpdatePrecisionAim(class InputActionMap* actions, float dt);
+	// プレイヤーのワールド位置を基準に、表示カメラを肩越し位置へ寄せる（向きは維持）。
+	// プレイヤー配置（基準カメラ）後に呼ぶ。precisionBlend_ で補間。
+	void ApplyPrecisionCamera(const Vector3& playerWorldPos);
+
 	// ----- チャージシステム -----
 	float playerChargeLevel_ = -1.0f;       // -1=チャージなし, 0.0=未達成, 1=stage1達成, 2=stage2達成
 	float chargeStage1Time_ = 3.0f;         // 1段階目完了までの秒数

@@ -292,6 +292,7 @@ void PostEffect::InitializeEffects()
 	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
 	radialBlur = static_cast<RadialBlurEffect*>(registerEffect(std::make_unique<RadialBlurEffect>()));
 	colorInvert = static_cast<ColorInvertEffect*>(registerEffect(std::make_unique<ColorInvertEffect>()));
+	precisionBlur = static_cast<PrecisionBlurEffect*>(registerEffect(std::make_unique<PrecisionBlurEffect>()));
 
 	// ----- Outline系エフェクトの登録（outline用RootSignatureで初期化） -----
 	{

@@ -11,6 +11,7 @@
 #include "Components/BulletParams.h"
 #include "Components/CarrierParams.h"
 #include "Components/ChargeParams.h"
+#include "Components/PrecisionParams.h"
 
 // 前方宣言
 class ImGuiManager;
@@ -103,6 +104,12 @@ public:
     ChargeParams& GetChargeParams() { return chargeParams_; }
 
     //====================
+    // PrecisionParams（プレイヤープレハブ用：精密射撃モード中の弾性能加算）
+    //====================
+    const PrecisionParams& GetPrecisionParams() const { return precisionParams_; }
+    PrecisionParams& GetPrecisionParams() { return precisionParams_; }
+
+    //====================
     // AttackPower（プレイヤー用の基礎攻撃力。各攻撃の倍率と乗算してダメージを決める）
     // enabled=false なら未設定。
     //====================
@@ -190,6 +197,7 @@ protected:
     BulletParams bulletParams_{};
     CarrierParams carrierParams_{};
     ChargeParams chargeParams_{};
+    PrecisionParams precisionParams_{};
     bool hasAttackPower_ = false;
     int  attackPower_ = 0;
     int  scoreValue_ = 10; // 撃破スコア（Enemy/Boss プレハブで使用、Prefab から上書き）

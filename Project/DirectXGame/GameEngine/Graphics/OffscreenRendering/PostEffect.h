@@ -20,6 +20,7 @@
 #include "OutlineNormalEffect.h"
 #include "MaskedGrayscaleEffect.h"
 #include "ColorInvertEffect.h"
+#include "PrecisionBlurEffect.h"
 #include "Matrix4x4.h"
 
 // 前方宣言
@@ -115,6 +116,7 @@ public:
 	OutlineNormalEffect* outlineNormal = nullptr;
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
+	PrecisionBlurEffect* precisionBlur = nullptr;
 
 private:
 	void CreateRootSignatures();

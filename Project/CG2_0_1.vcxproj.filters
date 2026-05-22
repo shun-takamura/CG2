@@ -309,6 +309,9 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -596,6 +599,9 @@
     <ClInclude Include="DirectXGame\Game\Components\ChargeParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\PrecisionParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -794,6 +800,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -917,6 +926,7 @@
     <FxCompile Include="Resources\Shaders\PostEffect\Common\PostProcess.VS.hlsl" />
     <FxCompile Include="Resources\Shaders\PostEffect\Filters\Sepia.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\PostEffect\Filters\Vignette.PS.hlsl" />
+    <FxCompile Include="Resources\Shaders\PostEffect\Filters\PrecisionBlur.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\PostEffect\Filters\Smoothing.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\PostEffect\Filters\GaussianFilter.PS.hlsl" />
     <FxCompile Include="Resources\Shaders\Skybox\Skybox.PS.hlsl" />

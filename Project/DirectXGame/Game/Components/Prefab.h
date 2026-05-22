@@ -116,7 +116,8 @@ struct PrefabDef {
 	bool          hasBullet = false;
 	float         bulletSpeed          = 18.0f; // [units/sec]
 	float         bulletLifetime       = 4.0f;  // [sec]
-	float         bulletHomingStrength = 0.0f;  // [/sec] 0=直進
+	float         bulletHomingStrength = 0.0f;  // [/sec] 軽ホーミング（最近敵）。0=直進
+	float         bulletStrongHomingStrength = 0.0f; // [/sec] 強ホーミング（ロック中の敵）
 	float         bulletColliderGrowth = 0.02f; // 進行 1m あたりの collider 半径拡大量
 	bool          bulletPenetrate      = false; // 貫通フラグ
 	float         bulletPenetrateDamageRate = 0.2f; // 貫通中の多段ヒット間隔 [sec]
@@ -133,6 +134,11 @@ struct PrefabDef {
 	float         chargeStage1Time = 3.0f;  // 1段階目完了までの秒数
 	float         chargeStage2Time = 6.0f;  // 2段階目完了までの秒数（合計時間）
 	float         chargeFireRate   = 0.12f; // 通常弾の連射間隔 [sec]
+
+	// ----- Precision（プレイヤープレハブ用：精密射撃モード中の弾性能加算） -----
+	bool          hasPrecision         = false;
+	float         precisionSpeedAdd    = 0.0f; // [units/sec] 全弾の弾速に加算
+	float         precisionHomingAdd   = 0.0f; // [/sec] 強ホーミング強度に加算（ロック弾のみ）
 
 	// ----- エフェクトスロット -----
 	// スロット名 → EffectManager 登録名（charge1 / charge2 / hit / death など）。

@@ -336,6 +336,7 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.bulletSpeed          = static_cast<float>(blJ["speed"].AsDouble(out.bulletSpeed));
 		out.bulletLifetime       = static_cast<float>(blJ["lifetime"].AsDouble(out.bulletLifetime));
 		out.bulletHomingStrength = static_cast<float>(blJ["homingStrength"].AsDouble(out.bulletHomingStrength));
+		out.bulletStrongHomingStrength = static_cast<float>(blJ["strongHomingStrength"].AsDouble(out.bulletStrongHomingStrength));
 		out.bulletColliderGrowth = static_cast<float>(blJ["colliderGrowth"].AsDouble(out.bulletColliderGrowth));
 		out.bulletPenetrate      = blJ["penetrate"].AsBool(out.bulletPenetrate);
 		out.bulletPenetrateDamageRate = static_cast<float>(blJ["penetrateDamageRate"].AsDouble(out.bulletPenetrateDamageRate));
@@ -358,6 +359,14 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.chargeStage1Time = static_cast<float>(chJ["stage1Time"].AsDouble(out.chargeStage1Time));
 		out.chargeStage2Time = static_cast<float>(chJ["stage2Time"].AsDouble(out.chargeStage2Time));
 		out.chargeFireRate   = static_cast<float>(chJ["fireRate"].AsDouble(out.chargeFireRate));
+	}
+
+	// Precision（プレイヤープレハブ用の精密射撃モード加算値）
+	const JsonValue& prJ = root["precision"];
+	if (prJ.IsObject()) {
+		out.hasPrecision       = true;
+		out.precisionSpeedAdd  = static_cast<float>(prJ["speedAdd"].AsDouble(out.precisionSpeedAdd));
+		out.precisionHomingAdd = static_cast<float>(prJ["homingAdd"].AsDouble(out.precisionHomingAdd));
 	}
 
 	// エフェクトスロット（スロット名 → エフェクト名）
@@ -467,6 +476,7 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		blObj["speed"]          = static_cast<double>(def.bulletSpeed);
 		blObj["lifetime"]       = static_cast<double>(def.bulletLifetime);
 		blObj["homingStrength"] = static_cast<double>(def.bulletHomingStrength);
+		blObj["strongHomingStrength"] = static_cast<double>(def.bulletStrongHomingStrength);
 		blObj["colliderGrowth"] = static_cast<double>(def.bulletColliderGrowth);
 		blObj["penetrate"]      = def.bulletPenetrate;
 		blObj["penetrateDamageRate"] = static_cast<double>(def.bulletPenetrateDamageRate);
@@ -493,6 +503,13 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		chObj["stage2Time"] = static_cast<double>(def.chargeStage2Time);
 		chObj["fireRate"]   = static_cast<double>(def.chargeFireRate);
 		root["charge"] = std::move(chObj);
+	}
+
+	if (def.hasPrecision) {
+		JsonValue prObj = JsonValue::MakeObject();
+		prObj["speedAdd"]  = static_cast<double>(def.precisionSpeedAdd);
+		prObj["homingAdd"] = static_cast<double>(def.precisionHomingAdd);
+		root["precision"] = std::move(prObj);
 	}
 
 	// エフェクトスロット

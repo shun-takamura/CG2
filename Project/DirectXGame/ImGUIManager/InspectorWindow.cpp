@@ -69,6 +69,32 @@ void InspectorWindow::OnDraw() {
 
     ImGui::Separator();
 
+    // ----- タグごとに表示する設定項目を決める -----
+    // 各タグに必要なコンポーネントだけを Inspector / Prefab 保存に出す。
+    const EntityTag inspTag = selected->GetTag();
+    const bool isPlayer       = (inspTag == EntityTag::Player);
+    const bool isPlayerBullet = (inspTag == EntityTag::PlayerBullet);
+    const bool isPlayerMelee  = (inspTag == EntityTag::PlayerMelee);
+    const bool isEnemy        = (inspTag == EntityTag::Enemy);
+    const bool isEnemyAttack  = (inspTag == EntityTag::EnemyAttack);
+    const bool isBoss         = (inspTag == EntityTag::Boss);
+
+    const bool showHP            = isPlayer || isEnemy || isBoss;
+    const bool showAttackPower   = isPlayer;                        // 攻撃力の実数値（プレイヤーのみ）
+    const bool showRawDamage     = isEnemy || isEnemyAttack || isBoss; // 固定ダメージ（敵側）
+    const bool showAtkMultiplier = isPlayerBullet || isPlayerMelee; // 攻撃倍率（自機の攻撃）
+    const bool showBullet        = isPlayerBullet || isEnemyAttack; // 弾パラメータ
+    const bool showCarrier       = isEnemy || isBoss;
+    const bool showCharge        = isPlayer;
+    const bool showPrecision     = isPlayer;
+    const bool showBulletSlots   = isPlayer;
+    const bool showScore         = isEnemy || isBoss;
+    const bool showEffects       = isPlayer || isPlayerBullet || isPlayerMelee
+                                 || isEnemy || isEnemyAttack || isBoss;
+    const bool showBattle = showHP || showAttackPower || showRawDamage || showAtkMultiplier
+                         || showBullet || showCarrier || showCharge || showPrecision
+                         || showBulletSlots || showScore;
+
     // ----- コライダー（タグが衝突可能、かつ 3D エンティティの場合のみ表示） -----
     {
         const EntityTag tag = selected->GetTag();
@@ -108,110 +134,154 @@ void InspectorWindow::OnDraw() {
         }
     }
 
-    // ----- HP / DamageDealer / AttackPower（バトル系コンポーネント） -----
-    {
+    // ----- バトル系コンポーネント（タグごとに必要な項目だけ表示） -----
+    if (showBattle) {
         if (ImGui::CollapsingHeader("Battle", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // HP
-            HP& hp = selected->GetHP();
-            ImGui::Checkbox("HP Enabled", &hp.enabled);
-            if (hp.enabled) {
-                ImGui::DragInt("Max HP", &hp.maxHP, 1, 1, 99999);
-                if (hp.currentHP > hp.maxHP) hp.currentHP = hp.maxHP;
-                ImGui::DragInt("Current HP", &hp.currentHP, 1, 0, hp.maxHP);
-                const float frac = hp.maxHP > 0
-                    ? static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP)
-                    : 0.0f;
-                ImGui::ProgressBar(frac);
-            }
+            bool needSep = false;
+            auto sep = [&]() { if (needSep) ImGui::Separator(); needSep = true; };
 
-            ImGui::Separator();
-
-            // DamageDealer
-            DamageDealer& dd = selected->GetDamageDealer();
-            ImGui::Checkbox("DamageDealer Enabled", &dd.enabled);
-            if (dd.enabled) {
-                ImGui::DragInt("Damage", &dd.damage, 1, 0, 99999);
-                ImGui::DragFloat("Attack Multiplier", &dd.multiplier, 0.05f, 0.0f, 100.0f, "%.2f");
-                ImGui::TextDisabled("(プレイヤー攻撃: 発射時に AttackPower * Multiplier を Damage に焼き込む)");
-            }
-
-            ImGui::Separator();
-
-            // AttackPower
-            bool hasAP = selected->HasAttackPower();
-            if (ImGui::Checkbox("AttackPower Enabled", &hasAP)) {
-                selected->SetHasAttackPower(hasAP);
-            }
-            if (hasAP) {
-                int ap = selected->GetAttackPower();
-                if (ImGui::DragInt("Attack Power", &ap, 1, 0, 99999)) {
-                    selected->SetAttackPower(ap);
+            // HP（Player / Enemy / Boss）
+            if (showHP) {
+                sep();
+                HP& hp = selected->GetHP();
+                ImGui::Checkbox("HP Enabled", &hp.enabled);
+                if (hp.enabled) {
+                    ImGui::DragInt("Max HP", &hp.maxHP, 1, 1, 99999);
+                    if (hp.currentHP > hp.maxHP) hp.currentHP = hp.maxHP;
+                    ImGui::DragInt("Current HP", &hp.currentHP, 1, 0, hp.maxHP);
+                    const float frac = hp.maxHP > 0
+                        ? static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP)
+                        : 0.0f;
+                    ImGui::ProgressBar(frac);
                 }
             }
 
-            ImGui::Separator();
+            // AttackPower（Player のみ：攻撃力の実数値）
+            if (showAttackPower) {
+                sep();
+                bool hasAP = selected->HasAttackPower();
+                if (ImGui::Checkbox("AttackPower Enabled", &hasAP)) {
+                    selected->SetHasAttackPower(hasAP);
+                }
+                if (hasAP) {
+                    int ap = selected->GetAttackPower();
+                    if (ImGui::DragInt("Attack Power", &ap, 1, 0, 99999)) {
+                        selected->SetAttackPower(ap);
+                    }
+                }
+                ImGui::TextDisabled("(弾・近接の攻撃倍率と掛けて敵へのダメージになる)");
+            }
 
-            // BulletParams（弾プレハブ用：速度・寿命・ホーミング・貫通）
-            BulletParams& bp = selected->GetBulletParams();
-            ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
-            if (bp.enabled) {
-                ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
-                ImGui::DragFloat("Bullet Lifetime", &bp.lifetime, 0.1f, 0.0f, 60.0f, "%.2f sec");
-                ImGui::DragFloat("Bullet Homing Strength", &bp.homingStrength, 0.05f, 0.0f, 20.0f, "%.2f /sec");
-                ImGui::DragFloat("Collider Growth /m", &bp.colliderGrowth, 0.005f, 0.0f, 1.0f, "%.3f");
-                ImGui::Checkbox("Penetrate", &bp.penetrate);
-                if (bp.penetrate) {
-                    ImGui::DragFloat("Penetrate Damage Rate", &bp.penetrateDamageRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
+            // 固定ダメージ（Enemy / EnemyAttack / Boss）
+            if (showRawDamage) {
+                sep();
+                DamageDealer& dd = selected->GetDamageDealer();
+                ImGui::Checkbox("Damage Enabled", &dd.enabled);
+                if (dd.enabled) {
+                    ImGui::DragInt("Damage", &dd.damage, 1, 0, 99999);
+                    ImGui::TextDisabled("(敵側の固定ダメージ)");
+                }
+            }
+
+            // 攻撃倍率（PlayerBullet / PlayerMelee：攻撃力 × 倍率 = 敵へのダメージ）
+            if (showAtkMultiplier) {
+                sep();
+                DamageDealer& dd = selected->GetDamageDealer();
+                ImGui::Checkbox("Damage Enabled", &dd.enabled);
+                if (dd.enabled) {
+                    ImGui::DragFloat("Attack Multiplier", &dd.multiplier, 0.05f, 0.0f, 100.0f, "%.2f");
+                    ImGui::TextDisabled("(発射/ヒット時に AttackPower * Multiplier を Damage に焼き込む)");
+                }
+            }
+
+            // BulletParams（PlayerBullet / EnemyAttack）
+            if (showBullet) {
+                sep();
+                BulletParams& bp = selected->GetBulletParams();
+                ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
+                if (bp.enabled) {
+                    ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
+                    ImGui::DragFloat("Bullet Lifetime", &bp.lifetime, 0.1f, 0.0f, 60.0f, "%.2f sec");
+                    ImGui::DragFloat("Homing (nearest)", &bp.homingStrength, 0.05f, 0.0f, 20.0f, "%.2f /sec");
                     if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("貫通中、同じ敵に多段ヒットする間隔 (秒)");
+                        ImGui::SetTooltip("軽ホーミング：レティクル付近の最近敵へ向かう強さ");
                     }
-                    // 貫通中ダメージ時のエフェクト（SceneEditor の Effects 一覧から DnD）
-                    char effBuf[128];
-                    std::snprintf(effBuf, sizeof(effBuf), "%s", bp.penetrateEffect.c_str());
-                    ImGui::SetNextItemWidth(200.0f);
-                    if (ImGui::InputText("Penetrate Effect", effBuf, sizeof(effBuf))) {
-                        bp.penetrateEffect = effBuf;
+                    ImGui::DragFloat("Strong Homing (locked)", &bp.strongHomingStrength, 0.05f, 0.0f, 20.0f, "%.2f /sec");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("強ホーミング：レティクルが重なってロック中の敵へ向かう強さ");
                     }
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(EFFECT_RES_DROP_PAYLOAD_TYPE)) {
-                            const auto* pld = static_cast<const EffectResDropPayload*>(p->Data);
-                            bp.penetrateEffect = pld->effectName;
+                    ImGui::DragFloat("Collider Growth /m", &bp.colliderGrowth, 0.005f, 0.0f, 1.0f, "%.3f");
+                    ImGui::Checkbox("Penetrate", &bp.penetrate);
+                    if (bp.penetrate) {
+                        ImGui::DragFloat("Penetrate Damage Rate", &bp.penetrateDamageRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("貫通中、同じ敵に多段ヒットする間隔 (秒)");
                         }
-                        ImGui::EndDragDropTarget();
+                        char effBuf[128];
+                        std::snprintf(effBuf, sizeof(effBuf), "%s", bp.penetrateEffect.c_str());
+                        ImGui::SetNextItemWidth(200.0f);
+                        if (ImGui::InputText("Penetrate Effect", effBuf, sizeof(effBuf))) {
+                            bp.penetrateEffect = effBuf;
+                        }
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(EFFECT_RES_DROP_PAYLOAD_TYPE)) {
+                                const auto* pld = static_cast<const EffectResDropPayload*>(p->Data);
+                                bp.penetrateEffect = pld->effectName;
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
                     }
                 }
-                ImGui::TextDisabled("(SpawnEnemyBullet / SpawnPlayerBullet 時にプレハブの bullet から読まれる)");
             }
 
-            ImGui::Separator();
-
-            // CarrierParams（運び屋プレハブ用：子敵パラメータ）
-            CarrierParams& cp = selected->GetCarrierParams();
-            ImGui::Checkbox("CarrierParams Enabled", &cp.enabled);
-            if (cp.enabled) {
-                ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
-                ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
-                ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
-            }
-
-            ImGui::Separator();
-
-            // ChargeParams（プレイヤープレハブ用：チャージ時間 + 連射間隔）
-            ChargeParams& chp = selected->GetChargeParams();
-            ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
-            if (chp.enabled) {
-                ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
-                ImGui::DragFloat("Charge Stage2 Time", &chp.stage2Time, 0.05f, 0.0f, 60.0f, "%.2f sec");
-                ImGui::DragFloat("Fire Rate", &chp.fireRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("通常弾の連射間隔 (秒)");
+            // CarrierParams（Enemy / Boss）
+            if (showCarrier) {
+                sep();
+                CarrierParams& cp = selected->GetCarrierParams();
+                ImGui::Checkbox("CarrierParams Enabled", &cp.enabled);
+                if (cp.enabled) {
+                    ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
+                    ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
+                    ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
                 }
-                ImGui::TextDisabled("(stage2Time は合計時間。stage1Time より大きい値を設定する)");
             }
 
-            // 弾プレハブスロット（Player タグのみ）：通常 / charge1 / charge2
-            if (selected->GetTag() == EntityTag::Player) {
-                ImGui::Separator();
+            // ChargeParams（Player）
+            if (showCharge) {
+                sep();
+                ChargeParams& chp = selected->GetChargeParams();
+                ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
+                if (chp.enabled) {
+                    ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
+                    ImGui::DragFloat("Charge Stage2 Time", &chp.stage2Time, 0.05f, 0.0f, 60.0f, "%.2f sec");
+                    ImGui::DragFloat("Fire Rate", &chp.fireRate, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("通常弾の連射間隔 (秒)");
+                    }
+                    ImGui::TextDisabled("(stage2Time は合計時間。stage1Time より大きい値を設定する)");
+                }
+            }
+
+            // PrecisionParams（Player：精密射撃モード中の弾性能加算）
+            if (showPrecision) {
+                sep();
+                PrecisionParams& pp = selected->GetPrecisionParams();
+                ImGui::Checkbox("Precision Enabled", &pp.enabled);
+                if (pp.enabled) {
+                    ImGui::DragFloat("Precision Speed +", &pp.speedAdd, 0.5f, 0.0f, 2000.0f, "%.1f /sec");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("精密モード中、全弾の弾速に加算");
+                    }
+                    ImGui::DragFloat("Precision Homing +", &pp.homingAdd, 0.05f, 0.0f, 20.0f, "%.2f /sec");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("精密モード中、強ホーミング（ロック弾）の強さに加算");
+                    }
+                }
+            }
+
+            // 弾プレハブスロット（Player）：normal / charge1 / charge2
+            if (showBulletSlots) {
+                sep();
                 ImGui::TextDisabled("Bullet Prefab Slots");
                 auto& bulletPrefabs = selected->GetBulletPrefabs();
                 const char* slotNames[3] = { "normal", "charge1", "charge2" };
@@ -234,15 +304,11 @@ void InspectorWindow::OnDraw() {
                     }
                     ImGui::PopID();
                 }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("SceneEditor の Prefab 一覧から弾プレハブを DnD で割り当て");
-                }
             }
 
-            // ScoreValue（Enemy/Boss タグの時だけ表示）
-            const EntityTag scoreTag = selected->GetTag();
-            if (scoreTag == EntityTag::Enemy || scoreTag == EntityTag::Boss) {
-                ImGui::Separator();
+            // ScoreValue（Enemy / Boss）
+            if (showScore) {
+                sep();
                 int sv = selected->GetScoreValue();
                 if (ImGui::DragInt("Score Value", &sv, 1, 0, 99999)) {
                     selected->SetScoreValue(sv);
@@ -253,22 +319,23 @@ void InspectorWindow::OnDraw() {
         ImGui::Separator();
     }
 
-    // ----- Effects スロット欄 -----
+    // ----- Effects スロット欄（タグが使うものだけ表示） -----
     // 任意のスロット名 → EffectManager 登録名のマップを編集する。
     // DnD ターゲット（SceneEditor の Effects 一覧から）と手入力の両対応。
-    {
+    if (showEffects) {
         if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto& effects = selected->GetEffects();
 
             // タグに応じた推奨スロット名
-            const EntityTag tag = selected->GetTag();
             std::vector<const char*> suggested;
-            if (tag == EntityTag::Player) {
+            if (isPlayer) {
                 suggested = { "charge_start", "charge_hold", "charge_start2", "charge_hold2" };
-            } else if (tag == EntityTag::PlayerAttack || tag == EntityTag::EnemyAttack) {
+            } else if (isPlayerBullet || isEnemyAttack) {
                 // 弾：trail（弾追従ループ）/ hit（着弾）
                 suggested = { "trail", "hit" };
-            } else if (CollisionMatrix::IsCollidableTag(tag) && tag != EntityTag::Player) {
+            } else if (isPlayerMelee) {
+                suggested = { "hit" };
+            } else if (isEnemy || isBoss) {
                 suggested = { "hit", "death" };
             }
 
@@ -414,49 +481,57 @@ void InspectorWindow::OnDraw() {
                         def.colliderCapsuleHeight = col.capsuleHeight;
                     }
 
-                    // HP / DamageDealer / AttackPower をプレハブに保存
+                    // バトル系：タグが使う項目だけプレハブに保存する
                     const HP& hp = selected->GetHP();
-                    if (hp.enabled) {
+                    if (showHP && hp.enabled) {
                         def.hasHP = true;
                         def.maxHP = hp.maxHP;
                     }
+                    // ダメージ：敵側=固定ダメージ / 自機攻撃=攻撃倍率（どちらも DamageDealer）
                     const DamageDealer& dd = selected->GetDamageDealer();
-                    if (dd.enabled) {
+                    if ((showRawDamage || showAtkMultiplier) && dd.enabled) {
                         def.hasDamageDealer = true;
                         def.damage = dd.damage;
                         def.attackMultiplier = dd.multiplier;
                     }
-                    if (selected->HasAttackPower()) {
+                    if (showAttackPower && selected->HasAttackPower()) {
                         def.hasAttackPower = true;
                         def.attackPower = selected->GetAttackPower();
                     }
                     const BulletParams& bp = selected->GetBulletParams();
-                    if (bp.enabled) {
+                    if (showBullet && bp.enabled) {
                         def.hasBullet            = true;
                         def.bulletSpeed          = bp.speed;
                         def.bulletLifetime       = bp.lifetime;
                         def.bulletHomingStrength = bp.homingStrength;
+                        def.bulletStrongHomingStrength = bp.strongHomingStrength;
                         def.bulletColliderGrowth = bp.colliderGrowth;
                         def.bulletPenetrate           = bp.penetrate;
                         def.bulletPenetrateDamageRate = bp.penetrateDamageRate;
                         def.bulletPenetrateEffect     = bp.penetrateEffect;
                     }
                     const CarrierParams& cp = selected->GetCarrierParams();
-                    if (cp.enabled) {
+                    if (showCarrier && cp.enabled) {
                         def.hasCarrier               = true;
                         def.carrierChildLifetimeSec  = cp.childLifetimeSec;
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
                     }
                     const ChargeParams& chp = selected->GetChargeParams();
-                    if (chp.enabled) {
+                    if (showCharge && chp.enabled) {
                         def.hasCharge        = true;
                         def.chargeStage1Time = chp.stage1Time;
                         def.chargeStage2Time = chp.stage2Time;
                         def.chargeFireRate   = chp.fireRate;
                     }
-                    // ScoreValue（インスタンスの値をそのままプレハブへ反映）
-                    def.scoreValue = selected->GetScoreValue();
+                    const PrecisionParams& prp = selected->GetPrecisionParams();
+                    if (showPrecision && prp.enabled) {
+                        def.hasPrecision       = true;
+                        def.precisionSpeedAdd  = prp.speedAdd;
+                        def.precisionHomingAdd = prp.homingAdd;
+                    }
+                    // ScoreValue（Enemy/Boss のみ反映）
+                    if (showScore) def.scoreValue = selected->GetScoreValue();
                     // エフェクトスロットをまるごと保存
                     def.effects = selected->GetEffects();
                     // 弾プレハブスロットをまるごと保存
