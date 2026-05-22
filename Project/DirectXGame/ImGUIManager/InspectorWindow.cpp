@@ -265,6 +265,9 @@ void InspectorWindow::OnDraw() {
             std::vector<const char*> suggested;
             if (tag == EntityTag::Player) {
                 suggested = { "charge_start", "charge_hold", "charge_start2", "charge_hold2" };
+            } else if (tag == EntityTag::PlayerAttack || tag == EntityTag::EnemyAttack) {
+                // 弾：trail（弾追従ループ）/ hit（着弾）
+                suggested = { "trail", "hit" };
             } else if (CollisionMatrix::IsCollidableTag(tag) && tag != EntityTag::Player) {
                 suggested = { "hit", "death" };
             }

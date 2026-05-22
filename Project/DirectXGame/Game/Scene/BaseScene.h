@@ -450,6 +450,8 @@ protected:
 		std::string penetrateEffect;            // 貫通中ダメージ発生時のエフェクト名
 		int         penetrateDamage = 0;        // 焼き込んだダメージ（手動適用用）
 		std::unordered_map<IImGuiEditable*, float> hitCooldowns; // 敵 → 次にダメージを与えられるまでの残り秒
+		// 弾追従エフェクト（trail 等のループ再生）。弾消滅時に Stop する。0=無効。
+		uint64_t    trailEffectHandle = 0;
 	};
 	std::vector<BulletRuntime> bullets_;
 

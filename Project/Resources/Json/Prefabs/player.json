@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      -0.0042634494602680206,
-      -9.9964250694029033e-05,
+      0.23306378722190857,
+      -0.13634110987186432,
       0
     ]
   },
@@ -47,7 +47,7 @@
     "charge_start2": "Hit_Small"
   },
   "bulletPrefabs": {
-    "normal": "TemporaryPlayerBullet (2)",
+    "normal": "TemporaryPlayerBullet",
     "charge1": "",
     "charge2": ""
   }

@@ -1001,6 +1001,14 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.penetrateDamageRate = penetrateDamageRate;
 	br.penetrateEffect = penetrateEffect;
 	br.penetrateDamage = penetrateDamage;
+
+	// 弾追従エフェクト（trail スロット、ループ前提）を再生。弾消滅時に Stop する。
+	if (spawned) {
+		const std::string trailEff = spawned->FindEffect("trail");
+		if (!trailEff.empty()) {
+			br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
+		}
+	}
 	bullets_.push_back(br);
 }
 
@@ -1080,6 +1088,11 @@ void BaseScene::UpdateBullets(float deltaTime) {
 		t->y += b.velocity.y * deltaTime;
 		t->z += b.velocity.z * deltaTime;
 
+		// trail エフェクトを弾位置に追従
+		if (b.trailEffectHandle != 0) {
+			EffectManager::GetInstance()->SetPosition(b.trailEffectHandle, *t);
+		}
+
 		// 進行距離（colliderGrowth と maxTravelDistance の両方で使う）
 		float traveled = 0.0f;
 		if (b.colliderGrowthPerMeter > 0.0f || b.maxTravelDistance > 0.0f) {
@@ -1108,6 +1121,11 @@ void BaseScene::UpdateBullets(float deltaTime) {
 		if (it->remainingLifetime > 0.0f && it->primitive) {
 			++it;
 			continue;
+		}
+		// 弾消滅と同時に trail エフェクトを停止
+		if (it->trailEffectHandle != 0) {
+			EffectManager::GetInstance()->Stop(it->trailEffectHandle);
+			it->trailEffectHandle = 0;
 		}
 		// 該当 primitive を dynamicPrimitives_ から取り出す
 		PrimitiveInstance* dead = it->primitive;
