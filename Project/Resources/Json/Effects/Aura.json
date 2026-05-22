@@ -1,0 +1,252 @@
+{
+  "name": "Aura",
+  "totalDuration": 10,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "",
+      "meshType": 4,
+      "ringParams": {
+        "outerRadius": 1,
+        "innerRadius": 0.5,
+        "divisions": 32,
+        "innerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "outerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "cylinderParams": {
+        "topRadius": 1.6000000238418579,
+        "bottomRadius": 1,
+        "height": 2,
+        "divisions": 32,
+        "topColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "bottomColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 1.588249683380127,
+        "endAngle": 4.6949357986450195
+      },
+      "helixParams": {
+        "startHelixRadius": 0.30000001192092896,
+        "endHelixRadius": 0.30000001192092896,
+        "startTubeRadius": 0.05000000074505806,
+        "endTubeRadius": 0.05000000074505806,
+        "pitch": 1,
+        "turns": 5,
+        "circleSegments": 8,
+        "lengthSegments": 64,
+        "startColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "endColor": [
+          1,
+          0.30000001192092896,
+          0,
+          0.20000000298023224
+        ]
+      },
+      "offset": [
+        0,
+        1,
+        0
+      ],
+      "rotate": [
+        0,
+        3.1400001049041748,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 10,
+      "startScale": [
+        1,
+        1,
+        1
+      ],
+      "endScale": [
+        1,
+        1,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "texturePath": "Resources/Textures/gradationLine.dds",
+      "blendMode": 2,
+      "billboardMode": "None",
+      "depthWrite": false,
+      "alphaReference": 0.32499998807907104,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": true,
+      "uvScrollSpeed": [
+        0.10000000149011612,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": true
+    },
+    {
+      "displayName": "",
+      "meshType": 4,
+      "ringParams": {
+        "outerRadius": 1,
+        "innerRadius": 0.5,
+        "divisions": 32,
+        "innerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "outerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "cylinderParams": {
+        "topRadius": 1.5,
+        "bottomRadius": 1,
+        "height": 1,
+        "divisions": 32,
+        "topColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "bottomColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "helixParams": {
+        "startHelixRadius": 0.30000001192092896,
+        "endHelixRadius": 0.30000001192092896,
+        "startTubeRadius": 0.05000000074505806,
+        "endTubeRadius": 0.05000000074505806,
+        "pitch": 1,
+        "turns": 5,
+        "circleSegments": 8,
+        "lengthSegments": 64,
+        "startColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "endColor": [
+          1,
+          0.30000001192092896,
+          0,
+          0.20000000298023224
+        ]
+      },
+      "offset": [
+        0,
+        0.5,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 10,
+      "startScale": [
+        1,
+        1,
+        1
+      ],
+      "endScale": [
+        1,
+        1,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "texturePath": "Resources/Textures/gradationLine.dds",
+      "blendMode": 2,
+      "billboardMode": "None",
+      "depthWrite": false,
+      "alphaReference": 0.39800000190734863,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "uvAutoScroll": true,
+      "uvScrollSpeed": [
+        0.10000000149011612,
+        0
+      ],
+      "uvOffset": [
+        0.10000000149011612,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": true
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": []
+}

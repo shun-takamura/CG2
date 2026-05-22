@@ -1,6 +1,7 @@
 #pragma once
 #include "PrimitiveMesh.h"
 #include "PrimitivePipeline.h"
+#include "PrimitiveGenerator.h"  // RingParams / CylinderParams / HelixParams
 #include "BillboardMode.h"
 #include "Vector2.h"
 #include "Vector3.h"
@@ -22,8 +23,13 @@ public:
 
     /// <summary>
     /// 指定タイプのメッシュで初期化。texturePath が空ならデフォルト白テクスチャ。
+    /// Ring/Cylinder/Helix の場合は対応する params でジオメトリを生成する
+    /// （該当しないタイプでは params は無視される）。
     /// </summary>
-    void Initialize(int primitiveType, const std::string& texturePath);
+    void Initialize(int primitiveType, const std::string& texturePath,
+                    const PrimitiveGenerator::RingParams& ringParams = {},
+                    const PrimitiveGenerator::CylinderParams& cylinderParams = {},
+                    const PrimitiveGenerator::HelixParams& helixParams = {});
 
     void Update(Camera* camera, float deltaTime);
     void Draw();

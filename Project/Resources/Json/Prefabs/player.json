@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      0.1249580904841423,
-      -0.41056156158447266,
+      -0.0042634494602680206,
+      -9.9964250694029033e-05,
       0
     ]
   },
@@ -39,5 +39,16 @@
   },
   "attackPower": {
     "value": 10
+  },
+  "effects": {
+    "charge_start": "Hit_Small",
+    "charge_hold": "Aura",
+    "charge_hold2": "Aura",
+    "charge_start2": "Hit_Small"
+  },
+  "bulletPrefabs": {
+    "normal": "TemporaryPlayerBullet (2)",
+    "charge1": "",
+    "charge2": ""
   }
 }

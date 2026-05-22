@@ -264,7 +264,7 @@ void InspectorWindow::OnDraw() {
             const EntityTag tag = selected->GetTag();
             std::vector<const char*> suggested;
             if (tag == EntityTag::Player) {
-                suggested = { "charge1", "charge2" };
+                suggested = { "charge_start", "charge_hold", "charge_start2", "charge_hold2" };
             } else if (CollisionMatrix::IsCollidableTag(tag) && tag != EntityTag::Player) {
                 suggested = { "hit", "death" };
             }

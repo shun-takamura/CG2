@@ -275,6 +275,8 @@ void SceneEditorWindow::OnDraw() {
         if (prefabs.empty()) {
             ImGui::TextDisabled("(none in %s)", PrefabManager::GetPrefabDir());
         } else {
+            // 削除確認ポップアップ対象（ループ中に Rescan() すると参照が無効化されるため遅延処理する）
+            static std::string prefabToDelete;
             for (const auto& p : prefabs) {
                 ImGui::PushID(p.name.c_str());
                 ImGui::Button(p.name.c_str());
@@ -287,6 +289,32 @@ void SceneEditorWindow::OnDraw() {
                         std::string(GetTagName(p.tag)).c_str(),
                         p.modelDir.c_str(), p.modelFile.c_str());
                     ImGui::EndDragDropSource();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("x")) {
+                    prefabToDelete = p.name;
+                    ImGui::OpenPopup("Delete Prefab?");
+                }
+                if (ImGui::BeginPopupModal("Delete Prefab?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    ImGui::Text("Delete prefab \"%s\" ?", prefabToDelete.c_str());
+                    ImGui::TextDisabled("This deletes the .json file and cannot be undone.");
+                    ImGui::Separator();
+                    if (ImGui::Button("Delete", ImVec2(120, 0))) {
+                        if (PrefabManager::Delete(prefabToDelete)) {
+                            PrefabManager::GetInstance()->Rescan();
+                        }
+                        prefabToDelete.clear();
+                        ImGui::CloseCurrentPopup();
+                        ImGui::EndPopup();
+                        ImGui::PopID();
+                        break; // prefabs 参照が無効化されたのでループを抜ける
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+                        prefabToDelete.clear();
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
                 }
                 ImGui::PopID();
             }

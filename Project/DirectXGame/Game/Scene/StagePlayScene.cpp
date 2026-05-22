@@ -1011,6 +1011,11 @@ void StagePlayScene::Update() {
 			}
 		}
 
+		// charge_hold（保持ループ）エフェクトをプレイヤー位置に毎フレーム追従させる
+		if (chargeHoldEffectHandle_ != kInvalidEffectHandle && player_) {
+			EffectManager::GetInstance()->SetPosition(chargeHoldEffectHandle_, player_->GetTranslate());
+		}
+
 		bool firePressed = actions->IsPressed(static_cast<int>(Action::Fire));
 
 		// Fire を押していない時間でチャージ進行
@@ -1033,25 +1038,31 @@ void StagePlayScene::Update() {
 					reticle_->StartChargeAnimation(outerChargeStartRadius_, outerChargeEndRadius_, outerChargeEasingDuration_);
 					reticle_->SetOuterRotationSpeed(outerRotationSpeed_);
 				}
+				// プレイヤープレハブのエフェクトスロットから取得（charge_start=瞬間 / charge_hold=保持ループ）
 				auto* effectMgr = EffectManager::GetInstance();
 				if (effectMgr) {
-					chargeStartEffectHandle_ = effectMgr->Play("charge_start", player_->GetTranslate());
-					chargeHoldEffectHandle_ = effectMgr->Play("charge_hold", player_->GetTranslate());
+					const std::string startEff = player_->FindEffect("charge_start");
+					const std::string holdEff  = player_->FindEffect("charge_hold");
+					if (!startEff.empty()) chargeStartEffectHandle_ = effectMgr->Play(startEff, player_->GetTranslate());
+					if (!holdEff.empty())  chargeHoldEffectHandle_  = effectMgr->Play(holdEff, player_->GetTranslate());
 				}
 			}
 
-			// 2段階目発動（6秒経過）→ 別エフェクト（charge_start2 / charge_hold2）
+			// 2段階目発動（6秒経過）→ 別エフェクト（charge_start2 / charge_hold2 スロット）
 			if (!chargeStage2Triggered_ && chargeTimer_ >= chargeStage2Time_) {
 				chargeStage2Triggered_ = true;
 				playerChargeLevel_ = 2.0f;
 				auto* effectMgr = EffectManager::GetInstance();
 				if (effectMgr) {
-					effectMgr->Play("charge_start2", player_->GetTranslate());
+					const std::string startEff2 = player_->FindEffect("charge_start2");
+					const std::string holdEff2  = player_->FindEffect("charge_hold2");
+					if (!startEff2.empty()) effectMgr->Play(startEff2, player_->GetTranslate());
 					// charge_hold を charge_hold2 に差し替え
 					if (chargeHoldEffectHandle_ != kInvalidEffectHandle) {
 						effectMgr->Stop(chargeHoldEffectHandle_);
+						chargeHoldEffectHandle_ = kInvalidEffectHandle;
 					}
-					chargeHoldEffectHandle_ = effectMgr->Play("charge_hold2", player_->GetTranslate());
+					if (!holdEff2.empty()) chargeHoldEffectHandle_ = effectMgr->Play(holdEff2, player_->GetTranslate());
 				}
 			}
 		}
