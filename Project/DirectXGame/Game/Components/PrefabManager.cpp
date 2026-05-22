@@ -313,13 +313,17 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.scoreValue = static_cast<int>(svJ.AsInt(static_cast<int64_t>(out.scoreValue)));
 	}
 
-	// Bullet（弾プレハブ用の速度・寿命・ホーミング）
+	// Bullet（弾プレハブ用の速度・寿命・ホーミング・貫通）
 	const JsonValue& blJ = root["bullet"];
 	if (blJ.IsObject()) {
 		out.hasBullet            = true;
 		out.bulletSpeed          = static_cast<float>(blJ["speed"].AsDouble(out.bulletSpeed));
 		out.bulletLifetime       = static_cast<float>(blJ["lifetime"].AsDouble(out.bulletLifetime));
 		out.bulletHomingStrength = static_cast<float>(blJ["homingStrength"].AsDouble(out.bulletHomingStrength));
+		out.bulletColliderGrowth = static_cast<float>(blJ["colliderGrowth"].AsDouble(out.bulletColliderGrowth));
+		out.bulletPenetrate      = blJ["penetrate"].AsBool(out.bulletPenetrate);
+		out.bulletPenetrateDamageRate = static_cast<float>(blJ["penetrateDamageRate"].AsDouble(out.bulletPenetrateDamageRate));
+		if (blJ["penetrateEffect"].IsString()) out.bulletPenetrateEffect = blJ["penetrateEffect"].AsString();
 	}
 
 	// Carrier（運び屋プレハブ用の子敵パラメータ）
@@ -331,12 +335,13 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.carrierChildMoveSpeed    = static_cast<float>(caJ["childMoveSpeed"].AsDouble(out.carrierChildMoveSpeed));
 	}
 
-	// Charge（プレイヤープレハブ用のチャージ時間）
+	// Charge（プレイヤープレハブ用のチャージ時間 + 連射間隔）
 	const JsonValue& chJ = root["charge"];
 	if (chJ.IsObject()) {
 		out.hasCharge        = true;
 		out.chargeStage1Time = static_cast<float>(chJ["stage1Time"].AsDouble(out.chargeStage1Time));
 		out.chargeStage2Time = static_cast<float>(chJ["stage2Time"].AsDouble(out.chargeStage2Time));
+		out.chargeFireRate   = static_cast<float>(chJ["fireRate"].AsDouble(out.chargeFireRate));
 	}
 
 	// エフェクトスロット（スロット名 → エフェクト名）
@@ -345,6 +350,16 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		for (const auto& kv : efJ.AsObject()) {
 			if (kv.second.IsString()) {
 				out.effects[kv.first] = kv.second.AsString();
+			}
+		}
+	}
+
+	// 弾プレハブスロット（スロット名 → 弾プレハブ名）
+	const JsonValue& bpJ = root["bulletPrefabs"];
+	if (bpJ.IsObject()) {
+		for (const auto& kv : bpJ.AsObject()) {
+			if (kv.second.IsString()) {
+				out.bulletPrefabs[kv.first] = kv.second.AsString();
 			}
 		}
 	}
@@ -436,6 +451,10 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		blObj["speed"]          = static_cast<double>(def.bulletSpeed);
 		blObj["lifetime"]       = static_cast<double>(def.bulletLifetime);
 		blObj["homingStrength"] = static_cast<double>(def.bulletHomingStrength);
+		blObj["colliderGrowth"] = static_cast<double>(def.bulletColliderGrowth);
+		blObj["penetrate"]      = def.bulletPenetrate;
+		blObj["penetrateDamageRate"] = static_cast<double>(def.bulletPenetrateDamageRate);
+		blObj["penetrateEffect"] = def.bulletPenetrateEffect;
 		root["bullet"] = std::move(blObj);
 	}
 
@@ -456,6 +475,7 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		JsonValue chObj = JsonValue::MakeObject();
 		chObj["stage1Time"] = static_cast<double>(def.chargeStage1Time);
 		chObj["stage2Time"] = static_cast<double>(def.chargeStage2Time);
+		chObj["fireRate"]   = static_cast<double>(def.chargeFireRate);
 		root["charge"] = std::move(chObj);
 	}
 
@@ -466,6 +486,15 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 			efObj[kv.first] = kv.second;
 		}
 		root["effects"] = std::move(efObj);
+	}
+
+	// 弾プレハブスロット
+	if (!def.bulletPrefabs.empty()) {
+		JsonValue bpObj = JsonValue::MakeObject();
+		for (const auto& kv : def.bulletPrefabs) {
+			bpObj[kv.first] = kv.second;
+		}
+		root["bulletPrefabs"] = std::move(bpObj);
 	}
 
 	// ディレクトリ作成

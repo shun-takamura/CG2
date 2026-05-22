@@ -30,8 +30,10 @@
     "planeDistance": 200,
     "smoothTime": 0.079999998211860657,
     "assistPixelScale": 1.3999999761581421,
-    "reticleOuterMinPx": 8,
-    "reticleOuterMaxPx": 72
+    "reticleOuterMinPx": 16,
+    "reticleOuterMaxPx": 32,
+    "reticleOuterSizeMinPx": 32,
+    "reticleOuterSizeMaxPx": 64
   },
   "damage": {
     "invincibilityDuration": 1,
@@ -87,9 +89,9 @@
     }
   },
   "reticle": {
-    "outerChargeStartRadius": 150,
+    "outerChargeStartRadius": 72,
     "outerChargeEndRadius": 60,
-    "outerChargeEasingDuration": 0.30000001192092896,
+    "outerChargeEasingDuration": 0.20000000298023224,
     "outerRotationSpeed": 360
   }
 }

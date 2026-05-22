@@ -37,6 +37,8 @@
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
+#include "Components/PrefabManager.h"
+#include "Components/Prefab.h"
 
 #ifdef _DEBUG
 #include "ViewportWindow.h"
@@ -101,16 +103,6 @@ void StagePlayScene::LoadTuningFromJson() {
 		playerClipMargin_.y = static_cast<float>(mar[1].AsDouble(playerClipMargin_.y));
 	}
 
-	// ----- shooting -----
-	const JsonValue& sh = root["shooting"];
-	if (sh.IsObject()) {
-		bulletSpeed_           = static_cast<float>(sh["bulletSpeed"].AsDouble(bulletSpeed_));
-		bulletLifetime_        = static_cast<float>(sh["bulletLifetime"].AsDouble(bulletLifetime_));
-		fireRate_              = static_cast<float>(sh["fireRate"].AsDouble(fireRate_));
-		bulletColliderGrowth_  = static_cast<float>(sh["colliderGrowthPerMeter"].AsDouble(bulletColliderGrowth_));
-		bulletHomingStrength_  = static_cast<float>(sh["homingStrength"].AsDouble(bulletHomingStrength_));
-		bulletHomingLockOnBoost_ = static_cast<float>(sh["homingLockOnBoost"].AsDouble(bulletHomingLockOnBoost_));
-	}
 
 	// ----- aim -----
 	const JsonValue& aim = root["aim"];
@@ -120,6 +112,8 @@ void StagePlayScene::LoadTuningFromJson() {
 		aimAssistPixelScale_  = static_cast<float>(aim["assistPixelScale"].AsDouble(aimAssistPixelScale_));
 		reticleOuterMinPx_    = static_cast<float>(aim["reticleOuterMinPx"].AsDouble(reticleOuterMinPx_));
 		reticleOuterMaxPx_    = static_cast<float>(aim["reticleOuterMaxPx"].AsDouble(reticleOuterMaxPx_));
+		reticleOuterSizeMinPx_ = static_cast<float>(aim["reticleOuterSizeMinPx"].AsDouble(reticleOuterSizeMinPx_));
+		reticleOuterSizeMaxPx_ = static_cast<float>(aim["reticleOuterSizeMaxPx"].AsDouble(reticleOuterSizeMaxPx_));
 	}
 
 	// ----- damage / invincibility -----
@@ -208,21 +202,14 @@ void StagePlayScene::SaveTuningToJson() const {
 	camObj["speed"] = static_cast<double>(railCameraSpeed_);
 	root["camera"] = std::move(camObj);
 
-	JsonValue shObj = JsonValue::MakeObject();
-	shObj["bulletSpeed"]            = static_cast<double>(bulletSpeed_);
-	shObj["bulletLifetime"]         = static_cast<double>(bulletLifetime_);
-	shObj["fireRate"]               = static_cast<double>(fireRate_);
-	shObj["colliderGrowthPerMeter"] = static_cast<double>(bulletColliderGrowth_);
-	shObj["homingStrength"]         = static_cast<double>(bulletHomingStrength_);
-	shObj["homingLockOnBoost"]      = static_cast<double>(bulletHomingLockOnBoost_);
-	root["shooting"] = std::move(shObj);
-
 	JsonValue aimObj = JsonValue::MakeObject();
 	aimObj["planeDistance"]      = static_cast<double>(aimPlaneDistance_);
 	aimObj["smoothTime"]         = static_cast<double>(aimSmoothTime_);
 	aimObj["assistPixelScale"]   = static_cast<double>(aimAssistPixelScale_);
-	aimObj["reticleOuterMinPx"]  = static_cast<double>(reticleOuterMinPx_);
-	aimObj["reticleOuterMaxPx"]  = static_cast<double>(reticleOuterMaxPx_);
+	aimObj["reticleOuterMinPx"]  = static_cast<double>(reticle_ ? reticle_->GetLockOnMinPxOutside() : reticleOuterMinPx_);
+	aimObj["reticleOuterMaxPx"]  = static_cast<double>(reticle_ ? reticle_->GetLockOnMaxPxOutside() : reticleOuterMaxPx_);
+	aimObj["reticleOuterSizeMinPx"] = static_cast<double>(reticle_ ? reticle_->GetOuterSizeMin() : reticleOuterSizeMinPx_);
+	aimObj["reticleOuterSizeMaxPx"] = static_cast<double>(reticle_ ? reticle_->GetOuterSizeMax() : reticleOuterSizeMaxPx_);
 	root["aim"] = std::move(aimObj);
 
 	JsonValue dmgObj = JsonValue::MakeObject();
@@ -373,28 +360,8 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 
 	if (ImGui::CollapsingHeader("Shooting")) {
-		ImGui::DragFloat("Bullet Speed", &bulletSpeed_, 1.0f, 1.0f, 500.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Bullet Lifetime (s)", &bulletLifetime_, 0.05f, 0.1f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Rate (s/shot)", &fireRate_, 0.005f, 0.02f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Collider Growth /m", &bulletColliderGrowth_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::SameLine();
-		ImGui::TextDisabled("(?)");
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("弾が 1m 進むごとに collider 半径を + この値。\n0 で固定半径、0.02 だと 50m 進むと半径 +1.0。");
-		}
-		ImGui::DragFloat("Homing Strength /s",     &bulletHomingStrength_,    0.05f, 0.0f, 20.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Homing Strength (Lock)", &bulletHomingLockOnBoost_, 0.05f, 0.0f, 20.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::SameLine();
-		ImGui::TextDisabled("(?)");
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("弾の進行方向を target に向ける指数収束 [/sec]。\n0 でホーミング無効、4.0 で約 0.25 秒で大半が向く。\nLock 側はロックオン中の弾の倍率（必殺技でも同じ仕組みを使う）。");
-		}
+		ImGui::TextDisabled("弾パラメータ（速度/寿命/collider拡大/ホーミング/貫通）は\n弾プレハブの BulletParams で設定する。");
+		ImGui::TextDisabled("連射間隔(Fire Rate)はプレイヤープレハブの ChargeParams で設定する。");
 	}
 
 	if (ImGui::CollapsingHeader("Aim / Lock-on")) {
@@ -413,18 +380,33 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::Separator();
-		ImGui::TextDisabled("Reticle Outer Particle Offset");
-		ImGui::DragFloat("Outer Min Offset (px)", &reticleOuterMinPx_, 1.0f, 0.0f, 512.0f, "%.0f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Outer Max Offset (px)", &reticleOuterMaxPx_, 1.0f, 0.0f, 1024.0f, "%.0f");
+		ImGui::TextDisabled("Reticle Outer Particle");
+		if (reticle_) {
+			// Reticle のメンバを直接編集（中間変数を経由しない）
+			ImGui::DragFloat("Outer Min Offset (px)", reticle_->GetLockOnMinPxOutsidePtr(), 1.0f, 0.0f, 512.0f, "%.0f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Outer Max Offset (px)", reticle_->GetLockOnMaxPxOutsidePtr(), 1.0f, 0.0f, 1024.0f, "%.0f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("外側パーツの中心からの配置オフセット（内側レティクル半径連動）の最小/最大 (pixel)");
+			}
+			ImGui::DragFloat("Outer Min Size (px)", reticle_->GetOuterSizeMinPtr(), 1.0f, 0.0f, 512.0f, "%.0f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Outer Max Size (px)", reticle_->GetOuterSizeMaxPtr(), 1.0f, 0.0f, 1024.0f, "%.0f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("外側パーツのスプライトサイズの最小/最大 (pixel)");
+			}
+		}
+		ImGui::DragFloat("Charge Initial Offset (px)", &outerChargeStartRadius_, 1.0f, 0.0f, 1024.0f, "%.0f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("レティクル外側パーツ（4枚）の中心からの最小/最大オフセット (pixel)");
+			ImGui::SetTooltip("チャージ完了の瞬間、外側パーツが寄ってくる前の初期追加オフセット (pixel)。\nここから 0 へ減衰して内側へ収束する。");
 		}
 		ImGui::DragFloat("Outer Easing Duration (s)", &outerChargeEasingDuration_, 0.01f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("チャージ完了時に外側オフセットが最大→最小へ線形補間する時間 (秒)");
+			ImGui::SetTooltip("チャージ完了時に外側パーツの追加広がりが最大→0へ収束する時間 (秒)");
 		}
 	}
 
@@ -598,6 +580,9 @@ void StagePlayScene::Initialize() {
 	// レティクル
 	reticle_ = std::make_unique<Reticle>();
 	reticle_->Initialize(spriteManager_);
+	// JSON から読み込んだ外側オフセット範囲・サイズ範囲を Reticle に初期反映
+	reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
+	reticle_->SetOuterSizeClamp(reticleOuterSizeMinPx_, reticleOuterSizeMaxPx_);
 
 	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
 	{
@@ -850,8 +835,6 @@ void StagePlayScene::Update() {
 			mouseMoved = (m->GetDeltaX() != 0) || (m->GetDeltaY() != 0);
 		}
 #endif
-		// 外側パーツのクランプ範囲を毎フレーム反映（ImGui で動的に変更可能）
-		reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
 		reticle_->Update(mouseHovered, mouseClient, mouseMoved,
 			input_->GetController(), GetScaledDeltaTime());
 	}
@@ -1094,17 +1077,35 @@ void StagePlayScene::Update() {
 			const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
 			if (len > 1e-6f) {
 				dir.x /= len; dir.y /= len; dir.z /= len;
-				// ロックオン中なら強ホーミング、外なら画面上最近の敵に軽ホーミング
+				// ロックオン中の敵を優先、外なら画面上最近の敵に軽ホーミング
 				IImGuiEditable* homeTarget = lockedEnemy_ ? lockedEnemy_ : nearestEnemy_;
-				const float homeStrength = lockedEnemy_
-					? bulletHomingLockOnBoost_
-					: (homeTarget ? bulletHomingStrength_ : 0.0f);
+
+				// チャージレベルで弾プレハブを選択（normal / charge1 / charge2）
+				std::string bulletPrefab;
+				if (playerChargeLevel_ >= 2.0f)      bulletPrefab = player_->FindBulletPrefab("charge2");
+				else if (playerChargeLevel_ >= 1.0f) bulletPrefab = player_->FindBulletPrefab("charge1");
+				else                                  bulletPrefab = player_->FindBulletPrefab("normal");
+				if (bulletPrefab.empty()) bulletPrefab = "TemporaryPlayerBullet"; // フォールバック
+
+				// 弾プレハブの BulletParams から速度・寿命・collider拡大・ホーミングを読む
+				float speed = 80.0f, lifetime = 2.0f, colliderGrowth = 0.0f, homing = 0.0f;
+				if (const PrefabDef* bdef = PrefabManager::GetInstance()->Find(bulletPrefab);
+					bdef && bdef->hasBullet) {
+					speed          = bdef->bulletSpeed;
+					lifetime       = bdef->bulletLifetime;
+					colliderGrowth = bdef->bulletColliderGrowth;
+					homing         = bdef->bulletHomingStrength;
+				}
+				const float homeStrength = homeTarget ? homing : 0.0f;
 				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
 				const int atk = (player_ && player_->HasAttackPower()) ? player_->GetAttackPower() : 0;
-				SpawnPlayerBullet(origin, dir, bulletSpeed_, bulletLifetime_,
-					bulletColliderGrowth_, homeTarget, homeStrength,
-					aimPlaneDistance_, "TemporaryPlayerBullet", atk);
-				fireTimer_ = fireRate_;
+				SpawnPlayerBullet(origin, dir, speed, lifetime,
+					colliderGrowth, homeTarget, homeStrength,
+					aimPlaneDistance_, bulletPrefab, atk);
+
+				// 連射間隔はプレイヤープレハブの ChargeParams.fireRate から
+				const float fr = player_->GetChargeParams().fireRate;
+				fireTimer_ = (fr > 0.0f) ? fr : 0.12f;
 
 				// チャージ状態だった場合はリセット
 				if (playerChargeLevel_ >= 0.0f) {

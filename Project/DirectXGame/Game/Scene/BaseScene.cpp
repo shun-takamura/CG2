@@ -457,6 +457,10 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			bp.speed          = def->bulletSpeed;
 			bp.lifetime       = def->bulletLifetime;
 			bp.homingStrength = def->bulletHomingStrength;
+			bp.colliderGrowth = def->bulletColliderGrowth;
+			bp.penetrate            = def->bulletPenetrate;
+			bp.penetrateDamageRate  = def->bulletPenetrateDamageRate;
+			bp.penetrateEffect      = def->bulletPenetrateEffect;
 		}
 		if (def->hasCarrier) {
 			CarrierParams& cp = e->GetCarrierParams();
@@ -470,10 +474,15 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			chp.enabled    = true;
 			chp.stage1Time = def->chargeStage1Time;
 			chp.stage2Time = def->chargeStage2Time;
+			chp.fireRate   = def->chargeFireRate;
 		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
 			e->GetEffects() = def->effects;
+		}
+		// 弾プレハブスロットを丸ごとコピー
+		if (!def->bulletPrefabs.empty()) {
+			e->GetBulletPrefabs() = def->bulletPrefabs;
 		}
 	};
 
@@ -840,8 +849,10 @@ void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (ctrl && ctrl->entity_ == e) ctrl->entity_ = nullptr;
 	}
 	// ホーミング対象として参照している弾があれば無効化（dangling 参照防止）
+	// 貫通弾の多段ヒット記録からも削除する
 	for (auto& b : bullets_) {
 		if (b.homingTarget == e) b.homingTarget = nullptr;
+		if (b.penetrate) b.hitCooldowns.erase(e);
 	}
 
 	// Primitive
@@ -904,6 +915,17 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	// 今 spawn した primitive は今フレームの Update がスキップされるため、
 	// transform CB が初期値 (0,0,0) のまま Draw されてしまう（弾がワールド原点で巨大に見える原因）。
 	// ここで明示的に Update を1回呼んで CB をスポーン位置で確定させる。
+	// 弾プレハブの貫通設定を読む
+	bool        penetrate = false;
+	float       penetrateDamageRate = 0.2f;
+	std::string penetrateEffect;
+	if (const PrefabDef* bdef = PrefabManager::GetInstance()->Find(prefabName); bdef && bdef->hasBullet) {
+		penetrate           = bdef->bulletPenetrate;
+		penetrateDamageRate = bdef->bulletPenetrateDamageRate;
+		penetrateEffect     = bdef->bulletPenetrateEffect;
+	}
+
+	int penetrateDamage = 0;
 	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
 	if (spawned) {
 		spawned->Update();
@@ -912,25 +934,46 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		DamageDealer& dd = spawned->GetDamageDealer();
 		if (dd.enabled) {
 			dd.damage = static_cast<int>(static_cast<float>(attackPower) * dd.multiplier);
+			penetrateDamage = dd.damage;
+			// 貫通弾は CollisionManager の毎フレーム自動ダメージを無効化し、onCollision で damageRate 制御する
+			if (penetrate) {
+				dd.enabled = false;
+			}
 		}
 
-		// 敵に当たったら弾を消す + ヒットエフェクト発火（実ダメージ適用は CollisionManager 側）
+		// 敵に当たったときの処理。実ダメージ適用は通常弾=CollisionManager / 貫通弾=ここで手動。
 		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 			if (!other) return;
-			// 弾が複数回ヒットしないよう、相手が Enemy/Boss の時だけ反応
 			const EntityTag tag = other->GetTag();
 			if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 
-			// ヒット位置（弾の現在位置）にヒットエフェクトを再生
 			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
 			if (const Vector3* t = spawned->GetEditableTranslate()) {
 				hitPos = *t;
 			}
-			EffectManager::GetInstance()->Play("Hit_Small", hitPos);
 
-			// この弾の bullets_ エントリを死亡フラグに（UpdateBullets が次フレームで掃除）
 			for (auto& b : bullets_) {
-				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
+				if (b.primitive != spawned) continue;
+				if (b.penetrate) {
+					// 貫通：damageRate クールタイムが切れていればダメージ + 専用エフェクト
+					auto it = b.hitCooldowns.find(other);
+					const float cd = (it != b.hitCooldowns.end()) ? it->second : 0.0f;
+					if (cd <= 0.0f) {
+						if (other->GetHP().enabled) {
+							other->GetHP().TakeDamage(b.penetrateDamage);
+						}
+						if (!b.penetrateEffect.empty()) {
+							EffectManager::GetInstance()->Play(b.penetrateEffect, hitPos);
+						}
+						b.hitCooldowns[other] = b.penetrateDamageRate;
+					}
+					// 貫通弾は消えない
+				} else {
+					// 通常弾：ヒットエフェクト発火 + 死亡フラグ（実ダメージは CollisionManager 側）
+					EffectManager::GetInstance()->Play("Hit_Small", hitPos);
+					b.remainingLifetime = -1.0f;
+				}
+				break;
 			}
 			// HPゼロの敵は BaseScene::SweepDeadEntities が後で破棄する
 		};
@@ -947,6 +990,10 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.homingTarget = homingTarget;
 	br.homingStrength = homingStrength;
 	br.maxTravelDistance = maxTravelDistance;
+	br.penetrate = penetrate;
+	br.penetrateDamageRate = penetrateDamageRate;
+	br.penetrateEffect = penetrateEffect;
+	br.penetrateDamage = penetrateDamage;
 	bullets_.push_back(br);
 }
 
@@ -975,6 +1022,14 @@ void BaseScene::UpdateBullets(float deltaTime) {
 
 	for (auto& b : bullets_) {
 		if (!b.primitive) continue;
+
+		// 貫通弾の多段ヒット用クールタイムを減算
+		if (b.penetrate) {
+			for (auto& kv : b.hitCooldowns) {
+				kv.second -= deltaTime;
+			}
+		}
+
 		Vector3* t = b.primitive->GetEditableTranslate();
 		if (!t) {
 			b.remainingLifetime -= deltaTime;
