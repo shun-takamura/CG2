@@ -261,6 +261,17 @@ void EffectEditorWindow::OnDraw() {
     ImGui::SameLine();
     if (ImGui::Button("Stop")) em->StopAll();
 
+    // シーンのゲームプレイだけ凍結（エフェクト再生は進む）。
+    // 編集中にプレイヤーが死んでシーンリセットされるのを防ぐ。
+    ImGui::Checkbox("SceneStop", &pauseScene_);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("ON の間、シーンのゲームプレイ（プレイヤー/敵/当たり判定）を凍結する。\n"
+                          "エフェクトの再生は進むので、シーン内での実際の映りを確認できる。\n"
+                          "このウィンドウを閉じると自動的に解除される。");
+    }
+
     // Timeline：最初の再生中インスタンスの経過時間 / 総寿命をプログレスバーで表示
     {
         EffectInstance* inst = em->GetFirstActiveInstance();

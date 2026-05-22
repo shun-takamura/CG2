@@ -47,6 +47,13 @@ public:
 
     const std::string& GetCurrentName() const { return editBuffer_.name; }
 
+    /// <summary>
+    /// シーンを一時停止（ゲームプレイ凍結）すべきか。
+    /// チェックON かつ ウィンドウが開いているときだけ true。
+    /// 閉じれば自動的に false になり、凍結しっぱなしを防ぐ。
+    /// </summary>
+    bool IsScenePaused() const { return isOpen_ && pauseScene_; }
+
 protected:
     void OnDraw() override;
 
@@ -80,6 +87,9 @@ private:
 
     std::string selectedEffect_;
     float playPos_[3] = { 0.0f, 0.0f, 0.0f };
+
+    // ON の間、シーンのゲームプレイを凍結する（エフェクト再生は進める）
+    bool pauseScene_ = false;
 
     // ===== 編集状態 =====
     EffectDef editBuffer_;
