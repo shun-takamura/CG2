@@ -471,6 +471,18 @@ void BaseScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			bp.penetrateDamageRate  = def->bulletPenetrateDamageRate;
 			bp.penetrateEffect      = def->bulletPenetrateEffect;
 		}
+		if (def->hasMelee) {
+			MeleeParams& mp = e->GetMeleeParams();
+			mp.enabled         = true;
+			mp.startup         = def->meleeStartup;
+			mp.activeDuration  = def->meleeActiveDuration;
+			mp.offset          = def->meleeOffset;
+			mp.comboWindow     = def->meleeComboWindow;
+			mp.recovery        = def->meleeRecovery;
+			mp.cleanWindow     = def->meleeCleanWindow;
+			mp.cleanMultiplier = def->meleeCleanMultiplier;
+			mp.lateMultiplier  = def->meleeLateMultiplier;
+		}
 		if (def->hasCarrier) {
 			CarrierParams& cp = e->GetCarrierParams();
 			cp.enabled           = true;
@@ -869,16 +881,24 @@ void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (b.homingTarget == e) b.homingTarget = nullptr;
 		if (b.penetrate) b.hitCooldowns.erase(e);
 	}
+	// 近接判定が追従元 or ヒット対象として参照していたら無効化（dangling 参照防止）
+	for (auto& m : melees_) {
+		if (m.owner == e) m.owner = nullptr;
+		m.hitTargets.erase(e);
+	}
 
 	// Primitive
 	{
 		auto it = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
 			[e](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == e; });
 		if (it != dynamicPrimitives_.end()) {
-			// 関連する弾エントリも掃除
+			// 関連する弾・近接判定エントリも掃除
 			PrimitiveInstance* prim = it->get();
 			for (auto& b : bullets_) {
 				if (b.primitive == prim) b.remainingLifetime = -1.0f;
+			}
+			for (auto& m : melees_) {
+				if (m.primitive == prim) { m.remainingLifetime = -1.0f; m.primitive = nullptr; }
 			}
 			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(it->release()));
 			dynamicPrimitives_.erase(it);
@@ -1036,6 +1056,113 @@ void BaseScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	bullets_.push_back(br);
 }
 
+void BaseScene::SpawnPlayerMelee(IImGuiEditable* owner,
+	const Vector3& right, const Vector3& up, const Vector3& forward,
+	const std::string& prefabName,
+	int attackPower) {
+	// 近接パラメータをプレハブから読む（無ければデフォルトで動かす）
+	float activeDuration = 0.20f;
+	Vector3 offset{ 0.0f, 0.0f, 2.0f };
+	float cleanWindow = 0.08f;
+	float cleanMul = 1.5f;
+	float lateMul = 0.7f;
+	if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefabName); mdef && mdef->hasMelee) {
+		activeDuration = mdef->meleeActiveDuration;
+		offset         = mdef->meleeOffset;
+		cleanWindow    = mdef->meleeCleanWindow;
+		cleanMul       = mdef->meleeCleanMultiplier;
+		lateMul        = mdef->meleeLateMultiplier;
+	}
+
+	// 判定オフセットを基底ベクトルでワールドへ展開（右/上/前）
+	const Vector3 worldOffset{
+		right.x * offset.x + up.x * offset.y + forward.x * offset.z,
+		right.y * offset.x + up.y * offset.y + forward.y * offset.z,
+		right.z * offset.x + up.z * offset.y + forward.z * offset.z,
+	};
+
+	// 初期配置位置 = owner 位置 + worldOffset
+	Vector3 spawnPos = worldOffset;
+	if (owner) {
+		if (const Vector3* op = owner->GetEditableTranslate()) {
+			spawnPos = { op->x + worldOffset.x, op->y + worldOffset.y, op->z + worldOffset.z };
+		}
+	}
+
+	const size_t prevCount = dynamicPrimitives_.size();
+	InstantiatePrefab(prefabName, spawnPos);
+	if (dynamicPrimitives_.size() != prevCount + 1) {
+		LogBuffer::Instance().Add(
+			std::string("SpawnPlayerMelee: prefab not spawned as primitive: ") + prefabName,
+			LogBuffer::Level::Warning);
+		return;
+	}
+
+	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
+	if (!spawned) return;
+
+	// OBB / Capsule 判定が前方を向くよう、進行（aim）方向に合わせて回転
+	spawned->SetRotate(DirectionToEuler(forward));
+	spawned->Update(); // 初フレームの CB を確定（弾と同じく (0,0,0) 描画バグ回避）
+
+	// CollisionManager の毎フレーム自動ダメージは使わず、onCollision で本/持続あてを手動適用
+	DamageDealer& dd = spawned->GetDamageDealer();
+	dd.enabled = false;
+
+	const int cleanDamage = static_cast<int>(static_cast<float>(attackPower) * cleanMul);
+	const int lateDamage  = static_cast<int>(static_cast<float>(attackPower) * lateMul);
+	const std::string hitEffect = spawned->FindEffect("hit");
+
+	// 振りエフェクト（"swing" スロット）：発生時に判定位置で再生し、aim 方向へ向ける。
+	// 以降は UpdateMelees が判定に追従させ、判定の寿命切れで Stop する。
+	uint64_t swingHandle = 0;
+	{
+		const std::string swingEffect = spawned->FindEffect("swing");
+		if (!swingEffect.empty()) {
+			swingHandle = EffectManager::GetInstance()->Play(swingEffect, spawnPos);
+			EffectManager::GetInstance()->SetRotation(swingHandle, DirectionToEuler(forward));
+		}
+	}
+
+	// 敵に当たったときの処理。同じ敵には1回だけ、当たった瞬間の経過時間で本/持続あてを切替。
+	spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+		if (!other) return;
+		const EntityTag tag = other->GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+
+		for (auto& m : melees_) {
+			if (m.primitive != spawned) continue;
+			if (m.hitTargets.count(other)) return; // この判定では既に当てた敵
+			m.hitTargets.insert(other);
+
+			if (other->GetHP().enabled) {
+				const int dmg = (m.elapsed <= m.cleanWindow) ? m.cleanDamage : m.lateDamage;
+				other->GetHP().TakeDamage(dmg);
+			}
+			if (!m.hitEffect.empty()) {
+				Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
+				if (const Vector3* t = spawned->GetEditableTranslate()) hitPos = *t;
+				EffectManager::GetInstance()->Play(m.hitEffect, hitPos);
+			}
+			break;
+		}
+		// HPゼロの敵は BaseScene::SweepDeadEntities が後で破棄する
+	};
+
+	MeleeRuntime mr{};
+	mr.primitive = spawned;
+	mr.owner = owner;
+	mr.worldOffset = worldOffset;
+	mr.remainingLifetime = activeDuration;
+	mr.elapsed = 0.0f;
+	mr.cleanWindow = cleanWindow;
+	mr.cleanDamage = cleanDamage;
+	mr.lateDamage = lateDamage;
+	mr.hitEffect = hitEffect;
+	mr.swingEffectHandle = swingHandle;
+	melees_.push_back(std::move(mr));
+}
+
 void BaseScene::SweepDeadEntities() {
 	// 死亡エンティティを収集（破棄で配列が変わるので二段階）。Player タグは除外。
 	std::vector<IImGuiEditable*> dead;
@@ -1176,6 +1303,53 @@ void BaseScene::UpdateBullets(float deltaTime) {
 			dynamicPrimitives_.erase(pit);
 		}
 		it = bullets_.erase(it);
+	}
+}
+
+void BaseScene::UpdateMelees(float deltaTime) {
+	if (melees_.empty()) return;
+
+	for (auto& m : melees_) {
+		m.elapsed += deltaTime;
+		m.remainingLifetime -= deltaTime;
+
+		// owner（自機）に追従：毎フレーム owner 位置 + worldOffset へ配置（判定＋振りエフェクト）
+		if (m.owner) {
+			if (const Vector3* op = m.owner->GetEditableTranslate()) {
+				const Vector3 pos{ op->x + m.worldOffset.x, op->y + m.worldOffset.y, op->z + m.worldOffset.z };
+				if (m.primitive) {
+					if (Vector3* t = m.primitive->GetEditableTranslate()) {
+						t->x = pos.x; t->y = pos.y; t->z = pos.z;
+					}
+				}
+				if (m.swingEffectHandle != 0) {
+					EffectManager::GetInstance()->SetPosition(m.swingEffectHandle, pos);
+				}
+			}
+		}
+	}
+
+	// 持続切れの判定を削除：melees_ から外し、対応する dynamicPrimitives_ も deferredDeletes_ へ
+	for (auto it = melees_.begin(); it != melees_.end();) {
+		if (it->remainingLifetime > 0.0f && it->primitive) {
+			++it;
+			continue;
+		}
+		// 判定の寿命切れ：振りエフェクトを停止
+		if (it->swingEffectHandle != 0) {
+			EffectManager::GetInstance()->Stop(it->swingEffectHandle);
+			it->swingEffectHandle = 0;
+		}
+		PrimitiveInstance* dead = it->primitive;
+		if (dead) {
+			auto pit = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
+				[dead](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == dead; });
+			if (pit != dynamicPrimitives_.end()) {
+				deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(pit->release()));
+				dynamicPrimitives_.erase(pit);
+			}
+		}
+		it = melees_.erase(it);
 	}
 }
 

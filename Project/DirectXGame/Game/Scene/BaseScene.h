@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 // PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
 #include "Primitive/PrimitiveInstance.h"
@@ -163,6 +164,19 @@ public:
 		float maxTravelDistance = 0.0f, // 0 で無制限
 		const std::string& prefabName = "TemporaryPlayerBullet",
 		int attackPower = 0); // プレイヤーの基礎攻撃力。弾プレハブの multiplier と掛けて damage を確定
+
+	/// <summary>
+	/// プレイヤー近接攻撃の判定を1つスポーン。Primitive プレハブ（PlayerMelee タグ）から生成し、
+	/// owner（自機）に追従させて MeleeParams.activeDuration 秒だけ判定を持続させる。
+	/// 同じ敵には1回だけダメージ（hitTargets で多段防止、貫通弾と同じ流儀）。
+	/// ダメージは本あて（cleanWindow 以内）/ 持続あて（それ以降）で倍率を変える。
+	/// right/up/forward は判定オフセットの基底（aim 方向から作る）。worldOffset を spawn 時に確定し、
+	/// 以降は owner 位置 + worldOffset へ毎フレーム配置する。進行と寿命処理は UpdateMelees() が行う。
+	/// </summary>
+	virtual void SpawnPlayerMelee(IImGuiEditable* owner,
+		const Vector3& right, const Vector3& up, const Vector3& forward,
+		const std::string& prefabName,
+		int attackPower);
 
 	/// <summary>
 	/// 動的エンティティ（Object3D / Animated / Primitive）を遅延破棄キューへ移送する。
@@ -454,6 +468,26 @@ protected:
 		uint64_t    trailEffectHandle = 0;
 	};
 	std::vector<BulletRuntime> bullets_;
+
+	/// <summary>
+	/// 近接判定の追従（owner 位置 + worldOffset へ配置）と寿命減算、死亡判定の削除。派生 Update から呼ぶ。
+	/// </summary>
+	void UpdateMelees(float deltaTime);
+
+	struct MeleeRuntime {
+		PrimitiveInstance* primitive = nullptr;  // dynamicPrimitives_ 内の生ポインタ
+		IImGuiEditable* owner = nullptr;         // 追従元（自機）。破棄時に null 化
+		Vector3 worldOffset{ 0.0f, 0.0f, 0.0f }; // owner 位置からのワールドオフセット（spawn 時に確定）
+		float remainingLifetime = 0.0f;          // 残り持続 [sec]
+		float elapsed = 0.0f;                    // 判定発生からの経過 [sec]（本/持続あて判定用）
+		float cleanWindow = 0.08f;               // この秒数以内のヒットは本あて扱い
+		int   cleanDamage = 0;                   // 本あてダメージ（焼き込み）
+		int   lateDamage = 0;                    // 持続あてダメージ（焼き込み）
+		std::string hitEffect;                   // ヒット時エフェクト名（"hit" スロット、空可）
+		uint64_t    swingEffectHandle = 0;       // 振りエフェクト（"swing" スロット、判定に追従）。0=無効
+		std::unordered_set<IImGuiEditable*> hitTargets; // 既に当てた敵集合（多段ヒット防止）
+	};
+	std::vector<MeleeRuntime> melees_;
 
 	/// <summary>
 	/// スプライン追従敵の進行（t += speed*dt）と終端処理。派生 Update から呼ぶ。

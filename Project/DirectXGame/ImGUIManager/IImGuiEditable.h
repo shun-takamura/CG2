@@ -9,6 +9,7 @@
 #include "Components/HP.h"
 #include "Components/DamageDealer.h"
 #include "Components/BulletParams.h"
+#include "Components/MeleeParams.h"
 #include "Components/CarrierParams.h"
 #include "Components/ChargeParams.h"
 #include "Components/PrecisionParams.h"
@@ -90,6 +91,12 @@ public:
     //====================
     const BulletParams& GetBulletParams() const { return bulletParams_; }
     BulletParams& GetBulletParams() { return bulletParams_; }
+
+    //====================
+    // MeleeParams（近接攻撃プレハブ用：持続・オフセット・コンボ・本/持続あて倍率）
+    //====================
+    const MeleeParams& GetMeleeParams() const { return meleeParams_; }
+    MeleeParams& GetMeleeParams() { return meleeParams_; }
 
     //====================
     // CarrierParams（運び屋プレハブ用：子敵パラメータ）
@@ -195,6 +202,7 @@ protected:
     HP hp_{};
     DamageDealer damageDealer_{};
     BulletParams bulletParams_{};
+    MeleeParams meleeParams_{};
     CarrierParams carrierParams_{};
     ChargeParams chargeParams_{};
     PrecisionParams precisionParams_{};

@@ -117,4 +117,10 @@ public:
     void SetIsFlipY(const bool& isFlipY) { isFlipY_ = isFlipY; }
     void SetTextureLeftTop(const Vector2& textureLeftTop) { textureLeftTop_ = textureLeftTop; }
     void SetTextureSize(const Vector2& textureSize) { textureSize_ = textureSize; }
+
+    /// <summary>
+    /// 実行時にテクスチャを差し替える（パス指定）。サイズ等はそのまま維持する。
+    /// 未ロードなら TextureManager に読み込ませる。Draw はパスから SRV を引くため即反映される。
+    /// </summary>
+    void SetTexture(const std::string& filePath);
 };

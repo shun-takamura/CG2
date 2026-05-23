@@ -123,6 +123,17 @@ struct PrefabDef {
 	float         bulletPenetrateDamageRate = 0.2f; // 貫通中の多段ヒット間隔 [sec]
 	std::string   bulletPenetrateEffect;       // 貫通中ダメージ発生時のエフェクト名
 
+	// ----- Melee（近接攻撃プレハブ用：発生/持続/後隙・オフセット・コンボ・本/持続あて） -----
+	bool          hasMelee            = false;
+	float         meleeStartup        = 0.05f;            // 入力から判定発生までの時間 [sec]
+	float         meleeActiveDuration = 0.20f;            // 判定の持続時間 [sec]
+	float         meleeRecovery       = 0.15f;            // 判定終了から次の行動までの後隙 [sec]
+	Vector3       meleeOffset{ 0.0f, 0.0f, 2.0f };        // aim 基準オフセット 右(X)/上(Y)/前(Z)
+	float         meleeComboWindow    = 0.40f;            // 後隙後の次段入力の受付猶予 [sec]
+	float         meleeCleanWindow     = 0.08f;           // 本あて扱いの秒数
+	float         meleeCleanMultiplier = 1.5f;            // 本あて倍率
+	float         meleeLateMultiplier  = 0.7f;            // 持続あて倍率
+
 	// ----- Carrier（運び屋プレハブ用：子敵の寿命・徘徊半径） -----
 	bool          hasCarrier             = false;
 	float         carrierChildLifetimeSec  = 10.0f;

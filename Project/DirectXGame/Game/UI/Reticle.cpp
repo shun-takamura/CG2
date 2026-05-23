@@ -18,6 +18,7 @@ void Reticle::Initialize(SpriteManager* spriteManager, const std::string& textur
 	sprite_->Initialize(spriteManager, texturePath, "Reticle");
 	sprite_->SetAnchorPoint({ 0.5f, 0.5f });
 	sprite_->SetSize({ sizePx_, sizePx_ });
+	normalTexturePath_ = texturePath; // 近接レンジ解除時に戻すための通常テクスチャ
 
 	currentSizePx_ = sizePx_;
 
@@ -140,6 +141,14 @@ void Reticle::SetLockOn(bool on) {
 	lockedOn_ = on;
 	if (sprite_) {
 		sprite_->SetColor(lockedOn_ ? lockOnColor_ : normalColor_);
+	}
+}
+
+void Reticle::SetMeleeInRange(bool inRange) {
+	if (inRange == meleeInRange_) return; // 変化時のみ差し替え
+	meleeInRange_ = inRange;
+	if (sprite_) {
+		sprite_->SetTexture(inRange ? meleeTexturePath_ : normalTexturePath_);
 	}
 }
 

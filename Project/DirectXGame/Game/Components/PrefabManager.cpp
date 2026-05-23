@@ -343,6 +343,20 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		if (blJ["penetrateEffect"].IsString()) out.bulletPenetrateEffect = blJ["penetrateEffect"].AsString();
 	}
 
+	// Melee（近接攻撃プレハブ用：持続・オフセット・コンボ・本/持続あて）
+	const JsonValue& meJ = root["melee"];
+	if (meJ.IsObject()) {
+		out.hasMelee             = true;
+		out.meleeStartup         = static_cast<float>(meJ["startup"].AsDouble(out.meleeStartup));
+		out.meleeActiveDuration  = static_cast<float>(meJ["activeDuration"].AsDouble(out.meleeActiveDuration));
+		out.meleeOffset          = JsonToVec3(meJ["offset"], out.meleeOffset);
+		out.meleeComboWindow     = static_cast<float>(meJ["comboWindow"].AsDouble(out.meleeComboWindow));
+		out.meleeRecovery        = static_cast<float>(meJ["recovery"].AsDouble(out.meleeRecovery));
+		out.meleeCleanWindow     = static_cast<float>(meJ["cleanWindow"].AsDouble(out.meleeCleanWindow));
+		out.meleeCleanMultiplier = static_cast<float>(meJ["cleanMultiplier"].AsDouble(out.meleeCleanMultiplier));
+		out.meleeLateMultiplier  = static_cast<float>(meJ["lateMultiplier"].AsDouble(out.meleeLateMultiplier));
+	}
+
 	// Carrier（運び屋プレハブ用の子敵パラメータ）
 	const JsonValue& caJ = root["carrier"];
 	if (caJ.IsObject()) {
@@ -487,6 +501,19 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 	// Enemy/Boss のスコア（デフォルト 10 から外れていれば書き出す）
 	if (def.scoreValue != 10) {
 		root["scoreValue"] = static_cast<int64_t>(def.scoreValue);
+	}
+
+	if (def.hasMelee) {
+		JsonValue meObj = JsonValue::MakeObject();
+		meObj["startup"]         = static_cast<double>(def.meleeStartup);
+		meObj["activeDuration"]  = static_cast<double>(def.meleeActiveDuration);
+		meObj["offset"]          = Vec3ToJson(def.meleeOffset);
+		meObj["comboWindow"]     = static_cast<double>(def.meleeComboWindow);
+		meObj["recovery"]        = static_cast<double>(def.meleeRecovery);
+		meObj["cleanWindow"]     = static_cast<double>(def.meleeCleanWindow);
+		meObj["cleanMultiplier"] = static_cast<double>(def.meleeCleanMultiplier);
+		meObj["lateMultiplier"]  = static_cast<double>(def.meleeLateMultiplier);
+		root["melee"] = std::move(meObj);
 	}
 
 	if (def.hasCarrier) {

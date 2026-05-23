@@ -34,6 +34,15 @@ void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string&
     CreateTransformationMatrixBuffer();
 }
 
+void SpriteInstance::SetTexture(const std::string& filePath)
+{
+    if (filePath.empty() || filePath == textureFilePath_) return;
+    textureFilePath_ = filePath;
+    TextureManager::GetInstance()->LoadTexture(filePath);
+    textureGpuHandle_ = TextureManager::GetInstance()->GetSrvHandleGPU(filePath);
+    // サイズ（size_ / textureSize_）は呼び出し側の指定を維持するため AdjustTextureSize は呼ばない。
+}
+
 void SpriteInstance::Update()
 {
     float left = 0.0f - anchorPoint_.x;

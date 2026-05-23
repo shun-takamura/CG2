@@ -330,6 +330,123 @@ void StagePlayScene::PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float dura
 	}
 }
 
+void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const
+{
+	// 前 = 自機 → firingTarget
+	Vector3 fwd{ 0.0f, 0.0f, 1.0f };
+	if (player_) {
+		const Vector3 ppos = player_->GetTranslate();
+		fwd = { firingTarget_.x - ppos.x, firingTarget_.y - ppos.y, firingTarget_.z - ppos.z };
+	}
+	float flen = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+	if (flen < 1e-5f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
+	fwd.x /= flen; fwd.y /= flen; fwd.z /= flen;
+
+	// 右 = worldUp × 前
+	const Vector3 worldUp{ 0.0f, 1.0f, 0.0f };
+	Vector3 rgt{
+		worldUp.y * fwd.z - worldUp.z * fwd.y,
+		worldUp.z * fwd.x - worldUp.x * fwd.z,
+		worldUp.x * fwd.y - worldUp.y * fwd.x,
+	};
+	float rlen = std::sqrt(rgt.x * rgt.x + rgt.y * rgt.y + rgt.z * rgt.z);
+	if (rlen < 1e-5f) { rgt = { 1.0f, 0.0f, 0.0f }; rlen = 1.0f; } // 前が真上/真下のときの保険
+	rgt.x /= rlen; rgt.y /= rlen; rgt.z /= rlen;
+
+	// 上 = 前 × 右
+	up = {
+		fwd.y * rgt.z - fwd.z * rgt.y,
+		fwd.z * rgt.x - fwd.x * rgt.z,
+		fwd.x * rgt.y - fwd.y * rgt.x,
+	};
+	forward = fwd;
+	right = rgt;
+}
+
+void StagePlayScene::SpawnPendingMelee()
+{
+	if (!player_) return;
+	Vector3 right, up, forward;
+	ComputeAimBasis(right, up, forward);
+	const int atk = player_->HasAttackPower() ? player_->GetAttackPower() : 0;
+	SpawnPlayerMelee(player_, right, up, forward, meleePendingPrefab_, atk);
+}
+
+void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
+{
+	if (!player_) return;
+
+	// タイマー進行
+	if (meleeActionLockTimer_ > 0.0f) {
+		meleeActionLockTimer_ -= dt;
+		if (meleeActionLockTimer_ < 0.0f) meleeActionLockTimer_ = 0.0f;
+	}
+	if (meleeComboIndex_ > 0) {
+		meleeComboTimer_ -= dt;
+		if (meleeComboTimer_ <= 0.0f) {
+			meleeComboTimer_ = 0.0f;
+			meleeComboIndex_ = 0; // 受付猶予超過でコンボリセット
+		}
+	}
+
+	// 発生待ち：startup 経過で判定を spawn
+	if (meleePending_) {
+		meleeStartupTimer_ -= dt;
+		if (meleeStartupTimer_ <= 0.0f) {
+			meleeStartupTimer_ = 0.0f;
+			meleePending_ = false;
+			SpawnPendingMelee();
+		}
+	}
+
+	if (!actions) return;
+
+	// 行動ロック中（発生〜後隙）は新規入力を一切受け付けない
+	if (meleeActionLockTimer_ > 0.0f) return;
+
+	const bool strongTrig = actions->IsTriggered(static_cast<int>(Action::MeleeStrong));
+	const bool weakTrig   = actions->IsTriggered(static_cast<int>(Action::MeleeWeak));
+	if (!strongTrig && !weakTrig) return;
+
+	// 攻撃スロットを決定（強=単発でコンボリセット / 弱=1→2→3→4→1 と段送り）
+	std::string slot;
+	if (strongTrig) {
+		slot = "melee_strong";
+		meleeComboIndex_ = 0;
+	} else {
+		const int next = (meleeComboIndex_ % kMeleeWeakComboMax_) + 1;
+		slot = "melee_w" + std::to_string(next);
+		meleeComboIndex_ = next;
+	}
+
+	std::string prefab = player_->FindBulletPrefab(slot);
+	if (prefab.empty()) prefab = "TemporaryPlayerMelee"; // フォールバック
+
+	// 発生/持続/後隙/受付猶予をプレハブの MeleeParams から
+	float startup = 0.05f, active = 0.20f, recovery = 0.15f, comboWindow = 0.40f;
+	if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab); mdef && mdef->hasMelee) {
+		startup     = mdef->meleeStartup;
+		active      = mdef->meleeActiveDuration;
+		recovery    = mdef->meleeRecovery;
+		comboWindow = mdef->meleeComboWindow;
+	}
+
+	// 攻撃を予約：startup 後に判定発生。発生〜後隙まで全行動ロック。
+	meleePendingPrefab_ = prefab;
+	meleeStartupTimer_  = startup;
+	meleePending_       = true;
+	meleeActionLockTimer_ = startup + active + recovery;
+	// 後隙終了後 comboWindow 秒だけ次段を受け付ける（その間に入力が無ければコンボリセット）
+	meleeComboTimer_      = startup + active + recovery + comboWindow;
+
+	// startup が 0 なら同フレームで発生させる（1フレーム遅延を避ける）
+	if (meleeStartupTimer_ <= 0.0f) {
+		meleeStartupTimer_ = 0.0f;
+		meleePending_ = false;
+		SpawnPendingMelee();
+	}
+}
+
 void StagePlayScene::UpdateJustDodgeEffect(float dt)
 {
 	if (!justDodgeActive_) return;
@@ -1143,6 +1260,39 @@ void StagePlayScene::Update() {
 			constexpr float kReticleMargin = 1.25f;
 			reticle_->SetLockOnTargetSize(pixelRadius * 2.0f * kReticleMargin);
 		}
+		// ----- 近接レンジ表示：弱近接1段目(melee_w1)の判定球が、ロック中の敵に届くか -----
+		// レティクルが敵に重なっている時(hitEnemy)だけ判定。届くなら近接用テクスチャに切替。
+		bool meleeInRange = false;
+		if (hitEnemy && player_) {
+			std::string mprefab = player_->FindBulletPrefab("melee_w1");
+			if (mprefab.empty()) mprefab = "TemporaryPlayerMelee";
+			float meleeRadius = 0.0f;
+			Vector3 meleeOff{ 0.0f, 0.0f, 0.0f };
+			if (const PrefabDef* md = PrefabManager::GetInstance()->Find(mprefab)) {
+				meleeRadius = md->colliderRadius;        // Sphere collider 前提
+				if (md->hasMelee) meleeOff = md->meleeOffset;
+			}
+			if (meleeRadius > 0.0f) {
+				// aim 基底（前/右/上）= SpawnPlayerMelee と共通
+				Vector3 rgt, up, fwd;
+				ComputeAimBasis(rgt, up, fwd);
+				const Vector3 ppos = player_->GetTranslate();
+				// 判定球中心 = 自機 + 基底×offset
+				const Vector3 hitCenter{
+					ppos.x + rgt.x * meleeOff.x + up.x * meleeOff.y + fwd.x * meleeOff.z,
+					ppos.y + rgt.y * meleeOff.x + up.y * meleeOff.y + fwd.y * meleeOff.z,
+					ppos.z + rgt.z * meleeOff.x + up.z * meleeOff.y + fwd.z * meleeOff.z,
+				};
+				// ロック中の敵中心 = desiredTarget、敵半径 = hitEnemyRadius（既に取得済み）
+				const float ddx = hitCenter.x - desiredTarget.x;
+				const float ddy = hitCenter.y - desiredTarget.y;
+				const float ddz = hitCenter.z - desiredTarget.z;
+				const float d = std::sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+				meleeInRange = (d <= meleeRadius + hitEnemyRadius);
+			}
+		}
+		reticle_->SetMeleeInRange(meleeInRange);
+
 		reticle_->SetLockOn(hitEnemy);
 
 		// 弾発射時のホーミング選択用にメンバへ反映
@@ -1240,7 +1390,8 @@ void StagePlayScene::Update() {
 		}
 #endif
 		// Fire 押下で発射（チャージ状態でも即発射、または連射）
-		if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f && player_) {
+		if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f
+			&& meleeActionLockTimer_ <= 0.0f && player_) {
 			const Vector3 origin = player_->GetTranslate();
 			// 発射方向は Lerp 前の即時 target を使う（ロックオン直後の弾が遅れて飛ぶのを防ぐ）
 			Vector3 dir{ firingTarget_.x - origin.x, firingTarget_.y - origin.y, firingTarget_.z - origin.z };
@@ -1308,11 +1459,16 @@ void StagePlayScene::Update() {
 				}
 			}
 		}
+
+		// ----- 近接攻撃（弱4段コンボ / 強単発）-----
+		UpdateMeleeCombo(actions, dtP);
 	}
 
 	// 弾の進行と寿命処理（World 時間軸で動かす）
 	if (!gameFrozen) {
 		UpdateBullets(worldDt);
+		// 近接判定の追従・寿命処理
+		UpdateMelees(worldDt);
 
 		// プレイヤー被弾処理・UI更新
 		UpdatePlayerDamageAndUI(worldDt);
@@ -1539,11 +1695,18 @@ void StagePlayScene::Seek(float seconds) {
 	pendingEnemyControllers_.clear();
 	movingEnemies_.clear();
 	bullets_.clear();
+	melees_.clear();
+	meleeComboIndex_ = 0;
+	meleeComboTimer_ = 0.0f;
+	meleeStartupTimer_ = 0.0f;
+	meleeActionLockTimer_ = 0.0f;
+	meleePending_ = false;
 	for (auto& p : dynamicPrimitives_) {
 		if (!p) continue;
 		const EntityTag t = p->GetTag();
 		if (t == EntityTag::Enemy || t == EntityTag::Boss
-			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack) {
+			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack
+			|| t == EntityTag::PlayerMelee) {
 			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
 		}
 	}
@@ -1801,6 +1964,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 	player_ = nullptr;
 	movingEnemies_.clear();
 	bullets_.clear();
+	melees_.clear();
 
 	const JsonValue& objs = result.value["objects"];
 	if (!objs.IsArray()) return true;

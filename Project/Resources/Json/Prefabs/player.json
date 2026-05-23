@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      0.11621131002902985,
-      -0.40268492698669434,
+      0.11213962733745575,
+      -0.41052427887916565,
       0
     ]
   },
@@ -58,6 +58,11 @@
   "bulletPrefabs": {
     "normal": "TemporaryPlayerBullet",
     "charge1": "",
-    "charge2": ""
+    "melee_w1": "TemporaryPlayerMelee",
+    "charge2": "",
+    "melee_w2": "TemporaryPlayerMelee",
+    "melee_w3": "TemporaryPlayerMelee",
+    "melee_w4": "TemporaryPlayerMelee",
+    "melee_strong": "PlayerMeleeStrong"
   }
 }

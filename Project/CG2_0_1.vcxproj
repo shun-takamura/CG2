@@ -370,6 +370,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Components\HP.h" />
     <ClInclude Include="DirectXGame\Game\Components\DamageDealer.h" />
     <ClInclude Include="DirectXGame\Game\Components\BulletParams.h" />
+    <ClInclude Include="DirectXGame\Game\Components\MeleeParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\ChargeParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\PrecisionParams.h" />

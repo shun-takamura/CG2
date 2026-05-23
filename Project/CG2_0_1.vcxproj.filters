@@ -593,6 +593,9 @@
     <ClInclude Include="DirectXGame\Game\Components\BulletParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\MeleeParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

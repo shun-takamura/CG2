@@ -56,6 +56,14 @@ public:
 	void SetLockOnColor(const Vector4& c) { lockOnColor_ = c; }
 
 	/// <summary>
+	/// 近接攻撃が当たる距離にロック中の敵がいる時、内側レティクルのテクスチャを
+	/// 近接用に差し替える（サイズ・色はそのまま）。状態変化時のみ切替。
+	/// </summary>
+	void SetMeleeInRange(bool inRange);
+	bool IsMeleeInRange() const { return meleeInRange_; }
+	void SetMeleeTexture(const std::string& path) { meleeTexturePath_ = path; }
+
+	/// <summary>
 	/// ロックオン中の目標サイズ（pixel）を毎フレームセットする。
 	/// 呼び出し側で「敵の見かけ半径」を計算して渡す前提。
 	/// SetLockOn(true) と組み合わせて使う。
@@ -112,6 +120,11 @@ private:
 	Vector2 position_{ 0.0f, 0.0f };  // クライアント領域内（pixels）
 	float stickSpeed_ = 1200.0f;       // 右スティック最大時の 1 秒あたり移動ピクセル
 	float sizePx_ = 64.0f;             // 通常時の表示サイズ（正方形）
+
+	// 内側レティクルのテクスチャ差し替え（通常 ↔ 近接）
+	std::string normalTexturePath_;                                       // Initialize 時のテクスチャ（通常）
+	std::string meleeTexturePath_ = "Resources/Textures/reticle_melee.dds"; // 近接が当たる距離の表示
+	bool meleeInRange_ = false;                                           // 近接レンジ表示中フラグ
 
 	// ロックオン演出（色 + サイズ）
 	bool lockedOn_ = false;

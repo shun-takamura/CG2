@@ -82,8 +82,9 @@ void InspectorWindow::OnDraw() {
     const bool showHP            = isPlayer || isEnemy || isBoss;
     const bool showAttackPower   = isPlayer;                        // 攻撃力の実数値（プレイヤーのみ）
     const bool showRawDamage     = isEnemy || isEnemyAttack || isBoss; // 固定ダメージ（敵側）
-    const bool showAtkMultiplier = isPlayerBullet || isPlayerMelee; // 攻撃倍率（自機の攻撃）
+    const bool showAtkMultiplier = isPlayerBullet;                  // 攻撃倍率（弾）。近接は MeleeParams 側で倍率を持つ
     const bool showBullet        = isPlayerBullet || isEnemyAttack; // 弾パラメータ
+    const bool showMelee         = isPlayerMelee;                   // 近接パラメータ（持続/オフセット/コンボ/本・持続あて）
     const bool showCarrier       = isEnemy || isBoss;
     const bool showCharge        = isPlayer;
     const bool showPrecision     = isPlayer;
@@ -92,7 +93,7 @@ void InspectorWindow::OnDraw() {
     const bool showEffects       = isPlayer || isPlayerBullet || isPlayerMelee
                                  || isEnemy || isEnemyAttack || isBoss;
     const bool showBattle = showHP || showAttackPower || showRawDamage || showAtkMultiplier
-                         || showBullet || showCarrier || showCharge || showPrecision
+                         || showBullet || showMelee || showCarrier || showCharge || showPrecision
                          || showBulletSlots || showScore;
 
     // ----- コライダー（タグが衝突可能、かつ 3D エンティティの場合のみ表示） -----
@@ -234,6 +235,32 @@ void InspectorWindow::OnDraw() {
                 }
             }
 
+            // MeleeParams（PlayerMelee：持続・オフセット・コンボ・本/持続あて倍率）
+            if (showMelee) {
+                sep();
+                MeleeParams& mp = selected->GetMeleeParams();
+                ImGui::Checkbox("MeleeParams Enabled", &mp.enabled);
+                if (mp.enabled) {
+                    ImGui::DragFloat("Startup", &mp.startup, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("入力から判定が発生するまでの時間");
+                    ImGui::DragFloat("Active Duration", &mp.activeDuration, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("判定の持続時間");
+                    ImGui::DragFloat("Recovery", &mp.recovery, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("判定終了から次の行動（射撃/回避/近接）までの後隙");
+                    ImGui::DragFloat3("Offset (R/U/F)", &mp.offset.x, 0.05f, -50.0f, 50.0f, "%.2f");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("aim 基準オフセット 右(X)/上(Y)/前(Z)");
+                    ImGui::DragFloat("Combo Window", &mp.comboWindow, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("後隙終了後、次段入力を受け付ける猶予");
+                    ImGui::Separator();
+                    ImGui::DragFloat("Clean Window", &mp.cleanWindow, 0.01f, 0.0f, 5.0f, "%.2f sec");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("判定発生からこの秒数までを「本あて」扱い");
+                    ImGui::DragFloat("Clean Multiplier", &mp.cleanMultiplier, 0.05f, 0.0f, 100.0f, "%.2f");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("本あて倍率：AttackPower × これ = ダメージ");
+                    ImGui::DragFloat("Late Multiplier", &mp.lateMultiplier, 0.05f, 0.0f, 100.0f, "%.2f");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("持続あて（遅れ当て）倍率");
+                }
+            }
+
             // CarrierParams（Enemy / Boss）
             if (showCarrier) {
                 sep();
@@ -284,11 +311,15 @@ void InspectorWindow::OnDraw() {
                 sep();
                 ImGui::TextDisabled("Bullet Prefab Slots");
                 auto& bulletPrefabs = selected->GetBulletPrefabs();
-                const char* slotNames[3] = { "normal", "charge1", "charge2" };
+                // 弾スロットと近接スロット（攻撃スロットとして同じ map を流用）
+                const char* slotNames[8] = {
+                    "normal", "charge1", "charge2",
+                    "melee_w1", "melee_w2", "melee_w3", "melee_w4", "melee_strong"
+                };
                 for (const char* slot : slotNames) {
                     ImGui::PushID(slot);
                     ImGui::TextUnformatted(slot);
-                    ImGui::SameLine(80.0f);
+                    ImGui::SameLine(90.0f);
                     char buf[128];
                     std::snprintf(buf, sizeof(buf), "%s", bulletPrefabs[slot].c_str());
                     ImGui::SetNextItemWidth(200.0f);
@@ -334,7 +365,8 @@ void InspectorWindow::OnDraw() {
                 // 弾：trail（弾追従ループ）/ hit（着弾）
                 suggested = { "trail", "hit" };
             } else if (isPlayerMelee) {
-                suggested = { "hit" };
+                // swing（振り：判定追従）/ hit（着弾）
+                suggested = { "swing", "hit" };
             } else if (isEnemy || isBoss) {
                 suggested = { "hit", "death" };
             }
@@ -509,6 +541,18 @@ void InspectorWindow::OnDraw() {
                         def.bulletPenetrate           = bp.penetrate;
                         def.bulletPenetrateDamageRate = bp.penetrateDamageRate;
                         def.bulletPenetrateEffect     = bp.penetrateEffect;
+                    }
+                    const MeleeParams& mp = selected->GetMeleeParams();
+                    if (showMelee && mp.enabled) {
+                        def.hasMelee            = true;
+                        def.meleeStartup        = mp.startup;
+                        def.meleeActiveDuration = mp.activeDuration;
+                        def.meleeOffset         = mp.offset;
+                        def.meleeComboWindow    = mp.comboWindow;
+                        def.meleeRecovery       = mp.recovery;
+                        def.meleeCleanWindow     = mp.cleanWindow;
+                        def.meleeCleanMultiplier = mp.cleanMultiplier;
+                        def.meleeLateMultiplier  = mp.lateMultiplier;
                     }
                     const CarrierParams& cp = selected->GetCarrierParams();
                     if (showCarrier && cp.enabled) {

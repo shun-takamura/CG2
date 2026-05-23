@@ -143,6 +143,31 @@ private:
 	float outerChargeEasingDuration_ = 0.3f;
 	float outerRotationSpeed_ = 360.0f;
 
+	// ----- 近接攻撃（コンボ）-----
+	// 弱攻撃は4段コンボ（連打で段送り）、強攻撃は単発（弱コンボをリセット）。
+	// 各段の発生/持続/後隙・倍率・受付猶予は段プレハブの MeleeParams から読む。
+	// 攻撃の流れ：入力 →(startup)→ 判定発生(activeDuration) →(recovery 後隙)→ 行動可。
+	int   meleeComboIndex_       = 0;     // 0=コンボ無し, 1..4=現在の弱攻撃段
+	float meleeComboTimer_       = 0.0f;  // コンボ継続の残り [sec]（0で段リセット）
+	float meleeStartupTimer_     = 0.0f;  // 発生までの残り [sec]（0で判定 spawn）
+	float meleeActionLockTimer_  = 0.0f;  // >0 の間、射撃/回避/近接を全てロック（発生＋持続＋後隙）
+	bool  meleePending_          = false; // 発生待ちの攻撃があるか
+	std::string meleePendingPrefab_;      // 発生時に spawn する近接プレハブ
+	static constexpr int kMeleeWeakComboMax_ = 4;
+
+	void UpdateMeleeCombo(class InputActionMap* actions, float dt);
+	void SpawnPendingMelee();             // 発生待ちの近接判定を実際に spawn する
+	// aim 基底（前=自機→firingTarget、右=worldUp×前、上=前×右）を返す
+	void ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const;
+
+public:
+	/// <summary>
+	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
+	/// 将来の回避実装などからも参照する。
+	/// </summary>
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f; }
+private:
+
 	// ----- ジャスト回避演出 -----
 	bool  justDodgeActive_ = false;
 	float justDodgeTimer_ = 0.0f;
