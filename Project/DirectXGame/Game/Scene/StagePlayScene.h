@@ -165,7 +165,7 @@ public:
 	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
 	/// 将来の回避実装などからも参照する。
 	/// </summary>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f; }
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f; }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -175,6 +175,45 @@ private:
 	float justDodgeFadeIn_ = 0.15f;
 	float justDodgeFadeOut_ = 0.3f;
 	IImGuiEditable* justDodgeTarget_ = nullptr;
+
+	// ----- 回避 / ジャスト回避メカニクス -----
+	// 無敵の点滅色は「無敵の発生源」で出し分ける（被弾=赤/白・回避=水色・ジャスト=点滅なし）。
+	bool  wasInvincible_ = false;        // 前フレーム無敵だったか（無敵終了時に通常色へ戻す用）
+
+	// 通常回避（ダッシュ＋無敵窓）。タイマー類は実時間（UI グループ dt）で進める。
+	bool  dodgeActive_ = false;          // 回避無敵が有効か
+	float dodgeTimer_ = 0.0f;            // 回避開始からの経過 [sec]
+	float dodgeJustWindow_ = 0.2f;       // ジャスト成立窓：入力後この秒数以内に被弾接触すると成立
+	float dodgeIFrameDuration_ = 0.4f;   // 回避無敵：入力後この秒数まで被弾無効（justWindow を内包）
+	float dodgeCooldown_ = 0.6f;         // 回避クールダウン [sec]
+	float dodgeCooldownTimer_ = 0.0f;    // クールダウン残り
+	float dodgeActionLock_ = 0.25f;      // 回避中の行動ロック秒（IsActionLocked に合流）
+	float dodgeActionLockTimer_ = 0.0f;  // 行動ロック残り
+	Vector2 dodgeImpulse_{ 22.0f, 18.0f }; // ダッシュ初速（画面平面 X/Y, units/sec、playerVelocity_ に加算）
+
+	// ジャスト回避スロー（受付期限モデル：将来の分身カウンターで延長/短縮できる構造）
+	float justDodgeSlowWorld_ = 0.3f;       // 成立中の World 時間倍率（Player/UI は等速）
+	float justDodgeReceiptWindow_ = 3.0f;   // 追加入力の受付期間（=基本スロー長）[sec]
+	bool  justDodgeCounterActive_ = false;  // 追加入力アクション進行中フック（true の間は受付終了を保留）
+	float justDodgeFadeOutTimer_ = -1.0f;   // フェードアウト経過（-1=未フェード）
+
+	// 回復（ジャスト回避で貯まるストック）
+	int   healStock_    = 0;     // 使用可能な回復ストック（ジャスト回避1回ごとに+1）
+	int   healUsedStg_  = 0;     // STG で使った回復回数
+	int   healUsedBoss_ = 0;     // ボスで使った回復回数
+	int   healMaxStg_   = 5;     // STG 回復上限
+	int   healMaxBoss_  = 5;     // ボス 回復上限
+	int   healAmount_   = 5;     // 1 回の回復量（調整可）
+
+	// スコア
+	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
+
+	void UpdateDodge(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	void UpdateHeal(class InputActionMap* actions);
+	void TriggerJustDodge(IImGuiEditable* attacker);
+	// 回避・ジャスト回避のランタイム状態を即時クリア（Seek / LoadScene で呼ぶ）。
+	// スロー・グレースケールが残るのを防ぐため TimeScale と PostEffect も元に戻す。
+	void ResetDodgeState();
 
 	void UpdateJustDodgeEffect(float dt);
 

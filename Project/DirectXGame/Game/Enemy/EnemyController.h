@@ -25,6 +25,7 @@ public:
 	Vector3 freeVelocity_    { 0.0f, 0.0f, 0.0f };
 	bool    useFreeVelocity_ = false;
 	bool    billboardToPlayer_ = true;
+	bool    contactDamageActive_ = false; // 突進など攻撃接触中のみ true（被弾判定側が参照）
 
 	// WaveEntry から設定するパラメータ（UpdateEnemyControllers が ctx にセットする）
 	float       triggerT_        = 0.0f;

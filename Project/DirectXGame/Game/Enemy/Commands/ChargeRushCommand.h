@@ -63,6 +63,7 @@ public:
 		} else if (phase_ == Phase::Rush) {
 			ctx.billboardToPlayer = false;
 			ctx.useFreeVelocity   = true;
+			ctx.contactDamageActive = true; // 突進中のみ接触ダメージ（ジャスト回避対象）
 			ctx.freeVelocity      = {
 				rushDir_.x * rushSpeed_, rushDir_.y * rushSpeed_, rushDir_.z * rushSpeed_ };
 			rushTraveled_ += rushSpeed_ * dt;

@@ -12,6 +12,8 @@ void EnemyController::Update(float dt, EnemyContext& ctx) {
 	ctx.freeVelocity    = freeVelocity_;
 	ctx.useFreeVelocity = useFreeVelocity_;
 	ctx.billboardToPlayer = billboardToPlayer_;
+	// 接触ダメージは「そのフレームにコマンドが立てたか」だけを見たいので毎フレームリセット
+	ctx.contactDamageActive = false;
 
 	if (commandIdx_ < commands_.size()) {
 		auto& cmd = commands_[commandIdx_];
@@ -32,6 +34,7 @@ void EnemyController::Update(float dt, EnemyContext& ctx) {
 	freeVelocity_     = ctx.freeVelocity;
 	useFreeVelocity_  = ctx.useFreeVelocity;
 	billboardToPlayer_ = ctx.billboardToPlayer;
+	contactDamageActive_ = ctx.contactDamageActive;
 }
 
 void EnemyController::TriggerRetreat() {

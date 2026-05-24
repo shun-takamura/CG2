@@ -127,6 +127,35 @@ void StagePlayScene::LoadTuningFromJson() {
 		damageCameraShakeDuration_    = static_cast<float>(dmg["cameraShakeDuration"].AsDouble(damageCameraShakeDuration_));
 	}
 
+	// ----- dodge（回避）-----
+	const JsonValue& dodge = root["dodge"];
+	if (dodge.IsObject()) {
+		dodgeJustWindow_     = static_cast<float>(dodge["justWindow"].AsDouble(dodgeJustWindow_));
+		dodgeIFrameDuration_ = static_cast<float>(dodge["iframeDuration"].AsDouble(dodgeIFrameDuration_));
+		dodgeCooldown_       = static_cast<float>(dodge["cooldown"].AsDouble(dodgeCooldown_));
+		dodgeActionLock_     = static_cast<float>(dodge["actionLock"].AsDouble(dodgeActionLock_));
+		dodgeImpulse_.x      = static_cast<float>(dodge["impulseX"].AsDouble(dodgeImpulse_.x));
+		dodgeImpulse_.y      = static_cast<float>(dodge["impulseY"].AsDouble(dodgeImpulse_.y));
+	}
+
+	// ----- justDodge（ジャスト回避スロー）-----
+	const JsonValue& jd = root["justDodge"];
+	if (jd.IsObject()) {
+		justDodgeSlowWorld_     = static_cast<float>(jd["slowWorld"].AsDouble(justDodgeSlowWorld_));
+		justDodgeReceiptWindow_ = static_cast<float>(jd["receiptWindow"].AsDouble(justDodgeReceiptWindow_));
+		justDodgeFadeIn_        = static_cast<float>(jd["fadeIn"].AsDouble(justDodgeFadeIn_));
+		justDodgeFadeOut_       = static_cast<float>(jd["fadeOut"].AsDouble(justDodgeFadeOut_));
+		justDodgeScore_         = static_cast<int>(jd["score"].AsInt(static_cast<int64_t>(justDodgeScore_)));
+	}
+
+	// ----- heal（回復）-----
+	const JsonValue& heal = root["heal"];
+	if (heal.IsObject()) {
+		healAmount_  = static_cast<int>(heal["amount"].AsInt(static_cast<int64_t>(healAmount_)));
+		healMaxStg_  = static_cast<int>(heal["maxStg"].AsInt(static_cast<int64_t>(healMaxStg_)));
+		healMaxBoss_ = static_cast<int>(heal["maxBoss"].AsInt(static_cast<int64_t>(healMaxBoss_)));
+	}
+
 	// ----- HP bar UI -----
 	const JsonValue& hpb = root["hpBar"];
 	if (hpb.IsObject()) {
@@ -242,6 +271,29 @@ void StagePlayScene::SaveTuningToJson() const {
 	dmgObj["cameraShakeDuration"]   = static_cast<double>(damageCameraShakeDuration_);
 	root["damage"] = std::move(dmgObj);
 
+	JsonValue dodgeObj = JsonValue::MakeObject();
+	dodgeObj["justWindow"]     = static_cast<double>(dodgeJustWindow_);
+	dodgeObj["iframeDuration"] = static_cast<double>(dodgeIFrameDuration_);
+	dodgeObj["cooldown"]       = static_cast<double>(dodgeCooldown_);
+	dodgeObj["actionLock"]     = static_cast<double>(dodgeActionLock_);
+	dodgeObj["impulseX"]       = static_cast<double>(dodgeImpulse_.x);
+	dodgeObj["impulseY"]       = static_cast<double>(dodgeImpulse_.y);
+	root["dodge"] = std::move(dodgeObj);
+
+	JsonValue jdObj = JsonValue::MakeObject();
+	jdObj["slowWorld"]     = static_cast<double>(justDodgeSlowWorld_);
+	jdObj["receiptWindow"] = static_cast<double>(justDodgeReceiptWindow_);
+	jdObj["fadeIn"]        = static_cast<double>(justDodgeFadeIn_);
+	jdObj["fadeOut"]       = static_cast<double>(justDodgeFadeOut_);
+	jdObj["score"]         = static_cast<int64_t>(justDodgeScore_);
+	root["justDodge"] = std::move(jdObj);
+
+	JsonValue healObj = JsonValue::MakeObject();
+	healObj["amount"]  = static_cast<int64_t>(healAmount_);
+	healObj["maxStg"]  = static_cast<int64_t>(healMaxStg_);
+	healObj["maxBoss"] = static_cast<int64_t>(healMaxBoss_);
+	root["heal"] = std::move(healObj);
+
 	JsonValue hpbObj = JsonValue::MakeObject();
 	hpbObj["maxWidth"]  = static_cast<double>(hpBarMaxWidth_);
 	hpbObj["height"]    = static_cast<double>(hpBarHeight_);
@@ -316,6 +368,7 @@ void StagePlayScene::PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float dura
 	justDodgeTimer_ = 0.0f;
 	justDodgeDuration_ = duration;
 	justDodgeTarget_ = targetEnemy;
+	justDodgeFadeOutTimer_ = -1.0f;
 
 	// プレイヤー + 対象敵をハイライト登録
 	ClearHighlights();
@@ -328,6 +381,94 @@ void StagePlayScene::PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float dura
 		pe->maskedGrayscale->SetIntensity(0.0f);
 		pe->maskedGrayscale->UpdateConstantBuffer();
 	}
+}
+
+void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
+{
+	// 演出：プレイヤー＋攻撃元をハイライトしてグレースケール。受付期間ぶん保持する。
+	PlayJustDodgeEffect(attacker, justDodgeReceiptWindow_);
+	// World だけスロー（Player/UI は等速）。終了は UpdateJustDodgeEffect が元に戻す。
+	SetTimeScale(TimeGroup::World, justDodgeSlowWorld_);
+	// 分身カウンター（追加入力）は次フェーズ。今は受付フックを立てない＝受付期間で自然終了。
+	justDodgeCounterActive_ = false;
+	// 回復ストック +1（消費上限は UpdateHeal 側で管理）
+	++healStock_;
+	// スコア加点
+	ScoreManager::GetInstance()->AddScore(justDodgeScore_);
+}
+
+void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDelta, float dt)
+{
+	// クールダウン・行動ロックを実時間で減衰
+	if (dodgeCooldownTimer_ > 0.0f)   dodgeCooldownTimer_   -= dt;
+	if (dodgeActionLockTimer_ > 0.0f) dodgeActionLockTimer_ -= dt;
+
+	// 回避無敵の経過。dodgeIFrameDuration_ を超えたら無敵終了。
+	if (dodgeActive_) {
+		dodgeTimer_ += dt;
+		if (dodgeTimer_ > dodgeIFrameDuration_) {
+			dodgeActive_ = false;
+		}
+	}
+
+	// 入力で回避開始（行動ロック中・CD中・ジャスト回避演出中は不可）
+	if (actions && actions->IsTriggered(static_cast<int>(Action::Dodge))
+		&& !IsActionLocked() && dodgeCooldownTimer_ <= 0.0f && !justDodgeActive_) {
+		dodgeActive_          = true;
+		dodgeTimer_           = 0.0f;
+		dodgeCooldownTimer_   = dodgeCooldown_;
+		dodgeActionLockTimer_ = dodgeActionLock_;
+
+		// 移動入力方向へダッシュ（入力なしはその場）。playerVelocity_ に初速インパルスを足すだけなので
+		// 以降の移動クリップ（isInsideClip）がそのまま効いて画面外には出ない。
+		const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+		if (mlen > 1e-3f) {
+			playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
+			playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+		}
+	}
+}
+
+void StagePlayScene::ResetDodgeState()
+{
+	dodgeActive_          = false;
+	dodgeTimer_           = 0.0f;
+	dodgeCooldownTimer_   = 0.0f;
+	dodgeActionLockTimer_ = 0.0f;
+	wasInvincible_        = false;
+	playerInvincibilityTimer_ = -2.0f;
+
+	if (justDodgeActive_) {
+		justDodgeActive_        = false;
+		justDodgeTimer_         = 0.0f;
+		justDodgeFadeOutTimer_  = -1.0f;
+		justDodgeCounterActive_ = false;
+		justDodgeTarget_        = nullptr;
+		ClearHighlights();
+		SetTimeScale(TimeGroup::World, 1.0f);
+		if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+			pe->maskedGrayscale->SetEnabled(false);
+			pe->maskedGrayscale->SetIntensity(1.0f);
+			pe->maskedGrayscale->UpdateConstantBuffer();
+		}
+	}
+}
+
+void StagePlayScene::UpdateHeal(InputActionMap* actions)
+{
+	if (!actions || !player_) return;
+	if (!actions->IsTriggered(static_cast<int>(Action::Heal))) return;
+	if (healStock_ <= 0) return;
+
+	// 現フェーズの回復上限（STG / ボスで別カウント）
+	const bool isBoss = (phase_ == Phase::Boss);
+	int&      used = isBoss ? healUsedBoss_ : healUsedStg_;
+	const int cap  = isBoss ? healMaxBoss_  : healMaxStg_;
+	if (used >= cap) return;
+
+	player_->GetHP().Heal(healAmount_);
+	--healStock_;
+	++used;
 }
 
 void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const
@@ -453,31 +594,43 @@ void StagePlayScene::UpdateJustDodgeEffect(float dt)
 
 	justDodgeTimer_ += dt;
 
-	// 0→fadeIn→duration-fadeOut→duration で 0/1/1/0 にスムーズ補間
-	float intensity = 1.0f;
-	const float t = justDodgeTimer_;
-	const float D = justDodgeDuration_;
 	const float fi = justDodgeFadeIn_;
 	const float fo = justDodgeFadeOut_;
 
-	if (t < fi && fi > 0.0f) {
-		intensity = t / fi;
-	} else if (t > D - fo && fo > 0.0f) {
-		intensity = (std::max)(0.0f, (D - t) / fo);
-	}
+	// 受付期間中（または追加入力アクション進行中）はフェードアウトせず保持する。
+	// → 追加入力なしなら受付期間(=justDodgeReceiptWindow_)でフェードアウトへ。
+	//    追加入力があれば justDodgeCounterActive_ を立てている間は延長される（次フェーズの分身カウンター用）。
+	const bool holding = (justDodgeTimer_ < justDodgeReceiptWindow_) || justDodgeCounterActive_;
 
-	if (t >= D) {
-		// 終了
-		justDodgeActive_ = false;
-		justDodgeTimer_ = 0.0f;
-		justDodgeTarget_ = nullptr;
-		ClearHighlights();
-		if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
-			pe->maskedGrayscale->SetEnabled(false);
-			pe->maskedGrayscale->SetIntensity(1.0f);
-			pe->maskedGrayscale->UpdateConstantBuffer();
+	float intensity = 1.0f;
+
+	if (!holding) {
+		// 受付終了 → フェードアウト開始。開始時に World 時間を通常へ戻してゲームを再開する。
+		if (justDodgeFadeOutTimer_ < 0.0f) {
+			justDodgeFadeOutTimer_ = 0.0f;
+			SetTimeScale(TimeGroup::World, 1.0f);
 		}
-		return;
+		justDodgeFadeOutTimer_ += dt;
+		intensity = (fo > 0.0f) ? (std::max)(0.0f, 1.0f - justDodgeFadeOutTimer_ / fo) : 0.0f;
+
+		if (justDodgeFadeOutTimer_ >= fo) {
+			// 完全終了
+			justDodgeActive_       = false;
+			justDodgeTimer_        = 0.0f;
+			justDodgeFadeOutTimer_ = -1.0f;
+			justDodgeTarget_       = nullptr;
+			ClearHighlights();
+			SetTimeScale(TimeGroup::World, 1.0f); // 念のため確実に戻す
+			if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+				pe->maskedGrayscale->SetEnabled(false);
+				pe->maskedGrayscale->SetIntensity(1.0f);
+				pe->maskedGrayscale->UpdateConstantBuffer();
+			}
+			return;
+		}
+	} else if (justDodgeTimer_ < fi && fi > 0.0f) {
+		// フェードイン
+		intensity = justDodgeTimer_ / fi;
 	}
 
 	// intensity 反映
@@ -671,19 +824,61 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 	}
 
-	if (ImGui::CollapsingHeader("Just Dodge Effect (debug)")) {
-		ImGui::DragFloat("Duration (s)", &justDodgeDuration_, 0.05f, 0.1f, 10.0f, "%.2f");
+	if (ImGui::CollapsingHeader("Dodge / Just Dodge / Heal")) {
+		ImGui::Separator();
+		ImGui::TextUnformatted("回避（Dodge）");
+		ImGui::DragFloat("Just Window (s)", &dodgeJustWindow_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("回避入力後この秒数以内に被弾接触するとジャスト成立。遠近感対策で広めから調整");
+		ImGui::DragFloat("I-Frame Duration (s)", &dodgeIFrameDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("回避入力後この秒数まで被弾無効（Just Window を内包）。これを過ぎると被弾");
+		ImGui::DragFloat("Cooldown (s)", &dodgeCooldown_, 0.02f, 0.0f, 3.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Action Lock (s)", &dodgeActionLock_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Dash Impulse (X/Y)", &dodgeImpulse_.x, 0.5f, 0.0f, 100.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("runtime: active=%d t=%.2f cd=%.2f lock=%.2f",
+			dodgeActive_ ? 1 : 0, dodgeTimer_, dodgeCooldownTimer_, dodgeActionLockTimer_);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("ジャスト回避スロー（受付期限モデル）");
+		ImGui::DragFloat("Slow World Scale", &justDodgeSlowWorld_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Receipt Window (s)", &justDodgeReceiptWindow_, 0.05f, 0.1f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("追加入力の受付期間。追加入力なしならこの秒数で演出終了（実時間）");
 		ImGui::DragFloat("Fade In (s)", &justDodgeFadeIn_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Fade Out (s)", &justDodgeFadeOut_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Just Dodge Score", &justDodgeScore_, 5.0f, 0, 100000);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		IImGuiEditable* sel = ImGuiManager::Instance().GetSelected();
-		ImGui::Text("Target (Inspector 選択): %s",
-			sel ? sel->GetName().c_str() : "(none)");
-		if (ImGui::Button("Play Just Dodge")) {
-			PlayJustDodgeEffect(sel, justDodgeDuration_);
+		ImGui::Text("Highlight Target (Inspector 選択): %s", sel ? sel->GetName().c_str() : "(none)");
+		if (ImGui::Button("Test: Trigger Just Dodge")) {
+			TriggerJustDodge(sel);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Play Effect Only")) {
+			PlayJustDodgeEffect(sel, justDodgeReceiptWindow_);
 		}
 		if (justDodgeActive_) {
-			ImGui::Text("Active: %.2f / %.2f s", justDodgeTimer_, justDodgeDuration_);
+			ImGui::Text("Active: %.2f s (counter=%d, fadeOut=%.2f)",
+				justDodgeTimer_, justDodgeCounterActive_ ? 1 : 0, justDodgeFadeOutTimer_);
 		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("回復（Heal）");
+		ImGui::DragInt("Heal Amount", &healAmount_, 1.0f, 0, 999);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Max Heals (STG)", &healMaxStg_, 1.0f, 0, 99);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Max Heals (Boss)", &healMaxBoss_, 1.0f, 0, 99);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("stock=%d  usedSTG=%d/%d  usedBoss=%d/%d",
+			healStock_, healUsedStg_, healMaxStg_, healUsedBoss_, healMaxBoss_);
 	}
 
 	if (ImGui::CollapsingHeader("Damage / Invincibility")) {
@@ -971,6 +1166,10 @@ void StagePlayScene::Update() {
 		playerVelocity_.x += (targetVel.x - playerVelocity_.x) * alpha;
 		playerVelocity_.y += (targetVel.y - playerVelocity_.y) * alpha;
 
+		// 回避（ダッシュ＋無敵窓）。playerVelocity_ にインパルスを足すので、以降のクリップ判定で
+		// 画面外には出ない。タイマー類はスローの影響を受けない実時間（UI グループ dt）で進める。
+		UpdateDodge(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
+
 		// 候補オフセット（クリップで反映可否を判定する）
 		Vector2 candidate = {
 			playerInputOffset_.x + playerVelocity_.x * dt,
@@ -1079,8 +1278,12 @@ void StagePlayScene::Update() {
 	// 全シーン共通の EffectManager + GPUParticle を更新
 	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
 
-	// ジャスト回避演出のタイマ更新（World グループ dt に従う）
-	UpdateJustDodgeEffect(GetScaledDeltaTime());
+	// ジャスト回避演出のタイマ更新。受付期間/フェードは実時間（UI グループ）で計測する
+	// （World をスローにしても受付 3 秒は実時間で一定にしたいため）。
+	UpdateJustDodgeEffect(GetScaledDeltaTime(TimeGroup::UI));
+
+	// HP 回復（ジャスト回避ストックを消費）
+	UpdateHeal(actions);
 
 	// レティクル：Viewport 内でマウスが動いたときだけワープ（ImGui 操作と衝突させない）
 	if (reticle_) {
@@ -1701,6 +1904,7 @@ void StagePlayScene::Seek(float seconds) {
 	meleeStartupTimer_ = 0.0f;
 	meleeActionLockTimer_ = 0.0f;
 	meleePending_ = false;
+	ResetDodgeState();
 	for (auto& p : dynamicPrimitives_) {
 		if (!p) continue;
 		const EntityTag t = p->GetTag();
@@ -1965,6 +2169,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 	movingEnemies_.clear();
 	bullets_.clear();
 	melees_.clear();
+	ResetDodgeState();
 
 	const JsonValue& objs = result.value["objects"];
 	if (!objs.IsArray()) return true;
@@ -2085,56 +2290,99 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		camera_->UpdateShake(deltaTime);
 	}
 
-	// 無敵時間カウント・点滅エフェクト
-	if (playerInvincibilityTimer_ > 0.0f) {
-		playerInvincibilityTimer_ -= deltaTime;
+	// ----- 無敵状態の集約（無敵の発生源で点滅色を出し分ける）-----
+	if (playerInvincibilityTimer_ > 0.0f) playerInvincibilityTimer_ -= deltaTime;
+	if (shootLockoutTimer_ > 0.0f)        shootLockoutTimer_ -= deltaTime;
 
-		// 白／赤の半透明点滅（10Hz）
-		const float blinkFreq = damageBlinkFrequency_;
-		float phase = std::fmod(playerInvincibilityTimer_ * blinkFreq, 1.0f);
-		if (phase < 0.5f) {
-			player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
-		} else {
-			player_->SetMaterialColor({ 1.0f, 0.3f, 0.3f, damageBlinkAlpha_ });
-		}
-	} else if (playerInvincibilityTimer_ > -1.0f) {
-		// 無敵終了直後に通常色に戻す（1度だけ）
+	const bool justInv    = justDodgeActive_;                                    // ジャスト回避中：無敵・点滅なし
+	const bool dodgeInv   = dodgeActive_ && dodgeTimer_ <= dodgeIFrameDuration_; // 回避無敵：水色点滅
+	const bool dmgInv     = playerInvincibilityTimer_ > 0.0f;                    // 被弾無敵：赤/白点滅
+	const bool invincible = justInv || dodgeInv || dmgInv;
+
+	const float blinkFreq = damageBlinkFrequency_;
+	if (justInv) {
+		// ジャスト回避中は無敵だが点滅させない（ソリッド表示）
 		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-		playerInvincibilityTimer_ = -2.0f; // 復帰済みフラグ
+	} else if (dodgeInv) {
+		// 回避（〜ジャスト窓〜回避無敵）：水色／白の点滅
+		float phase = std::fmod(dodgeTimer_ * blinkFreq, 1.0f);
+		if (phase < 0.5f) player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
+		else              player_->SetMaterialColor({ 0.4f, 0.8f, 1.0f, damageBlinkAlpha_ });
+	} else if (dmgInv) {
+		// 被弾無敵：赤／白の点滅
+		float phase = std::fmod(playerInvincibilityTimer_ * blinkFreq, 1.0f);
+		if (phase < 0.5f) player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
+		else              player_->SetMaterialColor({ 1.0f, 0.3f, 0.3f, damageBlinkAlpha_ });
+	} else if (wasInvincible_) {
+		// 無敵終了直後に通常色へ戻す（1度だけ）
+		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
+	wasInvincible_ = invincible;
 
-	// 射撃禁止タイマー
-	if (shootLockoutTimer_ > 0.0f) {
-		shootLockoutTimer_ -= deltaTime;
-	}
-
-	// 敵弾とプレイヤーの衝突判定
-	if (playerInvincibilityTimer_ <= 0.0f) {
+	// ----- 敵攻撃との接触判定（敵弾＋突進）-----
+	// ジャスト回避中は完全スルー。それ以外は、回避ジャスト窓内の接触＝ジャスト回避成立、
+	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。
+	if (!justInv) {
 		const Vector3 playerPos = player_->GetTranslate();
 		const float playerR = player_->GetCollider().radius;
 
-		for (auto& b : bullets_) {
+		bool            hitFound = false;
+		int             incomingDamage = 0;
+		int             hitBulletIndex = -1;
+		IImGuiEditable* attacker = nullptr; // ジャスト演出のハイライト対象
+
+		// 敵弾
+		for (size_t i = 0; i < bullets_.size(); ++i) {
+			auto& b = bullets_[i];
 			if (!b.primitive) continue;
 			if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
-
 			const Vector3* bp = b.primitive->GetEditableTranslate();
 			if (!bp) continue;
 			const float bulletR = b.primitive->GetCollider().radius;
-
-			float dx = playerPos.x - bp->x;
-			float dy = playerPos.y - bp->y;
-			float dz = playerPos.z - bp->z;
-			float distSq = dx * dx + dy * dy + dz * dz;
+			float dx = playerPos.x - bp->x, dy = playerPos.y - bp->y, dz = playerPos.z - bp->z;
 			float sumR = playerR + bulletR;
-
-			if (distSq < sumR * sumR) {
-				int damage = b.primitive->GetDamageDealer().damage;
-				if (damage <= 0) damage = 10;
-				OnPlayerTakeDamage(damage);
-
-				// 弾を消滅キューへ
-				b.remainingLifetime = -1.0f;
+			if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
+				incomingDamage = b.primitive->GetDamageDealer().damage;
+				if (incomingDamage <= 0) incomingDamage = 10;
+				hitBulletIndex = static_cast<int>(i);
+				attacker = nearestEnemy_; // 弾の発射元は不明なので画面上最近の敵を演出対象に
+				hitFound = true;
 				break;
+			}
+		}
+
+		// 突進など「攻撃接触中」の敵（弾が当たっていない場合のみ。ただの移動接触は contactDamageActive_=false で除外）
+		if (!hitFound) {
+			for (auto& ctrl : enemyControllers_) {
+				if (!ctrl || !ctrl->contactDamageActive_ || !ctrl->entity_) continue;
+				IImGuiEditable* e = ctrl->entity_;
+				const Vector3* ep = e->GetEditableTranslate();
+				if (!ep) continue;
+				const float er = e->GetCollider().radius;
+				float dx = playerPos.x - ep->x, dy = playerPos.y - ep->y, dz = playerPos.z - ep->z;
+				float sumR = playerR + er;
+				if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
+					incomingDamage = e->GetDamageDealer().damage;
+					if (incomingDamage <= 0) incomingDamage = 10;
+					attacker = e;
+					hitFound = true;
+					break;
+				}
+			}
+		}
+
+		if (hitFound) {
+			if (dodgeActive_ && dodgeTimer_ <= dodgeJustWindow_) {
+				// ジャスト回避成立（スロー＋演出＋回復ストック＋スコア）
+				TriggerJustDodge(attacker);
+				dodgeActive_ = false; // 回避無敵を消費し、以降はジャスト無敵へ移行
+				if (hitBulletIndex >= 0) bullets_[hitBulletIndex].remainingLifetime = -1.0f;
+			} else if (dodgeInv || dmgInv) {
+				// 無敵中：ダメージ無効（弾はそのまま通過＝既存の被弾無敵と同様）
+			} else {
+				// 通常被弾
+				OnPlayerTakeDamage(incomingDamage);
+				if (hitBulletIndex >= 0) bullets_[hitBulletIndex].remainingLifetime = -1.0f;
 			}
 		}
 	}
