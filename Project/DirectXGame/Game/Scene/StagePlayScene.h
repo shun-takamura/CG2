@@ -208,6 +208,34 @@ private:
 	// スコア
 	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
 
+	// ----- 分身カウンター（ジャスト回避派生）-----
+	// 方向→アクション割当: 上=近接強 / 右=近接弱 / 下=追加回避 / 左=回復（Phase2 で各アクション実装）。
+	enum class CounterDir { None, Up, Right, Down, Left };
+	bool       jdSelecting_ = false;               // 分身プレビュー表示中（方向入力待ち）
+	CounterDir jdChosen_    = CounterDir::None;     // 確定した派生方向（Phase2 で参照）
+	IImGuiEditable* jdCounterTarget_ = nullptr;    // カウンター対象敵（ジャストした攻撃の発生元）
+	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（暫定: player プレハブ半透明複製。index=CounterDir-1）
+	float   jdCloneOffset_     = 4.0f;             // 分身の表示オフセット距離（画面平面 units）
+	Vector4 jdCloneColor_{ 0.4f, 0.8f, 1.0f, 0.45f }; // 分身の半透明色
+	float   jdSpreadTimer_     = 0.0f;            // 分裂アニメ経過（中心→各方向へ広がる）
+	float   jdSpreadDuration_  = 0.15f;           // 分裂アニメ時間（秒）
+	bool    jdMerging_         = false;           // 集合アニメ中（無選択で受付終了→中心へ戻る）
+	float   jdMergeTimer_      = 0.0f;            // 集合アニメ経過
+	float   jdMergeDuration_   = 0.2f;            // 集合アニメ時間（秒）
+	float   jdSelectThreshold_ = 0.5f;            // 方向確定に必要な入力量
+	bool    jdSelectArmed_ = false;               // 一度入力をニュートラルに戻すまで選択を受け付けない（回避の握りっぱなし誤爆防止）
+
+	// カメラ引き（ジャスト回避中。精密カメラより優先）
+	float jdCamPullback_     = 8.0f;   // forward 逆方向への後退量（units、引き）
+	float jdCamFovAdd_       = 0.06f;  // 引き時に加える FovY（rad、視野を広げる）
+	float jdEffectIntensity_ = 0.0f;   // 演出強度(0..1)。UpdateJustDodgeEffect が更新し、カメラ引きブレンドに使う
+
+	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
+	void SpawnJustDodgeClones();
+	void UpdateJustDodgeClones(const Vector2& moveDelta, float dt);
+	void ClearJustDodgeClones();
+	bool TrySelectCloneDir(const Vector2& moveDelta); // 方向入力で分身確定。確定したら true
+
 	void UpdateDodge(class InputActionMap* actions, const Vector2& moveDelta, float dt);
 	void UpdateHeal(class InputActionMap* actions);
 	void TriggerJustDodge(IImGuiEditable* attacker);

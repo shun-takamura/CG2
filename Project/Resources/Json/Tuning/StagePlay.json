@@ -35,6 +35,31 @@
     "cameraShakeIntensity": 0.11999999731779099,
     "cameraShakeDuration": 0.25
   },
+  "dodge": {
+    "justWindow": 0.15000000596046448,
+    "iframeDuration": 0.40000000596046448,
+    "cooldown": 0.60000002384185791,
+    "actionLock": 0.25,
+    "impulseX": 10,
+    "impulseY": 6
+  },
+  "justDodge": {
+    "slowWorld": 0.20000000298023224,
+    "receiptWindow": 2,
+    "fadeIn": 0.15000000596046448,
+    "fadeOut": 0.30000001192092896,
+    "score": 100,
+    "cloneOffset": 4,
+    "camPullback": 10,
+    "camFovAdd": 0.10000000149011612,
+    "selectThreshold": 0.5,
+    "spreadDuration": 0.15000000596046448
+  },
+  "heal": {
+    "amount": 5,
+    "maxStg": 5,
+    "maxBoss": 5
+  },
   "hpBar": {
     "maxWidth": 350,
     "height": 30,

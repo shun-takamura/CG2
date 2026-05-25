@@ -23,6 +23,7 @@
 #include "AnimatedModelInstance.h"
 #include "Object3DInstance.h"
 #include "Primitive/PrimitiveInstance.h"
+#include "Primitive/PrimitivePipeline.h"
 #include "SpriteInstance.h"
 #include "LightManager.h"
 #include "LogBuffer.h"
@@ -146,6 +147,12 @@ void StagePlayScene::LoadTuningFromJson() {
 		justDodgeFadeIn_        = static_cast<float>(jd["fadeIn"].AsDouble(justDodgeFadeIn_));
 		justDodgeFadeOut_       = static_cast<float>(jd["fadeOut"].AsDouble(justDodgeFadeOut_));
 		justDodgeScore_         = static_cast<int>(jd["score"].AsInt(static_cast<int64_t>(justDodgeScore_)));
+		jdCloneOffset_     = static_cast<float>(jd["cloneOffset"].AsDouble(jdCloneOffset_));
+		jdCamPullback_     = static_cast<float>(jd["camPullback"].AsDouble(jdCamPullback_));
+		jdCamFovAdd_       = static_cast<float>(jd["camFovAdd"].AsDouble(jdCamFovAdd_));
+		jdSelectThreshold_ = static_cast<float>(jd["selectThreshold"].AsDouble(jdSelectThreshold_));
+		jdSpreadDuration_  = static_cast<float>(jd["spreadDuration"].AsDouble(jdSpreadDuration_));
+		jdMergeDuration_   = static_cast<float>(jd["mergeDuration"].AsDouble(jdMergeDuration_));
 	}
 
 	// ----- heal（回復）-----
@@ -286,6 +293,12 @@ void StagePlayScene::SaveTuningToJson() const {
 	jdObj["fadeIn"]        = static_cast<double>(justDodgeFadeIn_);
 	jdObj["fadeOut"]       = static_cast<double>(justDodgeFadeOut_);
 	jdObj["score"]         = static_cast<int64_t>(justDodgeScore_);
+	jdObj["cloneOffset"]     = static_cast<double>(jdCloneOffset_);
+	jdObj["camPullback"]     = static_cast<double>(jdCamPullback_);
+	jdObj["camFovAdd"]       = static_cast<double>(jdCamFovAdd_);
+	jdObj["selectThreshold"] = static_cast<double>(jdSelectThreshold_);
+	jdObj["spreadDuration"]  = static_cast<double>(jdSpreadDuration_);
+	jdObj["mergeDuration"]   = static_cast<double>(jdMergeDuration_);
 	root["justDodge"] = std::move(jdObj);
 
 	JsonValue healObj = JsonValue::MakeObject();
@@ -389,12 +402,171 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 	PlayJustDodgeEffect(attacker, justDodgeReceiptWindow_);
 	// World だけスロー（Player/UI は等速）。終了は UpdateJustDodgeEffect が元に戻す。
 	SetTimeScale(TimeGroup::World, justDodgeSlowWorld_);
-	// 分身カウンター（追加入力）は次フェーズ。今は受付フックを立てない＝受付期間で自然終了。
-	justDodgeCounterActive_ = false;
 	// 回復ストック +1（消費上限は UpdateHeal 側で管理）
 	++healStock_;
 	// スコア加点
 	ScoreManager::GetInstance()->AddScore(justDodgeScore_);
+
+	// 分身カウンター：4方向に分身プレビューを出し、方向入力での確定待ちに入る。
+	// （上=近接強 / 右=近接弱 / 下=追加回避 / 左=回復。各アクションは Phase2 で実装）
+	jdCounterTarget_        = attacker;
+	jdChosen_               = CounterDir::None;
+	justDodgeCounterActive_ = false; // 派生が確定するまでは false（無入力なら受付期限で自然終了）
+	jdSelecting_            = true;
+	jdSelectArmed_          = false; // 回避入力を一旦離すまで選択受付しない
+	jdMerging_              = false;
+	SpawnJustDodgeClones();
+}
+
+void StagePlayScene::ApplyJustDodgeCamera(const Vector3& playerWorldPos)
+{
+	(void)playerWorldPos; // Phase3 の端寄せ構図補正で使用予定
+	if (!camera_) return;
+	const float b = jdEffectIntensity_;
+	if (b <= 0.001f) return;
+
+	// 精密カメラ適用後の現在 eye を基準に、forward 逆方向へ引く（後退＝視野が広がる）。
+	// clip 判定は引き前の通常カメラで済んでいるので、本体の可動範囲は変わらない（端固まり防止）。
+	const Vector3 eye = camera_->GetTranslate();
+	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
+	camera_->SetTranslate({
+		eye.x - forward.x * jdCamPullback_ * b,
+		eye.y - forward.y * jdCamPullback_ * b,
+		eye.z - forward.z * jdCamPullback_ * b,
+	});
+	camera_->SetFovY(camera_->GetFovY() + jdCamFovAdd_ * b);
+	camera_->Update();
+}
+
+void StagePlayScene::SpawnJustDodgeClones()
+{
+	ClearJustDodgeClones();
+	if (!player_ || !camera_) return;
+
+	// 分身は暫定で軽量プリミティブ（半透明スフィア）。スキン付きモデル複製は重い（4体でfps低下）ので使わない。
+	// 位置は UpdateJustDodgeClones が毎フレーム本体へ追従させる。
+	const Vector3 ppos = player_->GetTranslate();
+	const float r = (player_->GetCollider().radius > 0.01f) ? player_->GetCollider().radius : 1.0f;
+	jdSpreadTimer_ = 0.0f; // 中心→各方向へ分裂するアニメをやり直し
+	jdClones_.assign(4, nullptr); // index: 0=Up,1=Right,2=Down,3=Left
+	for (int i = 0; i < 4; ++i) {
+		const size_t prev = dynamicPrimitives_.size();
+		AddDynamicPrimitive(static_cast<int>(PrimitiveInstance::PrimitiveType::Sphere), ppos);
+		if (dynamicPrimitives_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
+		PrimitiveInstance* clone = dynamicPrimitives_.back().get();
+		if (!clone) continue;
+		clone->SetScale({ r, r, r });
+		clone->GetMesh().SetColor(jdCloneColor_);                           // 半透明色
+		clone->GetMesh().SetBlendMode(PrimitivePipeline::kBlendModeNormal); // アルファブレンド
+		clone->GetCollider().enabled = false;                              // 当たり判定なし
+		clone->Update(); // 初フレームの CB を確定（原点描画バグ回避）
+		AddHighlight(clone); // 分身はグレースケール対象外（色つきのまま）にする
+		jdClones_[i] = clone;
+	}
+
+	// 中心のプレイヤーは描画しない（分身に分裂した見た目にする）。
+	// ハイライトからも外す＝非描画プレイヤーのシルエットがグレースケールに残らないように。
+	player_->SetVisible(false);
+	RemoveHighlight(player_);
+}
+
+void StagePlayScene::ClearJustDodgeClones()
+{
+	for (auto* c : jdClones_) {
+		if (!c) continue;
+		RemoveHighlight(c);     // ハイライト一覧から外す（破棄前に）
+		DestroyDynamicEntity(c);
+	}
+	jdClones_.clear();
+	// 中心プレイヤーの描画を戻す
+	if (player_) player_->SetVisible(true);
+}
+
+bool StagePlayScene::TrySelectCloneDir(const Vector2& moveDelta)
+{
+	const float ax = std::abs(moveDelta.x);
+	const float ay = std::abs(moveDelta.y);
+
+	// 回避の握りっぱなしによる即選択を防ぐ：一度ニュートラル付近に戻るまでは受け付けない
+	if (!jdSelectArmed_) {
+		if (ax < jdSelectThreshold_ && ay < jdSelectThreshold_) jdSelectArmed_ = true;
+		return false;
+	}
+
+	// 入力が閾値未満なら未確定
+	if (ax < jdSelectThreshold_ && ay < jdSelectThreshold_) return false;
+
+	// 強い方の軸で方向を決定
+	CounterDir dir;
+	if (ay >= ax) dir = (moveDelta.y > 0.0f) ? CounterDir::Up : CounterDir::Down;
+	else          dir = (moveDelta.x > 0.0f) ? CounterDir::Right : CounterDir::Left;
+
+	jdChosen_    = dir;
+	jdSelecting_ = false;
+	jdMerging_   = false; // 選択時は集合アニメせず即確定（Phase2 でアクションへ）
+
+	// 選んだ分身以外を消す（選択分身は Phase2 のアクションで使う。今は一旦すべて消す）
+	ClearJustDodgeClones();
+
+	// Phase2 で各アクションへ分岐予定。現状は確定ログのみ。
+	const char* name =
+		dir == CounterDir::Up    ? "Up(近接強)" :
+		dir == CounterDir::Right ? "Right(近接弱)" :
+		dir == CounterDir::Down  ? "Down(追加回避)" : "Left(回復)";
+	LogBuffer::Instance().Add(std::string("JustDodge derive: ") + name, LogBuffer::Level::Info);
+	return true;
+}
+
+void StagePlayScene::UpdateJustDodgeClones(const Vector2& moveDelta, float dt)
+{
+	if (!jdSelecting_ && !jdMerging_) return;
+	if (!player_ || !camera_) return;
+
+	// spread: 0=中心, 1=各方向に最大展開。分裂は ease-out で広がり、集合は中心へ戻る。
+	float spread;
+	if (jdMerging_) {
+		jdMergeTimer_ += dt;
+		float mt = (jdMergeDuration_ > 1e-4f) ? (jdMergeTimer_ / jdMergeDuration_) : 1.0f;
+		if (mt > 1.0f) mt = 1.0f;
+		spread = 1.0f - mt * mt * mt; // 1→0（中心へ吸い込まれる）
+	} else {
+		jdSpreadTimer_ += dt;
+		float st = (jdSpreadDuration_ > 1e-4f) ? (jdSpreadTimer_ / jdSpreadDuration_) : 1.0f;
+		if (st > 1.0f) st = 1.0f;
+		spread = 1.0f - (1.0f - st) * (1.0f - st) * (1.0f - st); // EaseOutCubic 0→1
+	}
+
+	// 分身位置 = 本体位置 ± カメラ右/上 × オフセット × spread（ダッシュ滑り中も本体に追従）
+	const Vector3 ppos = player_->GetTranslate();
+	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 right = { rot.m[0][0], rot.m[0][1], rot.m[0][2] };
+	const Vector3 up    = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
+	const float o = jdCloneOffset_ * spread;
+	const Vector3 dirOff[4] = {
+		{  up.x * o,    up.y * o,    up.z * o    }, // Up
+		{  right.x * o, right.y * o, right.z * o }, // Right
+		{ -up.x * o,   -up.y * o,   -up.z * o    }, // Down
+		{ -right.x * o,-right.y * o,-right.z * o }, // Left
+	};
+	for (int i = 0; i < static_cast<int>(jdClones_.size()) && i < 4; ++i) {
+		if (!jdClones_[i]) continue;
+		if (Vector3* t = jdClones_[i]->GetEditableTranslate()) {
+			t->x = ppos.x + dirOff[i].x;
+			t->y = ppos.y + dirOff[i].y;
+			t->z = ppos.z + dirOff[i].z;
+		}
+	}
+
+	// 集合アニメ完了 → 分身を消してプレイヤーを戻す
+	if (jdMerging_ && jdMergeTimer_ >= jdMergeDuration_) {
+		ClearJustDodgeClones();
+		jdMerging_ = false;
+		return;
+	}
+
+	// 選択中のみ方向入力で確定
+	if (jdSelecting_) TrySelectCloneDir(moveDelta);
 }
 
 void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDelta, float dt)
@@ -437,6 +609,16 @@ void StagePlayScene::ResetDodgeState()
 	dodgeActionLockTimer_ = 0.0f;
 	wasInvincible_        = false;
 	playerInvincibilityTimer_ = -2.0f;
+
+	// 分身まわりは状態に関わらず確実に掃除
+	jdSelecting_       = false;
+	jdSelectArmed_     = false;
+	jdMerging_         = false;
+	jdMergeTimer_      = 0.0f;
+	jdChosen_          = CounterDir::None;
+	jdCounterTarget_   = nullptr;
+	jdEffectIntensity_ = 0.0f;
+	ClearJustDodgeClones();
 
 	if (justDodgeActive_) {
 		justDodgeActive_        = false;
@@ -590,7 +772,7 @@ void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 
 void StagePlayScene::UpdateJustDodgeEffect(float dt)
 {
-	if (!justDodgeActive_) return;
+	if (!justDodgeActive_) { jdEffectIntensity_ = 0.0f; return; }
 
 	justDodgeTimer_ += dt;
 
@@ -609,16 +791,26 @@ void StagePlayScene::UpdateJustDodgeEffect(float dt)
 		if (justDodgeFadeOutTimer_ < 0.0f) {
 			justDodgeFadeOutTimer_ = 0.0f;
 			SetTimeScale(TimeGroup::World, 1.0f);
+			// 無選択で受付終了 → 分身を中心へ集合させてから消す
+			if (jdSelecting_) {
+				jdSelecting_  = false;
+				jdMerging_    = true;
+				jdMergeTimer_ = 0.0f;
+			}
 		}
 		justDodgeFadeOutTimer_ += dt;
 		intensity = (fo > 0.0f) ? (std::max)(0.0f, 1.0f - justDodgeFadeOutTimer_ / fo) : 0.0f;
 
-		if (justDodgeFadeOutTimer_ >= fo) {
-			// 完全終了
+		if (justDodgeFadeOutTimer_ >= fo && !jdMerging_) {
+			// 完全終了（集合アニメ中は待つ）
 			justDodgeActive_       = false;
 			justDodgeTimer_        = 0.0f;
 			justDodgeFadeOutTimer_ = -1.0f;
 			justDodgeTarget_       = nullptr;
+			jdEffectIntensity_     = 0.0f;
+			jdSelecting_           = false;
+			jdChosen_              = CounterDir::None;
+			ClearJustDodgeClones();
 			ClearHighlights();
 			SetTimeScale(TimeGroup::World, 1.0f); // 念のため確実に戻す
 			if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
@@ -633,7 +825,8 @@ void StagePlayScene::UpdateJustDodgeEffect(float dt)
 		intensity = justDodgeTimer_ / fi;
 	}
 
-	// intensity 反映
+	// intensity 反映（カメラ引きブレンドにも流用）
+	jdEffectIntensity_ = intensity;
 	if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
 		pe->maskedGrayscale->SetIntensity(intensity);
 		pe->maskedGrayscale->UpdateConstantBuffer();
@@ -868,6 +1061,26 @@ void StagePlayScene::OnImGuiTuning() {
 			ImGui::Text("Active: %.2f s (counter=%d, fadeOut=%.2f)",
 				justDodgeTimer_, justDodgeCounterActive_ ? 1 : 0, justDodgeFadeOutTimer_);
 		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("分身カウンター（Phase1: カメラ引き＋プレビュー＋方向選択）");
+		ImGui::DragFloat("Clone Offset", &jdCloneOffset_, 0.1f, 0.0f, 30.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam Pullback", &jdCamPullback_, 0.2f, 0.0f, 60.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam FovY Add", &jdCamFovAdd_, 0.005f, 0.0f, 0.5f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Select Threshold", &jdSelectThreshold_, 0.02f, 0.05f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Spread Duration", &jdSpreadDuration_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Merge Duration", &jdMergeDuration_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Clone Color", &jdCloneColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("selecting=%d chosen=%d clones=%d intensity=%.2f",
+			jdSelecting_ ? 1 : 0, static_cast<int>(jdChosen_),
+			static_cast<int>(jdClones_.size()), jdEffectIntensity_);
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("回復（Heal）");
@@ -1155,6 +1368,10 @@ void StagePlayScene::Update() {
 		moveDelta.x = std::clamp(moveDelta.x, -1.0f, 1.0f);
 		moveDelta.y = std::clamp(moveDelta.y, -1.0f, 1.0f);
 
+		// 分身選択中は新規移動入力を「方向選択」に回す（既存の慣性＝ダッシュ滑りはそのまま継続）。
+		const Vector2 selectionDelta = moveDelta;
+		if (jdSelecting_) moveDelta = { 0.0f, 0.0f };
+
 		// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
 		Vector2 targetVel = {
 			moveDelta.x * playerMoveSpeed_.x,
@@ -1261,10 +1478,15 @@ void StagePlayScene::Update() {
 		player_->SetTranslate(worldPos);
 		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
 
+		// 分身の本体追従＋分裂アニメ＋方向選択（ジャスト回避中のみ動作）
+		UpdateJustDodgeClones(selectionDelta, GetScaledDeltaTime(TimeGroup::UI));
+
 		// 精密射撃：プレイヤー配置（基準カメラ）後に表示カメラを肩越し位置へ寄せる。
 		// プレイヤーは基準カメラのまま配置済みなので移動範囲はズーム前と同じ。
 		if (!GetUseDebugCamera()) {
 			ApplyPrecisionCamera(worldPos);
+			// ジャスト回避の引き（精密カメラの後＝上書きして優先）
+			ApplyJustDodgeCamera(worldPos);
 		}
 	}
 

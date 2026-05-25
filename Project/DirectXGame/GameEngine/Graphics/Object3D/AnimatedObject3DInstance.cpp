@@ -247,6 +247,7 @@ void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
 
 void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 {
+    if (!visible_) return;
 #ifdef _DEBUG
     if (!visibleInEditor_) return;
 #endif
@@ -300,6 +301,7 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 
 void AnimatedObject3DInstance::DrawIdPass(DirectXCore* dxCore)
 {
+    if (!visible_) return; // 非描画なら ID マスクにも書かない（グレースケールのシルエット残り防止）
 #ifdef _DEBUG
     if (!visibleInEditor_) return;
 #endif
