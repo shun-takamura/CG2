@@ -123,6 +123,7 @@ void Framework::Initialize() {
 			const char* candidates[] = {
 				"../Generated/Assets.pack",  // 開発時: CWD=Project/ から repo ルート Generated/
 				"Generated/Assets.pack",     // Release: 配布展開先 CWD と同階層 Generated/
+				"../../Assets.pack",         // 直接実行: Generated/Output/Release/ から 2 段上
 			};
 			bool opened = false;
 			for (const char* p : candidates) {
@@ -164,6 +165,7 @@ void Framework::Initialize() {
 		const char* packCandidates[] = {
 			"../Generated/Assets.pack",  // 開発時: CWD=Project/ から repo ルート Generated/
 			"Generated/Assets.pack",     // Release: 配布展開先 CWD と同階層 Generated/
+			"../../Assets.pack",         // 直接実行: Generated/Output/Release/ から 2 段上
 		};
 		for (const char* p : packCandidates) {
 			std::error_code ec;

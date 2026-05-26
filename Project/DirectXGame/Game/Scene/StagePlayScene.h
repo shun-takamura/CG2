@@ -165,7 +165,7 @@ public:
 	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
 	/// 将来の回避実装などからも参照する。
 	/// </summary>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f; }
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_; }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -175,6 +175,83 @@ private:
 	float justDodgeFadeIn_ = 0.15f;
 	float justDodgeFadeOut_ = 0.3f;
 	IImGuiEditable* justDodgeTarget_ = nullptr;
+
+	// ----- 回避 / ジャスト回避メカニクス -----
+	// 無敵の点滅色は「無敵の発生源」で出し分ける（被弾=赤/白・回避=水色・ジャスト=点滅なし）。
+	bool  wasInvincible_ = false;        // 前フレーム無敵だったか（無敵終了時に通常色へ戻す用）
+
+	// 通常回避（ダッシュ＋無敵窓）。タイマー類は実時間（UI グループ dt）で進める。
+	bool  dodgeActive_ = false;          // 回避無敵が有効か
+	float dodgeTimer_ = 0.0f;            // 回避開始からの経過 [sec]
+	float dodgeJustWindow_ = 0.2f;       // ジャスト成立窓：入力後この秒数以内に被弾接触すると成立
+	float dodgeIFrameDuration_ = 0.4f;   // 回避無敵：入力後この秒数まで被弾無効（justWindow を内包）
+	float dodgeCooldown_ = 0.6f;         // 回避クールダウン [sec]
+	float dodgeCooldownTimer_ = 0.0f;    // クールダウン残り
+	float dodgeActionLock_ = 0.25f;      // 回避中の行動ロック秒（IsActionLocked に合流）
+	float dodgeActionLockTimer_ = 0.0f;  // 行動ロック残り
+	Vector2 dodgeImpulse_{ 22.0f, 18.0f }; // ダッシュ初速（画面平面 X/Y, units/sec、playerVelocity_ に加算）
+
+	// ジャスト回避スロー（受付期限モデル：将来の分身カウンターで延長/短縮できる構造）
+	float justDodgeSlowWorld_ = 0.3f;       // 成立中の World 時間倍率（Player/UI は等速）
+	float justDodgeReceiptWindow_ = 3.0f;   // 追加入力の受付期間（=基本スロー長）[sec]
+	bool  justDodgeCounterActive_ = false;  // 追加入力アクション進行中フック（true の間は受付終了を保留）
+	float justDodgeFadeOutTimer_ = -1.0f;   // フェードアウト経過（-1=未フェード）
+
+	// 回復（ジャスト回避で貯まるストック）
+	int   healStock_    = 0;     // 使用可能な回復ストック（ジャスト回避1回ごとに+1）
+	int   healUsedStg_  = 0;     // STG で使った回復回数
+	int   healUsedBoss_ = 0;     // ボスで使った回復回数
+	int   healMaxStg_   = 5;     // STG 回復上限
+	int   healMaxBoss_  = 5;     // ボス 回復上限
+	int   healAmount_   = 5;     // 1 回の回復量（調整可）
+
+	// スコア
+	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
+
+	// ----- 分身カウンター（ジャスト回避派生）-----
+	// 方向→アクション割当: 上=近接強 / 右=近接弱 / 下=追加回避 / 左=回復（Phase2 で各アクション実装）。
+	enum class CounterDir { None, Up, Right, Down, Left };
+	bool       jdSelecting_ = false;               // 分身プレビュー表示中（方向入力待ち）
+	CounterDir jdChosen_    = CounterDir::None;     // 確定した派生方向（Phase2 で参照）
+	IImGuiEditable* jdCounterTarget_ = nullptr;    // カウンター対象敵（ジャストした攻撃の発生元）
+	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（Object3D。index=CounterDir-1）
+	// 各方向の分身モデルパス（あとで派生モーション初期ポーズの非アニメ.meshに差し替えやすいよう方向ごとに持つ）
+	std::string jdClonePath_[4] = {
+		"Resources/Models/Animated/Walk/walk.mesh", // Up
+		"Resources/Models/Animated/Walk/walk.mesh", // Right
+		"Resources/Models/Animated/Walk/walk.mesh", // Down
+		"Resources/Models/Animated/Walk/walk.mesh", // Left
+	};
+	float   jdCloneOffset_     = 4.0f;             // 分身の表示オフセット距離（画面平面 units）
+	Vector4 jdCloneColor_{ 0.4f, 0.8f, 1.0f, 0.45f }; // 分身の半透明色
+	float   jdSpreadTimer_     = 0.0f;            // 分裂アニメ経過（中心→各方向へ広がる）
+	float   jdSpreadDuration_  = 0.15f;           // 分裂アニメ時間（秒）
+	bool    jdMerging_         = false;           // 集合アニメ中（無選択で受付終了→中心へ戻る）
+	float   jdMergeTimer_      = 0.0f;            // 集合アニメ経過
+	float   jdMergeDuration_   = 0.2f;            // 集合アニメ時間（秒）
+	float   jdSelectThreshold_ = 0.5f;            // (未使用・互換のため温存) 方向確定に必要な入力量
+
+	// カメラ引き（ジャスト回避中。精密カメラより優先）
+	float jdCamPullback_     = 8.0f;   // forward 逆方向への後退量（units、引き）
+	float jdCamFovAdd_       = 0.06f;  // 引き時に加える FovY（rad、視野を広げる）
+	float jdEffectIntensity_ = 0.0f;   // 演出強度(0..1)。UpdateJustDodgeEffect が更新し、カメラ引きブレンドに使う
+
+	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
+	void SpawnJustDodgeClones();
+	void UpdateJustDodgeClones(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	void ClearJustDodgeClones();
+	// アクションボタン (MeleeStrong=Up / MeleeWeak=Right / Dodge=Down / Heal=Left) で方向確定。
+	// 確定したら TriggerCloneCounterAction を呼んで true を返す。
+	bool TrySelectCloneByAction(class InputActionMap* actions, const Vector2& moveDelta);
+	// 選ばれた分身を実体化（α=1）・残り3体を破棄・プレイヤーを分身位置へテレポート・該当アクションを発動。
+	void TriggerCloneCounterAction(CounterDir dir, const Vector2& moveDelta);
+
+	void UpdateDodge(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	void UpdateHeal(class InputActionMap* actions);
+	void TriggerJustDodge(IImGuiEditable* attacker);
+	// 回避・ジャスト回避のランタイム状態を即時クリア（Seek / LoadScene で呼ぶ）。
+	// スロー・グレースケールが残るのを防ぐため TimeScale と PostEffect も元に戻す。
+	void ResetDodgeState();
 
 	void UpdateJustDodgeEffect(float dt);
 

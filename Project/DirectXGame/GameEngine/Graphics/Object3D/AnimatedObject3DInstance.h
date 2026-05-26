@@ -67,6 +67,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     //==============================
     float animationTime_ = 0.0f;       // 現在の再生時刻（秒）
     bool isPlaying_ = true;            // 再生中フラグ
+    bool visible_   = true;            // 描画フラグ（false で Draw をスキップ。全構成で有効）
     bool isLoop_ = true;               // ループ再生フラグ
     float playbackSpeed_ = 1.0f;       // 再生速度（1.0が等倍）
 
@@ -122,6 +123,8 @@ public:
     void SetName(const std::string& name) override { name_ = name; }
     void SetModel(AnimatedModelInstance* animatedModel) { animatedModelInstance_ = animatedModel; }
     void SetCamera(Camera* camera) { camera_ = camera; }
+    void SetVisible(bool v) { visible_ = v; }
+    bool GetVisible() const { return visible_; }
     void SetScale(const Vector3& scale) { transform_.scale = scale; }
     void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
     void SetTranslate(const Vector3& translate) { transform_.translate = translate; }

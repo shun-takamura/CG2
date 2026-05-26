@@ -26,4 +26,7 @@ struct EnemyContext {
 	Vector3 freeVelocity     { 0.0f, 0.0f, 0.0f }; // 切り離し後の自由移動速度
 	bool    useFreeVelocity  = false;
 	bool    billboardToPlayer = true;          // false にするとビルボードを無効化
+	// 突進など「攻撃判定を持つ接触」中のみ true（ただの移動接触はダメージ対象外にするため）。
+	// EnemyController が毎フレーム false にリセットし、コマンドがそのフレームだけ true を立てる。
+	bool    contactDamageActive = false;
 };
