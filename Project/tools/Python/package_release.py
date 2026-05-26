@@ -30,9 +30,16 @@ from pathlib import Path
 # Project ルートからの相対パス（$(ProjectDir) で起動される）
 RELEASE_DIR = Path("../Generated/Output/Release")
 RESOURCES_DIR = Path("Resources")
-SHADERS_DIR = RESOURCES_DIR / "Shaders"           # 実行時コンパイル用 .hlsl のみ含める
 PACK_FILE = Path("../Generated/Assets.pack")       # repo ルート側 Generated/ にある
 OUTPUT_DIR = RELEASE_DIR / "Distribution"          # Release内の専用サブフォルダに出力
+
+# pack に入っていない (= 実行時に FS から直接読む) ディレクトリ群。
+# zip にはここを Resources/... の形でそのまま入れる。
+FS_INCLUDE_DIRS = [
+    RESOURCES_DIR / "Shaders",  # .hlsl 実行時コンパイル
+    RESOURCES_DIR / "Json",     # シーン/プリファブ/チューニング/キーコンフィグ等
+    RESOURCES_DIR / "Sounds",   # MediaFoundation が URL で直接読む .wav
+]
 
 # Release ディレクトリから取り込む拡張子
 INCLUDE_SUFFIXES = {".exe", ".dll", ".cso"}
@@ -72,12 +79,15 @@ def collect_release_files(release_dir: Path) -> list[Path]:
     #まとめたものを返す
     return files
 
-# Resources/Shaders/ 配下の .hlsl など実行時に必要なファイルのみ拾う
+# FS_INCLUDE_DIRS に列挙されたディレクトリ配下のファイルを再帰的に集める
 # （その他の Resources/* は Generated/Assets.pack に集約されている）
-def collect_shaders_files(shaders_dir: Path) -> list[Path]:
-    if not shaders_dir.exists():
-        return []
-    return [f for f in shaders_dir.rglob("*") if f.is_file()]
+def collect_fs_files(dirs: list[Path]) -> list[Path]:
+    files: list[Path] = []
+    for d in dirs:
+        if not d.exists():
+            continue
+        files.extend(f for f in d.rglob("*") if f.is_file())
+    return files
 
 
 def main() -> int:
@@ -87,7 +97,8 @@ def main() -> int:
     args = parser.parse_args()
 
     release_dir = RELEASE_DIR.resolve()
-    shaders_dir = SHADERS_DIR.resolve()
+    fs_include_dirs = [d.resolve() for d in FS_INCLUDE_DIRS]
+    resources_root = RESOURCES_DIR.resolve()
     pack_file = PACK_FILE.resolve()
     output_dir = OUTPUT_DIR.resolve()
 
@@ -106,7 +117,7 @@ def main() -> int:
     zip_path = output_dir / zip_name
 
     release_files = collect_release_files(release_dir)
-    shaders_files = collect_shaders_files(shaders_dir)
+    fs_files = collect_fs_files(fs_include_dirs)
 
     if not release_files:
         print(f"[ERROR] Release ディレクトリに対象ファイルがありません: {release_dir}", file=sys.stderr)
@@ -121,7 +132,7 @@ def main() -> int:
         print(f"[PACKAGE] {zip_path}")
         print(f"  timestamp: {timestamp}")
         print(f"  release:   {len(release_files)} 件")
-        print(f"  shaders:   {len(shaders_files)} 件 (.hlsl 個別)")
+        print(f"  fs:        {len(fs_files)} 件 (Resources/{{Shaders,Json,Sounds}} 配下)")
         print(f"  pack:      {pack_file.name} ({pack_size_mb:.2f} MB)")
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
@@ -139,9 +150,9 @@ def main() -> int:
         if not args.silent:
             print(f"  + {pack_arcname}")
 
-        # Resources/Shaders/ のみ個別ファイルとして含める
-        for f in shaders_files:
-            rel = f.relative_to(shaders_dir.parent.parent)  # "Resources/..." の形に
+        # FS_INCLUDE_DIRS 配下を "Resources/..." の形でそのまま入れる
+        for f in fs_files:
+            rel = f.relative_to(resources_root.parent)  # "Resources/..." の形に
             arcname = rel.as_posix()
             zf.write(f, arcname=arcname)
             if not args.silent:

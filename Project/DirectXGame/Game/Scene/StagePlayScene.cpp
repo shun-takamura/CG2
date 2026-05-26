@@ -153,6 +153,19 @@ void StagePlayScene::LoadTuningFromJson() {
 		jdSelectThreshold_ = static_cast<float>(jd["selectThreshold"].AsDouble(jdSelectThreshold_));
 		jdSpreadDuration_  = static_cast<float>(jd["spreadDuration"].AsDouble(jdSpreadDuration_));
 		jdMergeDuration_   = static_cast<float>(jd["mergeDuration"].AsDouble(jdMergeDuration_));
+		const JsonValue& cpArr = jd["clonePaths"];
+		if (cpArr.IsArray()) {
+			for (size_t i = 0; i < cpArr.Size() && i < 4; ++i) {
+				jdClonePath_[i] = cpArr[i].AsString(jdClonePath_[i]);
+			}
+		}
+		const JsonValue& cc = jd["cloneColor"];
+		if (cc.IsArray() && cc.Size() >= 4) {
+			jdCloneColor_.x = static_cast<float>(cc[0].AsDouble(jdCloneColor_.x));
+			jdCloneColor_.y = static_cast<float>(cc[1].AsDouble(jdCloneColor_.y));
+			jdCloneColor_.z = static_cast<float>(cc[2].AsDouble(jdCloneColor_.z));
+			jdCloneColor_.w = static_cast<float>(cc[3].AsDouble(jdCloneColor_.w));
+		}
 	}
 
 	// ----- heal（回復）-----
@@ -299,6 +312,19 @@ void StagePlayScene::SaveTuningToJson() const {
 	jdObj["selectThreshold"] = static_cast<double>(jdSelectThreshold_);
 	jdObj["spreadDuration"]  = static_cast<double>(jdSpreadDuration_);
 	jdObj["mergeDuration"]   = static_cast<double>(jdMergeDuration_);
+	{
+		JsonValue cpArr = JsonValue::MakeArray();
+		for (int i = 0; i < 4; ++i) cpArr.Push(JsonValue(jdClonePath_[i]));
+		jdObj["clonePaths"] = std::move(cpArr);
+	}
+	{
+		JsonValue ccArr = JsonValue::MakeArray();
+		ccArr.Push(JsonValue(static_cast<double>(jdCloneColor_.x)));
+		ccArr.Push(JsonValue(static_cast<double>(jdCloneColor_.y)));
+		ccArr.Push(JsonValue(static_cast<double>(jdCloneColor_.z)));
+		ccArr.Push(JsonValue(static_cast<double>(jdCloneColor_.w)));
+		jdObj["cloneColor"] = std::move(ccArr);
+	}
 	root["justDodge"] = std::move(jdObj);
 
 	JsonValue healObj = JsonValue::MakeObject();
@@ -413,7 +439,6 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 	jdChosen_               = CounterDir::None;
 	justDodgeCounterActive_ = false; // 派生が確定するまでは false（無入力なら受付期限で自然終了）
 	jdSelecting_            = true;
-	jdSelectArmed_          = false; // 回避入力を一旦離すまで選択受付しない
 	jdMerging_              = false;
 	SpawnJustDodgeClones();
 }
@@ -444,22 +469,26 @@ void StagePlayScene::SpawnJustDodgeClones()
 	ClearJustDodgeClones();
 	if (!player_ || !camera_) return;
 
-	// 分身は暫定で軽量プリミティブ（半透明スフィア）。スキン付きモデル複製は重い（4体でfps低下）ので使わない。
-	// 位置は UpdateJustDodgeClones が毎フレーム本体へ追従させる。
+	// 分身は Object3D（.mesh）。各方向ごとにモデルパスを持ち、あとで派生モーション初期ポーズの
+	// .mesh に差し替えやすくしてある。位置は UpdateJustDodgeClones が毎フレーム本体へ追従させる。
 	const Vector3 ppos = player_->GetTranslate();
-	const float r = (player_->GetCollider().radius > 0.01f) ? player_->GetCollider().radius : 1.0f;
 	jdSpreadTimer_ = 0.0f; // 中心→各方向へ分裂するアニメをやり直し
 	jdClones_.assign(4, nullptr); // index: 0=Up,1=Right,2=Down,3=Left
 	for (int i = 0; i < 4; ++i) {
-		const size_t prev = dynamicPrimitives_.size();
-		AddDynamicPrimitive(static_cast<int>(PrimitiveInstance::PrimitiveType::Sphere), ppos);
-		if (dynamicPrimitives_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
-		PrimitiveInstance* clone = dynamicPrimitives_.back().get();
+		// パスを「dir/file」に分割（AddDynamicObject の引数仕様）。
+		// ローダ側で dir + "/" + filename を行うため、dir 末尾の '/' は付けない（二重スラッシュ防止）。
+		const std::string& full = jdClonePath_[i];
+		const auto slash = full.find_last_of('/');
+		const std::string dir  = (slash == std::string::npos) ? std::string()  : full.substr(0, slash);
+		const std::string file = (slash == std::string::npos) ? full           : full.substr(slash + 1);
+
+		const size_t prev = object3DInstances_.size();
+		AddDynamicObject(dir, file, ppos);
+		if (object3DInstances_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
+		Object3DInstance* clone = object3DInstances_.back().get();
 		if (!clone) continue;
-		clone->SetScale({ r, r, r });
-		clone->GetMesh().SetColor(jdCloneColor_);                           // 半透明色
-		clone->GetMesh().SetBlendMode(PrimitivePipeline::kBlendModeNormal); // アルファブレンド
-		clone->GetCollider().enabled = false;                              // 当たり判定なし
+		clone->GetCollider().enabled = false; // 当たり判定なし
+		clone->SetMaterialColor(jdCloneColor_); // 半透明色（alpha<1 で半透明）
 		clone->Update(); // 初フレームの CB を確定（原点描画バグ回避）
 		AddHighlight(clone); // 分身はグレースケール対象外（色つきのまま）にする
 		jdClones_[i] = clone;
@@ -483,42 +512,135 @@ void StagePlayScene::ClearJustDodgeClones()
 	if (player_) player_->SetVisible(true);
 }
 
-bool StagePlayScene::TrySelectCloneDir(const Vector2& moveDelta)
+bool StagePlayScene::TrySelectCloneByAction(InputActionMap* actions, const Vector2& moveDelta)
 {
-	const float ax = std::abs(moveDelta.x);
-	const float ay = std::abs(moveDelta.y);
+	if (!actions) return false;
 
-	// 回避の握りっぱなしによる即選択を防ぐ：一度ニュートラル付近に戻るまでは受け付けない
-	if (!jdSelectArmed_) {
-		if (ax < jdSelectThreshold_ && ay < jdSelectThreshold_) jdSelectArmed_ = true;
-		return false;
+	// アクションボタン→分身方向：通常移動入力(WASD/スティック)とは別系統。
+	// WASD は移動・追加回避の方向指定に温存する設計。
+	CounterDir dir = CounterDir::None;
+	if      (actions->IsTriggered(static_cast<int>(Action::MeleeStrong))) dir = CounterDir::Up;
+	else if (actions->IsTriggered(static_cast<int>(Action::MeleeWeak)))   dir = CounterDir::Right;
+	else if (actions->IsTriggered(static_cast<int>(Action::Dodge)))       dir = CounterDir::Down;
+	else if (actions->IsTriggered(static_cast<int>(Action::Heal)))        dir = CounterDir::Left;
+
+	if (dir == CounterDir::None) return false;
+
+	TriggerCloneCounterAction(dir, moveDelta);
+	return true;
+}
+
+void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& moveDelta)
+{
+	int idx = -1;
+	switch (dir) {
+		case CounterDir::Up:    idx = 0; break;
+		case CounterDir::Right: idx = 1; break;
+		case CounterDir::Down:  idx = 2; break;
+		case CounterDir::Left:  idx = 3; break;
+		default: return;
+	}
+	if (idx < 0 || idx >= static_cast<int>(jdClones_.size())) return;
+
+	IImGuiEditable* selected = jdClones_[idx];
+
+	// 他3体を破棄
+	for (int i = 0; i < static_cast<int>(jdClones_.size()); ++i) {
+		if (i == idx) continue;
+		if (auto* c = jdClones_[i]) {
+			RemoveHighlight(c);
+			DestroyDynamicEntity(c);
+		}
+	}
+	jdClones_.clear();
+	if (selected) {
+		jdClones_.push_back(selected);
+		// α=1.0 で不透明化（実体化）
+		Vector4 solid = jdCloneColor_;
+		solid.w = 1.0f;
+		static_cast<Object3DInstance*>(selected)->SetMaterialColor(solid);
 	}
 
-	// 入力が閾値未満なら未確定
-	if (ax < jdSelectThreshold_ && ay < jdSelectThreshold_) return false;
-
-	// 強い方の軸で方向を決定
-	CounterDir dir;
-	if (ay >= ax) dir = (moveDelta.y > 0.0f) ? CounterDir::Up : CounterDir::Down;
-	else          dir = (moveDelta.x > 0.0f) ? CounterDir::Right : CounterDir::Left;
+	// プレイヤーを選ばれた分身位置へテレポート（カメラ局所オフセットを直接加算）。
+	// 端の画面外問題は Phase3 の案B（許容枠の一時拡張）で対処予定。
+	switch (dir) {
+		case CounterDir::Up:    playerInputOffset_.y += jdCloneOffset_; break;
+		case CounterDir::Right: playerInputOffset_.x += jdCloneOffset_; break;
+		case CounterDir::Down:  playerInputOffset_.y -= jdCloneOffset_; break;
+		case CounterDir::Left:  playerInputOffset_.x -= jdCloneOffset_; break;
+		default: break;
+	}
 
 	jdChosen_    = dir;
 	jdSelecting_ = false;
-	jdMerging_   = false; // 選択時は集合アニメせず即確定（Phase2 でアクションへ）
+	jdMerging_   = false;
 
-	// 選んだ分身以外を消す（選択分身は Phase2 のアクションで使う。今は一旦すべて消す）
-	ClearJustDodgeClones();
+	// 該当アクション発動
+	switch (dir) {
+		case CounterDir::Up:
+		case CounterDir::Right: {
+			// 近接（強=Up / 弱1段目=Right）。UpdateMeleeCombo の発生予約と同じ手順。
+			const std::string slot = (dir == CounterDir::Up) ? "melee_strong" : "melee_w1";
+			std::string prefab = player_ ? player_->FindBulletPrefab(slot) : std::string();
+			if (prefab.empty()) prefab = "TemporaryPlayerMelee";
+			float startup = 0.05f, active = 0.20f, recovery = 0.15f, comboWindow = 0.40f;
+			if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab); mdef && mdef->hasMelee) {
+				startup     = mdef->meleeStartup;
+				active      = mdef->meleeActiveDuration;
+				recovery    = mdef->meleeRecovery;
+				comboWindow = mdef->meleeComboWindow;
+			}
+			meleePendingPrefab_   = prefab;
+			meleeStartupTimer_    = startup;
+			meleePending_         = true;
+			meleeActionLockTimer_ = startup + active + recovery;
+			meleeComboTimer_      = startup + active + recovery + comboWindow;
+			meleeComboIndex_      = (dir == CounterDir::Up) ? 0 : 1;
+			if (meleeStartupTimer_ <= 0.0f) {
+				meleeStartupTimer_ = 0.0f;
+				meleePending_      = false;
+				SpawnPendingMelee();
+			}
+		} break;
 
-	// Phase2 で各アクションへ分岐予定。現状は確定ログのみ。
+		case CounterDir::Down: {
+			// 追加回避：moveDelta(WASD/スティック)方向へダッシュ＋無敵窓開始
+			dodgeActive_          = true;
+			dodgeTimer_           = 0.0f;
+			dodgeCooldownTimer_   = dodgeCooldown_;
+			dodgeActionLockTimer_ = dodgeActionLock_;
+			const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+			if (mlen > 1e-3f) {
+				playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
+				playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+			}
+		} break;
+
+		case CounterDir::Left: {
+			// 回復：UpdateHeal と同じ消費ロジック（Phase3 で「左派生＝小回復・無制限」に再設計予定）
+			if (player_ && healStock_ > 0) {
+				const bool isBoss = (phase_ == Phase::Boss);
+				int&      used = isBoss ? healUsedBoss_ : healUsedStg_;
+				const int cap  = isBoss ? healMaxBoss_  : healMaxStg_;
+				if (used < cap) {
+					player_->GetHP().Heal(healAmount_);
+					++used;
+					--healStock_;
+				}
+			}
+		} break;
+
+		default: break;
+	}
+
 	const char* name =
 		dir == CounterDir::Up    ? "Up(近接強)" :
 		dir == CounterDir::Right ? "Right(近接弱)" :
 		dir == CounterDir::Down  ? "Down(追加回避)" : "Left(回復)";
 	LogBuffer::Instance().Add(std::string("JustDodge derive: ") + name, LogBuffer::Level::Info);
-	return true;
 }
 
-void StagePlayScene::UpdateJustDodgeClones(const Vector2& moveDelta, float dt)
+void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector2& moveDelta, float dt)
 {
 	if (!jdSelecting_ && !jdMerging_) return;
 	if (!player_ || !camera_) return;
@@ -556,6 +678,8 @@ void StagePlayScene::UpdateJustDodgeClones(const Vector2& moveDelta, float dt)
 			t->y = ppos.y + dirOff[i].y;
 			t->z = ppos.z + dirOff[i].z;
 		}
+		// ImGui で色を編集中でもライブ反映するため毎フレーム適用（clones は Object3DInstance）
+		static_cast<Object3DInstance*>(jdClones_[i])->SetMaterialColor(jdCloneColor_);
 	}
 
 	// 集合アニメ完了 → 分身を消してプレイヤーを戻す
@@ -565,8 +689,8 @@ void StagePlayScene::UpdateJustDodgeClones(const Vector2& moveDelta, float dt)
 		return;
 	}
 
-	// 選択中のみ方向入力で確定
-	if (jdSelecting_) TrySelectCloneDir(moveDelta);
+	// 選択中のみアクションボタンで方向確定（MeleeStrong=Up / MeleeWeak=Right / Dodge=Down / Heal=Left）
+	if (jdSelecting_) TrySelectCloneByAction(actions, moveDelta);
 }
 
 void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDelta, float dt)
@@ -612,7 +736,6 @@ void StagePlayScene::ResetDodgeState()
 
 	// 分身まわりは状態に関わらず確実に掃除
 	jdSelecting_       = false;
-	jdSelectArmed_     = false;
 	jdMerging_         = false;
 	jdMergeTimer_      = 0.0f;
 	jdChosen_          = CounterDir::None;
@@ -639,6 +762,8 @@ void StagePlayScene::ResetDodgeState()
 void StagePlayScene::UpdateHeal(InputActionMap* actions)
 {
 	if (!actions || !player_) return;
+	// ジャスト回避演出中は通常Healを発動しない（左派生で消費される＝同フレ二重消費を防ぐ）
+	if (justDodgeActive_) return;
 	if (!actions->IsTriggered(static_cast<int>(Action::Heal))) return;
 	if (healStock_ <= 0) return;
 
@@ -1076,8 +1201,18 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Merge Duration", &jdMergeDuration_, 0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Clone Color", &jdCloneColor_.x);
+		ImGui::ColorEdit4("Clone Color", &jdCloneColor_.x); // alpha<1 で半透明
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		// 各方向の分身モデルパス（あとで派生モーション初期ポーズの.meshに差し替え可能）
+		{
+			const char* labels[4] = { "Path Up", "Path Right", "Path Down", "Path Left" };
+			for (int i = 0; i < 4; ++i) {
+				char buf[256];
+				std::snprintf(buf, sizeof(buf), "%s", jdClonePath_[i].c_str());
+				if (ImGui::InputText(labels[i], buf, sizeof(buf))) jdClonePath_[i] = buf;
+				if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			}
+		}
 		ImGui::Text("selecting=%d chosen=%d clones=%d intensity=%.2f",
 			jdSelecting_ ? 1 : 0, static_cast<int>(jdChosen_),
 			static_cast<int>(jdClones_.size()), jdEffectIntensity_);
@@ -1368,9 +1503,8 @@ void StagePlayScene::Update() {
 		moveDelta.x = std::clamp(moveDelta.x, -1.0f, 1.0f);
 		moveDelta.y = std::clamp(moveDelta.y, -1.0f, 1.0f);
 
-		// 分身選択中は新規移動入力を「方向選択」に回す（既存の慣性＝ダッシュ滑りはそのまま継続）。
-		const Vector2 selectionDelta = moveDelta;
-		if (jdSelecting_) moveDelta = { 0.0f, 0.0f };
+		// 分身選択中も WASD/スティックは通常移動として有効（方向選択はアクションボタン側で受ける）。
+		// 下=追加回避を選んだ瞬間の WASD を回避方向に使うため、ここでは zero 化しない。
 
 		// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
 		Vector2 targetVel = {
@@ -1478,8 +1612,9 @@ void StagePlayScene::Update() {
 		player_->SetTranslate(worldPos);
 		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
 
-		// 分身の本体追従＋分裂アニメ＋方向選択（ジャスト回避中のみ動作）
-		UpdateJustDodgeClones(selectionDelta, GetScaledDeltaTime(TimeGroup::UI));
+		// 分身の本体追従＋分裂アニメ＋方向選択（ジャスト回避中のみ動作）。
+		// actions を渡すとアクションボタン (Melee*/Dodge/Heal) で方向確定する。
+		UpdateJustDodgeClones(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
 
 		// 精密射撃：プレイヤー配置（基準カメラ）後に表示カメラを肩越し位置へ寄せる。
 		// プレイヤーは基準カメラのまま配置済みなので移動範囲はズーム前と同じ。
@@ -1495,7 +1630,12 @@ void StagePlayScene::Update() {
 	UpdateDynamicAnimated(GetScaledDeltaTime());
 	UpdateDynamicPrimitives();
 	UpdateDynamicSprites();
+
+#ifdef _DEBUG
+
 	DrawDynamicSplinesDebug();
+
+#endif // _DEBUG
 
 	// 全シーン共通の EffectManager + GPUParticle を更新
 	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());

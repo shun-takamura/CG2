@@ -165,7 +165,7 @@ public:
 	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
 	/// 将来の回避実装などからも参照する。
 	/// </summary>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f; }
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_; }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -214,7 +214,14 @@ private:
 	bool       jdSelecting_ = false;               // 分身プレビュー表示中（方向入力待ち）
 	CounterDir jdChosen_    = CounterDir::None;     // 確定した派生方向（Phase2 で参照）
 	IImGuiEditable* jdCounterTarget_ = nullptr;    // カウンター対象敵（ジャストした攻撃の発生元）
-	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（暫定: player プレハブ半透明複製。index=CounterDir-1）
+	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（Object3D。index=CounterDir-1）
+	// 各方向の分身モデルパス（あとで派生モーション初期ポーズの非アニメ.meshに差し替えやすいよう方向ごとに持つ）
+	std::string jdClonePath_[4] = {
+		"Resources/Models/Animated/Walk/walk.mesh", // Up
+		"Resources/Models/Animated/Walk/walk.mesh", // Right
+		"Resources/Models/Animated/Walk/walk.mesh", // Down
+		"Resources/Models/Animated/Walk/walk.mesh", // Left
+	};
 	float   jdCloneOffset_     = 4.0f;             // 分身の表示オフセット距離（画面平面 units）
 	Vector4 jdCloneColor_{ 0.4f, 0.8f, 1.0f, 0.45f }; // 分身の半透明色
 	float   jdSpreadTimer_     = 0.0f;            // 分裂アニメ経過（中心→各方向へ広がる）
@@ -222,8 +229,7 @@ private:
 	bool    jdMerging_         = false;           // 集合アニメ中（無選択で受付終了→中心へ戻る）
 	float   jdMergeTimer_      = 0.0f;            // 集合アニメ経過
 	float   jdMergeDuration_   = 0.2f;            // 集合アニメ時間（秒）
-	float   jdSelectThreshold_ = 0.5f;            // 方向確定に必要な入力量
-	bool    jdSelectArmed_ = false;               // 一度入力をニュートラルに戻すまで選択を受け付けない（回避の握りっぱなし誤爆防止）
+	float   jdSelectThreshold_ = 0.5f;            // (未使用・互換のため温存) 方向確定に必要な入力量
 
 	// カメラ引き（ジャスト回避中。精密カメラより優先）
 	float jdCamPullback_     = 8.0f;   // forward 逆方向への後退量（units、引き）
@@ -232,9 +238,13 @@ private:
 
 	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
 	void SpawnJustDodgeClones();
-	void UpdateJustDodgeClones(const Vector2& moveDelta, float dt);
+	void UpdateJustDodgeClones(class InputActionMap* actions, const Vector2& moveDelta, float dt);
 	void ClearJustDodgeClones();
-	bool TrySelectCloneDir(const Vector2& moveDelta); // 方向入力で分身確定。確定したら true
+	// アクションボタン (MeleeStrong=Up / MeleeWeak=Right / Dodge=Down / Heal=Left) で方向確定。
+	// 確定したら TriggerCloneCounterAction を呼んで true を返す。
+	bool TrySelectCloneByAction(class InputActionMap* actions, const Vector2& moveDelta);
+	// 選ばれた分身を実体化（α=1）・残り3体を破棄・プレイヤーを分身位置へテレポート・該当アクションを発動。
+	void TriggerCloneCounterAction(CounterDir dir, const Vector2& moveDelta);
 
 	void UpdateDodge(class InputActionMap* actions, const Vector2& moveDelta, float dt);
 	void UpdateHeal(class InputActionMap* actions);

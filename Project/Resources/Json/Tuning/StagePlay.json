@@ -49,11 +49,24 @@
     "fadeIn": 0.15000000596046448,
     "fadeOut": 0.30000001192092896,
     "score": 100,
-    "cloneOffset": 4,
-    "camPullback": 10,
+    "cloneOffset": 2,
+    "camPullback": 7,
     "camFovAdd": 0.10000000149011612,
     "selectThreshold": 0.5,
-    "spreadDuration": 0.15000000596046448
+    "spreadDuration": 0.15000000596046448,
+    "mergeDuration": 0.20000000298023224,
+    "clonePaths": [
+      "Resources/Models/Animated/Walk/walk.mesh",
+      "Resources/Models/Animated/Walk/walk.mesh",
+      "Resources/Models/Animated/Walk/walk.mesh",
+      "Resources/Models/Animated/Walk/walk.mesh"
+    ],
+    "cloneColor": [
+      0.40000000596046448,
+      0.80000001192092896,
+      1,
+      0.44999998807907104
+    ]
   },
   "heal": {
     "amount": 5,

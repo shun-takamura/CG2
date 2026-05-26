@@ -7,6 +7,7 @@
 EffectHierarchyWindow::EffectHierarchyWindow(ImGuiManager* mgr, EffectEditorWindow* editor)
     : IImGuiWindow("EffectHierarchy"), mgr_(mgr), editor_(editor) {
     SetInitialSize(ImVec2(260, 360));
+
 }
 
 void EffectHierarchyWindow::OnDraw() {

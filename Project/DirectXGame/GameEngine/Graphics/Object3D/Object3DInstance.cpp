@@ -193,6 +193,22 @@ void Object3DInstance::SetEnvironmentCoefficient(float coef)
     mat->environmentCoefficient = coef;
 }
 
+void Object3DInstance::SetMaterialColor(const Vector4& color)
+{
+    if (!modelInstance_) return;
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) return;
+    mat->color = color;
+}
+
+Vector4 Object3DInstance::GetMaterialColor() const
+{
+    if (!modelInstance_) return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    return mat->color;
+}
+
 //==============================
 // ImGui Inspector描画
 //==============================
