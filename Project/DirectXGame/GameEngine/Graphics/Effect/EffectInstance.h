@@ -24,6 +24,14 @@ public:
     void Update(Camera* camera, float deltaTime);
     void Draw();
 
+    // useDistortion 有効な各 primitive renderer を distortionRT へ描画する
+    void DrawDistortionPass();
+    // 上記のプレビュー版（preview WVP CB を使う）
+    void DrawDistortionPassPreview();
+
+    // このインスタンスが描画すべき distortion source を1つ以上持っているか
+    bool HasActiveDistortionSource() const;
+
     // プレビュー RT 用：同じインスタンスを別カメラで描画するため、各Primitive renderer の
     // プレビュー WVP を再計算する（位置/スケール/色は Update でメイン用に既に確定済み）。
     void UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos);

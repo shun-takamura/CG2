@@ -58,7 +58,28 @@ public:
     void SetUVFlipV(bool b)            { mesh_.SetUVFlipV(b); }
     void SetTexture(const std::string& path) { mesh_.SetTexture(path); }
 
+    // ===== Distortion =====
+    /// <summary>
+    /// 歪み源ノーマルマップを設定（空文字でリセット）。SRV は TextureManager 経由でキャッシュ。
+    /// </summary>
+    void SetDistortionTexture(const std::string& path);
+
+    void SetDistortionUVScroll(const Vector2& v) { mesh_.SetDistortionUVScroll(v); }
+    void SetDistortionUVOffset(const Vector2& v) { mesh_.SetDistortionUVOffset(v); }
+    void SetDistortionUVScale(const Vector2& v)  { mesh_.SetDistortionUVScale(v); }
+    void SetDistortionUVFlipU(bool b)            { mesh_.SetDistortionUVFlipU(b); }
+    void SetDistortionUVFlipV(bool b)            { mesh_.SetDistortionUVFlipV(b); }
+    void SetDistortionStrength(float s)          { mesh_.SetDistortionStrength(s); }
+
+    bool HasDistortionTexture() const { return hasDistortionTexture_; }
+    void DrawDistortionPass();
+    void DrawDistortionPassPreview();
+
 private:
     PrimitiveMesh mesh_;
     int primitiveType_ = 0;
+
+    // Distortion 用ノーマルマップの SRV
+    uint32_t distortionTextureSrvIndex_ = 0;
+    bool     hasDistortionTexture_ = false;
 };

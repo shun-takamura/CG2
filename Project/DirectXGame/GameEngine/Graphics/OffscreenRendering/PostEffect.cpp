@@ -36,6 +36,12 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	idMaskRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8_UINT, idClear);
 
+	// Distortion 用 RT。RG=0.5（オフセット0）, A=0（強度0）で初期化
+	float distortionClear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+	distortionRT_ = std::make_unique<RenderTexture>();
+	distortionRT_->Initialize(dxCore_, srvManager_, width, height,
+		DXGI_FORMAT_R8G8B8A8_UNORM, distortionClear);
+
 	CreateRootSignatures();
 	CreateBasePsoDesc();
 	InitializeEffects();
@@ -207,6 +213,80 @@ void PostEffect::CreateRootSignatures()
 			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&outlineRootSignature_));
 		assert(SUCCEEDED(hr));
 	}
+
+	// ----- distortionRootSignature（color t0 + distortion t1 + depth t2 + cbuffer b0 + linear/point sampler） -----
+	{
+		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
+		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].NumDescriptors = 1;
+		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_DESCRIPTOR_RANGE distortionRange[1] = {};
+		distortionRange[0].BaseShaderRegister = 1;
+		distortionRange[0].NumDescriptors = 1;
+		distortionRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		distortionRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
+		depthRange[0].BaseShaderRegister = 2;
+		depthRange[0].NumDescriptors = 1;
+		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER rootParameters[4] = {};
+		// [0] color (t0)
+		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		// [1] distortion (t1)
+		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[1].DescriptorTable.pDescriptorRanges = distortionRange;
+		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+		// [2] depth (t2)
+		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[2].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+		// [3] cbuffer (b0)
+		rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[3].Descriptor.ShaderRegister = 0;
+		rootParameters[3].Descriptor.RegisterSpace = 0;
+
+		// linear(s0) + point(s1)
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
+		for (int i = 0; i < 2; ++i) {
+			staticSamplers[i].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+			staticSamplers[i].MaxLOD = D3D12_FLOAT32_MAX;
+			staticSamplers[i].ShaderRegister = i;
+			staticSamplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		}
+		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		staticSamplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+
+		D3D12_ROOT_SIGNATURE_DESC desc{};
+		desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+		desc.pParameters = rootParameters;
+		desc.NumParameters = _countof(rootParameters);
+		desc.pStaticSamplers = staticSamplers;
+		desc.NumStaticSamplers = _countof(staticSamplers);
+
+		Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob, errorBlob;
+		hr = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
+		if (FAILED(hr)) {
+			if (errorBlob) OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+			assert(false);
+		}
+		hr = dxCore_->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(),
+			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&distortionRootSignature_));
+		assert(SUCCEEDED(hr));
+	}
 }
 
 // ===================================================================
@@ -327,6 +407,20 @@ void PostEffect::InitializeEffects()
 		effectOrder_.push_back(maskedGrayscale);
 		effectOwners_.push_back(std::move(mg));
 	}
+
+	// ----- Distortion（distortionRT_ を t1 に、scene depth を t2 に参照）-----
+	// 専用 RS を使う（color t0 + distortion t1 + depth t2 + cbuffer b0）
+	// per-instance の歪み強度を使う設計のため、グローバルストレングスは 1 で固定。
+	// 有効/無効は毎フレーム Game.cpp / EffectEditor から EffectManager の状態で自動切替する。
+	{
+		auto de = std::make_unique<DistortionEffect>();
+		de->InitializeMasked(dxCore_, distortionRootSignature_.Get(), basePsoDesc_, distortionRT_.get());
+		de->SetStrength(1.0f);
+		de->SetEnabled(false); // 既定は OFF、毎フレーム自動切替
+		distortion = de.get();
+		effectOrder_.push_back(distortion);
+		effectOwners_.push_back(std::move(de));
+	}
 }
 
 // ===================================================================
@@ -349,6 +443,46 @@ void PostEffect::EndIdPass(ID3D12GraphicsCommandList* commandList)
 {
 	if (!idMaskRT_) return;
 	idMaskRT_->EndRender(commandList);
+}
+
+// ===================================================================
+// Distortion Pass の開始/終了
+// ===================================================================
+
+void PostEffect::BeginDistortionPass(ID3D12GraphicsCommandList* commandList)
+{
+	if (!distortionRT_) return;
+	// (0.5, 0.5, 0.5, 0) でクリア（オフセット0・強度0）
+	const float clear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+	distortionRT_->BeginRender(commandList);
+	auto rtv = distortionRT_->GetRTVHandle();
+	commandList->ClearRenderTargetView(rtv, clear, 0, nullptr);
+}
+
+void PostEffect::EndDistortionPass(ID3D12GraphicsCommandList* commandList)
+{
+	if (!distortionRT_) return;
+	distortionRT_->EndRender(commandList);
+}
+
+void PostEffect::RunDistortionForPreview(ID3D12GraphicsCommandList* commandList,
+	uint32_t colorSrvIndex, uint32_t distortionSrvIndex)
+{
+	if (!distortion) return;
+
+	// strength を最新化
+	distortion->UpdateConstantBuffer();
+
+	// distortion 専用 RS：t0=color / t1=distortion / t2=depth / b0=cbuffer
+	commandList->SetGraphicsRootSignature(distortionRootSignature_.Get());
+	commandList->SetPipelineState(distortion->GetPipelineState());
+	srvManager_->SetGraphicsRootDescriptorTable(0, colorSrvIndex);
+	srvManager_->SetGraphicsRootDescriptorTable(1, distortionSrvIndex);
+	srvManager_->SetGraphicsRootDescriptorTable(2, dxCore_->GetDepthSRVIndex());
+	commandList->SetGraphicsRootConstantBufferView(3, distortion->GetConstantBufferGPUAddress());
+
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	commandList->DrawInstanced(3, 1, 0, 0);
 }
 
 // ===================================================================
@@ -467,7 +601,16 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 		effect->UpdateConstantBuffer();
 	}
 
-	if (effect->NeedsDepth() || effect->NeedsMaskTexture()) {
+	if (effect == distortion) {
+		// Distortion: color t0, distortion t1, depth t2, cbuffer b0（専用 RS）
+		commandList->SetGraphicsRootSignature(distortionRootSignature_.Get());
+		commandList->SetPipelineState(effect->GetPipelineState());
+		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(1, effect->GetMaskTextureSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(2, dxCore_->GetDepthSRVIndex());
+		commandList->SetGraphicsRootConstantBufferView(3, effect->GetConstantBufferGPUAddress());
+	}
+	else if (effect->NeedsDepth() || effect->NeedsMaskTexture()) {
 		// Outline系/Dissolve系: color t0, aux t1, cbuffer b0
 		uint32_t auxSrvIndex = effect->NeedsDepth()
 			? dxCore_->GetDepthSRVIndex()
@@ -598,6 +741,10 @@ void PostEffect::ShowImGui()
 	for (int i = 0; i < static_cast<int>(effectOrder_.size()); ++i) {
 		auto* effect = effectOrder_[i];
 
+		// Distortion はエフェクト連動の自動制御（per-instance strength）にしたので、
+		// ユーザー操作の対象外。ImGui リストからは除外する。
+		if (effect == distortion) continue;
+
 		ImGui::PushID(i);
 
 		// ON/OFFチェックボックス
@@ -653,9 +800,11 @@ void PostEffect::Finalize()
 	copyRootSignature_.Reset();
 	effectRootSignature_.Reset();
 	outlineRootSignature_.Reset();
+	distortionRootSignature_.Reset();
 	copyPipelineState_.Reset();
 
 	if (renderTextureA_) renderTextureA_->Finalize();
 	if (renderTextureB_) renderTextureB_->Finalize();
 	if (idMaskRT_)       idMaskRT_->Finalize();
+	if (distortionRT_)   distortionRT_->Finalize();
 }

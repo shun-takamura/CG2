@@ -207,6 +207,67 @@ void EffectComponentEditable::OnImGuiInspector() {
                 dirty = true;
             }
         }
+
+        // ===== Distortion（歪みエフェクト） =====
+        if (ImGui::CollapsingHeader("Distortion", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Checkbox("Use Distortion", &c.useDistortion);
+
+            if (c.useDistortion) {
+                ImGui::Indent();
+
+                // --- ノーマルマップ（Sprite ドラッグ&ドロップ） ---
+                ImGui::Text("Normal Map:");
+                const std::string nmcurr = c.distortionTexturePath.empty() ? "(none)" : c.distortionTexturePath;
+                ImGui::Button(nmcurr.c_str(), ImVec2(-FLT_MIN, 0));
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                        const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                        c.distortionTexturePath = p->texturePath;
+                        dirty = true;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::TextDisabled("drop a Sprite from SceneEditor here");
+                if (ImGui::Button("Reset Normal Map")) {
+                    c.distortionTexturePath.clear();
+                    dirty = true;
+                }
+
+                ImGui::Separator();
+
+                // --- 強度（per-instance） ---
+                dirty |= ImGui::SliderFloat("Strength##Distortion", &c.distortionStrength, 0.0f, 1.0f, "%.3f");
+
+                ImGui::Separator();
+
+                // --- 自動スクロール ---
+                dirty |= ImGui::Checkbox("Auto Scroll##Distortion", &c.distortionUvAutoScroll);
+                if (!c.distortionUvAutoScroll) ImGui::BeginDisabled();
+                dirty |= ImGui::DragFloat2("Scroll Speed##Distortion", &c.distortionUvScrollSpeed.x, 0.01f);
+                if (!c.distortionUvAutoScroll) ImGui::EndDisabled();
+
+                ImGui::Separator();
+
+                dirty |= ImGui::DragFloat2("Manual Offset##Distortion", &c.distortionUvOffset.x, 0.01f);
+                dirty |= ImGui::DragFloat2("UV Scale##Distortion", &c.distortionUvScale.x, 0.01f);
+                dirty |= ImGui::Checkbox("Flip U##Distortion", &c.distortionUvFlipU);
+                ImGui::SameLine();
+                dirty |= ImGui::Checkbox("Flip V##Distortion", &c.distortionUvFlipV);
+
+                if (ImGui::Button("Reset UV##Distortion")) {
+                    c.distortionUvAutoScroll = false;
+                    c.distortionUvScrollSpeed = { 0.0f, 0.0f };
+                    c.distortionUvOffset = { 0.0f, 0.0f };
+                    c.distortionUvScale  = { 1.0f, 1.0f };
+                    c.distortionUvFlipU = false;
+                    c.distortionUvFlipV = false;
+                    c.distortionStrength = 0.5f;
+                    dirty = true;
+                }
+
+                ImGui::Unindent();
+            }
+        }
     }
     else if (kind_ == Kind::Particle) {
         if (index_ < 0 || index_ >= static_cast<int>(buf.particles.size())) { ImGui::Text("(removed)"); return; }

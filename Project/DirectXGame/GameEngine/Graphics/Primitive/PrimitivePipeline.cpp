@@ -23,6 +23,7 @@ void PrimitivePipeline::Initialize(DirectXCore* dxCore, SRVManager* srvManager) 
     }
 
     CreateIdPassObjects();
+    CreateDistortionPassObjects();
 }
 
 void PrimitivePipeline::Finalize() {
@@ -33,6 +34,10 @@ void PrimitivePipeline::Finalize() {
             }
         }
     }
+    idPipelineState_.Reset();
+    idRootSignature_.Reset();
+    distortionPipelineState_.Reset();
+    rootSignature_.Reset();
 }
 
 void PrimitivePipeline::PreDraw(BlendMode blendMode, bool depthWrite, bool cullBackface) {
@@ -323,5 +328,85 @@ void PrimitivePipeline::CreateIdPassObjects() {
     desc.SampleDesc.Count = 1;
 
     hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&idPipelineState_));
+    assert(SUCCEEDED(hr));
+}
+
+void PrimitivePipeline::CreateDistortionPassObjects() {
+    // RootSignature は通常の rootSignature_ をそのまま流用する
+    //   [0] VS CBV(b0) = TransformationMatrix
+    //   [1] PS CBV(b0) = Material（distortion 専用の uvTransform を持つ別 CB を bind）
+    //   [2] PS SRV(t0) = ノーマルマップ
+    //   sampler s0/s1/s2 = 既存のものを利用（distortion はタイリング前提なので s0=WrapAll が主）
+
+    // VS / PS のコンパイル
+    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Primitive/DistortionMesh.PS.hlsl", L"ps_6_0");
+    assert(vs && ps);
+
+    // 入力レイアウト（通常パスと同じ）
+    D3D12_INPUT_ELEMENT_DESC elems[4] = {};
+    elems[0].SemanticName = "POSITION";
+    elems[0].SemanticIndex = 0;
+    elems[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    elems[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[1].SemanticName = "TEXCOORD";
+    elems[1].SemanticIndex = 0;
+    elems[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+    elems[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[2].SemanticName = "NORMAL";
+    elems[2].SemanticIndex = 0;
+    elems[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    elems[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[3].SemanticName = "COLOR";
+    elems[3].SemanticIndex = 0;
+    elems[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    elems[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+    D3D12_INPUT_LAYOUT_DESC inputLayout{};
+    inputLayout.pInputElementDescs = elems;
+    inputLayout.NumElements = _countof(elems);
+
+    // ラスタライザ：両面描画（歪み源は薄い面メッシュも多い想定）
+    D3D12_RASTERIZER_DESC rasterizer{};
+    rasterizer.CullMode = D3D12_CULL_MODE_NONE;
+    rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
+    rasterizer.DepthClipEnable = TRUE;
+
+    // ブレンド：MAX 合成（重なった時に強い歪みが勝つ）
+    D3D12_BLEND_DESC blend{};
+    blend.AlphaToCoverageEnable = FALSE;
+    blend.IndependentBlendEnable = FALSE;
+    blend.RenderTarget[0].BlendEnable = TRUE;
+    blend.RenderTarget[0].SrcBlend  = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOp   = D3D12_BLEND_OP_MAX;
+    blend.RenderTarget[0].SrcBlendAlpha  = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOpAlpha   = D3D12_BLEND_OP_MAX;
+    blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+    // 深度：テストは行うが書き込みはしない（DistortionRT は深度書き込み不要）
+    D3D12_DEPTH_STENCIL_DESC dsDesc{};
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+    desc.pRootSignature = rootSignature_.Get();
+    desc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+    desc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+    desc.InputLayout = inputLayout;
+    desc.BlendState = blend;
+    desc.RasterizerState = rasterizer;
+    desc.DepthStencilState = dsDesc;
+    desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+    desc.NumRenderTargets = 1;
+    // DistortionRT のフォーマットに合わせる（PostEffect 側で R8G8B8A8_UNORM を作る）
+    desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    desc.SampleDesc.Count = 1;
+
+    HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&distortionPipelineState_));
     assert(SUCCEEDED(hr));
 }

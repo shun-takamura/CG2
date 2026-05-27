@@ -63,6 +63,33 @@ void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
     materialData_->alphaReference = alphaReference_;
     materialData_->samplerMode = samplerMode_;
 
+    // --- Distortion 用 UV 変換の累積（通常 UV と完全に独立） ---
+    if (distortionMaterialData_) {
+        distortionUVScrollAccumulated_.x += distortionUVScrollSpeed_.x * deltaTime;
+        distortionUVScrollAccumulated_.y += distortionUVScrollSpeed_.y * deltaTime;
+
+        float dsx = distortionUVScale_.x;
+        float dsy = distortionUVScale_.y;
+        if (distortionUVFlipU_) dsx = -dsx;
+        if (distortionUVFlipV_) dsy = -dsy;
+
+        float dtx = distortionUVScrollAccumulated_.x + distortionUVOffset_.x;
+        float dty = distortionUVScrollAccumulated_.y + distortionUVOffset_.y;
+        if (distortionUVFlipU_) dtx += 1.0f;
+        if (distortionUVFlipV_) dty += 1.0f;
+
+        Matrix4x4 distUvMat = MakeIdentity4x4();
+        distUvMat.m[0][0] = dsx;
+        distUvMat.m[1][1] = dsy;
+        distUvMat.m[3][0] = dtx;
+        distUvMat.m[3][1] = dty;
+        distortionMaterialData_->uvTransform = distUvMat;
+        // alphaReference は 0 固定で OK（discard はほぼ発生しない）
+        distortionMaterialData_->alphaReference = 0.0f;
+        // color.a に per-instance の歪み強度を載せる（シェーダーで texture.a × vertex.color.a × color.a）
+        distortionMaterialData_->color = { 1.0f, 1.0f, 1.0f, distortionStrength_ };
+        distortionMaterialData_->samplerMode = 0;
+    }
 }
 
 void PrimitiveMesh::UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos) {
@@ -195,6 +222,56 @@ void PrimitiveMesh::DrawIdPass(uint32_t objectId) {
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
+    if (!transformResource_ || !distortionMaterialResource_) return;
+
+    auto* pp = PrimitivePipeline::GetInstance();
+    auto* cmd = pp->GetDxCore()->GetCommandList();
+
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(pp->GetRootSignature());
+    cmd->SetPipelineState(pp->GetDistortionPipelineState());
+
+    cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    cmd->IASetIndexBuffer(&indexBufferView_);
+
+    // [0] VS: TransformationMatrix (b0) — メイン用CBを共用
+    cmd->SetGraphicsRootConstantBufferView(0, transformResource_->GetGPUVirtualAddress());
+
+    // [1] PS: Material (b0) — Distortion 専用 CB
+    cmd->SetGraphicsRootConstantBufferView(1, distortionMaterialResource_->GetGPUVirtualAddress());
+
+    // [2] PS: Texture (t0) — ノーマルマップ
+    SRVManager* srvManager = pp->GetSRVManager();
+    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+
+    cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
+void PrimitiveMesh::DrawDistortionPassPreview(uint32_t normalMapSrvIndex) {
+    if (!transformPreviewResource_ || !distortionMaterialResource_) return;
+
+    auto* pp = PrimitivePipeline::GetInstance();
+    auto* cmd = pp->GetDxCore()->GetCommandList();
+
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(pp->GetRootSignature());
+    cmd->SetPipelineState(pp->GetDistortionPipelineState());
+
+    cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    cmd->IASetIndexBuffer(&indexBufferView_);
+
+    // VS CBV = プレビュー用 WVP
+    cmd->SetGraphicsRootConstantBufferView(0, transformPreviewResource_->GetGPUVirtualAddress());
+    // PS CBV = Distortion 専用 Material
+    cmd->SetGraphicsRootConstantBufferView(1, distortionMaterialResource_->GetGPUVirtualAddress());
+    // PS SRV = ノーマルマップ
+    SRVManager* srvManager = pp->GetSRVManager();
+    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+
+    cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void PrimitiveMesh::DrawPreview() {
     if (!transformPreviewResource_) return;
 
@@ -299,4 +376,15 @@ void PrimitiveMesh::CreateMaterialResource() {
     materialData_->samplerMode = samplerMode_;
     materialData_->padding = 0.0f;
     materialData_->uvTransform = MakeIdentity4x4();
+
+    // Distortion 用 CB（PS の Material と同じレイアウト、独立した uvTransform を持つ）
+    distortionMaterialResource_ = dxCore->CreateBufferResource(sizeof(PrimitiveMaterial));
+    distortionMaterialResource_->Map(0, nullptr, reinterpret_cast<void**>(&distortionMaterialData_));
+
+    distortionMaterialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+    distortionMaterialData_->enableLighting = 0;
+    distortionMaterialData_->alphaReference = 0.0f;
+    distortionMaterialData_->samplerMode = 0; // Wrap U/V（タイル前提）
+    distortionMaterialData_->padding = 0.0f;
+    distortionMaterialData_->uvTransform = MakeIdentity4x4();
 }

@@ -78,6 +78,14 @@ private:
     uint32_t pendingHeight_ = 0;
     std::unique_ptr<RenderTexture> oldRenderTexture_;
 
+    // Distortion プレビュー用：歪みマップ書き込み先と、最終合成出力先
+    std::unique_ptr<RenderTexture> previewDistortionRT_;
+    std::unique_ptr<RenderTexture> previewOutputRT_;
+    std::unique_ptr<RenderTexture> oldPreviewDistortionRT_;
+    std::unique_ptr<RenderTexture> oldPreviewOutputRT_;
+    // 直近の Render() で歪み合成までやったか（OnDraw で表示先を切り替えるフラグ）
+    bool lastFrameDistortionApplied_ = false;
+
     DebugCamera debugCamera_;
     Camera      camera_;
 

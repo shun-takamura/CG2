@@ -21,6 +21,7 @@
 #include "MaskedGrayscaleEffect.h"
 #include "ColorInvertEffect.h"
 #include "PrecisionBlurEffect.h"
+#include "DistortionEffect.h"
 #include "Matrix4x4.h"
 
 // 前方宣言
@@ -83,6 +84,9 @@ public:
 	// IDマスク用 RT（R8_UINT）。シーン描画後の ID Pass で書き込み、MaskedGrayscale 等の参照対象。
 	RenderTexture* GetIdMaskRT() const { return idMaskRT_.get(); }
 
+	// Distortion 用 RT（R8G8B8A8_UNORM）。RG=歪み方向, A=強度。Distortion Effect の参照対象。
+	RenderTexture* GetDistortionRT() const { return distortionRT_.get(); }
+
 	/// <summary>
 	/// ID Pass の開始：idMaskRT を RT としてバインドし 0 でクリア。シーン描画後・PostEffect Draw 前に呼ぶ。
 	/// </summary>
@@ -91,6 +95,24 @@ public:
 	/// ID Pass の終了：idMaskRT を PIXEL_SHADER_RESOURCE 状態に遷移。
 	/// </summary>
 	void EndIdPass(ID3D12GraphicsCommandList* commandList);
+
+	/// <summary>
+	/// Distortion Pass の開始：distortionRT を RT としてバインドし (0.5, 0.5, 0.5, 0) でクリア。
+	/// IdPass の後・PostEffect Draw 前に呼ぶ。
+	/// </summary>
+	void BeginDistortionPass(ID3D12GraphicsCommandList* commandList);
+	/// <summary>
+	/// Distortion Pass の終了：distortionRT を PIXEL_SHADER_RESOURCE 状態に遷移。
+	/// </summary>
+	void EndDistortionPass(ID3D12GraphicsCommandList* commandList);
+
+	/// <summary>
+	/// プレビュー用：指定された color SRV と distortion SRV を入力に、現在バインドされている RTV に対して
+	/// Distortion.PS を 1 パス実行する。EffectEditor 等で独自 RT に歪み合成したい場合に使う。
+	/// 呼び出し側で RTV / Viewport / Scissor を設定済みであること。
+	/// </summary>
+	void RunDistortionForPreview(ID3D12GraphicsCommandList* commandList,
+		uint32_t colorSrvIndex, uint32_t distortionSrvIndex);
 
 	/// <summary>
 	/// ダメージ演出を適用
@@ -117,6 +139,7 @@ public:
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;
+	DistortionEffect* distortion = nullptr;
 
 private:
 	void CreateRootSignatures();
@@ -138,11 +161,17 @@ private:
 	// IDマスク RT（R8_UINT、シーン描画後の ID Pass で書き込まれる）
 	std::unique_ptr<RenderTexture> idMaskRT_;
 
-	// ルートシグネチャ（3種類）
+	// Distortion 用 RT（R8G8B8A8_UNORM、Distortion Pass で歪み源プリミティブが書き込む）
+	std::unique_ptr<RenderTexture> distortionRT_;
+
+	// ルートシグネチャ（4種類）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRootSignature_;
 	// outlineRootSignature: color SRV(t0) + depth SRV(t1) + cbuffer(b0) + linear(s0) + point(s1)
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> outlineRootSignature_;
+	// distortionRootSignature: color SRV(t0) + distortion SRV(t1) + depth SRV(t2) + cbuffer(b0) + linear(s0) + point(s1)
+	// distortion 合成パス専用。outlineRootSignature と分けることで他フィルタに影響しない。
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> distortionRootSignature_;
 
 	// コピー用パイプライン
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;

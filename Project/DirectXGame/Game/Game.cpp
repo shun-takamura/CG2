@@ -175,6 +175,38 @@ void Game::Draw() {
 		}
 	}
 
+	// ----- Distortion Pass：エフェクト中の useDistortion なプリミティブを distortionRT に書き込む -----
+	// 歪み源が無いフレームはパス全体（RT 遷移・クリア・描画・PostEffect 合成）をスキップして GPU を節約する。
+	// 合成側 (PostEffect の Distortion フィルタ) も同じフラグで毎フレーム自動 ON/OFF する。
+	const bool distortionActive = EffectManager::GetInstance()->HasActiveDistortionSource();
+	if (postEffect_ && postEffect_->distortion) {
+		postEffect_->distortion->SetEnabled(distortionActive);
+	}
+	if (distortionActive) {
+		auto* cmd = dxCore_->GetCommandList();
+		postEffect_->BeginDistortionPass(cmd);
+
+		// RTV + DSV をバインド（IdPass と同じ要領、深度テストのみ・書き込みなし）
+		auto rtv = postEffect_->GetDistortionRT()->GetRTVHandle();
+		auto dsv = dxCore_->GetDsvHandle();
+		cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
+
+		D3D12_VIEWPORT vp{};
+		vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
+		vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
+		vp.MaxDepth = 1.0f;
+		cmd->RSSetViewports(1, &vp);
+		D3D12_RECT sc{ 0, 0,
+			static_cast<LONG>(WindowsApplication::kClientWidth),
+			static_cast<LONG>(WindowsApplication::kClientHeight) };
+		cmd->RSSetScissorRects(1, &sc);
+
+		srvManager_->PreDraw();
+		EffectManager::GetInstance()->DrawDistortionPass();
+
+		postEffect_->EndDistortionPass(cmd);
+	}
+
 	// 2. Swapchainに切り替え
 	dxCore_->BeginDraw();
 

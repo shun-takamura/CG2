@@ -2,19 +2,33 @@
 #include "BaseFilterEffect.h"
 #include <cstdint>
 
+class RenderTexture;
+
 /// <summary>
-/// ディストーション（背景歪み）ポストエフェクト
-/// ディストーションRTに描画された歪みマップを読み取り、シーンのUVをオフセットする
+/// ディストーション（背景歪み）ポストエフェクト。
+/// DistortionRT に描画された歪みマップ（RG=方向, A=強度）を読み取り、
+/// シーンテクスチャの UV をオフセットして合成する。
 /// </summary>
 class DistortionEffect : public BaseFilterEffect
 {
 public:
-    void Initialize(
+    /// <summary>
+    /// PostEffect から distortionRT のポインタを受け取って初期化（outline 用ルートシグネチャを共用）
+    /// </summary>
+    void InitializeMasked(
         DirectXCore* dxCore,
-        ID3D12RootSignature* copyRootSignature,
-        ID3D12RootSignature* effectRootSignature,
-        const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
-    ) override;
+        ID3D12RootSignature* outlineRootSignature,
+        const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc,
+        RenderTexture* distortionRT
+    );
+
+    // Base 経由でも呼べるようダミー実装（未使用）
+    void Initialize(
+        DirectXCore* /*dxCore*/,
+        ID3D12RootSignature* /*copyRootSignature*/,
+        ID3D12RootSignature* /*effectRootSignature*/,
+        const D3D12_GRAPHICS_PIPELINE_STATE_DESC& /*basePsoDesc*/
+    ) override {}
 
     void UpdateConstantBuffer() override;
     void ShowImGui() override;
@@ -22,15 +36,10 @@ public:
 
     std::string GetName() const override { return "Distortion"; }
     bool NeedsCBuffer() const override { return true; }
-
-    // ===== ディストーションRT連携 =====
-
-    /// <summary>
-    /// ディストーションRTのSRVインデックスを設定
-    /// PostEffectが初期化時に呼ぶ
-    /// </summary>
-    void SetDistortionSRVIndex(uint32_t index) { distortionSrvIndex_ = index; }
-    uint32_t GetDistortionSRVIndex() const { return distortionSrvIndex_; }
+    bool NeedsMaskTexture() const override { return true; }
+    uint32_t GetMaskTextureSRVIndex() const override;
+    // 合成パスで scene depth を t2 から読むため、depth SRV 状態への遷移が必要
+    bool NeedsDepth() const override { return true; }
 
     // ===== パラメータ =====
 
@@ -46,5 +55,5 @@ private:
     };
 
     float strength_ = 0.1f;
-    uint32_t distortionSrvIndex_ = 0;
+    RenderTexture* distortionRT_ = nullptr; // PostEffect 所有
 };

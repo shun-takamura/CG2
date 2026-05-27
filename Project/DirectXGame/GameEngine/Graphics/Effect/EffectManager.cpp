@@ -218,6 +218,25 @@ void EffectManager::Draw() {
     }
 }
 
+void EffectManager::DrawDistortionPass() {
+    for (auto& inst : activeInstances_) {
+        if (inst) inst->DrawDistortionPass();
+    }
+}
+
+void EffectManager::DrawDistortionPassPreview() {
+    for (auto& inst : activeInstances_) {
+        if (inst) inst->DrawDistortionPassPreview();
+    }
+}
+
+bool EffectManager::HasActiveDistortionSource() const {
+    for (const auto& inst : activeInstances_) {
+        if (inst && inst->HasActiveDistortionSource()) return true;
+    }
+    return false;
+}
+
 void EffectManager::DrawPreview() {
     if (!previewCamera_) return;
 

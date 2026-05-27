@@ -115,6 +115,24 @@ public:
     void Update(float deltaTime);
     void Draw();
 
+    /// <summary>
+    /// アクティブな全 EffectInstance の useDistortion な Primitive を distortionRT に描画する。
+    /// Game::Draw が IdPass の後に呼ぶ想定。RTV/DSV/Viewport/Scissor は呼び出し側が設定済みであること。
+    /// </summary>
+    void DrawDistortionPass();
+
+    /// <summary>
+    /// プレビュー版 distortion パス。EffectEditor のプレビュー RT に対して、プレビュー WVP CB で描画する。
+    /// 呼ぶ直前に DrawPreview() でプレビュー WVP が更新されている前提。
+    /// </summary>
+    void DrawDistortionPassPreview();
+
+    /// <summary>
+    /// アクティブな EffectInstance の中に「useDistortion + テクスチャ済」な primitive が1つでもあるか。
+    /// Game.cpp / EffectEditorWindow が毎フレーム distortion パスをスキップするか判定するのに使う。
+    /// </summary>
+    bool HasActiveDistortionSource() const;
+
     // プレビュー RT への描画。SetPreviewCamera で設定したカメラ視点で同じインスタンスを描画する。
     // 呼び出し前にプレビュー RT を BeginRender 済みであること。
     void DrawPreview();

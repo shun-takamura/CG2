@@ -1,5 +1,6 @@
 #include "EffectPrimitiveRenderer.h"
 #include "PrimitiveGenerator.h"
+#include "TextureManager.h"
 
 namespace {
     // primitiveType（int）から MeshData を生成。EffectDef.h のmeshType値と互換。
@@ -55,4 +56,24 @@ void EffectPrimitiveRenderer::UpdatePreviewWVP(const Matrix4x4& viewMatrix, cons
 
 void EffectPrimitiveRenderer::DrawPreview() {
     mesh_.DrawPreview();
+}
+
+void EffectPrimitiveRenderer::SetDistortionTexture(const std::string& path) {
+    if (path.empty()) {
+        hasDistortionTexture_ = false;
+        return;
+    }
+    TextureManager::GetInstance()->LoadTexture(path);
+    distortionTextureSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex(path);
+    hasDistortionTexture_ = true;
+}
+
+void EffectPrimitiveRenderer::DrawDistortionPass() {
+    if (!hasDistortionTexture_) return;
+    mesh_.DrawDistortionPass(distortionTextureSrvIndex_);
+}
+
+void EffectPrimitiveRenderer::DrawDistortionPassPreview() {
+    if (!hasDistortionTexture_) return;
+    mesh_.DrawDistortionPassPreview(distortionTextureSrvIndex_);
 }

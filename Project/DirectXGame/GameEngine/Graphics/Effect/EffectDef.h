@@ -77,6 +77,19 @@ struct EffectPrimitiveComponent {
     Vector2 uvScale       = { 1.0f, 1.0f };
     bool    uvFlipU = false;
     bool    uvFlipV = false;
+
+    // ----- Distortion（歪みエフェクト） -----
+    // useDistortion が true のときだけ、distortionRT に DistortionMesh.PS でこのプリミティブを描き込む。
+    // distortionTexturePath はノーマルマップ風 RG テクスチャ（指定が無ければ歪まない）。
+    bool        useDistortion        = false;
+    std::string distortionTexturePath;
+    float       distortionStrength      = 0.5f; // 0..1。per-instance の歪み強度（texture.a × vertex.color.a と乗算）
+    bool        distortionUvAutoScroll  = false;
+    Vector2     distortionUvScrollSpeed = { 0.0f, 0.0f };
+    Vector2     distortionUvOffset      = { 0.0f, 0.0f };
+    Vector2     distortionUvScale       = { 1.0f, 1.0f };
+    bool        distortionUvFlipU = false;
+    bool        distortionUvFlipV = false;
 };
 
 /// <summary>
