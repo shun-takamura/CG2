@@ -36,6 +36,9 @@ public:
     ID3D12RootSignature* GetIdRootSignature() const { return idRootSignature_.Get(); }
     ID3D12PipelineState* GetIdPipelineState() const { return idPipelineState_.Get(); }
 
+    // Distortion Pass（メインの rootSignature_ を流用 / PSO のみ専用）
+    ID3D12PipelineState* GetDistortionPipelineState() const { return distortionPipelineState_.Get(); }
+
 private:
     PrimitivePipeline() = default;
     ~PrimitivePipeline() = default;
@@ -45,6 +48,7 @@ private:
     void CreateRootSignature();
     void CreateGraphicsPipelineState(BlendMode mode, bool depthWrite, bool cullBackface);
     void CreateIdPassObjects();
+    void CreateDistortionPassObjects();
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
@@ -56,4 +60,7 @@ private:
     // ID Pass 用
     Microsoft::WRL::ComPtr<ID3D12RootSignature> idRootSignature_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> idPipelineState_;
+
+    // Distortion Pass 用（DistortionRT に歪みマップを書き込む）
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> distortionPipelineState_;
 };

@@ -39,6 +39,13 @@ public:
     // ID Pass：idMaskRT に objectId を書き込む
     void DrawIdPass(uint32_t objectId);
 
+    // Distortion Pass：DistortionRT にノーマルマップ由来の歪み情報を書き込む
+    // 通常テクスチャとは独立した UV 変換（distortionUv*）で描画される
+    void DrawDistortionPass(uint32_t normalMapSrvIndex);
+
+    // 上記のプレビュー版。VS CBV には transformPreviewResource_（プレビューカメラの WVP）を bind する。
+    void DrawDistortionPassPreview(uint32_t normalMapSrvIndex);
+
     // プレビュー用 CB を bind して描画
     void DrawPreview();
 
@@ -68,6 +75,15 @@ public:
     void SetUVFlipU(bool flip) { uvFlipU_ = flip; }
     void SetUVScale(const Vector2& scale) { uvScale_ = scale; }
     void SetUVOffset(const Vector2& offset) { uvOffset_ = offset; } // 手動で設定したい場合
+
+    // Distortion 用 UV 変換設定（通常テクスチャの UV と完全に独立）
+    void SetDistortionUVScroll(const Vector2& scrollPerSec) { distortionUVScrollSpeed_ = scrollPerSec; }
+    void SetDistortionUVFlipU(bool flip) { distortionUVFlipU_ = flip; }
+    void SetDistortionUVFlipV(bool flip) { distortionUVFlipV_ = flip; }
+    void SetDistortionUVScale(const Vector2& scale) { distortionUVScale_ = scale; }
+    void SetDistortionUVOffset(const Vector2& offset) { distortionUVOffset_ = offset; }
+    // per-instance の歪み強度（0..1）。 distortionMaterialData_->color.a に書かれ、シェーダーで texture.a × vertex.color.a × strength として使われる。
+    void SetDistortionStrength(float s) { distortionStrength_ = s; }
 
     // Transformアクセス（translate/rotate/scaleを外部から書き換え可能）
     Transform& GetTransform() { return transform_; }
@@ -120,6 +136,11 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
     PrimitiveMaterial* materialData_ = nullptr;
 
+    // Distortion 用マテリアル CB（distortion パスでのみ bind される）
+    // 通常テクスチャと独立した uvTransform を持つ
+    Microsoft::WRL::ComPtr<ID3D12Resource> distortionMaterialResource_;
+    PrimitiveMaterial* distortionMaterialData_ = nullptr;
+
     // Transform
     Transform transform_{
         { 1.0f, 1.0f, 1.0f }, // scale
@@ -139,6 +160,15 @@ private:
     bool uvFlipV_ = false;
     float alphaReference_ = 0.0f; // デフォルト：discardしない
     int   samplerMode_ = 0;       // 0=WrapAll, 1=WrapU+ClampV, 2=ClampAll
+
+    // Distortion 用 UV 変換関連（通常テクスチャと別の蓄積・状態を持つ）
+    Vector2 distortionUVScrollSpeed_     = { 0.0f, 0.0f };
+    Vector2 distortionUVScrollAccumulated_ = { 0.0f, 0.0f };
+    Vector2 distortionUVOffset_          = { 0.0f, 0.0f };
+    Vector2 distortionUVScale_           = { 1.0f, 1.0f };
+    bool    distortionUVFlipU_ = false;
+    bool    distortionUVFlipV_ = false;
+    float   distortionStrength_ = 1.0f; // per-instance 歪み強度（distortionMaterialData_->color.a へ書く）
 
     // 描画設定
     PrimitivePipeline::BlendMode blendMode_ = PrimitivePipeline::kBlendModeAdd;

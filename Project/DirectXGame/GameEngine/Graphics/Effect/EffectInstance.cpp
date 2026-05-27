@@ -81,6 +81,17 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer->SetUVScale(pc.uvScale);
             rt.renderer->SetUVFlipU(pc.uvFlipU);
             rt.renderer->SetUVFlipV(pc.uvFlipV);
+
+            // Distortion（useDistortion かつノーマルマップ指定がある場合のみ反映）
+            if (pc.useDistortion && !pc.distortionTexturePath.empty()) {
+                rt.renderer->SetDistortionTexture(pc.distortionTexturePath);
+                rt.renderer->SetDistortionStrength(pc.distortionStrength);
+                rt.renderer->SetDistortionUVScroll(pc.distortionUvAutoScroll ? pc.distortionUvScrollSpeed : Vector2{ 0.0f, 0.0f });
+                rt.renderer->SetDistortionUVOffset(pc.distortionUvOffset);
+                rt.renderer->SetDistortionUVScale(pc.distortionUvScale);
+                rt.renderer->SetDistortionUVFlipU(pc.distortionUvFlipU);
+                rt.renderer->SetDistortionUVFlipV(pc.distortionUvFlipV);
+            }
             rt.started = true;
         }
 
@@ -301,6 +312,31 @@ void EffectInstance::Draw() {
             rt.renderer->Draw();
         }
     }
+}
+
+void EffectInstance::DrawDistortionPass() {
+    for (auto& rt : primitives_) {
+        if (rt.renderer && rt.started && !rt.finished && rt.renderer->HasDistortionTexture()) {
+            rt.renderer->DrawDistortionPass();
+        }
+    }
+}
+
+void EffectInstance::DrawDistortionPassPreview() {
+    for (auto& rt : primitives_) {
+        if (rt.renderer && rt.started && !rt.finished && rt.renderer->HasDistortionTexture()) {
+            rt.renderer->DrawDistortionPassPreview();
+        }
+    }
+}
+
+bool EffectInstance::HasActiveDistortionSource() const {
+    for (const auto& rt : primitives_) {
+        if (rt.renderer && rt.started && !rt.finished && rt.renderer->HasDistortionTexture()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void EffectInstance::UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos) {

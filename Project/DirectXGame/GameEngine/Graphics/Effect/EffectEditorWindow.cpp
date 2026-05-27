@@ -6,6 +6,9 @@
 #include "EffectManager.h"
 #include "ImGuiManager.h"
 #include "SceneEditorWindow.h"
+#include "PostEffect.h"
+#include "Game.h"
+#include "FilterEffect/DistortionEffect.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include "imgui.h"
@@ -47,31 +50,46 @@ void EffectEditorWindow::Initialize() {
 }
 
 void EffectEditorWindow::Finalize() {
-    if (oldRenderTexture_) {
-        oldRenderTexture_->Finalize();
-        oldRenderTexture_.reset();
-    }
-    if (renderTexture_) {
-        renderTexture_->Finalize();
-        renderTexture_.reset();
-    }
+    if (oldRenderTexture_) { oldRenderTexture_->Finalize(); oldRenderTexture_.reset(); }
+    if (renderTexture_)    { renderTexture_->Finalize();    renderTexture_.reset(); }
+    if (oldPreviewDistortionRT_) { oldPreviewDistortionRT_->Finalize(); oldPreviewDistortionRT_.reset(); }
+    if (previewDistortionRT_)    { previewDistortionRT_->Finalize();    previewDistortionRT_.reset(); }
+    if (oldPreviewOutputRT_)     { oldPreviewOutputRT_->Finalize();     oldPreviewOutputRT_.reset(); }
+    if (previewOutputRT_)        { previewOutputRT_->Finalize();        previewOutputRT_.reset(); }
 }
 
 void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height) {
     if (width == rtWidth_ && height == rtHeight_ && renderTexture_) return;
 
-    if (renderTexture_) {
-        if (oldRenderTexture_) {
-            oldRenderTexture_->Finalize();
-            oldRenderTexture_.reset();
+    // 旧 RT を保持して破棄遅延（GPU で参照中の可能性があるため次フレーム冒頭で解放）
+    auto swapOut = [](std::unique_ptr<RenderTexture>& live, std::unique_ptr<RenderTexture>& old) {
+        if (live) {
+            if (old) { old->Finalize(); old.reset(); }
+            old = std::move(live);
         }
-        oldRenderTexture_ = std::move(renderTexture_);
-    }
+    };
+    swapOut(renderTexture_,        oldRenderTexture_);
+    swapOut(previewDistortionRT_,  oldPreviewDistortionRT_);
+    swapOut(previewOutputRT_,      oldPreviewOutputRT_);
 
+    // メインのプレビュー RT
     renderTexture_ = std::make_unique<RenderTexture>();
     const float clear[4] = { 0.15f, 0.15f, 0.18f, 1.0f };
     renderTexture_->Initialize(dxCore_, srvManager_, width, height,
         DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clear);
+
+    // Distortion 用：RG=0.5（オフセット0）、A=0（強度0）でクリア。SRGB ではなく UNORM。
+    previewDistortionRT_ = std::make_unique<RenderTexture>();
+    const float distClear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+    previewDistortionRT_->Initialize(dxCore_, srvManager_, width, height,
+        DXGI_FORMAT_R8G8B8A8_UNORM, distClear);
+
+    // 歪み合成後の最終表示用
+    previewOutputRT_ = std::make_unique<RenderTexture>();
+    const float outClear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    previewOutputRT_->Initialize(dxCore_, srvManager_, width, height,
+        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, outClear);
+
     rtWidth_ = width;
     rtHeight_ = height;
 
@@ -126,10 +144,9 @@ void EffectEditorWindow::Render() {
         (pendingWidth_ != rtWidth_ || pendingHeight_ != rtHeight_)) {
         EnsureRenderTextureSize(pendingWidth_, pendingHeight_);
     }
-    if (oldRenderTexture_) {
-        oldRenderTexture_->Finalize();
-        oldRenderTexture_.reset();
-    }
+    if (oldRenderTexture_) { oldRenderTexture_->Finalize(); oldRenderTexture_.reset(); }
+    if (oldPreviewDistortionRT_) { oldPreviewDistortionRT_->Finalize(); oldPreviewDistortionRT_.reset(); }
+    if (oldPreviewOutputRT_) { oldPreviewOutputRT_->Finalize(); oldPreviewOutputRT_.reset(); }
 
     if (!renderTexture_ || !isOpen_) return;
 
@@ -165,6 +182,51 @@ void EffectEditorWindow::Render() {
     EffectManager::GetInstance()->DrawPreview();
 
     renderTexture_->EndRender(commandList);
+
+    // ===== Distortion プレビュー合成 =====
+    // 本番 PostEffect の distortion フィルタが ON のときだけ、プレビューにも歪みを適用する。
+    lastFrameDistortionApplied_ = false;
+    PostEffect* postEffect = Game::GetPostEffect();
+    const bool distortionOn = postEffect && postEffect->distortion && postEffect->distortion->IsEnabled();
+
+    if (distortionOn && previewDistortionRT_ && previewOutputRT_) {
+        // (A) 歪みマップ用 RT に effect primitives の distortion パスを描画
+        previewDistortionRT_->BeginRender(commandList);
+        const float dclear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+        commandList->ClearRenderTargetView(previewDistortionRT_->GetRTVHandle(), dclear, 0, nullptr);
+
+        // RTV は previewDistortionRT、DSV は共有（renderTexture_ 描画時の深度を引き継ぐ）
+        auto distRtv = previewDistortionRT_->GetRTVHandle();
+        commandList->OMSetRenderTargets(1, &distRtv, false, &dsv);
+        // viewport / scissor は同サイズなので維持
+        srvManager_->PreDraw();
+
+        // プレビュー用 WVP CB はすぐ上の EffectManager::DrawPreview() で更新済み
+        EffectManager::GetInstance()->DrawDistortionPassPreview();
+
+        previewDistortionRT_->EndRender(commandList);
+
+        // 合成シェーダーで scene depth を t2 から読むため SRV 状態へ遷移
+        dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+        // (B) renderTexture_ + previewDistortionRT_ + depth → previewOutputRT_ に合成
+        previewOutputRT_->BeginRender(commandList);
+        srvManager_->PreDraw();
+        // viewport / scissor も RT サイズに合わせ直す
+        commandList->RSSetViewports(1, &vp);
+        commandList->RSSetScissorRects(1, &sc);
+
+        postEffect->RunDistortionForPreview(commandList,
+            renderTexture_->GetSRVIndex(),
+            previewDistortionRT_->GetSRVIndex());
+
+        previewOutputRT_->EndRender(commandList);
+
+        // 次フレーム DSV として使えるよう書き込み状態に戻す
+        dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+        lastFrameDistortionApplied_ = true;
+    }
 }
 
 void EffectEditorWindow::OnDraw() {
@@ -297,7 +359,11 @@ void EffectEditorWindow::OnDraw() {
         pendingHeight_ = newH;
     }
 
-    uint32_t srvIndex = renderTexture_->GetSRVIndex();
+    // distortion 合成済みなら出力 RT を、そうでなければ通常の RT を表示
+    RenderTexture* showRT = (lastFrameDistortionApplied_ && previewOutputRT_)
+        ? previewOutputRT_.get()
+        : renderTexture_.get();
+    uint32_t srvIndex = showRT->GetSRVIndex();
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = srvManager_->GetGPUDescriptorHandle(srvIndex);
 
     float texW = (float)renderTexture_->GetWidth();

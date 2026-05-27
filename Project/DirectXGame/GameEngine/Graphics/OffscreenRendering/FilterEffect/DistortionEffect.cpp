@@ -1,5 +1,6 @@
 #include "DistortionEffect.h"
 #include "DirectXCore.h"
+#include "RenderTexture.h"
 #include <cassert>
 #include <cstring>
 
@@ -7,29 +8,27 @@
 #include "imgui.h"
 #endif
 
-void DistortionEffect::Initialize(
+void DistortionEffect::InitializeMasked(
     DirectXCore* dxCore,
-    ID3D12RootSignature* copyRootSignature,
-    ID3D12RootSignature* effectRootSignature,
-    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
-) {
-    // シェーダーコンパイル
+    ID3D12RootSignature* outlineRootSignature,
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc,
+    RenderTexture* distortionRT)
+{
+    distortionRT_ = distortionRT;
+
     IDxcBlob* psBlob = dxCore->CompileShader(
         L"Resources/Shaders/PostEffect/Filters/Distortion.PS.hlsl",
-        L"ps_6_0"
-    );
+        L"ps_6_0");
     assert(psBlob);
 
-    // パイプライン作成（cbufferあり → effectRootSignature）
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = basePsoDesc;
-    psoDesc.pRootSignature = effectRootSignature;
+    psoDesc.pRootSignature = outlineRootSignature;
     psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
 
     HRESULT hr = dxCore->GetDevice()->CreateGraphicsPipelineState(
         &psoDesc, IID_PPV_ARGS(&pipelineState_));
     assert(SUCCEEDED(hr));
 
-    // 定数バッファ作成
     CreateConstantBuffer(dxCore, sizeof(DistortionParamsCB));
     UpdateConstantBuffer();
 }
@@ -40,7 +39,7 @@ void DistortionEffect::UpdateConstantBuffer() {
     DistortionParamsCB cb{};
     cb.strength = strength_;
 
-    memcpy(constantBufferMappedPtr_, &cb, sizeof(cb));
+    std::memcpy(constantBufferMappedPtr_, &cb, sizeof(cb));
 }
 
 void DistortionEffect::ShowImGui() {
@@ -51,4 +50,8 @@ void DistortionEffect::ShowImGui() {
 
 void DistortionEffect::ResetParams() {
     strength_ = 0.1f;
+}
+
+uint32_t DistortionEffect::GetMaskTextureSRVIndex() const {
+    return distortionRT_ ? distortionRT_->GetSRVIndex() : 0u;
 }

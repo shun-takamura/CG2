@@ -145,6 +145,17 @@ namespace {
         c.uvScale       = AsVec2(o["uvScale"],       c.uvScale);
         if (o["uvFlipU"].IsBool()) c.uvFlipU = o["uvFlipU"].AsBool(c.uvFlipU);
         if (o["uvFlipV"].IsBool()) c.uvFlipV = o["uvFlipV"].AsBool(c.uvFlipV);
+
+        // Distortion
+        if (o["useDistortion"].IsBool()) c.useDistortion = o["useDistortion"].AsBool(c.useDistortion);
+        if (o["distortionTexturePath"].IsString()) c.distortionTexturePath = o["distortionTexturePath"].AsString();
+        c.distortionStrength = AsFloat(o["distortionStrength"], c.distortionStrength);
+        if (o["distortionUvAutoScroll"].IsBool()) c.distortionUvAutoScroll = o["distortionUvAutoScroll"].AsBool(c.distortionUvAutoScroll);
+        c.distortionUvScrollSpeed = AsVec2(o["distortionUvScrollSpeed"], c.distortionUvScrollSpeed);
+        c.distortionUvOffset      = AsVec2(o["distortionUvOffset"],      c.distortionUvOffset);
+        c.distortionUvScale       = AsVec2(o["distortionUvScale"],       c.distortionUvScale);
+        if (o["distortionUvFlipU"].IsBool()) c.distortionUvFlipU = o["distortionUvFlipU"].AsBool(c.distortionUvFlipU);
+        if (o["distortionUvFlipV"].IsBool()) c.distortionUvFlipV = o["distortionUvFlipV"].AsBool(c.distortionUvFlipV);
     }
 
     void ParseParticle(const JsonValue& o, EffectParticleComponent& c) {
@@ -371,6 +382,16 @@ namespace EffectDefIO {
             o["uvScale"]        = Vec2ToJson(c.uvScale);
             o["uvFlipU"]        = c.uvFlipU;
             o["uvFlipV"]        = c.uvFlipV;
+            // Distortion
+            o["useDistortion"]           = c.useDistortion;
+            o["distortionTexturePath"]   = c.distortionTexturePath;
+            o["distortionStrength"]      = static_cast<double>(c.distortionStrength);
+            o["distortionUvAutoScroll"]  = c.distortionUvAutoScroll;
+            o["distortionUvScrollSpeed"] = Vec2ToJson(c.distortionUvScrollSpeed);
+            o["distortionUvOffset"]      = Vec2ToJson(c.distortionUvOffset);
+            o["distortionUvScale"]       = Vec2ToJson(c.distortionUvScale);
+            o["distortionUvFlipU"]       = c.distortionUvFlipU;
+            o["distortionUvFlipV"]       = c.distortionUvFlipV;
             primArr.Push(std::move(o));
         }
         root["primitives"] = std::move(primArr);
