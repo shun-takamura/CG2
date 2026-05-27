@@ -197,13 +197,20 @@ private:
 	bool  justDodgeCounterActive_ = false;  // 追加入力アクション進行中フック（true の間は受付終了を保留）
 	float justDodgeFadeOutTimer_ = -1.0f;   // フェードアウト経過（-1=未フェード）
 
-	// 回復（ジャスト回避で貯まるストック）
-	int   healStock_    = 0;     // 使用可能な回復ストック（ジャスト回避1回ごとに+1）
-	int   healUsedStg_  = 0;     // STG で使った回復回数
-	int   healUsedBoss_ = 0;     // ボスで使った回復回数
-	int   healMaxStg_   = 5;     // STG 回復上限
-	int   healMaxBoss_  = 5;     // ボス 回復上限
-	int   healAmount_   = 5;     // 1 回の回復量（調整可）
+	// 回復
+	// デフォルトHeal(R/X) = 大回復・固定回数制（STG/ボスごとに上限）。
+	// 左派生（分身カウンター）= 小回復・回数無制限（ジャスト回避できる限り何度でも）。
+	int   healUsedStg_     = 0;  // STG で使った回復回数（デフォルトHealのみカウント）
+	int   healUsedBoss_    = 0;  // ボスで使った回復回数（同上）
+	int   healMaxStg_      = 2;  // STG 回復上限（デフォルトHeal用、小さめ）
+	int   healMaxBoss_     = 2;  // ボス 回復上限
+	int   healAmount_      = 20; // デフォルトHealの回復量（大）
+	int   healSmallAmount_ = 5;  // 左派生の小回復量
+
+	// 必殺技ゲージ（UI 未実装。ゲージ本体だけ先に持つ）
+	float specialGauge_         = 0.0f;   // 現在値（0..specialGaugeMax_）
+	float specialGaugeMax_      = 100.0f; // 上限
+	float dodgeSpecialGaugeGain_ = 8.0f;  // 追加回避1回ぶんの加算量
 
 	// スコア
 	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
@@ -236,7 +243,51 @@ private:
 	float jdCamFovAdd_       = 0.06f;  // 引き時に加える FovY（rad、視野を広げる）
 	float jdEffectIntensity_ = 0.0f;   // 演出強度(0..1)。UpdateJustDodgeEffect が更新し、カメラ引きブレンドに使う
 
+	// ----- 分身カウンター派生（Phase2）アクション中の状態 -----
+	// 派生確定後 justDodgeCounterActive_=true の間は受付期限が延長され、世界スローも継続する。
+	enum class JdActionPhase { None, Approach, Active, Return };
+	JdActionPhase jdActionPhase_ = JdActionPhase::None;
+	Vector2 jdReturnOffset_{ 0.0f, 0.0f }; // テレポート前の playerInputOffset_。復帰時に補間で戻す。
+	float   jdActionPhaseTimer_ = 0.0f;    // 現フェーズ経過秒（実時間=UI dt）
+
+	// 近接派生（Up/Right）共通パラメータ
+	float jdMeleeApproachDuration_ = 0.18f;   // 詰め寄り補間時間
+	float jdMeleeReturnDuration_   = 0.25f;   // 元位置への戻り補間時間
+	float jdMeleeApproachDist_     = 4.0f;    // 対象敵から手前にこの距離だけ離した位置を目標にする
+	Vector2 jdMeleeApproachStart_{ 0.0f, 0.0f }; // (未使用、互換のため温存)
+	Vector2 jdMeleeApproachGoal_{ 0.0f, 0.0f };  // (未使用)
+
+	// 近接派生はワールド座標で補間する（camera-local 平面では z 差が出て melee 判定が届かないため）。
+	// Approach: jdApproachWorldStart_ → jdApproachWorldGoal_（敵手前）
+	// Active  : jdApproachWorldGoal_ で停滞して melee 発生
+	// Return  : jdApproachWorldGoal_ → jdReturnWorldPos_（派生開始時のワールド位置）
+	Vector3 jdApproachWorldStart_{ 0.0f, 0.0f, 0.0f };
+	Vector3 jdApproachWorldGoal_{ 0.0f, 0.0f, 0.0f };
+	Vector3 jdReturnWorldPos_{ 0.0f, 0.0f, 0.0f };
+
+	// 弱近接派生（Right）の自動連撃ステージ（1..kMeleeWeakComboMax_）。強（Up）は常に1。
+	int jdAutoComboStage_ = 0;
+
+	// 近接派生中のカメラオフセット（プレイヤーローカル基底：right/up/forward）
+	// forward = プレイヤー→対象敵。本値は「プレイヤー位置からのオフセット」。
+	// 左斜め後ろ＝右-、上+、前-（後ろ）になるよう既定値を設定。
+	Vector3 jdMeleeCameraOffset_{ -3.0f, 2.5f, -5.0f };
+	// 注視点オフセット（プレイヤーと敵の中点を基準）
+	Vector3 jdMeleeCameraLookOffset_{ 0.0f, 1.0f, 0.0f };
+	bool    jdMeleeCameraActive_ = false; // 近接派生中は ApplyJustDodgeMeleeCamera で上書きする
+
+	// 追加回避（Down）派生：許容枠を一時拡張＋戻し補間＋射撃禁止
+	bool    jdDodgeMarginActive_   = false;    // 拡張クリップ枠が有効か（戻し中も true）
+	float   jdDodgeMarginTimer_    = 0.0f;     // 戻し補間タイマー（0..jdDodgeReturnDuration_）
+	bool    jdDodgeReturning_      = false;    // 拡張→通常へ補間中
+	Vector2 jdDodgeExpandedMargin_{ 0.8f, 0.8f }; // 拡張時のクリップマージン
+	float   jdDodgeReturnDuration_ = 0.35f;    // 戻し時間
+	Vector2 jdDodgeReturnFromOffset_{ 0.0f, 0.0f }; // 戻し開始時の playerInputOffset_（押し戻し補間用）
+
 	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
+	void ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos);
+	void UpdateJustDodgeCounterAction(float dt);
+	void EndJustDodgeCounterAction();
 	void SpawnJustDodgeClones();
 	void UpdateJustDodgeClones(class InputActionMap* actions, const Vector2& moveDelta, float dt);
 	void ClearJustDodgeClones();
