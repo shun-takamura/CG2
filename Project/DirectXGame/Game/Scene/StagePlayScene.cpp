@@ -153,6 +153,33 @@ void StagePlayScene::LoadTuningFromJson() {
 		jdSelectThreshold_ = static_cast<float>(jd["selectThreshold"].AsDouble(jdSelectThreshold_));
 		jdSpreadDuration_  = static_cast<float>(jd["spreadDuration"].AsDouble(jdSpreadDuration_));
 		jdMergeDuration_   = static_cast<float>(jd["mergeDuration"].AsDouble(jdMergeDuration_));
+		jdMeleeApproachDuration_ = static_cast<float>(jd["meleeApproachDuration"].AsDouble(jdMeleeApproachDuration_));
+		jdMeleeReturnDuration_   = static_cast<float>(jd["meleeReturnDuration"].AsDouble(jdMeleeReturnDuration_));
+		jdMeleeApproachDist_     = static_cast<float>(jd["meleeApproachDist"].AsDouble(jdMeleeApproachDist_));
+		jdDodgeReturnDuration_   = static_cast<float>(jd["dodgeReturnDuration"].AsDouble(jdDodgeReturnDuration_));
+		{
+			const JsonValue& em = jd["dodgeExpandedMargin"];
+			if (em.IsArray() && em.Size() >= 2) {
+				jdDodgeExpandedMargin_.x = static_cast<float>(em[0].AsDouble(jdDodgeExpandedMargin_.x));
+				jdDodgeExpandedMargin_.y = static_cast<float>(em[1].AsDouble(jdDodgeExpandedMargin_.y));
+			}
+			const JsonValue& mc = jd["meleeCamOffset"];
+			if (mc.IsArray() && mc.Size() >= 3) {
+				jdMeleeCameraOffset_ = {
+					static_cast<float>(mc[0].AsDouble(jdMeleeCameraOffset_.x)),
+					static_cast<float>(mc[1].AsDouble(jdMeleeCameraOffset_.y)),
+					static_cast<float>(mc[2].AsDouble(jdMeleeCameraOffset_.z)),
+				};
+			}
+			const JsonValue& ml = jd["meleeCamLookOffset"];
+			if (ml.IsArray() && ml.Size() >= 3) {
+				jdMeleeCameraLookOffset_ = {
+					static_cast<float>(ml[0].AsDouble(jdMeleeCameraLookOffset_.x)),
+					static_cast<float>(ml[1].AsDouble(jdMeleeCameraLookOffset_.y)),
+					static_cast<float>(ml[2].AsDouble(jdMeleeCameraLookOffset_.z)),
+				};
+			}
+		}
 		const JsonValue& cpArr = jd["clonePaths"];
 		if (cpArr.IsArray()) {
 			for (size_t i = 0; i < cpArr.Size() && i < 4; ++i) {
@@ -171,9 +198,16 @@ void StagePlayScene::LoadTuningFromJson() {
 	// ----- heal（回復）-----
 	const JsonValue& heal = root["heal"];
 	if (heal.IsObject()) {
-		healAmount_  = static_cast<int>(heal["amount"].AsInt(static_cast<int64_t>(healAmount_)));
-		healMaxStg_  = static_cast<int>(heal["maxStg"].AsInt(static_cast<int64_t>(healMaxStg_)));
-		healMaxBoss_ = static_cast<int>(heal["maxBoss"].AsInt(static_cast<int64_t>(healMaxBoss_)));
+		healAmount_       = static_cast<int>(heal["amount"].AsInt(static_cast<int64_t>(healAmount_)));
+		healSmallAmount_  = static_cast<int>(heal["smallAmount"].AsInt(static_cast<int64_t>(healSmallAmount_)));
+		healMaxStg_       = static_cast<int>(heal["maxStg"].AsInt(static_cast<int64_t>(healMaxStg_)));
+		healMaxBoss_      = static_cast<int>(heal["maxBoss"].AsInt(static_cast<int64_t>(healMaxBoss_)));
+	}
+	// ----- special gauge -----
+	const JsonValue& sg = root["special"];
+	if (sg.IsObject()) {
+		specialGaugeMax_       = static_cast<float>(sg["max"].AsDouble(specialGaugeMax_));
+		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
 	}
 
 	// ----- HP bar UI -----
@@ -312,6 +346,30 @@ void StagePlayScene::SaveTuningToJson() const {
 	jdObj["selectThreshold"] = static_cast<double>(jdSelectThreshold_);
 	jdObj["spreadDuration"]  = static_cast<double>(jdSpreadDuration_);
 	jdObj["mergeDuration"]   = static_cast<double>(jdMergeDuration_);
+	jdObj["meleeApproachDuration"] = static_cast<double>(jdMeleeApproachDuration_);
+	jdObj["meleeReturnDuration"]   = static_cast<double>(jdMeleeReturnDuration_);
+	jdObj["meleeApproachDist"]     = static_cast<double>(jdMeleeApproachDist_);
+	jdObj["dodgeReturnDuration"]   = static_cast<double>(jdDodgeReturnDuration_);
+	{
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(jdDodgeExpandedMargin_.x)));
+		arr.Push(JsonValue(static_cast<double>(jdDodgeExpandedMargin_.y)));
+		jdObj["dodgeExpandedMargin"] = std::move(arr);
+	}
+	{
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraOffset_.x)));
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraOffset_.y)));
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraOffset_.z)));
+		jdObj["meleeCamOffset"] = std::move(arr);
+	}
+	{
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraLookOffset_.x)));
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraLookOffset_.y)));
+		arr.Push(JsonValue(static_cast<double>(jdMeleeCameraLookOffset_.z)));
+		jdObj["meleeCamLookOffset"] = std::move(arr);
+	}
 	{
 		JsonValue cpArr = JsonValue::MakeArray();
 		for (int i = 0; i < 4; ++i) cpArr.Push(JsonValue(jdClonePath_[i]));
@@ -328,10 +386,16 @@ void StagePlayScene::SaveTuningToJson() const {
 	root["justDodge"] = std::move(jdObj);
 
 	JsonValue healObj = JsonValue::MakeObject();
-	healObj["amount"]  = static_cast<int64_t>(healAmount_);
-	healObj["maxStg"]  = static_cast<int64_t>(healMaxStg_);
-	healObj["maxBoss"] = static_cast<int64_t>(healMaxBoss_);
+	healObj["amount"]      = static_cast<int64_t>(healAmount_);
+	healObj["smallAmount"] = static_cast<int64_t>(healSmallAmount_);
+	healObj["maxStg"]      = static_cast<int64_t>(healMaxStg_);
+	healObj["maxBoss"]     = static_cast<int64_t>(healMaxBoss_);
 	root["heal"] = std::move(healObj);
+
+	JsonValue sgObj = JsonValue::MakeObject();
+	sgObj["max"]       = static_cast<double>(specialGaugeMax_);
+	sgObj["dodgeGain"] = static_cast<double>(dodgeSpecialGaugeGain_);
+	root["special"] = std::move(sgObj);
 
 	JsonValue hpbObj = JsonValue::MakeObject();
 	hpbObj["maxWidth"]  = static_cast<double>(hpBarMaxWidth_);
@@ -428,8 +492,7 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 	PlayJustDodgeEffect(attacker, justDodgeReceiptWindow_);
 	// World だけスロー（Player/UI は等速）。終了は UpdateJustDodgeEffect が元に戻す。
 	SetTimeScale(TimeGroup::World, justDodgeSlowWorld_);
-	// 回復ストック +1（消費上限は UpdateHeal 側で管理）
-	++healStock_;
+	// （ストック制廃止：左派生＝小回復・無制限、デフォルトHeal＝大回復・固定回数制に再設計）
 	// スコア加点
 	ScoreManager::GetInstance()->AddScore(justDodgeScore_);
 
@@ -461,6 +524,69 @@ void StagePlayScene::ApplyJustDodgeCamera(const Vector3& playerWorldPos)
 		eye.z - forward.z * jdCamPullback_ * b,
 	});
 	camera_->SetFovY(camera_->GetFovY() + jdCamFovAdd_ * b);
+	camera_->Update();
+}
+
+void StagePlayScene::ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos)
+{
+	if (!camera_ || !jdMeleeCameraActive_) return;
+	// プレイヤー→対象敵を forward に取って、その基底（right/up/forward）で
+	// jdMeleeCameraOffset_ ぶんプレイヤーから離れた位置にカメラを置く。
+	// 注視点は (player+target)/2 + jdMeleeCameraLookOffset_。
+	Vector3 target = playerWorldPos;
+	if (jdCounterTarget_) {
+		if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) target = *tp;
+	}
+
+	Vector3 fwd{ target.x - playerWorldPos.x, target.y - playerWorldPos.y, target.z - playerWorldPos.z };
+	float flen = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
+	fwd.x /= flen; fwd.y /= flen; fwd.z /= flen;
+
+	const Vector3 worldUp{ 0.0f, 1.0f, 0.0f };
+	Vector3 rgt{
+		worldUp.y * fwd.z - worldUp.z * fwd.y,
+		worldUp.z * fwd.x - worldUp.x * fwd.z,
+		worldUp.x * fwd.y - worldUp.y * fwd.x,
+	};
+	float rlen = std::sqrt(rgt.x * rgt.x + rgt.y * rgt.y + rgt.z * rgt.z);
+	if (rlen < 1e-4f) { rgt = { 1.0f, 0.0f, 0.0f }; rlen = 1.0f; }
+	rgt.x /= rlen; rgt.y /= rlen; rgt.z /= rlen;
+	Vector3 up{
+		fwd.y * rgt.z - fwd.z * rgt.y,
+		fwd.z * rgt.x - fwd.x * rgt.z,
+		fwd.x * rgt.y - fwd.y * rgt.x,
+	};
+
+	const Vector3& off = jdMeleeCameraOffset_;
+	Vector3 eye{
+		playerWorldPos.x + rgt.x * off.x + up.x * off.y + fwd.x * off.z,
+		playerWorldPos.y + rgt.y * off.x + up.y * off.y + fwd.y * off.z,
+		playerWorldPos.z + rgt.z * off.x + up.z * off.y + fwd.z * off.z,
+	};
+	// 注視点 = 中点 + lookOffset（基底空間で）
+	Vector3 mid{
+		(playerWorldPos.x + target.x) * 0.5f,
+		(playerWorldPos.y + target.y) * 0.5f,
+		(playerWorldPos.z + target.z) * 0.5f,
+	};
+	const Vector3& lo = jdMeleeCameraLookOffset_;
+	Vector3 look{
+		mid.x + rgt.x * lo.x + up.x * lo.y + fwd.x * lo.z,
+		mid.y + rgt.y * lo.x + up.y * lo.y + fwd.y * lo.z,
+		mid.z + rgt.z * lo.x + up.z * lo.y + fwd.z * lo.z,
+	};
+
+	// look ←→ eye から yaw/pitch を逆算
+	Vector3 dir{ look.x - eye.x, look.y - eye.y, look.z - eye.z };
+	float dlen = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+	if (dlen < 1e-4f) return;
+	dir.x /= dlen; dir.y /= dlen; dir.z /= dlen;
+	float yaw   = std::atan2(dir.x, dir.z);
+	float pitch = -std::asin(dir.y);
+
+	camera_->SetTranslate(eye);
+	camera_->SetRotate({ pitch, yaw, 0.0f });
 	camera_->Update();
 }
 
@@ -532,37 +658,26 @@ bool StagePlayScene::TrySelectCloneByAction(InputActionMap* actions, const Vecto
 
 void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& moveDelta)
 {
-	int idx = -1;
-	switch (dir) {
-		case CounterDir::Up:    idx = 0; break;
-		case CounterDir::Right: idx = 1; break;
-		case CounterDir::Down:  idx = 2; break;
-		case CounterDir::Left:  idx = 3; break;
-		default: return;
-	}
-	if (idx < 0 || idx >= static_cast<int>(jdClones_.size())) return;
+	if (dir == CounterDir::None) return;
 
-	IImGuiEditable* selected = jdClones_[idx];
-
-	// 他3体を破棄
-	for (int i = 0; i < static_cast<int>(jdClones_.size()); ++i) {
-		if (i == idx) continue;
-		if (auto* c = jdClones_[i]) {
-			RemoveHighlight(c);
-			DestroyDynamicEntity(c);
-		}
+	// 全分身を破棄（選択された分身も含む）。以降は実プレイヤーモデル（AnimatedObject3D）を表示する。
+	for (auto* c : jdClones_) {
+		if (!c) continue;
+		RemoveHighlight(c);
+		DestroyDynamicEntity(c);
 	}
 	jdClones_.clear();
-	if (selected) {
-		jdClones_.push_back(selected);
-		// α=1.0 で不透明化（実体化）
-		Vector4 solid = jdCloneColor_;
-		solid.w = 1.0f;
-		static_cast<Object3DInstance*>(selected)->SetMaterialColor(solid);
+
+	// プレイヤーを再表示（SpawnJustDodgeClones で非表示にしていた）。
+	if (player_) {
+		player_->SetVisible(true);
+		AddHighlight(player_); // ジャスト回避演出のグレースケール除外対象に戻す
 	}
 
-	// プレイヤーを選ばれた分身位置へテレポート（カメラ局所オフセットを直接加算）。
-	// 端の画面外問題は Phase3 の案B（許容枠の一時拡張）で対処予定。
+	// 復帰用に「派生開始時の playerInputOffset_」を保存（近接派生の元位置復帰で使う）。
+	jdReturnOffset_ = playerInputOffset_;
+
+	// プレイヤーを選択された分身位置へテレポート（視覚的に分身→プレイヤーへ切替）。
 	switch (dir) {
 		case CounterDir::Up:    playerInputOffset_.y += jdCloneOffset_; break;
 		case CounterDir::Right: playerInputOffset_.x += jdCloneOffset_; break;
@@ -571,40 +686,67 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		default: break;
 	}
 
-	jdChosen_    = dir;
-	jdSelecting_ = false;
-	jdMerging_   = false;
+	jdChosen_               = dir;
+	jdSelecting_            = false;
+	jdMerging_              = false;
+	justDodgeCounterActive_ = true; // 派生中は受付期限を延長＋世界スロー継続
+	jdActionPhase_          = JdActionPhase::None;
+	jdActionPhaseTimer_     = 0.0f;
+	jdMeleeCameraActive_    = false;
 
 	// 該当アクション発動
 	switch (dir) {
 		case CounterDir::Up:
 		case CounterDir::Right: {
-			// 近接（強=Up / 弱1段目=Right）。UpdateMeleeCombo の発生予約と同じ手順。
-			const std::string slot = (dir == CounterDir::Up) ? "melee_strong" : "melee_w1";
-			std::string prefab = player_ ? player_->FindBulletPrefab(slot) : std::string();
-			if (prefab.empty()) prefab = "TemporaryPlayerMelee";
-			float startup = 0.05f, active = 0.20f, recovery = 0.15f, comboWindow = 0.40f;
-			if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab); mdef && mdef->hasMelee) {
-				startup     = mdef->meleeStartup;
-				active      = mdef->meleeActiveDuration;
-				recovery    = mdef->meleeRecovery;
-				comboWindow = mdef->meleeComboWindow;
+			// 近接（強=Up / 弱1段目=Right）。
+			// フロー：ワールド空間で詰め寄り(Approach) → 攻撃発生(Active=既存meleeパイプ) → 元位置へ復帰(Return)。
+			// camera-local 平面（z 固定）では z 差で melee 判定が届かないので、ワールド座標で直接補間する。
+			if (player_) {
+				Vector3* pp = player_->GetEditableTranslate();
+				jdApproachWorldStart_ = pp ? *pp : Vector3{0.0f, 0.0f, 0.0f}; // テレポート後の現位置
+				// 派生終了で戻すワールド位置 = jdReturnOffset_ をワールドへ変換
+				if (camera_) {
+					jdReturnWorldPos_ = TransformCoordinate(
+						{ playerLocalOffset_.x + jdReturnOffset_.x,
+						  playerLocalOffset_.y + jdReturnOffset_.y,
+						  playerLocalOffset_.z }, camera_->GetWorldMatrix());
+				} else {
+					jdReturnWorldPos_ = jdApproachWorldStart_;
+				}
 			}
-			meleePendingPrefab_   = prefab;
-			meleeStartupTimer_    = startup;
-			meleePending_         = true;
-			meleeActionLockTimer_ = startup + active + recovery;
-			meleeComboTimer_      = startup + active + recovery + comboWindow;
-			meleeComboIndex_      = (dir == CounterDir::Up) ? 0 : 1;
-			if (meleeStartupTimer_ <= 0.0f) {
-				meleeStartupTimer_ = 0.0f;
-				meleePending_      = false;
-				SpawnPendingMelee();
+			// 詰め寄り終点 = 敵から「プレイヤー方向」へ jdMeleeApproachDist_ 離した位置
+			jdApproachWorldGoal_ = jdApproachWorldStart_;
+			if (jdCounterTarget_) {
+				if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) {
+					Vector3 epos = *tp;
+					Vector3 d{ jdApproachWorldStart_.x - epos.x,
+					           jdApproachWorldStart_.y - epos.y,
+					           jdApproachWorldStart_.z - epos.z };
+					float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+					if (dl > 1e-3f) {
+						d.x /= dl; d.y /= dl; d.z /= dl;
+						jdApproachWorldGoal_ = {
+							epos.x + d.x * jdMeleeApproachDist_,
+							epos.y + d.y * jdMeleeApproachDist_,
+							epos.z + d.z * jdMeleeApproachDist_,
+						};
+					}
+				}
 			}
+
+			jdActionPhase_       = JdActionPhase::Approach;
+			jdActionPhaseTimer_  = 0.0f;
+			jdMeleeCameraActive_ = true; // 近接派生中は専用カメラに切替
+
+			// 近接派生中はワールド時間を完全停止（敵がずれて当たらない事故を防ぐ）。
+			// Player グループは等倍のままなので、プレイヤーの詰め寄り/攻撃は動く。
+			SetTimeScale(TimeGroup::World, 0.0f);
+
+			meleeComboIndex_ = (dir == CounterDir::Up) ? 0 : 1;
 		} break;
 
 		case CounterDir::Down: {
-			// 追加回避：moveDelta(WASD/スティック)方向へダッシュ＋無敵窓開始
+			// 追加回避：moveDelta(WASD/スティック)方向へダッシュ＋無敵窓開始＋許容枠拡張＋射撃禁止
 			dodgeActive_          = true;
 			dodgeTimer_           = 0.0f;
 			dodgeCooldownTimer_   = dodgeCooldown_;
@@ -614,20 +756,26 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 				playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
 				playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
 			}
+			// 許容枠を一時拡張。回避＋無敵が終わってから戻し補間を開始する（UpdateJustDodgeCounterAction）。
+			jdDodgeMarginActive_ = true;
+			jdDodgeReturning_    = false;
+			jdDodgeMarginTimer_  = 0.0f;
+			// 射撃禁止：ダッシュ＋追加無敵中ずっと（UpdateJustDodgeCounterAction で毎フレ上書き）
+			shootLockoutTimer_ = (std::max)(shootLockoutTimer_, dodgeIFrameDuration_);
+			// 必殺技ゲージ加算
+			specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + dodgeSpecialGaugeGain_);
+			// Down のフェーズ：直接 Active 扱いで、終了は dodgeActive_ が落ちたら判定する
+			jdActionPhase_      = JdActionPhase::Active;
+			jdActionPhaseTimer_ = 0.0f;
 		} break;
 
 		case CounterDir::Left: {
-			// 回復：UpdateHeal と同じ消費ロジック（Phase3 で「左派生＝小回復・無制限」に再設計予定）
-			if (player_ && healStock_ > 0) {
-				const bool isBoss = (phase_ == Phase::Boss);
-				int&      used = isBoss ? healUsedBoss_ : healUsedStg_;
-				const int cap  = isBoss ? healMaxBoss_  : healMaxStg_;
-				if (used < cap) {
-					player_->GetHP().Heal(healAmount_);
-					++used;
-					--healStock_;
-				}
+			// 回復（小回復・無制限）：上限チェックなし
+			if (player_) {
+				player_->GetHP().Heal(healSmallAmount_);
 			}
+			// 即座に派生終了（演出はジャスト回避のフェードアウトに任せる）
+			EndJustDodgeCounterAction();
 		} break;
 
 		default: break;
@@ -638,6 +786,118 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		dir == CounterDir::Right ? "Right(近接弱)" :
 		dir == CounterDir::Down  ? "Down(追加回避)" : "Left(回復)";
 	LogBuffer::Instance().Add(std::string("JustDodge derive: ") + name, LogBuffer::Level::Info);
+}
+
+void StagePlayScene::EndJustDodgeCounterAction()
+{
+	// 近接派生でワールドを停止していた場合は元のスロー値へ戻す。
+	// （フェードアウト処理側で最終的に 1.0 に戻る）
+	if (jdMeleeCameraActive_) {
+		SetTimeScale(TimeGroup::World, justDodgeSlowWorld_);
+	}
+	justDodgeCounterActive_ = false;
+	jdActionPhase_          = JdActionPhase::None;
+	jdActionPhaseTimer_     = 0.0f;
+	jdMeleeCameraActive_    = false;
+}
+
+void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
+{
+	if (!justDodgeCounterActive_) return;
+	jdActionPhaseTimer_ += dt;
+
+	switch (jdChosen_) {
+		case CounterDir::Up:
+		case CounterDir::Right: {
+			// Approach → Active（meleeパイプ＋melee発生待ち） → (弱は自動連撃で w1→w4) → Return → 終了
+			// ワールド位置の補間は描画直前の SetTranslate 上書きで行う（ここではフェーズ管理だけ）。
+
+			// 近接スロット名から発生予約をまとめる lambda。stage は弱の場合 1..4、強の場合は無視。
+			auto spawnMeleeStage = [&](int stage) {
+				std::string slot;
+				if (jdChosen_ == CounterDir::Up) {
+					slot = "melee_strong";
+				} else {
+					switch (stage) {
+						case 1: slot = "melee_w1"; break;
+						case 2: slot = "melee_w2"; break;
+						case 3: slot = "melee_w3"; break;
+						case 4: slot = "melee_w4"; break;
+						default: slot = "melee_w1"; break;
+					}
+				}
+				std::string prefab = player_ ? player_->FindBulletPrefab(slot) : std::string();
+				if (prefab.empty()) prefab = "TemporaryPlayerMelee";
+				float startup = 0.05f, active = 0.20f, recovery = 0.15f, comboWindow = 0.40f;
+				if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab); mdef && mdef->hasMelee) {
+					startup     = mdef->meleeStartup;
+					active      = mdef->meleeActiveDuration;
+					recovery    = mdef->meleeRecovery;
+					comboWindow = mdef->meleeComboWindow;
+				}
+				meleePendingPrefab_   = prefab;
+				meleeStartupTimer_    = startup;
+				meleePending_         = true;
+				meleeActionLockTimer_ = startup + active + recovery;
+				meleeComboTimer_      = startup + active + recovery + comboWindow;
+				meleeComboIndex_      = (jdChosen_ == CounterDir::Up) ? 0 : stage;
+				if (meleeStartupTimer_ <= 0.0f) {
+					meleeStartupTimer_ = 0.0f;
+					meleePending_      = false;
+					SpawnPendingMelee();
+				}
+			};
+
+			if (jdActionPhase_ == JdActionPhase::Approach) {
+				if (jdActionPhaseTimer_ >= jdMeleeApproachDuration_) {
+					jdAutoComboStage_   = 1;
+					spawnMeleeStage(jdAutoComboStage_);
+					jdActionPhase_      = JdActionPhase::Active;
+					jdActionPhaseTimer_ = 0.0f;
+				}
+			} else if (jdActionPhase_ == JdActionPhase::Active) {
+				if (meleeActionLockTimer_ <= 0.0f) {
+					// 弱（Right）は kMeleeWeakComboMax_ 段まで自動連撃
+					const bool isWeak = (jdChosen_ == CounterDir::Right);
+					if (isWeak && jdAutoComboStage_ < kMeleeWeakComboMax_) {
+						++jdAutoComboStage_;
+						spawnMeleeStage(jdAutoComboStage_);
+						jdActionPhaseTimer_ = 0.0f; // Active 継続
+					} else {
+						jdActionPhase_      = JdActionPhase::Return;
+						jdActionPhaseTimer_ = 0.0f;
+					}
+				}
+			} else if (jdActionPhase_ == JdActionPhase::Return) {
+				if (jdActionPhaseTimer_ >= jdMeleeReturnDuration_) {
+					playerInputOffset_ = jdReturnOffset_;
+					playerVelocity_    = { 0.0f, 0.0f };
+					meleeComboIndex_   = 0; // 連撃終了でコンボ状態リセット
+					EndJustDodgeCounterAction();
+				}
+			}
+		} break;
+
+		case CounterDir::Down: {
+			// 回避が落ちる（dodgeActive_=false）まで Active 継続。
+			// ダッシュ＋追加無敵中は射撃禁止を上書きし続ける（既存shootLockoutTimer_を流用）。
+			if (dodgeActive_) {
+				shootLockoutTimer_ = (std::max)(shootLockoutTimer_, 0.05f);
+			} else {
+				// 回避＋追加無敵終了 → 戻り開始フラグだけ立てる。
+				// 押し戻し＆終了判定はメイン Update 側のコライダー 8 角チェックで行う
+				// （ここで中心 NDC ベースに終了すると collider 端がはみ出したまま次フレで固まる）。
+				if (!jdDodgeReturning_) {
+					jdDodgeReturning_        = true;
+					jdDodgeMarginTimer_      = 0.0f;
+					jdDodgeReturnFromOffset_ = playerInputOffset_;
+				}
+				jdDodgeMarginTimer_ += dt;
+			}
+		} break;
+
+		default: break;
+	}
 }
 
 void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector2& moveDelta, float dt)
@@ -741,6 +1001,12 @@ void StagePlayScene::ResetDodgeState()
 	jdChosen_          = CounterDir::None;
 	jdCounterTarget_   = nullptr;
 	jdEffectIntensity_ = 0.0f;
+	jdActionPhase_     = JdActionPhase::None;
+	jdActionPhaseTimer_ = 0.0f;
+	jdMeleeCameraActive_ = false;
+	jdDodgeMarginActive_ = false;
+	jdDodgeReturning_    = false;
+	jdDodgeMarginTimer_  = 0.0f;
 	ClearJustDodgeClones();
 
 	if (justDodgeActive_) {
@@ -765,26 +1031,29 @@ void StagePlayScene::UpdateHeal(InputActionMap* actions)
 	// ジャスト回避演出中は通常Healを発動しない（左派生で消費される＝同フレ二重消費を防ぐ）
 	if (justDodgeActive_) return;
 	if (!actions->IsTriggered(static_cast<int>(Action::Heal))) return;
-	if (healStock_ <= 0) return;
 
-	// 現フェーズの回復上限（STG / ボスで別カウント）
+	// デフォルトHeal = 大回復・固定回数制（STG/ボスで別カウント）。ストック制は廃止。
 	const bool isBoss = (phase_ == Phase::Boss);
 	int&      used = isBoss ? healUsedBoss_ : healUsedStg_;
 	const int cap  = isBoss ? healMaxBoss_  : healMaxStg_;
 	if (used >= cap) return;
 
 	player_->GetHP().Heal(healAmount_);
-	--healStock_;
 	++used;
 }
 
 void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const
 {
-	// 前 = 自機 → firingTarget
+	// 前 = 自機 → firingTarget。
+	// 近接派生中（Up/Right）は firingTarget ではなく対象敵を直接向く（melee 判定オフセットも敵方向に展開される）。
 	Vector3 fwd{ 0.0f, 0.0f, 1.0f };
 	if (player_) {
 		const Vector3 ppos = player_->GetTranslate();
-		fwd = { firingTarget_.x - ppos.x, firingTarget_.y - ppos.y, firingTarget_.z - ppos.z };
+		Vector3 tgt = firingTarget_;
+		if (jdMeleeCameraActive_ && jdCounterTarget_) {
+			if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) tgt = *tp;
+		}
+		fwd = { tgt.x - ppos.x, tgt.y - ppos.y, tgt.z - ppos.z };
 	}
 	float flen = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
 	if (flen < 1e-5f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
@@ -851,6 +1120,9 @@ void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 
 	// 行動ロック中（発生〜後隙）は新規入力を一切受け付けない
 	if (meleeActionLockTimer_ > 0.0f) return;
+	// 分身カウンター派生中は通常の近接入力を受け付けない
+	// （MeleeStrong/MeleeWeak で派生が確定したフレームに通常近接が二重発動するのを防止）。
+	if (justDodgeCounterActive_ || jdSelecting_) return;
 
 	const bool strongTrig = actions->IsTriggered(static_cast<int>(Action::MeleeStrong));
 	const bool weakTrig   = actions->IsTriggered(static_cast<int>(Action::MeleeWeak));
@@ -1218,15 +1490,47 @@ void StagePlayScene::OnImGuiTuning() {
 			static_cast<int>(jdClones_.size()), jdEffectIntensity_);
 
 		ImGui::Separator();
-		ImGui::TextUnformatted("回復（Heal）");
-		ImGui::DragInt("Heal Amount", &healAmount_, 1.0f, 0, 999);
+		ImGui::TextUnformatted("分身カウンター派生（Phase2: 詰め寄り / 戻り / 専用カメラ）");
+		ImGui::DragFloat("Melee Approach Duration (s)", &jdMeleeApproachDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("Max Heals (STG)", &healMaxStg_, 1.0f, 0, 99);
+		ImGui::DragFloat("Melee Return Duration (s)",   &jdMeleeReturnDuration_,   0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Melee Approach Dist",         &jdMeleeApproachDist_,     0.1f,  0.0f, 30.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat3("Melee Cam Offset (R/U/F)",   &jdMeleeCameraOffset_.x,   0.05f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("プレイヤー基底（右/上/前=対象敵方向）でのカメラ位置オフセット。\n左斜め後ろ＝右-（左）, 上+, 前-（後ろ）");
+		ImGui::DragFloat3("Melee Cam Look Offset",      &jdMeleeCameraLookOffset_.x, 0.05f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("プレイヤーと敵の中点を基準にした注視点オフセット（基底空間）");
+		ImGui::DragFloat2("Dodge Expanded Margin",      &jdDodgeExpandedMargin_.x, 0.01f, 0.0f, 3.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Dodge Return Duration (s)",   &jdDodgeReturnDuration_,   0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("phase=%d  jdReturnOffset=(%.2f, %.2f)  dodgeReturning=%d",
+			static_cast<int>(jdActionPhase_), jdReturnOffset_.x, jdReturnOffset_.y, jdDodgeReturning_ ? 1 : 0);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("必殺技ゲージ（UI 未実装）");
+		ImGui::DragFloat("Special Gauge Max",   &specialGaugeMax_,      1.0f, 1.0f, 1000.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Dodge Gauge Gain",    &dodgeSpecialGaugeGain_,0.1f, 0.0f, 100.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ProgressBar(specialGauge_ / (std::max)(1.0f, specialGaugeMax_), ImVec2(-1.0f, 0.0f));
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("回復（デフォルト Heal = 大・固定回数 / 左派生 = 小・無制限）");
+		ImGui::DragInt("Heal Amount (大・R/X)",   &healAmount_,      1.0f, 0, 999);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Heal Small (小・左派生)", &healSmallAmount_, 1.0f, 0, 999);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Max Heals (STG)",  &healMaxStg_,  1.0f, 0, 99);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragInt("Max Heals (Boss)", &healMaxBoss_, 1.0f, 0, 99);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("stock=%d  usedSTG=%d/%d  usedBoss=%d/%d",
-			healStock_, healUsedStg_, healMaxStg_, healUsedBoss_, healMaxBoss_);
+		ImGui::Text("usedSTG=%d/%d  usedBoss=%d/%d  gauge=%.1f/%.1f",
+			healUsedStg_, healMaxStg_, healUsedBoss_, healMaxBoss_,
+			specialGauge_, specialGaugeMax_);
 	}
 
 	if (ImGui::CollapsingHeader("Damage / Invincibility")) {
@@ -1486,7 +1790,8 @@ void StagePlayScene::Update() {
 
 	// プレイヤー：入力でカメラ空間オフセットを動かしつつ、コライダーが画面端を越えないようクリップ
 	if (player_) {
-		const float dt = GetScaledDeltaTime();
+		// プレイヤーの移動・入力は Player グループ（既定 1.0）で動かす＝ジャスト回避のワールドスロー中も等倍。
+		const float dt = GetScaledDeltaTime(TimeGroup::Player);
 
 		// ----- 入力で moveDelta (-1..1) を作る -----
 		Vector2 moveDelta{ 0.0f, 0.0f };
@@ -1518,8 +1823,13 @@ void StagePlayScene::Update() {
 		playerVelocity_.y += (targetVel.y - playerVelocity_.y) * alpha;
 
 		// 回避（ダッシュ＋無敵窓）。playerVelocity_ にインパルスを足すので、以降のクリップ判定で
-		// 画面外には出ない。タイマー類はスローの影響を受けない実時間（UI グループ dt）で進める。
-		UpdateDodge(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
+		// 画面外には出ない。iframe や CD は World dt（スロー中は遅く減る＝iframe が体感で延びる）。
+		// 追加回避（Down派生）でジャスト回避スロー中に発動した場合、無敵がそのままスロー分延びる挙動。
+		UpdateDodge(actions, moveDelta, GetScaledDeltaTime(TimeGroup::World));
+
+		// 分身カウンター派生のアクション進行（近接の詰め寄り/戻り、追加回避の戻し管理など）。
+		// playerInputOffset_ を直接書き換えるので、クリップ判定の手前で呼ぶ。
+		UpdateJustDodgeCounterAction(GetScaledDeltaTime(TimeGroup::UI));
 
 		// 候補オフセット（クリップで反映可否を判定する）
 		Vector2 candidate = {
@@ -1565,9 +1875,43 @@ void StagePlayScene::Update() {
 				break;
 			}
 
-			// 8 角を World → Clip 投影して X/Y が許容範囲を超えるか
-			const float xLim = 1.0f + playerClipMargin_.x;
-			const float yLim = 1.0f + playerClipMargin_.y;
+			// 8 角を World → Clip 投影して X/Y が許容範囲を超えるか。
+			// 追加回避（Down）派生中は許容枠を一時拡張。戻し中(jdDodgeReturning_)は時間で線形に縮める。
+			// ただし「プレイヤー現在位置を含む最小マージン」を下回らないようにする（戻し中に固定回避）。
+			Vector2 effMargin = playerClipMargin_;
+			// 近接派生中はクリップ制限を実質無効化（Approach で対象敵手前まで自由に移動できるように）。
+			if (jdMeleeCameraActive_) {
+				effMargin = { 10.0f, 10.0f };
+			} else
+			if (jdDodgeMarginActive_) {
+				if (jdDodgeReturning_ && jdDodgeReturnDuration_ > 1e-4f) {
+					float t = jdDodgeMarginTimer_ / jdDodgeReturnDuration_;
+					if (t > 1.0f) t = 1.0f;
+					effMargin.x = jdDodgeExpandedMargin_.x + (playerClipMargin_.x - jdDodgeExpandedMargin_.x) * t;
+					effMargin.y = jdDodgeExpandedMargin_.y + (playerClipMargin_.y - jdDodgeExpandedMargin_.y) * t;
+				} else {
+					effMargin = jdDodgeExpandedMargin_;
+				}
+				// プレイヤー現在位置(中心)のNDCを取り、それを含む最小 margin と比較して大きい方を採用。
+				// これで戻し中にマージンが縮みすぎて player が範囲外で固まる事故を防ぐ（押し戻しで内側に来たら自然に縮む）。
+				Vector3 curWorld = TransformCoordinate(
+					{ playerLocalOffset_.x + playerInputOffset_.x,
+					  playerLocalOffset_.y + playerInputOffset_.y,
+					  playerLocalOffset_.z }, camWorld);
+				float cwx = curWorld.x * vp.m[0][0] + curWorld.y * vp.m[1][0] + curWorld.z * vp.m[2][0] + vp.m[3][0];
+				float cwy = curWorld.x * vp.m[0][1] + curWorld.y * vp.m[1][1] + curWorld.z * vp.m[2][1] + vp.m[3][1];
+				float cww = curWorld.x * vp.m[0][3] + curWorld.y * vp.m[1][3] + curWorld.z * vp.m[2][3] + vp.m[3][3];
+				if (cww > 1e-4f) {
+					float ndcX = cwx / cww;
+					float ndcY = cwy / cww;
+					float needX = (std::max)(0.0f, std::fabs(ndcX) - 1.0f) + 0.05f;
+					float needY = (std::max)(0.0f, std::fabs(ndcY) - 1.0f) + 0.05f;
+					if (needX > effMargin.x) effMargin.x = needX;
+					if (needY > effMargin.y) effMargin.y = needY;
+				}
+			}
+			const float xLim = 1.0f + effMargin.x;
+			const float yLim = 1.0f + effMargin.y;
 			for (int i = 0; i < 8; ++i) {
 				float sx = (i & 1) ? +1.0f : -1.0f;
 				float sy = (i & 2) ? +1.0f : -1.0f;
@@ -1604,11 +1948,112 @@ void StagePlayScene::Update() {
 		}
 		playerInputOffset_ = next;
 
+		// 追加回避の戻り：コライダー 8 角の最大 NDC で軸ごとに判定。
+		// 通常マージンを超えてる軸だけ内側へ押し戻す（ダッシュで取った別軸位置は維持）。
+		if (jdDodgeMarginActive_ && jdDodgeReturning_) {
+			// 8 角の NDC を全部取って、軸ごとの max(|ndc|) を求める
+			Vector3 worldPosN = TransformCoordinate(
+				{ playerLocalOffset_.x + playerInputOffset_.x,
+				  playerLocalOffset_.y + playerInputOffset_.y, playerLocalOffset_.z }, camWorld);
+			Matrix4x4 rotN = MakeRotateMatrix(camera_->GetRotate());
+			Vector3 axesN[3] = {
+				{ rotN.m[0][0], rotN.m[0][1], rotN.m[0][2] },
+				{ rotN.m[1][0], rotN.m[1][1], rotN.m[1][2] },
+				{ rotN.m[2][0], rotN.m[2][1], rotN.m[2][2] },
+			};
+			const Collider& colN = player_->GetCollider();
+			Vector3 centerN = { worldPosN.x + colN.offset.x, worldPosN.y + colN.offset.y, worldPosN.z + colN.offset.z };
+			Vector3 heN{ 0.0f, 0.0f, 0.0f };
+			switch (colN.shape) {
+			case ColliderShape::Sphere:  heN = { colN.radius, colN.radius, colN.radius }; break;
+			case ColliderShape::OBB:     heN = colN.halfExtents; break;
+			case ColliderShape::Capsule: heN = { colN.capsuleRadius, 0.5f * colN.capsuleHeight + colN.capsuleRadius, colN.capsuleRadius }; break;
+			}
+			float maxAbsX = 0.0f, maxAbsY = 0.0f;
+			bool valid = true;
+			for (int i = 0; i < 8; ++i) {
+				float sx = (i & 1) ? +1.0f : -1.0f;
+				float sy = (i & 2) ? +1.0f : -1.0f;
+				float sz = (i & 4) ? +1.0f : -1.0f;
+				Vector3 local = {
+					centerN.x + axesN[0].x * heN.x * sx + axesN[1].x * heN.y * sy + axesN[2].x * heN.z * sz,
+					centerN.y + axesN[0].y * heN.x * sx + axesN[1].y * heN.y * sy + axesN[2].y * heN.z * sz,
+					centerN.z + axesN[0].z * heN.x * sx + axesN[1].z * heN.y * sy + axesN[2].z * heN.z * sz,
+				};
+				float wx = local.x * vp.m[0][0] + local.y * vp.m[1][0] + local.z * vp.m[2][0] + vp.m[3][0];
+				float wy = local.x * vp.m[0][1] + local.y * vp.m[1][1] + local.z * vp.m[2][1] + vp.m[3][1];
+				float ww = local.x * vp.m[0][3] + local.y * vp.m[1][3] + local.z * vp.m[2][3] + vp.m[3][3];
+				if (ww <= 1e-4f) { valid = false; break; }
+				float ndcX = wx / ww;
+				float ndcY = wy / ww;
+				if (std::fabs(ndcX) > maxAbsX) maxAbsX = std::fabs(ndcX);
+				if (std::fabs(ndcY) > maxAbsY) maxAbsY = std::fabs(ndcY);
+			}
+			if (valid) {
+				// 通常マージンより内側のセーフティ位置まで押し戻す（境界ピッタリで次フレ固定回避）
+				const float xTgt = 1.0f + playerClipMargin_.x - 0.05f;
+				const float yTgt = 1.0f + playerClipMargin_.y - 0.05f;
+				bool outX = maxAbsX > xTgt;
+				bool outY = maxAbsY > yTgt;
+				if (outX || outY) {
+					const float pushSpeed = 30.0f;
+					if (outX) {
+						float sign = (playerInputOffset_.x > 0.0f) ? -1.0f : 1.0f;
+						playerInputOffset_.x += sign * pushSpeed * dt;
+					}
+					if (outY) {
+						float sign = (playerInputOffset_.y > 0.0f) ? -1.0f : 1.0f;
+						playerInputOffset_.y += sign * pushSpeed * dt;
+					}
+					playerVelocity_ = { 0.0f, 0.0f };
+				} else {
+					// コライダー全体がセーフティ枠内 → 派生終了（次フレの通常クリップでも確実に内側）
+					jdDodgeMarginActive_ = false;
+					jdDodgeReturning_    = false;
+					EndJustDodgeCounterAction();
+				}
+			}
+		}
+
 		Vector3 worldPos = TransformCoordinate(
 			{ playerLocalOffset_.x + playerInputOffset_.x,
 			  playerLocalOffset_.y + playerInputOffset_.y,
 			  playerLocalOffset_.z },
 			camWorld);
+
+		// 近接派生中はワールド位置を直接上書き（Approach/Active/Return）。
+		// camera-local 平面では z が固定で melee 判定が遠方の敵に届かないため、
+		// ワールド空間で敵手前まで詰め寄って攻撃→元位置へ戻す。
+		if (jdMeleeCameraActive_) {
+			auto easeOutCubic = [](float t) {
+				if (t < 0.0f) t = 0.0f;
+				if (t > 1.0f) t = 1.0f;
+				return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+			};
+			if (jdActionPhase_ == JdActionPhase::Approach) {
+				float t = (jdMeleeApproachDuration_ > 1e-4f)
+					? (jdActionPhaseTimer_ / jdMeleeApproachDuration_) : 1.0f;
+				const float e = easeOutCubic(t);
+				worldPos = {
+					jdApproachWorldStart_.x + (jdApproachWorldGoal_.x - jdApproachWorldStart_.x) * e,
+					jdApproachWorldStart_.y + (jdApproachWorldGoal_.y - jdApproachWorldStart_.y) * e,
+					jdApproachWorldStart_.z + (jdApproachWorldGoal_.z - jdApproachWorldStart_.z) * e,
+				};
+			} else if (jdActionPhase_ == JdActionPhase::Active) {
+				worldPos = jdApproachWorldGoal_;
+			} else if (jdActionPhase_ == JdActionPhase::Return) {
+				float t = (jdMeleeReturnDuration_ > 1e-4f)
+					? (jdActionPhaseTimer_ / jdMeleeReturnDuration_) : 1.0f;
+				const float e = easeOutCubic(t);
+				worldPos = {
+					jdApproachWorldGoal_.x + (jdReturnWorldPos_.x - jdApproachWorldGoal_.x) * e,
+					jdApproachWorldGoal_.y + (jdReturnWorldPos_.y - jdApproachWorldGoal_.y) * e,
+					jdApproachWorldGoal_.z + (jdReturnWorldPos_.z - jdApproachWorldGoal_.z) * e,
+				};
+			}
+			playerVelocity_ = { 0.0f, 0.0f };
+		}
+
 		player_->SetTranslate(worldPos);
 		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
 
@@ -1622,6 +2067,8 @@ void StagePlayScene::Update() {
 			ApplyPrecisionCamera(worldPos);
 			// ジャスト回避の引き（精密カメラの後＝上書きして優先）
 			ApplyJustDodgeCamera(worldPos);
+			// 近接派生中はさらに上書き（プレイヤー左斜め後ろからのカメラに切替）
+			ApplyJustDodgeMeleeCamera(worldPos);
 		}
 	}
 
@@ -1799,9 +2246,14 @@ void StagePlayScene::Update() {
 			aimTarget_.z += (desiredTarget.z - aimTarget_.z) * alpha;
 		}
 
-		// プレイヤー回転を player → aimTarget 方向に
+		// プレイヤー回転を player → aimTarget 方向に。
+		// ただし近接派生中（Up/Right）はレティクルではなく対象敵を直接向く。
 		const Vector3 playerPos = player_->GetTranslate();
-		const Vector3 toAim{ aimTarget_.x - playerPos.x, aimTarget_.y - playerPos.y, aimTarget_.z - playerPos.z };
+		Vector3 aimTgt = aimTarget_;
+		if (jdMeleeCameraActive_ && jdCounterTarget_) {
+			if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) aimTgt = *tp;
+		}
+		const Vector3 toAim{ aimTgt.x - playerPos.x, aimTgt.y - playerPos.y, aimTgt.z - playerPos.z };
 		const float horiz = std::sqrt(toAim.x * toAim.x + toAim.z * toAim.z);
 		if (horiz > 1e-4f || std::abs(toAim.y) > 1e-4f) {
 			const float yaw = std::atan2(toAim.x, toAim.z);
@@ -2025,15 +2477,31 @@ void StagePlayScene::Update() {
 			}
 		}
 
-		// ----- 近接攻撃（弱4段コンボ / 強単発）-----
+	}
+
+	// ----- 近接攻撃（弱4段コンボ / 強単発）-----
+	// 分身カウンターの近接派生中は World=0 のため上の gameFrozen ブロックに入れない。
+	// MeleeCombo は startup/recovery タイマーや SpawnPendingMelee を駆動するので、
+	// 派生中も Player dt で必ず呼ぶ必要がある。
+	if (!gameFrozen || jdMeleeCameraActive_) {
+		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
 		UpdateMeleeCombo(actions, dtP);
 	}
 
 	// 弾の進行と寿命処理（World 時間軸で動かす）
 	if (!gameFrozen) {
 		UpdateBullets(worldDt);
-		// 近接判定の追従・寿命処理
-		UpdateMelees(worldDt);
+	}
+	// 近接判定の追従・寿命処理。
+	// 近接派生中はワールド完全停止だが、判定の寿命と当たり処理は進める必要があるので Player dt で動かす。
+	{
+		const float meleeDt = jdMeleeCameraActive_
+			? GetScaledDeltaTime(TimeGroup::Player) : worldDt;
+		if (!gameFrozen || jdMeleeCameraActive_) {
+			UpdateMelees(meleeDt);
+		}
+	}
+	if (!gameFrozen) {
 
 		// プレイヤー被弾処理・UI更新
 		UpdatePlayerDamageAndUI(worldDt);
