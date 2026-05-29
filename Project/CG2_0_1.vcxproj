@@ -286,6 +286,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectDef.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\LightningRuntime.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectInstance.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.cpp" />
@@ -342,6 +343,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\BillboardMode.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectDef.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\LightningRuntime.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectInstance.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.h" />
@@ -736,10 +738,12 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <None Include="tools\Python\cook_assets.py" />
     <None Include="tools\Python\pack_assets.py" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\..\..\デスクトップ\Beam_Sample.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-
   <!-- アセットコンバーター実行（PreBuildEvent ではなく BuildDependsOn で確実に走らせる） -->
   <PropertyGroup>
     <BuildDependsOn>CookAssets;$(BuildDependsOn)</BuildDependsOn>

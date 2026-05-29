@@ -7,7 +7,7 @@
 #include <string>
 
 namespace {
-    const char* MeshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix" };
+    const char* MeshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning" };
     const char* BlendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
     const char* BillboardNames[] = { "None", "Full", "YAxis" };
     const char* LightKindNames[] = { "Point", "Spot" };
@@ -97,8 +97,8 @@ void EffectComponentEditable::OnImGuiInspector() {
             }
         }
 
-        // ===== Geometry（Ring / Cylinder / Helix のみ。PrimitiveInstance Inspector と同等） =====
-        if (c.meshType == 3 || c.meshType == 4 || c.meshType == 5) {
+        // ===== Geometry（Ring / Cylinder / Helix / Beam / Lightning のみ。PrimitiveInstance Inspector と同等） =====
+        if (c.meshType == 3 || c.meshType == 4 || c.meshType == 5 || c.meshType == 6 || c.meshType == 7) {
             if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
                 if (c.meshType == 3) { // Ring
                     auto& rp = c.ringParams;
@@ -127,7 +127,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     dirty |= ImGui::ColorEdit4("Bottom Color", &cp.bottomColor.x);
                     dirty |= ImGui::SliderAngle("Start Angle", &cp.startAngle, 0.0f, 360.0f);
                     dirty |= ImGui::SliderAngle("End Angle",   &cp.endAngle,   0.0f, 360.0f);
-                } else { // Helix
+                } else if (c.meshType == 5) { // Helix
                     auto& hp = c.helixParams;
                     dirty |= ImGui::DragFloat("Start Helix Radius", &hp.startHelixRadius, 0.01f, 0.0f, 100.0f);
                     dirty |= ImGui::DragFloat("End Helix Radius",   &hp.endHelixRadius,   0.01f, 0.0f, 100.0f);
@@ -147,6 +147,69 @@ void EffectComponentEditable::OnImGuiInspector() {
                     }
                     dirty |= ImGui::ColorEdit4("Start Color", &hp.startColor.x);
                     dirty |= ImGui::ColorEdit4("End Color",   &hp.endColor.x);
+                } else if (c.meshType == 6) { // Beam
+                    auto& bp = c.beamParams;
+                    auto& app = bp.appearance;
+                    dirty |= ImGui::DragFloat3("Start Pos", &bp.startPos.x, 0.05f);
+                    dirty |= ImGui::DragFloat3("End Pos",   &bp.endPos.x,   0.05f);
+                    int lenSeg = static_cast<int>(bp.lengthSegments);
+                    if (ImGui::DragInt("Length Segments", &lenSeg, 1.0f, 1, 1024)) {
+                        bp.lengthSegments = static_cast<uint32_t>(lenSeg);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::DragFloat("Start Width", &app.startWidth, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("End Width",   &app.endWidth,   0.01f, 0.0f, 100.0f);
+                    int planeCount = static_cast<int>(app.planeCount);
+                    if (ImGui::DragInt("Plane Count", &planeCount, 0.1f, 1, 8)) {
+                        app.planeCount = static_cast<uint32_t>(planeCount);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::DragFloat("Fade Start Length", &app.fadeStartLength, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Fade End Length",   &app.fadeEndLength,   0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::ColorEdit4("Start Color##Beam", &app.startColor.x);
+                    dirty |= ImGui::ColorEdit4("End Color##Beam",   &app.endColor.x);
+                    dirty |= ImGui::Checkbox("UV Wrap By Length", &app.uvWrapByLength);
+                    dirty |= ImGui::DragFloat("UV Tiles Per Unit", &app.uvTilesPerUnit, 0.01f, 0.0f, 100.0f);
+                } else { // Lightning
+                    auto& lp = c.lightningParams;
+                    auto& app = lp.appearance;
+                    dirty |= ImGui::DragFloat3("Start Pos", &lp.startPos.x, 0.05f);
+                    dirty |= ImGui::DragFloat3("End Pos",   &lp.endPos.x,   0.05f);
+
+                    ImGui::SeparatorText("Fractal");
+                    int gen = static_cast<int>(lp.generations);
+                    if (ImGui::DragInt("Generations", &gen, 0.1f, 1, 10)) {
+                        lp.generations = static_cast<uint32_t>(gen);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::DragFloat("Max Offset Ratio", &lp.maxOffsetRatio, 0.005f, 0.0f, 1.0f);
+                    int seed = static_cast<int>(lp.randomSeed);
+                    if (ImGui::DragInt("Random Seed (0=random)", &seed, 1.0f, 0, INT_MAX)) {
+                        lp.randomSeed = static_cast<uint32_t>(seed < 0 ? 0 : seed);
+                        dirty = true;
+                    }
+
+                    ImGui::SeparatorText("Branches");
+                    dirty |= ImGui::SliderFloat("Branch Probability", &lp.branchProbability, 0.0f, 1.0f);
+                    dirty |= ImGui::DragFloat("Branch Length Scale", &lp.branchLengthScale, 0.01f, 0.0f, 2.0f);
+                    dirty |= ImGui::SliderAngle("Branch Max Angle", &lp.branchMaxAngle, 0.0f, 90.0f);
+                    dirty |= ImGui::DragFloat("Branch Width Scale", &lp.branchWidthScale, 0.01f, 0.0f, 2.0f);
+                    dirty |= ImGui::DragFloat("Branch Color Scale", &lp.branchColorScale, 0.01f, 0.0f, 2.0f);
+
+                    ImGui::SeparatorText("Appearance");
+                    dirty |= ImGui::DragFloat("Start Width##Lit", &app.startWidth, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("End Width##Lit",   &app.endWidth,   0.01f, 0.0f, 100.0f);
+                    int planeCount = static_cast<int>(app.planeCount);
+                    if (ImGui::DragInt("Plane Count##Lit", &planeCount, 0.1f, 1, 8)) {
+                        app.planeCount = static_cast<uint32_t>(planeCount);
+                        dirty = true;
+                    }
+                    dirty |= ImGui::DragFloat("Fade Start Length##Lit", &app.fadeStartLength, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::DragFloat("Fade End Length##Lit",   &app.fadeEndLength,   0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::ColorEdit4("Start Color##Lit", &app.startColor.x);
+                    dirty |= ImGui::ColorEdit4("End Color##Lit",   &app.endColor.x);
+                    dirty |= ImGui::Checkbox("UV Wrap By Length##Lit", &app.uvWrapByLength);
+                    dirty |= ImGui::DragFloat("UV Tiles Per Unit##Lit", &app.uvTilesPerUnit, 0.01f, 0.0f, 100.0f);
                 }
                 ImGui::TextDisabled("(変更は Restart で反映)");
             }
@@ -160,6 +223,8 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty |= ImGui::Checkbox("Cull Backface", &c.cullBackface);
             const char* samplerItems[] = { "Wrap U / Wrap V", "Wrap U / Clamp V", "Clamp U / Clamp V" };
             dirty |= ImGui::Combo("Sampler", &c.samplerMode, samplerItems, IM_ARRAYSIZE(samplerItems));
+            dirty |= ImGui::DragFloat("View Angle Fade Power", &c.viewAngleFadePower, 0.05f, 0.0f, 16.0f,
+                "%.2f (0=無効、雷/レーザーで斜め面をフェード)");
         }
 
         // ===== UV =====

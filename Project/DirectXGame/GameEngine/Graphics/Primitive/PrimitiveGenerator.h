@@ -115,4 +115,55 @@ namespace PrimitiveGenerator {
     // Helix（螺旋チューブ）を生成
     MeshData CreateHelix(const HelixParams& params);
 
+    // Beam / Lightning 共通の見た目パラメータ
+    struct BeamAppearance {
+        float startWidth = 0.3f;
+        float endWidth   = 0.3f;
+        uint32_t planeCount = 3;            // 軸まわりに均等配置する交差Plane枚数
+        float fadeStartLength = 0.2f;       // 始点側のフェード距離（頂点αに焼き込み）
+        float fadeEndLength   = 0.2f;       // 終点側のフェード距離
+        Vector4 startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        Vector4 endColor   = { 1.0f, 1.0f, 1.0f, 1.0f };
+        bool   uvWrapByLength = true;       // U方向を長さに比例させる
+        float  uvTilesPerUnit = 1.0f;       // uvWrapByLength=true時、1ユニットあたりのUタイル数
+    };
+
+    // 直線ビーム（レーザー）の生成パラメータ
+    struct BeamParams {
+        Vector3 startPos = { 0.0f, 0.0f, 0.0f };
+        Vector3 endPos   = { 0.0f, 0.0f, 1.0f };
+        BeamAppearance appearance;
+        // 始点→終点の自動分割数（両端フェードの補間に最低限の中間頂点が必要）
+        uint32_t lengthSegments = 16;
+    };
+
+    // 折れ線→交差Plane帯メッシュ（雷の内部実装でも使う共通関数）
+    MeshData CreateBeamFromPolyline(const std::vector<Vector3>& polyline, const BeamAppearance& app);
+
+    // 直線ビームを生成（CreateBeamFromPolyline に2点を渡す薄ラッパー）
+    MeshData CreateBeam(const BeamParams& params);
+
+    // 雷（ジグザグ折れ線）の生成パラメータ
+    // 始点→終点をフラクタル再帰で分割しオフセットしてジグザグを作る。枝分岐あり。
+    struct LightningBoltParams {
+        Vector3 startPos = { 0.0f, 0.0f, 0.0f };
+        Vector3 endPos   = { 0.0f, 0.0f, 1.0f };
+        BeamAppearance appearance;
+
+        // フラクタル分割
+        uint32_t generations    = 5;      // 分割回数（多いほど細かい）
+        float    maxOffsetRatio = 0.15f;  // 始終点距離に対するオフセット比率
+        uint32_t randomSeed     = 0;      // 0=毎回ランダム、固定値で再現可
+
+        // 枝分かれ
+        float branchProbability = 0.15f;  // 各セグメントで枝を生やす確率（分割後の全セグメントに適用）
+        float branchLengthScale = 0.25f;  // 枝の長さ＝ボルト全長 × この値（0.2〜0.4 が見やすい）
+        float branchMaxAngle    = 0.6f;   // 本線方向からの最大ずれ角（ラジアン）
+        float branchWidthScale  = 0.5f;   // 枝の太さ倍率
+        float branchColorScale  = 0.5f;   // 枝の明るさ倍率（α含む）
+    };
+
+    // 雷メッシュを生成（本線＋枝を合成した1つの MeshData を返す）
+    MeshData CreateLightningBolt(const LightningBoltParams& params);
+
 }

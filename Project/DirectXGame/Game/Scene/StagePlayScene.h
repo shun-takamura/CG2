@@ -14,6 +14,7 @@ class SplineCurveActor;
 class RailCameraController;
 class AnimatedObject3DInstance;
 class Reticle;
+class LightningRuntime;
 
 /// <summary>
 /// ステージプレイシーン
@@ -165,7 +166,7 @@ public:
 	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
 	/// 将来の回避実装などからも参照する。
 	/// </summary>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_; }
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_; }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -371,4 +372,120 @@ private:
 	void OnPlayerTakeDamage(int damageAmount);
 	void InitializeHPBarUI();
 	void UpdateHPBarUI();
+
+	// 無敵状態（ジャスト回避 / 回避無敵 / 被弾無敵 / 必殺技）を集約し、
+	// HP.enabled を切り替えて CollisionManager の自動ダメージも止める。
+	// シーン Update の終盤で呼ぶことで CollisionManager::Update より前に反映される。
+	void RefreshPlayerHpInvincibility();
+
+	// ----- LightningRuntime 動作確認用テストパネル（Phase2B、必殺技実装後に削除予定）-----
+	std::unique_ptr<LightningRuntime> lightningTest_;
+
+	// ----- 必殺技「傲慢サンダー」 -----
+	// Phase 1 (Barrier): バリア展開・プレイヤー強制位置・カメラ引き・無敵・バリア当たり判定
+	// Phase 2-5 は Step B-2 以降で追加
+	enum class SpecialPhase {
+		Idle,
+		Barrier,   // バリア展開（通常時間進行、バリア当たり判定）
+		Lockon,    // Step B-2: ワールド時間停止 + 順次ロックオン + チャージ
+		Fire,      // Step B-3: 時間停止解除 + サンダー発射
+		End,       // Step B-4: 終了猶予（バリア停止までの間）
+	};
+	SpecialPhase specialPhase_ = SpecialPhase::Idle;
+	float specialPhaseTimer_ = 0.0f;     // 現フェーズ内の経過秒
+	bool  specialActive_   = false;      // 発動中フラグ（Idle 以外で true）
+	float specialTimer_    = 0.0f;       // 発動開始からの総経過秒（デバッグ表示用）
+	float specialDuration_ = 5.0f;       // [互換] 旧 Step A の総時間（ImGui で残す、未使用化）
+
+	// Phase 1（バリア）
+	float specialBarrierRadius_   = 2.0f;   // バリア球半径
+	float specialBarrierDuration_ = 3.0f;   // Phase 1 の長さ（秒）
+	Vector4 specialBarrierColor_{ 0.4f, 0.7f, 1.0f, 0.25f }; // 半透明青
+
+	// プレイヤー強制位置・カメラ引き
+	Vector2 specialPlayerInputOffsetSaved_{ 0.0f, 0.0f }; // 復帰用に保存
+	Vector2 specialPlayerVelocitySaved_  { 0.0f, 0.0f };
+	float   specialCamPullback_ = 8.0f;   // forward 逆方向（ジャスト回避と同じ既定）
+	float   specialCamFovAdd_   = 0.06f;  // FovY 加算
+	float   specialCamUpAdd_    = 1.5f;   // up 方向へ持ち上げ（プレイヤーが画面下寄りに）
+
+	// バリア可視化（半透明球プリミティブ）
+	std::unique_ptr<class EffectPrimitiveRenderer> specialBarrierVis_;
+
+	// 遅延削除キュー：GPU が前フレームの commandList を実行中に resource を Release すると
+	// D3D12 OBJECT_DELETED_WHILE_STILL_IN_USE になるため、数フレーム保持してから捨てる
+	struct SpecialTrashEntry {
+		std::unique_ptr<class EffectPrimitiveRenderer> renderer;
+		std::unique_ptr<class LightningRuntime> lightning;
+		int framesLeft = 4;
+	};
+	std::vector<SpecialTrashEntry> specialTrash_;
+
+	// ----- Phase 2（ロックオン + チャージ）-----
+	struct SpecialLockonTarget {
+		IImGuiEditable* entity = nullptr;        // 敵本体 or 突進敵
+		int   bulletIndex = -1;                   // 弾の場合の bullets_ インデックス（-1=敵）
+		int   patternIndex = 0;                   // 0=A(真上/左下/右下), 1=B(真下/右上/左上)
+		float startTime = 0.0f;                   // Phase 2 経過秒（このターゲットのロック開始時刻）
+		float radius = 0.5f;                      // 敵 collider 半径
+		bool  visualsCreated = false;             // 線・リング・キューブ生成済みか
+		std::unique_ptr<class EffectPrimitiveRenderer> lines[3];
+		std::unique_ptr<class EffectPrimitiveRenderer> ring;
+		std::unique_ptr<class EffectPrimitiveRenderer> cube;
+	};
+	std::vector<SpecialLockonTarget> specialLockonTargets_;
+	float specialLockonInterval_         = 0.075f;  // ロックオン開始間隔
+	float specialLockonDuration_         = 0.5f;    // 1体あたりロックオン完了までの秒
+	float specialLockonLineTravelTime_   = 0.2f;    // 線が敵中心へ集まる時間
+	float specialLockonLineHoldTime_     = 0.1f;    // 集まった後の停止時間（線消滅まで）
+	float specialLockonRingAppearTime_   = 0.2f;    // リング出現時刻（ロック開始から）
+	float specialLockonRingFadeoutTime_  = 0.1f;    // ロック完了後リングが消えるまでの時間
+	float specialChargeDuration_         = 1.5f;    // 全ロック後のチャージ秒
+	Vector4 specialLockonColor_{ 0.3f, 0.7f, 1.0f, 1.0f }; // 線・リングの青
+	Vector4 specialCubeColor_  { 1.0f, 0.5f, 0.0f, 0.5f }; // キューブのオレンジ
+	float specialLockonLineWidth_  = 0.04f;
+	float specialLockonRingThickness_ = 0.05f;
+	float specialPhase2Timer_ = 0.0f; // Phase 2 経過秒（ロック演出時刻基準）
+	bool  specialAllLockonComplete_ = false;
+	float specialChargeStartTime_   = 0.0f; // Phase2 内での全ロック完了時刻
+
+	// チャージ電撃（複数本がプレイヤー周囲のカプセル表面で短い弧を描く）
+	struct SpecialChargeBolt {
+		std::unique_ptr<class LightningRuntime> rt;
+		float nextRegenTime = 0.0f;  // 次に角度を再ランダム化する時刻（Phase 2 経過秒）
+		float angleBase = 0.0f;       // 現在の基準角度（ラジアン）
+	};
+	std::vector<SpecialChargeBolt> specialChargeBolts_;
+	int   specialChargeBoltCount_     = 4;       // 同時本数
+	float specialChargeRegenInterval_ = 0.1f;    // 1本ごとの再生成間隔
+	// 始点・終点の半径制御（プレイヤーカプセル形状を考慮し、スクリーン投影楕円で計算）
+	// 0 以下なら player の Collider.capsuleRadius / capsuleHeight から自動算出
+	float specialChargeStartRadiusH_  = 0.0f;    // 水平半径（=capsuleRadius 相当）
+	float specialChargeStartRadiusV_  = 0.0f;    // 垂直半径（=capsuleHeight/2 + capsuleRadius 相当）
+	float specialChargeMinLength_     = 0.6f;    // 終点 - 始点 の最小長
+
+	void InitializeSpecialGaugeUI();
+	void UpdateSpecialGaugeUI();
+	void UpdateSpecialMove(class InputActionMap* actions, float dt);
+	void TriggerSpecialMove();
+	void EnterSpecialPhaseBarrier();
+	void UpdateSpecialPhaseBarrier(float worldDt);
+	void EnterSpecialPhaseLockon();
+	void UpdateSpecialPhaseLockon(float realDt);
+	void EnumerateLockonTargets();   // 画面内敵+敵弾を列挙してプレイヤー近い順にソート
+	void SpawnLockonVisuals(SpecialLockonTarget& t);
+	void UpdateLockonTargetVisuals(SpecialLockonTarget& t, float localTime);
+	void EndSpecialMove();
+	void ApplySpecialCamera(const Vector3& playerWorldPos);
+
+	// ゲージ UI（HP バーと同じスプライト2枚パターン）
+	SpriteInstance* gaugeBarBackground_ = nullptr; // 暗背景
+	SpriteInstance* gaugeBarForeground_ = nullptr; // 現在値
+	float gaugeBarMaxWidth_ = 300.0f;
+	float gaugeBarHeight_   = 12.0f;
+	float gaugeBarPosX_     = 60.0f;
+	float gaugeBarPosY_     = 60.0f; // HP バー下
+	Vector4 gaugeBarBgColor_   { 0.10f, 0.10f, 0.20f, 0.8f };
+	Vector4 gaugeBarFgColor_   { 0.55f, 0.75f, 1.00f, 1.0f };  // ノーマル時：水色
+	Vector4 gaugeBarFullColor_ { 1.00f, 0.85f, 0.30f, 1.0f };  // MAX時：黄色（発動可能サイン）
 };

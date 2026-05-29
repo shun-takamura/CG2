@@ -55,6 +55,24 @@
     "selectThreshold": 0.5,
     "spreadDuration": 0.15000000596046448,
     "mergeDuration": 0.20000000298023224,
+    "meleeApproachDuration": 0.18000000715255737,
+    "meleeReturnDuration": 0.25,
+    "meleeApproachDist": 4,
+    "dodgeReturnDuration": 0.34999999403953552,
+    "dodgeExpandedMargin": [
+      0.80000001192092896,
+      0.80000001192092896
+    ],
+    "meleeCamOffset": [
+      -3,
+      2.5,
+      -5
+    ],
+    "meleeCamLookOffset": [
+      0,
+      1,
+      0
+    ],
     "clonePaths": [
       "Resources/Models/Animated/Walk/walk.mesh",
       "Resources/Models/Animated/Walk/walk.mesh",
@@ -70,8 +88,53 @@
   },
   "heal": {
     "amount": 5,
+    "smallAmount": 5,
     "maxStg": 5,
     "maxBoss": 5
+  },
+  "special": {
+    "max": 100,
+    "dodgeGain": 8,
+    "duration": 5,
+    "barrierRadius": 2,
+    "barrierDuration": 3,
+    "barrierColor": [
+      0.40000000596046448,
+      0.69999998807907104,
+      1,
+      0.25
+    ],
+    "camPullback": 8,
+    "camFovAdd": 0.059999998658895493,
+    "camUpAdd": 1.5,
+    "chargeBoltCount": 6,
+    "chargeRegenInterval": 0.15000000596046448,
+    "chargeStartRadius": 1,
+    "chargeMinLength": 1,
+    "bar": {
+      "maxWidth": 300,
+      "height": 12,
+      "posX": 60,
+      "posY": 60,
+      "bgColor": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.20000000298023224,
+        0.80000001192092896
+      ],
+      "fgColor": [
+        0.55000001192092896,
+        0.75,
+        1,
+        1
+      ],
+      "fullColor": [
+        1,
+        0.85000002384185791,
+        0.30000001192092896,
+        1
+      ]
+    }
   },
   "hpBar": {
     "maxWidth": 350,

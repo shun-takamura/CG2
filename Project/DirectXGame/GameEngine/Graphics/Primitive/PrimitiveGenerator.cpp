@@ -1,5 +1,7 @@
 #include "PrimitiveGenerator.h"
 #include <cmath>
+#include <random>
+#include <chrono>
 
 namespace PrimitiveGenerator {
 
@@ -440,6 +442,333 @@ namespace PrimitiveGenerator {
             }
         }
         return mesh;
+    }
+
+    MeshData CreateBeamFromPolyline(const std::vector<Vector3>& polyline, const BeamAppearance& app) {
+        MeshData mesh;
+        if (polyline.size() < 2) return mesh;
+
+        const float kPi = 3.14159265358979323846f;
+        const uint32_t planeCount = app.planeCount < 1 ? 1 : app.planeCount;
+
+        auto length3 = [](const Vector3& v) {
+            return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            };
+        auto normalize3 = [&](const Vector3& v) -> Vector3 {
+            float len = length3(v);
+            if (len < 1e-6f) return { 1.0f, 0.0f, 0.0f };
+            return { v.x / len, v.y / len, v.z / len };
+            };
+        auto cross3 = [](const Vector3& a, const Vector3& b) -> Vector3 {
+            return {
+                a.y * b.z - a.z * b.y,
+                a.z * b.x - a.x * b.z,
+                a.x * b.y - a.y * b.x
+            };
+            };
+        auto lerpV4 = [](const Vector4& a, const Vector4& b, float t) {
+            return Vector4{
+                a.x + (b.x - a.x) * t,
+                a.y + (b.y - a.y) * t,
+                a.z + (b.z - a.z) * t,
+                a.w + (b.w - a.w) * t
+            };
+            };
+
+        // 各頂点ごとの累積長
+        const size_t n = polyline.size();
+        std::vector<float> cumLen(n, 0.0f);
+        for (size_t i = 1; i < n; ++i) {
+            cumLen[i] = cumLen[i - 1] + length3({
+                polyline[i].x - polyline[i - 1].x,
+                polyline[i].y - polyline[i - 1].y,
+                polyline[i].z - polyline[i - 1].z });
+        }
+        const float totalLen = cumLen.back();
+        if (totalLen < 1e-6f) return mesh;
+
+        // 各点での接線とその直交基底（right, up）を事前計算
+        std::vector<Vector3> tangents(n), rights(n), ups(n);
+        for (size_t i = 0; i < n; ++i) {
+            Vector3 t;
+            if (i == 0) {
+                t = { polyline[1].x - polyline[0].x, polyline[1].y - polyline[0].y, polyline[1].z - polyline[0].z };
+            } else if (i == n - 1) {
+                t = { polyline[i].x - polyline[i - 1].x, polyline[i].y - polyline[i - 1].y, polyline[i].z - polyline[i - 1].z };
+            } else {
+                t = { polyline[i + 1].x - polyline[i - 1].x, polyline[i + 1].y - polyline[i - 1].y, polyline[i + 1].z - polyline[i - 1].z };
+            }
+            tangents[i] = normalize3(t);
+            Vector3 up = (std::abs(tangents[i].y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            rights[i] = normalize3(cross3(tangents[i], up));
+            ups[i] = cross3(rights[i], tangents[i]);
+        }
+
+        // Plane を軸まわりに均等配置（pi/planeCount 刻みで180度未満を埋める：両面で360度カバー）
+        for (uint32_t p = 0; p < planeCount; ++p) {
+            float angleRot = kPi * static_cast<float>(p) / static_cast<float>(planeCount);
+            float cosA = std::cos(angleRot);
+            float sinA = std::sin(angleRot);
+
+            uint32_t baseIdx = static_cast<uint32_t>(mesh.vertices.size());
+
+            for (size_t i = 0; i < n; ++i) {
+                // 軸まわり回転後のオフセット方向
+                Vector3 offsetDir = {
+                    rights[i].x * cosA + ups[i].x * sinA,
+                    rights[i].y * cosA + ups[i].y * sinA,
+                    rights[i].z * cosA + ups[i].z * sinA
+                };
+                // 面法線（接線 × オフセット = 面に垂直）
+                Vector3 faceNormal = normalize3(cross3(tangents[i], offsetDir));
+
+                float t = cumLen[i] / totalLen;
+                float w = app.startWidth + (app.endWidth - app.startWidth) * t;
+                Vector4 col = lerpV4(app.startColor, app.endColor, t);
+
+                // 両端フェード（αに焼き込み）
+                float fadeAlpha = 1.0f;
+                if (app.fadeStartLength > 1e-6f && cumLen[i] < app.fadeStartLength) {
+                    fadeAlpha *= cumLen[i] / app.fadeStartLength;
+                }
+                float distFromEnd = totalLen - cumLen[i];
+                if (app.fadeEndLength > 1e-6f && distFromEnd < app.fadeEndLength) {
+                    fadeAlpha *= distFromEnd / app.fadeEndLength;
+                }
+                col.w *= fadeAlpha;
+
+                float u = app.uvWrapByLength ? (cumLen[i] * app.uvTilesPerUnit) : t;
+
+                MeshVertex v0{}, v1{};
+                float halfW = w * 0.5f;
+                v0.position = {
+                    polyline[i].x + offsetDir.x * halfW,
+                    polyline[i].y + offsetDir.y * halfW,
+                    polyline[i].z + offsetDir.z * halfW
+                };
+                v0.normal = faceNormal;
+                v0.color = col;
+                v0.texcoord = { u, 0.0f };
+
+                v1.position = {
+                    polyline[i].x - offsetDir.x * halfW,
+                    polyline[i].y - offsetDir.y * halfW,
+                    polyline[i].z - offsetDir.z * halfW
+                };
+                v1.normal = faceNormal;
+                v1.color = col;
+                v1.texcoord = { u, 1.0f };
+
+                mesh.vertices.push_back(v0);
+                mesh.vertices.push_back(v1);
+            }
+
+            // セグメントごとに2三角形
+            for (size_t i = 0; i < n - 1; ++i) {
+                uint32_t i0 = baseIdx + static_cast<uint32_t>(i) * 2;
+                uint32_t i1 = i0 + 1;
+                uint32_t i2 = i0 + 2;
+                uint32_t i3 = i0 + 3;
+
+                mesh.indices.push_back(i0);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i1);
+                mesh.indices.push_back(i1);
+                mesh.indices.push_back(i2);
+                mesh.indices.push_back(i3);
+            }
+        }
+
+        return mesh;
+    }
+
+    namespace {
+        // 2つの MeshData を結合（v2 のインデックスをオフセット）
+        void AppendMesh(MeshData& dst, const MeshData& src) {
+            uint32_t baseIdx = static_cast<uint32_t>(dst.vertices.size());
+            dst.vertices.insert(dst.vertices.end(), src.vertices.begin(), src.vertices.end());
+            dst.indices.reserve(dst.indices.size() + src.indices.size());
+            for (uint32_t i : src.indices) {
+                dst.indices.push_back(i + baseIdx);
+            }
+        }
+
+        // 線分 (a,b) のフラクタル分割。生成された折れ線を out へ追加（始点を含む）
+        // depth=0 で end を含めて push する。
+        void SubdivideSegment(const Vector3& a, const Vector3& b,
+                              float offsetAmount, uint32_t depth,
+                              std::mt19937& rng,
+                              std::vector<Vector3>& out) {
+            if (depth == 0) {
+                out.push_back(b);
+                return;
+            }
+            Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
+            float len = std::sqrt(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
+            if (len < 1e-6f) {
+                out.push_back(b);
+                return;
+            }
+            // 線分に垂直な平面内でランダム方向を選ぶ
+            Vector3 nDir = { dir.x / len, dir.y / len, dir.z / len };
+            Vector3 up = (std::abs(nDir.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            Vector3 right = {
+                nDir.y * up.z - nDir.z * up.y,
+                nDir.z * up.x - nDir.x * up.z,
+                nDir.x * up.y - nDir.y * up.x
+            };
+            float rLen = std::sqrt(right.x*right.x + right.y*right.y + right.z*right.z);
+            if (rLen < 1e-6f) { out.push_back(b); return; }
+            right = { right.x / rLen, right.y / rLen, right.z / rLen };
+            Vector3 up2 = {
+                right.y * nDir.z - right.z * nDir.y,
+                right.z * nDir.x - right.x * nDir.z,
+                right.x * nDir.y - right.y * nDir.x
+            };
+            std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * 3.14159265358979323846f);
+            std::uniform_real_distribution<float> distOffset(-offsetAmount, offsetAmount);
+            float theta = distAngle(rng);
+            float mag = distOffset(rng);
+            Vector3 offsetVec = {
+                (right.x * std::cos(theta) + up2.x * std::sin(theta)) * mag,
+                (right.y * std::cos(theta) + up2.y * std::sin(theta)) * mag,
+                (right.z * std::cos(theta) + up2.z * std::sin(theta)) * mag
+            };
+            Vector3 mid = {
+                (a.x + b.x) * 0.5f + offsetVec.x,
+                (a.y + b.y) * 0.5f + offsetVec.y,
+                (a.z + b.z) * 0.5f + offsetVec.z
+            };
+            float nextOffset = offsetAmount * 0.5f; // 毎世代で半分
+            SubdivideSegment(a, mid, nextOffset, depth - 1, rng, out);
+            SubdivideSegment(mid, b, nextOffset, depth - 1, rng, out);
+        }
+
+        // 始点→終点のフラクタル折れ線を生成（始点を含み、終点を含む）
+        std::vector<Vector3> GenerateFractalPolyline(const Vector3& start, const Vector3& end,
+                                                     float maxOffset, uint32_t generations,
+                                                     std::mt19937& rng) {
+            std::vector<Vector3> out;
+            out.push_back(start);
+            SubdivideSegment(start, end, maxOffset, generations, rng, out);
+            return out;
+        }
+    }
+
+    MeshData CreateLightningBolt(const LightningBoltParams& params) {
+        MeshData mesh;
+
+        // RNG（seed=0 なら現在時刻、それ以外は固定）
+        uint32_t seed = params.randomSeed;
+        if (seed == 0) {
+            seed = static_cast<uint32_t>(
+                std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        }
+        std::mt19937 rng(seed);
+
+        // 始終点距離 → maxOffset
+        Vector3 d = { params.endPos.x - params.startPos.x,
+                      params.endPos.y - params.startPos.y,
+                      params.endPos.z - params.startPos.z };
+        float totalLen = std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
+        if (totalLen < 1e-6f) return mesh;
+        float maxOffset = totalLen * params.maxOffsetRatio;
+
+        // 本線
+        std::vector<Vector3> mainPoly =
+            GenerateFractalPolyline(params.startPos, params.endPos, maxOffset, params.generations, rng);
+
+        MeshData mainMesh = CreateBeamFromPolyline(mainPoly, params.appearance);
+        AppendMesh(mesh, mainMesh);
+
+        // 枝：本線の隣接点 (i, i+1) で確率的に分岐
+        // 枝の終点 = mid + Rotate(dir) * lengthScale * |segment|
+        if (params.branchProbability > 0.0f && mainPoly.size() >= 2) {
+            std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+            std::uniform_real_distribution<float> distAngle(-params.branchMaxAngle, params.branchMaxAngle);
+
+            // 枝用のappearance（細く・暗く）
+            BeamAppearance branchApp = params.appearance;
+            branchApp.startWidth *= params.branchWidthScale;
+            branchApp.endWidth   *= params.branchWidthScale;
+            branchApp.startColor.x *= params.branchColorScale;
+            branchApp.startColor.y *= params.branchColorScale;
+            branchApp.startColor.z *= params.branchColorScale;
+            branchApp.startColor.w *= params.branchColorScale;
+            branchApp.endColor.x *= params.branchColorScale;
+            branchApp.endColor.y *= params.branchColorScale;
+            branchApp.endColor.z *= params.branchColorScale;
+            branchApp.endColor.w *= params.branchColorScale;
+
+            for (size_t i = 0; i + 1 < mainPoly.size(); ++i) {
+                if (dist01(rng) > params.branchProbability) continue;
+
+                Vector3 a = mainPoly[i];
+                Vector3 b = mainPoly[i + 1];
+                Vector3 seg = { b.x - a.x, b.y - a.y, b.z - a.z };
+                float segLen = std::sqrt(seg.x*seg.x + seg.y*seg.y + seg.z*seg.z);
+                if (segLen < 1e-6f) continue;
+
+                // 軸まわりにランダム角度で回転（本線方向から少しズラす）
+                Vector3 nSeg = { seg.x / segLen, seg.y / segLen, seg.z / segLen };
+                Vector3 upRef = (std::abs(nSeg.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+                Vector3 axR = {
+                    nSeg.y * upRef.z - nSeg.z * upRef.y,
+                    nSeg.z * upRef.x - nSeg.x * upRef.z,
+                    nSeg.x * upRef.y - nSeg.y * upRef.x
+                };
+                float arLen = std::sqrt(axR.x*axR.x + axR.y*axR.y + axR.z*axR.z);
+                if (arLen < 1e-6f) continue;
+                axR = { axR.x / arLen, axR.y / arLen, axR.z / arLen };
+                Vector3 axU = {
+                    axR.y * nSeg.z - axR.z * nSeg.y,
+                    axR.z * nSeg.x - axR.x * nSeg.z,
+                    axR.x * nSeg.y - axR.y * nSeg.x
+                };
+
+                // 軸まわり回転 + 軸からの傾き
+                float tilt = distAngle(rng);
+                float roll = std::uniform_real_distribution<float>(0.0f, 2.0f * 3.14159265358979323846f)(rng);
+                Vector3 tiltDir = {
+                    nSeg.x * std::cos(tilt) + (axR.x * std::cos(roll) + axU.x * std::sin(roll)) * std::sin(tilt),
+                    nSeg.y * std::cos(tilt) + (axR.y * std::cos(roll) + axU.y * std::sin(roll)) * std::sin(tilt),
+                    nSeg.z * std::cos(tilt) + (axR.z * std::cos(roll) + axU.z * std::sin(roll)) * std::sin(tilt)
+                };
+                // 枝の長さは「ボルト全長 × branchLengthScale」を基準にする。
+                // 分割後の単一セグメントだと短すぎて見えないため。
+                float branchLen = totalLen * params.branchLengthScale;
+                Vector3 branchEnd = {
+                    b.x + tiltDir.x * branchLen,
+                    b.y + tiltDir.y * branchLen,
+                    b.z + tiltDir.z * branchLen
+                };
+
+                // 枝にもフラクタル（世代は本線より浅く）
+                uint32_t branchGen = params.generations > 1 ? params.generations - 1 : 1;
+                float branchMaxOffset = branchLen * params.maxOffsetRatio;
+                std::vector<Vector3> branchPoly =
+                    GenerateFractalPolyline(b, branchEnd, branchMaxOffset, branchGen, rng);
+
+                MeshData branchMesh = CreateBeamFromPolyline(branchPoly, branchApp);
+                AppendMesh(mesh, branchMesh);
+            }
+        }
+
+        return mesh;
+    }
+
+    MeshData CreateBeam(const BeamParams& params) {
+        const uint32_t segs = params.lengthSegments < 1 ? 1 : params.lengthSegments;
+        std::vector<Vector3> polyline(segs + 1);
+        for (uint32_t i = 0; i <= segs; ++i) {
+            float t = static_cast<float>(i) / static_cast<float>(segs);
+            polyline[i] = {
+                params.startPos.x + (params.endPos.x - params.startPos.x) * t,
+                params.startPos.y + (params.endPos.y - params.startPos.y) * t,
+                params.startPos.z + (params.endPos.z - params.startPos.z) * t,
+            };
+        }
+        return CreateBeamFromPolyline(polyline, params.appearance);
     }
 
     MeshData CreateHelix(const HelixParams& params) {

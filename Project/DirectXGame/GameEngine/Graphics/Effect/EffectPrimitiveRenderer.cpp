@@ -4,12 +4,13 @@
 
 namespace {
     // primitiveType（int）から MeshData を生成。EffectDef.h のmeshType値と互換。
-    // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix
-    // Ring/Cylinder/Helix は渡された params でジオメトリを生成する。
+    // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix, 6=Beam, 7=Lightning
     MeshData GenerateByType(int type,
                             const PrimitiveGenerator::RingParams& ring,
                             const PrimitiveGenerator::CylinderParams& cyl,
-                            const PrimitiveGenerator::HelixParams& helix) {
+                            const PrimitiveGenerator::HelixParams& helix,
+                            const PrimitiveGenerator::BeamParams& beam,
+                            const PrimitiveGenerator::LightningBoltParams& lightning) {
         switch (type) {
         case 0: return PrimitiveGenerator::CreatePlane();
         case 1: return PrimitiveGenerator::CreateBox();
@@ -17,6 +18,8 @@ namespace {
         case 3: return PrimitiveGenerator::CreateRing(ring);
         case 4: return PrimitiveGenerator::CreateCylinder(cyl);
         case 5: return PrimitiveGenerator::CreateHelix(helix);
+        case 6: return PrimitiveGenerator::CreateBeam(beam);
+        case 7: return PrimitiveGenerator::CreateLightningBolt(lightning);
         default: return PrimitiveGenerator::CreatePlane();
         }
     }
@@ -25,9 +28,11 @@ namespace {
 void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& texturePath,
                                          const PrimitiveGenerator::RingParams& ringParams,
                                          const PrimitiveGenerator::CylinderParams& cylinderParams,
-                                         const PrimitiveGenerator::HelixParams& helixParams) {
+                                         const PrimitiveGenerator::HelixParams& helixParams,
+                                         const PrimitiveGenerator::BeamParams& beamParams,
+                                         const PrimitiveGenerator::LightningBoltParams& lightningParams) {
     primitiveType_ = primitiveType;
-    MeshData md = GenerateByType(primitiveType, ringParams, cylinderParams, helixParams);
+    MeshData md = GenerateByType(primitiveType, ringParams, cylinderParams, helixParams, beamParams, lightningParams);
     mesh_.Initialize(md);
 
     // エフェクト用既定：加算ブレンド・深度書き込みなし・背面カリング無効

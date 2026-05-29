@@ -97,6 +97,42 @@ namespace {
         p.endAngle     = AsFloat(o["endAngle"], p.endAngle);
     }
 
+    void ParseBeamAppearance(const JsonValue& o, PrimitiveGenerator::BeamAppearance& a) {
+        if (!o.IsObject()) return;
+        a.startWidth      = AsFloat(o["startWidth"], a.startWidth);
+        a.endWidth        = AsFloat(o["endWidth"], a.endWidth);
+        a.planeCount      = AsUInt(o["planeCount"], a.planeCount);
+        a.fadeStartLength = AsFloat(o["fadeStartLength"], a.fadeStartLength);
+        a.fadeEndLength   = AsFloat(o["fadeEndLength"], a.fadeEndLength);
+        a.startColor      = AsVec4(o["startColor"], a.startColor);
+        a.endColor        = AsVec4(o["endColor"], a.endColor);
+        if (o["uvWrapByLength"].IsBool()) a.uvWrapByLength = o["uvWrapByLength"].AsBool(a.uvWrapByLength);
+        a.uvTilesPerUnit  = AsFloat(o["uvTilesPerUnit"], a.uvTilesPerUnit);
+    }
+
+    void ParseBeamParams(const JsonValue& o, PrimitiveGenerator::BeamParams& p) {
+        if (!o.IsObject()) return;
+        p.startPos       = AsVec3(o["startPos"], p.startPos);
+        p.endPos         = AsVec3(o["endPos"], p.endPos);
+        p.lengthSegments = AsUInt(o["lengthSegments"], p.lengthSegments);
+        ParseBeamAppearance(o["appearance"], p.appearance);
+    }
+
+    void ParseLightningParams(const JsonValue& o, PrimitiveGenerator::LightningBoltParams& p) {
+        if (!o.IsObject()) return;
+        p.startPos          = AsVec3(o["startPos"], p.startPos);
+        p.endPos            = AsVec3(o["endPos"], p.endPos);
+        p.generations       = AsUInt(o["generations"], p.generations);
+        p.maxOffsetRatio    = AsFloat(o["maxOffsetRatio"], p.maxOffsetRatio);
+        p.randomSeed        = AsUInt(o["randomSeed"], p.randomSeed);
+        p.branchProbability = AsFloat(o["branchProbability"], p.branchProbability);
+        p.branchLengthScale = AsFloat(o["branchLengthScale"], p.branchLengthScale);
+        p.branchMaxAngle    = AsFloat(o["branchMaxAngle"], p.branchMaxAngle);
+        p.branchWidthScale  = AsFloat(o["branchWidthScale"], p.branchWidthScale);
+        p.branchColorScale  = AsFloat(o["branchColorScale"], p.branchColorScale);
+        ParseBeamAppearance(o["appearance"], p.appearance);
+    }
+
     void ParseHelixParams(const JsonValue& o, PrimitiveGenerator::HelixParams& p) {
         if (!o.IsObject()) return;
         p.startHelixRadius = AsFloat(o["startHelixRadius"], p.startHelixRadius);
@@ -120,6 +156,8 @@ namespace {
         ParseRingParams(o["ringParams"], c.ringParams);
         ParseCylinderParams(o["cylinderParams"], c.cylinderParams);
         ParseHelixParams(o["helixParams"], c.helixParams);
+        ParseBeamParams(o["beamParams"], c.beamParams);
+        ParseLightningParams(o["lightningParams"], c.lightningParams);
         c.offset     = AsVec3(o["offset"], c.offset);
         c.rotate     = AsVec3(o["rotate"], c.rotate);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
@@ -137,6 +175,7 @@ namespace {
         c.alphaReference = AsFloat(o["alphaReference"], c.alphaReference);
         if (o["cullBackface"].IsBool()) c.cullBackface = o["cullBackface"].AsBool(c.cullBackface);
         c.samplerMode = AsInt(o["samplerMode"], c.samplerMode);
+        c.viewAngleFadePower = AsFloat(o["viewAngleFadePower"], c.viewAngleFadePower);
 
         // UV
         if (o["uvAutoScroll"].IsBool()) c.uvAutoScroll = o["uvAutoScroll"].AsBool(c.uvAutoScroll);
@@ -329,6 +368,42 @@ namespace EffectDefIO {
             o["endAngle"]     = static_cast<double>(p.endAngle);
             return o;
         }
+        JsonValue BeamAppearanceToJson(const PrimitiveGenerator::BeamAppearance& a) {
+            JsonValue o = JsonValue::MakeObject();
+            o["startWidth"]      = static_cast<double>(a.startWidth);
+            o["endWidth"]        = static_cast<double>(a.endWidth);
+            o["planeCount"]      = static_cast<int64_t>(a.planeCount);
+            o["fadeStartLength"] = static_cast<double>(a.fadeStartLength);
+            o["fadeEndLength"]   = static_cast<double>(a.fadeEndLength);
+            o["startColor"]      = Vec4ToJson(a.startColor);
+            o["endColor"]        = Vec4ToJson(a.endColor);
+            o["uvWrapByLength"]  = a.uvWrapByLength;
+            o["uvTilesPerUnit"]  = static_cast<double>(a.uvTilesPerUnit);
+            return o;
+        }
+        JsonValue BeamParamsToJson(const PrimitiveGenerator::BeamParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["startPos"]       = Vec3ToJson(p.startPos);
+            o["endPos"]         = Vec3ToJson(p.endPos);
+            o["lengthSegments"] = static_cast<int64_t>(p.lengthSegments);
+            o["appearance"]     = BeamAppearanceToJson(p.appearance);
+            return o;
+        }
+        JsonValue LightningParamsToJson(const PrimitiveGenerator::LightningBoltParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["startPos"]          = Vec3ToJson(p.startPos);
+            o["endPos"]            = Vec3ToJson(p.endPos);
+            o["generations"]       = static_cast<int64_t>(p.generations);
+            o["maxOffsetRatio"]    = static_cast<double>(p.maxOffsetRatio);
+            o["randomSeed"]        = static_cast<int64_t>(p.randomSeed);
+            o["branchProbability"] = static_cast<double>(p.branchProbability);
+            o["branchLengthScale"] = static_cast<double>(p.branchLengthScale);
+            o["branchMaxAngle"]    = static_cast<double>(p.branchMaxAngle);
+            o["branchWidthScale"]  = static_cast<double>(p.branchWidthScale);
+            o["branchColorScale"]  = static_cast<double>(p.branchColorScale);
+            o["appearance"]        = BeamAppearanceToJson(p.appearance);
+            return o;
+        }
         JsonValue HelixParamsToJson(const PrimitiveGenerator::HelixParams& p) {
             JsonValue o = JsonValue::MakeObject();
             o["startHelixRadius"] = static_cast<double>(p.startHelixRadius);
@@ -359,6 +434,8 @@ namespace EffectDefIO {
             o["ringParams"]     = RingParamsToJson(c.ringParams);
             o["cylinderParams"] = CylinderParamsToJson(c.cylinderParams);
             o["helixParams"]    = HelixParamsToJson(c.helixParams);
+            o["beamParams"]     = BeamParamsToJson(c.beamParams);
+            o["lightningParams"] = LightningParamsToJson(c.lightningParams);
             o["offset"]     = Vec3ToJson(c.offset);
             o["rotate"]     = Vec3ToJson(c.rotate);
             o["startTime"]  = static_cast<double>(c.startTime);
@@ -375,6 +452,7 @@ namespace EffectDefIO {
             o["alphaReference"] = static_cast<double>(c.alphaReference);
             o["cullBackface"]   = c.cullBackface;
             o["samplerMode"]    = static_cast<int64_t>(c.samplerMode);
+            o["viewAngleFadePower"] = static_cast<double>(c.viewAngleFadePower);
             // UV
             o["uvAutoScroll"]   = c.uvAutoScroll;
             o["uvScrollSpeed"]  = Vec2ToJson(c.uvScrollSpeed);

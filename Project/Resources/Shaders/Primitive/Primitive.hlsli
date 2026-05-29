@@ -14,6 +14,7 @@ struct VertexOutput
     float2 texcoord : TEXCOORD0;
     float3 normal : NORMAL0;
     float4 color : COLOR0;
+    float3 worldPos : TEXCOORD1;
 };
 
 // 変換行列（VSのb0）
@@ -32,4 +33,6 @@ struct Material
     int samplerMode;       // 0=WrapAll / 1=WrapU+ClampV / 2=ClampAll
     float padding;
     float4x4 uvTransform;
+    float3 cameraPos;
+    float viewAngleFadePower; // 0=無効
 };

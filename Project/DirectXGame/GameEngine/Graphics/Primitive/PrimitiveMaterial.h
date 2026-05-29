@@ -15,4 +15,8 @@ struct PrimitiveMaterial {
     int samplerMode;          // サンプラーモード（上記コメント参照）
     float padding;            // 16バイト境界合わせ
     Matrix4x4 uvTransform;
+    // ビーム/雷など「面がカメラに対して斜めだとフェードさせたい」用途で使う角度フェード
+    // 0=無効。>0 のとき pow(|dot(viewDir, normal)|, power) を α に乗算する
+    Vector3 cameraPos;        // ワールド空間のカメラ位置（PS用）
+    float viewAngleFadePower; // 0で無効、推奨2〜4
 };

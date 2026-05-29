@@ -128,6 +128,9 @@ public:
 	// デルタタイムの取得（生の値）
 	float GetDeltaTime() const { return deltaTime_; }
 
+	// GPU 完了待機（リソース解放前など、外部からも呼ぶ用）
+	void WaitForGpu();
+
 	// タイムスケール適用済みデルタタイム
 	float GetScaledDeltaTime() const { return deltaTime_ * timeScale_; }
 
@@ -249,8 +252,5 @@ private:
 	// 現在の Swapchain サイズ。Resize() で書き換わる。
 	int32_t swapChainWidth_ = WindowsApplication::kClientWidth;
 	int32_t swapChainHeight_ = WindowsApplication::kClientHeight;
-
-	// GPU 完了待機（Resize 用）
-	void WaitForGpu();
 
 };

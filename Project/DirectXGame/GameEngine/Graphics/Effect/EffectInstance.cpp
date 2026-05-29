@@ -65,7 +65,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (!rt.started) {
             rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
             rt.renderer->Initialize(pc.meshType, pc.texturePath,
-                                    pc.ringParams, pc.cylinderParams, pc.helixParams);
+                                    pc.ringParams, pc.cylinderParams, pc.helixParams, pc.beamParams,
+                                    pc.lightningParams);
             rt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
             rt.renderer->SetBillboardMode(pc.billboardMode);
             rt.renderer->SetRotate(pc.rotate);
@@ -75,6 +76,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer->SetAlphaReference(pc.alphaReference);
             rt.renderer->SetCullBackface(pc.cullBackface);
             rt.renderer->SetSamplerMode(pc.samplerMode);
+            rt.renderer->SetViewAngleFadePower(pc.viewAngleFadePower);
             // UV
             rt.renderer->SetUVScroll(pc.uvAutoScroll ? pc.uvScrollSpeed : Vector2{ 0.0f, 0.0f });
             rt.renderer->SetUVOffset(pc.uvOffset);

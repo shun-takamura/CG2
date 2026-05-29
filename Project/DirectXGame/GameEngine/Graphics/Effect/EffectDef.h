@@ -33,13 +33,15 @@ struct EffectPrimitiveComponent {
     // Inspector / Hierarchy で表示する名前（空ならデフォルト "Primitive"）
     std::string displayName;
 
-    // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5）
+    // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5, Beam=6, Lightning=7）
     int meshType = 0;
 
     // ----- 形状ごとのジオメトリパラメータ（meshType が該当する場合のみ使用。PrimitiveInstance と同等） -----
-    PrimitiveGenerator::RingParams     ringParams;
-    PrimitiveGenerator::CylinderParams cylinderParams;
-    PrimitiveGenerator::HelixParams    helixParams;
+    PrimitiveGenerator::RingParams         ringParams;
+    PrimitiveGenerator::CylinderParams     cylinderParams;
+    PrimitiveGenerator::HelixParams        helixParams;
+    PrimitiveGenerator::BeamParams         beamParams;
+    PrimitiveGenerator::LightningBoltParams lightningParams;
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
@@ -69,6 +71,7 @@ struct EffectPrimitiveComponent {
     float alphaReference = 0.0f;
     bool  cullBackface = false;
     int   samplerMode = 0; // 0=WrapAll, 1=WrapU+ClampV, 2=ClampAll
+    float viewAngleFadePower = 0.0f; // 0=無効、雷/レーザーで斜め面をフェードさせたい時 2〜4 推奨
 
     // ----- UV 設定 -----
     bool    uvAutoScroll = false;
