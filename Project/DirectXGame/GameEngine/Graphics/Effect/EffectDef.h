@@ -96,6 +96,14 @@ struct EffectPrimitiveComponent {
 };
 
 /// <summary>
+/// グラデーションの色キー（位置 0..1 と色）。Fixed カラーモードで複数置くと多色補間になる。
+/// </summary>
+struct EffectColorKey {
+    float   location = 0.0f;                     // 0..1
+    Vector4 color    = { 1.0f, 1.0f, 1.0f, 1.0f };
+};
+
+/// <summary>
 /// Particle コンポーネント
 /// 指定した GPU Particle グループへバースト発射する。
 /// </summary>
@@ -103,8 +111,12 @@ struct EffectParticleComponent {
     // Inspector / Hierarchy で表示する名前（空ならデフォルト "Particle"）
     std::string displayName;
 
-    // 参照する GPU Particle グループ名（GPUParticleManager の登録名）
+    // 参照する GPU Particle グループ名（GPUParticleManager の登録名）。
+    // 未登録の名前なら再生時に texturePath で自動生成する。
     std::string gpuParticleGroupName;
+
+    // グループ自動生成時に使うテクスチャ（既存グループがある場合は無視される）
+    std::string texturePath = "Resources/Textures/circle.dds";
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
@@ -124,11 +136,24 @@ struct EffectParticleComponent {
     int     colorMode = 0;
     Vector4 startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
     Vector4 endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
+    // Fixed カラーモードで使う多色グラデーション。2個以上で start/end の代わりに多色補間。
+    // 空 or 1個なら従来どおり startColor→endColor の2色補間。
+    std::vector<EffectColorKey> colorKeys;
 
     // ----- スケール（粒子サイズ） -----
     Vector2 scaleMin = { 0.1f, 0.1f }; // 最小サイズ（幅, 高さ）
     Vector2 scaleMax = { 0.5f, 0.5f }; // 最大サイズ（幅, 高さ）
     bool    uniformScale = true;        // true なら 幅=高さ を強制（Xレンジを共用）
+
+    // ----- 発生 -----
+    float   emitRadius = 0.5f;          // 発生位置の散らばり半径
+    float   particleLifeTime = 1.0f;    // 各粒子の寿命（秒）
+
+    // ----- 初速制御 -----
+    int     velocityMode = 0;           // 0=全方向ランダム / 1=方向固定 / 2=放射(中心から外)
+    Vector3 velocityDir = { 0.0f, 1.0f, 0.0f }; // mode=1 の向き
+    float   velocitySpeed = 3.0f;       // mode=1/2 の初速の大きさ
+    float   velocityJitter = 0.0f;      // 速度ゆらぎ量
 };
 
 /// <summary>

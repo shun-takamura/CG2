@@ -738,9 +738,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <None Include="tools\Python\cook_assets.py" />
     <None Include="tools\Python\pack_assets.py" />
   </ItemGroup>
-  <ItemGroup>
-    <Image Include="..\..\..\..\デスクトップ\Beam_Sample.png" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

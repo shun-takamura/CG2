@@ -202,6 +202,9 @@ namespace {
         if (o["gpuParticleGroupName"].IsString()) {
             c.gpuParticleGroupName = o["gpuParticleGroupName"].AsString();
         }
+        if (o["texturePath"].IsString()) {
+            c.texturePath = o["texturePath"].AsString();
+        }
         c.offset     = AsVec3(o["offset"], c.offset);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
         c.duration   = AsFloat(o["duration"], c.duration);
@@ -213,6 +216,26 @@ namespace {
         c.scaleMin   = AsVec2(o["scaleMin"], c.scaleMin);
         c.scaleMax   = AsVec2(o["scaleMax"], c.scaleMax);
         if (o["uniformScale"].IsBool()) c.uniformScale = o["uniformScale"].AsBool(c.uniformScale);
+        // 発生
+        c.emitRadius       = AsFloat(o["emitRadius"], c.emitRadius);
+        c.particleLifeTime = AsFloat(o["particleLifeTime"], c.particleLifeTime);
+        // 初速制御
+        c.velocityMode   = AsInt(o["velocityMode"], c.velocityMode);
+        c.velocityDir    = AsVec3(o["velocityDir"], c.velocityDir);
+        c.velocitySpeed  = AsFloat(o["velocitySpeed"], c.velocitySpeed);
+        c.velocityJitter = AsFloat(o["velocityJitter"], c.velocityJitter);
+        // 多色グラデーションキー
+        c.colorKeys.clear();
+        const JsonValue& ck = o["colorKeys"];
+        if (ck.IsArray()) {
+            for (size_t i = 0; i < ck.Size(); ++i) {
+                const JsonValue& k = ck[i];
+                EffectColorKey key;
+                key.location = AsFloat(k["location"], key.location);
+                key.color    = AsVec4(k["color"], key.color);
+                c.colorKeys.push_back(key);
+            }
+        }
     }
 
     void ParseSound(const JsonValue& o, EffectSoundComponent& c) {
@@ -479,6 +502,7 @@ namespace EffectDefIO {
             JsonValue o = JsonValue::MakeObject();
             o["displayName"] = c.displayName;
             o["gpuParticleGroupName"] = c.gpuParticleGroupName;
+            o["texturePath"] = c.texturePath;
             o["offset"]     = Vec3ToJson(c.offset);
             o["startTime"]  = static_cast<double>(c.startTime);
             o["duration"]   = static_cast<double>(c.duration);
@@ -490,6 +514,22 @@ namespace EffectDefIO {
             o["scaleMin"]   = Vec2ToJson(c.scaleMin);
             o["scaleMax"]   = Vec2ToJson(c.scaleMax);
             o["uniformScale"] = c.uniformScale;
+            o["emitRadius"]       = static_cast<double>(c.emitRadius);
+            o["particleLifeTime"] = static_cast<double>(c.particleLifeTime);
+            o["velocityMode"]   = static_cast<int64_t>(c.velocityMode);
+            o["velocityDir"]    = Vec3ToJson(c.velocityDir);
+            o["velocitySpeed"]  = static_cast<double>(c.velocitySpeed);
+            o["velocityJitter"] = static_cast<double>(c.velocityJitter);
+            {
+                JsonValue ckArr = JsonValue::MakeArray();
+                for (const auto& k : c.colorKeys) {
+                    JsonValue ko = JsonValue::MakeObject();
+                    ko["location"] = static_cast<double>(k.location);
+                    ko["color"]    = Vec4ToJson(k.color);
+                    ckArr.Push(std::move(ko));
+                }
+                o["colorKeys"] = std::move(ckArr);
+            }
             partArr.Push(std::move(o));
         }
         root["particles"] = std::move(partArr);

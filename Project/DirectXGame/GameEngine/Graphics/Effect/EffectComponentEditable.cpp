@@ -343,7 +343,18 @@ void EffectComponentEditable::OnImGuiInspector() {
             c.gpuParticleGroupName = nameBuf;
             dirty = true;
         }
-        ImGui::TextDisabled("(GPUParticleManager::CreateGroup() の登録名)");
+        if (c.gpuParticleGroupName.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Group Name が空だと描画されません。任意の名前を入力してください");
+        } else {
+            ImGui::TextDisabled("(未登録の名前なら下の Texture Path で自動生成)");
+        }
+        char texBuf[256];
+        std::snprintf(texBuf, sizeof(texBuf), "%s", c.texturePath.c_str());
+        if (ImGui::InputText("Texture Path", texBuf, sizeof(texBuf))) {
+            c.texturePath = texBuf;
+            dirty = true;
+        }
+        ImGui::TextDisabled("(グループ自動生成時のテクスチャ。既存グループには無効)");
         dirty |= ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
         dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
         dirty |= ImGui::DragFloat("Duration",   &c.duration,  0.01f, 0.0f, 60.0f);
@@ -365,6 +376,38 @@ void EffectComponentEditable::OnImGuiInspector() {
         if (c.colorMode == 1) {
             dirty |= ImGui::ColorEdit4("Start Color", &c.startColor.x);
             dirty |= ImGui::ColorEdit4("End Color",   &c.endColor.x);
+
+            // ----- 多色グラデーション（中間キー） -----
+            // Start/End は常に両端(0/1)。ここで足すのは「その間に挿入する中間キー」。
+            ImGui::Spacing();
+            ImGui::TextDisabled("中間キー（Start→End の間に挿入。1個足すと3色グラデ）");
+            const size_t kMaxMidKeys = 6; // Start/End と合わせて最大8キー
+            int removeIdx = -1;
+            for (size_t k = 0; k < c.colorKeys.size(); ++k) {
+                ImGui::PushID(static_cast<int>(k));
+                ImGui::SetNextItemWidth(90.0f);
+                dirty |= ImGui::DragFloat("##loc", &c.colorKeys[k].location, 0.005f, 0.0f, 1.0f, "Loc %.2f");
+                ImGui::SameLine();
+                dirty |= ImGui::ColorEdit4("##col", &c.colorKeys[k].color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreviewHalf);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) removeIdx = static_cast<int>(k);
+                ImGui::PopID();
+            }
+            if (removeIdx >= 0) { c.colorKeys.erase(c.colorKeys.begin() + removeIdx); dirty = true; }
+            if (c.colorKeys.size() < kMaxMidKeys) {
+                if (ImGui::Button("+ Add Mid Key")) {
+                    EffectColorKey nk;
+                    nk.location = 0.5f;
+                    nk.color = { (c.startColor.x + c.endColor.x) * 0.5f,
+                                 (c.startColor.y + c.endColor.y) * 0.5f,
+                                 (c.startColor.z + c.endColor.z) * 0.5f,
+                                 (c.startColor.w + c.endColor.w) * 0.5f };
+                    c.colorKeys.push_back(nk);
+                    dirty = true;
+                }
+            } else {
+                ImGui::TextDisabled("(中間キーは最大 %d 個)", static_cast<int>(kMaxMidKeys));
+            }
         } else {
             ImGui::TextDisabled("(Random: 色は GPU 側でランダム生成)");
         }
@@ -376,6 +419,29 @@ void EffectComponentEditable::OnImGuiInspector() {
         dirty |= ImGui::DragFloat2("Scale Max (W/H)", &c.scaleMax.x, 0.01f, 0.0f, 100.0f);
         if (c.uniformScale) {
             ImGui::TextDisabled("(Uniform: Min/Max の X 範囲のみ使われ、W=H に固定)");
+        }
+
+        // ===== Emit / Lifetime =====
+        ImGui::Separator();
+        dirty |= ImGui::DragFloat("Emit Radius", &c.emitRadius, 0.01f, 0.0f, 100.0f);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("発生位置の散らばり半径");
+        dirty |= ImGui::DragFloat("Particle Life (s)", &c.particleLifeTime, 0.01f, 0.0001f, 60.0f);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("各粒子の寿命（Effect の totalDuration を超えない範囲でクランプ）");
+
+        // ===== Velocity =====
+        ImGui::Separator();
+        const char* velModeNames[] = { "Random (全方向)", "Directional (方向固定)", "Radial (放射/外向き)" };
+        dirty |= ImGui::Combo("Velocity Mode", &c.velocityMode, velModeNames, IM_ARRAYSIZE(velModeNames));
+        if (c.velocityMode == 1) {
+            dirty |= ImGui::DragFloat3("Velocity Dir", &c.velocityDir.x, 0.01f);
+            dirty |= ImGui::DragFloat("Velocity Speed", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
+            dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
+        } else if (c.velocityMode == 2) {
+            dirty |= ImGui::DragFloat("Velocity Speed (放射)", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
+            dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
+            ImGui::TextDisabled("(中心から外向きに噴出。Emit Radius は小さめ推奨)");
+        } else {
+            ImGui::TextDisabled("(Random: 従来の全方向ランダム初速)");
         }
     }
     else if (kind_ == Kind::Light) {

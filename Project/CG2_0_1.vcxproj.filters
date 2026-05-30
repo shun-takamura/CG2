@@ -16,9 +16,6 @@
     <Filter Include="InGUI">
       <UniqueIdentifier>{e289b9c0-c80e-4bee-8075-cbc447f31306}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Game\Enemy\Commands">
-      <UniqueIdentifier>{6C4D8E3A-F7B2-4A1D-9E6C-2B0F5A187D93}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DirectXGame\main.cpp">
@@ -629,21 +626,6 @@
     <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h">
-      <Filter>Game\Enemy\Commands</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h">
-      <Filter>Game\Enemy\Commands</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h">
-      <Filter>Game\Enemy\Commands</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h">
-      <Filter>Game\Enemy\Commands</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h">
-      <Filter>Game\Enemy\Commands</Filter>
-    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Core\Input\MouseInput.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -929,6 +911,21 @@
     <ClInclude Include="DirectXGame\Game\Enemy\EnemyCommandFactory.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Object3D\Object3d.VS.hlsl" />
@@ -977,10 +974,5 @@
     <None Include="tools\Python\convert_hdr_to_dds.py" />
     <None Include="tools\Python\cook_assets.py" />
     <None Include="tools\Python\pack_assets.py" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="..\..\..\..\デスクトップ\Beam_Sample.png">
-      <Filter>リソース ファイル</Filter>
-    </Image>
   </ItemGroup>
 </Project>

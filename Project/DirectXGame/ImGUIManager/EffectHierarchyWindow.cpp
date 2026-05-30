@@ -39,12 +39,17 @@ void EffectHierarchyWindow::OnDraw() {
 
                 ImGui::PushID(e.get());
 
-                // ×ボタン分の幅を残して Selectable を伸ばす
+                // 複製(+)・削除(x) ボタン分の幅を残して Selectable を伸ばす
                 const float availW = ImGui::GetContentRegionAvail().x;
-                const float xButtonW = ImGui::GetFrameHeight();
-                if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availW - xButtonW - 4.0f, 0))) {
+                const float btnW = ImGui::GetFrameHeight();
+                if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availW - btnW * 2.0f - 8.0f, 0))) {
                     if (mgr_) mgr_->SetSelected(e.get());
                 }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+")) {
+                    editor_->DuplicateComponent(e->GetKind(), e->GetIndex());
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("複製（同じ設定をもう1つ追加。方向違いの翼などに）");
                 ImGui::SameLine();
                 if (ImGui::SmallButton("x")) {
                     editor_->RemoveComponent(e->GetKind(), e->GetIndex());

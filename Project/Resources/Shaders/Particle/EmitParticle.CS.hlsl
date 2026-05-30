@@ -23,14 +23,15 @@ struct EmitterSphere
     float frequencyTime;
     uint emit;
     uint colorMode;       // 0=Random, 1=Fixed
-    float3 pad0;
+    float3 baseVelocity;  // velocityMode!=0 のとき、この方向＋ジッタを初速にする
     float4 startColor;
     float4 endColor;
     float2 scaleMin;
     float2 scaleMax;
     uint   uniformScale;  // 0=per-axis ランダム, 1=幅=高さ強制
     float  particleLifeTime; // emit時に各粒子へ設定する寿命
-    float2 pad1;
+    float  velocityMode;  // 0=ランダム(従来), 1=baseVelocity+ジッタ
+    float  velocityJitter;// velocityMode!=0 のときの速度ゆらぎ量
 };
 
 struct PerFrame
@@ -78,9 +79,22 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 }
                 // ビルボード時 z は不要だが、None モード時の見た目維持で x と同じに
                 gParticles[particleIndex].scale = float3(sx, sy, sx);
-                gParticles[particleIndex].translate =
-                    gEmitter.translate + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
-                gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 3.0f;
+                float3 spawnOffset = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
+                gParticles[particleIndex].translate = gEmitter.translate + spawnOffset;
+                if (gEmitter.velocityMode > 1.5f) {
+                    // 放射モード：発生位置の中心からのオフセット方向へ baseVelocity.x の速さで飛ばす
+                    float len = length(spawnOffset);
+                    float3 d = (len > 1e-5f) ? (spawnOffset / len) : float3(0.0f, 1.0f, 0.0f);
+                    gParticles[particleIndex].velocity =
+                        d * gEmitter.baseVelocity.x + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.velocityJitter;
+                } else if (gEmitter.velocityMode > 0.5f) {
+                    // 方向固定モード：baseVelocity を初速に、velocityJitter ぶんだけランダムに散らす
+                    gParticles[particleIndex].velocity =
+                        gEmitter.baseVelocity + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.velocityJitter;
+                } else {
+                    // 従来：全方向ランダム
+                    gParticles[particleIndex].velocity = (generator.Generate3d() * 2.0f - 1.0f) * 3.0f;
+                }
                 gParticles[particleIndex].lifeTime = gEmitter.particleLifeTime;
                 gParticles[particleIndex].currentTime = 0.0f;
 

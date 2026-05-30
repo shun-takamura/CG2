@@ -7,6 +7,8 @@
 #include "Effect/EffectManager.h"
 #include <memory>
 #include <vector>
+#include <unordered_set>
+#include <utility>
 
 class Camera;
 class Skybox;
@@ -400,7 +402,8 @@ private:
 	// Phase 1（バリア）
 	float specialBarrierRadius_   = 2.0f;   // バリア球半径
 	float specialBarrierDuration_ = 3.0f;   // Phase 1 の長さ（秒）
-	Vector4 specialBarrierColor_{ 0.4f, 0.7f, 1.0f, 0.25f }; // 半透明青
+	Vector4 specialBarrierColor_{ 1.0f, 0.8f, 0.3f, 0.10f }; // 薄い金（内膜）
+	bool  specialBarrierFillOn_ = false;    // 塗りつぶし半透明球を表示するか（既定 OFF、ワイヤ球のみ）
 
 	// プレイヤー強制位置・カメラ引き
 	Vector2 specialPlayerInputOffsetSaved_{ 0.0f, 0.0f }; // 復帰用に保存
@@ -464,17 +467,106 @@ private:
 	float specialChargeStartRadiusV_  = 0.0f;    // 垂直半径（=capsuleHeight/2 + capsuleRadius 相当）
 	float specialChargeMinLength_     = 0.6f;    // 終点 - 始点 の最小長
 
+	// ----- Phase 3（Fire = サンダー発射）-----
+	// ロック済み + 新規侵入のターゲットを順次サンダーで拘束し、ダメージティックで削る。
+	struct SpecialFireBolt {
+		std::unique_ptr<class LightningRuntime> rt;
+		IImGuiEditable* entity = nullptr;      // 対象（敵本体 or 弾の primitive ポインタ）
+		bool   isBullet = false;               // HP を持たない対象（敵弾）か
+		float  elapsed = 0.0f;                 // この対象に当て始めてからの経過秒
+		float  nextTickTime = 0.0f;            // 次のダメージティック時刻（elapsed 基準）
+		Vector3 lastTargetPos{ 0.0f, 0.0f, 0.0f }; // 最後に確認した対象位置（終点用）
+		bool   done = false;                   // 終了フラグ（trash へ回収予定）
+	};
+	std::vector<SpecialFireBolt> specialFireBolts_;
+	struct SpecialFireQueueItem { IImGuiEditable* entity = nullptr; bool isBullet = false; };
+	std::vector<SpecialFireQueueItem> specialFireQueue_;        // 処理待ちターゲット
+	std::unordered_set<IImGuiEditable*> specialFireProcessed_;  // 既に発射枠へ回した対象（再ロック防止）
+	float specialFireLaunchTimer_ = 0.0f;        // 次の発射までの残り秒
+	// Fire パラメータ（ImGui 調整 / JSON 保存）
+	int   specialFireSimultaneous_   = 3;        // 同時サンダー本数
+	float specialFireMinHold_        = 0.5f;     // 最低拘束時間（HP=0 でもこの秒数は当てる）
+	float specialFireMaxHold_        = 2.0f;     // 最高拘束時間（生存でも強制終了）
+	float specialFireTickInterval_   = 0.1f;     // ダメージティック間隔
+	int   specialFireTickDamage_     = 5;        // 1ティックダメージ
+	float specialFireLaunchInterval_ = 0.1f;     // 次の発射開始間隔
+	Vector4 specialFireColor_{ 0.5f, 0.8f, 1.0f, 1.0f }; // サンダーの色
+	// サンダーの見た目（敵へ飛んでいく感 vs 放電感のバランス調整）
+	float specialFireGrowTime_       = 0.08f;    // 始点→ターゲットへ伸びる時間（0で即全長）
+	float specialFireMaxOffsetRatio_ = 0.10f;    // ジグザグの暴れ幅（小=直線的＝飛んでる感）
+	float specialFireBranchProb_     = 0.30f;    // 枝分かれ確率（放電のパチパチ感）
+	float specialFireStartWidth_     = 0.10f;    // 始点(プレイヤー側)の太さ
+	float specialFireEndWidth_       = 0.05f;    // 終点(敵側)の太さ
+	float specialFireBoltLifetime_   = 0.08f;    // 1メッシュの寿命（小=高速にパチパチ再生成）
+
+	// ----- 光の翼（X字方向に「小さいパーティクル」を外向き噴出。アーム1本=GPUパーティクル群1つ）-----
+	// 将来プレイヤー常時装備へ流用予定。描画は GPUParticleManager が自動で行う。
+	bool    specialWingOn_          = true;
+	int     specialWingArmCount_    = 4;          // アーム本数（X字=4）
+	float   specialWingAngleOffset_ = 0.7853982f; // 配置の基準角(rad)。π/4 で X 字
+	float   specialWingSpeed_       = 6.0f;       // 外向き初速（実質長さ ≒ speed×life）
+	float   specialWingLife_        = 0.4f;       // 粒子寿命（秒）
+	int     specialWingBurstCount_  = 6;          // 1アーム・1フレームの粒子数（量）
+	float   specialWingJitter_      = 1.0f;       // 速度ゆらぎ
+	float   specialWingEmitRadius_  = 0.1f;       // 発生位置の散らばり（中心付近）
+	Vector2 specialWingScaleMin_{ 0.04f, 0.04f }; // めっちゃ小さい
+	Vector2 specialWingScaleMax_{ 0.10f, 0.10f };
+	Vector4 specialWingColorInner_{ 1.0f, 0.85f, 0.20f, 1.0f }; // 金（発生時）
+	Vector4 specialWingColorOuter_{ 1.0f, 0.40f, 0.85f, 0.0f };  // ピンク（寿命末でフェード）
+
+	// ----- Phase 4（End = 終了猶予）-----
+	float specialEndDuration_ = 1.0f;            // Fire 終了からバリア消失までの猶予秒
+
+	// 必殺技の演出中心：プレイヤー原点は足元なので、バリア球・電撃の中心を up 方向へ持ち上げて体の中心に合わせる。
+	// 0 以下なら player の Collider.offset.y（プレハブの足元→カプセル中心）を自動採用。
+	float specialPlayerCenterOffset_ = 0.0f;
+
+	// バリアの回転ワイヤーフレーム球（LineRenderer で経線・緯線を描画）。当たり判定の正確な範囲を可視化。
+	bool    specialBarrierWireframeOn_     = true;
+	Vector3 specialBarrierWireSpin_{ 0.0f, 0.0f, 0.0f };           // 各軸の累積回転角（rad、内部状態）
+	Vector3 specialBarrierWireSpinSpeed_{ 0.5f, 1.2f, 0.3f };      // 各軸の回転速度（rad/s、実時間）
+	int     specialBarrierWireMeridians_   = 8;      // 経線本数
+	int     specialBarrierWireParallels_   = 5;      // 緯線本数
+	int     specialBarrierWireSegments_    = 24;     // 1円の分割数
+	Vector4 specialBarrierWireColorGold_{ 1.0f, 0.84f, 0.15f, 0.9f }; // 経線=金
+	Vector4 specialBarrierWireColorPink_{ 1.0f, 0.35f, 0.80f, 0.9f }; // 緯線=ピンク
+
+	// バリアのパーティクル演出（GPU パーティクルを球状に連続バースト）。当たり判定は球プリミティブ側のまま。
+	// 球状ランダムは虫っぽくなるため既定 OFF。将来は外周リング沿い等に作り直す。
+	bool    specialBarrierParticleOn_   = false;
+	float   specialBarrierEmitInterval_ = 0.02f;   // バースト間隔（秒、実時間）
+	int     specialBarrierEmitCount_    = 10;      // 1バーストの粒子数
+	float   specialBarrierParticleLife_ = 0.5f;    // 粒子寿命（秒）
+	float   specialBarrierParticleRadiusScale_ = 1.0f; // 発生半径 = barrierRadius × これ
+	Vector2 specialBarrierParticleScaleMin_{ 0.06f, 0.06f };
+	Vector2 specialBarrierParticleScaleMax_{ 0.16f, 0.16f };
+	Vector4 specialBarrierParticleColor0_{ 0.5f, 0.85f, 1.0f, 1.0f }; // 発生時の色
+	Vector4 specialBarrierParticleColor1_{ 0.2f, 0.5f,  1.0f, 0.0f }; // 寿命末の色（フェード）
+	float   specialBarrierEmitAccum_  = 0.0f;      // 内部バーストタイマ
+	bool    specialBarrierGroupReady_ = false;     // GPU パーティクルグループ生成済み
+
 	void InitializeSpecialGaugeUI();
 	void UpdateSpecialGaugeUI();
 	void UpdateSpecialMove(class InputActionMap* actions, float dt);
 	void TriggerSpecialMove();
 	void EnterSpecialPhaseBarrier();
 	void UpdateSpecialPhaseBarrier(float worldDt);
+	void UpdateSpecialBarrier();   // バリア球のプレイヤー追従＋球内の敵弾消去（全フェーズ共通）
+	void DrawSpecialBarrierWireframe(const Vector3& center); // 回転ワイヤーフレーム球を LineRenderer へ積む
+	void UpdateSpecialWings();     // 光の翼：X字方向に小パーティクルを外向き噴出
 	void EnterSpecialPhaseLockon();
 	void UpdateSpecialPhaseLockon(float realDt);
 	void EnumerateLockonTargets();   // 画面内敵+敵弾を列挙してプレイヤー近い順にソート
 	void SpawnLockonVisuals(SpecialLockonTarget& t);
 	void UpdateLockonTargetVisuals(SpecialLockonTarget& t, float localTime);
+	void EnterSpecialPhaseFire();
+	void UpdateSpecialPhaseFire(float dt);
+	void EnterSpecialPhaseEnd();
+	void UpdateSpecialPhaseEnd(float dt);
+	bool IsSpecialTargetAlive(IImGuiEditable* e) const;          // 動的コンテナにポインタが生存しているか
+	void CollectScreenTargets(std::vector<std::pair<IImGuiEditable*, bool>>& out); // 画面内の敵/敵弾を列挙(entity,isBullet)
+	Vector3 SpecialBoltStart(const Vector3& playerPos, const Vector3& dir) const;  // プレイヤーカプセル表面の始点（楕円射影）
+	Vector3 SpecialPlayerCenter() const;  // 必殺技演出の中心（足元 + offset up = 体の中心）
 	void EndSpecialMove();
 	void ApplySpecialCamera(const Vector3& playerWorldPos);
 

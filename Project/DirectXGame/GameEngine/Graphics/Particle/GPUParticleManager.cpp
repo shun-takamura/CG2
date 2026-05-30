@@ -140,6 +140,30 @@ void GPUParticleManager::SetEmitterTranslate(const std::string& name, const Vect
     it->second.emitterData->translate = translate;
 }
 
+void GPUParticleManager::SetEmitterVelocity(const std::string& name, const Vector3& baseVelocity, float jitter, int mode)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.emitterData) return;
+    auto& e = *it->second.emitterData;
+    e.baseVelocity = baseVelocity;
+    e.velocityJitter = jitter;
+    e.velocityMode = static_cast<float>(mode);
+}
+
+void GPUParticleManager::SetEmitterGradient(const std::string& name, const std::vector<std::pair<float, Vector4>>& keys)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.gradientData) return;
+    auto& g = *it->second.gradientData;
+    const uint32_t n = (keys.size() < kMaxGradientKeys) ? static_cast<uint32_t>(keys.size()) : kMaxGradientKeys;
+    // 2個未満は無効化（粒子の start/end 2色補間に戻す）
+    g.keyCount = (n >= 2) ? n : 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        g.keyLoc[i]   = { keys[i].first, 0.0f, 0.0f, 0.0f };
+        g.keyColor[i] = keys[i].second;
+    }
+}
+
 //==========================================================
 // ビルボード / TimeGroup
 //==========================================================
@@ -442,6 +466,7 @@ void GPUParticleManager::DispatchUpdateCS(GPUParticleGroup& g)
     commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
     commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
     commandList->SetComputeRootConstantBufferView(3, g.perFrameResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootConstantBufferView(4, g.gradientResource->GetGPUVirtualAddress());
 
     commandList->Dispatch(1, 1, 1);
 }
@@ -495,17 +520,21 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.emitterData->frequencyTime = 0.0f;
     g.emitterData->emit = 0;
     g.emitterData->colorMode = 0;
-    g.emitterData->pad0[0] = 0.0f;
-    g.emitterData->pad0[1] = 0.0f;
-    g.emitterData->pad0[2] = 0.0f;
+    g.emitterData->baseVelocity = { 0.0f, 0.0f, 0.0f };
     g.emitterData->startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
     g.emitterData->endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
     g.emitterData->scaleMin = { 0.1f, 0.1f };
     g.emitterData->scaleMax = { 0.5f, 0.5f };
     g.emitterData->uniformScale = 1;
     g.emitterData->particleLifeTime = 1.0f;
-    g.emitterData->pad1[0] = 0.0f;
-    g.emitterData->pad1[1] = 0.0f;
+    g.emitterData->velocityMode = 0.0f;
+    g.emitterData->velocityJitter = 0.0f;
+
+    // Gradient CB（Update CS b1）。既定 keyCount=0（無効＝粒子の start/end 2色補間）
+    // CBV は 256 バイト境界なのでサイズを 256 の倍数に丸める
+    g.gradientResource = dxCore_->CreateBufferResource((sizeof(ParticleGradient) + 255) & ~static_cast<size_t>(255));
+    g.gradientResource->Map(0, nullptr, reinterpret_cast<void**>(&g.gradientData));
+    *g.gradientData = ParticleGradient{};
 
     // PerFrame CB
     g.perFrameResource = dxCore_->CreateBufferResource(sizeof(PerFrame));
@@ -538,6 +567,10 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
         g.emitterResource->Unmap(0, nullptr);
         g.emitterData = nullptr;
     }
+    if (g.gradientResource && g.gradientData) {
+        g.gradientResource->Unmap(0, nullptr);
+        g.gradientData = nullptr;
+    }
     if (g.perFrameResource && g.perFrameData) {
         g.perFrameResource->Unmap(0, nullptr);
         g.perFrameData = nullptr;
@@ -551,6 +584,7 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
         g.perViewPreviewData = nullptr;
     }
     g.emitterResource.Reset();
+    g.gradientResource.Reset();
     g.perFrameResource.Reset();
     g.perViewResource.Reset();
     g.perViewPreviewResource.Reset();
@@ -720,7 +754,7 @@ void GPUParticleManager::CreateUpdatePipeline()
     rangeList[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[4] = {};
+    D3D12_ROOT_PARAMETER rootParameters[5] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
@@ -735,7 +769,10 @@ void GPUParticleManager::CreateUpdatePipeline()
     rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
     rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[3].Descriptor.ShaderRegister = 0;
+    rootParameters[3].Descriptor.ShaderRegister = 0; // PerFrame b0
+    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[4].Descriptor.ShaderRegister = 1; // Gradient b1
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
