@@ -62,6 +62,10 @@ void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
     materialData_->color = color_;
     materialData_->alphaReference = alphaReference_;
     materialData_->samplerMode = samplerMode_;
+    materialData_->viewAngleFadePower = viewAngleFadePower_;
+    if (camera) {
+        materialData_->cameraPos = camera->GetTranslate();
+    }
 
     // --- Distortion 用 UV 変換の累積（通常 UV と完全に独立） ---
     if (distortionMaterialData_) {
@@ -172,6 +176,9 @@ Matrix4x4 PrimitiveMesh::BuildWorldMatrix(Camera* camera) const {
 }
 
 void PrimitiveMesh::Draw() {
+    // 空メッシュは描画スキップ
+    if (indexCount_ == 0 || vertexCount_ == 0) return;
+
     // パイプラインの事前設定
     PrimitivePipeline::GetInstance()->PreDraw(blendMode_, depthWrite_, cullBackface_);
 
@@ -312,6 +319,12 @@ void PrimitiveMesh::CreateVertexResource(const MeshData& meshData) {
     vertexCount_ = static_cast<uint32_t>(meshData.vertices.size());
     size_t sizeInBytes = sizeof(MeshVertex) * vertexCount_;
 
+    // 空メッシュガード：D3D12 は 0 サイズの CommittedResource を許容しないため
+    // 最小 1 頂点分のバッファだけ確保し、描画側で vertexCount_=0 を見てスキップする
+    if (sizeInBytes == 0) {
+        sizeInBytes = sizeof(MeshVertex);
+    }
+
     // バッファ作成
     vertexResource_ = dxCore->CreateBufferResource(sizeInBytes);
 
@@ -323,7 +336,9 @@ void PrimitiveMesh::CreateVertexResource(const MeshData& meshData) {
     // マップしてコピー
     MeshVertex* vertexData = nullptr;
     vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
-    std::memcpy(vertexData, meshData.vertices.data(), sizeInBytes);
+    if (vertexCount_ > 0) {
+        std::memcpy(vertexData, meshData.vertices.data(), sizeof(MeshVertex) * vertexCount_);
+    }
     vertexResource_->Unmap(0, nullptr);
 }
 
@@ -332,6 +347,11 @@ void PrimitiveMesh::CreateIndexResource(const MeshData& meshData) {
 
     indexCount_ = static_cast<uint32_t>(meshData.indices.size());
     size_t sizeInBytes = sizeof(uint32_t) * indexCount_;
+
+    // 空メッシュガード
+    if (sizeInBytes == 0) {
+        sizeInBytes = sizeof(uint32_t);
+    }
 
     // バッファ作成
     indexResource_ = dxCore->CreateBufferResource(sizeInBytes);
@@ -344,7 +364,9 @@ void PrimitiveMesh::CreateIndexResource(const MeshData& meshData) {
     // マップしてコピー
     uint32_t* indexData = nullptr;
     indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
-    std::memcpy(indexData, meshData.indices.data(), sizeInBytes);
+    if (indexCount_ > 0) {
+        std::memcpy(indexData, meshData.indices.data(), sizeof(uint32_t) * indexCount_);
+    }
     indexResource_->Unmap(0, nullptr);
 }
 
@@ -376,6 +398,8 @@ void PrimitiveMesh::CreateMaterialResource() {
     materialData_->samplerMode = samplerMode_;
     materialData_->padding = 0.0f;
     materialData_->uvTransform = MakeIdentity4x4();
+    materialData_->cameraPos = { 0.0f, 0.0f, 0.0f };
+    materialData_->viewAngleFadePower = 0.0f;
 
     // Distortion 用 CB（PS の Material と同じレイアウト、独立した uvTransform を持つ）
     distortionMaterialResource_ = dxCore->CreateBufferResource(sizeof(PrimitiveMaterial));
@@ -387,4 +411,6 @@ void PrimitiveMesh::CreateMaterialResource() {
     distortionMaterialData_->samplerMode = 0; // Wrap U/V（タイル前提）
     distortionMaterialData_->padding = 0.0f;
     distortionMaterialData_->uvTransform = MakeIdentity4x4();
+    distortionMaterialData_->cameraPos = { 0.0f, 0.0f, 0.0f };
+    distortionMaterialData_->viewAngleFadePower = 0.0f;
 }

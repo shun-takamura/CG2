@@ -1,0 +1,238 @@
+{
+  "name": "WingEffect",
+  "totalDuration": 0.10000000149011612,
+  "loop": true,
+  "primitives": [],
+  "particles": [
+    {
+      "displayName": "RightWingEffect",
+      "gpuParticleGroupName": "wing",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0.30000001192092896,
+        0.69999998807907104,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 64,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.68137252330780029,
+        0.29824787378311157,
+        0.0300605408847332,
+        1
+      ],
+      "endColor": [
+        0.84313726425170898,
+        0.10196078568696976,
+        1,
+        0.39215686917304993
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 0.20000000298023224,
+      "particleLifeTime": 1,
+      "velocityMode": 1,
+      "velocityDir": [
+        1,
+        0.60000002384185791,
+        -0.80000001192092896
+      ],
+      "velocitySpeed": 1,
+      "velocityJitter": 0.40000000596046448,
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.68598616123199463,
+            0.029411792755126953,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "RightWingEffect",
+      "gpuParticleGroupName": "wing_2",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0.30000001192092896,
+        0.34999999403953552,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 64,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.68137252330780029,
+        0.29824787378311157,
+        0.0300605408847332,
+        1
+      ],
+      "endColor": [
+        0.84313726425170898,
+        0.10196078568696976,
+        1,
+        0.39215686917304993
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 0.20000000298023224,
+      "particleLifeTime": 1,
+      "velocityMode": 1,
+      "velocityDir": [
+        1,
+        -0.60000002384185791,
+        -0.80000001192092896
+      ],
+      "velocitySpeed": 1,
+      "velocityJitter": 0.40000000596046448,
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.68598616123199463,
+            0.029411792755126953,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "RightWingEffect",
+      "gpuParticleGroupName": "wing_3",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        -0.30000001192092896,
+        0.69999998807907104,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 64,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.68137252330780029,
+        0.29824787378311157,
+        0.0300605408847332,
+        1
+      ],
+      "endColor": [
+        0.84313726425170898,
+        0.10196078568696976,
+        1,
+        0.39215686917304993
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 0.20000000298023224,
+      "particleLifeTime": 1,
+      "velocityMode": 1,
+      "velocityDir": [
+        -1,
+        0.60000002384185791,
+        -0.80000001192092896
+      ],
+      "velocitySpeed": 1,
+      "velocityJitter": 0.40000000596046448,
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.68598616123199463,
+            0.029411792755126953,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "RightWingEffect",
+      "gpuParticleGroupName": "wing_3_2",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        -0.30000001192092896,
+        0.34999999403953552,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 64,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.68137252330780029,
+        0.29824787378311157,
+        0.0300605408847332,
+        1
+      ],
+      "endColor": [
+        0.84313726425170898,
+        0.10196078568696976,
+        1,
+        0.39215686917304993
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 0.20000000298023224,
+      "particleLifeTime": 1,
+      "velocityMode": 1,
+      "velocityDir": [
+        -1,
+        -0.60000002384185791,
+        -0.80000001192092896
+      ],
+      "velocitySpeed": 1,
+      "velocityJitter": 0.40000000596046448,
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.68598616123199463,
+            0.029411792755126953,
+            0.5
+          ]
+        }
+      ]
+    }
+  ],
+  "lights": [],
+  "sounds": []
+}

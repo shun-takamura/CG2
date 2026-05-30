@@ -18,12 +18,16 @@
 #include "Spline/RailCameraController.h"
 #include <cmath>
 #include <cstdio>
+#include <random>
+#include <unordered_set>
 #include "Components/EntityTag.h"
 #include "AnimatedObject3DInstance.h"
 #include "AnimatedModelInstance.h"
 #include "Object3DInstance.h"
 #include "Primitive/PrimitiveInstance.h"
 #include "Primitive/PrimitivePipeline.h"
+#include "Effect/LightningRuntime.h"
+#include "Particle/GPUParticleManager.h"
 #include "SpriteInstance.h"
 #include "LightManager.h"
 #include "LogBuffer.h"
@@ -208,6 +212,172 @@ void StagePlayScene::LoadTuningFromJson() {
 	if (sg.IsObject()) {
 		specialGaugeMax_       = static_cast<float>(sg["max"].AsDouble(specialGaugeMax_));
 		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
+		specialDuration_       = static_cast<float>(sg["duration"].AsDouble(specialDuration_));
+		// Phase 1
+		specialBarrierRadius_   = static_cast<float>(sg["barrierRadius"].AsDouble(specialBarrierRadius_));
+		specialBarrierDuration_ = static_cast<float>(sg["barrierDuration"].AsDouble(specialBarrierDuration_));
+		specialBarrierFillOn_   = sg["barrierFill"].AsBool(specialBarrierFillOn_);
+		specialPlayerCenterOffset_ = static_cast<float>(sg["centerOffset"].AsDouble(specialPlayerCenterOffset_));
+		// バリアのワイヤーフレーム球
+		const JsonValue& wf = sg["barrierWire"];
+		if (wf.IsObject()) {
+			specialBarrierWireframeOn_   = wf["on"].AsBool(specialBarrierWireframeOn_);
+			const JsonValue& ss = wf["spinSpeed"];
+			if (ss.IsArray() && ss.Size() >= 3) {
+				specialBarrierWireSpinSpeed_.x = static_cast<float>(ss[0].AsDouble(specialBarrierWireSpinSpeed_.x));
+				specialBarrierWireSpinSpeed_.y = static_cast<float>(ss[1].AsDouble(specialBarrierWireSpinSpeed_.y));
+				specialBarrierWireSpinSpeed_.z = static_cast<float>(ss[2].AsDouble(specialBarrierWireSpinSpeed_.z));
+			} else if (ss.IsNumber()) {
+				// 旧フォーマット（単一値=Y軸のみ）との互換
+				specialBarrierWireSpinSpeed_.y = static_cast<float>(ss.AsDouble(specialBarrierWireSpinSpeed_.y));
+			}
+			specialBarrierWireMeridians_ = static_cast<int>(wf["meridians"].AsInt(static_cast<int64_t>(specialBarrierWireMeridians_)));
+			specialBarrierWireParallels_ = static_cast<int>(wf["parallels"].AsInt(static_cast<int64_t>(specialBarrierWireParallels_)));
+			specialBarrierWireSegments_  = static_cast<int>(wf["segments"].AsInt(static_cast<int64_t>(specialBarrierWireSegments_)));
+			auto readV4w = [](const JsonValue& a, Vector4& v) {
+				if (a.IsArray() && a.Size() >= 4) {
+					v.x = static_cast<float>(a[0].AsDouble(v.x));
+					v.y = static_cast<float>(a[1].AsDouble(v.y));
+					v.z = static_cast<float>(a[2].AsDouble(v.z));
+					v.w = static_cast<float>(a[3].AsDouble(v.w));
+				}
+			};
+			readV4w(wf["gold"], specialBarrierWireColorGold_);
+			readV4w(wf["pink"], specialBarrierWireColorPink_);
+		}
+		// バリアパーティクル
+		const JsonValue& bp = sg["barrierParticle"];
+		if (bp.IsObject()) {
+			specialBarrierParticleOn_   = bp["on"].AsBool(specialBarrierParticleOn_);
+			specialBarrierEmitInterval_ = static_cast<float>(bp["interval"].AsDouble(specialBarrierEmitInterval_));
+			specialBarrierEmitCount_    = static_cast<int>(bp["count"].AsInt(static_cast<int64_t>(specialBarrierEmitCount_)));
+			specialBarrierParticleLife_ = static_cast<float>(bp["life"].AsDouble(specialBarrierParticleLife_));
+			specialBarrierParticleRadiusScale_ = static_cast<float>(bp["radiusScale"].AsDouble(specialBarrierParticleRadiusScale_));
+			auto readV2 = [](const JsonValue& a, Vector2& v) {
+				if (a.IsArray() && a.Size() >= 2) {
+					v.x = static_cast<float>(a[0].AsDouble(v.x));
+					v.y = static_cast<float>(a[1].AsDouble(v.y));
+				}
+			};
+			auto readV4 = [](const JsonValue& a, Vector4& v) {
+				if (a.IsArray() && a.Size() >= 4) {
+					v.x = static_cast<float>(a[0].AsDouble(v.x));
+					v.y = static_cast<float>(a[1].AsDouble(v.y));
+					v.z = static_cast<float>(a[2].AsDouble(v.z));
+					v.w = static_cast<float>(a[3].AsDouble(v.w));
+				}
+			};
+			readV2(bp["scaleMin"], specialBarrierParticleScaleMin_);
+			readV2(bp["scaleMax"], specialBarrierParticleScaleMax_);
+			readV4(bp["color0"], specialBarrierParticleColor0_);
+			readV4(bp["color1"], specialBarrierParticleColor1_);
+		}
+		// 光の翼（X字パーティクル）
+		const JsonValue& wg = sg["wing"];
+		if (wg.IsObject()) {
+			specialWingOn_          = wg["on"].AsBool(specialWingOn_);
+			specialWingArmCount_    = static_cast<int>(wg["armCount"].AsInt(static_cast<int64_t>(specialWingArmCount_)));
+			specialWingAngleOffset_ = static_cast<float>(wg["angleOffset"].AsDouble(specialWingAngleOffset_));
+			specialWingSpeed_       = static_cast<float>(wg["speed"].AsDouble(specialWingSpeed_));
+			specialWingLife_        = static_cast<float>(wg["life"].AsDouble(specialWingLife_));
+			specialWingBurstCount_  = static_cast<int>(wg["burstCount"].AsInt(static_cast<int64_t>(specialWingBurstCount_)));
+			specialWingJitter_      = static_cast<float>(wg["jitter"].AsDouble(specialWingJitter_));
+			specialWingEmitRadius_  = static_cast<float>(wg["emitRadius"].AsDouble(specialWingEmitRadius_));
+			auto readV2w = [](const JsonValue& a, Vector2& v) {
+				if (a.IsArray() && a.Size() >= 2) {
+					v.x = static_cast<float>(a[0].AsDouble(v.x));
+					v.y = static_cast<float>(a[1].AsDouble(v.y));
+				}
+			};
+			auto readV4w2 = [](const JsonValue& a, Vector4& v) {
+				if (a.IsArray() && a.Size() >= 4) {
+					v.x = static_cast<float>(a[0].AsDouble(v.x));
+					v.y = static_cast<float>(a[1].AsDouble(v.y));
+					v.z = static_cast<float>(a[2].AsDouble(v.z));
+					v.w = static_cast<float>(a[3].AsDouble(v.w));
+				}
+			};
+			readV2w(wg["scaleMin"], specialWingScaleMin_);
+			readV2w(wg["scaleMax"], specialWingScaleMax_);
+			readV4w2(wg["colorInner"], specialWingColorInner_);
+			readV4w2(wg["colorOuter"], specialWingColorOuter_);
+		}
+		const JsonValue& bc = sg["barrierColor"];
+		if (bc.IsArray() && bc.Size() >= 4) {
+			specialBarrierColor_ = {
+				static_cast<float>(bc[0].AsDouble(specialBarrierColor_.x)),
+				static_cast<float>(bc[1].AsDouble(specialBarrierColor_.y)),
+				static_cast<float>(bc[2].AsDouble(specialBarrierColor_.z)),
+				static_cast<float>(bc[3].AsDouble(specialBarrierColor_.w))
+			};
+		}
+		specialCamPullback_ = static_cast<float>(sg["camPullback"].AsDouble(specialCamPullback_));
+		specialCamFovAdd_   = static_cast<float>(sg["camFovAdd"].AsDouble(specialCamFovAdd_));
+		specialCamUpAdd_    = static_cast<float>(sg["camUpAdd"].AsDouble(specialCamUpAdd_));
+		// Phase 2 チャージ
+		specialChargeBoltCount_     = static_cast<int>(sg["chargeBoltCount"].AsInt(static_cast<int64_t>(specialChargeBoltCount_)));
+		specialChargeRegenInterval_ = static_cast<float>(sg["chargeRegenInterval"].AsDouble(specialChargeRegenInterval_));
+		specialChargeStartRadiusH_  = static_cast<float>(sg["chargeStartRadiusH"].AsDouble(specialChargeStartRadiusH_));
+		specialChargeStartRadiusV_  = static_cast<float>(sg["chargeStartRadiusV"].AsDouble(specialChargeStartRadiusV_));
+		specialChargeMinLength_     = static_cast<float>(sg["chargeMinLength"].AsDouble(specialChargeMinLength_));
+		// Phase 3 Fire
+		specialFireSimultaneous_   = static_cast<int>(sg["fireSimultaneous"].AsInt(static_cast<int64_t>(specialFireSimultaneous_)));
+		specialFireMinHold_        = static_cast<float>(sg["fireMinHold"].AsDouble(specialFireMinHold_));
+		specialFireMaxHold_        = static_cast<float>(sg["fireMaxHold"].AsDouble(specialFireMaxHold_));
+		specialFireTickInterval_   = static_cast<float>(sg["fireTickInterval"].AsDouble(specialFireTickInterval_));
+		specialFireTickDamage_     = static_cast<int>(sg["fireTickDamage"].AsInt(static_cast<int64_t>(specialFireTickDamage_)));
+		specialFireLaunchInterval_ = static_cast<float>(sg["fireLaunchInterval"].AsDouble(specialFireLaunchInterval_));
+		specialFireGrowTime_       = static_cast<float>(sg["fireGrowTime"].AsDouble(specialFireGrowTime_));
+		specialFireMaxOffsetRatio_ = static_cast<float>(sg["fireMaxOffsetRatio"].AsDouble(specialFireMaxOffsetRatio_));
+		specialFireBranchProb_     = static_cast<float>(sg["fireBranchProb"].AsDouble(specialFireBranchProb_));
+		specialFireStartWidth_     = static_cast<float>(sg["fireStartWidth"].AsDouble(specialFireStartWidth_));
+		specialFireEndWidth_       = static_cast<float>(sg["fireEndWidth"].AsDouble(specialFireEndWidth_));
+		specialFireBoltLifetime_   = static_cast<float>(sg["fireBoltLifetime"].AsDouble(specialFireBoltLifetime_));
+		specialEndDuration_        = static_cast<float>(sg["endDuration"].AsDouble(specialEndDuration_));
+		const JsonValue& fc = sg["fireColor"];
+		if (fc.IsArray() && fc.Size() >= 4) {
+			specialFireColor_ = {
+				static_cast<float>(fc[0].AsDouble(specialFireColor_.x)),
+				static_cast<float>(fc[1].AsDouble(specialFireColor_.y)),
+				static_cast<float>(fc[2].AsDouble(specialFireColor_.z)),
+				static_cast<float>(fc[3].AsDouble(specialFireColor_.w))
+			};
+		}
+		// ゲージ UI
+		const JsonValue& bar = sg["bar"];
+		if (bar.IsObject()) {
+			gaugeBarMaxWidth_ = static_cast<float>(bar["maxWidth"].AsDouble(gaugeBarMaxWidth_));
+			gaugeBarHeight_   = static_cast<float>(bar["height"].AsDouble(gaugeBarHeight_));
+			gaugeBarPosX_     = static_cast<float>(bar["posX"].AsDouble(gaugeBarPosX_));
+			gaugeBarPosY_     = static_cast<float>(bar["posY"].AsDouble(gaugeBarPosY_));
+			const JsonValue& bgC = bar["bgColor"];
+			if (bgC.IsArray() && bgC.Size() >= 4) {
+				gaugeBarBgColor_ = {
+					static_cast<float>(bgC[0].AsDouble(gaugeBarBgColor_.x)),
+					static_cast<float>(bgC[1].AsDouble(gaugeBarBgColor_.y)),
+					static_cast<float>(bgC[2].AsDouble(gaugeBarBgColor_.z)),
+					static_cast<float>(bgC[3].AsDouble(gaugeBarBgColor_.w))
+				};
+			}
+			const JsonValue& fgC = bar["fgColor"];
+			if (fgC.IsArray() && fgC.Size() >= 4) {
+				gaugeBarFgColor_ = {
+					static_cast<float>(fgC[0].AsDouble(gaugeBarFgColor_.x)),
+					static_cast<float>(fgC[1].AsDouble(gaugeBarFgColor_.y)),
+					static_cast<float>(fgC[2].AsDouble(gaugeBarFgColor_.z)),
+					static_cast<float>(fgC[3].AsDouble(gaugeBarFgColor_.w))
+				};
+			}
+			const JsonValue& fuC = bar["fullColor"];
+			if (fuC.IsArray() && fuC.Size() >= 4) {
+				gaugeBarFullColor_ = {
+					static_cast<float>(fuC[0].AsDouble(gaugeBarFullColor_.x)),
+					static_cast<float>(fuC[1].AsDouble(gaugeBarFullColor_.y)),
+					static_cast<float>(fuC[2].AsDouble(gaugeBarFullColor_.z)),
+					static_cast<float>(fuC[3].AsDouble(gaugeBarFullColor_.w))
+				};
+			}
+		}
 	}
 
 	// ----- HP bar UI -----
@@ -395,6 +565,150 @@ void StagePlayScene::SaveTuningToJson() const {
 	JsonValue sgObj = JsonValue::MakeObject();
 	sgObj["max"]       = static_cast<double>(specialGaugeMax_);
 	sgObj["dodgeGain"] = static_cast<double>(dodgeSpecialGaugeGain_);
+	sgObj["duration"]  = static_cast<double>(specialDuration_);
+	sgObj["barrierRadius"]   = static_cast<double>(specialBarrierRadius_);
+	sgObj["barrierDuration"] = static_cast<double>(specialBarrierDuration_);
+	sgObj["barrierFill"]     = JsonValue(specialBarrierFillOn_);
+	sgObj["centerOffset"]    = static_cast<double>(specialPlayerCenterOffset_);
+	{
+		JsonValue wfObj = JsonValue::MakeObject();
+		wfObj["on"]        = JsonValue(specialBarrierWireframeOn_);
+		{
+			JsonValue ss = JsonValue::MakeArray();
+			ss.Push(JsonValue(static_cast<double>(specialBarrierWireSpinSpeed_.x)));
+			ss.Push(JsonValue(static_cast<double>(specialBarrierWireSpinSpeed_.y)));
+			ss.Push(JsonValue(static_cast<double>(specialBarrierWireSpinSpeed_.z)));
+			wfObj["spinSpeed"] = std::move(ss);
+		}
+		wfObj["meridians"] = static_cast<int64_t>(specialBarrierWireMeridians_);
+		wfObj["parallels"] = static_cast<int64_t>(specialBarrierWireParallels_);
+		wfObj["segments"]  = static_cast<int64_t>(specialBarrierWireSegments_);
+		auto pushV4w = [](const Vector4& v) {
+			JsonValue arr = JsonValue::MakeArray();
+			arr.Push(JsonValue(static_cast<double>(v.x)));
+			arr.Push(JsonValue(static_cast<double>(v.y)));
+			arr.Push(JsonValue(static_cast<double>(v.z)));
+			arr.Push(JsonValue(static_cast<double>(v.w)));
+			return arr;
+		};
+		wfObj["gold"] = pushV4w(specialBarrierWireColorGold_);
+		wfObj["pink"] = pushV4w(specialBarrierWireColorPink_);
+		sgObj["barrierWire"] = std::move(wfObj);
+	}
+	{
+		JsonValue bpObj = JsonValue::MakeObject();
+		bpObj["on"]          = JsonValue(specialBarrierParticleOn_);
+		bpObj["interval"]    = static_cast<double>(specialBarrierEmitInterval_);
+		bpObj["count"]       = static_cast<int64_t>(specialBarrierEmitCount_);
+		bpObj["life"]        = static_cast<double>(specialBarrierParticleLife_);
+		bpObj["radiusScale"] = static_cast<double>(specialBarrierParticleRadiusScale_);
+		auto pushV2 = [](const Vector2& v) {
+			JsonValue arr = JsonValue::MakeArray();
+			arr.Push(JsonValue(static_cast<double>(v.x)));
+			arr.Push(JsonValue(static_cast<double>(v.y)));
+			return arr;
+		};
+		auto pushV4b = [](const Vector4& v) {
+			JsonValue arr = JsonValue::MakeArray();
+			arr.Push(JsonValue(static_cast<double>(v.x)));
+			arr.Push(JsonValue(static_cast<double>(v.y)));
+			arr.Push(JsonValue(static_cast<double>(v.z)));
+			arr.Push(JsonValue(static_cast<double>(v.w)));
+			return arr;
+		};
+		bpObj["scaleMin"] = pushV2(specialBarrierParticleScaleMin_);
+		bpObj["scaleMax"] = pushV2(specialBarrierParticleScaleMax_);
+		bpObj["color0"]   = pushV4b(specialBarrierParticleColor0_);
+		bpObj["color1"]   = pushV4b(specialBarrierParticleColor1_);
+		sgObj["barrierParticle"] = std::move(bpObj);
+	}
+	{
+		JsonValue wgObj = JsonValue::MakeObject();
+		wgObj["on"]          = JsonValue(specialWingOn_);
+		wgObj["armCount"]    = static_cast<int64_t>(specialWingArmCount_);
+		wgObj["angleOffset"] = static_cast<double>(specialWingAngleOffset_);
+		wgObj["speed"]       = static_cast<double>(specialWingSpeed_);
+		wgObj["life"]        = static_cast<double>(specialWingLife_);
+		wgObj["burstCount"]  = static_cast<int64_t>(specialWingBurstCount_);
+		wgObj["jitter"]      = static_cast<double>(specialWingJitter_);
+		wgObj["emitRadius"]  = static_cast<double>(specialWingEmitRadius_);
+		auto pushV2w = [](const Vector2& v) {
+			JsonValue arr = JsonValue::MakeArray();
+			arr.Push(JsonValue(static_cast<double>(v.x)));
+			arr.Push(JsonValue(static_cast<double>(v.y)));
+			return arr;
+		};
+		auto pushV4w2 = [](const Vector4& v) {
+			JsonValue arr = JsonValue::MakeArray();
+			arr.Push(JsonValue(static_cast<double>(v.x)));
+			arr.Push(JsonValue(static_cast<double>(v.y)));
+			arr.Push(JsonValue(static_cast<double>(v.z)));
+			arr.Push(JsonValue(static_cast<double>(v.w)));
+			return arr;
+		};
+		wgObj["scaleMin"]   = pushV2w(specialWingScaleMin_);
+		wgObj["scaleMax"]   = pushV2w(specialWingScaleMax_);
+		wgObj["colorInner"] = pushV4w2(specialWingColorInner_);
+		wgObj["colorOuter"] = pushV4w2(specialWingColorOuter_);
+		sgObj["wing"] = std::move(wgObj);
+	}
+	{
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(specialBarrierColor_.x)));
+		arr.Push(JsonValue(static_cast<double>(specialBarrierColor_.y)));
+		arr.Push(JsonValue(static_cast<double>(specialBarrierColor_.z)));
+		arr.Push(JsonValue(static_cast<double>(specialBarrierColor_.w)));
+		sgObj["barrierColor"] = std::move(arr);
+	}
+	sgObj["camPullback"] = static_cast<double>(specialCamPullback_);
+	sgObj["camFovAdd"]   = static_cast<double>(specialCamFovAdd_);
+	sgObj["camUpAdd"]    = static_cast<double>(specialCamUpAdd_);
+	// Phase 2 チャージ
+	sgObj["chargeBoltCount"]     = static_cast<int64_t>(specialChargeBoltCount_);
+	sgObj["chargeRegenInterval"] = static_cast<double>(specialChargeRegenInterval_);
+	sgObj["chargeStartRadiusH"]  = static_cast<double>(specialChargeStartRadiusH_);
+	sgObj["chargeStartRadiusV"]  = static_cast<double>(specialChargeStartRadiusV_);
+	sgObj["chargeMinLength"]     = static_cast<double>(specialChargeMinLength_);
+	// Phase 3 Fire
+	sgObj["fireSimultaneous"]   = static_cast<int64_t>(specialFireSimultaneous_);
+	sgObj["fireMinHold"]        = static_cast<double>(specialFireMinHold_);
+	sgObj["fireMaxHold"]        = static_cast<double>(specialFireMaxHold_);
+	sgObj["fireTickInterval"]   = static_cast<double>(specialFireTickInterval_);
+	sgObj["fireTickDamage"]     = static_cast<int64_t>(specialFireTickDamage_);
+	sgObj["fireLaunchInterval"] = static_cast<double>(specialFireLaunchInterval_);
+	sgObj["fireGrowTime"]       = static_cast<double>(specialFireGrowTime_);
+	sgObj["fireMaxOffsetRatio"] = static_cast<double>(specialFireMaxOffsetRatio_);
+	sgObj["fireBranchProb"]     = static_cast<double>(specialFireBranchProb_);
+	sgObj["fireStartWidth"]     = static_cast<double>(specialFireStartWidth_);
+	sgObj["fireEndWidth"]       = static_cast<double>(specialFireEndWidth_);
+	sgObj["fireBoltLifetime"]   = static_cast<double>(specialFireBoltLifetime_);
+	sgObj["endDuration"]        = static_cast<double>(specialEndDuration_);
+	{
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(specialFireColor_.x)));
+		arr.Push(JsonValue(static_cast<double>(specialFireColor_.y)));
+		arr.Push(JsonValue(static_cast<double>(specialFireColor_.z)));
+		arr.Push(JsonValue(static_cast<double>(specialFireColor_.w)));
+		sgObj["fireColor"] = std::move(arr);
+	}
+	// ゲージ UI
+	JsonValue barObj = JsonValue::MakeObject();
+	barObj["maxWidth"] = static_cast<double>(gaugeBarMaxWidth_);
+	barObj["height"]   = static_cast<double>(gaugeBarHeight_);
+	barObj["posX"]     = static_cast<double>(gaugeBarPosX_);
+	barObj["posY"]     = static_cast<double>(gaugeBarPosY_);
+	auto pushV4 = [](const Vector4& v) {
+		JsonValue arr = JsonValue::MakeArray();
+		arr.Push(JsonValue(static_cast<double>(v.x)));
+		arr.Push(JsonValue(static_cast<double>(v.y)));
+		arr.Push(JsonValue(static_cast<double>(v.z)));
+		arr.Push(JsonValue(static_cast<double>(v.w)));
+		return arr;
+	};
+	barObj["bgColor"]   = pushV4(gaugeBarBgColor_);
+	barObj["fgColor"]   = pushV4(gaugeBarFgColor_);
+	barObj["fullColor"] = pushV4(gaugeBarFullColor_);
+	sgObj["bar"] = std::move(barObj);
 	root["special"] = std::move(sgObj);
 
 	JsonValue hpbObj = JsonValue::MakeObject();
@@ -1511,12 +1825,189 @@ void StagePlayScene::OnImGuiTuning() {
 			static_cast<int>(jdActionPhase_), jdReturnOffset_.x, jdReturnOffset_.y, jdDodgeReturning_ ? 1 : 0);
 
 		ImGui::Separator();
-		ImGui::TextUnformatted("必殺技ゲージ（UI 未実装）");
+		ImGui::TextUnformatted("必殺技（傲慢サンダー）");
 		ImGui::DragFloat("Special Gauge Max",   &specialGaugeMax_,      1.0f, 1.0f, 1000.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Dodge Gauge Gain",    &dodgeSpecialGaugeGain_,0.1f, 0.0f, 100.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Active Duration",     &specialDuration_,      0.05f, 0.1f, 30.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::ProgressBar(specialGauge_ / (std::max)(1.0f, specialGaugeMax_), ImVec2(-1.0f, 0.0f));
+		const char* phaseName = "Idle";
+		switch (specialPhase_) {
+		case SpecialPhase::Barrier: phaseName = "Barrier"; break;
+		case SpecialPhase::Lockon:  phaseName = "Lockon";  break;
+		case SpecialPhase::Fire:    phaseName = "Fire";    break;
+		case SpecialPhase::End:     phaseName = "End";     break;
+		default: break;
+		}
+		ImGui::Text("Phase: %s  timer=%.2f  phaseTimer=%.2f",
+			phaseName, specialTimer_, specialPhaseTimer_);
+
+		// Phase 1（バリア）
+		ImGui::SeparatorText("Phase 1 (Barrier)");
+		ImGui::DragFloat("Barrier Radius",   &specialBarrierRadius_,   0.05f, 0.1f, 20.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Barrier Duration", &specialBarrierDuration_, 0.05f, 0.1f, 10.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Checkbox("Barrier Fill (sphere)", &specialBarrierFillOn_);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("塗りつぶし半透明球の表示。OFF でワイヤ球のみ");
+		ImGui::ColorEdit4("Barrier Color",   &specialBarrierColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Center Offset Up (0=auto)", &specialPlayerCenterOffset_, 0.02f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("バリア球・電撃の中心を up 方向へ持ち上げる量。\n0 で player Collider.offset.y（足元→体の中心）を自動採用");
+		ImGui::Checkbox("Wireframe Sphere", &specialBarrierWireframeOn_);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat3("  Wire Spin Speed XYZ (rad/s)", &specialBarrierWireSpinSpeed_.x, 0.05f, -10.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("  Wire Meridians", &specialBarrierWireMeridians_, 0.2f, 1, 32);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("  Wire Parallels", &specialBarrierWireParallels_, 0.2f, 1, 32);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("  Wire Segments", &specialBarrierWireSegments_, 0.5f, 3, 96);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("  Wire Gold (meridian)", &specialBarrierWireColorGold_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("  Wire Pink (parallel)", &specialBarrierWireColorPink_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Checkbox("Barrier Particles", &specialBarrierParticleOn_);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("  Emit Interval (s)", &specialBarrierEmitInterval_, 0.002f, 0.001f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("  Emit Count / burst", &specialBarrierEmitCount_, 0.5f, 1, 200);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("  Particle Life (s)", &specialBarrierParticleLife_, 0.02f, 0.05f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("  Radius Scale", &specialBarrierParticleRadiusScale_, 0.02f, 0.1f, 3.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("発生半径 = Barrier Radius × これ");
+		ImGui::DragFloat2("  Scale Min", &specialBarrierParticleScaleMin_.x, 0.005f, 0.0f, 2.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("  Scale Max", &specialBarrierParticleScaleMax_.x, 0.005f, 0.0f, 2.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("  Particle Color (start)", &specialBarrierParticleColor0_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("  Particle Color (end)",   &specialBarrierParticleColor1_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		// 光の翼（X字方向に小パーティクルを外向き噴出）
+		ImGui::SeparatorText("光の翼 (Wings)");
+		ImGui::Checkbox("Wings On", &specialWingOn_);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Wing Arms (本数)", &specialWingArmCount_, 0.2f, 1, 16);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Wing Angle Offset (rad)", &specialWingAngleOffset_, 0.02f, -3.14f, 3.14f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("配置の基準角。π/4≒0.79・本数4 で X 字");
+		ImGui::DragFloat("Wing Speed (速度→長さ)", &specialWingSpeed_, 0.1f, 0.0f, 40.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("外向き初速。実質の長さ ≒ Speed × Life");
+		ImGui::DragFloat("Wing Life (s)", &specialWingLife_, 0.02f, 0.05f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Wing Burst Count (量)", &specialWingBurstCount_, 0.2f, 1, 64);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Wing Jitter (ゆらぎ)", &specialWingJitter_, 0.02f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Wing Emit Radius", &specialWingEmitRadius_, 0.01f, 0.0f, 2.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Wing Scale Min", &specialWingScaleMin_.x, 0.002f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Wing Scale Max", &specialWingScaleMax_.x, 0.002f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Wing Color (発生=金)", &specialWingColorInner_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Wing Color (末=ピンク)", &specialWingColorOuter_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		// Phase 2（チャージ電撃）
+		ImGui::SeparatorText("Phase 2 Charge Lightning");
+		ImGui::DragInt("Charge Bolt Count", &specialChargeBoltCount_, 0.1f, 1, 16);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Charge Regen Interval", &specialChargeRegenInterval_, 0.005f, 0.01f, 1.0f, "%.3f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Charge Start H (0=auto)", &specialChargeStartRadiusH_, 0.02f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Charge Start V (0=auto)", &specialChargeStartRadiusV_, 0.02f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("(0 のとき player Collider.capsule から自動算出)");
+		ImGui::DragFloat("Charge Min Length", &specialChargeMinLength_, 0.02f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		// Phase 3（Fire = サンダー発射）
+		ImGui::SeparatorText("Phase 3 (Fire)");
+		ImGui::DragInt("Fire Simultaneous", &specialFireSimultaneous_, 0.1f, 1, 16);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Min Hold (s)", &specialFireMinHold_, 0.01f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Max Hold (s)", &specialFireMaxHold_, 0.01f, 0.1f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Tick Interval (s)", &specialFireTickInterval_, 0.005f, 0.01f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Fire Tick Damage", &specialFireTickDamage_, 0.2f, 0, 999);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Launch Interval (s)", &specialFireLaunchInterval_, 0.005f, 0.0f, 2.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Fire Color", &specialFireColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Grow Time (s)", &specialFireGrowTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("発射直後に始点→敵へ伸びる時間。0で即全長。大きいほど飛んでいく感");
+		ImGui::DragFloat("Fire Zigzag (maxOffset)", &specialFireMaxOffsetRatio_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("ジグザグの暴れ幅。小さいほど直線的＝飛んでる感、大きいほど放電感");
+		ImGui::DragFloat("Fire Branch Prob", &specialFireBranchProb_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("枝分かれ確率。放電のパチパチ感");
+		ImGui::DragFloat("Fire Start Width", &specialFireStartWidth_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire End Width", &specialFireEndWidth_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fire Bolt Lifetime (s)", &specialFireBoltLifetime_, 0.005f, 0.01f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("1メッシュの寿命。小さいほど高速にパチパチ再生成");
+		ImGui::DragFloat("End Duration (s)", &specialEndDuration_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("fire bolts=%d  queue=%d", static_cast<int>(specialFireBolts_.size()), static_cast<int>(specialFireQueue_.size()));
+
+		// カメラ引き
+		ImGui::SeparatorText("Camera Pullback");
+		ImGui::DragFloat("Cam Pullback (forward)", &specialCamPullback_, 0.1f, 0.0f, 60.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam FovY Add",           &specialCamFovAdd_,   0.005f, 0.0f, 1.0f, "%.3f rad");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam Up Add",             &specialCamUpAdd_,    0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		// デバッグボタン
+		if (ImGui::Button("Fill Gauge"))   specialGauge_ = specialGaugeMax_;
+		ImGui::SameLine();
+		if (ImGui::Button("Trigger Now") && !specialActive_) {
+			specialGauge_ = specialGaugeMax_;
+			TriggerSpecialMove();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Force End"))    {
+			EndSpecialMove();
+		}
+
+		// ゲージ UI 位置・サイズ
+		ImGui::Separator();
+		ImGui::TextUnformatted("Gauge Bar UI");
+		ImGui::DragFloat("Bar Width",  &gaugeBarMaxWidth_, 1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Bar Height", &gaugeBarHeight_,   0.5f, 0.0f, 200.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Bar Pos X",  &gaugeBarPosX_,     1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Bar Pos Y",  &gaugeBarPosY_,     1.0f, 0.0f, 2000.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Bar BG Color",   &gaugeBarBgColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Bar FG Color",   &gaugeBarFgColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Bar Full Color", &gaugeBarFullColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("回復（デフォルト Heal = 大・固定回数 / 左派生 = 小・無制限）");
@@ -1622,6 +2113,40 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::PopID();
 	}
 
+	// ----- LightningRuntime テスト（Phase2B動作確認用、必殺技実装後に削除予定） -----
+	if (ImGui::CollapsingHeader("Lightning Runtime Test")) {
+		ImGui::TextDisabled("動的雷ランタイム（毎寿命でランダム再生成）。");
+		ImGui::Text("State: %s", (lightningTest_ && lightningTest_->IsActive()) ? "Active" : "Inactive");
+		if (ImGui::Button("Spawn (camera forward 30u)")) {
+			lightningTest_ = std::make_unique<LightningRuntime>();
+			PrimitiveGenerator::LightningBoltParams lp{};
+			lp.appearance.startWidth = 0.4f;
+			lp.appearance.endWidth   = 0.4f;
+			lp.appearance.planeCount = 3;
+			lp.appearance.fadeStartLength = 0.5f;
+			lp.appearance.fadeEndLength   = 0.5f;
+			lp.appearance.startColor = { 0.6f, 0.8f, 1.0f, 1.0f };
+			lp.appearance.endColor   = { 0.6f, 0.8f, 1.0f, 1.0f };
+			lp.generations = 5;
+			lp.maxOffsetRatio = 0.15f;
+			lp.branchProbability = 0.15f;
+			lp.branchLengthScale = 0.25f;
+			lightningTest_->Initialize(lp, "Resources/Textures/white1x1.dds", 2 /*Add*/);
+			// 始終点
+			if (camera_) {
+				Vector3 camPos = camera_->GetTranslate();
+				Vector3 fwd    = camera_->GetForward();
+				Vector3 endP = { camPos.x + fwd.x * 30.0f, camPos.y + fwd.y * 30.0f, camPos.z + fwd.z * 30.0f };
+				lightningTest_->SetEndpoints(camPos, endP);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Stop")) {
+			if (lightningTest_) lightningTest_->Stop();
+		}
+		ImGui::TextDisabled("※ 始終点はSpawn時のカメラに固定。動的追従の正式版は傲慢サンダー実装時に。");
+	}
+
 	// 末尾で一括保存（変更があれば即書き出し）
 	if (changed) SaveTuningToJson();
 #endif
@@ -1725,9 +2250,25 @@ void StagePlayScene::Initialize() {
 
 	// HP バー UI 初期化
 	InitializeHPBarUI();
+	// 必殺技ゲージ UI 初期化
+	InitializeSpecialGaugeUI();
 }
 
-void StagePlayScene::Finalize() {}
+void StagePlayScene::Finalize() {
+	// 必殺技関連の GPU リソースを破棄する前に GPU 完了を待つ。
+	// （ウィンドウ閉じ等でシーンが落ちる際、command list がまだ参照中の resource を
+	//   解放すると D3D12 OBJECT_DELETED_WHILE_STILL_IN_USE になる）
+	if (dxCore_) {
+		dxCore_->WaitForGpu();
+	}
+	specialTrash_.clear();
+	specialBarrierVis_.reset();
+	specialLockonTargets_.clear();
+	specialChargeBolts_.clear();
+	specialFireBolts_.clear();
+	specialFireQueue_.clear();
+	specialFireProcessed_.clear();
+}
 
 void StagePlayScene::Update() {
 	if (SceneManager::GetInstance()->IsTransitioning()) {
@@ -1807,6 +2348,12 @@ void StagePlayScene::Update() {
 		}
 		moveDelta.x = std::clamp(moveDelta.x, -1.0f, 1.0f);
 		moveDelta.y = std::clamp(moveDelta.y, -1.0f, 1.0f);
+
+		// 必殺技発動中は入力ロック（移動・慣性をゼロ化）
+		if (specialActive_) {
+			moveDelta = { 0.0f, 0.0f };
+			playerVelocity_ = { 0.0f, 0.0f };
+		}
 
 		// 分身選択中も WASD/スティックは通常移動として有効（方向選択はアクションボタン側で受ける）。
 		// 下=追加回避を選んだ瞬間の WASD を回避方向に使うため、ここでは zero 化しない。
@@ -2069,6 +2616,8 @@ void StagePlayScene::Update() {
 			ApplyJustDodgeCamera(worldPos);
 			// 近接派生中はさらに上書き（プレイヤー左斜め後ろからのカメラに切替）
 			ApplyJustDodgeMeleeCamera(worldPos);
+			// 必殺技発動中の引き（最優先）
+			ApplySpecialCamera(worldPos);
 		}
 	}
 
@@ -2501,10 +3050,34 @@ void StagePlayScene::Update() {
 			UpdateMelees(meleeDt);
 		}
 	}
-	if (!gameFrozen) {
+	// 必殺技発動中は World が止まっていても必殺技自身の進行と UI 更新は走らせる
+	if (!gameFrozen || specialActive_) {
 
 		// プレイヤー被弾処理・UI更新
 		UpdatePlayerDamageAndUI(worldDt);
+
+		// 必殺技：発動入力検出 + 発動中タイマー進行
+		UpdateSpecialMove(actions, worldDt);
+		// ゲージ UI のスプライトサイズ更新
+		UpdateSpecialGaugeUI();
+
+		// 無敵フラグから HP.enabled を同期（CollisionManager の auto-damage を止める）
+		// scene->Update 完了後に CollisionManager::Update が走るため、ここで反映すれば次の判定に間に合う
+		RefreshPlayerHpInvincibility();
+
+		// バリア可視化プリミティブの CB 更新（位置は UpdateSpecialBarrier で毎フレ反映済み）
+		if (specialBarrierVis_) {
+			specialBarrierVis_->Update(camera_.get(), dxCore_->GetDeltaTime());
+		}
+
+		// 遅延削除キュー：framesLeft を減らし、0 になったら破棄
+		for (auto& e : specialTrash_) {
+			if (e.framesLeft > 0) --e.framesLeft;
+		}
+		specialTrash_.erase(
+			std::remove_if(specialTrash_.begin(), specialTrash_.end(),
+				[](const SpecialTrashEntry& e) { return e.framesLeft <= 0; }),
+			specialTrash_.end());
 
 		// SweepDeadEntities の前に、HP がゼロになった敵のスポーンエントリに kill t を記録
 		// （SweepDeadEntities が DestroyDynamicEntity 経由で movingEnemies_ の entity を null 化する前に行う）
@@ -2608,6 +3181,11 @@ void StagePlayScene::Update() {
 	if (!gameFrozen) {
 		UpdateMovingEnemies(worldDt);
 	}
+
+	// LightningRuntime テスト：Active なら毎フレ Update。始終点はテストパネル側で更新済み
+	if (lightningTest_ && lightningTest_->IsActive()) {
+		lightningTest_->Update(camera_.get(), dxCore_->GetDeltaTime());
+	}
 }
 
 void StagePlayScene::Draw() {
@@ -2637,6 +3215,36 @@ void StagePlayScene::Draw() {
 	DrawDynamicObjects();
 	DrawDynamicAnimated();
 	DrawDynamicPrimitives();
+
+	// LightningRuntime テスト描画
+	if (lightningTest_ && lightningTest_->IsActive()) {
+		lightningTest_->Draw();
+	}
+
+	// 必殺技バリア可視化（半透明球）。既定では非表示（ワイヤ球のみ）。
+	if (specialBarrierFillOn_ && specialBarrierVis_) {
+		specialBarrierVis_->Draw();
+	}
+
+	// 必殺技 Phase 2 ロックオン可視化（線・リング・キューブ）
+	for (auto& t : specialLockonTargets_) {
+		if (!t.visualsCreated) continue;
+		for (int i = 0; i < 3; ++i) if (t.lines[i]) t.lines[i]->Draw();
+		if (t.ring) t.ring->Draw();
+		if (t.cube) t.cube->Draw();
+	}
+
+	// 必殺技 Phase 2 チャージ電撃（複数本）
+	for (auto& b : specialChargeBolts_) {
+		if (b.rt && b.rt->IsActive()) b.rt->Draw();
+	}
+
+	// 必殺技 Phase 3 サンダー（発射中の雷）
+	for (auto& fb : specialFireBolts_) {
+		if (fb.rt && fb.rt->IsActive()) fb.rt->Draw();
+	}
+
+	// 光の翼は GPU パーティクル群（special_wing_*）として DrawGlobalEffects が自動描画
 
 	// 全シーン共通の GPUParticle + Effect Editor 描画
 	DrawGlobalEffects();
@@ -3127,7 +3735,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	const bool justInv    = justDodgeActive_;                                    // ジャスト回避中：無敵・点滅なし
 	const bool dodgeInv   = dodgeActive_ && dodgeTimer_ <= dodgeIFrameDuration_; // 回避無敵：水色点滅
 	const bool dmgInv     = playerInvincibilityTimer_ > 0.0f;                    // 被弾無敵：赤/白点滅
-	const bool invincible = justInv || dodgeInv || dmgInv;
+	const bool specialInv = specialActive_;                                      // 必殺技発動中：完全無敵
+	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
 
 	const float blinkFreq = damageBlinkFrequency_;
 	if (justInv) {
@@ -3207,7 +3816,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				TriggerJustDodge(attacker);
 				dodgeActive_ = false; // 回避無敵を消費し、以降はジャスト無敵へ移行
 				if (hitBulletIndex >= 0) bullets_[hitBulletIndex].remainingLifetime = -1.0f;
-			} else if (dodgeInv || dmgInv) {
+			} else if (dodgeInv || dmgInv || specialInv) {
 				// 無敵中：ダメージ無効（弾はそのまま通過＝既存の被弾無敵と同様）
 			} else {
 				// 通常被弾
@@ -3269,4 +3878,1079 @@ void StagePlayScene::UpdateHPBarUI() {
 	if (currentRedRatio < 0.0f) currentRedRatio = 0.0f;
 	if (currentRedRatio > 1.0f) currentRedRatio = 1.0f;
 	hpBarBackground_->SetSize({ hpBarMaxWidth_ * currentRedRatio, hpBarHeight_ });
+}
+
+void StagePlayScene::InitializeSpecialGaugeUI() {
+	gaugeBarBackground_ = nullptr;
+	gaugeBarForeground_ = nullptr;
+	if (!spriteManager_) return;
+
+	const Vector2 pos{ gaugeBarPosX_, gaugeBarPosY_ };
+
+	// 背景（暗色フル幅）
+	auto bg = std::make_unique<SpriteInstance>();
+	bg->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "SpecialGaugeBackground");
+	bg->SetPosition(pos);
+	bg->SetSize({ gaugeBarMaxWidth_, gaugeBarHeight_ });
+	bg->SetColor(gaugeBarBgColor_);
+	gaugeBarBackground_ = bg.get();
+	dynamicSprites_.push_back(std::move(bg));
+
+	// 前景（現在値）
+	auto fg = std::make_unique<SpriteInstance>();
+	fg->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "SpecialGaugeForeground");
+	fg->SetPosition(pos);
+	fg->SetSize({ 0.0f, gaugeBarHeight_ });
+	fg->SetColor(gaugeBarFgColor_);
+	gaugeBarForeground_ = fg.get();
+	dynamicSprites_.push_back(std::move(fg));
+}
+
+void StagePlayScene::UpdateSpecialGaugeUI() {
+	if (!gaugeBarBackground_ || !gaugeBarForeground_) return;
+
+	// 位置（ImGuiでチューニングされた値を毎フレ反映）
+	gaugeBarBackground_->SetPosition({ gaugeBarPosX_, gaugeBarPosY_ });
+	gaugeBarForeground_->SetPosition({ gaugeBarPosX_, gaugeBarPosY_ });
+	gaugeBarBackground_->SetSize({ gaugeBarMaxWidth_, gaugeBarHeight_ });
+	gaugeBarBackground_->SetColor(gaugeBarBgColor_);
+
+	// 比率
+	float ratio = (specialGaugeMax_ > 0.0001f) ? specialGauge_ / specialGaugeMax_ : 0.0f;
+	if (ratio < 0.0f) ratio = 0.0f;
+	if (ratio > 1.0f) ratio = 1.0f;
+	gaugeBarForeground_->SetSize({ gaugeBarMaxWidth_ * ratio, gaugeBarHeight_ });
+
+	// MAX のとき色を切替（発動可能サイン）。発動中は前景非表示（消費済み演出）
+	if (specialActive_) {
+		gaugeBarForeground_->SetSize({ 0.0f, gaugeBarHeight_ });
+	} else if (specialGauge_ >= specialGaugeMax_) {
+		gaugeBarForeground_->SetColor(gaugeBarFullColor_);
+	} else {
+		gaugeBarForeground_->SetColor(gaugeBarFgColor_);
+	}
+}
+
+void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
+	if (!actions) return;
+
+	if (specialActive_) {
+		// 発動中：総タイマーとフェーズ内タイマーを進める
+		specialTimer_      += dt;
+		specialPhaseTimer_ += dt;
+
+		// バリア球の追従＋当たり判定は全フェーズ共通（Fire 中もカメラ前進にズレず追従させる）
+		UpdateSpecialBarrier();
+		// 光の翼（放射状ストリーク）も全フェーズ共通で流す
+		UpdateSpecialWings();
+
+		switch (specialPhase_) {
+		case SpecialPhase::Barrier:
+			UpdateSpecialPhaseBarrier(dt);
+			break;
+		case SpecialPhase::Lockon:
+			// Lockon フェーズは実時間で進行（World は止まっているため）
+			UpdateSpecialPhaseLockon(dxCore_->GetDeltaTime());
+			break;
+		case SpecialPhase::Fire:
+			// Fire は World 再開済み。dt（worldDt）で進行させ敵移動と同期させる
+			UpdateSpecialPhaseFire(dt);
+			break;
+		case SpecialPhase::End:
+			UpdateSpecialPhaseEnd(dt);
+			break;
+		default: break;
+		}
+		return;
+	}
+
+	// 発動待ち：ゲージMAX & 行動可能 & Ultimate トリガで発動
+	if (specialGauge_ < specialGaugeMax_) return;
+	if (IsActionLocked()) return;
+	if (justDodgeActive_) return;
+
+	if (actions->IsTriggered(static_cast<int>(Action::Ultimate))) {
+		TriggerSpecialMove();
+	}
+}
+
+void StagePlayScene::TriggerSpecialMove() {
+	specialActive_      = true;
+	specialTimer_       = 0.0f;
+	specialPhaseTimer_  = 0.0f;
+	specialGauge_       = 0.0f;
+	// HP.enabled の同期は RefreshPlayerHpInvincibility に一元化
+
+	// Phase 1: バリア展開へ
+	EnterSpecialPhaseBarrier();
+}
+
+void StagePlayScene::EnterSpecialPhaseBarrier() {
+	specialPhase_      = SpecialPhase::Barrier;
+	specialPhaseTimer_ = 0.0f;
+
+	// 現在のプレイヤー入力オフセット・速度を保存（終了時に滑らかに戻す用途は EndSpecialMove で）
+	specialPlayerInputOffsetSaved_ = playerInputOffset_;
+	specialPlayerVelocitySaved_    = playerVelocity_;
+	// 強制中はゼロ固定（入力ロックされるので外部からの変動はない想定）
+	playerInputOffset_ = { 0.0f, 0.0f };
+	playerVelocity_    = { 0.0f, 0.0f };
+
+	// バリア可視化プリミティブ（半透明青の球、Blend=Normal、両面、深度書き込みなし）
+	specialBarrierVis_ = std::make_unique<EffectPrimitiveRenderer>();
+	specialBarrierVis_->Initialize(2 /*Sphere*/, "Resources/Textures/white1x1.dds");
+	specialBarrierVis_->SetBlendMode(PrimitivePipeline::kBlendModeNormal);
+	specialBarrierVis_->SetDepthWrite(false);
+	specialBarrierVis_->SetCullBackface(false);
+	specialBarrierVis_->SetColor(specialBarrierColor_);
+	const float diameter = specialBarrierRadius_ * 2.0f; // CreateSphere は radius=0.5 既定なので
+	specialBarrierVis_->SetScale({ diameter, diameter, diameter });
+
+	// バリアのパーティクル群を用意（球状エミッタ）。時間停止中も動くよう TimeGroup=Player。
+	if (auto* gpu = Game::GetGPUParticleManager()) {
+		if (!gpu->HasGroup("special_barrier")) {
+			gpu->CreateGroup("special_barrier", "Resources/Textures/circle.dds");
+		}
+		gpu->SetGroupBillboardMode("special_barrier", BillboardMode::Full);
+		gpu->SetGroupTimeGroup("special_barrier", TimeGroup::Player);
+		specialBarrierGroupReady_ = true;
+	}
+	specialBarrierEmitAccum_ = 0.0f;
+	specialBarrierWireSpin_  = { 0.0f, 0.0f, 0.0f };
+}
+
+void StagePlayScene::UpdateSpecialBarrier() {
+	if (!player_) return;
+
+	// バリア球の中心 = プレイヤー体の中心（足元原点 + offset）。毎フレ追従。
+	// Fire 中はレールカメラが進行してプレイヤーのワールド位置も前進するため、
+	// 全フェーズ共通でここで追従させないと球と当たり判定が置いて行かれる。
+	const Vector3 playerPos = SpecialPlayerCenter();
+	if (specialBarrierVis_) {
+		specialBarrierVis_->SetTranslate(playerPos);
+	}
+
+	// バリア当たり判定：球内に侵入した EnemyAttack 弾を消す（距離判定）
+	const float r = specialBarrierRadius_;
+	const float r2 = r * r;
+	for (auto& b : bullets_) {
+		if (!b.primitive) continue;
+		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		const Vector3* bp = b.primitive->GetEditableTranslate();
+		if (!bp) continue;
+		float dx = bp->x - playerPos.x;
+		float dy = bp->y - playerPos.y;
+		float dz = bp->z - playerPos.z;
+		if (dx*dx + dy*dy + dz*dz <= r2) {
+			b.remainingLifetime = -1.0f; // 消滅
+			// 波紋エフェクトはエディター機能準備後に追加
+		}
+	}
+
+	// 実時間 dt（時間停止中もバリア演出は等速で進める）
+	const float rdt = dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
+
+	// 回転ワイヤーフレーム球（バリアの正確な範囲を可視化）。X/Y/Z 3軸で回す。
+	specialBarrierWireSpin_.x += specialBarrierWireSpinSpeed_.x * rdt;
+	specialBarrierWireSpin_.y += specialBarrierWireSpinSpeed_.y * rdt;
+	specialBarrierWireSpin_.z += specialBarrierWireSpinSpeed_.z * rdt;
+	if (specialBarrierWireframeOn_) {
+		DrawSpecialBarrierWireframe(playerPos);
+	}
+
+	// バリアのパーティクル：球面内に連続バースト（実時間で進めるので時間停止中もシマー）
+	if (specialBarrierParticleOn_ && specialBarrierGroupReady_) {
+		if (auto* gpu = Game::GetGPUParticleManager()) {
+			const float interval = (specialBarrierEmitInterval_ > 1e-4f) ? specialBarrierEmitInterval_ : 0.02f;
+			const float emitRadius = specialBarrierRadius_ * specialBarrierParticleRadiusScale_;
+			const uint32_t count = static_cast<uint32_t>((std::max)(1, specialBarrierEmitCount_));
+			gpu->SetEmitterTranslate("special_barrier", playerPos);
+			specialBarrierEmitAccum_ += rdt;
+			int guard = 0; // 1フレームに出し過ぎない安全弁
+			while (specialBarrierEmitAccum_ >= interval && guard < 8) {
+				specialBarrierEmitAccum_ -= interval;
+				++guard;
+				gpu->BurstEmit("special_barrier", playerPos, count, emitRadius,
+					1 /*Fixed*/, specialBarrierParticleColor0_, specialBarrierParticleColor1_,
+					specialBarrierParticleScaleMin_, specialBarrierParticleScaleMax_, true,
+					specialBarrierParticleLife_);
+			}
+		}
+	}
+}
+
+void StagePlayScene::DrawSpecialBarrierWireframe(const Vector3& center) {
+	auto* lr = LineRenderer::GetInstance();
+	if (!lr) return;
+
+	const float kPi = 3.14159265358979323846f;
+	const float R   = specialBarrierRadius_;
+	const int meridians = (std::max)(1, specialBarrierWireMeridians_);
+	const int parallels = (std::max)(1, specialBarrierWireParallels_);
+	const int seg       = (std::max)(3, specialBarrierWireSegments_);
+
+	// 3軸回転行列。ローカル球面点に適用してから center に足す。
+	const Matrix4x4 rot = MakeRotateMatrix(specialBarrierWireSpin_);
+	auto toWorld = [&](float lx, float ly, float lz) -> Vector3 {
+		return {
+			center.x + (lx * rot.m[0][0] + ly * rot.m[1][0] + lz * rot.m[2][0]),
+			center.y + (lx * rot.m[0][1] + ly * rot.m[1][1] + lz * rot.m[2][1]),
+			center.z + (lx * rot.m[0][2] + ly * rot.m[1][2] + lz * rot.m[2][2]),
+		};
+	};
+
+	// 経線（Y軸を通る大円）。色=金。
+	for (int m = 0; m < meridians; ++m) {
+		const float phi = static_cast<float>(m) / meridians * kPi;
+		const float cphi = std::cos(phi), sphi = std::sin(phi);
+		Vector3 prev{};
+		for (int i = 0; i <= seg; ++i) {
+			const float t = static_cast<float>(i) / seg * 2.0f * kPi;
+			const float st = std::sin(t), ct = std::cos(t);
+			const Vector3 p = toWorld(R * (st * cphi), R * ct, R * (st * sphi));
+			if (i > 0) lr->AddLine(prev, p, specialBarrierWireColorGold_);
+			prev = p;
+		}
+	}
+
+	// 緯線（高さ固定の水平円）。色=ピンク。
+	for (int k = 1; k <= parallels; ++k) {
+		const float lat = static_cast<float>(k) / (parallels + 1) * kPi; // (0,π) の内側
+		const float y = std::cos(lat);
+		const float rxz = std::sin(lat);
+		Vector3 prev{};
+		for (int i = 0; i <= seg; ++i) {
+			const float a = static_cast<float>(i) / seg * 2.0f * kPi;
+			const Vector3 p = toWorld(R * (rxz * std::cos(a)), R * y, R * (rxz * std::sin(a)));
+			if (i > 0) lr->AddLine(prev, p, specialBarrierWireColorPink_);
+			prev = p;
+		}
+	}
+}
+
+void StagePlayScene::UpdateSpecialWings() {
+	if (!specialWingOn_) return;
+	auto* gpu = Game::GetGPUParticleManager();
+	if (!gpu) return;
+
+	const int arms = (std::max)(1, specialWingArmCount_);
+	const float kPi = 3.14159265358979323846f;
+	const Vector3 center = SpecialPlayerCenter();
+	// X字方向はカメラ平面（画面）基準。camRight/camUp で画面内の角度を作る。
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
+	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+
+	for (int i = 0; i < arms; ++i) {
+		const std::string name = "special_wing_" + std::to_string(i);
+		if (!gpu->HasGroup(name)) {
+			gpu->CreateGroup(name, "Resources/Textures/circle.dds");
+			gpu->SetGroupBillboardMode(name, BillboardMode::Full);
+			gpu->SetGroupTimeGroup(name, TimeGroup::Player);
+		}
+		// アーム方向（画面内で均等配置。offset=π/4・arms=4 で X 字）
+		const float a = specialWingAngleOffset_ + static_cast<float>(i) / arms * 2.0f * kPi;
+		const Vector3 dir = {
+			std::cos(a) * camRight.x + std::sin(a) * camUp.x,
+			std::cos(a) * camRight.y + std::sin(a) * camUp.y,
+			std::cos(a) * camRight.z + std::sin(a) * camUp.z,
+		};
+		const Vector3 vel = { dir.x * specialWingSpeed_, dir.y * specialWingSpeed_, dir.z * specialWingSpeed_ };
+		gpu->SetEmitterVelocity(name, vel, specialWingJitter_, 1); // 外向き初速（方向固定）
+		gpu->BurstEmit(name, center,
+			static_cast<uint32_t>((std::max)(1, specialWingBurstCount_)), specialWingEmitRadius_,
+			1 /*Fixed: 金→ピンク*/, specialWingColorInner_, specialWingColorOuter_,
+			specialWingScaleMin_, specialWingScaleMax_, true, specialWingLife_);
+	}
+}
+
+void StagePlayScene::UpdateSpecialPhaseBarrier(float worldDt) {
+	(void)worldDt;
+	// 追従・当たり判定は UpdateSpecialBarrier（全フェーズ共通）で実施。
+	// ここは Phase 1 のフェーズ遷移判定のみ。
+	// 3 秒経過で Phase 2（Lockon）へ遷移
+	if (specialPhaseTimer_ >= specialBarrierDuration_) {
+		EnterSpecialPhaseLockon();
+	}
+}
+
+void StagePlayScene::EnterSpecialPhaseLockon() {
+	specialPhase_ = SpecialPhase::Lockon;
+	specialPhaseTimer_ = 0.0f;
+	specialPhase2Timer_ = 0.0f;
+	specialAllLockonComplete_ = false;
+	specialChargeStartTime_ = 0.0f;
+
+	// ワールド時間停止（A案：既存のジャスト回避と同じ仕組み）
+	SetTimeScale(TimeGroup::World, 0.0f);
+
+	// ロックオン対象列挙
+	specialLockonTargets_.clear();
+	EnumerateLockonTargets();
+}
+
+void StagePlayScene::EnumerateLockonTargets() {
+	if (!camera_ || !player_) return;
+
+	const Vector3 playerPos = player_->GetTranslate();
+	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+
+	auto isVisibleInClip = [&](const Vector3& worldPos) {
+		Vector4 clip = {
+			worldPos.x * vp.m[0][0] + worldPos.y * vp.m[1][0] + worldPos.z * vp.m[2][0] + vp.m[3][0],
+			worldPos.x * vp.m[0][1] + worldPos.y * vp.m[1][1] + worldPos.z * vp.m[2][1] + vp.m[3][1],
+			worldPos.x * vp.m[0][2] + worldPos.y * vp.m[1][2] + worldPos.z * vp.m[2][2] + vp.m[3][2],
+			worldPos.x * vp.m[0][3] + worldPos.y * vp.m[1][3] + worldPos.z * vp.m[2][3] + vp.m[3][3],
+		};
+		// カメラの前方にあるか（clip.w > 0）と XY 画面内にあるかだけで判定。
+		// 奥行きは far plane (デフォ 100) を超えると NDC Z > 1 になるが、レールSTG では
+		// 弾や敵が far plane 近くを飛ぶことが多いので、奥行きフィルタは敢えてかけない。
+		if (clip.w <= 0.0f) return false;
+		const float ndx = clip.x / clip.w;
+		const float ndy = clip.y / clip.w;
+		const float margin = 0.0f;
+		return std::abs(ndx) <= 1.0f + margin && std::abs(ndy) <= 1.0f + margin;
+	};
+
+	auto sqDistToPlayer = [&](const Vector3& p) {
+		float dx = p.x - playerPos.x, dy = p.y - playerPos.y, dz = p.z - playerPos.z;
+		return dx * dx + dy * dy + dz * dz;
+	};
+
+	struct Candidate {
+		IImGuiEditable* entity;
+		int bulletIndex;
+		float dist2;
+		float radius;
+	};
+	std::vector<Candidate> cands;
+
+	// 敵弾（EnemyAttack）
+	for (size_t i = 0; i < bullets_.size(); ++i) {
+		auto& b = bullets_[i];
+		if (!b.primitive) continue;
+		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		const Vector3* p = b.primitive->GetEditableTranslate();
+		if (!p) continue;
+		if (!isVisibleInClip(*p)) continue;
+		Candidate c;
+		c.entity = b.primitive;
+		c.bulletIndex = static_cast<int>(i);
+		c.dist2 = sqDistToPlayer(*p);
+		c.radius = b.primitive->GetCollider().radius;
+		cands.push_back(c);
+	}
+
+	// 敵本体：dynamicPrimitives_ / object3DInstances_ / dynamicAnimated_ の中から
+	// Enemy / Boss タグを持つものを直接拾う。HP の有無は問わない。
+	// （EnemyController や movingEnemies_ に登録されていない敵もカバーできるよう、
+	//   entity の格納コンテナを直接スキャンするのがもっとも漏れがない）
+	std::unordered_set<IImGuiEditable*> enemySeen;
+	auto pushEnemy = [&](IImGuiEditable* e) {
+		if (!e) return;
+		if (!enemySeen.insert(e).second) return; // 重複
+		const EntityTag tag = e->GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		const Vector3* p = e->GetEditableTranslate();
+		if (!p) return;
+		if (!isVisibleInClip(*p)) return;
+		Candidate c;
+		c.entity = e;
+		c.bulletIndex = -1;
+		c.dist2 = sqDistToPlayer(*p);
+		c.radius = e->GetCollider().radius;
+		cands.push_back(c);
+	};
+	for (auto& up : dynamicPrimitives_)  { pushEnemy(up.get()); }
+	for (auto& up : object3DInstances_)  { pushEnemy(up.get()); }
+	for (auto& up : dynamicAnimated_)    { pushEnemy(up.get()); }
+
+	// プレイヤーから近い順にソート
+	std::sort(cands.begin(), cands.end(),
+		[](const Candidate& a, const Candidate& b) { return a.dist2 < b.dist2; });
+
+	specialLockonTargets_.reserve(cands.size());
+	for (size_t i = 0; i < cands.size(); ++i) {
+		SpecialLockonTarget t;
+		t.entity = cands[i].entity;
+		t.bulletIndex = cands[i].bulletIndex;
+		t.patternIndex = static_cast<int>(i % 2); // 交互に A/B
+		t.startTime = static_cast<float>(i) * specialLockonInterval_;
+		t.radius = (cands[i].radius > 0.01f) ? cands[i].radius : 0.5f;
+		specialLockonTargets_.push_back(std::move(t));
+	}
+}
+
+void StagePlayScene::SpawnLockonVisuals(SpecialLockonTarget& t) {
+	if (t.visualsCreated) return;
+
+	// 3本の線（薄い Plane、Full Billboard、Blend=Add で発光感）
+	for (int i = 0; i < 3; ++i) {
+		t.lines[i] = std::make_unique<EffectPrimitiveRenderer>();
+		t.lines[i]->Initialize(0 /*Plane*/, "Resources/Textures/white1x1.dds");
+		t.lines[i]->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+		t.lines[i]->SetBillboardMode(BillboardMode::Full);
+		t.lines[i]->SetDepthWrite(false);
+		t.lines[i]->SetCullBackface(false);
+		t.lines[i]->SetColor(specialLockonColor_);
+		t.lines[i]->SetScale({ 0.0f, 0.0f, 1.0f }); // 初期は非表示
+	}
+
+	// リング（Y軸ビルボードはNG＝Fullで正面）
+	{
+		PrimitiveGenerator::RingParams rp{};
+		rp.outerRadius = 1.0f;
+		rp.innerRadius = 1.0f - specialLockonRingThickness_;
+		rp.divisions = 48;
+		rp.innerColor = specialLockonColor_;
+		rp.outerColor = specialLockonColor_;
+		t.ring = std::make_unique<EffectPrimitiveRenderer>();
+		t.ring->Initialize(3 /*Ring*/, "Resources/Textures/white1x1.dds", rp);
+		t.ring->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+		t.ring->SetBillboardMode(BillboardMode::Full);
+		t.ring->SetDepthWrite(false);
+		t.ring->SetCullBackface(false);
+		t.ring->SetColor(specialLockonColor_);
+		t.ring->SetScale({ 0.0f, 0.0f, 0.0f });
+	}
+
+	// キューブ（半透明オレンジ、Blend=Normal、両面）
+	{
+		t.cube = std::make_unique<EffectPrimitiveRenderer>();
+		t.cube->Initialize(1 /*Box*/, "Resources/Textures/white1x1.dds");
+		t.cube->SetBlendMode(PrimitivePipeline::kBlendModeNormal);
+		t.cube->SetDepthWrite(false);
+		t.cube->SetCullBackface(false);
+		t.cube->SetColor(specialCubeColor_);
+		t.cube->SetScale({ 0.0f, 0.0f, 0.0f });
+	}
+
+	t.visualsCreated = true;
+}
+
+void StagePlayScene::UpdateLockonTargetVisuals(SpecialLockonTarget& t, float localTime) {
+	// ターゲットのワールド位置を取得（敵 or 弾が消えていたら 0 で抜ける）
+	if (!t.entity) return;
+	const Vector3* tp = t.entity->GetEditableTranslate();
+	if (!tp) return;
+	const Vector3 enemyPos = *tp;
+	const float r = t.radius;
+
+	// 線：t∈[0, lineTravel+lineHold] = [0, 0.3] で表示。
+	//  outer 端は固定（radius*5 と radius*3 の中間など）、inner 端が radius*3 → 0 に移動。
+	//  ここでは仕様通り「内側の点が radius*3 から 0 へ」、線の長さは constant（= radius*2）。
+	const float lineLen = r * 2.0f;
+	const float lineLife = specialLockonLineTravelTime_ + specialLockonLineHoldTime_; // 0.3
+	const bool  lineVisible = (localTime >= 0.0f && localTime < lineLife);
+
+	// 3 つの角度（パターンA: 90°/210°/330°、パターンB: 270°/30°/150°）
+	const float kPi = 3.14159265358979323846f;
+	const float baseAngles[3] = { 0.5f * kPi, 7.0f / 6.0f * kPi, 11.0f / 6.0f * kPi };
+	const float patternOffset = (t.patternIndex == 1) ? kPi : 0.0f; // パターンBは180°回転
+
+	// カメラ基底（線・リングの向き計算用）
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
+	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+
+	float innerDist;
+	if (localTime <= specialLockonLineTravelTime_) {
+		const float u = localTime / specialLockonLineTravelTime_;
+		innerDist = r * 3.0f * (1.0f - u);
+	} else {
+		innerDist = 0.0f;
+	}
+	const float outerDist = innerDist + lineLen;
+	const float midDist   = (innerDist + outerDist) * 0.5f;
+
+	for (int i = 0; i < 3; ++i) {
+		if (!t.lines[i]) continue;
+		if (!lineVisible) {
+			t.lines[i]->SetScale({ 0.0f, 0.0f, 1.0f });
+			continue;
+		}
+		const float angle = baseAngles[i] + patternOffset;
+		const Vector3 dir = {
+			std::cos(angle) * camRight.x + std::sin(angle) * camUp.x,
+			std::cos(angle) * camRight.y + std::sin(angle) * camUp.y,
+			std::cos(angle) * camRight.z + std::sin(angle) * camUp.z,
+		};
+		const Vector3 midPos = {
+			enemyPos.x + dir.x * midDist,
+			enemyPos.y + dir.y * midDist,
+			enemyPos.z + dir.z * midDist,
+		};
+		t.lines[i]->SetTranslate(midPos);
+		t.lines[i]->SetRotate({ 0.0f, 0.0f, angle - 0.5f * kPi });
+		t.lines[i]->SetScale({ specialLockonLineWidth_, lineLen, 1.0f });
+		Vector4 col = specialLockonColor_;
+		// 0.2〜0.3 秒は到達後の余韻でαを薄くしてフェード
+		if (localTime > specialLockonLineTravelTime_) {
+			const float fade = 1.0f - (localTime - specialLockonLineTravelTime_) / specialLockonLineHoldTime_;
+			col.w = (std::max)(0.0f, fade) * specialLockonColor_.w;
+		}
+		t.lines[i]->SetColor(col);
+	}
+
+	// リング：t∈[0.2, 0.6] で表示。サイズは ジャスト(r) → r*0.3 に収縮（0.2〜0.5）、0.5〜0.6 でフェードアウト
+	const float ringAppear  = specialLockonRingAppearTime_;            // 0.2
+	const float ringComplete= specialLockonDuration_;                  // 0.5
+	const float ringFadeEnd = specialLockonDuration_ + specialLockonRingFadeoutTime_; // 0.6
+	if (t.ring) {
+		if (localTime < ringAppear || localTime > ringFadeEnd) {
+			t.ring->SetScale({ 0.0f, 0.0f, 0.0f });
+		} else {
+			float ringRadius;
+			if (localTime <= ringComplete) {
+				const float u = (localTime - ringAppear) / (ringComplete - ringAppear);
+				ringRadius = r * (1.0f - u) + r * 0.3f * u;
+			} else {
+				ringRadius = r * 0.3f;
+			}
+			t.ring->SetTranslate(enemyPos);
+			t.ring->SetScale({ ringRadius, ringRadius, ringRadius });
+			Vector4 col = specialLockonColor_;
+			if (localTime > ringComplete) {
+				const float fade = 1.0f - (localTime - ringComplete) / specialLockonRingFadeoutTime_;
+				col.w = (std::max)(0.0f, fade) * specialLockonColor_.w;
+			}
+			t.ring->SetColor(col);
+		}
+	}
+
+	// キューブ：ロック完了（0.5秒）以降ターゲットが消えるまで継続
+	if (t.cube) {
+		if (localTime < specialLockonDuration_) {
+			t.cube->SetScale({ 0.0f, 0.0f, 0.0f });
+		} else {
+			const float side = r * 2.0f;
+			t.cube->SetTranslate(enemyPos);
+			t.cube->SetScale({ side, side, side });
+			t.cube->SetColor(specialCubeColor_);
+		}
+	}
+
+	// Update（CB書き込み）。dt=0 でも位置/scale/color は反映される
+	const float realDt = dxCore_ ? dxCore_->GetDeltaTime() : 0.0f;
+	for (int i = 0; i < 3; ++i) if (t.lines[i]) t.lines[i]->Update(camera_.get(), realDt);
+	if (t.ring) t.ring->Update(camera_.get(), realDt);
+	if (t.cube) t.cube->Update(camera_.get(), realDt);
+}
+
+void StagePlayScene::UpdateSpecialPhaseLockon(float realDt) {
+	specialPhase2Timer_ += realDt;
+
+	// 各ターゲットの可視化生成・更新
+	for (auto& t : specialLockonTargets_) {
+		// ターゲットが消えていたらスキップ（敵が破壊済み or 弾消滅）
+		if (!t.entity) continue;
+		// 弾は remainingLifetime<0 で消滅予定だが Phase 2 では World=0 なので生きてる想定
+
+		const float localTime = specialPhase2Timer_ - t.startTime;
+		if (localTime < 0.0f) continue; // まだ開始してない
+
+		if (!t.visualsCreated) {
+			SpawnLockonVisuals(t);
+		}
+		UpdateLockonTargetVisuals(t, localTime);
+	}
+
+	// 全ターゲットのロック完了タイミング = 最後のターゲットの startTime + Duration
+	if (!specialAllLockonComplete_) {
+		bool justCompleted = false;
+		if (specialLockonTargets_.empty()) {
+			specialAllLockonComplete_ = true;
+			specialChargeStartTime_ = specialPhase2Timer_;
+			justCompleted = true;
+		} else {
+			const float lastStart = specialLockonTargets_.back().startTime;
+			if (specialPhase2Timer_ >= lastStart + specialLockonDuration_) {
+				specialAllLockonComplete_ = true;
+				specialChargeStartTime_ = specialPhase2Timer_;
+				justCompleted = true;
+			}
+		}
+		// チャージ電撃の本数ぶん LightningRuntime を起動
+		if (justCompleted) {
+			specialChargeBolts_.clear();
+			specialChargeBolts_.reserve(specialChargeBoltCount_);
+			for (int i = 0; i < specialChargeBoltCount_; ++i) {
+				SpecialChargeBolt b;
+				b.rt = std::make_unique<LightningRuntime>();
+				PrimitiveGenerator::LightningBoltParams lp{};
+				lp.appearance.startWidth = 0.05f;
+				lp.appearance.endWidth   = 0.05f;
+				lp.appearance.planeCount = 3;
+				lp.appearance.fadeStartLength = 0.05f;
+				lp.appearance.fadeEndLength   = 0.05f;
+				lp.appearance.startColor = specialLockonColor_;
+				lp.appearance.endColor   = specialLockonColor_;
+				lp.generations = 5;
+				lp.maxOffsetRatio = 0.2f;
+				lp.branchProbability = 0.2f;
+				lp.branchLengthScale = 0.25f;
+				b.rt->Initialize(lp, "Resources/Textures/white1x1.dds", 2 /*Add*/);
+				b.rt->SetBoltLifetime(specialChargeRegenInterval_);
+				b.rt->SetOverlapOffset(specialChargeRegenInterval_ * 0.5f);
+				// 各本に再生成タイミングをずらして配置（同時に全部点滅しないように）
+				b.nextRegenTime = specialPhase2Timer_
+					+ static_cast<float>(i) * (specialChargeRegenInterval_ / specialChargeBoltCount_);
+				specialChargeBolts_.push_back(std::move(b));
+			}
+		}
+	}
+
+	// チャージ進行（全ロック完了後）
+	if (specialAllLockonComplete_) {
+		const float chargeT = specialPhase2Timer_ - specialChargeStartTime_;
+		const float u = (std::clamp)(chargeT / specialChargeDuration_, 0.0f, 1.0f);
+
+		// プレイヤー位置と始終点半径
+		// 始点はプレイヤーカプセル表面（スクリーン投影楕円）。
+		// 終点はバリア表面方向（チャージ進行 u で成長、最小長で下限を確保）
+		const Vector3 ppos = SpecialPlayerCenter();
+		// カプセル投影の半軸（ImGui で 0 のままなら collider から自動算出）
+		float ellipseA = specialChargeStartRadiusH_; // 水平
+		float ellipseB = specialChargeStartRadiusV_; // 垂直
+		if ((ellipseA <= 0.0f || ellipseB <= 0.0f) && player_) {
+			const Collider& col = player_->GetCollider();
+			const float cr = col.capsuleRadius;
+			const float ch = col.capsuleHeight;
+			if (ellipseA <= 0.0f) ellipseA = (cr > 0.01f ? cr : 0.5f);
+			if (ellipseB <= 0.0f) ellipseB = (ch > 0.01f ? ch * 0.5f + cr : ellipseA * 1.8f);
+		}
+		if (ellipseA < 0.01f) ellipseA = 0.5f;
+		if (ellipseB < 0.01f) ellipseB = 1.0f;
+
+		// カメラ基底
+		const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+		const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
+		const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+
+		// 乱数源
+		static thread_local std::mt19937 rng(
+			static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+		std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * 3.14159265358979323846f);
+
+		for (auto& b : specialChargeBolts_) {
+			if (!b.rt) continue;
+
+			// 再生成タイミングに到達したら角度をランダムに更新
+			if (specialPhase2Timer_ >= b.nextRegenTime) {
+				b.angleBase = distAngle(rng);
+				b.nextRegenTime += specialChargeRegenInterval_;
+				if (b.nextRegenTime < specialPhase2Timer_) {
+					b.nextRegenTime = specialPhase2Timer_ + specialChargeRegenInterval_;
+				}
+			}
+
+			// 放射方向（カメラ平面上のランダム角度）
+			const float a = b.angleBase;
+			const float ct = std::cos(a), st = std::sin(a);
+			const Vector3 dir = {
+				ct * camRight.x + st * camUp.x,
+				ct * camRight.y + st * camUp.y,
+				ct * camRight.z + st * camUp.z,
+			};
+			// 始点：スクリーン投影楕円 r(θ) = a*b / sqrt((b cosθ)^2 + (a sinθ)^2)
+			const float denom = std::sqrt((ellipseB * ct) * (ellipseB * ct) + (ellipseA * st) * (ellipseA * st));
+			const float startR = (denom > 1e-5f) ? (ellipseA * ellipseB) / denom : ellipseA;
+			// 終点：チャージ進行に応じた半径（最小長下限）
+			const float endR = (std::max)(startR + specialChargeMinLength_, specialBarrierRadius_ * u);
+
+			Vector3 s = { ppos.x + dir.x * startR, ppos.y + dir.y * startR, ppos.z + dir.z * startR };
+			Vector3 e = { ppos.x + dir.x * endR,   ppos.y + dir.y * endR,   ppos.z + dir.z * endR   };
+			b.rt->SetEndpoints(s, e);
+			b.rt->Update(camera_.get(), realDt);
+		}
+
+		// チャージ完了で Fire フェーズへ
+		if (chargeT >= specialChargeDuration_) {
+			EnterSpecialPhaseFire();
+		}
+	}
+}
+
+void StagePlayScene::EnterSpecialPhaseFire() {
+	specialPhase_      = SpecialPhase::Fire;
+	specialPhaseTimer_ = 0.0f;
+
+	// World 時間を再開（Lockon で 0 にしていた）
+	SetTimeScale(TimeGroup::World, 1.0f);
+
+	// 処理待ちキューをロック済みターゲットから構築（近い順は EnumerateLockonTargets でソート済み）
+	specialFireQueue_.clear();
+	specialFireProcessed_.clear();
+	for (auto& t : specialLockonTargets_) {
+		if (!t.entity) continue;
+		if (!specialFireProcessed_.insert(t.entity).second) continue;
+		SpecialFireQueueItem item;
+		item.entity   = t.entity;
+		item.isBullet = (t.bulletIndex >= 0);
+		specialFireQueue_.push_back(item);
+	}
+
+	// Phase 2 の可視化（線・リング・キューブ）とチャージ電撃は役目を終えたので trash へ
+	for (auto& b : specialChargeBolts_) {
+		if (b.rt) {
+			SpecialTrashEntry e;
+			e.lightning = std::move(b.rt);
+			specialTrash_.push_back(std::move(e));
+		}
+	}
+	specialChargeBolts_.clear();
+	for (auto& t : specialLockonTargets_) {
+		for (int i = 0; i < 3; ++i) {
+			if (t.lines[i]) {
+				SpecialTrashEntry e;
+				e.renderer = std::move(t.lines[i]);
+				specialTrash_.push_back(std::move(e));
+			}
+		}
+		if (t.ring) { SpecialTrashEntry e; e.renderer = std::move(t.ring); specialTrash_.push_back(std::move(e)); }
+		if (t.cube) { SpecialTrashEntry e; e.renderer = std::move(t.cube); specialTrash_.push_back(std::move(e)); }
+	}
+	specialLockonTargets_.clear();
+
+	specialFireBolts_.clear();
+	specialFireLaunchTimer_ = 0.0f; // 1 本目は即発射
+}
+
+bool StagePlayScene::IsSpecialTargetAlive(IImGuiEditable* e) const {
+	if (!e) return false;
+	for (auto& up : dynamicPrimitives_) if (up.get() == e) return true;
+	for (auto& up : object3DInstances_) if (up.get() == e) return true;
+	for (auto& up : dynamicAnimated_)   if (up.get() == e) return true;
+	return false;
+}
+
+void StagePlayScene::CollectScreenTargets(std::vector<std::pair<IImGuiEditable*, bool>>& out) {
+	if (!camera_) return;
+	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+	auto isVisibleInClip = [&](const Vector3& w) {
+		Vector4 clip = {
+			w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0],
+			w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1],
+			w.x * vp.m[0][2] + w.y * vp.m[1][2] + w.z * vp.m[2][2] + vp.m[3][2],
+			w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3],
+		};
+		if (clip.w <= 0.0f) return false;
+		const float ndx = clip.x / clip.w;
+		const float ndy = clip.y / clip.w;
+		return std::abs(ndx) <= 1.0f && std::abs(ndy) <= 1.0f;
+	};
+
+	// 敵弾（EnemyAttack）
+	for (auto& b : bullets_) {
+		if (!b.primitive) continue;
+		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		const Vector3* p = b.primitive->GetEditableTranslate();
+		if (!p || !isVisibleInClip(*p)) continue;
+		out.emplace_back(static_cast<IImGuiEditable*>(b.primitive), true);
+	}
+	// 敵本体（Enemy / Boss）
+	std::unordered_set<IImGuiEditable*> seen;
+	auto pushEnemy = [&](IImGuiEditable* e) {
+		if (!e || !seen.insert(e).second) return;
+		const EntityTag tag = e->GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		const Vector3* p = e->GetEditableTranslate();
+		if (!p || !isVisibleInClip(*p)) return;
+		out.emplace_back(e, false);
+	};
+	for (auto& up : dynamicPrimitives_) pushEnemy(up.get());
+	for (auto& up : object3DInstances_) pushEnemy(up.get());
+	for (auto& up : dynamicAnimated_)   pushEnemy(up.get());
+}
+
+Vector3 StagePlayScene::SpecialPlayerCenter() const {
+	Vector3 base = player_ ? player_->GetTranslate() : Vector3{ 0.0f, 0.0f, 0.0f };
+	if (!player_) return base;
+	float off = specialPlayerCenterOffset_;
+	if (off <= 0.0f) off = player_->GetCollider().offset.y; // プレハブの足元→カプセル中心
+	if (off == 0.0f) return base;
+	// カメラ平面ベースの演出（楕円射影/放射）と整合するよう up はカメラ up を使う
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Vector3 camUp = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+	return { base.x + camUp.x * off, base.y + camUp.y * off, base.z + camUp.z * off };
+}
+
+Vector3 StagePlayScene::SpecialBoltStart(const Vector3& playerPos, const Vector3& dir) const {
+	// プレイヤーカプセルのスクリーン投影楕円表面の点を返す（チャージ電撃と同じ考え方）。
+	// dir は正規化済みの「始点 → 対象」方向。
+	float ellipseA = specialChargeStartRadiusH_;
+	float ellipseB = specialChargeStartRadiusV_;
+	if ((ellipseA <= 0.0f || ellipseB <= 0.0f) && player_) {
+		const Collider& col = player_->GetCollider();
+		const float cr = col.capsuleRadius;
+		const float ch = col.capsuleHeight;
+		if (ellipseA <= 0.0f) ellipseA = (cr > 0.01f ? cr : 0.5f);
+		if (ellipseB <= 0.0f) ellipseB = (ch > 0.01f ? ch * 0.5f + cr : ellipseA * 1.8f);
+	}
+	if (ellipseA < 0.01f) ellipseA = 0.5f;
+	if (ellipseB < 0.01f) ellipseB = 1.0f;
+
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
+	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+	// dir をカメラ平面に投影した成分から角度を求める
+	const float cx = dir.x * camRight.x + dir.y * camRight.y + dir.z * camRight.z;
+	const float cy = dir.x * camUp.x    + dir.y * camUp.y    + dir.z * camUp.z;
+	const float ct = std::cos(std::atan2(cy, cx));
+	const float st = std::sin(std::atan2(cy, cx));
+	const float denom = std::sqrt((ellipseB * ct) * (ellipseB * ct) + (ellipseA * st) * (ellipseA * st));
+	const float startR = (denom > 1e-5f) ? (ellipseA * ellipseB) / denom : ellipseA;
+	return { playerPos.x + dir.x * startR, playerPos.y + dir.y * startR, playerPos.z + dir.z * startR };
+}
+
+void StagePlayScene::UpdateSpecialPhaseFire(float dt) {
+	specialFireLaunchTimer_ -= dt;
+
+	const Vector3 ppos = SpecialPlayerCenter();
+
+	// ----- 新規侵入の検出：画面内に新しく入った敵/敵弾を queue に追加 -----
+	{
+		std::vector<std::pair<IImGuiEditable*, bool>> screen;
+		CollectScreenTargets(screen);
+		// 現在アクティブな bolt のターゲット集合（重複防止）
+		std::unordered_set<IImGuiEditable*> activeSet;
+		for (auto& fb : specialFireBolts_) if (fb.entity) activeSet.insert(fb.entity);
+		for (auto& s : screen) {
+			IImGuiEditable* e = s.first;
+			if (specialFireProcessed_.count(e)) continue; // 既処理（発射済み）
+			if (activeSet.count(e)) continue;             // 発射中
+			// queue 内の重複
+			bool inQueue = false;
+			for (auto& q : specialFireQueue_) { if (q.entity == e) { inQueue = true; break; } }
+			if (inQueue) continue;
+			SpecialFireQueueItem item; item.entity = e; item.isBullet = s.second;
+			specialFireQueue_.push_back(item);
+		}
+	}
+
+	// ----- 空き枠があり、発射間隔を満たしたら queue から 1 本発射 -----
+	if (specialFireLaunchTimer_ <= 0.0f &&
+		static_cast<int>(specialFireBolts_.size()) < specialFireSimultaneous_) {
+		// 生存している先頭ターゲットを探す
+		while (!specialFireQueue_.empty()) {
+			SpecialFireQueueItem item = specialFireQueue_.front();
+			specialFireQueue_.erase(specialFireQueue_.begin());
+			// 弾は primitive ポインタ、敵は entity ポインタ。いずれも動的コンテナで生存確認できる
+			if (!IsSpecialTargetAlive(item.entity)) continue; // 既に消滅 → スキップ
+			specialFireProcessed_.insert(item.entity);
+
+			SpecialFireBolt fb;
+			fb.entity   = item.entity;
+			fb.isBullet = item.isBullet;
+			fb.elapsed  = 0.0f;
+			fb.nextTickTime = 0.0f; // 開始直後に 1 ティック目
+			fb.rt = std::make_unique<LightningRuntime>();
+			PrimitiveGenerator::LightningBoltParams lp{};
+			lp.appearance.startWidth = specialFireStartWidth_;
+			lp.appearance.endWidth   = specialFireEndWidth_;
+			lp.appearance.planeCount = 3;
+			lp.appearance.fadeStartLength = 0.05f;
+			lp.appearance.fadeEndLength   = 0.05f;
+			lp.appearance.startColor = specialFireColor_;
+			lp.appearance.endColor   = specialFireColor_;
+			lp.generations = 6;
+			lp.maxOffsetRatio = specialFireMaxOffsetRatio_;
+			lp.branchProbability = specialFireBranchProb_;
+			lp.branchLengthScale = 0.3f;
+			fb.rt->Initialize(lp, "Resources/Textures/white1x1.dds", 2 /*Add*/);
+			fb.rt->SetBoltLifetime(specialFireBoltLifetime_);
+			fb.rt->SetOverlapOffset(specialFireBoltLifetime_ * 0.5f);
+			specialFireBolts_.push_back(std::move(fb));
+			specialFireLaunchTimer_ = specialFireLaunchInterval_;
+			break; // 1 フレームに発射するのは 1 本まで
+		}
+	}
+
+	// ----- 各 bolt の更新（追従・ダメージティック・終了判定）-----
+	for (auto& fb : specialFireBolts_) {
+		if (fb.done) continue;
+		if (!fb.rt) { fb.done = true; continue; }
+
+		// ターゲット生存確認（World 再開中は sweep でポインタが無効化されうる）
+		if (!IsSpecialTargetAlive(fb.entity)) { fb.done = true; continue; }
+		const Vector3* tp = fb.entity->GetEditableTranslate();
+		if (!tp) { fb.done = true; continue; }
+		fb.lastTargetPos = *tp;
+
+		fb.elapsed += dt;
+
+		// サンダーの始点（プレイヤーカプセル表面）と終点（ターゲット現在位置）。
+		// 発射直後は始点→ターゲットへ伸ばす（敵へ飛んでいく感）。grow 完了後は終点を追従。
+		Vector3 dir = { fb.lastTargetPos.x - ppos.x, fb.lastTargetPos.y - ppos.y, fb.lastTargetPos.z - ppos.z };
+		const float dlen = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+		if (dlen > 1e-4f) { dir.x /= dlen; dir.y /= dlen; dir.z /= dlen; }
+		else { dir = { 0.0f, 1.0f, 0.0f }; }
+		const Vector3 s = SpecialBoltStart(ppos, dir);
+		float gu = (specialFireGrowTime_ > 1e-4f)
+			? (std::clamp)(fb.elapsed / specialFireGrowTime_, 0.0f, 1.0f)
+			: 1.0f;
+		if (gu < 0.12f) gu = 0.12f; // 0 長（空メッシュ）回避＆最低限の見える長さ確保
+		const Vector3 renderEnd = {
+			s.x + (fb.lastTargetPos.x - s.x) * gu,
+			s.y + (fb.lastTargetPos.y - s.y) * gu,
+			s.z + (fb.lastTargetPos.z - s.z) * gu,
+		};
+		fb.rt->SetEndpoints(s, renderEnd);
+		fb.rt->Update(camera_.get(), dt);
+
+		// ダメージティック
+		while (fb.elapsed >= fb.nextTickTime) {
+			if (!fb.isBullet) {
+				fb.entity->GetHP().TakeDamage(specialFireTickDamage_);
+			}
+			fb.nextTickTime += specialFireTickInterval_;
+		}
+
+		// 終了判定
+		if (fb.isBullet) {
+			// 敵弾：最低拘束時間で強制消滅
+			if (fb.elapsed >= specialFireMinHold_) {
+				for (auto& b : bullets_) {
+					if (static_cast<IImGuiEditable*>(b.primitive) == fb.entity) { b.remainingLifetime = -1.0f; break; }
+				}
+				fb.done = true;
+			}
+		} else {
+			const bool dead = fb.entity->GetHP().IsDead();
+			if (dead && fb.elapsed >= specialFireMinHold_) {
+				fb.done = true; // 撃破（scoreは SweepDeadEntities 前の加点経路で処理）
+			} else if (fb.elapsed >= specialFireMaxHold_) {
+				fb.done = true; // 生存でも上限で次へ（ボス等）
+			}
+		}
+	}
+
+	// ----- 終了した bolt を trash へ回収 -----
+	for (auto& fb : specialFireBolts_) {
+		if (fb.done && fb.rt) {
+			SpecialTrashEntry e;
+			e.lightning = std::move(fb.rt);
+			specialTrash_.push_back(std::move(e));
+		}
+	}
+	specialFireBolts_.erase(
+		std::remove_if(specialFireBolts_.begin(), specialFireBolts_.end(),
+			[](const SpecialFireBolt& fb) { return fb.done; }),
+		specialFireBolts_.end());
+
+	// ----- Phase 終了：処理待ち 0 かつ アクティブ雷 0 -----
+	if (specialFireQueue_.empty() && specialFireBolts_.empty()) {
+		EnterSpecialPhaseEnd();
+	}
+}
+
+void StagePlayScene::EnterSpecialPhaseEnd() {
+	specialPhase_      = SpecialPhase::End;
+	specialPhaseTimer_ = 0.0f;
+}
+
+void StagePlayScene::UpdateSpecialPhaseEnd(float dt) {
+	(void)dt;
+	// Fire 終了から specialEndDuration_ 秒後にバリアを消して通常へ戻す
+	if (specialPhaseTimer_ >= specialEndDuration_) {
+		EndSpecialMove();
+	}
+}
+
+void StagePlayScene::EndSpecialMove() {
+	specialActive_     = false;
+	specialPhase_      = SpecialPhase::Idle;
+	specialPhaseTimer_ = 0.0f;
+	specialTimer_      = 0.0f;
+	specialPhase2Timer_       = 0.0f;
+	specialAllLockonComplete_ = false;
+	specialChargeStartTime_   = 0.0f;
+
+	// ワールド時間を通常に戻す
+	SetTimeScale(TimeGroup::World, 1.0f);
+
+	// プレイヤー位置を「画面内クリップ範囲」に収めるため、入力オフセットを 0 に戻す
+	playerInputOffset_ = { 0.0f, 0.0f };
+	playerVelocity_    = { 0.0f, 0.0f };
+
+	// バリア・ロックオン可視化・チャージ電撃を遅延削除キューへ移して、
+	// 数フレーム後に破棄する（GPU が前フレームの commandList で参照中の可能性あり）
+	if (specialBarrierVis_) {
+		SpecialTrashEntry e;
+		e.renderer = std::move(specialBarrierVis_);
+		specialTrash_.push_back(std::move(e));
+	}
+	for (auto& b : specialChargeBolts_) {
+		if (b.rt) {
+			SpecialTrashEntry e;
+			e.lightning = std::move(b.rt);
+			specialTrash_.push_back(std::move(e));
+		}
+	}
+	specialChargeBolts_.clear();
+	for (auto& fb : specialFireBolts_) {
+		if (fb.rt) {
+			SpecialTrashEntry e;
+			e.lightning = std::move(fb.rt);
+			specialTrash_.push_back(std::move(e));
+		}
+	}
+	specialFireBolts_.clear();
+	specialFireQueue_.clear();
+	specialFireProcessed_.clear();
+	specialFireLaunchTimer_ = 0.0f;
+	// 光の翼パーティクルは発生を止めれば寿命で自然消滅（追加処理不要）
+	for (auto& t : specialLockonTargets_) {
+		for (int i = 0; i < 3; ++i) {
+			if (t.lines[i]) {
+				SpecialTrashEntry e;
+				e.renderer = std::move(t.lines[i]);
+				specialTrash_.push_back(std::move(e));
+			}
+		}
+		if (t.ring) {
+			SpecialTrashEntry e;
+			e.renderer = std::move(t.ring);
+			specialTrash_.push_back(std::move(e));
+		}
+		if (t.cube) {
+			SpecialTrashEntry e;
+			e.renderer = std::move(t.cube);
+			specialTrash_.push_back(std::move(e));
+		}
+	}
+	specialLockonTargets_.clear();
+}
+
+void StagePlayScene::ApplySpecialCamera(const Vector3& playerWorldPos) {
+	(void)playerWorldPos;
+	if (!camera_ || !specialActive_) return;
+
+	// 既存のカメラ位置を基準に forward 逆方向 + up 方向に引く（FovY も加算）
+	const Vector3 eye = camera_->GetTranslate();
+	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
+	const Vector3 up      = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
+
+	camera_->SetTranslate({
+		eye.x - forward.x * specialCamPullback_ + up.x * specialCamUpAdd_,
+		eye.y - forward.y * specialCamPullback_ + up.y * specialCamUpAdd_,
+		eye.z - forward.z * specialCamPullback_ + up.z * specialCamUpAdd_,
+	});
+	camera_->SetFovY(camera_->GetFovY() + specialCamFovAdd_);
+	camera_->Update();
+}
+
+void StagePlayScene::RefreshPlayerHpInvincibility() {
+	if (!player_) return;
+
+	// 無敵の発生源を全て集約。どれか1つでも有効なら HP.enabled=false にして
+	// CollisionManager::Update の自動ダメージ経路も止める。
+	const bool justInv    = justDodgeActive_;
+	const bool dodgeInv   = dodgeActive_ && dodgeTimer_ <= dodgeIFrameDuration_;
+	const bool dmgInv     = playerInvincibilityTimer_ > 0.0f;
+	const bool specialInv = specialActive_;
+	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
+
+	player_->GetHP().enabled = !invincible;
 }

@@ -268,6 +268,51 @@ void EffectEditorWindow::OnDraw() {
         RebuildEditables();
     }
 
+    // 複製要求を安全に処理（末尾に追加）
+    if (!pendingDuplications_.empty()) {
+        auto inRange = [](int i, size_t n) { return i >= 0 && i < static_cast<int>(n); };
+        for (const auto& r : pendingDuplications_) {
+            switch (r.kind) {
+            case EffectComponentEditable::Kind::Primitive:
+                if (inRange(r.index, editBuffer_.primitives.size()))
+                    editBuffer_.primitives.push_back(editBuffer_.primitives[r.index]);
+                break;
+            case EffectComponentEditable::Kind::Particle:
+                if (inRange(r.index, editBuffer_.particles.size())) {
+                    EffectParticleComponent copy = editBuffer_.particles[r.index];
+                    // 同じグループ名だと 1フレーム1バーストで衝突し片方しか出ないので、
+                    // 複製側のグループ名をユニーク化する（別グループ＝両方バーストされる）。
+                    if (!copy.gpuParticleGroupName.empty()) {
+                        const std::string base = copy.gpuParticleGroupName;
+                        auto used = [&](const std::string& n) {
+                            for (const auto& p : editBuffer_.particles)
+                                if (p.gpuParticleGroupName == n) return true;
+                            return false;
+                        };
+                        std::string candidate = base;
+                        for (int n = 2; used(candidate); ++n) {
+                            candidate = base + "_" + std::to_string(n);
+                        }
+                        copy.gpuParticleGroupName = candidate;
+                    }
+                    editBuffer_.particles.push_back(copy);
+                }
+                break;
+            case EffectComponentEditable::Kind::Light:
+                if (inRange(r.index, editBuffer_.lights.size()))
+                    editBuffer_.lights.push_back(editBuffer_.lights[r.index]);
+                break;
+            case EffectComponentEditable::Kind::Sound:
+                if (inRange(r.index, editBuffer_.sounds.size()))
+                    editBuffer_.sounds.push_back(editBuffer_.sounds[r.index]);
+                break;
+            }
+        }
+        pendingDuplications_.clear();
+        editBufferDirty_ = true;
+        RebuildEditables();
+    }
+
     EffectManager* em = EffectManager::GetInstance();
 
     // ============ 上部：定義選択 + Save + Play ============
@@ -290,6 +335,33 @@ void EffectEditorWindow::OnDraw() {
     ImGui::SameLine();
     if (ImGui::SmallButton("New")) {
         NewEffect();
+    }
+
+    // 既存エフェクトのコンポーネントを「現在の編集」に追加（マージ）。
+    // 例：Hit_Small 編集中に Aura のコンポーネント一式を取り込む。
+    {
+        static std::string mergeSel;
+        if ((mergeSel.empty() || std::find(defs.begin(), defs.end(), mergeSel) == defs.end()) && !defs.empty()) {
+            mergeSel = defs.front();
+        }
+        ImGui::SetNextItemWidth(160.0f);
+        if (ImGui::BeginCombo("##mergeSrc", mergeSel.c_str())) {
+            for (const auto& name : defs) {
+                if (ImGui::Selectable(name.c_str(), name == mergeSel)) mergeSel = name;
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Merge")) {
+            if (const EffectDef* src = em->FindDef(mergeSel)) {
+                for (const auto& c : src->primitives) editBuffer_.primitives.push_back(c);
+                for (const auto& c : src->particles)  editBuffer_.particles.push_back(c);
+                for (const auto& c : src->lights)     editBuffer_.lights.push_back(c);
+                for (const auto& c : src->sounds)     editBuffer_.sounds.push_back(c);
+                editBufferDirty_ = true;
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("選択したエフェクトのコンポーネント一式を現在の編集に追加（マージ）");
     }
 
     ImGui::InputText("Name", editNameInput_, IM_ARRAYSIZE(editNameInput_));
@@ -458,6 +530,13 @@ void EffectEditorWindow::RemoveComponent(EffectComponentEditable::Kind kind, int
         if (r.kind == kind && r.index == index) return;
     }
     pendingRemovals_.push_back({ kind, index });
+}
+
+void EffectEditorWindow::DuplicateComponent(EffectComponentEditable::Kind kind, int index) {
+    for (const auto& r : pendingDuplications_) {
+        if (r.kind == kind && r.index == index) return;
+    }
+    pendingDuplications_.push_back({ kind, index });
 }
 
 void EffectEditorWindow::RebuildEditables() {

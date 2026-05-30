@@ -9,5 +9,6 @@ VertexOutput main(VertexInput input)
     output.texcoord = input.texcoord;
     output.normal = normalize(mul(input.normal, (float3x3) gTransform.World));
     output.color = input.color;
+    output.worldPos = mul(float4(input.position, 1.0f), gTransform.World).xyz;
     return output;
 }

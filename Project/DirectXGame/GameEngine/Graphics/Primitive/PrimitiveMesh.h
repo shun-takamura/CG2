@@ -65,6 +65,10 @@ public:
     void SetSamplerMode(int mode) { samplerMode_ = mode; }
     int  GetSamplerMode() const { return samplerMode_; }
 
+    // 視線角度フェード（0=無効、>0で面法線がエッジオンに近いほどα低下。雷/レーザー用）
+    void SetViewAngleFadePower(float power) { viewAngleFadePower_ = power; }
+    float GetViewAngleFadePower() const { return viewAngleFadePower_; }
+
     // ビルボードモード（None / Full / YAxis）
     void SetBillboardMode(BillboardMode mode) { billboardMode_ = mode; }
     BillboardMode GetBillboardMode() const { return billboardMode_; }
@@ -160,6 +164,7 @@ private:
     bool uvFlipV_ = false;
     float alphaReference_ = 0.0f; // デフォルト：discardしない
     int   samplerMode_ = 0;       // 0=WrapAll, 1=WrapU+ClampV, 2=ClampAll
+    float viewAngleFadePower_ = 0.0f; // デフォルト無効
 
     // Distortion 用 UV 変換関連（通常テクスチャと別の蓄積・状態を持つ）
     Vector2 distortionUVScrollSpeed_     = { 0.0f, 0.0f };

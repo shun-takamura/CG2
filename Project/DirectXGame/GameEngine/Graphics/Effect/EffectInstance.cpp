@@ -65,7 +65,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (!rt.started) {
             rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
             rt.renderer->Initialize(pc.meshType, pc.texturePath,
-                                    pc.ringParams, pc.cylinderParams, pc.helixParams);
+                                    pc.ringParams, pc.cylinderParams, pc.helixParams, pc.beamParams,
+                                    pc.lightningParams);
             rt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
             rt.renderer->SetBillboardMode(pc.billboardMode);
             rt.renderer->SetRotate(pc.rotate);
@@ -75,6 +76,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer->SetAlphaReference(pc.alphaReference);
             rt.renderer->SetCullBackface(pc.cullBackface);
             rt.renderer->SetSamplerMode(pc.samplerMode);
+            rt.renderer->SetViewAngleFadePower(pc.viewAngleFadePower);
             // UV
             rt.renderer->SetUVScroll(pc.uvAutoScroll ? pc.uvScrollSpeed : Vector2{ 0.0f, 0.0f });
             rt.renderer->SetUVOffset(pc.uvOffset);
@@ -135,14 +137,58 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (!gpu_) { rt.burstFired = true; continue; }
         if (elapsedTime_ < pc.startTime) continue;
 
+        // グループ名が指定されていて未登録なら、texturePath で自動生成（エディタで完結できるように）
+        if (!pc.gpuParticleGroupName.empty() && !gpu_->HasGroup(pc.gpuParticleGroupName)) {
+            gpu_->CreateGroup(pc.gpuParticleGroupName,
+                pc.texturePath.empty() ? "Resources/Textures/circle.dds" : pc.texturePath);
+        }
+
         // 1回だけバースト発射（duration は将来の拡張用、現状未使用）
         if (gpu_->HasGroup(pc.gpuParticleGroupName)) {
             gpu_->SetGroupBillboardMode(pc.gpuParticleGroupName, pc.billboardMode);
             Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
-            // 粒子寿命は Effect の totalDuration を超えないようにクランプ
-            float remaining = max(0.0001f, def_.totalDuration - pc.startTime);
-            float particleLife = min(1.0f, remaining); // 標準寿命 1.0秒 を上限に
-            gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount, 0.5f,
+
+            // 初速モード（0=ランダム / 1=方向固定 / 2=放射）。mode に応じた baseVelocity を渡す。
+            if (pc.velocityMode == 1) {
+                float len = std::sqrt(pc.velocityDir.x * pc.velocityDir.x +
+                                      pc.velocityDir.y * pc.velocityDir.y +
+                                      pc.velocityDir.z * pc.velocityDir.z);
+                Vector3 v = (len > 1e-5f)
+                    ? Vector3{ pc.velocityDir.x / len * pc.velocitySpeed,
+                               pc.velocityDir.y / len * pc.velocitySpeed,
+                               pc.velocityDir.z / len * pc.velocitySpeed }
+                    : Vector3{ 0.0f, pc.velocitySpeed, 0.0f };
+                gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, v, pc.velocityJitter, 1);
+            } else if (pc.velocityMode == 2) {
+                gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, 2);
+            } else {
+                gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 0);
+            }
+
+            // 多色グラデーション（Fixed カラーモード）。
+            // Start(loc=0)/End(loc=1) を常に両端キーとして使い、colorKeys はその間に挿入する中間キー。
+            // → 中間キー0個=Start→End の2色、1個=3色…（Random モードでは無効）。
+            if (pc.colorMode == 1) {
+                std::vector<std::pair<float, Vector4>> keys;
+                keys.reserve(pc.colorKeys.size() + 2);
+                keys.emplace_back(0.0f, pc.startColor);
+                for (const auto& k : pc.colorKeys) keys.emplace_back(k.location, k.color);
+                keys.emplace_back(1.0f, pc.endColor);
+                std::sort(keys.begin(), keys.end(),
+                    [](const std::pair<float, Vector4>& a, const std::pair<float, Vector4>& b) { return a.first < b.first; });
+                gpu_->SetEmitterGradient(pc.gpuParticleGroupName, keys);
+            } else {
+                gpu_->SetEmitterGradient(pc.gpuParticleGroupName, {});
+            }
+
+            // 粒子寿命：ループ時は周期を超えて生き残らせる（境界で全消えしないように）。
+            // 非ループ時のみ totalDuration を超えないようにクランプ。
+            float particleLife = pc.particleLifeTime;
+            if (!def_.loop) {
+                float remaining = max(0.0001f, def_.totalDuration - pc.startTime);
+                particleLife = min(particleLife, remaining);
+            }
+            gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount, pc.emitRadius,
                             static_cast<uint32_t>(pc.colorMode), pc.startColor, pc.endColor,
                             pc.scaleMin, pc.scaleMax, pc.uniformScale, particleLife);
         }

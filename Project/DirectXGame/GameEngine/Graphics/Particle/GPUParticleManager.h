@@ -12,6 +12,8 @@
 #include <string>
 #include <unordered_map>
 #include <cstdint>
+#include <vector>
+#include <utility>
 
 class Camera;
 
@@ -68,6 +70,17 @@ public:
     void SetContinuousEmit(const std::string& name, bool enabled, float frequency = 0.5f, uint32_t countPerEmit = 10, float radius = 1.0f);
     void SetEmitterTranslate(const std::string& name, const Vector3& translate);
 
+    /// <summary>
+    /// 初速モードを設定。mode: 0=全方向ランダム(従来) / 1=baseVelocity固定 / 2=放射(中心から外、baseVelocity.x=速さ)。
+    /// </summary>
+    void SetEmitterVelocity(const std::string& name, const Vector3& baseVelocity, float jitter, int mode = 1);
+
+    /// <summary>
+    /// 多色グラデーションを設定。locations(0..1) と colors の組を最大 kMaxGradientKeys 個。
+    /// 2個未満なら無効化（粒子の start/end 2色補間に戻る）。CPU 側で location 昇順にソートして渡す。
+    /// </summary>
+    void SetEmitterGradient(const std::string& name, const std::vector<std::pair<float, Vector4>>& keys);
+
     // ===== ビルボード / TimeGroup =====
     void SetGroupBillboardMode(const std::string& name, BillboardMode mode);
     void SetGroupTimeGroup(const std::string& name, TimeGroup group);
@@ -116,14 +129,25 @@ private:
         float frequencyTime;
         uint32_t emit;
         uint32_t colorMode;     // 0=Random, 1=Fixed
-        float pad0[3];          // 16-byte align for startColor
+        Vector3 baseVelocity;   // velocityMode!=0 のときの初速方向（16-byte align も兼ねる）
         Vector4 startColor;
         Vector4 endColor;
         Vector2 scaleMin;       // 80..88
         Vector2 scaleMax;       // 88..96
         uint32_t uniformScale;  // 96..100
         float particleLifeTime; // 100..104（emit時に各粒子に設定される寿命）
-        float pad1[2];          // 104..112
+        float velocityMode;     // 0=ランダム(従来), 1=baseVelocity+ジッタ
+        float velocityJitter;   // velocityMode!=0 のときの速度ゆらぎ量
+    };
+
+    static const uint32_t kMaxGradientKeys = 8;
+    // 多色グラデーション（Update CS の b1）。keyCount>=2 で有効、それ未満は粒子の start/end 2色補間。
+    struct ParticleGradient
+    {
+        uint32_t keyCount = 0;
+        float    pad[3] = { 0.0f, 0.0f, 0.0f };
+        Vector4  keyColor[kMaxGradientKeys] = {};
+        Vector4  keyLoc[kMaxGradientKeys]   = {}; // .x に位置(0..1)。昇順
     };
 
     struct PerFrame
@@ -151,6 +175,10 @@ private:
         // Emitter CB
         Microsoft::WRL::ComPtr<ID3D12Resource> emitterResource;
         EmitterSphere* emitterData = nullptr;
+
+        // Gradient CB（Update CS b1。多色グラデーション）
+        Microsoft::WRL::ComPtr<ID3D12Resource> gradientResource;
+        ParticleGradient* gradientData = nullptr;
 
         // PerFrame CB（TimeGroup によって dt が異なるため per-group）
         Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource;

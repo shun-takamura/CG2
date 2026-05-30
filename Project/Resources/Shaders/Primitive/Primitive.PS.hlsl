@@ -41,6 +41,16 @@ PixelOutput main(VertexOutput input)
     // 最終色 = テクスチャ × 頂点カラー × マテリアル色
     output.color = texColor * input.color * gMaterial.color;
 
+    // ビュー角度フェード（power>0 のときのみ有効）
+    // 面法線がカメラ方向と平行=正面に近い=明るく、垂直=エッジオン=暗く
+    if (gMaterial.viewAngleFadePower > 0.0001f)
+    {
+        float3 viewDir = normalize(gMaterial.cameraPos - input.worldPos);
+        float ndotv = saturate(abs(dot(viewDir, normalize(input.normal))));
+        float fade = pow(ndotv, gMaterial.viewAngleFadePower);
+        output.color.a *= fade;
+    }
+
     // alphaReferenceを使ったdiscard
     if (output.color.a <= gMaterial.alphaReference)
     {

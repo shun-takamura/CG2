@@ -55,6 +55,24 @@
     "selectThreshold": 0.5,
     "spreadDuration": 0.15000000596046448,
     "mergeDuration": 0.20000000298023224,
+    "meleeApproachDuration": 0.18000000715255737,
+    "meleeReturnDuration": 0.25,
+    "meleeApproachDist": 4,
+    "dodgeReturnDuration": 0.34999999403953552,
+    "dodgeExpandedMargin": [
+      0.80000001192092896,
+      0.80000001192092896
+    ],
+    "meleeCamOffset": [
+      -3,
+      2.5,
+      -5
+    ],
+    "meleeCamLookOffset": [
+      0,
+      1,
+      0
+    ],
     "clonePaths": [
       "Resources/Models/Animated/Walk/walk.mesh",
       "Resources/Models/Animated/Walk/walk.mesh",
@@ -70,8 +88,125 @@
   },
   "heal": {
     "amount": 5,
+    "smallAmount": 5,
     "maxStg": 5,
     "maxBoss": 5
+  },
+  "special": {
+    "max": 100,
+    "dodgeGain": 8,
+    "duration": 5,
+    "barrierRadius": 2,
+    "barrierDuration": 3,
+    "barrierFill": false,
+    "centerOffset": 0,
+    "barrierWire": {
+      "on": true,
+      "spinSpeed": [
+        0.5,
+        1.2000000476837158,
+        0.30000001192092896
+      ],
+      "meridians": 2,
+      "parallels": 1,
+      "segments": 24,
+      "gold": [
+        1,
+        0.8399999737739563,
+        0.15000000596046448,
+        0.89999997615814209
+      ],
+      "pink": [
+        1,
+        0.34999999403953552,
+        0.80000001192092896,
+        0.89999997615814209
+      ]
+    },
+    "barrierParticle": {
+      "on": false,
+      "interval": 0.019999999552965164,
+      "count": 10,
+      "life": 0.5,
+      "radiusScale": 1,
+      "scaleMin": [
+        0.059999998658895493,
+        0.059999998658895493
+      ],
+      "scaleMax": [
+        0.15999999642372131,
+        0.15999999642372131
+      ],
+      "color0": [
+        0.5,
+        0.85000002384185791,
+        1,
+        1
+      ],
+      "color1": [
+        0.20000000298023224,
+        0.5,
+        1,
+        0
+      ]
+    },
+    "barrierColor": [
+      1,
+      0.80000001192092896,
+      0.30000001192092896,
+      0.10000000149011612
+    ],
+    "camPullback": 8,
+    "camFovAdd": 0.059999998658895493,
+    "camUpAdd": 1.5,
+    "chargeBoltCount": 6,
+    "chargeRegenInterval": 0.15000000596046448,
+    "chargeStartRadiusH": 0,
+    "chargeStartRadiusV": 0,
+    "chargeMinLength": 1,
+    "fireSimultaneous": 3,
+    "fireMinHold": 0.5,
+    "fireMaxHold": 2,
+    "fireTickInterval": 0.10000000149011612,
+    "fireTickDamage": 10,
+    "fireLaunchInterval": 0.10000000149011612,
+    "fireGrowTime": 0.079999998211860657,
+    "fireMaxOffsetRatio": 0.10000000149011612,
+    "fireBranchProb": 0.0099999997764825821,
+    "fireStartWidth": 0.10000000149011612,
+    "fireEndWidth": 0.05000000074505806,
+    "fireBoltLifetime": 0.079999998211860657,
+    "endDuration": 1,
+    "fireColor": [
+      0.5,
+      0.80000001192092896,
+      1,
+      1
+    ],
+    "bar": {
+      "maxWidth": 300,
+      "height": 12,
+      "posX": 60,
+      "posY": 60,
+      "bgColor": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.20000000298023224,
+        0.80000001192092896
+      ],
+      "fgColor": [
+        0.55000001192092896,
+        0.75,
+        1,
+        1
+      ],
+      "fullColor": [
+        1,
+        0.85000002384185791,
+        0.30000001192092896,
+        1
+      ]
+    }
   },
   "hpBar": {
     "maxWidth": 350,

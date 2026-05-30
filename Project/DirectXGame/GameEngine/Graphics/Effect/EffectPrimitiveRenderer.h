@@ -29,7 +29,9 @@ public:
     void Initialize(int primitiveType, const std::string& texturePath,
                     const PrimitiveGenerator::RingParams& ringParams = {},
                     const PrimitiveGenerator::CylinderParams& cylinderParams = {},
-                    const PrimitiveGenerator::HelixParams& helixParams = {});
+                    const PrimitiveGenerator::HelixParams& helixParams = {},
+                    const PrimitiveGenerator::BeamParams& beamParams = {},
+                    const PrimitiveGenerator::LightningBoltParams& lightningParams = {});
 
     void Update(Camera* camera, float deltaTime);
     void Draw();
@@ -50,6 +52,7 @@ public:
     void SetCullBackface(bool e)                      { mesh_.SetCullBackface(e); }
     void SetAlphaReference(float v)                   { mesh_.SetAlphaReference(v); }
     void SetSamplerMode(int m)                        { mesh_.SetSamplerMode(m); }
+    void SetViewAngleFadePower(float p)               { mesh_.SetViewAngleFadePower(p); }
 
     void SetUVScroll(const Vector2& v) { mesh_.SetUVScroll(v); }
     void SetUVOffset(const Vector2& v) { mesh_.SetUVOffset(v); }

@@ -41,6 +41,8 @@ public:
     void AddComponent(EffectComponentEditable::Kind kind);
     // 即時削除ではなく、次の OnDraw 冒頭で削除する（OnImGuiInspector 中の self-destroy 回避）
     void RemoveComponent(EffectComponentEditable::Kind kind, int index);
+    // 指定コンポーネントの複製を末尾に追加（同じく次フレーム冒頭で安全に処理）
+    void DuplicateComponent(EffectComponentEditable::Kind kind, int index);
 
     // Editable 一覧（EffectHierarchyWindow から参照される）
     const std::vector<std::unique_ptr<EffectComponentEditable>>& GetEditables() const { return editables_; }
@@ -116,4 +118,7 @@ private:
         int index;
     };
     std::vector<PendingRemoval> pendingRemovals_;
+
+    // 次フレームに反映する複製要求
+    std::vector<PendingRemoval> pendingDuplications_;
 };
