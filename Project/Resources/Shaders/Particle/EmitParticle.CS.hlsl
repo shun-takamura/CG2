@@ -32,6 +32,10 @@ struct EmitterSphere
     float  particleLifeTime; // emit時に各粒子へ設定する寿命
     float  velocityMode;  // 0=ランダム(従来), 1=baseVelocity+ジッタ
     float  velocityJitter;// velocityMode!=0 のときの速度ゆらぎ量
+    float  shapeMode;     // 0=Sphere(従来), 1=Ring(円周)
+    float3 ringNormal;    // Ring の法線（リング平面の向き）
+    float  ringThickness; // Ring の太さ（円周まわりのランダム散らばり）
+    float3 pad2;
 };
 
 struct PerFrame
@@ -79,9 +83,35 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 }
                 // ビルボード時 z は不要だが、None モード時の見た目維持で x と同じに
                 gParticles[particleIndex].scale = float3(sx, sy, sx);
-                float3 spawnOffset = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
+                float3 spawnOffset;
+                if (gEmitter.shapeMode > 0.5f) {
+                    // Ring：法線まわりの円周上 + 太さぶんのランダム散らばり
+                    float3 n = gEmitter.ringNormal;
+                    float nlen = length(n);
+                    n = (nlen > 1e-5f) ? (n / nlen) : float3(0.0f, 0.0f, 1.0f);
+                    float3 ref = (abs(n.y) < 0.99f) ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 0.0f, 0.0f);
+                    float3 t1 = normalize(cross(ref, n));
+                    float3 t2 = cross(n, t1);
+                    float ang = generator.Generate3d().x * 6.28318530718f;
+                    float3 circle = (cos(ang) * t1 + sin(ang) * t2) * gEmitter.radius;
+                    float3 thick = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.ringThickness;
+                    spawnOffset = circle + thick;
+                } else {
+                    spawnOffset = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
+                }
                 gParticles[particleIndex].translate = gEmitter.translate + spawnOffset;
-                if (gEmitter.velocityMode > 1.5f) {
+                if (gEmitter.velocityMode > 2.5f) {
+                    // 接線モード（公転）：ringNormal まわりに、発生位置の半径方向の接線へ流す
+                    float3 nrm = gEmitter.ringNormal;
+                    float nl = length(nrm);
+                    nrm = (nl > 1e-5f) ? (nrm / nl) : float3(0.0f, 0.0f, 1.0f);
+                    float3 radial = spawnOffset - dot(spawnOffset, nrm) * nrm; // 法線成分を除いた半径方向
+                    float rl = length(radial);
+                    float3 rd = (rl > 1e-5f) ? (radial / rl) : float3(1.0f, 0.0f, 0.0f);
+                    float3 tangent = cross(nrm, rd);
+                    gParticles[particleIndex].velocity =
+                        tangent * gEmitter.baseVelocity.x + (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.velocityJitter;
+                } else if (gEmitter.velocityMode > 1.5f) {
                     // 放射モード：発生位置の中心からのオフセット方向へ baseVelocity.x の速さで飛ばす
                     float len = length(spawnOffset);
                     float3 d = (len > 1e-5f) ? (spawnOffset / len) : float3(0.0f, 1.0f, 0.0f);

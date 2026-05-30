@@ -31,6 +31,21 @@ namespace {
         };
     }
     float LerpF(float a, float b, float t) { return a + (b - a) * t; }
+
+    // axis まわりに v を ang 回転（ロドリゲスの回転公式）
+    Vector3 RotateAroundAxis(const Vector3& v, const Vector3& axis, float ang) {
+        float len = std::sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+        if (len < 1e-5f) return v;
+        Vector3 k = { axis.x / len, axis.y / len, axis.z / len };
+        float c = std::cos(ang), s = std::sin(ang);
+        float kv = k.x * v.x + k.y * v.y + k.z * v.z;
+        Vector3 cr = { k.y * v.z - k.z * v.y, k.z * v.x - k.x * v.z, k.x * v.y - k.y * v.x };
+        return {
+            v.x * c + cr.x * s + k.x * kv * (1.0f - c),
+            v.y * c + cr.y * s + k.y * kv * (1.0f - c),
+            v.z * c + cr.z * s + k.z * kv * (1.0f - c),
+        };
+    }
 }
 
 void EffectInstance::Initialize(const EffectDef& def, const Vector3& worldPos, GPUParticleManager* gpu) {
@@ -51,6 +66,7 @@ void EffectInstance::Initialize(const EffectDef& def, const Vector3& worldPos, G
 
 void EffectInstance::Update(Camera* camera, float deltaTime) {
     elapsedTime_ += deltaTime;
+    orbitClock_  += deltaTime; // ループでリセットしない（GPU orbit と同じく連続）
 
     // ===== Primitive =====
     for (size_t i = 0; i < def_.primitives.size(); ++i) {
@@ -133,8 +149,27 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
     for (size_t i = 0; i < def_.particles.size(); ++i) {
         const EffectParticleComponent& pc = def_.particles[i];
         ParticleRuntime& rt = particles_[i];
-        if (rt.burstFired) continue;
         if (!gpu_) { rt.burstFired = true; continue; }
+
+        // orbit 有効時、発生平面(ringNormal)を tumble と同じ回転で回す（帯が首を振り、発生と粒子が同期）。
+        // spin（帯上の流れ）の軸＝この「現在のリング法線」。
+        Vector3 effRingNormal = pc.ringNormal;
+        if (pc.orbitEnabled) {
+            effRingNormal = RotateAroundAxis(pc.ringNormal, pc.orbitTumbleAxis, pc.orbitTumbleSpeed * orbitClock_);
+        }
+
+        // 周回（orbit）は burst 後も毎フレーム更新（中心はエフェクト位置＋offset に追従）。
+        if (gpu_->HasGroup(pc.gpuParticleGroupName)) {
+            const Vector3 center = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+            gpu_->SetGroupOrbit(pc.gpuParticleGroupName, pc.orbitEnabled, center,
+                                effRingNormal, pc.orbitSpinSpeed,        // spin：帯上を流れる（現在のリング法線まわり）
+                                pc.orbitTumbleAxis, pc.orbitTumbleSpeed); // tumble：帯自体の回転
+            if (pc.orbitEnabled) {
+                gpu_->SetEmitterShape(pc.gpuParticleGroupName, pc.emitShape, effRingNormal, pc.ringThickness);
+            }
+        }
+
+        if (rt.burstFired) continue;
         if (elapsedTime_ < pc.startTime) continue;
 
         // グループ名が指定されていて未登録なら、texturePath で自動生成（エディタで完結できるように）
@@ -161,9 +196,15 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                 gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, v, pc.velocityJitter, 1);
             } else if (pc.velocityMode == 2) {
                 gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, 2);
+            } else if (pc.velocityMode == 3) {
+                // 接線（公転）：speed を baseVelocity.x に。方向はシェーダが ringNormal から接線を計算
+                gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, 3);
             } else {
                 gpu_->SetEmitterVelocity(pc.gpuParticleGroupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 0);
             }
+
+            // 発生形状（Sphere / Ring）。orbit 時は回転済みの法線で発生させ、粒子と同期させる。
+            gpu_->SetEmitterShape(pc.gpuParticleGroupName, pc.emitShape, effRingNormal, pc.ringThickness);
 
             // 多色グラデーション（Fixed カラーモード）。
             // Start(loc=0)/End(loc=1) を常に両端キーとして使い、colorKeys はその間に挿入する中間キー。

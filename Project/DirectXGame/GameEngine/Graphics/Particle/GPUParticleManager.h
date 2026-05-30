@@ -76,6 +76,19 @@ public:
     void SetEmitterVelocity(const std::string& name, const Vector3& baseVelocity, float jitter, int mode = 1);
 
     /// <summary>
+    /// 発生形状を設定。mode: 0=Sphere(従来) / 1=Ring（normal まわりの円周 + thickness の散らばり）。
+    /// </summary>
+    void SetEmitterShape(const std::string& name, int mode, const Vector3& ringNormal, float ringThickness);
+
+    /// <summary>
+    /// 周回（orbit）を設定。enabled なら粒子を center まわりに axis で angularSpeed[rad/s] 回す（外に出さない）。
+    /// center は毎フレ更新（プレイヤー追従など）して良い。
+    /// </summary>
+    void SetGroupOrbit(const std::string& name, bool enabled, const Vector3& center,
+                       const Vector3& spinAxis, float spinSpeed,
+                       const Vector3& tumbleAxis, float tumbleSpeed);
+
+    /// <summary>
     /// 多色グラデーションを設定。locations(0..1) と colors の組を最大 kMaxGradientKeys 個。
     /// 2個未満なら無効化（粒子の start/end 2色補間に戻る）。CPU 側で location 昇順にソートして渡す。
     /// </summary>
@@ -138,6 +151,10 @@ private:
         float particleLifeTime; // 100..104（emit時に各粒子に設定される寿命）
         float velocityMode;     // 0=ランダム(従来), 1=baseVelocity+ジッタ
         float velocityJitter;   // velocityMode!=0 のときの速度ゆらぎ量
+        float shapeMode;        // 0=Sphere(従来), 1=Ring
+        Vector3 ringNormal;     // Ring の法線
+        float ringThickness;    // Ring の太さ
+        float pad2[3];
     };
 
     static const uint32_t kMaxGradientKeys = 8;
@@ -148,6 +165,21 @@ private:
         float    pad[3] = { 0.0f, 0.0f, 0.0f };
         Vector4  keyColor[kMaxGradientKeys] = {};
         Vector4  keyLoc[kMaxGradientKeys]   = {}; // .x に位置(0..1)。昇順
+    };
+
+    // 周回（orbit）。Update CS の b2。spin=帯上を流れる(法線軸) / tumble=帯自体の回転(別軸)。
+    struct ParticleOrbit
+    {
+        float   enabled = 0.0f;
+        float   spinSpeed = 0.0f;
+        float   tumbleSpeed = 0.0f;
+        float   pad0 = 0.0f;
+        Vector3 center = { 0.0f, 0.0f, 0.0f };
+        float   pad1 = 0.0f;
+        Vector3 spinAxis = { 0.0f, 0.0f, 1.0f };
+        float   pad2 = 0.0f;
+        Vector3 tumbleAxis = { 0.0f, 1.0f, 0.0f };
+        float   pad3 = 0.0f;
     };
 
     struct PerFrame
@@ -179,6 +211,10 @@ private:
         // Gradient CB（Update CS b1。多色グラデーション）
         Microsoft::WRL::ComPtr<ID3D12Resource> gradientResource;
         ParticleGradient* gradientData = nullptr;
+
+        // Orbit CB（Update CS b2。周回運動）
+        Microsoft::WRL::ComPtr<ID3D12Resource> orbitResource;
+        ParticleOrbit* orbitData = nullptr;
 
         // PerFrame CB（TimeGroup によって dt が異なるため per-group）
         Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource;

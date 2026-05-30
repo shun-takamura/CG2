@@ -146,14 +146,24 @@ struct EffectParticleComponent {
     bool    uniformScale = true;        // true なら 幅=高さ を強制（Xレンジを共用）
 
     // ----- 発生 -----
-    float   emitRadius = 0.5f;          // 発生位置の散らばり半径
+    float   emitRadius = 0.5f;          // 発生位置の散らばり半径（Ring では円の半径）
     float   particleLifeTime = 1.0f;    // 各粒子の寿命（秒）
+    int     emitShape = 0;              // 0=Sphere / 1=Ring（円周）
+    Vector3 ringNormal = { 0.0f, 0.0f, 1.0f }; // Ring 平面の法線
+    float   ringThickness = 0.05f;      // Ring の太さ（円周まわりの散らばり）
 
     // ----- 初速制御 -----
-    int     velocityMode = 0;           // 0=全方向ランダム / 1=方向固定 / 2=放射(中心から外)
+    int     velocityMode = 0;           // 0=全方向ランダム / 1=方向固定 / 2=放射(中心から外) / 3=接線(公転の初速)
     Vector3 velocityDir = { 0.0f, 1.0f, 0.0f }; // mode=1 の向き
-    float   velocitySpeed = 3.0f;       // mode=1/2 の初速の大きさ
+    float   velocitySpeed = 3.0f;       // mode=1/2/3 の初速の大きさ
     float   velocityJitter = 0.0f;      // 速度ゆらぎ量
+
+    // ----- 周回（orbit）：粒子を中心まわりに回し続ける（外に出ない）-----
+    // spin=帯上を流れる（リング法線軸）/ tumble=帯自体の回転（別軸）。両方を粒子が受ける。
+    bool    orbitEnabled    = false;
+    float   orbitSpinSpeed  = 1.0f;     // 帯上を流れる速度 rad/s（軸＝Ring Normal）
+    float   orbitTumbleSpeed = 0.0f;    // 帯自体の回転速度 rad/s
+    Vector3 orbitTumbleAxis  = { 0.0f, 1.0f, 0.0f }; // 帯回転の軸
 };
 
 /// <summary>
