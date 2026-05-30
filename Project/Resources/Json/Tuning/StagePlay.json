@@ -150,6 +150,36 @@
         0
       ]
     },
+    "wing": {
+      "on": true,
+      "armCount": 4,
+      "angleOffset": 0.78539818525314331,
+      "speed": 6,
+      "life": 0.40000000596046448,
+      "burstCount": 6,
+      "jitter": 1,
+      "emitRadius": 0.10000000149011612,
+      "scaleMin": [
+        0.039999999105930328,
+        0.039999999105930328
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "colorInner": [
+        1,
+        0.85000002384185791,
+        0.20000000298023224,
+        1
+      ],
+      "colorOuter": [
+        1,
+        0.40000000596046448,
+        0.85000002384185791,
+        0
+      ]
+    },
     "barrierColor": [
       1,
       0.80000001192092896,
@@ -166,7 +196,7 @@
     "chargeMinLength": 1,
     "fireSimultaneous": 3,
     "fireMinHold": 0.5,
-    "fireMaxHold": 2,
+    "fireMaxHold": 3,
     "fireTickInterval": 0.10000000149011612,
     "fireTickDamage": 10,
     "fireLaunchInterval": 0.10000000149011612,
