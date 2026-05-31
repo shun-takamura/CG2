@@ -230,6 +230,9 @@ private:
 	// 入力ロックは specialActive_ で別途継続するので、後隙=「入力不可だが無敵なし」を実現する。
 	bool specialInvincible_ = true;
 
+	// 必殺技中の固定の構え向き（レティクル追従を止めて正面＝+Z で構える）。両必殺技共通。
+	Vector3 specialFirmFacing_{ 0.0f, 0.0f, 0.0f };
+
 	// スコア
 	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
 
@@ -578,8 +581,8 @@ private:
 	float          disruptorPhaseTimer_ = 0.0f;  // 現フェーズ経過秒（実時間）
 	// フェーズ長（秒、実時間）
 	float disruptorChargeDuration_   = 2.5f;  // Phase1 チャージ（狙う猶予。ImGui/JSONで調整可）
-	float disruptorSlashDuration_    = 0.3f;  // Phase2 一閃
-	float disruptorCollapseDuration_ = 0.8f;  // Phase3 崩壊
+	float disruptorSlashDuration_    = 1.5f;  // Phase2 一閃＝発射ショットの表示尺（カメラ到達は門番で別途保証）。確認しやすいよう長め
+	float disruptorCollapseDuration_ = 2.5f;  // Phase3 崩壊（リビールの剥がれ時間も兼ねる。ゆっくり戻す）
 	float disruptorRecoverDuration_  = 2.0f;  // Phase4 後隙（無敵なし・入力不可）
 	float disruptorChargeTimeScale_  = 0.0f;  // チャージ中の World 時間倍率（0=停止＝敵が固定で狙いやすい。>0でスロー）
 
@@ -594,14 +597,37 @@ private:
 	float   disruptorPivotRadiusPx_  = 14.0f;                     // 中央支点マーカー（リング）の半径(px)
 	Vector4 disruptorPivotColor_{ 1.0f, 1.0f, 1.0f, 0.9f };       // 支点マーカー色（白）
 
-	// ディスラプターのカメラ演出。狙う Charge 中は動かさず（WYSIWYG）、一閃 Slash→崩壊 Collapse で
-	// 壮大に引く。切断線は一閃でワールド空間へ焼き付くので、引いても線と敵がズレない。
-	// disruptorCamBlend_ (0→1) でイーズ。傲慢の specialCam* とは別管理。
-	float disruptorCamPullback_ = 8.0f;   // forward 逆方向への後退量（Slash/Collapse 時）
-	float disruptorCamUpAdd_    = 1.5f;   // up 方向の持ち上げ
-	float disruptorCamFovAdd_   = 0.06f;  // FovY 加算
-	float disruptorCamEaseTime_ = 0.4f;   // 引き/戻しのイーズ時間（秒）
-	float disruptorCamBlend_    = 0.0f;   // ランタイム：カメラ演出の適用度（0=通常/1=全開）
+	// ディスラプターのカメラ演出（フェーズ別の目標姿勢を補間。詳細は下の Step5-A 群と ApplyDisruptorCamera）。
+	// 切断線は一閃でワールド空間へ焼き付くので、アングルを変えても線と敵がズレない。傲慢の specialCam* とは別管理。
+	float disruptorCamPullback_ = 8.0f;   // forward 逆方向への後退量（Charge 時）
+	float disruptorCamUpAdd_    = 1.5f;   // up 方向の持ち上げ（Charge 時）
+	float disruptorCamFovAdd_   = 0.06f;  // FovY 加算（Charge 時）
+	float disruptorCamEaseTime_ = 0.25f;  // 1フェーズ分のカメラ移動時間（秒・決定的smoothstep。これが終わるまで次フェーズへ進まない）
+	float disruptorCamBlend_    = 0.0f;   // 旧ランタイム（現在カメラ駆動には未使用。互換のため残置）
+
+	// Step5-A: フェーズ別の目標カメラ姿勢を補間する演出。
+	// Charge=後方引き(狙う) → Slash=左横やや前・あおり(発射ショット) → Collapse=後方復帰(断裂線が走り込む) → Recover=通常へ。
+	bool    disruptorCamActive_ = false;   // 演出中フラグ（EnterDisruptor/EndSpecialMove で切替）
+	bool    disruptorCamInit_   = false;   // 補間状態を実カメラで初期化済みか
+	Vector3 disruptorCamEyeCur_{ 0.0f, 0.0f, 0.0f };  // 補間中のカメラ位置
+	Vector3 disruptorCamLookCur_{ 0.0f, 0.0f, 0.0f }; // 補間中の注視点
+	float   disruptorCamFovCur_ = 0.0f;    // 補間中の FovY
+	// 決定的なフェーズ間移動（前の移動が完了してから次フェーズへ＝手続き形式）。秒数設定を変えても破綻しない。
+	DisruptorPhase disruptorCamMovePhase_ = DisruptorPhase::Idle; // 現在移動中の対象フェーズ（変化検出用）
+	Vector3 disruptorCamFromEye_{ 0.0f, 0.0f, 0.0f };  // 移動開始時のカメラ位置
+	Vector3 disruptorCamFromLook_{ 0.0f, 0.0f, 0.0f }; // 移動開始時の注視点
+	float   disruptorCamFromFov_   = 0.0f; // 移動開始時の FovY
+	float   disruptorCamMoveTimer_ = 0.0f; // 現フェーズ移動の経過秒
+	bool    disruptorCamArrived_   = false;// 現フェーズの目標姿勢へ到達したか（フェーズ遷移の門番）
+	// 発射ショット（Slash）：プレイヤー基準オフセット（左横やや前・あおり）
+	float   disruptorCamFireSide_   = 6.0f; // プレイヤー左方向の距離
+	float   disruptorCamFireFront_  = 5.0f; // 前方（画面奥）方向の距離
+	float   disruptorCamFireDown_   = 3.0f; // 下げ量（あおり）
+	float   disruptorCamFireLookUp_ = 0.5f; // 注視点の持ち上げ
+	float   disruptorCamFireFovAdd_ = 0.0f; // 発射ショットの FovY 加算
+	// Collapse：後方引き（Charge とは別値で管理）
+	float   disruptorCamCollapsePullback_ = 8.0f;
+	float   disruptorCamCollapseUpAdd_    = 1.5f;
 
 	// 一閃の瞬間に確定するワールド空間の切断線（カメラを引いても敵と一緒に世界に残る＝描いた通り）。
 	bool    disruptorCutWorldValid_ = false;
@@ -609,12 +635,62 @@ private:
 	Vector3 disruptorCutWorldP2_{ 0.0f, 0.0f, 0.0f };
 	float   disruptorCutDepth_ = 40.0f;   // ヒット敵が無いときの焼き付け奥行き（敵があれば平均で上書き）
 
+	// ----- Step5-B: 発射ビーム / 衝撃波 / 断裂線ビジュアル（A案・FREEDOM風） -----
+	// 共通方式：ローカル空間でメッシュを1回生成し、SetRotate で発射方向へ向け、SetScale.z で伸長（再生成なし）。
+	// 発射ビーム（固定方向の一閃。Slash 中に筒先→全長へ伸びる transient）
+	std::unique_ptr<class EffectPrimitiveRenderer> disruptorBeam_;
+	Vector3 disruptorBeamDir_{ 0.0f, 0.15f, 1.0f };  // 固定発射方向（ワールド。既定=前方やや上＝戦場へ）。狙い角度とは無関係
+	float   disruptorBeamLength_  = 80.0f;           // ビーム全長
+	float   disruptorBeamWidth_   = 0.8f;            // ビーム幅（startWidth）
+	Vector4 disruptorBeamColor_{ 0.7f, 0.5f, 1.0f, 1.0f }; // 紫
+	float   disruptorBeamRunTime_ = 0.12f;           // 筒先→全長へ伸びる時間（Slash 内・決定的）
+	float   disruptorBeamTimer_   = 0.0f;            // ランタイム：伸長経過秒
+	Vector3 disruptorBeamFireDir_{ 0.0f, 0.0f, 1.0f };// ランタイム：確定発射方向
+	Vector3 disruptorBeamMuzzle_{ 0.0f, 0.0f, 0.0f }; // ランタイム：筒先位置
+	// 衝撃波（筒先の加算リング。Slash 中に拡大＋αフェード）
+	std::unique_ptr<class EffectPrimitiveRenderer> disruptorShockwave_;
+	float   disruptorShockRadius_    = 6.0f;         // 最大外半径
+	float   disruptorShockThickness_ = 0.4f;         // リング太さ（0..1、outer に対する内側の食い込み）
+	Vector4 disruptorShockColor_{ 0.8f, 0.6f, 1.0f, 1.0f };
+	float   disruptorShockTime_   = 0.25f;           // 拡大時間
+	float   disruptorShockTimer_  = 0.0f;            // ランタイム
+	// 断裂線ビジュアル（細い Beam・仮。Collapse 中に P1[右]→P2[左] へ走り込む）
+	std::unique_ptr<class EffectPrimitiveRenderer> disruptorRift_;
+	// 案1：見た目を「判定帯（disruptorLineWidthPx_ 半幅px）」に一致させる。焼き付け深度で px→world 換算した
+	// 半幅(disruptorRiftBakedHalfWidth_)をビーム全幅に使い、scale で微調整（1.0=判定帯ぴったり）。
+	float   disruptorRiftWidthScale_   = 1.0f;       // 判定帯に対する太さ倍率
+	float   disruptorRiftBakedHalfWidth_ = 0.0f;     // ランタイム：焼き付け時に確定した world 半幅
+	Vector4 disruptorRiftColor_{ 0.6f, 0.4f, 1.0f, 1.0f };
+	float   disruptorRiftRevealTime_ = 0.45f;        // 右→左へ走り込む時間（Collapse 内・決定的）
+	float   disruptorRiftTimer_   = 0.0f;            // ランタイム
+	// 遅延キル：判定は Slash で収集し、断裂線が引き切った瞬間に一括キル（線＝判定の対応を見せる）
+	std::vector<IImGuiEditable*> disruptorPendingEnemies_;     // 収集した敵本体（Enemy/Boss）
+	std::vector<IImGuiEditable*> disruptorPendingBulletPrims_; // 収集した敵弾の primitive ポインタ
+	bool disruptorKillsDone_ = false;                          // この一閃のキルを実行済みか
+
+	// ----- Step6: 崩壊リビール＋色反転（PostEffect の DisruptorReveal を駆動）-----
+	// Collapse 中は World 停止＝ライブ／キャプチャ同一フレームなので、現フレームを
+	// 断裂線の領域マスクで反転（殻）／通常（剥がれた下の世界）に出し分けるだけで2層リビールが成立する。
+	// Slash=全画面反転(revealT=0) → Collapse で線から上下へ通常色が伝播(revealT 0→1) → Recover で OFF。
+	float disruptorRevealIntensity_    = 1.0f;   // 反転の強さ（1=完全反転）
+	float disruptorRevealEdgeSoftness_ = 0.04f;  // 境界のソフト幅（破片帯の置き場。アスペクト補正UV）
+	// Collapse 入りからこの秒数は revealT=0（全画面反転＝断裂線が走り切るまで殻のまま）。
+	// 以後 [delay, disruptorCollapseDuration_] 区間で revealT 0→1（ゆっくり剥がれて下の通常色が戻る）。
+	float disruptorRevealStartDelay_   = 0.45f;
+	void  UpdateDisruptorReveal();               // 現フェーズに応じて DisruptorReveal の ON/OFF・線UV・進捗を更新
+
 	void EnterDisruptor();                       // TriggerSpecialMove(Disruptor) から：Charge へ
 	void UpdateDisruptorMove(class InputActionMap* actions, float realDt); // 専用フェーズ機の更新
 	void EnterDisruptorPhase(DisruptorPhase p);  // フェーズ遷移＋World時間/無敵の切替
 	float DisruptorAngleFromReticle() const;     // 画面中央→レティクルの角度(rad)
 	void  DrawDisruptorAimLine();                // 切断線を LineRenderer(3D) へ積む（スクリーン端まで）
-	void  ExecuteDisruptorSlash();               // 一閃：スクリーン空間の線上の敵/敵弾を断つ（貫通・物陰貫通）
+	void  ExecuteDisruptorSlash();               // 一閃：線上の敵/敵弾を「収集」＋切断線焼き付け＋発射ビーム生成（キルは遅延）
+	void  ExecuteDisruptorKills();               // 収集した対象を一括キル（断裂線が引き切った瞬間に呼ぶ）
+	void  ApplyDisruptorCamera();                // Step5-A：フェーズ別の目標カメラ姿勢を補間して適用
+	void  BuildDisruptorFireVisuals();           // Step5-B：Slash 入りで発射ビーム＋衝撃波を生成
+	void  BuildDisruptorRift();                  // Step5-B：Collapse 入りで断裂線ビームを生成
+	void  UpdateDisruptorVisuals(float realDt);  // Step5-B：ビーム伸長／衝撃波／断裂走り込みのアニメ＋Update
+	void  TrashDisruptorVisual(std::unique_ptr<class EffectPrimitiveRenderer>& r); // 遅延削除キューへ移す
 
 	void InitializeSpecialGaugeUI();
 	void UpdateSpecialGaugeUI();
