@@ -38,6 +38,12 @@ public:
 		ctx.useFreeVelocity = false;
 		ctx.billboardToPlayer = true;
 
+		// 運び屋が破棄されている場合は carrier_ を切る（解放済みポインタの dangling 参照を防ぐ）。
+		// 以後は徘徊先を失うだけで、lifetime 経過で自然に次のコマンドへ遷移する。
+		if (carrier_ && ctx.scene && !ctx.scene->IsDynamicEntityAlive(carrier_)) {
+			carrier_ = nullptr;
+		}
+
 		if (!entity || !carrier_) return;
 		Vector3* pos    = entity->GetEditableTranslate();
 		Vector3* cpos   = carrier_->GetEditableTranslate();

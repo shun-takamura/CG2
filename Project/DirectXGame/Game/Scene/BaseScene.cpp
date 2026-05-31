@@ -864,6 +864,14 @@ void BaseScene::RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) {
 	if (ctrl) pendingEnemyControllers_.push_back(std::move(ctrl));
 }
 
+bool BaseScene::IsDynamicEntityAlive(IImGuiEditable* e) const {
+	if (!e) return false;
+	for (const auto& p : dynamicPrimitives_) if (p.get() == e) return true;
+	for (const auto& o : object3DInstances_) if (o.get() == e) return true;
+	for (const auto& a : dynamicAnimated_)   if (a.get() == e) return true;
+	return false;
+}
+
 void BaseScene::DestroyDynamicEntity(IImGuiEditable* e) {
 	if (!e) return;
 

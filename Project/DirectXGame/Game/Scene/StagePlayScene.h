@@ -210,10 +210,25 @@ private:
 	int   healAmount_      = 20; // デフォルトHealの回復量（大）
 	int   healSmallAmount_ = 5;  // 左派生の小回復量
 
+	// 必殺技の種別（装備制：傲慢サンダー or ディスラプターの2択、片方のみ持込）。
+	// 本来は発動ボタン共通（R3/F=Ultimate）だが、デバッグでは別キーで両方試せるよう分離する。
+	enum class SpecialKind { GoumanThunder, Disruptor };
+	SpecialKind equippedSpecial_ = SpecialKind::GoumanThunder; // 現在装備中の必殺技
+
 	// 必殺技ゲージ（UI 未実装。ゲージ本体だけ先に持つ）
 	float specialGauge_         = 0.0f;   // 現在値（0..specialGaugeMax_）
-	float specialGaugeMax_      = 100.0f; // 上限
+	float specialGaugeMax_      = 100.0f; // 装備中種別の実効上限（種別切替でミラー更新）
+	float specialGaugeMaxGouman_    = 100.0f; // 傲慢サンダーのゲージ上限
+	float specialGaugeMaxDisruptor_ = 120.0f; // ディスラプターのゲージ上限
 	float dodgeSpecialGaugeGain_ = 8.0f;  // 追加回避1回ぶんの加算量
+
+	// クールタイム（両必殺技共通）。発動終了でタイマー開始、>0 の間は再発動不可。
+	float specialCooldown_      = 30.0f;  // クールタイム長（秒）
+	float specialCooldownTimer_ = 0.0f;   // クールタイム残り（秒、ランタイム）
+
+	// 必殺技中の無敵フラグ（後隙では false にして被弾可能にする）。既定 true。
+	// 入力ロックは specialActive_ で別途継続するので、後隙=「入力不可だが無敵なし」を実現する。
+	bool specialInvincible_ = true;
 
 	// スコア
 	int   justDodgeScore_ = 200; // ジャスト回避 1 回の加点（調整可）
@@ -550,10 +565,68 @@ private:
 	float   specialBarrierEmitAccum_  = 0.0f;      // 内部バーストタイマ
 	bool    specialBarrierGroupReady_ = false;     // GPU パーティクルグループ生成済み
 
+	// ----- 必殺技「ディスラプター」（線・瞬間・最高単発火力型）-----
+	// 傲慢サンダー（SpecialPhase）とは別のフェーズ機で進む。Step 2 はタイマーのみ（ビジュアルなし）。
+	enum class DisruptorPhase {
+		Idle,
+		Charge,    // Phase1 チャージ(収束)：World スロー＋無敵＋プレイヤー中央＋カメラ引き
+		Slash,     // Phase2 一閃：World 停止
+		Collapse,  // Phase3 崩壊：World 停止
+		Recover,   // Phase4 復帰＋後隙：World 再開・無敵なし・入力不可
+	};
+	DisruptorPhase disruptorPhase_      = DisruptorPhase::Idle;
+	float          disruptorPhaseTimer_ = 0.0f;  // 現フェーズ経過秒（実時間）
+	// フェーズ長（秒、実時間）
+	float disruptorChargeDuration_   = 2.5f;  // Phase1 チャージ（狙う猶予。ImGui/JSONで調整可）
+	float disruptorSlashDuration_    = 0.3f;  // Phase2 一閃
+	float disruptorCollapseDuration_ = 0.8f;  // Phase3 崩壊
+	float disruptorRecoverDuration_  = 2.0f;  // Phase4 後隙（無敵なし・入力不可）
+	float disruptorChargeTimeScale_  = 0.0f;  // チャージ中の World 時間倍率（0=停止＝敵が固定で狙いやすい。>0でスロー）
+
+	// 照準（中央支点・1点置き・角度自由）。スクリーン空間、深度無視。
+	// 線は画面中央 (kClientWidth/2, kClientHeight/2) を支点に角度 θ だけで決まる。0=横一閃(水平)。
+	float disruptorAimAngle_     = 0.0f;   // 切断線の角度(rad)。チャージ中はレティクルへライブ追従
+	bool  disruptorAimConfirmed_ = false;  // 射撃ボタンで角度を確定したか
+	float disruptorLineWidthPx_  = 40.0f;  // (Step4) スクリーン空間の線への距離しきい値(px, 半幅)。可視化太さにも流用
+	int   disruptorBossDamage_   = 1000;   // (Step4) ボスへの固定ダメージ（+将来スタンゲージ削り）
+	Vector4 disruptorAimPreviewColor_{ 1.0f, 0.85f, 0.2f, 0.6f }; // 予測線（調整中）＝半透明の金
+	Vector4 disruptorAimConfirmColor_{ 0.6f, 0.4f, 1.0f, 1.0f };  // 確定線＝紫
+	float   disruptorPivotRadiusPx_  = 14.0f;                     // 中央支点マーカー（リング）の半径(px)
+	Vector4 disruptorPivotColor_{ 1.0f, 1.0f, 1.0f, 0.9f };       // 支点マーカー色（白）
+
+	// ディスラプターのカメラ演出。狙う Charge 中は動かさず（WYSIWYG）、一閃 Slash→崩壊 Collapse で
+	// 壮大に引く。切断線は一閃でワールド空間へ焼き付くので、引いても線と敵がズレない。
+	// disruptorCamBlend_ (0→1) でイーズ。傲慢の specialCam* とは別管理。
+	float disruptorCamPullback_ = 8.0f;   // forward 逆方向への後退量（Slash/Collapse 時）
+	float disruptorCamUpAdd_    = 1.5f;   // up 方向の持ち上げ
+	float disruptorCamFovAdd_   = 0.06f;  // FovY 加算
+	float disruptorCamEaseTime_ = 0.4f;   // 引き/戻しのイーズ時間（秒）
+	float disruptorCamBlend_    = 0.0f;   // ランタイム：カメラ演出の適用度（0=通常/1=全開）
+
+	// 一閃の瞬間に確定するワールド空間の切断線（カメラを引いても敵と一緒に世界に残る＝描いた通り）。
+	bool    disruptorCutWorldValid_ = false;
+	Vector3 disruptorCutWorldP1_{ 0.0f, 0.0f, 0.0f };
+	Vector3 disruptorCutWorldP2_{ 0.0f, 0.0f, 0.0f };
+	float   disruptorCutDepth_ = 40.0f;   // ヒット敵が無いときの焼き付け奥行き（敵があれば平均で上書き）
+
+	void EnterDisruptor();                       // TriggerSpecialMove(Disruptor) から：Charge へ
+	void UpdateDisruptorMove(class InputActionMap* actions, float realDt); // 専用フェーズ機の更新
+	void EnterDisruptorPhase(DisruptorPhase p);  // フェーズ遷移＋World時間/無敵の切替
+	float DisruptorAngleFromReticle() const;     // 画面中央→レティクルの角度(rad)
+	void  DrawDisruptorAimLine();                // 切断線を LineRenderer(3D) へ積む（スクリーン端まで）
+	void  ExecuteDisruptorSlash();               // 一閃：スクリーン空間の線上の敵/敵弾を断つ（貫通・物陰貫通）
+
 	void InitializeSpecialGaugeUI();
 	void UpdateSpecialGaugeUI();
 	void UpdateSpecialMove(class InputActionMap* actions, float dt);
-	void TriggerSpecialMove();
+	// 種別ごとのゲージ上限を返す
+	float SpecialGaugeMaxFor(SpecialKind k) const {
+		return (k == SpecialKind::Disruptor) ? specialGaugeMaxDisruptor_ : specialGaugeMaxGouman_;
+	}
+	void SetEquippedSpecial(SpecialKind k); // 装備切替＋specialGaugeMax_ ミラー更新＋ゲージクランプ
+	void TryTriggerSpecial(SpecialKind k);  // クールタイム/ゲージ条件を満たせば発動
+	void TriggerSpecialMove();              // 装備中種別を発動（無条件・ImGuiボタン/内部用）
+	void TriggerSpecialMove(SpecialKind k); // 種別を指定して発動（種別で分岐）
 	void EnterSpecialPhaseBarrier();
 	void UpdateSpecialPhaseBarrier(float worldDt);
 	void UpdateSpecialBarrier();   // バリア球のプレイヤー追従＋球内の敵弾消去（全フェーズ共通）

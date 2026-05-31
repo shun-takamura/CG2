@@ -66,6 +66,17 @@ public:
 	}
 
 	/// <summary>
+	/// シェイクを即座に停止しオフセットを消す（World 停止中などに UpdateShake が進まず
+	/// 揺れが固まるのを防ぐため、必殺技発動時などに明示的に呼ぶ）。
+	/// </summary>
+	void StopShake() {
+		shakeIntensity_ = 0.0f;
+		shakeDuration_ = 0.0f;
+		shakeElapsed_ = 0.0f;
+		shakeOffset_ = { 0.0f, 0.0f, 0.0f };
+	}
+
+	/// <summary>
 	/// シェイクのオフセット計算を deltaTime 進める。
 	/// シーン側から Update() より前に呼ぶ。
 	/// </summary>
