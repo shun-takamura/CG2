@@ -11,11 +11,11 @@
       "offset": [
         0.30000001192092896,
         0.69999998807907104,
-        0
+        -0.5
       ],
       "startTime": 0,
       "duration": 0.30000001192092896,
-      "burstCount": 64,
+      "burstCount": 16,
       "billboardMode": "Full",
       "colorMode": 1,
       "startColor": [
@@ -40,15 +40,30 @@
       ],
       "uniformScale": true,
       "emitRadius": 0.20000000298023224,
-      "particleLifeTime": 1,
+      "particleLifeTime": 2,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
       "velocityMode": 1,
       "velocityDir": [
         1,
         0.60000002384185791,
-        -0.80000001192092896
+        -1
       ],
-      "velocitySpeed": 1,
-      "velocityJitter": 0.40000000596046448,
+      "velocitySpeed": 0.30000001192092896,
+      "velocityJitter": 0.10000000149011612,
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
       "colorKeys": [
         {
           "location": 0.40000000596046448,
@@ -68,11 +83,11 @@
       "offset": [
         0.30000001192092896,
         0.34999999403953552,
-        0
+        -0.5
       ],
       "startTime": 0,
       "duration": 0.30000001192092896,
-      "burstCount": 64,
+      "burstCount": 16,
       "billboardMode": "Full",
       "colorMode": 1,
       "startColor": [
@@ -97,15 +112,30 @@
       ],
       "uniformScale": true,
       "emitRadius": 0.20000000298023224,
-      "particleLifeTime": 1,
+      "particleLifeTime": 2,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
       "velocityMode": 1,
       "velocityDir": [
         1,
         -0.60000002384185791,
-        -0.80000001192092896
+        -1
       ],
-      "velocitySpeed": 1,
-      "velocityJitter": 0.40000000596046448,
+      "velocitySpeed": 0.30000001192092896,
+      "velocityJitter": 0.10000000149011612,
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
       "colorKeys": [
         {
           "location": 0.40000000596046448,
@@ -125,11 +155,11 @@
       "offset": [
         -0.30000001192092896,
         0.69999998807907104,
-        0
+        -0.5
       ],
       "startTime": 0,
       "duration": 0.30000001192092896,
-      "burstCount": 64,
+      "burstCount": 16,
       "billboardMode": "Full",
       "colorMode": 1,
       "startColor": [
@@ -154,15 +184,30 @@
       ],
       "uniformScale": true,
       "emitRadius": 0.20000000298023224,
-      "particleLifeTime": 1,
+      "particleLifeTime": 2,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
       "velocityMode": 1,
       "velocityDir": [
         -1,
         0.60000002384185791,
-        -0.80000001192092896
+        -1
       ],
-      "velocitySpeed": 1,
-      "velocityJitter": 0.40000000596046448,
+      "velocitySpeed": 0.30000001192092896,
+      "velocityJitter": 0.10000000149011612,
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
       "colorKeys": [
         {
           "location": 0.40000000596046448,
@@ -182,11 +227,11 @@
       "offset": [
         -0.30000001192092896,
         0.34999999403953552,
-        0
+        -0.5
       ],
       "startTime": 0,
       "duration": 0.30000001192092896,
-      "burstCount": 64,
+      "burstCount": 16,
       "billboardMode": "Full",
       "colorMode": 1,
       "startColor": [
@@ -211,15 +256,30 @@
       ],
       "uniformScale": true,
       "emitRadius": 0.20000000298023224,
-      "particleLifeTime": 1,
+      "particleLifeTime": 2,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
       "velocityMode": 1,
       "velocityDir": [
         -1,
         -0.60000002384185791,
-        -0.80000001192092896
+        -1
       ],
-      "velocitySpeed": 1,
-      "velocityJitter": 0.40000000596046448,
+      "velocitySpeed": 0.30000001192092896,
+      "velocityJitter": 0.10000000149011612,
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
       "colorKeys": [
         {
           "location": 0.40000000596046448,

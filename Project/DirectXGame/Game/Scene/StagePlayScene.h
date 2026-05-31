@@ -521,6 +521,11 @@ private:
 	// 0 以下なら player の Collider.offset.y（プレハブの足元→カプセル中心）を自動採用。
 	float specialPlayerCenterOffset_ = 0.0f;
 
+	// バリア本体エフェクト（エフェクトエディタ製）。名前が空でなく登録済みなら、これを再生して追従。
+	// 再生中はワイヤーフレーム球は描画しない（空 or 未登録ならワイヤー球にフォールバック）。
+	std::string  specialBarrierEffectName_   = "Barrier";
+	EffectHandle specialBarrierEffectHandle_ = kInvalidEffectHandle;
+
 	// バリアの回転ワイヤーフレーム球（LineRenderer で経線・緯線を描画）。当たり判定の正確な範囲を可視化。
 	bool    specialBarrierWireframeOn_     = true;
 	Vector3 specialBarrierWireSpin_{ 0.0f, 0.0f, 0.0f };           // 各軸の累積回転角（rad、内部状態）

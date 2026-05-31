@@ -43,8 +43,8 @@
       "particleLifeTime": 1,
       "emitShape": 1,
       "ringNormal": [
-        0,
-        1,
+        0.30000001192092896,
+        0.5,
         0
       ],
       "ringThickness": 0.075000002980232239,
@@ -117,7 +117,7 @@
       "ringNormal": [
         0.5,
         0,
-        0
+        0.30000001192092896
       ],
       "ringThickness": 0.075000002980232239,
       "velocityMode": 3,
@@ -188,7 +188,7 @@
       "emitShape": 1,
       "ringNormal": [
         0,
-        0,
+        0.30000001192092896,
         0.5
       ],
       "ringThickness": 0.075000002980232239,
