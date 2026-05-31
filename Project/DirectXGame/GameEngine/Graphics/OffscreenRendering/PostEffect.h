@@ -20,6 +20,7 @@
 #include "OutlineNormalEffect.h"
 #include "MaskedGrayscaleEffect.h"
 #include "ColorInvertEffect.h"
+#include "DisruptorRevealEffect.h"
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
 #include "Matrix4x4.h"
@@ -138,6 +139,7 @@ public:
 	OutlineNormalEffect* outlineNormal = nullptr;
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
+	DisruptorRevealEffect* disruptorReveal = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;
 	DistortionEffect* distortion = nullptr;
 
