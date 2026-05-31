@@ -1,0 +1,226 @@
+{
+  "name": "Barrier",
+  "totalDuration": 0.10000000149011612,
+  "loop": true,
+  "primitives": [],
+  "particles": [
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "Barrier_2",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 32,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        1,
+        0.5,
+        0,
+        1
+      ],
+      "endColor": [
+        0.76862746477127075,
+        0.25098040699958801,
+        1,
+        0.58823531866073608
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 2,
+      "particleLifeTime": 1,
+      "emitShape": 1,
+      "ringNormal": [
+        0.30000001192092896,
+        0.5,
+        0
+      ],
+      "ringThickness": 0.075000002980232239,
+      "velocityMode": 3,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 0.5,
+      "velocityJitter": 1,
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 0.5,
+      "orbitTumbleSpeed": 0.15000000596046448,
+      "orbitTumbleAxis": [
+        1,
+        0.5,
+        0.30000001192092896
+      ],
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.50098037719726562,
+            0,
+            0.79411768913269043
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "Barrier_2_2",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 32,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        1,
+        0.5,
+        0,
+        1
+      ],
+      "endColor": [
+        0.76862746477127075,
+        0.25098040699958801,
+        1,
+        0.58823531866073608
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 2,
+      "particleLifeTime": 1,
+      "emitShape": 1,
+      "ringNormal": [
+        0.5,
+        0,
+        0.30000001192092896
+      ],
+      "ringThickness": 0.075000002980232239,
+      "velocityMode": 3,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 0.5,
+      "velocityJitter": 1,
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 0.5,
+      "orbitTumbleSpeed": 0.15000000596046448,
+      "orbitTumbleAxis": [
+        0.30000001192092896,
+        1,
+        0.5
+      ],
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.50098037719726562,
+            0,
+            0.79411768913269043
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "Barrier_2_2_2",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 32,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        1,
+        0.5,
+        0,
+        1
+      ],
+      "endColor": [
+        0.76862746477127075,
+        0.25098040699958801,
+        1,
+        0.58823531866073608
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "uniformScale": true,
+      "emitRadius": 2,
+      "particleLifeTime": 1,
+      "emitShape": 1,
+      "ringNormal": [
+        0,
+        0.30000001192092896,
+        0.5
+      ],
+      "ringThickness": 0.075000002980232239,
+      "velocityMode": 3,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 0.5,
+      "velocityJitter": 1,
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 0.5,
+      "orbitTumbleSpeed": 0.15000000596046448,
+      "orbitTumbleAxis": [
+        0.5,
+        0.30000001192092896,
+        1
+      ],
+      "colorKeys": [
+        {
+          "location": 0.40000000596046448,
+          "color": [
+            1,
+            0.50098037719726562,
+            0,
+            0.79411768913269043
+          ]
+        }
+      ]
+    }
+  ],
+  "lights": [],
+  "sounds": []
+}

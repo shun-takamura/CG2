@@ -423,14 +423,22 @@ void EffectComponentEditable::OnImGuiInspector() {
 
         // ===== Emit / Lifetime =====
         ImGui::Separator();
+        const char* shapeNames[] = { "Sphere (球)", "Ring (円周)" };
+        dirty |= ImGui::Combo("Emit Shape", &c.emitShape, shapeNames, IM_ARRAYSIZE(shapeNames));
+        if (c.emitShape == 1) {
+            dirty |= ImGui::DragFloat3("Ring Normal", &c.ringNormal.x, 0.01f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("リング平面の法線（向き）。例: (0,0,1)=画面に正対 / (0,1,0)=水平");
+            dirty |= ImGui::DragFloat("Ring Thickness", &c.ringThickness, 0.005f, 0.0f, 10.0f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("円周まわりの散らばり（太さ）");
+        }
         dirty |= ImGui::DragFloat("Emit Radius", &c.emitRadius, 0.01f, 0.0f, 100.0f);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("発生位置の散らばり半径");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("発生位置の散らばり半径（Ring では円の半径）");
         dirty |= ImGui::DragFloat("Particle Life (s)", &c.particleLifeTime, 0.01f, 0.0001f, 60.0f);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("各粒子の寿命（Effect の totalDuration を超えない範囲でクランプ）");
 
         // ===== Velocity =====
         ImGui::Separator();
-        const char* velModeNames[] = { "Random (全方向)", "Directional (方向固定)", "Radial (放射/外向き)" };
+        const char* velModeNames[] = { "Random (全方向)", "Directional (方向固定)", "Radial (放射/外向き)", "Tangential (接線/公転)" };
         dirty |= ImGui::Combo("Velocity Mode", &c.velocityMode, velModeNames, IM_ARRAYSIZE(velModeNames));
         if (c.velocityMode == 1) {
             dirty |= ImGui::DragFloat3("Velocity Dir", &c.velocityDir.x, 0.01f);
@@ -440,8 +448,25 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty |= ImGui::DragFloat("Velocity Speed (放射)", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
             dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
             ImGui::TextDisabled("(中心から外向きに噴出。Emit Radius は小さめ推奨)");
+        } else if (c.velocityMode == 3) {
+            dirty |= ImGui::DragFloat("Velocity Speed (公転)", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
+            dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
+            dirty |= ImGui::DragFloat3("Ring Normal (軸)", &c.ringNormal.x, 0.01f);
+            ImGui::TextDisabled("(Ring Normal 軸まわりに公転。Emit Shape=Ring と併用で「流れるリング」)");
         } else {
             ImGui::TextDisabled("(Random: 従来の全方向ランダム初速)");
+        }
+
+        // ===== Orbit（周回）=====
+        ImGui::Separator();
+        dirty |= ImGui::Checkbox("Orbit (周回/外に出ない)", &c.orbitEnabled);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("ON で粒子を中心まわりに回し続ける（初速で飛ばさず一定半径）。\nSpin=帯上を流れる / Tumble=帯自体が回る。両方を粒子が受ける。");
+        if (c.orbitEnabled) {
+            dirty |= ImGui::DragFloat("Spin Speed (帯上を流れる)", &c.orbitSpinSpeed, 0.05f, -50.0f, 50.0f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Ring Normal 軸まわりにリング上を流れる速度");
+            dirty |= ImGui::DragFloat("Tumble Speed (帯自体の回転)", &c.orbitTumbleSpeed, 0.05f, -50.0f, 50.0f);
+            dirty |= ImGui::DragFloat3("Tumble Axis", &c.orbitTumbleAxis.x, 0.01f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("帯（リング平面）自体を回す軸。Ring Normal と直交させると首を振る");
         }
     }
     else if (kind_ == Kind::Light) {

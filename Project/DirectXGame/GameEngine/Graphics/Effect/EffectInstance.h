@@ -84,6 +84,7 @@ private:
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 worldRotation_ = { 0.0f, 0.0f, 0.0f }; // エフェクト全体の向き（オイラー角・ラジアン）
     float elapsedTime_ = 0.0f;
+    float orbitClock_ = 0.0f; // ループでリセットしない累積時間（orbit の発生平面回転を粒子と同期させる用）
     bool finished_ = false;
     bool stopRequested_ = false;
     uint64_t handle_ = 0;

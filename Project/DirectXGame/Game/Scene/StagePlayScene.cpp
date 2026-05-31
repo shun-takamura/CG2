@@ -217,6 +217,7 @@ void StagePlayScene::LoadTuningFromJson() {
 		specialBarrierRadius_   = static_cast<float>(sg["barrierRadius"].AsDouble(specialBarrierRadius_));
 		specialBarrierDuration_ = static_cast<float>(sg["barrierDuration"].AsDouble(specialBarrierDuration_));
 		specialBarrierFillOn_   = sg["barrierFill"].AsBool(specialBarrierFillOn_);
+		if (sg["barrierEffect"].IsString()) specialBarrierEffectName_ = sg["barrierEffect"].AsString();
 		specialPlayerCenterOffset_ = static_cast<float>(sg["centerOffset"].AsDouble(specialPlayerCenterOffset_));
 		// バリアのワイヤーフレーム球
 		const JsonValue& wf = sg["barrierWire"];
@@ -569,6 +570,7 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["barrierRadius"]   = static_cast<double>(specialBarrierRadius_);
 	sgObj["barrierDuration"] = static_cast<double>(specialBarrierDuration_);
 	sgObj["barrierFill"]     = JsonValue(specialBarrierFillOn_);
+	sgObj["barrierEffect"]   = specialBarrierEffectName_;
 	sgObj["centerOffset"]    = static_cast<double>(specialPlayerCenterOffset_);
 	{
 		JsonValue wfObj = JsonValue::MakeObject();
@@ -1858,7 +1860,16 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Center Offset Up (0=auto)", &specialPlayerCenterOffset_, 0.02f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("バリア球・電撃の中心を up 方向へ持ち上げる量。\n0 で player Collider.offset.y（足元→体の中心）を自動採用");
-		ImGui::Checkbox("Wireframe Sphere", &specialBarrierWireframeOn_);
+		{
+			char effBuf[128];
+			std::snprintf(effBuf, sizeof(effBuf), "%s", specialBarrierEffectName_.c_str());
+			if (ImGui::InputText("Barrier Effect (名前)", effBuf, sizeof(effBuf))) {
+				specialBarrierEffectName_ = effBuf;
+				changed = true;
+			}
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("エフェクトエディタ製エフェクト名（例: Barrier）。\n空 or 未登録だと下のワイヤー球にフォールバック");
+		}
+		ImGui::Checkbox("Wireframe Sphere (fallback)", &specialBarrierWireframeOn_);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat3("  Wire Spin Speed XYZ (rad/s)", &specialBarrierWireSpinSpeed_.x, 0.05f, -10.0f, 10.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
@@ -2260,6 +2271,10 @@ void StagePlayScene::Finalize() {
 	//   解放すると D3D12 OBJECT_DELETED_WHILE_STILL_IN_USE になる）
 	if (dxCore_) {
 		dxCore_->WaitForGpu();
+	}
+	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
+		if (auto* em = EffectManager::GetInstance()) em->Stop(specialBarrierEffectHandle_);
+		specialBarrierEffectHandle_ = kInvalidEffectHandle;
 	}
 	specialTrash_.clear();
 	specialBarrierVis_.reset();
@@ -4017,6 +4032,14 @@ void StagePlayScene::EnterSpecialPhaseBarrier() {
 	}
 	specialBarrierEmitAccum_ = 0.0f;
 	specialBarrierWireSpin_  = { 0.0f, 0.0f, 0.0f };
+
+	// バリア本体エフェクト（エディタ製 "Barrier" 等）を再生。登録済みならワイヤー球の代わりにこれを使う。
+	specialBarrierEffectHandle_ = kInvalidEffectHandle;
+	if (auto* em = EffectManager::GetInstance()) {
+		if (!specialBarrierEffectName_.empty() && em->HasDef(specialBarrierEffectName_)) {
+			specialBarrierEffectHandle_ = em->Play(specialBarrierEffectName_, SpecialPlayerCenter());
+		}
+	}
 }
 
 void StagePlayScene::UpdateSpecialBarrier() {
@@ -4050,12 +4073,20 @@ void StagePlayScene::UpdateSpecialBarrier() {
 	// 実時間 dt（時間停止中もバリア演出は等速で進める）
 	const float rdt = dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
 
-	// 回転ワイヤーフレーム球（バリアの正確な範囲を可視化）。X/Y/Z 3軸で回す。
-	specialBarrierWireSpin_.x += specialBarrierWireSpinSpeed_.x * rdt;
-	specialBarrierWireSpin_.y += specialBarrierWireSpinSpeed_.y * rdt;
-	specialBarrierWireSpin_.z += specialBarrierWireSpinSpeed_.z * rdt;
-	if (specialBarrierWireframeOn_) {
-		DrawSpecialBarrierWireframe(playerPos);
+	// バリア本体エフェクト再生中：プレイヤー中心へ追従。ワイヤー球は出さない。
+	const bool barrierEffectActive = (specialBarrierEffectHandle_ != kInvalidEffectHandle);
+	if (barrierEffectActive) {
+		if (auto* em = EffectManager::GetInstance()) {
+			em->SetPosition(specialBarrierEffectHandle_, playerPos);
+		}
+	} else {
+		// フォールバック：回転ワイヤーフレーム球（X/Y/Z 3軸で回す）
+		specialBarrierWireSpin_.x += specialBarrierWireSpinSpeed_.x * rdt;
+		specialBarrierWireSpin_.y += specialBarrierWireSpinSpeed_.y * rdt;
+		specialBarrierWireSpin_.z += specialBarrierWireSpinSpeed_.z * rdt;
+		if (specialBarrierWireframeOn_) {
+			DrawSpecialBarrierWireframe(playerPos);
+		}
 	}
 
 	// バリアのパーティクル：球面内に連続バースト（実時間で進めるので時間停止中もシマー）
@@ -4865,6 +4896,12 @@ void StagePlayScene::EndSpecialMove() {
 	specialPhase2Timer_       = 0.0f;
 	specialAllLockonComplete_ = false;
 	specialChargeStartTime_   = 0.0f;
+
+	// バリア本体エフェクトを停止
+	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
+		if (auto* em = EffectManager::GetInstance()) em->Stop(specialBarrierEffectHandle_);
+		specialBarrierEffectHandle_ = kInvalidEffectHandle;
+	}
 
 	// ワールド時間を通常に戻す
 	SetTimeScale(TimeGroup::World, 1.0f);

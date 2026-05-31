@@ -219,11 +219,19 @@ namespace {
         // 発生
         c.emitRadius       = AsFloat(o["emitRadius"], c.emitRadius);
         c.particleLifeTime = AsFloat(o["particleLifeTime"], c.particleLifeTime);
+        c.emitShape        = AsInt(o["emitShape"], c.emitShape);
+        c.ringNormal       = AsVec3(o["ringNormal"], c.ringNormal);
+        c.ringThickness    = AsFloat(o["ringThickness"], c.ringThickness);
         // 初速制御
         c.velocityMode   = AsInt(o["velocityMode"], c.velocityMode);
         c.velocityDir    = AsVec3(o["velocityDir"], c.velocityDir);
         c.velocitySpeed  = AsFloat(o["velocitySpeed"], c.velocitySpeed);
         c.velocityJitter = AsFloat(o["velocityJitter"], c.velocityJitter);
+        // 周回（orbit）
+        if (o["orbitEnabled"].IsBool()) c.orbitEnabled = o["orbitEnabled"].AsBool(c.orbitEnabled);
+        c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
+        c.orbitTumbleSpeed = AsFloat(o["orbitTumbleSpeed"], c.orbitTumbleSpeed);
+        c.orbitTumbleAxis  = AsVec3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
         // 多色グラデーションキー
         c.colorKeys.clear();
         const JsonValue& ck = o["colorKeys"];
@@ -516,10 +524,17 @@ namespace EffectDefIO {
             o["uniformScale"] = c.uniformScale;
             o["emitRadius"]       = static_cast<double>(c.emitRadius);
             o["particleLifeTime"] = static_cast<double>(c.particleLifeTime);
+            o["emitShape"]        = static_cast<int64_t>(c.emitShape);
+            o["ringNormal"]       = Vec3ToJson(c.ringNormal);
+            o["ringThickness"]    = static_cast<double>(c.ringThickness);
             o["velocityMode"]   = static_cast<int64_t>(c.velocityMode);
             o["velocityDir"]    = Vec3ToJson(c.velocityDir);
             o["velocitySpeed"]  = static_cast<double>(c.velocitySpeed);
             o["velocityJitter"] = static_cast<double>(c.velocityJitter);
+            o["orbitEnabled"]     = c.orbitEnabled;
+            o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
+            o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
+            o["orbitTumbleAxis"]  = Vec3ToJson(c.orbitTumbleAxis);
             {
                 JsonValue ckArr = JsonValue::MakeArray();
                 for (const auto& k : c.colorKeys) {
