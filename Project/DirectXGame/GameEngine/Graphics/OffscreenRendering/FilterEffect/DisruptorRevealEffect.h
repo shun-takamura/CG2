@@ -29,7 +29,6 @@ public:
 		lineP0_[0] = p0x; lineP0_[1] = p0y; lineP1_[0] = p1x; lineP1_[1] = p1y;
 	}
 	void SetRevealT(float t) { revealT_ = t; }
-	void SetEdgeSoftness(float s) { edgeSoftness_ = s; }
 	void SetIntensity(float v) { intensity_ = v; }
 	void SetAspect(float a) { aspect_ = a; }
 
@@ -39,15 +38,14 @@ private:
 		float lineP0[2]{ 0.5f, 0.5f };
 		float lineP1[2]{ 1.0f, 0.5f };
 		float revealT = 0.0f;
-		float edgeSoftness = 0.03f;
 		float intensity = 1.0f;
 		float aspect = 16.0f / 9.0f;
+		float _pad = 0.0f;
 	};
 
 	float lineP0_[2]{ 0.5f, 0.5f };
 	float lineP1_[2]{ 1.0f, 0.5f };
 	float revealT_ = 0.0f;
-	float edgeSoftness_ = 0.03f;
 	float intensity_ = 1.0f;
 	float aspect_ = 16.0f / 9.0f;
 };

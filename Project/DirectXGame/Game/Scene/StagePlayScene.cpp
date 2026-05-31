@@ -249,7 +249,6 @@ void StagePlayScene::LoadTuningFromJson() {
 		disruptorRiftWidthScale_ = static_cast<float>(sg["disruptorRiftWidthScale"].AsDouble(disruptorRiftWidthScale_));
 		disruptorRiftRevealTime_ = static_cast<float>(sg["disruptorRiftRevealTime"].AsDouble(disruptorRiftRevealTime_));
 		disruptorRevealIntensity_    = static_cast<float>(sg["disruptorRevealIntensity"].AsDouble(disruptorRevealIntensity_));
-		disruptorRevealEdgeSoftness_ = static_cast<float>(sg["disruptorRevealEdgeSoftness"].AsDouble(disruptorRevealEdgeSoftness_));
 		disruptorRevealStartDelay_   = static_cast<float>(sg["disruptorRevealStartDelay"].AsDouble(disruptorRevealStartDelay_));
 		{
 			const JsonValue& bd = sg["disruptorBeamDir"];
@@ -784,7 +783,6 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["disruptorRiftWidthScale"] = static_cast<double>(disruptorRiftWidthScale_);
 	sgObj["disruptorRiftRevealTime"] = static_cast<double>(disruptorRiftRevealTime_);
 	sgObj["disruptorRevealIntensity"]    = static_cast<double>(disruptorRevealIntensity_);
-	sgObj["disruptorRevealEdgeSoftness"] = static_cast<double>(disruptorRevealEdgeSoftness_);
 	sgObj["disruptorRevealStartDelay"]   = static_cast<double>(disruptorRevealStartDelay_);
 	{
 		JsonValue arr = JsonValue::MakeArray();
@@ -2062,8 +2060,6 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Reveal Start Delay (s)", &disruptorRevealStartDelay_, 0.01f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Reveal Intensity", &disruptorRevealIntensity_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Reveal Edge Softness", &disruptorRevealEdgeSoftness_, 0.005f, 0.0f, 0.3f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		{
 			const char* dPhase = "Idle";
@@ -4846,7 +4842,6 @@ void StagePlayScene::UpdateDisruptorReveal() {
 
 	rev->SetEnabled(true);
 	rev->SetIntensity(disruptorRevealIntensity_);
-	rev->SetEdgeSoftness(disruptorRevealEdgeSoftness_);
 
 	const float w = static_cast<float>(WindowsApplication::kClientWidth);
 	const float h = static_cast<float>(WindowsApplication::kClientHeight);

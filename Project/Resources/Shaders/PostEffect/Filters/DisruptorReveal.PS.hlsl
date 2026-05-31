@@ -18,12 +18,12 @@ SamplerState gSampler : register(s0);
 
 cbuffer DisruptorRevealParams : register(b0)
 {
-    float2 lineP0;       // 断裂線端点0（UV, 0..1）
-    float2 lineP1;       // 断裂線端点1（UV, 0..1）
-    float  revealT;      // リビール進捗 0..1（0=全画面反転 / 1=全画面通常）
-    float  edgeSoftness; // 境界のソフト幅（アスペクト補正後 UV、破片帯の置き場）
-    float  intensity;    // 反転の強さ（1=完全反転）
-    float  aspect;       // width/height（UV の縦横比補正）
+    float2 lineP0;    // 断裂線端点0（UV, 0..1）
+    float2 lineP1;    // 断裂線端点1（UV, 0..1）
+    float  revealT;   // リビール進捗 0..1（0=全画面反転 / 1=全画面通常）
+    float  intensity; // 反転の強さ（1=完全反転）
+    float  aspect;    // width/height（UV の縦横比補正）
+    float  _pad;
 };
 
 PixelShaderOutput main(VertexShaderOutput input)
@@ -49,8 +49,9 @@ PixelShaderOutput main(VertexShaderOutput input)
     float maxDist = sqrt(aspect * aspect + 1.0f) * 1.1f;
     float halfW = revealT * maxDist;
 
-    // shell=0: 通常色（剥がれた） / shell=1: 反転色（殻が残る）。境界で edgeSoftness 幅にソフト遷移
-    float shell = smoothstep(halfW - edgeSoftness, halfW + edgeSoftness, dist);
+    // shell=0: 通常色（剥がれた） / shell=1: 反転色（殻が残る）。境界はパリッと 0/1。
+    // 破片は反転世界側を反転色で別途描くので、ここに中間（ソフト）帯は設けない。
+    float shell = step(halfW, dist);
 
     float3 inverted = 1.0f - color.rgb;
     float3 shellColor = lerp(color.rgb, inverted, intensity);

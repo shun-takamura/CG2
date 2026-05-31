@@ -673,7 +673,6 @@ private:
 	// 断裂線の領域マスクで反転（殻）／通常（剥がれた下の世界）に出し分けるだけで2層リビールが成立する。
 	// Slash=全画面反転(revealT=0) → Collapse で線から上下へ通常色が伝播(revealT 0→1) → Recover で OFF。
 	float disruptorRevealIntensity_    = 1.0f;   // 反転の強さ（1=完全反転）
-	float disruptorRevealEdgeSoftness_ = 0.04f;  // 境界のソフト幅（破片帯の置き場。アスペクト補正UV）
 	// Collapse 入りからこの秒数は revealT=0（全画面反転＝断裂線が走り切るまで殻のまま）。
 	// 以後 [delay, disruptorCollapseDuration_] 区間で revealT 0→1（ゆっくり剥がれて下の通常色が戻る）。
 	float disruptorRevealStartDelay_   = 0.45f;

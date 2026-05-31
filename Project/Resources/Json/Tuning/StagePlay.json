@@ -246,7 +246,6 @@
     "disruptorRiftWidthScale": 1,
     "disruptorRiftRevealTime": 0.44999998807907104,
     "disruptorRevealIntensity": 1,
-    "disruptorRevealEdgeSoftness": 0.039999999105930328,
     "disruptorRevealStartDelay": 0.44999998807907104,
     "disruptorBeamDir": [
       0,
