@@ -222,6 +222,12 @@ public:
 	void ApplyEnemyRepulsion(IImGuiEditable* self);
 
 	/// <summary>
+	/// 指定ポインタが現在の動的エンティティ群（primitive / object3D / animated）に生存しているか。
+	/// 解放済みポインタ（dangling）の参照前チェックに使う（例：ドローンが親キャリアの生存確認）。
+	/// </summary>
+	bool IsDynamicEntityAlive(IImGuiEditable* e) const;
+
+	/// <summary>
 	/// EnemyController を BaseScene に登録する（コマンドからのランタイム追加用）。
 	/// </summary>
 	void RegisterEnemyController(std::unique_ptr<class EnemyController> ctrl);

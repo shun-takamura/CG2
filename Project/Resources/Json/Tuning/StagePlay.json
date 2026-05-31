@@ -93,12 +93,21 @@
     "maxBoss": 5
   },
   "special": {
-    "max": 100,
+    "gaugeMaxGouman": 100,
+    "gaugeMaxDisruptor": 120,
+    "cooldown": 30,
+    "equipped": 1,
+    "disruptorCharge": 2.5,
+    "disruptorSlash": 0.30000001192092896,
+    "disruptorCollapse": 0.80000001192092896,
+    "disruptorRecover": 2,
+    "disruptorChargeTimeScale": 0.0,
     "dodgeGain": 8,
     "duration": 5,
     "barrierRadius": 2,
     "barrierDuration": 3,
     "barrierFill": false,
+    "barrierEffect": "Barrier",
     "centerOffset": 0,
     "barrierWire": {
       "on": true,

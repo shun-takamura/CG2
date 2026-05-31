@@ -210,7 +210,28 @@ void StagePlayScene::LoadTuningFromJson() {
 	// ----- special gauge -----
 	const JsonValue& sg = root["special"];
 	if (sg.IsObject()) {
-		specialGaugeMax_       = static_cast<float>(sg["max"].AsDouble(specialGaugeMax_));
+		// 旧 "max" は傲慢サンダーの上限フォールバックとして読む（後方互換）
+		specialGaugeMaxGouman_    = static_cast<float>(sg["gaugeMaxGouman"].AsDouble(sg["max"].AsDouble(specialGaugeMaxGouman_)));
+		specialGaugeMaxDisruptor_ = static_cast<float>(sg["gaugeMaxDisruptor"].AsDouble(specialGaugeMaxDisruptor_));
+		specialCooldown_          = static_cast<float>(sg["cooldown"].AsDouble(specialCooldown_));
+		equippedSpecial_          = (sg["equipped"].AsInt(static_cast<int64_t>(equippedSpecial_)) == 1)
+			? SpecialKind::Disruptor : SpecialKind::GoumanThunder;
+		// 装備中種別の実効上限をミラー
+		specialGaugeMax_       = SpecialGaugeMaxFor(equippedSpecial_);
+		// ディスラプターのフェーズ長
+		disruptorChargeDuration_   = static_cast<float>(sg["disruptorCharge"].AsDouble(disruptorChargeDuration_));
+		disruptorSlashDuration_    = static_cast<float>(sg["disruptorSlash"].AsDouble(disruptorSlashDuration_));
+		disruptorCollapseDuration_ = static_cast<float>(sg["disruptorCollapse"].AsDouble(disruptorCollapseDuration_));
+		disruptorRecoverDuration_  = static_cast<float>(sg["disruptorRecover"].AsDouble(disruptorRecoverDuration_));
+		disruptorChargeTimeScale_  = static_cast<float>(sg["disruptorChargeTimeScale"].AsDouble(disruptorChargeTimeScale_));
+		disruptorLineWidthPx_      = static_cast<float>(sg["disruptorLineWidth"].AsDouble(disruptorLineWidthPx_));
+		disruptorBossDamage_       = static_cast<int>(sg["disruptorBossDamage"].AsInt(static_cast<int64_t>(disruptorBossDamage_)));
+		disruptorPivotRadiusPx_    = static_cast<float>(sg["disruptorPivotRadius"].AsDouble(disruptorPivotRadiusPx_));
+		disruptorCamPullback_      = static_cast<float>(sg["disruptorCamPullback"].AsDouble(disruptorCamPullback_));
+		disruptorCamUpAdd_         = static_cast<float>(sg["disruptorCamUpAdd"].AsDouble(disruptorCamUpAdd_));
+		disruptorCamFovAdd_        = static_cast<float>(sg["disruptorCamFovAdd"].AsDouble(disruptorCamFovAdd_));
+		disruptorCamEaseTime_      = static_cast<float>(sg["disruptorCamEaseTime"].AsDouble(disruptorCamEaseTime_));
+		disruptorCutDepth_         = static_cast<float>(sg["disruptorCutDepth"].AsDouble(disruptorCutDepth_));
 		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
 		specialDuration_       = static_cast<float>(sg["duration"].AsDouble(specialDuration_));
 		// Phase 1
@@ -564,7 +585,23 @@ void StagePlayScene::SaveTuningToJson() const {
 	root["heal"] = std::move(healObj);
 
 	JsonValue sgObj = JsonValue::MakeObject();
-	sgObj["max"]       = static_cast<double>(specialGaugeMax_);
+	sgObj["gaugeMaxGouman"]    = static_cast<double>(specialGaugeMaxGouman_);
+	sgObj["gaugeMaxDisruptor"] = static_cast<double>(specialGaugeMaxDisruptor_);
+	sgObj["cooldown"]          = static_cast<double>(specialCooldown_);
+	sgObj["equipped"]          = static_cast<int64_t>(equippedSpecial_);
+	sgObj["disruptorCharge"]         = static_cast<double>(disruptorChargeDuration_);
+	sgObj["disruptorSlash"]          = static_cast<double>(disruptorSlashDuration_);
+	sgObj["disruptorCollapse"]       = static_cast<double>(disruptorCollapseDuration_);
+	sgObj["disruptorRecover"]        = static_cast<double>(disruptorRecoverDuration_);
+	sgObj["disruptorChargeTimeScale"] = static_cast<double>(disruptorChargeTimeScale_);
+	sgObj["disruptorLineWidth"]       = static_cast<double>(disruptorLineWidthPx_);
+	sgObj["disruptorBossDamage"]      = static_cast<int64_t>(disruptorBossDamage_);
+	sgObj["disruptorPivotRadius"]     = static_cast<double>(disruptorPivotRadiusPx_);
+	sgObj["disruptorCamPullback"]     = static_cast<double>(disruptorCamPullback_);
+	sgObj["disruptorCamUpAdd"]        = static_cast<double>(disruptorCamUpAdd_);
+	sgObj["disruptorCamFovAdd"]       = static_cast<double>(disruptorCamFovAdd_);
+	sgObj["disruptorCamEaseTime"]     = static_cast<double>(disruptorCamEaseTime_);
+	sgObj["disruptorCutDepth"]        = static_cast<double>(disruptorCutDepth_);
 	sgObj["dodgeGain"] = static_cast<double>(dodgeSpecialGaugeGain_);
 	sgObj["duration"]  = static_cast<double>(specialDuration_);
 	sgObj["barrierRadius"]   = static_cast<double>(specialBarrierRadius_);
@@ -1827,9 +1864,28 @@ void StagePlayScene::OnImGuiTuning() {
 			static_cast<int>(jdActionPhase_), jdReturnOffset_.x, jdReturnOffset_.y, jdDodgeReturning_ ? 1 : 0);
 
 		ImGui::Separator();
-		ImGui::TextUnformatted("必殺技（傲慢サンダー）");
-		ImGui::DragFloat("Special Gauge Max",   &specialGaugeMax_,      1.0f, 1.0f, 1000.0f, "%.1f");
+		ImGui::TextUnformatted("必殺技（装備・ゲージ・クールタイム）");
+		// 装備中種別（傲慢サンダー / ディスラプター）。本来は2択装備制で発動ボタン共通。
+		{
+			const char* kindNames[] = { "GoumanThunder", "Disruptor" };
+			int kindIdx = static_cast<int>(equippedSpecial_);
+			if (ImGui::Combo("Equipped Special", &kindIdx, kindNames, IM_ARRAYSIZE(kindNames))) {
+				SetEquippedSpecial(static_cast<SpecialKind>(kindIdx));
+				changed = true;
+			}
+			ImGui::Text("Active Gauge Max: %.1f", specialGaugeMax_);
+		}
+		ImGui::DragFloat("Gauge Max (Gouman)",    &specialGaugeMaxGouman_,    1.0f, 1.0f, 1000.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) { SetEquippedSpecial(equippedSpecial_); changed = true; }
+		ImGui::DragFloat("Gauge Max (Disruptor)", &specialGaugeMaxDisruptor_, 1.0f, 1.0f, 1000.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) { SetEquippedSpecial(equippedSpecial_); changed = true; }
+		ImGui::DragFloat("Cooldown",            &specialCooldown_,      0.5f, 0.0f, 120.0f, "%.1f sec");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (specialCooldownTimer_ > 0.0f) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f), "Cooldown: %.1f sec 残り（発動不可）", specialCooldownTimer_);
+		} else {
+			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "Cooldown: Ready");
+		}
 		ImGui::DragFloat("Dodge Gauge Gain",    &dodgeSpecialGaugeGain_,0.1f, 0.0f, 100.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Active Duration",     &specialDuration_,      0.05f, 0.1f, 30.0f, "%.2f sec");
@@ -1845,6 +1901,52 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 		ImGui::Text("Phase: %s  timer=%.2f  phaseTimer=%.2f",
 			phaseName, specialTimer_, specialPhaseTimer_);
+
+		// ----- ディスラプター（フェーズ骨組み）-----
+		ImGui::SeparatorText("Disruptor (Charge→Slash→Collapse→Recover)");
+		ImGui::DragFloat("Charge Duration",   &disruptorChargeDuration_,   0.05f, 0.05f, 10.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Slash Duration",    &disruptorSlashDuration_,    0.02f, 0.02f, 5.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Collapse Duration", &disruptorCollapseDuration_, 0.05f, 0.05f, 10.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Recover Duration",  &disruptorRecoverDuration_,  0.05f, 0.05f, 10.0f, "%.2f sec");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Charge TimeScale",  &disruptorChargeTimeScale_,  0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Line Half Width (px)", &disruptorLineWidthPx_, 1.0f, 1.0f, 400.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragInt("Boss Damage (fixed)", &disruptorBossDamage_, 1.0f, 0, 99999);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Aim Preview Color", &disruptorAimPreviewColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Aim Confirm Color", &disruptorAimConfirmColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Pivot Marker Radius (px)", &disruptorPivotRadiusPx_, 0.5f, 0.0f, 100.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit4("Pivot Marker Color", &disruptorPivotColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("Camera (0=動かさない＝構図連続で狙いやすい)");
+		ImGui::DragFloat("Cam Pullback", &disruptorCamPullback_, 0.1f, 0.0f, 20.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam Up Add", &disruptorCamUpAdd_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Cam FovY Add", &disruptorCamFovAdd_, 0.005f, 0.0f, 1.0f, "%.3f rad");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		{
+			const char* dPhase = "Idle";
+			switch (disruptorPhase_) {
+			case DisruptorPhase::Charge:   dPhase = "Charge";   break;
+			case DisruptorPhase::Slash:    dPhase = "Slash";    break;
+			case DisruptorPhase::Collapse: dPhase = "Collapse"; break;
+			case DisruptorPhase::Recover:  dPhase = "Recover";  break;
+			default: break;
+			}
+			ImGui::Text("Disruptor Phase: %s  phaseTimer=%.2f  invincible=%d",
+				dPhase, disruptorPhaseTimer_, specialInvincible_ ? 1 : 0);
+			ImGui::Text("Aim: angle=%.1f deg  confirmed=%d",
+				disruptorAimAngle_ * 57.29578f, disruptorAimConfirmed_ ? 1 : 0);
+		}
 
 		// Phase 1（バリア）
 		ImGui::SeparatorText("Phase 1 (Barrier)");
@@ -2001,6 +2103,8 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::Button("Force End"))    {
 			EndSpecialMove();
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("Clear Cooldown")) specialCooldownTimer_ = 0.0f;
 
 		// ゲージ UI 位置・サイズ
 		ImGui::Separator();
@@ -2687,8 +2791,10 @@ void StagePlayScene::Update() {
 			mouseMoved = (m->GetDeltaX() != 0) || (m->GetDeltaY() != 0);
 		}
 #endif
+		// レティクルはプレイヤー操作なので Player グループ dt で更新する。
+		// World スロー（ジャスト回避／ディスラプターのチャージ等）の影響を受けず一定速度で動かすため。
 		reticle_->Update(mouseHovered, mouseClient, mouseMoved,
-			input_->GetController(), GetScaledDeltaTime());
+			input_->GetController(), GetScaledDeltaTime(TimeGroup::Player));
 	}
 
 	// ----- 照準ターゲット計算（プレイヤー回転 + 発射方向の元） -----
@@ -2887,7 +2993,9 @@ void StagePlayScene::Update() {
 	const bool gameFrozen = worldDt <= 0.0001f;
 
 	// ----- 射撃・チャージシステム -----
-	if (!gameFrozen) {
+	// 必殺技発動中は射撃・チャージを完全に止める（ディスラプターのチャージ中は World がスロー＝
+	// gameFrozen にならないため、specialActive_ を明示的に除外しないと点の決定 Fire で弾が出てしまう）。
+	if (!gameFrozen && !specialActive_) {
 		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
 		fireTimer_ -= dtP;
 		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
@@ -3750,7 +3858,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	const bool justInv    = justDodgeActive_;                                    // ジャスト回避中：無敵・点滅なし
 	const bool dodgeInv   = dodgeActive_ && dodgeTimer_ <= dodgeIFrameDuration_; // 回避無敵：水色点滅
 	const bool dmgInv     = playerInvincibilityTimer_ > 0.0f;                    // 被弾無敵：赤/白点滅
-	const bool specialInv = specialActive_;                                      // 必殺技発動中：完全無敵
+	const bool specialInv = specialActive_ && specialInvincible_;                // 必殺技発動中（後隙除く）：完全無敵
 	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
 
 	const float blinkFreq = damageBlinkFrequency_;
@@ -3954,6 +4062,13 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 		specialTimer_      += dt;
 		specialPhaseTimer_ += dt;
 
+		// ディスラプターは専用フェーズ機で進行（傲慢のバリア/翼更新は使わない）。
+		// World がスロー/停止するため実時間で進める（傲慢 Lockon と同方式）。
+		if (equippedSpecial_ == SpecialKind::Disruptor) {
+			UpdateDisruptorMove(actions, dxCore_->GetDeltaTime());
+			return;
+		}
+
 		// バリア球の追従＋当たり判定は全フェーズ共通（Fire 中もカメラ前進にズレず追従させる）
 		UpdateSpecialBarrier();
 		// 光の翼（放射状ストリーク）も全フェーズ共通で流す
@@ -3979,25 +4094,369 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 		return;
 	}
 
-	// 発動待ち：ゲージMAX & 行動可能 & Ultimate トリガで発動
-	if (specialGauge_ < specialGaugeMax_) return;
+	// 非発動時：クールタイムを消化（両必殺技共通）
+	if (specialCooldownTimer_ > 0.0f) {
+		specialCooldownTimer_ = (std::max)(0.0f, specialCooldownTimer_ - dt);
+	}
+
+	// 発動待ち：行動可能チェック（ゲージ・クールタイムは TryTriggerSpecial 側で種別ごとに判定）
 	if (IsActionLocked()) return;
 	if (justDodgeActive_) return;
 
+#ifdef _DEBUG
+	// デバッグ用：種別ごとの専用キーで両方を別々に試せるよう分離（本来は装備制で共通ボタン）。
+	// ディスラプター = G キー / 左スティック押し込み(L3)。傲慢サンダー = 既存 Ultimate(F/R3)。
+	{
+		auto* kb  = input_->GetKeyboard();
+		auto* pad = input_->GetController();
+		const bool disruptorKey =
+			(kb && kb->TriggerKey(DIK_G)) ||
+			(pad && pad->IsConnected() && pad->IsButtonTriggered(XINPUT_GAMEPAD_LEFT_THUMB));
+		if (disruptorKey) {
+			TryTriggerSpecial(SpecialKind::Disruptor);
+			return;
+		}
+	}
+#endif
+
+	// 通常：Ultimate(F/R3) で装備中の必殺技を発動
 	if (actions->IsTriggered(static_cast<int>(Action::Ultimate))) {
-		TriggerSpecialMove();
+		TryTriggerSpecial(equippedSpecial_);
 	}
 }
 
+void StagePlayScene::SetEquippedSpecial(SpecialKind k) {
+	equippedSpecial_ = k;
+	specialGaugeMax_ = SpecialGaugeMaxFor(k);
+	// 新上限を超えていたらクランプ（上限の低い種別へ切替えたとき）
+	specialGauge_ = (std::min)(specialGauge_, specialGaugeMax_);
+}
+
+void StagePlayScene::TryTriggerSpecial(SpecialKind k) {
+	if (specialCooldownTimer_ > 0.0f) return;               // クールタイム中は発動不可
+	if (specialGauge_ < SpecialGaugeMaxFor(k)) return;      // 種別ごとの上限に満たない
+	TriggerSpecialMove(k);
+}
+
 void StagePlayScene::TriggerSpecialMove() {
+	// 装備中種別を発動（ImGui ボタン等からの無条件発動用）
+	TriggerSpecialMove(equippedSpecial_);
+}
+
+void StagePlayScene::TriggerSpecialMove(SpecialKind k) {
+	// 発動した種別を装備中に同期（デバッグキーで別種別を撃った場合に合わせる）
+	SetEquippedSpecial(k);
+
 	specialActive_      = true;
 	specialTimer_       = 0.0f;
 	specialPhaseTimer_  = 0.0f;
 	specialGauge_       = 0.0f;
+	specialInvincible_  = true;  // 既定で無敵ON（ディスラプターの後隙でのみ OFF）
 	// HP.enabled の同期は RefreshPlayerHpInvincibility に一元化
 
-	// Phase 1: バリア展開へ
-	EnterSpecialPhaseBarrier();
+	// 被弾シェイク中に発動すると World 停止で UpdateShake が進まず揺れが固まるため、即クリア
+	if (camera_) camera_->StopShake();
+
+	if (k == SpecialKind::GoumanThunder) {
+		// Phase 1: バリア展開へ
+		EnterSpecialPhaseBarrier();
+	} else {
+		// ディスラプター：Charge フェーズへ（専用フェーズ機）
+		EnterDisruptor();
+	}
+}
+
+// ===== ディスラプター（線・瞬間型）フェーズ機 =====================================
+
+void StagePlayScene::EnterDisruptor() {
+	// プレイヤーを画面中央へ固定（傲慢 EnterSpecialPhaseBarrier と同じ保存/ゼロ化）。
+	// 入力は specialActive_ により全フェーズでロックされる。
+	specialPlayerInputOffsetSaved_ = playerInputOffset_;
+	specialPlayerVelocitySaved_    = playerVelocity_;
+	playerInputOffset_ = { 0.0f, 0.0f };
+	playerVelocity_    = { 0.0f, 0.0f };
+
+	// 照準リセット：未確定・初期角度はレティクル方向（チャージ中にライブ追従）
+	disruptorAimConfirmed_ = false;
+	disruptorAimAngle_     = DisruptorAngleFromReticle();
+
+	// 切断線（ワールド焼き付け）・カメラ演出ブレンドをリセット
+	disruptorCutWorldValid_ = false;
+	disruptorCamBlend_      = 0.0f;
+
+	EnterDisruptorPhase(DisruptorPhase::Charge);
+}
+
+void StagePlayScene::EnterDisruptorPhase(DisruptorPhase p) {
+	disruptorPhase_      = p;
+	disruptorPhaseTimer_ = 0.0f;
+
+	switch (p) {
+	case DisruptorPhase::Charge:
+		// 収束：World 停止/スロー（disruptorChargeTimeScale_、既定0=停止で敵が固定）＋無敵
+		SetTimeScale(TimeGroup::World, disruptorChargeTimeScale_);
+		specialInvincible_ = true;
+		break;
+	case DisruptorPhase::Slash:
+		// 一閃：World 停止＋無敵
+		SetTimeScale(TimeGroup::World, 0.0f);
+		specialInvincible_ = true;
+		break;
+	case DisruptorPhase::Collapse:
+		// 崩壊：World 停止のまま＋無敵
+		SetTimeScale(TimeGroup::World, 0.0f);
+		specialInvincible_ = true;
+		break;
+	case DisruptorPhase::Recover:
+		// 復帰＋後隙：World 再開・無敵なし（入力は specialActive_ で継続ロック）
+		SetTimeScale(TimeGroup::World, 1.0f);
+		specialInvincible_ = false;
+		break;
+	default:
+		break;
+	}
+}
+
+void StagePlayScene::UpdateDisruptorMove(InputActionMap* actions, float realDt) {
+	disruptorPhaseTimer_ += realDt;
+
+	switch (disruptorPhase_) {
+	case DisruptorPhase::Charge:
+		// 照準：未確定ならレティクル方向へライブ追従（予測線）。Fire で確定（角度凍結）。
+		// 早置きでもチャージは短縮しない（タイマーはそのまま進む）。
+		if (!disruptorAimConfirmed_) {
+			disruptorAimAngle_ = DisruptorAngleFromReticle();
+			if (actions && actions->IsTriggered(static_cast<int>(Action::Fire))) {
+				disruptorAimConfirmed_ = true;
+			}
+		}
+		if (disruptorPhaseTimer_ >= disruptorChargeDuration_) {
+			// 未配置なら横一閃（θ=0）で自動発射
+			if (!disruptorAimConfirmed_) {
+				disruptorAimAngle_     = 0.0f;
+				disruptorAimConfirmed_ = true;
+			}
+			EnterDisruptorPhase(DisruptorPhase::Slash);
+			// 一閃の瞬間に線上の敵を断つ（確定角度で1回だけ）
+			ExecuteDisruptorSlash();
+		}
+		break;
+	case DisruptorPhase::Slash:
+		if (disruptorPhaseTimer_ >= disruptorSlashDuration_) {
+			EnterDisruptorPhase(DisruptorPhase::Collapse);
+		}
+		break;
+	case DisruptorPhase::Collapse:
+		if (disruptorPhaseTimer_ >= disruptorCollapseDuration_) {
+			EnterDisruptorPhase(DisruptorPhase::Recover);
+		}
+		break;
+	case DisruptorPhase::Recover:
+		// 後隙明け → 終了（EndSpecialMove でクールタイム開始）
+		if (disruptorPhaseTimer_ >= disruptorRecoverDuration_) {
+			EndSpecialMove();
+		}
+		break;
+	default:
+		break;
+	}
+
+	// カメラ演出ブレンド：発動直後の Charge から 1 へ（すぐ壮大に引く）、Slash/Collapse も維持、
+	// 後隙 Recover で 0 へ戻す。イーズ。切断線はワールド焼き付けなので引いてもズレない。
+	const float targetBlend =
+		(disruptorPhase_ == DisruptorPhase::Charge ||
+		 disruptorPhase_ == DisruptorPhase::Slash ||
+		 disruptorPhase_ == DisruptorPhase::Collapse) ? 1.0f : 0.0f;
+	const float step = (disruptorCamEaseTime_ > 1e-4f) ? (realDt / disruptorCamEaseTime_) : 1.0f;
+	if (disruptorCamBlend_ < targetBlend) disruptorCamBlend_ = (std::min)(targetBlend, disruptorCamBlend_ + step);
+	else                                  disruptorCamBlend_ = (std::max)(targetBlend, disruptorCamBlend_ - step);
+
+	// 切断線の可視化（チャージ=予測線／一閃・崩壊=確定線）。後隙では消す。
+	if (disruptorPhase_ == DisruptorPhase::Charge ||
+		disruptorPhase_ == DisruptorPhase::Slash ||
+		disruptorPhase_ == DisruptorPhase::Collapse) {
+		DrawDisruptorAimLine();
+	}
+}
+
+float StagePlayScene::DisruptorAngleFromReticle() const {
+	const float cx = static_cast<float>(WindowsApplication::kClientWidth)  * 0.5f;
+	const float cy = static_cast<float>(WindowsApplication::kClientHeight) * 0.5f;
+	const Vector2 rp = reticle_ ? reticle_->GetPosition() : Vector2{ cx, cy };
+	const float dx = rp.x - cx;
+	const float dy = rp.y - cy;
+	if (dx * dx + dy * dy < 1.0f) return disruptorAimAngle_; // 中央付近は前回値を維持（角度ジャンプ防止）
+	return std::atan2(dy, dx);
+}
+
+void StagePlayScene::DrawDisruptorAimLine() {
+	auto* lr = LineRenderer::GetInstance();
+	if (!lr || !camera_) return;
+
+	// 一閃以降（Slash/Collapse）は、焼き付けたワールド線を描く。カメラを引いても
+	// 敵と同じ世界座標に残るので「描いた通り」に貫いて見える。
+	if (disruptorPhase_ != DisruptorPhase::Charge) {
+		if (disruptorCutWorldValid_) {
+			lr->AddLine(disruptorCutWorldP1_, disruptorCutWorldP2_, disruptorAimConfirmColor_);
+		}
+		return;
+	}
+
+	const float w = static_cast<float>(WindowsApplication::kClientWidth);
+	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float cx = w * 0.5f;
+	const float cy = h * 0.5f;
+	// スクリーン端まで延ばすため対角長を半径に取り、中央±方向の2端点を作る
+	const float half = std::sqrt(w * w + h * h);
+	const float dirX = std::cos(disruptorAimAngle_);
+	const float dirY = std::sin(disruptorAimAngle_);
+	const Vector2 p1{ cx - dirX * half, cy - dirY * half };
+	const Vector2 p2{ cx + dirX * half, cy + dirY * half };
+
+	// pixel → world（同一NDC深度でアンプロジェクト＝再投影でまっすぐな画面線になる）
+	const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
+	const float ndcZ = 0.5f; // 中間深度（debug 可視化用、見た目に影響なし）
+	auto pixelToWorld = [&](const Vector2& px) -> Vector3 {
+		const float ndcX = (px.x / w) * 2.0f - 1.0f;
+		const float ndcY = 1.0f - (px.y / h) * 2.0f;
+		return TransformCoordinate(Vector3{ ndcX, ndcY, ndcZ }, invVP);
+	};
+
+	const Vector4 color = disruptorAimConfirmed_ ? disruptorAimConfirmColor_ : disruptorAimPreviewColor_;
+	lr->AddLine(pixelToWorld(p1), pixelToWorld(p2), color);
+
+	// 中央支点マーカー（リング）。どこが回転中心かを明示する。
+	if (disruptorPivotRadiusPx_ > 0.5f) {
+		const int seg = 16;
+		const float r = disruptorPivotRadiusPx_;
+		Vector2 prev{};
+		for (int i = 0; i <= seg; ++i) {
+			const float a = (static_cast<float>(i) / seg) * 6.2831853f;
+			const Vector2 pt{ cx + std::cos(a) * r, cy + std::sin(a) * r };
+			if (i > 0) lr->AddLine(pixelToWorld(prev), pixelToWorld(pt), disruptorPivotColor_);
+			prev = pt;
+		}
+	}
+}
+
+void StagePlayScene::ExecuteDisruptorSlash() {
+	if (!camera_) return;
+
+	const float w = static_cast<float>(WindowsApplication::kClientWidth);
+	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float cx = w * 0.5f;
+	const float cy = h * 0.5f;
+	const float dirX = std::cos(disruptorAimAngle_);
+	const float dirY = std::sin(disruptorAimAngle_);
+
+	// 点 P（pixel）の「中央支点を通る角度 θ の直線」への垂直距離。d は単位ベクトルなので外積の大きさ＝距離。
+	auto distToLine = [&](const Vector2& px) -> float {
+		const float ex = px.x - cx;
+		const float ey = px.y - cy;
+		return std::abs(ex * dirY - ey * dirX);
+	};
+
+	// ワールド→pixel 投影（ww>0 のみ＝カメラ前方。深度は無視＝物陰の敵もヒット）。
+	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+	auto projectToPixel = [&](const Vector3& world, Vector2& outPx) -> bool {
+		const float wx = world.x * vp.m[0][0] + world.y * vp.m[1][0] + world.z * vp.m[2][0] + vp.m[3][0];
+		const float wy = world.x * vp.m[0][1] + world.y * vp.m[1][1] + world.z * vp.m[2][1] + vp.m[3][1];
+		const float ww = world.x * vp.m[0][3] + world.y * vp.m[1][3] + world.z * vp.m[2][3] + vp.m[3][3];
+		if (ww <= 1e-4f) return false; // カメラ後方
+		const float ndcX = wx / ww;
+		const float ndcY = wy / ww;
+		if (std::abs(ndcX) > 1.0f || std::abs(ndcY) > 1.0f) return false; // 画面外（線は画面端まで）
+		outPx.x = (ndcX * 0.5f + 0.5f) * w;
+		outPx.y = (1.0f - (ndcY * 0.5f + 0.5f)) * h;
+		return true;
+	};
+
+	// 線上判定の本体（中心位置 pos の対象が線に乗っていれば true）
+	auto onLine = [&](const Vector3& pos) -> bool {
+		Vector2 px{};
+		if (!projectToPixel(pos, px)) return false;
+		return distToLine(px) <= disruptorLineWidthPx_;
+	};
+
+	// ワールド線焼き付け用：ヒットした敵のカメラ前方距離(depth)を平均する
+	const Vector3 camPos = camera_->GetTranslate();
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 camFwd{ camRot.m[2][0], camRot.m[2][1], camRot.m[2][2] };
+	float depthSum = 0.0f;
+	int   depthCount = 0;
+	auto accumDepth = [&](const Vector3& pos) {
+		const float dz = (pos.x - camPos.x) * camFwd.x + (pos.y - camPos.y) * camFwd.y + (pos.z - camPos.z) * camFwd.z;
+		if (dz > 0.0f) { depthSum += dz; ++depthCount; }
+	};
+
+	// ----- 敵弾（EnemyAttack）：消滅 -----
+	for (auto& b : bullets_) {
+		if (!b.primitive) continue;
+		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		const Vector3* p = b.primitive->GetEditableTranslate();
+		if (!p) continue;
+		if (onLine(*p)) b.remainingLifetime = -1.0f;
+	}
+
+	// ----- 敵本体（Enemy / Boss）：通常敵=即死／ボス=固定ダメージ -----
+	// HP 無し雑魚は破棄でコンテナが変わるので、2 段階（収集→破棄）にする。
+	std::unordered_set<IImGuiEditable*> seen;
+	std::vector<IImGuiEditable*> destroyNow; // HP 無し敵の直接破棄リスト
+	auto consider = [&](IImGuiEditable* e) {
+		if (!e || !seen.insert(e).second) return;
+		const EntityTag tag = e->GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		const Vector3* p = e->GetEditableTranslate();
+		if (!p || !onLine(*p)) return;
+		accumDepth(*p);
+
+		if (tag == EntityTag::Boss) {
+			// ボス：固定ダメージ（+将来スタンゲージ大削り）
+			e->GetHP().TakeDamage(disruptorBossDamage_);
+		} else {
+			// 通常敵：即死。HP 持ちは HP=0 にして既存パイプライン（kill-t 記録＋スコア＋SweepDead）に任せる。
+			HP& hp = e->GetHP();
+			if (hp.enabled) {
+				hp.TakeDamage(hp.currentHP);
+			} else {
+				// HP 無し雑魚は直接破棄＋スコア加点
+				destroyNow.push_back(e);
+			}
+		}
+	};
+	for (auto& up : dynamicPrimitives_) consider(up.get());
+	for (auto& up : object3DInstances_) consider(up.get());
+	for (auto& up : dynamicAnimated_)   consider(up.get());
+
+	for (IImGuiEditable* e : destroyNow) {
+		ScoreManager::GetInstance()->AddScore(e->GetScoreValue());
+		DestroyDynamicEntity(e);
+	}
+
+	// ----- 切断線をワールド空間へ焼き付ける -----
+	// 画面端まで延ばした2端点を、ヒット敵の平均奥行き（無ければ既定）でワールド化。
+	// 以後カメラを引いても、この線は敵と同じ世界座標に残り続ける＝「描いた通り」に貫いて見える。
+	const float depth = (depthCount > 0) ? (depthSum / depthCount) : disruptorCutDepth_;
+	const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
+	auto pixelToWorldAtDepth = [&](const Vector2& px) -> Vector3 {
+		const float ndcX = (px.x / w) * 2.0f - 1.0f;
+		const float ndcY = 1.0f - (px.y / h) * 2.0f;
+		const Vector3 farW = TransformCoordinate(Vector3{ ndcX, ndcY, 1.0f }, invVP);
+		Vector3 rd{ farW.x - camPos.x, farW.y - camPos.y, farW.z - camPos.z };
+		const float rl = std::sqrt(rd.x * rd.x + rd.y * rd.y + rd.z * rd.z);
+		if (rl > 1e-6f) { rd.x /= rl; rd.y /= rl; rd.z /= rl; }
+		float denom = rd.x * camFwd.x + rd.y * camFwd.y + rd.z * camFwd.z;
+		if (denom < 1e-4f) denom = 1e-4f; // カメラ前方平面に乗せる
+		const float t = depth / denom;
+		return { camPos.x + rd.x * t, camPos.y + rd.y * t, camPos.z + rd.z * t };
+	};
+	// カメラを引いても画面端を超えるよう、対角長を多めに取って端点を作る
+	const float halfLen = std::sqrt(w * w + h * h) * 1.5f;
+	const Vector2 e1{ cx - dirX * halfLen, cy - dirY * halfLen };
+	const Vector2 e2{ cx + dirX * halfLen, cy + dirY * halfLen };
+	disruptorCutWorldP1_ = pixelToWorldAtDepth(e1);
+	disruptorCutWorldP2_ = pixelToWorldAtDepth(e2);
+	disruptorCutWorldValid_ = true;
 }
 
 void StagePlayScene::EnterSpecialPhaseBarrier() {
@@ -4893,6 +5352,18 @@ void StagePlayScene::EndSpecialMove() {
 	specialPhase_      = SpecialPhase::Idle;
 	specialPhaseTimer_ = 0.0f;
 	specialTimer_      = 0.0f;
+
+	// クールタイム開始（両必殺技共通）。ディスラプターは Recover(後隙)明けにここへ来る＝後隙明け開始。
+	specialCooldownTimer_ = specialCooldown_;
+
+	// ディスラプター専用フェーズ機のリセット＋無敵フラグを既定(true)へ戻す
+	disruptorPhase_      = DisruptorPhase::Idle;
+	disruptorPhaseTimer_ = 0.0f;
+	specialInvincible_   = true;
+	disruptorAimConfirmed_ = false;
+	disruptorAimAngle_     = 0.0f;
+	disruptorCutWorldValid_ = false;
+	disruptorCamBlend_      = 0.0f;
 	specialPhase2Timer_       = 0.0f;
 	specialAllLockonComplete_ = false;
 	specialChargeStartTime_   = 0.0f;
@@ -4963,6 +5434,16 @@ void StagePlayScene::ApplySpecialCamera(const Vector3& playerWorldPos) {
 	(void)playerWorldPos;
 	if (!camera_ || !specialActive_) return;
 
+	// 種別ごとにカメラ挙動を出し分ける。ディスラプターは Charge 中は動かさず（blend=0）、
+	// Slash/Collapse で blend が 1 へイーズして壮大に引く（切断線はワールド焼き付け済みでズレない）。
+	const bool isDisruptor = (equippedSpecial_ == SpecialKind::Disruptor);
+	const float blend = isDisruptor ? disruptorCamBlend_ : 1.0f;
+	const float pullback = (isDisruptor ? disruptorCamPullback_ : specialCamPullback_) * blend;
+	const float upAdd    = (isDisruptor ? disruptorCamUpAdd_    : specialCamUpAdd_)    * blend;
+	const float fovAdd   = (isDisruptor ? disruptorCamFovAdd_   : specialCamFovAdd_)   * blend;
+	// 全て 0 ならカメラに触れない（無駄な再計算とFOVの浮動小数ドリフトを避ける）
+	if (pullback == 0.0f && upAdd == 0.0f && fovAdd == 0.0f) return;
+
 	// 既存のカメラ位置を基準に forward 逆方向 + up 方向に引く（FovY も加算）
 	const Vector3 eye = camera_->GetTranslate();
 	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
@@ -4970,11 +5451,11 @@ void StagePlayScene::ApplySpecialCamera(const Vector3& playerWorldPos) {
 	const Vector3 up      = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
 
 	camera_->SetTranslate({
-		eye.x - forward.x * specialCamPullback_ + up.x * specialCamUpAdd_,
-		eye.y - forward.y * specialCamPullback_ + up.y * specialCamUpAdd_,
-		eye.z - forward.z * specialCamPullback_ + up.z * specialCamUpAdd_,
+		eye.x - forward.x * pullback + up.x * upAdd,
+		eye.y - forward.y * pullback + up.y * upAdd,
+		eye.z - forward.z * pullback + up.z * upAdd,
 	});
-	camera_->SetFovY(camera_->GetFovY() + specialCamFovAdd_);
+	camera_->SetFovY(camera_->GetFovY() + fovAdd);
 	camera_->Update();
 }
 
@@ -4986,7 +5467,7 @@ void StagePlayScene::RefreshPlayerHpInvincibility() {
 	const bool justInv    = justDodgeActive_;
 	const bool dodgeInv   = dodgeActive_ && dodgeTimer_ <= dodgeIFrameDuration_;
 	const bool dmgInv     = playerInvincibilityTimer_ > 0.0f;
-	const bool specialInv = specialActive_;
+	const bool specialInv = specialActive_ && specialInvincible_;  // 後隙(Recover)では false ＝被弾可能
 	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
 
 	player_->GetHP().enabled = !invincible;
