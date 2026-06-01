@@ -88,6 +88,17 @@ public:
 	// Distortion 用 RT（R8G8B8A8_UNORM）。RG=歪み方向, A=強度。Distortion Effect の参照対象。
 	RenderTexture* GetDistortionRT() const { return distortionRT_.get(); }
 
+	// シーンキャプチャ RT（ディスラプター崩壊の破片が反転して貼る元絵）。
+	RenderTexture* GetCaptureRT() const { return captureRT_.get(); }
+	uint32_t GetCaptureSRVIndex() const;
+
+	/// <summary>
+	/// 現フレームのシーン（renderTextureA_）を captureRT_ にコピーする。
+	/// シーン描画途中（renderTextureA_ が RENDER_TARGET 状態）に呼ぶ前提。終了後はシーン RTV/深度/ビューポートを復帰する。
+	/// World 停止中のディスラプター崩壊で、破片が貼り付ける「反転世界の元絵」を1枚取るのに使う。
+	/// </summary>
+	void CaptureSceneForDisruptor(ID3D12GraphicsCommandList* commandList);
+
 	/// <summary>
 	/// ID Pass の開始：idMaskRT を RT としてバインドし 0 でクリア。シーン描画後・PostEffect Draw 前に呼ぶ。
 	/// </summary>
@@ -165,6 +176,9 @@ private:
 
 	// Distortion 用 RT（R8G8B8A8_UNORM、Distortion Pass で歪み源プリミティブが書き込む）
 	std::unique_ptr<RenderTexture> distortionRT_;
+
+	// シーンキャプチャ RT（ディスラプター崩壊の破片用。renderTextureA_ のコピー先）
+	std::unique_ptr<RenderTexture> captureRT_;
 
 	// ルートシグネチャ（4種類）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;

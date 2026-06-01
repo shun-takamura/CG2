@@ -42,6 +42,7 @@
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
+#include "Effect/DisruptorShardRenderer.h"
 #include "Components/PrefabManager.h"
 #include "Components/Prefab.h"
 
@@ -250,6 +251,24 @@ void StagePlayScene::LoadTuningFromJson() {
 		disruptorRiftRevealTime_ = static_cast<float>(sg["disruptorRiftRevealTime"].AsDouble(disruptorRiftRevealTime_));
 		disruptorRevealIntensity_    = static_cast<float>(sg["disruptorRevealIntensity"].AsDouble(disruptorRevealIntensity_));
 		disruptorRevealStartDelay_   = static_cast<float>(sg["disruptorRevealStartDelay"].AsDouble(disruptorRevealStartDelay_));
+		disruptorInvertDelay_        = static_cast<float>(sg["disruptorInvertDelay"].AsDouble(disruptorInvertDelay_));
+		disruptorRevealCellSize_     = static_cast<float>(sg["disruptorRevealCellSize"].AsDouble(disruptorRevealCellSize_));
+		disruptorRevealChunkJitter_  = static_cast<float>(sg["disruptorRevealChunkJitter"].AsDouble(disruptorRevealChunkJitter_));
+		disruptorRevealEdgeAmp_      = static_cast<float>(sg["disruptorRevealEdgeAmp"].AsDouble(disruptorRevealEdgeAmp_));
+		disruptorRevealEdgeFreq_     = static_cast<float>(sg["disruptorRevealEdgeFreq"].AsDouble(disruptorRevealEdgeFreq_));
+		disruptorRevealEdgeDepth_    = static_cast<float>(sg["disruptorRevealEdgeDepth"].AsDouble(disruptorRevealEdgeDepth_));
+		disruptorFragAlpha_       = static_cast<float>(sg["disruptorFragAlpha"].AsDouble(disruptorFragAlpha_));
+		disruptorFragDistort_     = static_cast<float>(sg["disruptorFragDistort"].AsDouble(disruptorFragDistort_));
+		disruptorFragDistortFreq_ = static_cast<float>(sg["disruptorFragDistortFreq"].AsDouble(disruptorFragDistortFreq_));
+		disruptorFragMaxCount_   = static_cast<int>(sg["disruptorFragMaxCount"].AsInt(static_cast<int64_t>(disruptorFragMaxCount_)));
+		disruptorFragEmitRate_   = static_cast<float>(sg["disruptorFragEmitRate"].AsDouble(disruptorFragEmitRate_));
+		disruptorFragAlongRange_ = static_cast<float>(sg["disruptorFragAlongRange"].AsDouble(disruptorFragAlongRange_));
+		disruptorFragLifeMin_    = static_cast<float>(sg["disruptorFragLifeMin"].AsDouble(disruptorFragLifeMin_));
+		disruptorFragLifeMax_    = static_cast<float>(sg["disruptorFragLifeMax"].AsDouble(disruptorFragLifeMax_));
+		disruptorFragScaleMin_   = static_cast<float>(sg["disruptorFragScaleMin"].AsDouble(disruptorFragScaleMin_));
+		disruptorFragScaleMax_   = static_cast<float>(sg["disruptorFragScaleMax"].AsDouble(disruptorFragScaleMax_));
+		disruptorFragUvSize_     = static_cast<float>(sg["disruptorFragUvSize"].AsDouble(disruptorFragUvSize_));
+		disruptorFragSpin_       = static_cast<float>(sg["disruptorFragSpin"].AsDouble(disruptorFragSpin_));
 		{
 			const JsonValue& bd = sg["disruptorBeamDir"];
 			if (bd.IsArray() && bd.Size() >= 3) {
@@ -784,6 +803,24 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["disruptorRiftRevealTime"] = static_cast<double>(disruptorRiftRevealTime_);
 	sgObj["disruptorRevealIntensity"]    = static_cast<double>(disruptorRevealIntensity_);
 	sgObj["disruptorRevealStartDelay"]   = static_cast<double>(disruptorRevealStartDelay_);
+	sgObj["disruptorInvertDelay"]        = static_cast<double>(disruptorInvertDelay_);
+	sgObj["disruptorRevealCellSize"]     = static_cast<double>(disruptorRevealCellSize_);
+	sgObj["disruptorRevealChunkJitter"]  = static_cast<double>(disruptorRevealChunkJitter_);
+	sgObj["disruptorRevealEdgeAmp"]      = static_cast<double>(disruptorRevealEdgeAmp_);
+	sgObj["disruptorRevealEdgeFreq"]     = static_cast<double>(disruptorRevealEdgeFreq_);
+	sgObj["disruptorRevealEdgeDepth"]    = static_cast<double>(disruptorRevealEdgeDepth_);
+	sgObj["disruptorFragAlpha"]       = static_cast<double>(disruptorFragAlpha_);
+	sgObj["disruptorFragDistort"]     = static_cast<double>(disruptorFragDistort_);
+	sgObj["disruptorFragDistortFreq"] = static_cast<double>(disruptorFragDistortFreq_);
+	sgObj["disruptorFragMaxCount"]   = static_cast<int64_t>(disruptorFragMaxCount_);
+	sgObj["disruptorFragEmitRate"]   = static_cast<double>(disruptorFragEmitRate_);
+	sgObj["disruptorFragAlongRange"] = static_cast<double>(disruptorFragAlongRange_);
+	sgObj["disruptorFragLifeMin"]    = static_cast<double>(disruptorFragLifeMin_);
+	sgObj["disruptorFragLifeMax"]    = static_cast<double>(disruptorFragLifeMax_);
+	sgObj["disruptorFragScaleMin"]   = static_cast<double>(disruptorFragScaleMin_);
+	sgObj["disruptorFragScaleMax"]   = static_cast<double>(disruptorFragScaleMax_);
+	sgObj["disruptorFragUvSize"]     = static_cast<double>(disruptorFragUvSize_);
+	sgObj["disruptorFragSpin"]       = static_cast<double>(disruptorFragSpin_);
 	{
 		JsonValue arr = JsonValue::MakeArray();
 		arr.Push(JsonValue(static_cast<double>(disruptorBeamDir_.x)));
@@ -1839,103 +1876,7 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 	}
 
-	if (ImGui::CollapsingHeader("Dodge / Just Dodge / Heal")) {
-		ImGui::Separator();
-		ImGui::TextUnformatted("回避（Dodge）");
-		ImGui::DragFloat("Just Window (s)", &dodgeJustWindow_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("回避入力後この秒数以内に被弾接触するとジャスト成立。遠近感対策で広めから調整");
-		ImGui::DragFloat("I-Frame Duration (s)", &dodgeIFrameDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("回避入力後この秒数まで被弾無効（Just Window を内包）。これを過ぎると被弾");
-		ImGui::DragFloat("Cooldown (s)", &dodgeCooldown_, 0.02f, 0.0f, 3.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Action Lock (s)", &dodgeActionLock_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat2("Dash Impulse (X/Y)", &dodgeImpulse_.x, 0.5f, 0.0f, 100.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("runtime: active=%d t=%.2f cd=%.2f lock=%.2f",
-			dodgeActive_ ? 1 : 0, dodgeTimer_, dodgeCooldownTimer_, dodgeActionLockTimer_);
-
-		ImGui::Separator();
-		ImGui::TextUnformatted("ジャスト回避スロー（受付期限モデル）");
-		ImGui::DragFloat("Slow World Scale", &justDodgeSlowWorld_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Receipt Window (s)", &justDodgeReceiptWindow_, 0.05f, 0.1f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("追加入力の受付期間。追加入力なしならこの秒数で演出終了（実時間）");
-		ImGui::DragFloat("Fade In (s)", &justDodgeFadeIn_, 0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fade Out (s)", &justDodgeFadeOut_, 0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("Just Dodge Score", &justDodgeScore_, 5.0f, 0, 100000);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		IImGuiEditable* sel = ImGuiManager::Instance().GetSelected();
-		ImGui::Text("Highlight Target (Inspector 選択): %s", sel ? sel->GetName().c_str() : "(none)");
-		if (ImGui::Button("Test: Trigger Just Dodge")) {
-			TriggerJustDodge(sel);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Play Effect Only")) {
-			PlayJustDodgeEffect(sel, justDodgeReceiptWindow_);
-		}
-		if (justDodgeActive_) {
-			ImGui::Text("Active: %.2f s (counter=%d, fadeOut=%.2f)",
-				justDodgeTimer_, justDodgeCounterActive_ ? 1 : 0, justDodgeFadeOutTimer_);
-		}
-
-		ImGui::Separator();
-		ImGui::TextUnformatted("分身カウンター（Phase1: カメラ引き＋プレビュー＋方向選択）");
-		ImGui::DragFloat("Clone Offset", &jdCloneOffset_, 0.1f, 0.0f, 30.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam Pullback", &jdCamPullback_, 0.2f, 0.0f, 60.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam FovY Add", &jdCamFovAdd_, 0.005f, 0.0f, 0.5f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Select Threshold", &jdSelectThreshold_, 0.02f, 0.05f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Spread Duration", &jdSpreadDuration_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Merge Duration", &jdMergeDuration_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Clone Color", &jdCloneColor_.x); // alpha<1 で半透明
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		// 各方向の分身モデルパス（あとで派生モーション初期ポーズの.meshに差し替え可能）
-		{
-			const char* labels[4] = { "Path Up", "Path Right", "Path Down", "Path Left" };
-			for (int i = 0; i < 4; ++i) {
-				char buf[256];
-				std::snprintf(buf, sizeof(buf), "%s", jdClonePath_[i].c_str());
-				if (ImGui::InputText(labels[i], buf, sizeof(buf))) jdClonePath_[i] = buf;
-				if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-			}
-		}
-		ImGui::Text("selecting=%d chosen=%d clones=%d intensity=%.2f",
-			jdSelecting_ ? 1 : 0, static_cast<int>(jdChosen_),
-			static_cast<int>(jdClones_.size()), jdEffectIntensity_);
-
-		ImGui::Separator();
-		ImGui::TextUnformatted("分身カウンター派生（Phase2: 詰め寄り / 戻り / 専用カメラ）");
-		ImGui::DragFloat("Melee Approach Duration (s)", &jdMeleeApproachDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Melee Return Duration (s)",   &jdMeleeReturnDuration_,   0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Melee Approach Dist",         &jdMeleeApproachDist_,     0.1f,  0.0f, 30.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat3("Melee Cam Offset (R/U/F)",   &jdMeleeCameraOffset_.x,   0.05f);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("プレイヤー基底（右/上/前=対象敵方向）でのカメラ位置オフセット。\n左斜め後ろ＝右-（左）, 上+, 前-（後ろ）");
-		ImGui::DragFloat3("Melee Cam Look Offset",      &jdMeleeCameraLookOffset_.x, 0.05f);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("プレイヤーと敵の中点を基準にした注視点オフセット（基底空間）");
-		ImGui::DragFloat2("Dodge Expanded Margin",      &jdDodgeExpandedMargin_.x, 0.01f, 0.0f, 3.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Dodge Return Duration (s)",   &jdDodgeReturnDuration_,   0.01f, 0.0f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("phase=%d  jdReturnOffset=(%.2f, %.2f)  dodgeReturning=%d",
-			static_cast<int>(jdActionPhase_), jdReturnOffset_.x, jdReturnOffset_.y, jdDodgeReturning_ ? 1 : 0);
-
-		ImGui::Separator();
+	if (ImGui::CollapsingHeader("Special (Disruptor) / Heal", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextUnformatted("必殺技（装備・ゲージ・クールタイム）");
 		// 装備中種別（傲慢サンダー / ディスラプター）。本来は2択装備制で発動ボタン共通。
 		{
@@ -1947,8 +1888,6 @@ void StagePlayScene::OnImGuiTuning() {
 			}
 			ImGui::Text("Active Gauge Max: %.1f", specialGaugeMax_);
 		}
-		ImGui::DragFloat("Gauge Max (Gouman)",    &specialGaugeMaxGouman_,    1.0f, 1.0f, 1000.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) { SetEquippedSpecial(equippedSpecial_); changed = true; }
 		ImGui::DragFloat("Gauge Max (Disruptor)", &specialGaugeMaxDisruptor_, 1.0f, 1.0f, 1000.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) { SetEquippedSpecial(equippedSpecial_); changed = true; }
 		ImGui::DragFloat("Cooldown",            &specialCooldown_,      0.5f, 0.0f, 120.0f, "%.1f sec");
@@ -1963,16 +1902,6 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Active Duration",     &specialDuration_,      0.05f, 0.1f, 30.0f, "%.2f sec");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::ProgressBar(specialGauge_ / (std::max)(1.0f, specialGaugeMax_), ImVec2(-1.0f, 0.0f));
-		const char* phaseName = "Idle";
-		switch (specialPhase_) {
-		case SpecialPhase::Barrier: phaseName = "Barrier"; break;
-		case SpecialPhase::Lockon:  phaseName = "Lockon";  break;
-		case SpecialPhase::Fire:    phaseName = "Fire";    break;
-		case SpecialPhase::End:     phaseName = "End";     break;
-		default: break;
-		}
-		ImGui::Text("Phase: %s  timer=%.2f  phaseTimer=%.2f",
-			phaseName, specialTimer_, specialPhaseTimer_);
 
 		// ----- ディスラプター（フェーズ骨組み）-----
 		ImGui::SeparatorText("Disruptor (Charge→Slash→Collapse→Recover)");
@@ -2057,9 +1986,44 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::Text("[崩壊リビール] 反転殻＝Slash全画面反転→Collapseで線から上下へ通常色が伝播");
 		ImGui::TextDisabled("剥がれは [Start Delay, Collapse Duration] 区間で進む。長くするほどゆっくり戻る");
+		ImGui::DragFloat("Invert Delay (発射→反転) (s)", &disruptorInvertDelay_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("カメラ回り込み→ビーム発射の後、色反転が入るまでの遅れ");
 		ImGui::DragFloat("Reveal Start Delay (s)", &disruptorRevealStartDelay_, 0.01f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Reveal Intensity", &disruptorRevealIntensity_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("[境界崩壊] 反転殻の境界をギザギザ＋ブロックで砕く（画面の絵そのものが崩れる）");
+		ImGui::DragFloat("Crumble Cell Size", &disruptorRevealCellSize_, 0.002f, 0.005f, 0.3f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Crumble Chunk Jitter", &disruptorRevealChunkJitter_, 0.005f, 0.0f, 0.4f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Crumble Edge Amp", &disruptorRevealEdgeAmp_, 0.002f, 0.0f, 0.2f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Crumble Edge Freq", &disruptorRevealEdgeFreq_, 0.5f, 1.0f, 120.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Crumble Edge Depth (歯の深さ)", &disruptorRevealEdgeDepth_, 0.005f, 0.0f, 0.4f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("[飛び散る破片] 反転世界のかけらが境界で発生→断裂線へ寄りつつ縮小消滅");
+		ImGui::DragInt("Frag Max Count", &disruptorFragMaxCount_, 1.0f, 1, 256);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Emit Rate (/s)", &disruptorFragEmitRate_, 1.0f, 0.0f, 400.0f, "%.0f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Along Range (0-0.5)", &disruptorFragAlongRange_, 0.01f, 0.0f, 0.5f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Frag Life Min/Max (s)", &disruptorFragLifeMin_, 0.01f, 0.02f, 3.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Frag Scale Min/Max", &disruptorFragScaleMin_, 0.01f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag UV Size (capture)", &disruptorFragUvSize_, 0.002f, 0.005f, 0.5f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Spin (rad/s)", &disruptorFragSpin_, 0.1f, 0.0f, 30.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Alpha (半透明)", &disruptorFragAlpha_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Distort (歪み量)", &disruptorFragDistort_, 0.001f, 0.0f, 0.15f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Frag Distort Freq", &disruptorFragDistortFreq_, 0.5f, 1.0f, 60.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		{
 			const char* dPhase = "Idle";
@@ -2076,150 +2040,6 @@ void StagePlayScene::OnImGuiTuning() {
 				disruptorAimAngle_ * 57.29578f, disruptorAimConfirmed_ ? 1 : 0);
 		}
 
-		// Phase 1（バリア）
-		ImGui::SeparatorText("Phase 1 (Barrier)");
-		ImGui::DragFloat("Barrier Radius",   &specialBarrierRadius_,   0.05f, 0.1f, 20.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Barrier Duration", &specialBarrierDuration_, 0.05f, 0.1f, 10.0f, "%.2f sec");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Checkbox("Barrier Fill (sphere)", &specialBarrierFillOn_);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("塗りつぶし半透明球の表示。OFF でワイヤ球のみ");
-		ImGui::ColorEdit4("Barrier Color",   &specialBarrierColor_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Center Offset Up (0=auto)", &specialPlayerCenterOffset_, 0.02f, 0.0f, 5.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("バリア球・電撃の中心を up 方向へ持ち上げる量。\n0 で player Collider.offset.y（足元→体の中心）を自動採用");
-		{
-			char effBuf[128];
-			std::snprintf(effBuf, sizeof(effBuf), "%s", specialBarrierEffectName_.c_str());
-			if (ImGui::InputText("Barrier Effect (名前)", effBuf, sizeof(effBuf))) {
-				specialBarrierEffectName_ = effBuf;
-				changed = true;
-			}
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("エフェクトエディタ製エフェクト名（例: Barrier）。\n空 or 未登録だと下のワイヤー球にフォールバック");
-		}
-		ImGui::Checkbox("Wireframe Sphere (fallback)", &specialBarrierWireframeOn_);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat3("  Wire Spin Speed XYZ (rad/s)", &specialBarrierWireSpinSpeed_.x, 0.05f, -10.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("  Wire Meridians", &specialBarrierWireMeridians_, 0.2f, 1, 32);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("  Wire Parallels", &specialBarrierWireParallels_, 0.2f, 1, 32);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("  Wire Segments", &specialBarrierWireSegments_, 0.5f, 3, 96);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("  Wire Gold (meridian)", &specialBarrierWireColorGold_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("  Wire Pink (parallel)", &specialBarrierWireColorPink_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Checkbox("Barrier Particles", &specialBarrierParticleOn_);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("  Emit Interval (s)", &specialBarrierEmitInterval_, 0.002f, 0.001f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("  Emit Count / burst", &specialBarrierEmitCount_, 0.5f, 1, 200);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("  Particle Life (s)", &specialBarrierParticleLife_, 0.02f, 0.05f, 5.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("  Radius Scale", &specialBarrierParticleRadiusScale_, 0.02f, 0.1f, 3.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("発生半径 = Barrier Radius × これ");
-		ImGui::DragFloat2("  Scale Min", &specialBarrierParticleScaleMin_.x, 0.005f, 0.0f, 2.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat2("  Scale Max", &specialBarrierParticleScaleMax_.x, 0.005f, 0.0f, 2.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("  Particle Color (start)", &specialBarrierParticleColor0_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("  Particle Color (end)",   &specialBarrierParticleColor1_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-
-		// 光の翼（X字方向に小パーティクルを外向き噴出）
-		ImGui::SeparatorText("光の翼 (Wings)");
-		ImGui::Checkbox("Wings On", &specialWingOn_);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("Wing Arms (本数)", &specialWingArmCount_, 0.2f, 1, 16);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Wing Angle Offset (rad)", &specialWingAngleOffset_, 0.02f, -3.14f, 3.14f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("配置の基準角。π/4≒0.79・本数4 で X 字");
-		ImGui::DragFloat("Wing Speed (速度→長さ)", &specialWingSpeed_, 0.1f, 0.0f, 40.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("外向き初速。実質の長さ ≒ Speed × Life");
-		ImGui::DragFloat("Wing Life (s)", &specialWingLife_, 0.02f, 0.05f, 5.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("Wing Burst Count (量)", &specialWingBurstCount_, 0.2f, 1, 64);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Wing Jitter (ゆらぎ)", &specialWingJitter_, 0.02f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Wing Emit Radius", &specialWingEmitRadius_, 0.01f, 0.0f, 2.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat2("Wing Scale Min", &specialWingScaleMin_.x, 0.002f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat2("Wing Scale Max", &specialWingScaleMax_.x, 0.002f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Wing Color (発生=金)", &specialWingColorInner_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Wing Color (末=ピンク)", &specialWingColorOuter_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-
-		// Phase 2（チャージ電撃）
-		ImGui::SeparatorText("Phase 2 Charge Lightning");
-		ImGui::DragInt("Charge Bolt Count", &specialChargeBoltCount_, 0.1f, 1, 16);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Charge Regen Interval", &specialChargeRegenInterval_, 0.005f, 0.01f, 1.0f, "%.3f sec");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Charge Start H (0=auto)", &specialChargeStartRadiusH_, 0.02f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Charge Start V (0=auto)", &specialChargeStartRadiusV_, 0.02f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::TextDisabled("(0 のとき player Collider.capsule から自動算出)");
-		ImGui::DragFloat("Charge Min Length", &specialChargeMinLength_, 0.02f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-
-		// Phase 3（Fire = サンダー発射）
-		ImGui::SeparatorText("Phase 3 (Fire)");
-		ImGui::DragInt("Fire Simultaneous", &specialFireSimultaneous_, 0.1f, 1, 16);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Min Hold (s)", &specialFireMinHold_, 0.01f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Max Hold (s)", &specialFireMaxHold_, 0.01f, 0.1f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Tick Interval (s)", &specialFireTickInterval_, 0.005f, 0.01f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragInt("Fire Tick Damage", &specialFireTickDamage_, 0.2f, 0, 999);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Launch Interval (s)", &specialFireLaunchInterval_, 0.005f, 0.0f, 2.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Fire Color", &specialFireColor_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Grow Time (s)", &specialFireGrowTime_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("発射直後に始点→敵へ伸びる時間。0で即全長。大きいほど飛んでいく感");
-		ImGui::DragFloat("Fire Zigzag (maxOffset)", &specialFireMaxOffsetRatio_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("ジグザグの暴れ幅。小さいほど直線的＝飛んでる感、大きいほど放電感");
-		ImGui::DragFloat("Fire Branch Prob", &specialFireBranchProb_, 0.01f, 0.0f, 1.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("枝分かれ確率。放電のパチパチ感");
-		ImGui::DragFloat("Fire Start Width", &specialFireStartWidth_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire End Width", &specialFireEndWidth_, 0.005f, 0.0f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Fire Bolt Lifetime (s)", &specialFireBoltLifetime_, 0.005f, 0.01f, 1.0f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("1メッシュの寿命。小さいほど高速にパチパチ再生成");
-		ImGui::DragFloat("End Duration (s)", &specialEndDuration_, 0.05f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("fire bolts=%d  queue=%d", static_cast<int>(specialFireBolts_.size()), static_cast<int>(specialFireQueue_.size()));
-
-		// カメラ引き
-		ImGui::SeparatorText("Camera Pullback");
-		ImGui::DragFloat("Cam Pullback (forward)", &specialCamPullback_, 0.1f, 0.0f, 60.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam FovY Add",           &specialCamFovAdd_,   0.005f, 0.0f, 1.0f, "%.3f rad");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam Up Add",             &specialCamUpAdd_,    0.05f, 0.0f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		// デバッグボタン
 		if (ImGui::Button("Fill Gauge"))   specialGauge_ = specialGaugeMax_;
 		ImGui::SameLine();
@@ -2409,6 +2229,10 @@ void StagePlayScene::Initialize() {
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
 	baseFovY_ = camera_->GetFovY();   // 精密射撃モードのズーム基準（通常時 FovY）
+
+	// ディスラプター崩壊の破片レンダラ（キャプチャ反転の 3D 片＝飛び散って断裂線へ縮小消滅）
+	disruptorShards_ = std::make_unique<DisruptorShardRenderer>();
+	disruptorShards_->Initialize(dxCore_, PrimitivePipeline::GetInstance()->GetSRVManager(), kDisruptorShardCap_);
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
 	// Skybox 生成（DemoScene と同じ Cubemap を使用）
@@ -2508,6 +2332,7 @@ void StagePlayScene::Finalize() {
 		if (auto* em = EffectManager::GetInstance()) em->Stop(specialBarrierEffectHandle_);
 		specialBarrierEffectHandle_ = kInvalidEffectHandle;
 	}
+	if (disruptorShards_) { disruptorShards_->Finalize(); disruptorShards_.reset(); }
 	specialTrash_.clear();
 	specialBarrierVis_.reset();
 	disruptorBeam_.reset();
@@ -3508,10 +3333,17 @@ void StagePlayScene::Draw() {
 		if (fb.rt && fb.rt->IsActive()) fb.rt->Draw();
 	}
 
+	// 崩壊の破片用：World 停止中の現フレームのシーンを1回だけキャプチャ（反転世界の元絵）。
+	if (disruptorPhase_ == DisruptorPhase::Collapse && !disruptorCaptureDone_) {
+		Game::GetPostEffect()->CaptureSceneForDisruptor(commandList);
+		disruptorCaptureDone_ = true;
+	}
+
 	// 必殺技ディスラプター：発射ビーム／衝撃波／断裂線（Step5-B）
 	if (disruptorBeam_)      disruptorBeam_->Draw();
 	if (disruptorShockwave_) disruptorShockwave_->Draw();
 	if (disruptorRift_)      disruptorRift_->Draw();
+	DrawDisruptorFragments(); // 飛び散る破片（反転世界のかけら）
 
 	// 光の翼は GPU パーティクル群（special_wing_*）として DrawGlobalEffects が自動描画
 
@@ -4343,6 +4175,10 @@ void StagePlayScene::EnterDisruptor() {
 	disruptorPendingEnemies_.clear();
 	disruptorPendingBulletPrims_.clear();
 	disruptorKillsDone_ = false;
+	// 発射タイミング状態をリセット（カメラ回り込み後に発射→遅れて反転）
+	disruptorFired_ = false;
+	disruptorFireElapsed_ = 0.0f;
+	disruptorCollapseRevealTimer_ = 0.0f;
 
 	EnterDisruptorPhase(DisruptorPhase::Charge);
 }
@@ -4369,6 +4205,9 @@ void StagePlayScene::EnterDisruptorPhase(DisruptorPhase p) {
 		TrashDisruptorVisual(disruptorBeam_);
 		TrashDisruptorVisual(disruptorShockwave_);
 		BuildDisruptorRift();
+		EnsureDisruptorFragmentPool();   // 飛び散る破片プールを用意
+		disruptorCaptureDone_ = false;   // この崩壊のシーンキャプチャは Draw で1回だけ
+		disruptorCollapseRevealTimer_ = 0.0f; // カメラが狙うアングルへ戻り切ってから進める
 		break;
 	case DisruptorPhase::Recover:
 		// 復帰＋後隙：World 再開・無敵なし（入力は specialActive_ で継続ロック）。
@@ -4405,19 +4244,32 @@ void StagePlayScene::UpdateDisruptorMove(InputActionMap* actions, float realDt) 
 				disruptorAimConfirmed_ = true;
 			}
 			EnterDisruptorPhase(DisruptorPhase::Slash);
-			// 一閃の瞬間に線上の敵を断つ（確定角度で1回だけ）
+			// 線決定時（＝今まだ「狙う」カメラ）の視点でワールド切断線を焼き付け＆対象収集する。
+			// こうすると Collapse で狙うアングルに戻したとき、崩壊が描いた線どおりの向きになる。
 			ExecuteDisruptorSlash();
 		}
 		break;
 	case DisruptorPhase::Slash:
-		// 発射ショットへ到達し切ってから崩壊（後方復帰）へ
-		if (disruptorPhaseTimer_ >= disruptorSlashDuration_ && disruptorCamArrived_) {
-			EnterDisruptorPhase(DisruptorPhase::Collapse);
+		if (!disruptorFired_) {
+			// カメラが発射ショット位置へ回り込み切った瞬間にビーム発射（回り込み→発射の順）
+			if (disruptorCamArrived_) {
+				BuildDisruptorFireVisuals();  // 発射ビーム＋衝撃波を生成
+				disruptorFired_ = true;
+				disruptorFireElapsed_ = 0.0f;
+			}
+		} else {
+			// 発射の表示尺ぶん見せてから崩壊（後方復帰＋断裂線走り込み）へ
+			disruptorFireElapsed_ += realDt;
+			if (disruptorFireElapsed_ >= disruptorSlashDuration_ && disruptorCamArrived_) {
+				EnterDisruptorPhase(DisruptorPhase::Collapse);
+			}
 		}
 		break;
 	case DisruptorPhase::Collapse:
-		// 後方へ戻り切ってから後隙へ
-		if (disruptorPhaseTimer_ >= disruptorCollapseDuration_ && disruptorCamArrived_) {
+		// カメラが「狙うアングル」へ戻り切ってから崩壊タイマーを進める（復帰中は崩壊しない）。
+		if (disruptorCamArrived_) disruptorCollapseRevealTimer_ += realDt;
+		// 崩壊が進み切ったら後隙へ
+		if (disruptorCollapseRevealTimer_ >= disruptorCollapseDuration_) {
 			EnterDisruptorPhase(DisruptorPhase::Recover);
 		}
 		break;
@@ -4642,9 +4494,7 @@ void StagePlayScene::ExecuteDisruptorSlash() {
 	disruptorCutWorldP1_ = pixelToWorldAtDepth(rightPx); // 右端（断裂の走り始め）
 	disruptorCutWorldP2_ = pixelToWorldAtDepth(leftPx);  // 左端
 	disruptorCutWorldValid_ = true;
-
-	// 発射ビーム＋衝撃波を生成（固定方向の一閃。断裂線は Collapse 入りで別途生成）
-	BuildDisruptorFireVisuals();
+	// 発射ビームはここでは作らない。カメラが発射ショット位置へ回り込み切ってから BuildDisruptorFireVisuals() で生成する。
 }
 
 // ローカル +Z をワールド方向 d へ向ける Euler(pitch,yaw,roll)。カメラの look 逆算と同じ規約。
@@ -4814,7 +4664,8 @@ void StagePlayScene::UpdateDisruptorVisuals(float realDt) {
 	}
 	// 断裂線：Collapse 中に右→左へ走り込む。引き切った瞬間に敵を一括キル。
 	if (disruptorRift_) {
-		if (disruptorPhase_ == DisruptorPhase::Collapse) {
+		// カメラが狙うアングルへ戻り切ってから断裂線を走り込ませる（復帰中は止める）。
+		if (disruptorPhase_ == DisruptorPhase::Collapse && disruptorCamArrived_) {
 			disruptorRiftTimer_ += realDt;
 			const float raw = (disruptorRiftRevealTime_ > 1e-4f) ? (disruptorRiftTimer_ / disruptorRiftRevealTime_) : 1.0f;
 			disruptorRift_->SetScale({ 1.0f, 1.0f, smooth(raw) });
@@ -4823,8 +4674,11 @@ void StagePlayScene::UpdateDisruptorVisuals(float realDt) {
 		disruptorRift_->Update(camera_.get(), realDt);
 	}
 
-	// Step6: 崩壊リビール＋色反転（PostEffect）の更新
+	// Step6: 崩壊リビール＋色反転（PostEffect）の更新。境界はシェーダで軽くギザギザに。
 	UpdateDisruptorReveal();
+
+	// 飛び散る破片（反転世界のかけら）の発生・移動・縮小・寿命
+	UpdateDisruptorFragments(realDt);
 }
 
 void StagePlayScene::UpdateDisruptorReveal() {
@@ -4832,9 +4686,11 @@ void StagePlayScene::UpdateDisruptorReveal() {
 	if (!pe || !pe->disruptorReveal) return;
 	auto* rev = pe->disruptorReveal;
 
-	// 崩壊リビールは Slash（全画面反転）と Collapse（線から上下へ通常色が伝播）でのみ有効。
-	const bool active = (disruptorPhase_ == DisruptorPhase::Slash ||
-	                     disruptorPhase_ == DisruptorPhase::Collapse);
+	// 色反転は「ビーム発射から disruptorInvertDelay_ 遅れて」ON（Slash 後半）→ Collapse へ継続。
+	// 発射前（チャージ／カメラ回り込み中）は通常色のまま。
+	const bool slashInvert = (disruptorPhase_ == DisruptorPhase::Slash) &&
+	                         disruptorFired_ && (disruptorFireElapsed_ >= disruptorInvertDelay_);
+	const bool active = slashInvert || (disruptorPhase_ == DisruptorPhase::Collapse);
 	if (!active || !camera_) {
 		rev->SetEnabled(false);
 		return;
@@ -4842,6 +4698,8 @@ void StagePlayScene::UpdateDisruptorReveal() {
 
 	rev->SetEnabled(true);
 	rev->SetIntensity(disruptorRevealIntensity_);
+	rev->SetCrumble(disruptorRevealCellSize_, disruptorRevealChunkJitter_,
+	                disruptorRevealEdgeAmp_, disruptorRevealEdgeFreq_, disruptorRevealEdgeDepth_);
 
 	const float w = static_cast<float>(WindowsApplication::kClientWidth);
 	const float h = static_cast<float>(WindowsApplication::kClientHeight);
@@ -4873,7 +4731,7 @@ void StagePlayScene::UpdateDisruptorReveal() {
 	float t = 0.0f;
 	if (disruptorPhase_ == DisruptorPhase::Collapse) {
 		const float span  = disruptorCollapseDuration_ - disruptorRevealStartDelay_;
-		const float local = disruptorPhaseTimer_ - disruptorRevealStartDelay_;
+		const float local = disruptorCollapseRevealTimer_ - disruptorRevealStartDelay_;
 		if (local > 0.0f) {
 			const float raw = (span > 1e-4f) ? (local / span) : 1.0f;
 			const float u = std::clamp(raw, 0.0f, 1.0f);
@@ -4881,6 +4739,175 @@ void StagePlayScene::UpdateDisruptorReveal() {
 		}
 	}
 	rev->SetRevealT(t);
+}
+
+void StagePlayScene::EnsureDisruptorFragmentPool() {
+	const int n = (std::max)(disruptorFragMaxCount_, 1);
+	if (static_cast<int>(disruptorFragments_.size()) != n) {
+		disruptorFragments_.assign(n, DisruptorFragment{});
+	} else {
+		for (auto& f : disruptorFragments_) f.active = false;
+	}
+	disruptorFragEmitAccum_ = 0.0f;
+}
+
+void StagePlayScene::UpdateDisruptorFragments(float realDt) {
+	if (!camera_ || disruptorFragments_.empty()) return;
+
+	// 現在のリビール進捗（UpdateDisruptorReveal と同じ式）。Collapse 以外は発生しない。
+	float revealT = 0.0f;
+	const bool emitting = (disruptorPhase_ == DisruptorPhase::Collapse) && disruptorCutWorldValid_;
+	if (emitting) {
+		const float span  = disruptorCollapseDuration_ - disruptorRevealStartDelay_;
+		const float local = disruptorCollapseRevealTimer_ - disruptorRevealStartDelay_;
+		if (local > 0.0f) {
+			const float raw = (span > 1e-4f) ? (local / span) : 1.0f;
+			const float u = std::clamp(raw, 0.0f, 1.0f);
+			revealT = u * u * (3.0f - 2.0f * u);
+		}
+	}
+
+	const float w = static_cast<float>(WindowsApplication::kClientWidth);
+	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float aspect = (h > 1.0f) ? (w / h) : (16.0f / 9.0f);
+
+	// 断裂線をスクリーン UV へ射影（DisruptorReveal シェーダと同じ基準）。
+	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+	auto worldToUV = [&](const Vector3& world, float& u, float& v) {
+		const float wx = world.x * vp.m[0][0] + world.y * vp.m[1][0] + world.z * vp.m[2][0] + vp.m[3][0];
+		const float wy = world.x * vp.m[0][1] + world.y * vp.m[1][1] + world.z * vp.m[2][1] + vp.m[3][1];
+		float ww = world.x * vp.m[0][3] + world.y * vp.m[1][3] + world.z * vp.m[2][3] + vp.m[3][3];
+		if (ww <= 1e-4f) ww = 1e-4f;
+		u = (wx / ww) * 0.5f + 0.5f;
+		v = 1.0f - ((wy / ww) * 0.5f + 0.5f);
+	};
+	float au = 0.0f, av = 0.5f, bu = 1.0f, bv = 0.5f;
+	worldToUV(disruptorCutWorldP1_, au, av);
+	worldToUV(disruptorCutWorldP2_, bu, bv);
+	// アスペクト補正空間（シェーダと一致）。線方向と垂直方向。
+	const Vector2 A{ au * aspect, av };
+	const Vector2 B{ bu * aspect, bv };
+	Vector2 lineDir{ B.x - A.x, B.y - A.y };
+	const float lineLen = std::sqrt(lineDir.x * lineDir.x + lineDir.y * lineDir.y);
+	if (lineLen > 1e-5f) { lineDir.x /= lineLen; lineDir.y /= lineLen; }
+	else { lineDir = { 1.0f, 0.0f }; }
+	const Vector2 perpDir{ -lineDir.y, lineDir.x };  // 線に垂直（上下）
+	const float maxDist = std::sqrt(aspect * aspect + 1.0f) * 1.1f; // シェーダと同じ全画面到達距離
+	const float halfW = revealT * maxDist;                          // 現在の境界（線からの垂直距離）
+
+	// スクリーン UV → ワールド（焼き付け深度の前方平面に乗せる）
+	const Vector3 camPos = camera_->GetTranslate();
+	const Matrix4x4 camRot = MakeRotateMatrix(camera_->GetRotate());
+	const Vector3 camFwd{ camRot.m[2][0], camRot.m[2][1], camRot.m[2][2] };
+	const Matrix4x4 invVP = Inverse(vp);
+	const float depth = disruptorCutDepth_;
+	auto uvToWorld = [&](float u, float v) -> Vector3 {
+		const float ndcX = u * 2.0f - 1.0f;
+		const float ndcY = 1.0f - v * 2.0f;
+		const Vector3 farW = TransformCoordinate(Vector3{ ndcX, ndcY, 1.0f }, invVP);
+		Vector3 rd{ farW.x - camPos.x, farW.y - camPos.y, farW.z - camPos.z };
+		const float rl = std::sqrt(rd.x * rd.x + rd.y * rd.y + rd.z * rd.z);
+		if (rl > 1e-6f) { rd.x /= rl; rd.y /= rl; rd.z /= rl; }
+		float denom = rd.x * camFwd.x + rd.y * camFwd.y + rd.z * camFwd.z;
+		if (denom < 1e-4f) denom = 1e-4f;
+		const float t = depth / denom;
+		return { camPos.x + rd.x * t, camPos.y + rd.y * t, camPos.z + rd.z * t };
+	};
+
+	// 乱数源
+	static thread_local std::mt19937 rng(
+		static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+	auto randRange = [&](float a, float b) { return a + dist01(rng) * (std::max)(b - a, 0.0f); };
+
+	// ----- 発生：スクリーン境界（線から halfW の位置）に沿って破片を撒く -----
+	if (emitting && revealT > 0.0f && halfW > 1e-4f) {
+		disruptorFragEmitAccum_ += disruptorFragEmitRate_ * realDt;
+		while (disruptorFragEmitAccum_ >= 1.0f) {
+			disruptorFragEmitAccum_ -= 1.0f;
+			DisruptorFragment* slot = nullptr;
+			for (auto& f : disruptorFragments_) { if (!f.active) { slot = &f; break; } }
+			if (!slot) break; // 満杯
+			const float u = 0.5f + (dist01(rng) * 2.0f - 1.0f) * disruptorFragAlongRange_;
+			slot->lineBaseAspect = { A.x + (B.x - A.x) * u, A.y + (B.y - A.y) * u };
+			const float side = (dist01(rng) < 0.5f) ? -1.0f : 1.0f;
+			slot->perpAspect = { perpDir.x * side, perpDir.y * side };
+			slot->spawnPerp = halfW; // 発生時の境界位置（ここから線へ縮む）
+			slot->alongDrift = (dist01(rng) * 2.0f - 1.0f) * halfW * 0.7f; // 線方向の散らばり（扇状）
+			// 軸ごとに非一様＝整ったキューブでなく不揃いな破片
+			slot->baseScale = { randRange(disruptorFragScaleMin_, disruptorFragScaleMax_),
+			                    randRange(disruptorFragScaleMin_, disruptorFragScaleMax_),
+			                    randRange(disruptorFragScaleMin_, disruptorFragScaleMax_) };
+			slot->lifeDur   = (std::max)(randRange(disruptorFragLifeMin_, disruptorFragLifeMax_), 1e-3f);
+			slot->spin = { (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_,
+			               (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_,
+			               (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_ };
+			slot->rot  = { dist01(rng) * 6.2831853f, dist01(rng) * 6.2831853f, dist01(rng) * 6.2831853f };
+			// 発生位置の画面 UV を固定で持つ＝剥がれた場所の世界の絵を貼ったまま動く
+			const Vector2 spawnAspect{ slot->lineBaseAspect.x + slot->perpAspect.x * slot->spawnPerp,
+			                           slot->lineBaseAspect.y + slot->perpAspect.y * slot->spawnPerp };
+			const float cu = spawnAspect.x / aspect;
+			const float cv = spawnAspect.y;
+			const float half = disruptorFragUvSize_ * 0.5f;
+			slot->uvMin  = { cu - half, cv - half };
+			slot->uvSize = { disruptorFragUvSize_, disruptorFragUvSize_ };
+			slot->life = 0.0f;
+			slot->active = true;
+		}
+	}
+
+	// ----- 更新：スクリーン上で断裂線へ垂直距離を縮めながら、ワールドへ射影して 3D 配置 -----
+	for (auto& f : disruptorFragments_) {
+		if (!f.active) continue;
+		f.life += realDt / f.lifeDur;
+		if (f.life >= 1.0f) { f.active = false; continue; }
+		const float k = 1.0f - f.life;             // 1→0
+		const float curPerp = f.spawnPerp * k;     // 断裂線へ近づく（aspect空間）
+		// 線方向の単位ベクトル（perpAspect を90°回したもの）。飛び散りドリフトに使う。
+		const Vector2 dirA{ f.perpAspect.y, -f.perpAspect.x };
+		const float drift = f.alongDrift * f.life; // 進むほど線方向にも散る＝扇状に飛び散る
+		const Vector2 a{ f.lineBaseAspect.x + f.perpAspect.x * curPerp + dirA.x * drift,
+		                 f.lineBaseAspect.y + f.perpAspect.y * curPerp + dirA.y * drift };
+		const float uu = a.x / aspect;
+		const float vv = a.y;
+		f.pos = uvToWorld(uu, vv);
+		f.rot = { f.rot.x + f.spin.x * realDt, f.rot.y + f.spin.y * realDt, f.rot.z + f.spin.z * realDt };
+		const float shrink = k * k;                // どんどん小さく（後半で急に縮む）
+		f.curScale = { f.baseScale.x * shrink, f.baseScale.y * shrink, f.baseScale.z * shrink };
+		f.alpha = k; // フェードアウト
+	}
+}
+
+void StagePlayScene::DrawDisruptorFragments() {
+	if (!disruptorShards_ || !camera_) return;
+	auto* pe = Game::GetPostEffect();
+	if (!pe) return;
+
+	std::vector<DisruptorShardRenderer::Instance> instances;
+	instances.reserve(disruptorFragments_.size());
+	for (auto& f : disruptorFragments_) {
+		if (!f.active) continue;
+		DisruptorShardRenderer::Instance inst;
+		Transform t{};
+		t.scale = f.curScale;
+		t.rotate = f.rot;
+		t.translate = f.pos;
+		inst.world = MakeAffineMatrix(t);
+		inst.uvMin = f.uvMin;
+		inst.uvSize = f.uvSize;
+		inst.alpha = f.alpha * disruptorFragAlpha_;   // 半透明ガラス
+		inst.distortAmount = disruptorFragDistort_;
+		inst.distortFreq = disruptorFragDistortFreq_;
+		instances.push_back(inst);
+	}
+	if (instances.empty()) return;
+
+	disruptorShards_->Draw(camera_->GetViewProjectionMatrix(), pe->GetCaptureSRVIndex(), instances);
+}
+
+void StagePlayScene::ClearDisruptorFragments() {
+	for (auto& f : disruptorFragments_) f.active = false;
+	disruptorFragEmitAccum_ = 0.0f;
 }
 
 void StagePlayScene::EnterSpecialPhaseBarrier() {
@@ -5798,6 +5825,7 @@ void StagePlayScene::EndSpecialMove() {
 	TrashDisruptorVisual(disruptorBeam_);
 	TrashDisruptorVisual(disruptorShockwave_);
 	TrashDisruptorVisual(disruptorRift_);
+	ClearDisruptorFragments(); // 境界破片プールを遅延削除へ
 	disruptorPendingEnemies_.clear();
 	disruptorPendingBulletPrims_.clear();
 	disruptorKillsDone_ = false;
@@ -5936,10 +5964,11 @@ void StagePlayScene::ApplyDisruptorCamera() {
 		tgtFov  = baseFov + disruptorCamFireFovAdd_;
 		break;
 	case DisruptorPhase::Collapse:
-		// 崩壊：後方へ戻る。戻りの中に断裂線が走り込む。
-		tgtEye  = { baseEye.x - fwd.x * disruptorCamCollapsePullback_ + up.x * disruptorCamCollapseUpAdd_,
-		            baseEye.y - fwd.y * disruptorCamCollapsePullback_ + up.y * disruptorCamCollapseUpAdd_,
-		            baseEye.z - fwd.z * disruptorCamCollapsePullback_ + up.z * disruptorCamCollapseUpAdd_ };
+		// 崩壊：線を決めたとき（Charge）の「狙うアングル」へ戻す。
+		// ここへ戻り切ってから断裂線が走り込み崩壊する＝描いた線どおりの向きで崩れる。
+		tgtEye  = { baseEye.x - fwd.x * disruptorCamPullback_ + up.x * disruptorCamUpAdd_,
+		            baseEye.y - fwd.y * disruptorCamPullback_ + up.y * disruptorCamUpAdd_,
+		            baseEye.z - fwd.z * disruptorCamPullback_ + up.z * disruptorCamUpAdd_ };
 		tgtLook = player;
 		tgtFov  = baseFov + disruptorCamFovAdd_;
 		break;

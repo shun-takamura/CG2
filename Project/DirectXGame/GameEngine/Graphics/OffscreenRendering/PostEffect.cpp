@@ -42,6 +42,11 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	distortionRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8G8B8A8_UNORM, distortionClear);
 
+	// シーンキャプチャ RT（ディスラプター崩壊の破片用。シーン RT と同じ sRGB）
+	captureRT_ = std::make_unique<RenderTexture>();
+	captureRT_->Initialize(dxCore_, srvManager_, width, height,
+		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
+
 	CreateRootSignatures();
 	CreateBasePsoDesc();
 	InitializeEffects();
@@ -487,6 +492,51 @@ void PostEffect::RunDistortionForPreview(ID3D12GraphicsCommandList* commandList,
 }
 
 // ===================================================================
+// シーンキャプチャ（ディスラプター崩壊の破片用）
+// ===================================================================
+
+uint32_t PostEffect::GetCaptureSRVIndex() const
+{
+	return captureRT_ ? captureRT_->GetSRVIndex() : 0u;
+}
+
+void PostEffect::CaptureSceneForDisruptor(ID3D12GraphicsCommandList* commandList)
+{
+	if (!captureRT_ || !renderTextureA_) return;
+
+	// renderTextureA_ は現在 RENDER_TARGET。コピー元にするため SRV に遷移する。
+	ID3D12Resource* sceneRes = renderTextureA_->GetResource();
+	D3D12_RESOURCE_BARRIER toSrv{};
+	toSrv.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	toSrv.Transition.pResource = sceneRes;
+	toSrv.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	toSrv.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	toSrv.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	commandList->ResourceBarrier(1, &toSrv);
+
+	// captureRT_ を RT にして全画面コピー（既存の copy パイプライン流用）
+	captureRT_->BeginRender(commandList);
+	srvManager_->PreDraw();
+	DrawCopy(commandList, renderTextureA_.get());
+	captureRT_->EndRender(commandList); // capture -> PIXEL_SHADER_RESOURCE
+
+	// renderTextureA_ を RENDER_TARGET に戻す
+	D3D12_RESOURCE_BARRIER toRt = toSrv;
+	toRt.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	toRt.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	commandList->ResourceBarrier(1, &toRt);
+
+	// シーン RTV + 深度 + ビューポート/シザーを復帰（以降のシーン描画が継続できるように）
+	auto rtv = renderTextureA_->GetRTVHandle();
+	auto dsv = dxCore_->GetDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtv, false, &dsv);
+	D3D12_VIEWPORT vp{ 0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f };
+	D3D12_RECT sc{ 0, 0, static_cast<LONG>(width_), static_cast<LONG>(height_) };
+	commandList->RSSetViewports(1, &vp);
+	commandList->RSSetScissorRects(1, &sc);
+}
+
+// ===================================================================
 // シーン描画開始/終了
 // ===================================================================
 
@@ -808,4 +858,5 @@ void PostEffect::Finalize()
 	if (renderTextureB_) renderTextureB_->Finalize();
 	if (idMaskRT_)       idMaskRT_->Finalize();
 	if (distortionRT_)   distortionRT_->Finalize();
+	if (captureRT_)      captureRT_->Finalize();
 }
