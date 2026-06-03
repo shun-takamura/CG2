@@ -220,14 +220,47 @@ void Game::Draw() {
 	// 3. マルチパスでエフェクト適用
 	// Releaseビルド: Swapchainへ直接出力
 	// Debugビルド  : Viewport表示用 RenderTexture へ出力 → ImGui::Image で表示
+	auto* cmd = dxCore_->GetCommandList();
+	BaseScene* afterScene = SceneManager::GetInstance()->GetCurrentScene();
 #ifdef _DEBUG
-	postEffect_->Draw(dxCore_->GetCommandList(), viewportRenderTexture_.get());
-	// PostEffect::Draw 内で RTV が viewportRenderTexture_ に切り替えられたので、
+	postEffect_->Draw(cmd, viewportRenderTexture_.get());
+	// PostEffect 後のオーバーレイ（崩壊破片など）を viewportRT に重ねる。
+	// viewportRT は Draw 後 SRV 状態なので、合成画像を消さないよう手動バリアで RT 化（クリアしない・DSVなし）。
+	if (afterScene) {
+		RenderTexture* vrt = viewportRenderTexture_.get();
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = vrt->GetResource();
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		cmd->ResourceBarrier(1, &barrier);
+
+		auto rtv = vrt->GetRTVHandle();
+		cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
+		D3D12_VIEWPORT vp{ 0.0f, 0.0f,
+			static_cast<float>(vrt->GetWidth()), static_cast<float>(vrt->GetHeight()), 0.0f, 1.0f };
+		D3D12_RECT sc{ 0, 0,
+			static_cast<LONG>(vrt->GetWidth()), static_cast<LONG>(vrt->GetHeight()) };
+		cmd->RSSetViewports(1, &vp);
+		cmd->RSSetScissorRects(1, &sc);
+		srvManager_->PreDraw();
+		afterScene->DrawAfterPostEffect(cmd);
+
+		// RT → SRV に戻す（ImGui::Image で読めるように）
+		std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+		cmd->ResourceBarrier(1, &barrier);
+	}
 	// ImGui を Swapchain に描画するために RTV を戻す
-	dxCore_->RestoreSwapchainRenderTarget(dxCore_->GetCommandList());
+	dxCore_->RestoreSwapchainRenderTarget(cmd);
 	srvManager_->PreDraw();
 #else
-	postEffect_->Draw(dxCore_->GetCommandList());
+	postEffect_->Draw(cmd);
+	// PostEffect 後のオーバーレイ（崩壊破片など）。Swapchain RTV は DSVなしでバインド済み。
+	if (afterScene) {
+		srvManager_->PreDraw();
+		afterScene->DrawAfterPostEffect(cmd);
+	}
 #endif
 
 	// 4. ImGui描画（Swapchainに直接）

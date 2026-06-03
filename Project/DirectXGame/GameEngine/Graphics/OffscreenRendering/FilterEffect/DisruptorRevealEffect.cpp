@@ -41,9 +41,13 @@ void DisruptorRevealEffect::UpdateConstantBuffer()
 	cb.lineP0[0] = lineP0_[0]; cb.lineP0[1] = lineP0_[1];
 	cb.lineP1[0] = lineP1_[0]; cb.lineP1[1] = lineP1_[1];
 	cb.revealT = std::clamp(revealT_, 0.0f, 1.0f);
-	cb.edgeSoftness = (std::max)(edgeSoftness_, 0.0f);
 	cb.intensity = std::clamp(intensity_, 0.0f, 1.0f);
 	cb.aspect = aspect_;
+	cb.cellSize = cellSize_;
+	cb.chunkJitter = chunkJitter_;
+	cb.edgeNoiseAmp = edgeNoiseAmp_;
+	cb.edgeNoiseFreq = edgeNoiseFreq_;
+	cb.edgeDepth = edgeDepth_;
 	std::memcpy(constantBufferMappedPtr_, &cb, sizeof(cb));
 }
 
@@ -51,8 +55,12 @@ void DisruptorRevealEffect::ShowImGui()
 {
 #ifdef USE_IMGUI
 	ImGui::SliderFloat("Reveal T##DisruptorReveal", &revealT_, 0.0f, 1.0f);
-	ImGui::SliderFloat("Edge Softness##DisruptorReveal", &edgeSoftness_, 0.0f, 0.3f);
 	ImGui::SliderFloat("Intensity##DisruptorReveal", &intensity_, 0.0f, 1.0f);
+	ImGui::SliderFloat("Cell Size##DisruptorReveal", &cellSize_, 0.005f, 0.3f);
+	ImGui::SliderFloat("Chunk Jitter##DisruptorReveal", &chunkJitter_, 0.0f, 0.4f);
+	ImGui::SliderFloat("Edge Amp##DisruptorReveal", &edgeNoiseAmp_, 0.0f, 0.2f);
+	ImGui::SliderFloat("Edge Freq##DisruptorReveal", &edgeNoiseFreq_, 1.0f, 120.0f);
+	ImGui::SliderFloat("Edge Depth##DisruptorReveal", &edgeDepth_, 0.0f, 0.4f);
 	ImGui::DragFloat2("Line P0 (uv)##DisruptorReveal", lineP0_, 0.01f, 0.0f, 1.0f);
 	ImGui::DragFloat2("Line P1 (uv)##DisruptorReveal", lineP1_, 0.01f, 0.0f, 1.0f);
 	ImGui::TextDisabled("revealT=0: 全画面反転 / 1: 全画面通常");
@@ -64,6 +72,10 @@ void DisruptorRevealEffect::ResetParams()
 	lineP0_[0] = 0.5f; lineP0_[1] = 0.5f;
 	lineP1_[0] = 1.0f; lineP1_[1] = 0.5f;
 	revealT_ = 0.0f;
-	edgeSoftness_ = 0.03f;
 	intensity_ = 1.0f;
+	cellSize_ = 0.05f;
+	chunkJitter_ = 0.08f;
+	edgeNoiseAmp_ = 0.03f;
+	edgeNoiseFreq_ = 30.0f;
+	edgeDepth_ = 0.05f;
 }

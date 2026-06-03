@@ -29,9 +29,12 @@ public:
 		lineP0_[0] = p0x; lineP0_[1] = p0y; lineP1_[0] = p1x; lineP1_[1] = p1y;
 	}
 	void SetRevealT(float t) { revealT_ = t; }
-	void SetEdgeSoftness(float s) { edgeSoftness_ = s; }
 	void SetIntensity(float v) { intensity_ = v; }
 	void SetAspect(float a) { aspect_ = a; }
+	// 崩壊の見た目：ブロック大きさ／崩壊タイミングのばらつき／境界ギザギザ振幅・細かさ
+	void SetCrumble(float cellSize, float chunkJitter, float edgeNoiseAmp, float edgeNoiseFreq, float edgeDepth) {
+		cellSize_ = cellSize; chunkJitter_ = chunkJitter; edgeNoiseAmp_ = edgeNoiseAmp; edgeNoiseFreq_ = edgeNoiseFreq; edgeDepth_ = edgeDepth;
+	}
 
 private:
 	struct ParamsCB
@@ -39,15 +42,23 @@ private:
 		float lineP0[2]{ 0.5f, 0.5f };
 		float lineP1[2]{ 1.0f, 0.5f };
 		float revealT = 0.0f;
-		float edgeSoftness = 0.03f;
 		float intensity = 1.0f;
 		float aspect = 16.0f / 9.0f;
+		float cellSize = 0.05f;
+		float chunkJitter = 0.08f;
+		float edgeNoiseAmp = 0.03f;
+		float edgeNoiseFreq = 30.0f;
+		float edgeDepth = 0.05f;
 	};
 
 	float lineP0_[2]{ 0.5f, 0.5f };
 	float lineP1_[2]{ 1.0f, 0.5f };
 	float revealT_ = 0.0f;
-	float edgeSoftness_ = 0.03f;
 	float intensity_ = 1.0f;
 	float aspect_ = 16.0f / 9.0f;
+	float cellSize_ = 0.05f;
+	float chunkJitter_ = 0.08f;
+	float edgeNoiseAmp_ = 0.03f;
+	float edgeNoiseFreq_ = 30.0f;
+	float edgeDepth_ = 0.05f;
 };
