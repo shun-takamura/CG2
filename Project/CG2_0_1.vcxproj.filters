@@ -393,9 +393,6 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DisruptorRevealEffect.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -903,9 +900,6 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DisruptorRevealEffect.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h">
