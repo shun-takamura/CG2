@@ -69,7 +69,14 @@ PixelShaderOutput main(VertexShaderOutput input)
     float2 dir = (abLen > 1e-5f) ? (ab / abLen) : float2(1.0f, 0.0f);
     float2 nrm = float2(-dir.y, dir.x);
 
-    float maxDist = sqrt(aspect * aspect + 1.0f) * 1.1f;
+    // 断裂線から画面四隅までの最大垂直距離＝この線で全画面を覆い切るのに必要な距離。
+    // これを基準にすると revealT=1 でちょうど全画面復帰、revealT が「戻った割合」に正しく対応する。
+    float2 c0 = float2(0.0f, 0.0f);
+    float2 c1 = float2(aspect, 0.0f);
+    float2 c2 = float2(0.0f, 1.0f);
+    float2 c3 = float2(aspect, 1.0f);
+    float maxDist = max(max(abs(dot(c0 - a, nrm)), abs(dot(c1 - a, nrm))),
+                        max(abs(dot(c2 - a, nrm)), abs(dot(c3 - a, nrm)))) * 1.02f;
     float front = revealT * maxDist;          // 現在の境界（線から）
 
     // 不規則ブロック：ドメインワープした格子の「セル単位」で殻/通常を決める。

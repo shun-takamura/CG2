@@ -61,6 +61,12 @@ public:
 	virtual void Draw() = 0;
 
 	/// <summary>
+	/// PostEffect 適用後に最終 RT（Swapchain / Viewport RT）へ直接重ねるオーバーレイ描画。
+	/// 二重反転を避けたい崩壊破片などをここで描く。デフォルトは no-op。
+	/// </summary>
+	virtual void DrawAfterPostEffect(struct ID3D12GraphicsCommandList* commandList) {}
+
+	/// <summary>
 	/// シーンが使用しているアクティブなCameraを返す（無ければnullptr）
 	/// SceneManager が ImGuiManager に通知するために使う
 	/// </summary>

@@ -6,22 +6,14 @@
 #include <cstring>
 #include <algorithm>
 
-namespace {
-	struct ShardVertex {
-		float pos[3];
-		float uv[2];
-	};
-}
-
-void DisruptorShardRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t maxInstances) {
+void DisruptorShardRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t maxCells) {
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
-	maxInstances_ = (std::max)(maxInstances, 1u);
+	maxCells_ = (std::max)(maxCells, 1u);
 
 	CreateRootSignature();
 	CreatePipelineState();
-	CreateCubeMesh();
-	CreateInstanceBuffer();
+	CreateConstantBuffer();
 }
 
 void DisruptorShardRenderer::Finalize() {
@@ -29,15 +21,18 @@ void DisruptorShardRenderer::Finalize() {
 		cbBuffer_->Unmap(0, nullptr);
 		cbMapped_ = nullptr;
 	}
+	if (vertexBuffer_ && vbMapped_) {
+		vertexBuffer_->Unmap(0, nullptr);
+		vbMapped_ = nullptr;
+	}
 	cbBuffer_.Reset();
 	vertexBuffer_.Reset();
-	indexBuffer_.Reset();
 	pipelineState_.Reset();
 	rootSignature_.Reset();
 }
 
 void DisruptorShardRenderer::CreateRootSignature() {
-	// [0] CBV b0（VS:WVP/UV, PS:alpha）, [1] SRV t0（capture, PS）, s0 linear clamp
+	// [0] CBV b0（VS:WVP / PS:alpha,satBoost）, [1] SRV t0（capture, PS）, s0 linear clamp
 	D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
 	srvRange[0].BaseShaderRegister = 0;
 	srvRange[0].NumDescriptors = 1;
@@ -117,7 +112,7 @@ void DisruptorShardRenderer::CreatePipelineState() {
 	blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
 	blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
 
-	// 深度テストなし（崩壊のオーバーレイ演出として確実に手前に出す。書き込みもしない）
+	// 深度テストなし（PostEffect 後のオーバーレイ＝DSVなしで描く。書き込みもしない）
 	D3D12_DEPTH_STENCIL_DESC depth{};
 	depth.DepthEnable = FALSE;
 	depth.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
@@ -134,7 +129,7 @@ void DisruptorShardRenderer::CreatePipelineState() {
 	desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
 	desc.NumRenderTargets = 1;
 	desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // シーン RT と同じ
-	desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	desc.DSVFormat = DXGI_FORMAT_UNKNOWN; // PostEffect 後に DSVなしで描くため（DepthEnable=FALSE と整合）
 	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	desc.SampleDesc.Count = 1;
 
@@ -142,84 +137,84 @@ void DisruptorShardRenderer::CreatePipelineState() {
 	assert(SUCCEEDED(hr));
 }
 
-void DisruptorShardRenderer::CreateCubeMesh() {
-	// 24 頂点（面ごとに 4 頂点、面ローカル UV 0..1）。pos は [-0.5,0.5]。
-	const float h = 0.5f;
-	const ShardVertex verts[24] = {
-		// +X
-		{{ h,-h,-h},{0,0}}, {{ h,-h, h},{1,0}}, {{ h, h, h},{1,1}}, {{ h, h,-h},{0,1}},
-		// -X
-		{{-h,-h, h},{0,0}}, {{-h,-h,-h},{1,0}}, {{-h, h,-h},{1,1}}, {{-h, h, h},{0,1}},
-		// +Y
-		{{-h, h,-h},{0,0}}, {{ h, h,-h},{1,0}}, {{ h, h, h},{1,1}}, {{-h, h, h},{0,1}},
-		// -Y
-		{{-h,-h, h},{0,0}}, {{ h,-h, h},{1,0}}, {{ h,-h,-h},{1,1}}, {{-h,-h,-h},{0,1}},
-		// +Z
-		{{ h,-h, h},{0,0}}, {{-h,-h, h},{1,0}}, {{-h, h, h},{1,1}}, {{ h, h, h},{0,1}},
-		// -Z
-		{{-h,-h,-h},{0,0}}, {{ h,-h,-h},{1,0}}, {{ h, h,-h},{1,1}}, {{-h, h,-h},{0,1}},
-	};
-	uint32_t indices[36];
-	for (uint32_t f = 0; f < 6; ++f) {
-		const uint32_t b = f * 4;
-		const uint32_t o = f * 6;
-		indices[o + 0] = b + 0; indices[o + 1] = b + 1; indices[o + 2] = b + 2;
-		indices[o + 3] = b + 0; indices[o + 4] = b + 2; indices[o + 5] = b + 3;
-	}
-	indexCount_ = 36;
-
-	const UINT vbSize = sizeof(verts);
-	vertexBuffer_ = dxCore_->CreateBufferResource(vbSize);
-	void* vp = nullptr;
-	vertexBuffer_->Map(0, nullptr, &vp);
-	std::memcpy(vp, verts, vbSize);
-	vertexBuffer_->Unmap(0, nullptr);
-	vbView_.BufferLocation = vertexBuffer_->GetGPUVirtualAddress();
-	vbView_.SizeInBytes = vbSize;
-	vbView_.StrideInBytes = sizeof(ShardVertex);
-
-	const UINT ibSize = sizeof(indices);
-	indexBuffer_ = dxCore_->CreateBufferResource(ibSize);
-	void* ip = nullptr;
-	indexBuffer_->Map(0, nullptr, &ip);
-	std::memcpy(ip, indices, ibSize);
-	indexBuffer_->Unmap(0, nullptr);
-	ibView_.BufferLocation = indexBuffer_->GetGPUVirtualAddress();
-	ibView_.SizeInBytes = ibSize;
-	ibView_.Format = DXGI_FORMAT_R32_UINT;
-}
-
-void DisruptorShardRenderer::CreateInstanceBuffer() {
+void DisruptorShardRenderer::CreateConstantBuffer() {
 	cbStride_ = (static_cast<uint32_t>(sizeof(ShardCB)) + 255u) & ~255u;
-	cbBuffer_ = dxCore_->CreateBufferResource(static_cast<size_t>(cbStride_) * maxInstances_);
+	cbBuffer_ = dxCore_->CreateBufferResource(static_cast<size_t>(cbStride_) * maxCells_);
 	cbBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&cbMapped_));
 }
 
+void DisruptorShardRenderer::EnsureVertexCapacity(uint32_t vertexCount) {
+	if (vertexCount <= vbCapacityVerts_ && vertexBuffer_) return;
+
+	// 既存をアンマップして作り直す（SetCells は崩壊開始に1回＝フレーム途中の描画中ではない）
+	if (vertexBuffer_ && vbMapped_) {
+		vertexBuffer_->Unmap(0, nullptr);
+		vbMapped_ = nullptr;
+	}
+	// 余裕を持って確保（churn 抑制）
+	uint32_t cap = (std::max)(vertexCount, vbCapacityVerts_ + vbCapacityVerts_ / 2u);
+	cap = (std::max)(cap, 3u);
+	vertexBuffer_ = dxCore_->CreateBufferResource(static_cast<size_t>(cap) * sizeof(Vertex));
+	vertexBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&vbMapped_));
+	vbCapacityVerts_ = cap;
+}
+
+void DisruptorShardRenderer::SetCells(const std::vector<CellMesh>& cells) {
+	cellRanges_.clear();
+	cellRanges_.reserve(cells.size());
+
+	uint32_t total = 0;
+	for (const auto& c : cells) total += static_cast<uint32_t>(c.verts.size());
+	if (total == 0) {
+		vbView_ = {};
+		return;
+	}
+
+	EnsureVertexCapacity(total);
+	if (!vbMapped_) return;
+
+	uint32_t cursor = 0;
+	for (const auto& c : cells) {
+		const uint32_t n = static_cast<uint32_t>(c.verts.size());
+		CellRange range{ cursor, n };
+		cellRanges_.push_back(range);
+		if (n > 0) {
+			std::memcpy(vbMapped_ + static_cast<size_t>(cursor) * sizeof(Vertex),
+				c.verts.data(), static_cast<size_t>(n) * sizeof(Vertex));
+		}
+		cursor += n;
+	}
+
+	vbView_.BufferLocation = vertexBuffer_->GetGPUVirtualAddress();
+	vbView_.SizeInBytes = total * sizeof(Vertex);
+	vbView_.StrideInBytes = sizeof(Vertex);
+}
+
 void DisruptorShardRenderer::Draw(const Matrix4x4& viewProjection, uint32_t captureSrvIndex,
-	const std::vector<Instance>& instances) {
-	if (instances.empty() || !pipelineState_ || !cbMapped_) return;
+	const std::vector<DrawItem>& items) {
+	if (items.empty() || !pipelineState_ || !cbMapped_ || cellRanges_.empty() || vbView_.SizeInBytes == 0) return;
 
 	ID3D12GraphicsCommandList* cmd = dxCore_->GetCommandList();
 	cmd->SetGraphicsRootSignature(rootSignature_.Get());
 	cmd->SetPipelineState(pipelineState_.Get());
 	cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	cmd->IASetVertexBuffers(0, 1, &vbView_);
-	cmd->IASetIndexBuffer(&ibView_);
 	srvManager_->SetGraphicsRootDescriptorTable(1, captureSrvIndex);
 
-	const size_t n = (std::min)(instances.size(), static_cast<size_t>(maxInstances_));
+	const size_t n = (std::min)(items.size(), static_cast<size_t>(maxCells_));
 	for (size_t i = 0; i < n; ++i) {
-		const Instance& inst = instances[i];
+		const DrawItem& it = items[i];
+		if (it.cellIndex >= cellRanges_.size()) continue;
+		const CellRange& range = cellRanges_[it.cellIndex];
+		if (range.count == 0) continue;
+
 		ShardCB cb{};
-		cb.wvp = Multiply(inst.world, viewProjection);
-		cb.uvMin[0] = inst.uvMin.x;  cb.uvMin[1] = inst.uvMin.y;
-		cb.uvSize[0] = inst.uvSize.x; cb.uvSize[1] = inst.uvSize.y;
-		cb.alpha = inst.alpha;
-		cb.distortAmount = inst.distortAmount;
-		cb.distortFreq = inst.distortFreq;
+		cb.wvp = Multiply(it.world, viewProjection);
+		cb.alpha = it.alpha;
+		cb.satBoost = it.satBoost;
 		std::memcpy(cbMapped_ + i * cbStride_, &cb, sizeof(cb));
 		const D3D12_GPU_VIRTUAL_ADDRESS addr = cbBuffer_->GetGPUVirtualAddress() + i * cbStride_;
 		cmd->SetGraphicsRootConstantBufferView(0, addr);
-		cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+		cmd->DrawInstanced(range.count, 1, range.start, 0);
 	}
 }

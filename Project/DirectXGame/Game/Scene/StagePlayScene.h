@@ -38,6 +38,7 @@ public:
 	void Finalize() override;
 	void Update() override;
 	void Draw() override;
+	void DrawAfterPostEffect(ID3D12GraphicsCommandList* commandList) override;
 
 	// シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する。
 	void Seek(float seconds) override;
@@ -684,6 +685,9 @@ private:
 	// Collapse 入りからこの秒数は revealT=0（全画面反転＝断裂線が走り切るまで殻のまま）。
 	// 以後 [delay, disruptorCollapseDuration_] 区間で revealT 0→1（ゆっくり剥がれて下の通常色が戻る）。
 	float disruptorRevealStartDelay_   = 0.45f;
+	// 画面がこの割合まで通常色に戻ったら崩壊終了＝後隙(World再開)へ。破片は生かしたまま。
+	float disruptorCollapseEndAt_      = 0.9f;
+	float DisruptorCollapseRevealT() const; // Collapse の剥がれ進捗 0..1（smoothstep 済み）
 	// 崩壊の見た目（ギザギザ＋ブロック崩壊）。画面の絵そのものが砕けながら剥がれる。
 	// 境界はシェーダで軽くギザギザにする程度（飛び散る破片は 3D 片＝下の Fragment 群が担当）。
 	float disruptorRevealCellSize_     = 0.05f;  // 境界ブロックの大きさ
@@ -726,19 +730,69 @@ private:
 	float   disruptorFragAlongRange_= 0.35f;   // 線中央から±この割合の範囲で発生（画面内に収める）
 	float   disruptorFragLifeMin_   = 0.35f;
 	float   disruptorFragLifeMax_   = 0.7f;
-	float   disruptorFragScaleMin_  = 0.3f;    // 破片の最大スケール(world)。小さめ(0.3〜1.5)が破片らしい
-	float   disruptorFragScaleMax_  = 1.0f;
-	float   disruptorFragUvSize_    = 0.06f;   // 破片が貼るキャプチャの UV フットプリント
+	float   disruptorFragScaleMin_  = 0.7f;    // 破片の最大スケール(world)。大きいほど塊として見える
+	float   disruptorFragScaleMax_  = 2.2f;
+	float   disruptorFragUvSize_    = 0.1f;    // 破片が貼るキャプチャの UV フットプリント（大=1枚に広い画面が写る）
 	float   disruptorFragSpin_      = 6.0f;    // 回転速度の上限(rad/s)
-	// 破片のガラス化（半透明＋歪み）
-	float   disruptorFragAlpha_     = 0.55f;   // 破片の不透明度倍率（半透明ガラス）
+	float   disruptorFragMinScale_  = 0.06f;   // このスケール(world)まで縮んだら消す（小さいゴミが残らないように）
+	// 破片のガラス化（半透明＋歪み）と発色
+	// 反転色を非反転の背景に重ねるので、Alpha が低いと「色＋反転色＝灰色」に washout する。
+	// 色を出すなら Alpha を高め＋SatBoost で彩度を立てる。
+	float   disruptorFragAlpha_     = 1.0f;    // 破片の不透明度（1=反転スクリーンをそのまま貼る。下げると背景に溶けて灰色寄り）
 	float   disruptorFragDistort_   = 0.015f;  // サンプリングUVの歪み量（ガラスの屈折感）
 	float   disruptorFragDistortFreq_ = 12.0f; // 歪みの細かさ
-	static constexpr uint32_t kDisruptorShardCap_ = 256; // 破片レンダラのインスタンス上限
+	float   disruptorFragSatBoost_  = 1.6f;    // 反転色の彩度ブースト（1=そのまま, >1で色を強調）
+	static constexpr uint32_t kDisruptorShardCap_ = 2048; // 破片レンダラの per-cell 描画上限（Cell Count 上限以上に取る）
 	void EnsureDisruptorFragmentPool();          // プール（破片データ列）を遅延確保
 	void UpdateDisruptorFragments(float realDt);  // 発生＋断裂線への移動・縮小・フェード・寿命
-	void DrawDisruptorFragments();                // シーンへ描画（PostEffect 前。キャプチャ反転で殻のかけら）
+	void DrawDisruptorFragments();                // 最終 RT へ描画（PostEffect 後＝二重反転回避。キャプチャ反転で殻のかけら）
 	void ClearDisruptorFragments();               // 破片を全消去
+
+	// ----- F1: 事前分割セル（手続き Voronoi）＋割れ順プレビュー -----
+	// Slash→Collapse でスクリーン空間に種点を撒き、半平面クリップで各セルの凸多角形を作る（事前分割）。
+	// 種点はスクリーン空間固定＝エイム角θに非依存。同じ seed で同じ割れ方が再現される。
+	// 割れ順は「重心の切断線からの垂直距離」で決まり、リビール境界が来た片から順に割れる（飛散駆動はF3）。
+	struct DisruptorCell {
+		std::vector<Vector2> polyUV;          // セル凸多角形の頂点（スクリーンUV [0,1]）
+		Vector2 centroidUV{ 0.5f, 0.5f };     // 重心（スクリーンUV）
+	};
+	std::vector<DisruptorCell> disruptorCells_;
+	uint32_t disruptorFractureSeed_     = 1u;     // 割り方のシード（同値＝同じ割れ方）
+	bool     disruptorFractureSeedLock_ = false;  // true: 発動ごとにこの seed を使う / false: 毎回ランダム（使った値は seed に残す）
+	int      disruptorCellCount_        = 100;    // セル数（種点数）
+	// 割れ順プレビュー（デバッグ）
+	bool     disruptorCellDebugDraw_      = false; // セル境界線を LineRenderer で表示
+	float    disruptorCellPreviewRevealT_ = 0.0f;  // 手動スクラブ：この revealT まで割れたとみなして色分け
+	void BuildDisruptorCells();             // seed から種点スキャッタ→半平面クリップ→重心。disruptorCells_ を作る
+	void DrawDisruptorCellBordersDebug();   // セル境界線を LineRenderer へ（割れ順で色分け＋スクラブ）
+
+	// ----- F2: セルのワールド形状アップロード＋静止描画（baked UV 検証）-----
+	std::vector<Vector3> disruptorCellCentroidWorld_; // 各セル重心のワールド配置（rest）。F3 の飛散基準にも使う
+	bool disruptorCellMeshUploaded_ = false;          // この崩壊で SetCells 済みか
+	bool disruptorCellStaticDraw_   = false;          // F2: 割らずに全セルを静止描画（マッピング確認用）
+	void BuildDisruptorCellMeshesAndUpload();         // disruptorCells_ → ワールド三角形 → renderer SetCells（崩壊中1回）
+
+	// ----- F3: 割れ駆動（リビール境界が来たセルから順に飛散）-----
+	struct DisruptorCellRuntime {
+		bool    broken    = false;       // 既に割れて飛んだか
+		float   age       = 0.0f;        // broken からの経過秒
+		float   lifeDur   = 0.7f;        // 寿命（秒）
+		float   breakDist = 0.0f;        // 切断線からの垂直距離（割れ順の閾値、build 時に確定）
+		Vector3 vel{ 0.0f, 0.0f, 0.0f }; // 飛散速度（world）
+		Vector3 spin{ 0.0f, 0.0f, 0.0f };// 回転速度（rad/s）
+		Vector3 rot{ 0.0f, 0.0f, 0.0f }; // 現在回転
+		Vector3 offset{ 0.0f, 0.0f, 0.0f }; // 重心からの累積変位（world）
+	};
+	std::vector<DisruptorCellRuntime> disruptorCellRuntime_;
+	float disruptorCellMaxBreakDist_ = 1.0f; // 割れ閾値の正規化用（全画面を覆う最大垂直距離・build 時に確定）
+	// チューニング（飛散）。spin 上限/alpha/satBoost は既存 disruptorFrag* を流用。
+	float disruptorBreakFreeze_   = 0.12f; // 割れた直後この秒数は静止（バリン）
+	float disruptorBreakPopSpeed_ = 6.0f;  // 視点方向へ飛び出す速さ
+	float disruptorBreakSpread_   = 4.0f;  // ランダム拡散の速さ
+	float disruptorBreakGravity_  = 6.0f;  // 下方向（-Y）の重力加速
+	float disruptorBreakLifeMin_  = 0.5f;
+	float disruptorBreakLifeMax_  = 1.0f;
+	void UpdateDisruptorCells(float realDt); // 境界進行でセルを順に割り、飛散・回転・フェードを進める
 
 	void EnterDisruptor();                       // TriggerSpecialMove(Disruptor) から：Charge へ
 	void UpdateDisruptorMove(class InputActionMap* actions, float realDt); // 専用フェーズ機の更新

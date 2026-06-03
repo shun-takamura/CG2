@@ -1,23 +1,20 @@
 // DisruptorShard.VS.hlsl
-// 崩壊の破片（反転世界の殻のかけら）。シーンキャプチャの一部を貼った 3D キューブを描く。
-// per-shard cbuffer: WVP（world×VP）＋サンプリングする画面UV矩形（uvMin/uvSize）＋α。
+// 崩壊の破片（反転世界の殻のかけら）。事前分割セルの三角形を、重心ローカル座標で受け取り、
+// per-cell の WVP（重心回転＋飛散移動×VP）でワールドへ飛ばす。UV は baked スクリーンUV をそのまま流す。
 
 struct ShardCB
 {
     float4x4 wvp;
-    float2   uvMin;   // 破片が剥がれた画面位置（UV 左上）
-    float2   uvSize;  // UV のサイズ（破片の画面フットプリント）
     float    alpha;
-    float    distortAmount;
-    float    distortFreq;
-    float    _pad;
+    float    satBoost;
+    float2   pad;
 };
 ConstantBuffer<ShardCB> gShard : register(b0);
 
 struct VSInput
 {
-    float3 position : POSITION0;
-    float2 uv       : TEXCOORD0;
+    float3 position : POSITION0; // 重心ローカル座標（world 単位）
+    float2 uv       : TEXCOORD0; // baked スクリーンUV（剥がれた画面位置）
 };
 
 struct VSOutput
@@ -30,8 +27,6 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
     output.position = mul(float4(input.position, 1.0f), gShard.wvp);
-    // キューブのローカル UV(0..1) を、剥がれた画面領域 [uvMin, uvMin+uvSize] にマップ。
-    // これで破片は「剥がれた場所の世界の絵」を持ったまま動く。
-    output.uv = gShard.uvMin + input.uv * gShard.uvSize;
+    output.uv = input.uv;
     return output;
 }
