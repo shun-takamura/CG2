@@ -253,23 +253,8 @@ void StagePlayScene::LoadTuningFromJson() {
 		disruptorRevealStartDelay_   = static_cast<float>(sg["disruptorRevealStartDelay"].AsDouble(disruptorRevealStartDelay_));
 		disruptorCollapseEndAt_      = static_cast<float>(sg["disruptorCollapseEndAt"].AsDouble(disruptorCollapseEndAt_));
 		disruptorInvertDelay_        = static_cast<float>(sg["disruptorInvertDelay"].AsDouble(disruptorInvertDelay_));
-		disruptorRevealCellSize_     = static_cast<float>(sg["disruptorRevealCellSize"].AsDouble(disruptorRevealCellSize_));
-		disruptorRevealChunkJitter_  = static_cast<float>(sg["disruptorRevealChunkJitter"].AsDouble(disruptorRevealChunkJitter_));
-		disruptorRevealEdgeAmp_      = static_cast<float>(sg["disruptorRevealEdgeAmp"].AsDouble(disruptorRevealEdgeAmp_));
-		disruptorRevealEdgeFreq_     = static_cast<float>(sg["disruptorRevealEdgeFreq"].AsDouble(disruptorRevealEdgeFreq_));
-		disruptorRevealEdgeDepth_    = static_cast<float>(sg["disruptorRevealEdgeDepth"].AsDouble(disruptorRevealEdgeDepth_));
 		disruptorFragAlpha_       = static_cast<float>(sg["disruptorFragAlpha"].AsDouble(disruptorFragAlpha_));
-		disruptorFragDistort_     = static_cast<float>(sg["disruptorFragDistort"].AsDouble(disruptorFragDistort_));
-		disruptorFragDistortFreq_ = static_cast<float>(sg["disruptorFragDistortFreq"].AsDouble(disruptorFragDistortFreq_));
 		disruptorFragSatBoost_    = static_cast<float>(sg["disruptorFragSatBoost"].AsDouble(disruptorFragSatBoost_));
-		disruptorFragMaxCount_   = static_cast<int>(sg["disruptorFragMaxCount"].AsInt(static_cast<int64_t>(disruptorFragMaxCount_)));
-		disruptorFragEmitRate_   = static_cast<float>(sg["disruptorFragEmitRate"].AsDouble(disruptorFragEmitRate_));
-		disruptorFragAlongRange_ = static_cast<float>(sg["disruptorFragAlongRange"].AsDouble(disruptorFragAlongRange_));
-		disruptorFragLifeMin_    = static_cast<float>(sg["disruptorFragLifeMin"].AsDouble(disruptorFragLifeMin_));
-		disruptorFragLifeMax_    = static_cast<float>(sg["disruptorFragLifeMax"].AsDouble(disruptorFragLifeMax_));
-		disruptorFragScaleMin_   = static_cast<float>(sg["disruptorFragScaleMin"].AsDouble(disruptorFragScaleMin_));
-		disruptorFragScaleMax_   = static_cast<float>(sg["disruptorFragScaleMax"].AsDouble(disruptorFragScaleMax_));
-		disruptorFragUvSize_     = static_cast<float>(sg["disruptorFragUvSize"].AsDouble(disruptorFragUvSize_));
 		disruptorFragSpin_       = static_cast<float>(sg["disruptorFragSpin"].AsDouble(disruptorFragSpin_));
 		disruptorFragMinScale_   = static_cast<float>(sg["disruptorFragMinScale"].AsDouble(disruptorFragMinScale_));
 		disruptorFractureSeed_     = static_cast<uint32_t>(sg["disruptorFractureSeed"].AsInt(static_cast<int64_t>(disruptorFractureSeed_)));
@@ -817,23 +802,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["disruptorRevealStartDelay"]   = static_cast<double>(disruptorRevealStartDelay_);
 	sgObj["disruptorCollapseEndAt"]      = static_cast<double>(disruptorCollapseEndAt_);
 	sgObj["disruptorInvertDelay"]        = static_cast<double>(disruptorInvertDelay_);
-	sgObj["disruptorRevealCellSize"]     = static_cast<double>(disruptorRevealCellSize_);
-	sgObj["disruptorRevealChunkJitter"]  = static_cast<double>(disruptorRevealChunkJitter_);
-	sgObj["disruptorRevealEdgeAmp"]      = static_cast<double>(disruptorRevealEdgeAmp_);
-	sgObj["disruptorRevealEdgeFreq"]     = static_cast<double>(disruptorRevealEdgeFreq_);
-	sgObj["disruptorRevealEdgeDepth"]    = static_cast<double>(disruptorRevealEdgeDepth_);
 	sgObj["disruptorFragAlpha"]       = static_cast<double>(disruptorFragAlpha_);
-	sgObj["disruptorFragDistort"]     = static_cast<double>(disruptorFragDistort_);
-	sgObj["disruptorFragDistortFreq"] = static_cast<double>(disruptorFragDistortFreq_);
 	sgObj["disruptorFragSatBoost"]    = static_cast<double>(disruptorFragSatBoost_);
-	sgObj["disruptorFragMaxCount"]   = static_cast<int64_t>(disruptorFragMaxCount_);
-	sgObj["disruptorFragEmitRate"]   = static_cast<double>(disruptorFragEmitRate_);
-	sgObj["disruptorFragAlongRange"] = static_cast<double>(disruptorFragAlongRange_);
-	sgObj["disruptorFragLifeMin"]    = static_cast<double>(disruptorFragLifeMin_);
-	sgObj["disruptorFragLifeMax"]    = static_cast<double>(disruptorFragLifeMax_);
-	sgObj["disruptorFragScaleMin"]   = static_cast<double>(disruptorFragScaleMin_);
-	sgObj["disruptorFragScaleMax"]   = static_cast<double>(disruptorFragScaleMax_);
-	sgObj["disruptorFragUvSize"]     = static_cast<double>(disruptorFragUvSize_);
 	sgObj["disruptorFragSpin"]       = static_cast<double>(disruptorFragSpin_);
 	sgObj["disruptorFragMinScale"]   = static_cast<double>(disruptorFragMinScale_);
 	sgObj["disruptorFractureSeed"]     = static_cast<int64_t>(disruptorFractureSeed_);
@@ -2021,46 +1991,17 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Reveal Intensity", &disruptorRevealIntensity_, 0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("[境界崩壊] 反転殻の境界をギザギザ＋ブロックで砕く（画面の絵そのものが崩れる）");
-		ImGui::DragFloat("Crumble Cell Size", &disruptorRevealCellSize_, 0.002f, 0.005f, 0.3f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Crumble Chunk Jitter", &disruptorRevealChunkJitter_, 0.005f, 0.0f, 0.4f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Crumble Edge Amp", &disruptorRevealEdgeAmp_, 0.002f, 0.0f, 0.2f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Crumble Edge Freq", &disruptorRevealEdgeFreq_, 0.5f, 1.0f, 120.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Crumble Edge Depth (歯の深さ)", &disruptorRevealEdgeDepth_, 0.005f, 0.0f, 0.4f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("[飛び散る破片] 反転世界のかけらが境界で発生→断裂線へ寄りつつ縮小消滅");
-		ImGui::DragInt("Frag Max Count", &disruptorFragMaxCount_, 1.0f, 1, 256);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Frag Emit Rate (/s)", &disruptorFragEmitRate_, 1.0f, 0.0f, 400.0f, "%.0f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Frag Along Range (0-0.5)", &disruptorFragAlongRange_, 0.01f, 0.0f, 0.5f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat2("Frag Life Min/Max (s)", &disruptorFragLifeMin_, 0.01f, 0.02f, 3.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("破片の寿命。短くすると素早く消える（長すぎる場合はここを下げる）");
+		ImGui::Text("[殻・破片の見た目] 未割れ＝静止殻 / 割れ＝飛散（共通）");
 		ImGui::DragFloat("Frag Min Scale (消えるサイズ比 0-1)", &disruptorFragMinScale_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("破片サイズ(1=発生時)がこの比まで縮んだら完全に消す（αは下げない）。大きいほど早くパッと消える");
-		ImGui::DragFloat2("Frag Scale Min/Max", &disruptorFragScaleMin_, 0.01f, 0.0f, 5.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Frag UV Size (capture)", &disruptorFragUvSize_, 0.002f, 0.005f, 0.5f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Frag Spin (rad/s)", &disruptorFragSpin_, 0.1f, 0.0f, 30.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Frag Alpha (半透明)", &disruptorFragAlpha_, 0.01f, 0.0f, 1.0f, "%.2f");
+		ImGui::DragFloat("Frag Alpha (不透明度)", &disruptorFragAlpha_, 0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("低いと反転色が背景に溶けて灰色になる。色を出すなら上げる");
 		ImGui::DragFloat("Frag Sat Boost (彩度)", &disruptorFragSatBoost_, 0.05f, 0.0f, 4.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("拾った反転色の彩度を強調（1=そのまま、>1で色が濃く）");
-		ImGui::DragFloat("Frag Distort (歪み量)", &disruptorFragDistort_, 0.001f, 0.0f, 0.15f, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Frag Distort Freq", &disruptorFragDistortFreq_, 0.5f, 1.0f, 60.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::SeparatorText("Fracture (割り方・シード) [F1]");
 		ImGui::TextDisabled("画面を事前にVoronoiセル分割。seed固定で同じ割れ方を再現。");
@@ -4296,7 +4237,6 @@ void StagePlayScene::EnterDisruptorPhase(DisruptorPhase p) {
 		TrashDisruptorVisual(disruptorBeam_);
 		TrashDisruptorVisual(disruptorShockwave_);
 		BuildDisruptorRift();
-		EnsureDisruptorFragmentPool();   // 飛び散る破片プールを用意
 		// F1: 事前分割セルを構築（種点はスクリーン空間固定＝seed で割れ方が決まる）。
 		if (!disruptorFractureSeedLock_) disruptorFractureSeed_ = std::random_device{}();
 		BuildDisruptorCells();
@@ -4779,13 +4719,12 @@ void StagePlayScene::UpdateDisruptorVisuals(float realDt) {
 
 void StagePlayScene::UpdateDisruptorReveal() {
 	auto* pe = Game::GetPostEffect();
-	if (!pe || !pe->disruptorReveal) return;
-	auto* rev = pe->disruptorReveal;
+	if (!pe || !pe->colorInvert) return;
+	auto* rev = pe->colorInvert; // 全画面色反転は汎用 ColorInvert を流用（専用 DisruptorReveal は廃止）
 
-	// 崩壊の「色戻し」はセル（殻）が担当するためシェーダのディゾルブは廃止。
 	// 反転シェーダを使うのは (a) Slash 後半の全画面反転、(b) Collapse でセル殻が描けるまでの全反転ブリッジ、のみ。
-	// セルが準備でき次第（メッシュ＋キャプチャ完了）リビールを切る＝背景は通常色に戻り、
-	// 以後は「未割れセルの静止反転シャード＝殻」が反転を担い、割れた所から下の通常色が覗く。
+	// セルが準備でき次第（メッシュ＋キャプチャ完了）反転を切る＝背景は通常色に戻り、
+	// 以後は「未割れセルの静止反転シャード＝殻」が反転を担い、割れた所から下の通常色が覗く（段階戻しはセルが担当）。
 	const bool cellsReady = disruptorCellMeshUploaded_ && disruptorCaptureDone_;
 	const bool slashInvert = (disruptorPhase_ == DisruptorPhase::Slash) &&
 	                         disruptorFired_ && (disruptorFireElapsed_ >= disruptorInvertDelay_);
@@ -4797,37 +4736,7 @@ void StagePlayScene::UpdateDisruptorReveal() {
 	}
 
 	rev->SetEnabled(true);
-	rev->SetIntensity(disruptorRevealIntensity_);
-	rev->SetCrumble(disruptorRevealCellSize_, disruptorRevealChunkJitter_,
-	                disruptorRevealEdgeAmp_, disruptorRevealEdgeFreq_, disruptorRevealEdgeDepth_);
-
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
-	rev->SetAspect((h > 1.0f) ? (w / h) : (16.0f / 9.0f));
-
-	// 断裂線の端点を現フレームのカメラで UV へ射影（カメラが動いても境界が断裂線ビジュアルに一致）。
-	// 画面外（|ndc|>1）でも UV をそのまま返す＝線は画面端の外まで延びる。
-	float u0 = 0.0f, v0 = 0.5f, u1 = 1.0f, v1 = 0.5f; // 既定＝横一閃
-	if (disruptorCutWorldValid_) {
-		const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
-		auto toUV = [&](const Vector3& world, float& u, float& v) {
-			float wx = world.x * vp.m[0][0] + world.y * vp.m[1][0] + world.z * vp.m[2][0] + vp.m[3][0];
-			float wy = world.x * vp.m[0][1] + world.y * vp.m[1][1] + world.z * vp.m[2][1] + vp.m[3][1];
-			float ww = world.x * vp.m[0][3] + world.y * vp.m[1][3] + world.z * vp.m[2][3] + vp.m[3][3];
-			if (ww <= 1e-4f) ww = 1e-4f;
-			const float ndcX = wx / ww;
-			const float ndcY = wy / ww;
-			u = ndcX * 0.5f + 0.5f;
-			v = 1.0f - (ndcY * 0.5f + 0.5f);
-		};
-		toUV(disruptorCutWorldP1_, u0, v0);
-		toUV(disruptorCutWorldP2_, u1, v1);
-	}
-	rev->SetLine(u0, v0, u1, v1);
-
-	// ディゾルブ廃止＝常に全反転（revealT=0）。Slash の全画面反転と、Collapse のブリッジ全反転に使うのみ。
-	// 崩壊の段階的な色戻しはセル（殻が割れて剥がれる）が担当する。
-	rev->SetRevealT(0.0f);
+	rev->SetIntensity(disruptorRevealIntensity_); // 1=完全反転
 }
 
 float StagePlayScene::DisruptorCollapseRevealT() const {
@@ -4837,140 +4746,6 @@ float StagePlayScene::DisruptorCollapseRevealT() const {
 	const float raw = (span > 1e-4f) ? (local / span) : 1.0f;
 	const float u = std::clamp(raw, 0.0f, 1.0f);
 	return u * u * (3.0f - 2.0f * u); // smoothstep
-}
-
-void StagePlayScene::EnsureDisruptorFragmentPool() {
-	const int n = (std::max)(disruptorFragMaxCount_, 1);
-	if (static_cast<int>(disruptorFragments_.size()) != n) {
-		disruptorFragments_.assign(n, DisruptorFragment{});
-	} else {
-		for (auto& f : disruptorFragments_) f.active = false;
-	}
-	disruptorFragEmitAccum_ = 0.0f;
-}
-
-void StagePlayScene::UpdateDisruptorFragments(float realDt) {
-	if (!camera_ || disruptorFragments_.empty()) return;
-
-	// 現在のリビール進捗（UpdateDisruptorReveal と同じ式）。Collapse 以外は発生しない。
-	const bool emitting = (disruptorPhase_ == DisruptorPhase::Collapse) && disruptorCutWorldValid_;
-	const float revealT = emitting ? DisruptorCollapseRevealT() : 0.0f;
-
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
-	const float aspect = (h > 1.0f) ? (w / h) : (16.0f / 9.0f);
-
-	// 断裂線をスクリーン UV へ射影（DisruptorReveal シェーダと同じ基準）。
-	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
-	auto worldToUV = [&](const Vector3& world, float& u, float& v) {
-		const float wx = world.x * vp.m[0][0] + world.y * vp.m[1][0] + world.z * vp.m[2][0] + vp.m[3][0];
-		const float wy = world.x * vp.m[0][1] + world.y * vp.m[1][1] + world.z * vp.m[2][1] + vp.m[3][1];
-		float ww = world.x * vp.m[0][3] + world.y * vp.m[1][3] + world.z * vp.m[2][3] + vp.m[3][3];
-		if (ww <= 1e-4f) ww = 1e-4f;
-		u = (wx / ww) * 0.5f + 0.5f;
-		v = 1.0f - ((wy / ww) * 0.5f + 0.5f);
-	};
-	float au = 0.0f, av = 0.5f, bu = 1.0f, bv = 0.5f;
-	worldToUV(disruptorCutWorldP1_, au, av);
-	worldToUV(disruptorCutWorldP2_, bu, bv);
-	// アスペクト補正空間（シェーダと一致）。線方向と垂直方向。
-	const Vector2 A{ au * aspect, av };
-	const Vector2 B{ bu * aspect, bv };
-	Vector2 lineDir{ B.x - A.x, B.y - A.y };
-	const float lineLen = std::sqrt(lineDir.x * lineDir.x + lineDir.y * lineDir.y);
-	if (lineLen > 1e-5f) { lineDir.x /= lineLen; lineDir.y /= lineLen; }
-	else { lineDir = { 1.0f, 0.0f }; }
-	const Vector2 perpDir{ -lineDir.y, lineDir.x };  // 線に垂直（上下）
-	// 断裂線から画面四隅までの最大垂直距離（シェーダと一致）＝この線で全画面を覆い切る距離。
-	auto perpDistTo = [&](float cx, float cy) { return std::abs((cx - A.x) * perpDir.x + (cy - A.y) * perpDir.y); };
-	const float maxDist = (std::max)((std::max)(perpDistTo(0.0f, 0.0f), perpDistTo(aspect, 0.0f)),
-	                                 (std::max)(perpDistTo(0.0f, 1.0f), perpDistTo(aspect, 1.0f))) * 1.02f;
-	const float halfW = revealT * maxDist;                          // 現在の境界（線からの垂直距離）
-
-	// スクリーン UV → ワールド（焼き付け深度の前方平面に乗せる）
-	const Vector3 camPos = camera_->GetTranslate();
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_->GetRotate());
-	const Vector3 camFwd{ camRot.m[2][0], camRot.m[2][1], camRot.m[2][2] };
-	const Matrix4x4 invVP = Inverse(vp);
-	const float depth = disruptorCutDepth_;
-	auto uvToWorld = [&](float u, float v) -> Vector3 {
-		const float ndcX = u * 2.0f - 1.0f;
-		const float ndcY = 1.0f - v * 2.0f;
-		const Vector3 farW = TransformCoordinate(Vector3{ ndcX, ndcY, 1.0f }, invVP);
-		Vector3 rd{ farW.x - camPos.x, farW.y - camPos.y, farW.z - camPos.z };
-		const float rl = std::sqrt(rd.x * rd.x + rd.y * rd.y + rd.z * rd.z);
-		if (rl > 1e-6f) { rd.x /= rl; rd.y /= rl; rd.z /= rl; }
-		float denom = rd.x * camFwd.x + rd.y * camFwd.y + rd.z * camFwd.z;
-		if (denom < 1e-4f) denom = 1e-4f;
-		const float t = depth / denom;
-		return { camPos.x + rd.x * t, camPos.y + rd.y * t, camPos.z + rd.z * t };
-	};
-
-	// 乱数源
-	static thread_local std::mt19937 rng(
-		static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
-	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
-	auto randRange = [&](float a, float b) { return a + dist01(rng) * (std::max)(b - a, 0.0f); };
-
-	// ----- 発生：スクリーン境界（線から halfW の位置）に沿って破片を撒く -----
-	if (emitting && revealT > 0.0f && halfW > 1e-4f) {
-		disruptorFragEmitAccum_ += disruptorFragEmitRate_ * realDt;
-		while (disruptorFragEmitAccum_ >= 1.0f) {
-			disruptorFragEmitAccum_ -= 1.0f;
-			DisruptorFragment* slot = nullptr;
-			for (auto& f : disruptorFragments_) { if (!f.active) { slot = &f; break; } }
-			if (!slot) break; // 満杯
-			const float u = 0.5f + (dist01(rng) * 2.0f - 1.0f) * disruptorFragAlongRange_;
-			slot->lineBaseAspect = { A.x + (B.x - A.x) * u, A.y + (B.y - A.y) * u };
-			const float side = (dist01(rng) < 0.5f) ? -1.0f : 1.0f;
-			slot->perpAspect = { perpDir.x * side, perpDir.y * side };
-			slot->spawnPerp = halfW; // 発生時の境界位置（ここから線へ縮む）
-			slot->alongDrift = (dist01(rng) * 2.0f - 1.0f) * halfW * 0.7f; // 線方向の散らばり（扇状）
-			// 軸ごとに非一様＝整ったキューブでなく不揃いな破片
-			slot->baseScale = { randRange(disruptorFragScaleMin_, disruptorFragScaleMax_),
-			                    randRange(disruptorFragScaleMin_, disruptorFragScaleMax_),
-			                    randRange(disruptorFragScaleMin_, disruptorFragScaleMax_) };
-			slot->lifeDur   = (std::max)(randRange(disruptorFragLifeMin_, disruptorFragLifeMax_), 1e-3f);
-			slot->spin = { (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_,
-			               (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_,
-			               (dist01(rng) * 2.0f - 1.0f) * disruptorFragSpin_ };
-			slot->rot  = { dist01(rng) * 6.2831853f, dist01(rng) * 6.2831853f, dist01(rng) * 6.2831853f };
-			// 発生位置の画面 UV を固定で持つ＝剥がれた場所の世界の絵を貼ったまま動く
-			const Vector2 spawnAspect{ slot->lineBaseAspect.x + slot->perpAspect.x * slot->spawnPerp,
-			                           slot->lineBaseAspect.y + slot->perpAspect.y * slot->spawnPerp };
-			const float cu = spawnAspect.x / aspect;
-			const float cv = spawnAspect.y;
-			const float half = disruptorFragUvSize_ * 0.5f;
-			slot->uvMin  = { cu - half, cv - half };
-			slot->uvSize = { disruptorFragUvSize_, disruptorFragUvSize_ };
-			slot->life = 0.0f;
-			slot->active = true;
-		}
-	}
-
-	// ----- 更新：スクリーン上で断裂線へ垂直距離を縮めながら、ワールドへ射影して 3D 配置 -----
-	for (auto& f : disruptorFragments_) {
-		if (!f.active) continue;
-		f.life += realDt / f.lifeDur;
-		if (f.life >= 1.0f) { f.active = false; continue; }
-		const float k = 1.0f - f.life;             // 1→0
-		const float curPerp = f.spawnPerp * k;     // 断裂線へ近づく（aspect空間）
-		// 線方向の単位ベクトル（perpAspect を90°回したもの）。飛び散りドリフトに使う。
-		const Vector2 dirA{ f.perpAspect.y, -f.perpAspect.x };
-		const float drift = f.alongDrift * f.life; // 進むほど線方向にも散る＝扇状に飛び散る
-		const Vector2 a{ f.lineBaseAspect.x + f.perpAspect.x * curPerp + dirA.x * drift,
-		                 f.lineBaseAspect.y + f.perpAspect.y * curPerp + dirA.y * drift };
-		const float uu = a.x / aspect;
-		const float vv = a.y;
-		f.pos = uvToWorld(uu, vv);
-		f.rot = { f.rot.x + f.spin.x * realDt, f.rot.y + f.spin.y * realDt, f.rot.z + f.spin.z * realDt };
-		const float shrink = k * k;                // どんどん小さく（後半で急に縮む）
-		f.curScale = { f.baseScale.x * shrink, f.baseScale.y * shrink, f.baseScale.z * shrink };
-		// ある程度小さくなったら消す（小さいゴミが画面に残らないように）
-		const float maxAxis = (std::max)({ f.curScale.x, f.curScale.y, f.curScale.z });
-		if (maxAxis <= disruptorFragMinScale_) { f.active = false; continue; }
-		f.alpha = k; // フェードアウト
-	}
 }
 
 // F2: disruptorCells_（スクリーンUVの凸多角形）を、切断深度の前方平面へ射影してワールド三角形にし、
@@ -5216,11 +4991,6 @@ void StagePlayScene::DrawAfterPostEffect(ID3D12GraphicsCommandList* /*commandLis
 	// PostEffect（崩壊リビールの色反転）適用後の最終 RT に重ねて描く。
 	// シーン描画パス内（PostEffect 前）で描くと殻側に飛んだ破片が再反転で元色に戻る＝二重反転になるため。
 	DrawDisruptorFragments();
-}
-
-void StagePlayScene::ClearDisruptorFragments() {
-	for (auto& f : disruptorFragments_) f.active = false;
-	disruptorFragEmitAccum_ = 0.0f;
 }
 
 // F1: 事前分割セルの構築（手続き Voronoi）。
@@ -6270,15 +6040,14 @@ void StagePlayScene::EndSpecialMove() {
 	disruptorCamBlend_      = 0.0f;
 	disruptorCamActive_     = false;  // カメラ演出を解除（以後はレール/通常追従に戻る）
 	disruptorCamInit_       = false;
-	// 崩壊リビール（PostEffect）を確実に OFF（後隙で世界が反転したまま残らないように）
-	if (auto* pe = Game::GetPostEffect(); pe && pe->disruptorReveal) {
-		pe->disruptorReveal->SetEnabled(false);
+	// 色反転（PostEffect）を確実に OFF（後隙で世界が反転したまま残らないように）
+	if (auto* pe = Game::GetPostEffect(); pe && pe->colorInvert) {
+		pe->colorInvert->SetEnabled(false);
 	}
 	// Step5-B 演出を遅延削除へ＋遅延キルの保留をクリア
 	TrashDisruptorVisual(disruptorBeam_);
 	TrashDisruptorVisual(disruptorShockwave_);
 	TrashDisruptorVisual(disruptorRift_);
-	ClearDisruptorFragments(); // 境界破片プールを遅延削除へ
 	disruptorCellMeshUploaded_ = false; // 次の崩壊でセル形状を再アップロード
 	disruptorPendingEnemies_.clear();
 	disruptorPendingBulletPrims_.clear();

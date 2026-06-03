@@ -687,66 +687,20 @@ private:
 	float disruptorRevealStartDelay_   = 0.45f;
 	// 画面がこの割合まで通常色に戻ったら崩壊終了＝後隙(World再開)へ。破片は生かしたまま。
 	float disruptorCollapseEndAt_      = 0.9f;
-	float DisruptorCollapseRevealT() const; // Collapse の剥がれ進捗 0..1（smoothstep 済み）
-	// 崩壊の見た目（ギザギザ＋ブロック崩壊）。画面の絵そのものが砕けながら剥がれる。
-	// 境界はシェーダで軽くギザギザにする程度（飛び散る破片は 3D 片＝下の Fragment 群が担当）。
-	float disruptorRevealCellSize_     = 0.05f;  // 境界ブロックの大きさ
-	float disruptorRevealChunkJitter_  = 0.0f;   // 0=境界をその場で割らない（破片は3D片に任せる）。上げると境界も砕ける
-	float disruptorRevealEdgeAmp_      = 0.025f; // 境界ギザギザの振幅（細かい滑らかな揺れ）
-	float disruptorRevealEdgeFreq_     = 28.0f;  // 境界ギザギザの細かさ
-	float disruptorRevealEdgeDepth_    = 0.06f;  // 境界の歯の深さ（ブロック状の食い込み量）
-	void  UpdateDisruptorReveal();               // 現フェーズに応じて DisruptorReveal の ON/OFF・線UV・進捗を更新
+	float DisruptorCollapseRevealT() const; // Collapse の割れ進捗 0..1（smoothstep 済み・セルの割れ駆動に使用）
+	void  UpdateDisruptorReveal();               // 反転シェーダの ON/OFF（Slash 全反転＋Collapse ブリッジ全反転のみ）
 
-	// ----- 境界破片（反転世界の殻のかけら）-----
-	// Collapse 中、リビール境界（断裂線から距離 revealT×spread）に「シーンキャプチャの一部を貼った 3D 破片」を発生させ、
-	// 断裂線（中央）へ向かって距離を縮めながら縮小＋αフェードして消える＝亀裂が殻を吸い込むイメージ。
-	// 破片はキャプチャを反転して描く（DisruptorShardRenderer）ので、反転世界のかけらの「絵」を持ったまま崩れる。
-	struct DisruptorFragment {
-		bool    active    = false;
-		// スクリーン空間（アスペクト補正UV）で配置＝リビール境界（スクリーン）にぴったり沿わせる。
-		Vector2 lineBaseAspect{ 0.0f, 0.0f }; // 断裂線上の基準点（aspect空間、＝移動の到達先）
-		Vector2 perpAspect{ 0.0f, 1.0f };     // 線から離れる単位方向（aspect空間、side 込み）
-		float   spawnPerp = 0.0f;             // 発生時の線からの垂直距離（aspect空間＝発生時の境界位置）
-		float   alongDrift = 0.0f;            // 線方向へのドリフト（aspect空間、飛び散り＝扇状の散らばり）
-		Vector3 baseScale{ 0.5f, 0.5f, 0.5f }; // 最大スケール（軸ごとに非一様＝不揃いな破片, world）
-		Vector3 spin{ 0.0f, 0.0f, 0.0f };      // 回転速度(rad/s)
-		Vector3 rot{ 0.0f, 0.0f, 0.0f };       // 現在回転
-		float   life      = 0.0f;              // 0..1
-		float   lifeDur   = 0.6f;              // 寿命(秒)
-		Vector2 uvMin{ 0.0f, 0.0f };           // 剥がれた画面位置（キャプチャ UV 左上）
-		Vector2 uvSize{ 0.06f, 0.06f };        // サンプリング UV サイズ
-		// ランタイム（Update が計算 → Draw が使う）
-		Vector3 pos{ 0.0f, 0.0f, 0.0f };
-		Vector3 curScale{ 0.0f, 0.0f, 0.0f };
-		float   alpha = 0.0f;
-	};
-	std::vector<DisruptorFragment> disruptorFragments_;
-	std::unique_ptr<class DisruptorShardRenderer> disruptorShards_; // 破片描画（キャプチャ反転）
+	// ----- 破片レンダラ（反転世界の殻のかけら）-----
+	// セル方式：未割れセル＝静止した反転シャードで“殻”、割れたセルは飛散（F3）。描画は DrawDisruptorFragments。
+	std::unique_ptr<class DisruptorShardRenderer> disruptorShards_; // セル描画（キャプチャ反転）
 	bool  disruptorCaptureDone_ = false;       // この崩壊でシーンキャプチャ済みか
-	float disruptorFragEmitAccum_ = 0.0f;      // 発生タイマ（端数キャリー）
-	// チューニング
-	int     disruptorFragMaxCount_  = 48;      // プール上限（同時破片数）
-	float   disruptorFragEmitRate_  = 40.0f;   // 1秒あたり発生数（密度はこれで調整）
-	float   disruptorFragAlongRange_= 0.35f;   // 線中央から±この割合の範囲で発生（画面内に収める）
-	float   disruptorFragLifeMin_   = 0.35f;
-	float   disruptorFragLifeMax_   = 0.7f;
-	float   disruptorFragScaleMin_  = 0.7f;    // 破片の最大スケール(world)。大きいほど塊として見える
-	float   disruptorFragScaleMax_  = 2.2f;
-	float   disruptorFragUvSize_    = 0.1f;    // 破片が貼るキャプチャの UV フットプリント（大=1枚に広い画面が写る）
-	float   disruptorFragSpin_      = 6.0f;    // 回転速度の上限(rad/s)
-	float   disruptorFragMinScale_  = 0.06f;   // このスケール(world)まで縮んだら消す（小さいゴミが残らないように）
-	// 破片のガラス化（半透明＋歪み）と発色
-	// 反転色を非反転の背景に重ねるので、Alpha が低いと「色＋反転色＝灰色」に washout する。
-	// 色を出すなら Alpha を高め＋SatBoost で彩度を立てる。
-	float   disruptorFragAlpha_     = 1.0f;    // 破片の不透明度（1=反転スクリーンをそのまま貼る。下げると背景に溶けて灰色寄り）
-	float   disruptorFragDistort_   = 0.015f;  // サンプリングUVの歪み量（ガラスの屈折感）
-	float   disruptorFragDistortFreq_ = 12.0f; // 歪みの細かさ
+	// 見た目チューニング（殻・破片共通）
+	float   disruptorFragSpin_      = 6.0f;    // 破片の回転速度の上限(rad/s)
+	float   disruptorFragMinScale_  = 0.06f;   // 破片サイズ(1=発生時)がこの比まで縮んだら完全に消す
+	float   disruptorFragAlpha_     = 1.0f;    // 殻・破片の不透明度（1=反転スクリーンをそのまま貼る）
 	float   disruptorFragSatBoost_  = 1.6f;    // 反転色の彩度ブースト（1=そのまま, >1で色を強調）
 	static constexpr uint32_t kDisruptorShardCap_ = 2048; // 破片レンダラの per-cell 描画上限（Cell Count 上限以上に取る）
-	void EnsureDisruptorFragmentPool();          // プール（破片データ列）を遅延確保
-	void UpdateDisruptorFragments(float realDt);  // 発生＋断裂線への移動・縮小・フェード・寿命
-	void DrawDisruptorFragments();                // 最終 RT へ描画（PostEffect 後＝二重反転回避。キャプチャ反転で殻のかけら）
-	void ClearDisruptorFragments();               // 破片を全消去
+	void DrawDisruptorFragments();                // 最終 RT へ描画（PostEffect 後＝二重反転回避。未割れ＝殻／割れ＝飛散）
 
 	// ----- F1: 事前分割セル（手続き Voronoi）＋割れ順プレビュー -----
 	// Slash→Collapse でスクリーン空間に種点を撒き、半平面クリップで各セルの凸多角形を作る（事前分割）。
