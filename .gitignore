@@ -335,3 +335,8 @@ git rm --cached Project/imgui.ini
 
 # HDR ファイル（変換元、DDS化済みなので不要）
 *.hdr
+
+# J.A.R.V.I.S. 使い捨て/ローカル専用ファイル
+Project/tools/Python/jarvis_test.txt
+Project/tools/Python/jarvis_marker.txt
+.claude/worktrees/
