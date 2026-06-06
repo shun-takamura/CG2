@@ -339,4 +339,5 @@ git rm --cached Project/imgui.ini
 # J.A.R.V.I.S. 使い捨て/ローカル専用ファイル
 Project/tools/Python/jarvis_test.txt
 Project/tools/Python/jarvis_marker.txt
+Project/tools/Python/ollama_sample.cpp
 .claude/worktrees/

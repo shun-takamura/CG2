@@ -71,10 +71,12 @@ def main():
     run(["git", "checkout", "-b", branch])# ブランチを作りチェックアウト
 
     # 3. AI編集：第2引数の指示文をAIに渡してファイルを書き換えさせる
+    #    第3引数は対象ファイル（Ollama経路では必須、Claudeは自分で探すので省略可）
     #    指示が無ければ従来の配管テスト（マーカー追記）にフォールバック
     instruction = sys.argv[2] if len(sys.argv) > 2 else None
+    target_file = sys.argv[3] if len(sys.argv) > 3 else None
     if instruction:
-        ai_edit.run_ai_edit(action, instruction, REPO_DIR)
+        ai_edit.run_ai_edit(action, instruction, REPO_DIR, target_file)
         message = instruction  # 指示文をそのままコミットメッセージに（B方式）
     else:
         with MARKER.open("a", encoding="utf-8") as f:
