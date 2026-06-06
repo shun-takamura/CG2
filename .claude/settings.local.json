@@ -16,7 +16,9 @@
       "PowerShell(\"---\")",
       "Bash(find . -maxdepth 2 -name \"*.sln\")",
       "Bash(git rev-parse *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "PowerShell($o = Get-Command ollama -ErrorAction SilentlyContinue; if \\($o\\) { \"ollama: $\\($o.Source\\)\"; ollama list } else { \"ollama: 未インストール\" }; \"---\"; $c = Get-Command claude -ErrorAction SilentlyContinue; if \\($c\\) { \"claude: $\\($c.Source\\)\" } else { \"claude: 未インストール\" })",
+      "WebFetch(domain:docs.claude.com)"
     ]
   }
 }
