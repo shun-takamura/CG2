@@ -341,3 +341,4 @@ Project/tools/Python/jarvis_test.txt
 Project/tools/Python/jarvis_marker.txt
 Project/tools/Python/ollama_sample.cpp
 .claude/worktrees/
+.env
