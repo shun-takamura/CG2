@@ -3,6 +3,7 @@
 #include "EffectPrimitiveRenderer.h"
 #include "Vector3.h"
 #include "Matrix4x4.h"
+#include "Quaternion.h"
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -94,6 +95,8 @@ private:
         std::unique_ptr<EffectPrimitiveRenderer> renderer;
         bool started = false;
         bool finished = false;
+        // 持続回転を積分した現在の向き（基準rotate＋出現時ランダムを spawn 時に初期化）。
+        Quaternion orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
     };
     std::vector<PrimitiveRuntime> primitives_;
 

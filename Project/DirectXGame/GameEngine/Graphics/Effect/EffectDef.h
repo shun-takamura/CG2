@@ -45,7 +45,14 @@ struct EffectPrimitiveComponent {
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
-    Vector3 rotate = { 0.0f, 0.0f, 0.0f }; // ローカル回転（degreeではなくradian）
+    Vector3 rotate = { 0.0f, 0.0f, 0.0f }; // ローカル基準回転（degreeではなくradian）
+
+    // ----- 回転アニメーション（内部はクオータニオンで合成。ジンバルロック回避） -----
+    // 出現時ランダム回転：spawn 時に各軸 ±randomRotateRange の範囲で1回サンプルし、基準 rotate に加える。
+    bool    randomRotateOnSpawn = false;
+    Vector3 randomRotateRange   = { 0.0f, 0.0f, 0.0f }; // 各軸の最大ランダム角（radian）
+    // 持続回転：lifetime 中、角速度ベクトル rotateSpeed を毎フレーム積分して回し続ける（rad/s）。
+    Vector3 rotateSpeed = { 0.0f, 0.0f, 0.0f };
 
     // 時間制御（エフェクト再生開始からの絶対秒）
     float startTime = 0.0f;
@@ -144,6 +151,10 @@ struct EffectParticleComponent {
     Vector2 scaleMin = { 0.1f, 0.1f }; // 最小サイズ（幅, 高さ）
     Vector2 scaleMax = { 0.5f, 0.5f }; // 最大サイズ（幅, 高さ）
     bool    uniformScale = true;        // true なら 幅=高さ を強制（Xレンジを共用）
+    // 寿命に沿ったサイズ倍率（Size over Lifetime）。発生時ランダムサイズ × lerp(startScale, endScale, 寿命比率)。
+    // 1.0/1.0 で従来どおり変化なし。
+    float   startScale = 1.0f;
+    float   endScale   = 1.0f;
 
     // ----- 発生 -----
     float   emitRadius = 0.5f;          // 発生位置の散らばり半径（Ring では円の半径）
@@ -157,6 +168,12 @@ struct EffectParticleComponent {
     Vector3 velocityDir = { 0.0f, 1.0f, 0.0f }; // mode=1 の向き
     float   velocitySpeed = 3.0f;       // mode=1/2/3 の初速の大きさ
     float   velocityJitter = 0.0f;      // 速度ゆらぎ量
+
+    // ----- 回転（3D姿勢）：ビルボード None のとき板を3D回転させる（破片のようなタンブル）-----
+    // 内部はクオータニオン。Full/YAxis ビルボード時は無視（常にカメラを向く）。
+    bool    randomRotateOnSpawn = false;             // 出現時に各軸 ±範囲のランダム初期姿勢
+    Vector3 randomRotateRange   = { 0.0f, 0.0f, 0.0f }; // 各軸の最大ランダム角（radian）
+    Vector3 rotateSpeed         = { 0.0f, 0.0f, 0.0f }; // 各軸の角速度（rad/s）。出ている間回し続ける
 
     // ----- 周回（orbit）：粒子を中心まわりに回し続ける（外に出ない）-----
     // spin=帯上を流れる（リング法線軸）/ tumble=帯自体の回転（別軸）。両方を粒子が受ける。

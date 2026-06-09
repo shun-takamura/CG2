@@ -5,6 +5,7 @@
 #include "Material.h"
 #include "Transform.h"
 #include "Matrix4x4.h"
+#include "Quaternion.h"
 #include <wrl.h>
 #include <d3d12.h>
 #include <string>
@@ -93,6 +94,11 @@ public:
     Transform& GetTransform() { return transform_; }
     const Transform& GetTransform() const { return transform_; }
 
+    // クオータニオン回転を使う（ジンバルロック回避）。設定すると transform_.rotate(オイラー)は無視され、
+    // この向きで回転行列が組まれる。ClearRotateQuaternion() で従来のオイラー回転に戻る。
+    void SetRotateQuaternion(const Quaternion& q) { rotateQuat_ = q; useQuatRotation_ = true; }
+    void ClearRotateQuaternion() { useQuatRotation_ = false; }
+
     // ゲッター
     PrimitivePipeline::BlendMode GetBlendMode() const { return blendMode_; }
     bool GetDepthWrite() const { return depthWrite_; }
@@ -151,6 +157,10 @@ private:
         { 0.0f, 0.0f, 0.0f }, // rotate
         { 0.0f, 0.0f, 0.0f }  // translate
     };
+
+    // クオータニオン回転（useQuatRotation_ が true のとき transform_.rotate の代わりに使う）
+    Quaternion rotateQuat_ = { 0.0f, 0.0f, 0.0f, 1.0f };
+    bool       useQuatRotation_ = false;
 
     // 色
     Vector4 color_{ 1.0f, 1.0f, 1.0f, 1.0f };

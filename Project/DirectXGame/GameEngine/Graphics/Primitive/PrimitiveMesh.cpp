@@ -108,10 +108,13 @@ void PrimitiveMesh::UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x
 
 Matrix4x4 PrimitiveMesh::BuildWorldMatrixFromMatrices(const Matrix4x4& viewMatrix, const Vector3& cameraPos) const {
     if (billboardMode_ == BillboardMode::None) {
+        if (useQuatRotation_) {
+            return MakeAffineMatrix(transform_.scale, rotateQuat_, transform_.translate);
+        }
         return MakeAffineMatrix(transform_);
     }
     Matrix4x4 scaleMat     = MakeScaleMatrix(transform_);
-    Matrix4x4 rotateMat    = MakeRotateMatrix(transform_.rotate);
+    Matrix4x4 rotateMat    = useQuatRotation_ ? MakeRotateMatrix(rotateQuat_) : MakeRotateMatrix(transform_.rotate);
     Matrix4x4 translateMat = MakeTranslateMatrix(transform_);
 
     Matrix4x4 billboardMat = MakeIdentity4x4();
@@ -141,11 +144,14 @@ Matrix4x4 PrimitiveMesh::BuildWorldMatrixFromMatrices(const Matrix4x4& viewMatri
 
 Matrix4x4 PrimitiveMesh::BuildWorldMatrix(Camera* camera) const {
     if (billboardMode_ == BillboardMode::None || !camera) {
+        if (useQuatRotation_) {
+            return MakeAffineMatrix(transform_.scale, rotateQuat_, transform_.translate);
+        }
         return MakeAffineMatrix(transform_);
     }
     // Scale → Rotate（自己回転）→ Billboard → Translate
     Matrix4x4 scaleMat     = MakeScaleMatrix(transform_);
-    Matrix4x4 rotateMat    = MakeRotateMatrix(transform_.rotate);
+    Matrix4x4 rotateMat    = useQuatRotation_ ? MakeRotateMatrix(rotateQuat_) : MakeRotateMatrix(transform_.rotate);
     Matrix4x4 translateMat = MakeTranslateMatrix(transform_);
 
     Matrix4x4 billboardMat = MakeIdentity4x4();

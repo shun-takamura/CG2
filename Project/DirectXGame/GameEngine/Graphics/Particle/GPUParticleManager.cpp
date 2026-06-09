@@ -101,7 +101,9 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
 void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
                                     uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
                                     const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale,
-                                    float particleLifeTime)
+                                    float particleLifeTime,
+                                    float lifeScaleStart, float lifeScaleEnd,
+                                    const Vector3& rotRandomRange, const Vector3& rotateSpeed)
 {
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.emitterData) return;
@@ -117,6 +119,10 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
     e.scaleMax = scaleMax;
     e.uniformScale = uniformScale ? 1u : 0u;
     e.particleLifeTime = (particleLifeTime > 0.0001f) ? particleLifeTime : 0.0001f;
+    e.lifeScaleStart = lifeScaleStart;
+    e.lifeScaleEnd = lifeScaleEnd;
+    e.rotRandomRange = { rotRandomRange.x, rotRandomRange.y, rotRandomRange.z, 0.0f };
+    e.rotateSpeed = { rotateSpeed.x, rotateSpeed.y, rotateSpeed.z, 0.0f };
     // emit フラグは Update() で CB に転写（CPU/GPU レース回避）
     it->second.pendingBurst = true;
 }
@@ -558,6 +564,10 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.emitterData->shapeMode = 0.0f;
     g.emitterData->ringNormal = { 0.0f, 0.0f, 1.0f };
     g.emitterData->ringThickness = 0.0f;
+    g.emitterData->lifeScaleStart = 1.0f;
+    g.emitterData->lifeScaleEnd = 1.0f;
+    g.emitterData->rotRandomRange = { 0.0f, 0.0f, 0.0f, 0.0f };
+    g.emitterData->rotateSpeed = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Gradient CB（Update CS b1）。既定 keyCount=0（無効＝粒子の start/end 2色補間）
     // CBV は 256 バイト境界なのでサイズを 256 の倍数に丸める

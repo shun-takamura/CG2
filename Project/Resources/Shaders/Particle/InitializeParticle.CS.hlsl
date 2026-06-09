@@ -10,6 +10,9 @@ struct Particle
     float4 color;
     float4 startColor;
     float4 endColor;
+    float2 lifeScale; // 寿命に沿ったサイズ倍率（.x=開始, .y=終了）
+    float4 orientation; // 3D姿勢クオータニオン（ビルボードNone時に使用）
+    float3 angularVel;  // 各軸の角速度（rad/s）
 };
 
 static const uint kMaxParticles = 1024;

@@ -44,6 +44,7 @@ public:
     void SetTranslate(const Vector3& v) { mesh_.GetTransform().translate = v; }
     void SetScale(const Vector3& v)     { mesh_.GetTransform().scale     = v; }
     void SetRotate(const Vector3& v)    { mesh_.GetTransform().rotate    = v; }
+    void SetRotateQuaternion(const Quaternion& q) { mesh_.SetRotateQuaternion(q); }
     void SetColor(const Vector4& c)     { mesh_.SetColor(c); }
 
     void SetBlendMode(PrimitivePipeline::BlendMode m) { mesh_.SetBlendMode(m); }

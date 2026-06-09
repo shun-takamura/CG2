@@ -62,7 +62,10 @@ public:
     void BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
                    uint32_t colorMode, const Vector4& startColor, const Vector4& endColor,
                    const Vector2& scaleMin, const Vector2& scaleMax, bool uniformScale,
-                   float particleLifeTime);
+                   float particleLifeTime,
+                   float lifeScaleStart = 1.0f, float lifeScaleEnd = 1.0f,
+                   const Vector3& rotRandomRange = { 0.0f, 0.0f, 0.0f },
+                   const Vector3& rotateSpeed = { 0.0f, 0.0f, 0.0f });
 
     /// <summary>
     /// 連続発射のON/OFFと頻度設定
@@ -123,6 +126,9 @@ private:
         Vector4 color;       // 現在色（Update CS が毎フレーム計算）
         Vector4 startColor;  // 補間始点
         Vector4 endColor;    // 補間終点
+        Vector2 lifeScale;   // 寿命に沿ったサイズ倍率（x=開始, y=終了）
+        Vector4 orientation; // 3D姿勢クオータニオン（ビルボードNone時に使用）
+        Vector3 angularVel;  // 各軸の角速度（rad/s）
     };
 
     struct PerView
@@ -154,7 +160,11 @@ private:
         float shapeMode;        // 0=Sphere(従来), 1=Ring
         Vector3 ringNormal;     // Ring の法線
         float ringThickness;    // Ring の太さ
-        float pad2[3];
+        float lifeScaleStart;   // 寿命開始時のサイズ倍率
+        float lifeScaleEnd;     // 寿命終了時のサイズ倍率
+        float pad2;             // 16B境界合わせ
+        Vector4 rotRandomRange; // .xyz=出現時ランダム初期姿勢の各軸最大角（rad）
+        Vector4 rotateSpeed;    // .xyz=各軸の角速度（rad/s）
     };
 
     static const uint32_t kMaxGradientKeys = 8;

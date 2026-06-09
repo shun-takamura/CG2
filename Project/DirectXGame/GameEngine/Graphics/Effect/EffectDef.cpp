@@ -160,6 +160,10 @@ namespace {
         ParseLightningParams(o["lightningParams"], c.lightningParams);
         c.offset     = AsVec3(o["offset"], c.offset);
         c.rotate     = AsVec3(o["rotate"], c.rotate);
+        // 回転アニメーション
+        if (o["randomRotateOnSpawn"].IsBool()) c.randomRotateOnSpawn = o["randomRotateOnSpawn"].AsBool(c.randomRotateOnSpawn);
+        c.randomRotateRange = AsVec3(o["randomRotateRange"], c.randomRotateRange);
+        c.rotateSpeed       = AsVec3(o["rotateSpeed"], c.rotateSpeed);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
         c.lifetime   = AsFloat(o["lifetime"], c.lifetime);
         c.startScale = AsVec3(o["startScale"], c.startScale);
@@ -216,6 +220,8 @@ namespace {
         c.scaleMin   = AsVec2(o["scaleMin"], c.scaleMin);
         c.scaleMax   = AsVec2(o["scaleMax"], c.scaleMax);
         if (o["uniformScale"].IsBool()) c.uniformScale = o["uniformScale"].AsBool(c.uniformScale);
+        c.startScale = AsFloat(o["startScale"], c.startScale);
+        c.endScale   = AsFloat(o["endScale"], c.endScale);
         // 発生
         c.emitRadius       = AsFloat(o["emitRadius"], c.emitRadius);
         c.particleLifeTime = AsFloat(o["particleLifeTime"], c.particleLifeTime);
@@ -227,6 +233,10 @@ namespace {
         c.velocityDir    = AsVec3(o["velocityDir"], c.velocityDir);
         c.velocitySpeed  = AsFloat(o["velocitySpeed"], c.velocitySpeed);
         c.velocityJitter = AsFloat(o["velocityJitter"], c.velocityJitter);
+        // 回転（3D姿勢）
+        if (o["randomRotateOnSpawn"].IsBool()) c.randomRotateOnSpawn = o["randomRotateOnSpawn"].AsBool(c.randomRotateOnSpawn);
+        c.randomRotateRange = AsVec3(o["randomRotateRange"], c.randomRotateRange);
+        c.rotateSpeed       = AsVec3(o["rotateSpeed"], c.rotateSpeed);
         // 周回（orbit）
         if (o["orbitEnabled"].IsBool()) c.orbitEnabled = o["orbitEnabled"].AsBool(c.orbitEnabled);
         c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
@@ -469,6 +479,9 @@ namespace EffectDefIO {
             o["lightningParams"] = LightningParamsToJson(c.lightningParams);
             o["offset"]     = Vec3ToJson(c.offset);
             o["rotate"]     = Vec3ToJson(c.rotate);
+            o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
+            o["randomRotateRange"]   = Vec3ToJson(c.randomRotateRange);
+            o["rotateSpeed"]         = Vec3ToJson(c.rotateSpeed);
             o["startTime"]  = static_cast<double>(c.startTime);
             o["lifetime"]   = static_cast<double>(c.lifetime);
             o["startScale"] = Vec3ToJson(c.startScale);
@@ -522,6 +535,8 @@ namespace EffectDefIO {
             o["scaleMin"]   = Vec2ToJson(c.scaleMin);
             o["scaleMax"]   = Vec2ToJson(c.scaleMax);
             o["uniformScale"] = c.uniformScale;
+            o["startScale"] = static_cast<double>(c.startScale);
+            o["endScale"]   = static_cast<double>(c.endScale);
             o["emitRadius"]       = static_cast<double>(c.emitRadius);
             o["particleLifeTime"] = static_cast<double>(c.particleLifeTime);
             o["emitShape"]        = static_cast<int64_t>(c.emitShape);
@@ -531,6 +546,9 @@ namespace EffectDefIO {
             o["velocityDir"]    = Vec3ToJson(c.velocityDir);
             o["velocitySpeed"]  = static_cast<double>(c.velocitySpeed);
             o["velocityJitter"] = static_cast<double>(c.velocityJitter);
+            o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
+            o["randomRotateRange"]   = Vec3ToJson(c.randomRotateRange);
+            o["rotateSpeed"]         = Vec3ToJson(c.rotateSpeed);
             o["orbitEnabled"]     = c.orbitEnabled;
             o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
             o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
