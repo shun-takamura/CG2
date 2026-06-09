@@ -125,7 +125,7 @@ def run_ai_edit(action, instruction, cwd, target_file=None):
     else:
         # Ollamaは対象ファイルの指定が必須
         if not target_file:
-            raise SystemExit("Ollama編集には対象ファイル(target_file)の指定が必要です")
+            raise RuntimeError("Ollama編集には対象ファイル(target_file)の指定が必要です")
         edit_with_ollama(target_file, body, cwd)
     return role
 

@@ -15,6 +15,10 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 import test_run  # 同フォルダの「ゲーム起動＆スクショ」モジュール
+import git_pipeline  # 同フォルダの「AI編集→ビルド→push」モジュール
+
+# /refactor で使う定型指示（規約クリーンアップ。実際の規約は ai_edit のシステムプロンプト側）
+REFACTOR_INSTRUCTION = "コーディング規約に従って変数名・冗長コードを整理してリファクタリングして"
 
 # このファイルは tools/Python にあるので、3つ上がリポジトリ直下(CG2)
 REPO_DIR = Path(__file__).resolve().parents[3]
@@ -68,6 +72,75 @@ async def test_run_cmd(interaction: discord.Interaction, keys: str = "q,e,space"
     except Exception as e:
         # ウィンドウが見つからない等はここで捕まえてスマホに通知
         await interaction.followup.send(f"{interaction.user.mention} test_run 失敗: {e}")
+
+
+# パイプライン共通：run_pipeline を別スレッドで回し、結果を @メンション返信する
+async def _run_pipeline_and_report(interaction, action, instruction, target_file):
+    try:
+        # 編集→msbuild→push は数分かかる同期処理なので別スレッドへ逃がす
+        result = await asyncio.to_thread(
+            git_pipeline.run_pipeline, action, instruction, target_file
+        )
+        if result["committed"]:
+            text = (
+                f"{interaction.user.mention} ✅ {action} 完了！\n"
+                f"ビルド成功 → ローカルcommit済み（未push）\n"
+                f"ブランチ: `{result['branch']}`\n"
+                f"まとめて送るときは `/push`"
+            )
+        else:
+            # ビルドは通ったがAIが何も変えなかった等
+            text = (
+                f"{interaction.user.mention} ⚠️ {action} 終了（{result.get('note', '')}）\n"
+                f"ブランチ: `{result['branch']}`"
+            )
+        await interaction.followup.send(text)
+    except git_pipeline.PipelineError as e:
+        # ビルド失敗等。ログファイルがあれば添付してスマホに送る
+        files = []
+        if e.log_path and Path(e.log_path).exists():
+            files.append(discord.File(e.log_path, filename="build_error.log"))
+        await interaction.followup.send(
+            f"{interaction.user.mention} ❌ {action} 失敗:\n```{e}```", files=files
+        )
+    except Exception as e:
+        await interaction.followup.send(f"{interaction.user.mention} ❌ {action} 失敗: {e}")
+
+
+# /prompt コマンド：自由記述の指示でファイルをAI編集→ビルド→push
+# 指示の先頭に [C] か クロード があれば Claude、それ以外は Ollama（要 target_file）
+@tree.command(name="prompt", description="指示でファイルをAI編集→ビルド→push（[C]でClaude指定）")
+@app_commands.describe(
+    instruction="編集指示（先頭に [C] でClaude。例: [C] main.cppにコメント追記）",
+    target_file="対象ファイル（Ollama使用時は必須。Claudeは省略可）",
+)
+async def prompt_cmd(interaction: discord.Interaction, instruction: str, target_file: str = None):
+    await interaction.response.defer()  # 数分かかるので即「考え中」で3秒制限を回避
+    await _run_pipeline_and_report(interaction, "Prompt", instruction, target_file)
+
+
+# /refactor コマンド：定型のクリーンアップ（Ollamaで規約整理）→ビルド→push
+@tree.command(name="refactor", description="対象ファイルを規約に沿ってリファクタ→ビルド→push")
+@app_commands.describe(target_file="リファクタするファイル（例: Project/DirectXGame/main.cpp）")
+async def refactor_cmd(interaction: discord.Interaction, target_file: str):
+    await interaction.response.defer()
+    await _run_pipeline_and_report(interaction, "Refactor", REFACTOR_INSTRUCTION, target_file)
+
+
+# /push コマンド：たまった作業（セッションブランチ）をまとめてGitHubへ送る
+@tree.command(name="push", description="たまった作業をまとめてGitHubへpushする")
+async def push_cmd(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        result = await asyncio.to_thread(git_pipeline.push_session)
+        await interaction.followup.send(
+            f"{interaction.user.mention} ⬆️ push 完了！\n"
+            f"ブランチ `{result['branch']}` を GitHub へ送りました。"
+        )
+    except git_pipeline.PipelineError as e:
+        await interaction.followup.send(f"{interaction.user.mention} ❌ push 失敗: {e}")
+    except Exception as e:
+        await interaction.followup.send(f"{interaction.user.mention} ❌ push 失敗: {e}")
 
 
 # Botがログインしてオンラインになった瞬間に1度だけ呼ばれる
