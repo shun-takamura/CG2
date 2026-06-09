@@ -3,9 +3,9 @@
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
-	std::unique_ptr<Framework> game = std::make_unique<Game>();
+    std::unique_ptr<Framework> gameInstance = std::make_unique<Game>();
 
-	game->Run();
+    gameInstance->Run();
 
-	return 0;
+    return 0;
 }
