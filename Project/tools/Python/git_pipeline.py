@@ -1,9 +1,13 @@
-"""J.A.R.V.I.S. Step2: 安全なGitパイプライン自動化
+"""J.A.R.V.I.S. Step2/4: 安全なGitパイプライン自動化
 
-master を最新化 → 新ブランチ作成 → 模擬修正 → msbuild検証
-→ 成功時のみ commit & GitHub へ push。失敗時は push せず中断する。
+1本の「セッションブランチ」に作業を積み上げる方式。
+- master 上にいる時に初めて編集が来たら、master を最新化して JARVIS_ 枝を1本作る
+- すでに JARVIS_ 枝にいる時は、その枝にそのまま積む（master へ戻らない＝枝が分裂しない）
+- 各コマンドは「AI編集 → msbuild検証 → 成功時ローカルcommit」まで。push はしない
+- たまった作業は push_session()（Discordの /push）でまとめて GitHub へ送る
 
-手動で実行して動作確認するためのスクリプト。
+失敗は SystemExit ではなく PipelineError を投げる（Botを巻き込んで落とさないため）。
+単体でも動く（末尾の __main__）。
 """
 
 import subprocess
@@ -20,27 +24,61 @@ REPO_DIR = PROJECT_DIR.parent                          # リポジトリ直下(C
 
 SLN = PROJECT_DIR / "CG2_0_1.sln"                       # ビルド対象
 MARKER = OUT_DIR / "jarvis_marker.txt"                  # 模擬修正を書き込む専用ファイル
+BUILD_LOG = OUT_DIR / "build_error.log"                 # ビルド失敗時のログ出力先
 
 BASE_BRANCH = "master"                                  # 派生元ブランチ
 REMOTE = "origin"                                       # push 先リモート
+SESSION_PREFIX = "JARVIS_"                              # セッションブランチの目印
 
 # vswhere（VSインストーラ付属）で msbuild の場所を探す
 VSWHERE = Path(
     r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
 )
 
-# コマンドを実行し結果を表示。失敗したら終了
-def run(cmd, cwd=REPO_DIR):# cwdはカレントディレクトリでそれをリポジトリのディレクトリに設定
+
+# パイプライン内の失敗を表す例外。Bot側はこれを捕まえてスマホに通知する
+class PipelineError(RuntimeError):
+    def __init__(self, message, log_path=None):
+        super().__init__(message)
+        self.log_path = log_path  # ビルドエラーログ等の添付ファイルパス（あれば）
+
+
+# git等のコマンドを実行。失敗したら PipelineError を投げる
+def _run(cmd, cwd=REPO_DIR):
     print(f"\n$ {' '.join(str(c) for c in cmd)}")
-    result = subprocess.run(cmd, cwd=str(cwd), text=True)
+    result = subprocess.run(cmd, cwd=str(cwd), text=True, capture_output=True)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
     if result.returncode != 0:
-        raise SystemExit(f"コマンド失敗（終了コード {result.returncode}）")
+        raise PipelineError(
+            f"コマンド失敗: {' '.join(str(c) for c in cmd)}\n{result.stderr.strip()}"
+        )
     return result
+
+
+# 今いるブランチ名を返す
+def _current_branch():
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=str(REPO_DIR), text=True, capture_output=True,
+    )
+    return result.stdout.strip()
+
+
+# 失敗した編集を捨てて、ブランチを直前のコミット状態に戻す（セッションを汚さない）
+def _discard_changes():
+    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=str(REPO_DIR),
+                   text=True, capture_output=True)
+    subprocess.run(["git", "clean", "-fd"], cwd=str(REPO_DIR),
+                   text=True, capture_output=True)  # 追跡外の新規ファイルも除去（.gitignore対象は残る）
+
 
 # vswhereを使ってMSBuildのパスを取得
 def find_msbuild():
-    if not VSWHERE.exists():# existsは存在の確認
-        raise SystemExit(f"vswhere が見つかりません: {VSWHERE}")
+    if not VSWHERE.exists():
+        raise PipelineError(f"vswhere が見つかりません: {VSWHERE}")
     result = subprocess.run(
         [
             str(VSWHERE),
@@ -53,71 +91,94 @@ def find_msbuild():
     )
     path = result.stdout.strip().splitlines()
     if not path:
-        raise SystemExit("MSBuild.exe が見つかりませんでした")
+        raise PipelineError("MSBuild.exe が見つかりませんでした")
     return path[0]
 
 
-def main():
-    # 1. master へ切り替えて最新化
-    run(["git", "checkout", BASE_BRANCH])# masterに切り替え
-    run(["git", "pull", REMOTE, BASE_BRANCH])# pullして最新状態を取得
+def run_pipeline(action="Test", instruction=None, target_file=None):
+    """1コマンド分のパイプラインを実行する（push はしない）。
+    成功時は {ok, branch, committed, note/message} の辞書を返す。
+    失敗時は PipelineError を投げる（ビルド失敗なら .log_path にログを添える）。
+    """
+    # 1. セッションブランチを決める
+    branch = _current_branch()
+    if branch.startswith(SESSION_PREFIX):
+        # すでにセッション中 → その枝にそのまま積む（masterに戻らない）
+        print(f"既存セッションに積みます: {branch}")
+    else:
+        # 新セッション開始 → master を最新化して JARVIS_ 枝を1本作る
+        _run(["git", "checkout", BASE_BRANCH])
+        _run(["git", "pull", REMOTE, BASE_BRANCH])
+        stamp = datetime.now().strftime("%Y%m%d-%H%M")
+        branch = f"{SESSION_PREFIX}{action}_{stamp}"
+        _run(["git", "checkout", "-b", branch])
 
-    # 2. 新ブランチを作成（JARVIS_作業内容_日時）
-    #    作業内容(action)は将来のDiscordコマンド名と揃える: Refactor / EditClaude …
-    #    第1引数で受け取り、無ければ動作確認用に "Test"
-    stamp = datetime.now().strftime("%Y%m%d-%H%M")# 日時の取得
-    action = sys.argv[1] if len(sys.argv) > 1 else "Test"# 作業内容
-    branch = f"JARVIS_{action}_{stamp}"# ブランチ名を構築
-    run(["git", "checkout", "-b", branch])# ブランチを作りチェックアウト
-
-    # 3. AI編集：第2引数の指示文をAIに渡してファイルを書き換えさせる
-    #    第3引数は対象ファイル（Ollama経路では必須、Claudeは自分で探すので省略可）
-    #    指示が無ければ従来の配管テスト（マーカー追記）にフォールバック
-    instruction = sys.argv[2] if len(sys.argv) > 2 else None
-    target_file = sys.argv[3] if len(sys.argv) > 3 else None
+    # 2. AI編集：指示があればAIに書き換えさせる。無ければ配管テスト（マーカー追記）
     if instruction:
         ai_edit.run_ai_edit(action, instruction, REPO_DIR, target_file)
         message = instruction  # 指示文をそのままコミットメッセージに（B方式）
     else:
         with MARKER.open("a", encoding="utf-8") as f:
             f.write(f"{datetime.now().isoformat()} J.A.R.V.I.S. 配管テスト\n")
-        message = f"J.A.R.V.I.S. 配管テスト {stamp}"
+        message = f"J.A.R.V.I.S. 配管テスト {datetime.now():%Y%m%d-%H%M}"
         print(f"指示なし。配管テストとしてマーカー追記: {MARKER}")
 
-    # 4. msbuild でビルド検証
+    # 3. msbuild でビルド検証（ログを捕捉して失敗時に添付できるようにする）
     msbuild = find_msbuild()
     print(f"\nMSBuild: {msbuild}")
     build = subprocess.run(
-        [
-            msbuild,
-            str(SLN),
-            "/p:Configuration=Debug",
-            "/p:Platform=x64",
-            "/m",
-        ],
+        [msbuild, str(SLN), "/p:Configuration=Debug", "/p:Platform=x64", "/m"],
         cwd=str(REPO_DIR),
         text=True,
+        capture_output=True,
     )
 
-    # 5. 安全弁：成功時のみ commit & push、失敗時は中断
+    # 4. 安全弁：失敗なら編集を捨ててセッションを直前の状態に戻し、ログを残して中断
     if build.returncode != 0:
-        print("\nビルド失敗。push せず中断します。")
-        raise SystemExit(build.returncode)
+        BUILD_LOG.write_text(build.stdout or "", encoding="utf-8")
+        tail = "\n".join((build.stdout or "").splitlines()[-15:])
+        _discard_changes()  # 壊れた編集を破棄（commit済みの過去作業はそのまま残る）
+        raise PipelineError(
+            f"ビルド失敗（branch={branch}）。編集を破棄して中断。\n{tail}",
+            log_path=BUILD_LOG,
+        )
 
-    print("\nビルド成功。変更を確認します。")
-    # AIがどのファイルを触ったか不明なので全変更をステージ
-    run(["git", "add", "-A"])
-    # 変更ゼロなら commit せず終了（AIが何も変えなかった時の安全弁）
-    # git diff --cached --quiet は「差分なし→0／差分あり→1」を返す
+    # 5. 成功：ローカルにcommitだけ（pushはしない）
+    print("\nビルド成功。変更をコミットします。")
+    _run(["git", "add", "-A"])
     staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=str(REPO_DIR))
     if staged.returncode == 0:
-        print("変更なし。commit せず終了します。")
-        return
-    run(["git", "commit", "-m", message])# B方式のメッセージでコミット
-    run(["git", "push", "-u", REMOTE, branch])# リモートへプッシュ
+        return {"ok": True, "branch": branch, "committed": False, "note": "変更なし（commitせず）"}
 
-    print(f"\n完了：ビルド確認済みブランチ '{branch}' を GitHub へ push しました。")
+    _run(["git", "commit", "-m", message])
+    print(f"\nコミット完了（未push）: {branch}")
+    return {"ok": True, "branch": branch, "committed": True, "message": message}
 
-# 直接の実行時のみmainを動かす
+
+def push_session():
+    """今いるセッションブランチを GitHub へまとめて push する（Discordの /push）。"""
+    branch = _current_branch()
+    if not branch.startswith(SESSION_PREFIX):
+        raise PipelineError(
+            f"今 '{branch}' にいます。J.A.R.V.I.S.セッションブランチではないので push しません。"
+        )
+    _run(["git", "push", "-u", REMOTE, branch])
+    print(f"\npush 完了: {branch}")
+    return {"ok": True, "branch": branch}
+
+
+# 直接実行:
+#   python git_pipeline.py <action> "<instruction>" [<target_file>]   … 1作業を積む
+#   python git_pipeline.py Push                                        … まとめてpush
 if __name__ == "__main__":
-    main()
+    action = sys.argv[1] if len(sys.argv) > 1 else "Test"
+    try:
+        if action == "Push":
+            print(f"結果: {push_session()}")
+        else:
+            instruction = sys.argv[2] if len(sys.argv) > 2 else None
+            target_file = sys.argv[3] if len(sys.argv) > 3 else None
+            print(f"結果: {run_pipeline(action, instruction, target_file)}")
+    except PipelineError as e:
+        print(f"\n中断: {e}")
+        raise SystemExit(1)
