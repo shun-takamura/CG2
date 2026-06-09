@@ -21,15 +21,10 @@ void Camera::OnImGui()
 #ifdef USE_IMGUI
     ImGui::DragFloat3("Position", &transform_.translate.x, 0.1f);
 
-    Vector3 rotateDegree = {
-        transform_.rotate.x * (180.0f / 3.14159265f),
-        transform_.rotate.y * (180.0f / 3.14159265f),
-        transform_.rotate.z * (180.0f / 3.14159265f)
-    };
+    // 回転をDegreeで表示（内部はラジアン保存）
+    Vector3 rotateDegree = RadToDeg(transform_.rotate);
     if (ImGui::DragFloat3("Rotation", &rotateDegree.x, 1.0f)) {
-        transform_.rotate.x = rotateDegree.x * (3.14159265f / 180.0f);
-        transform_.rotate.y = rotateDegree.y * (3.14159265f / 180.0f);
-        transform_.rotate.z = rotateDegree.z * (3.14159265f / 180.0f);
+        transform_.rotate = DegToRad(rotateDegree);
     }
 
     ImGui::DragFloat3("Scale", &transform_.scale.x, 0.01f);

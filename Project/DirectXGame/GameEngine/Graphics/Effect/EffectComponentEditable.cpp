@@ -1,6 +1,7 @@
 #include "EffectComponentEditable.h"
 #include "EffectEditorWindow.h"
 #include "EffectDef.h"
+#include "MathUtility.h"
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "imgui.h"
 #include <cstdio>
@@ -83,7 +84,12 @@ void EffectComponentEditable::OnImGuiInspector() {
         if (ImGui::CollapsingHeader("Effect Timeline", ImGuiTreeNodeFlags_DefaultOpen)) {
             dirty |= ImGui::Combo("Mesh", &c.meshType, MeshTypeNames, IM_ARRAYSIZE(MeshTypeNames));
             dirty |= ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
-            dirty |= ImGui::DragFloat3("Rotate (rad)", &c.rotate.x, 0.01f);
+            // 回転をDegreeで表示（内部・保存はラジアンのまま）
+            Vector3 rotateDegree = RadToDeg(c.rotate);
+            if (ImGui::DragFloat3("Rotate (deg)", &rotateDegree.x, 1.0f)) {
+                c.rotate = DegToRad(rotateDegree);
+                dirty = true;
+            }
             dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
             dirty |= ImGui::DragFloat("Lifetime",   &c.lifetime,  0.01f, 0.0f, 60.0f);
             dirty |= ImGui::DragFloat3("Start Scale", &c.startScale.x, 0.05f);

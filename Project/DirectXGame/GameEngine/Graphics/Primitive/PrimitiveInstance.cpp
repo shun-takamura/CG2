@@ -1,5 +1,6 @@
 #include "PrimitiveInstance.h"
 #include "PrimitiveGenerator.h"
+#include "MathUtility.h"
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "SceneManager.h"
 #include "BaseScene.h"
@@ -262,16 +263,10 @@ void PrimitiveInstance::OnImGuiInspector() {
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat3("Position", &transform.translate.x, 0.1f);
 
-        // 回転をDegreeで表示
-        Vector3 rotateDegree = {
-            transform.rotate.x * (180.0f / 3.14159265f),
-            transform.rotate.y * (180.0f / 3.14159265f),
-            transform.rotate.z * (180.0f / 3.14159265f)
-        };
+        // 回転をDegreeで表示（内部はラジアン保存）
+        Vector3 rotateDegree = RadToDeg(transform.rotate);
         if (ImGui::DragFloat3("Rotation", &rotateDegree.x, 1.0f)) {
-            transform.rotate.x = rotateDegree.x * (3.14159265f / 180.0f);
-            transform.rotate.y = rotateDegree.y * (3.14159265f / 180.0f);
-            transform.rotate.z = rotateDegree.z * (3.14159265f / 180.0f);
+            transform.rotate = DegToRad(rotateDegree);
         }
 
         ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f);

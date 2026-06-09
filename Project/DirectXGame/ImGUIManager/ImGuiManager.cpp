@@ -25,6 +25,7 @@
 #include "TransitionManager.h"
 #include "DebugCamera.h"
 #include "Vector3.h"
+#include "MathUtility.h"
 #include "SceneManager.h"
 #include "BaseScene.h"
 #include "StagePlayScene.h"
@@ -126,9 +127,9 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                             dc->SetDistance(distance);
                         }
 
-                        float fovYDeg = dc->GetFovY() * 180.0f / 3.14159265f;
+                        float fovYDeg = RadToDeg(dc->GetFovY());
                         if (ImGui::DragFloat("Fov Y (deg)", &fovYDeg, 0.5f, 10.0f, 120.0f)) {
-                            dc->SetFovY(fovYDeg * 3.14159265f / 180.0f);
+                            dc->SetFovY(DegToRad(fovYDeg));
                         }
                     }
                 }
