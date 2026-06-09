@@ -12,6 +12,9 @@ struct Particle
     float4 color;
     float4 startColor;
     float4 endColor;
+    float2 lifeScale; // 寿命に沿ったサイズ倍率（.x=開始, .y=終了）
+    float4 orientation; // 3D姿勢クオータニオン（ビルボードNone時に使用）
+    float3 angularVel;  // 各軸の角速度（rad/s）
 };
 
 struct PerView
@@ -56,18 +59,30 @@ VertexShaderOutput main(VertexShaderInput input, uint instanceId : SV_InstanceID
              fx,   0.0f, fz,   0.0f,
              0.0f, 0.0f, 0.0f, 1.0f);
     } else {
-        // None：ビルボードなし、単位回転
+        // None：ビルボードなし。粒子の3D姿勢クオータニオンから回転行列を組む
+        // （エンジンの MakeRotateMatrix(q) と同じ行ベクトル配置）。
+        float qx = particle.orientation.x;
+        float qy = particle.orientation.y;
+        float qz = particle.orientation.z;
+        float qw = particle.orientation.w;
+        float xx = qx * qx, yy = qy * qy, zz = qz * qz;
+        float xy = qx * qy, xz = qx * qz, yz = qy * qz;
+        float wx = qw * qx, wy = qw * qy, wz = qw * qz;
         worldMatrix = float4x4(
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f);
+            1.0f - 2.0f * (yy + zz), 2.0f * (xy + wz),        2.0f * (xz - wy),        0.0f,
+            2.0f * (xy - wz),        1.0f - 2.0f * (xx + zz), 2.0f * (yz + wx),        0.0f,
+            2.0f * (xz + wy),        2.0f * (yz - wx),        1.0f - 2.0f * (xx + yy), 0.0f,
+            0.0f,                    0.0f,                    0.0f,                    1.0f);
     }
 
+    // 寿命に沿ったサイズ倍率（Size over Lifetime）。発生時サイズ × lerp(start, end, 寿命比率)。
+    float lifeT = (particle.lifeTime > 0.0f) ? saturate(particle.currentTime / particle.lifeTime) : 0.0f;
+    float sizeMul = lerp(particle.lifeScale.x, particle.lifeScale.y, lifeT);
+
     // スケールと位置を組み込んで完成
-    worldMatrix[0] *= particle.scale.x;
-    worldMatrix[1] *= particle.scale.y;
-    worldMatrix[2] *= particle.scale.z;
+    worldMatrix[0] *= particle.scale.x * sizeMul;
+    worldMatrix[1] *= particle.scale.y * sizeMul;
+    worldMatrix[2] *= particle.scale.z * sizeMul;
     worldMatrix[3].xyz = particle.translate;
 
     output.position = mul(input.position, mul(worldMatrix, gPerView.viewProjection));

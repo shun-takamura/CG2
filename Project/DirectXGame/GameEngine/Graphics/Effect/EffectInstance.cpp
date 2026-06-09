@@ -4,7 +4,9 @@
 #include "PrimitivePipeline.h"
 #include "SoundManager.h"
 #include "MathUtility.h"
+#include "Quaternion.h"
 #include <algorithm>
+#include <random>
 #define NOMINMAX
 #include<cmath>
 
@@ -31,6 +33,23 @@ namespace {
         };
     }
     float LerpF(float a, float b, float t) { return a + (b - a) * t; }
+
+    // [-r, r] の一様乱数
+    float RandSym(float r) {
+        if (r <= 0.0f) return 0.0f;
+        static std::mt19937 rng{ std::random_device{}() };
+        std::uniform_real_distribution<float> dist(-r, r);
+        return dist(rng);
+    }
+
+    // オイラー角(radian, Z*Y*X 順)→クオータニオン。MakeRotateMatrix(Vector3) と同じ合成順に合わせる。
+    Quaternion EulerToQuat(const Vector3& e) {
+        Quaternion qx = MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, e.x);
+        Quaternion qy = MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, e.y);
+        Quaternion qz = MakeRotateAxisAngleQuaternion({ 0.0f, 0.0f, 1.0f }, e.z);
+        // 行列が Z*Y*X（Xが最初に適用）なので、点に対し q = qz * qy * qx
+        return Multiply(Multiply(qz, qy), qx);
+    }
 
     // axis まわりに v を ang 回転（ロドリゲスの回転公式）
     Vector3 RotateAroundAxis(const Vector3& v, const Vector3& axis, float ang) {
@@ -85,7 +104,16 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                                     pc.lightningParams);
             rt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
             rt.renderer->SetBillboardMode(pc.billboardMode);
-            rt.renderer->SetRotate(pc.rotate);
+
+            // 向きの初期化：基準 rotate（× 出現時ランダム）をクオータニオンで合成。
+            Quaternion baseQ = EulerToQuat(pc.rotate);
+            if (pc.randomRotateOnSpawn) {
+                Quaternion randQ = EulerToQuat({ RandSym(pc.randomRotateRange.x),
+                                                 RandSym(pc.randomRotateRange.y),
+                                                 RandSym(pc.randomRotateRange.z) });
+                baseQ = Multiply(baseQ, randQ);
+            }
+            rt.orientation = Normalize(baseQ);
 
             // 静的マテリアル
             rt.renderer->SetDepthWrite(pc.depthWrite);
@@ -122,15 +150,28 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         Vector3 scale = LerpV3(pc.startScale, pc.endScale, t);
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
 
+        // 持続回転：角速度ベクトル rotateSpeed を毎フレーム積分（クオータニオン合成。ジンバルロックなし）。
+        {
+            const Vector3& w = pc.rotateSpeed;
+            float wlen = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
+            if (wlen > 1e-6f) {
+                float ang = wlen * deltaTime;
+                Quaternion dq = MakeRotateAxisAngleQuaternion({ w.x / wlen, w.y / wlen, w.z / wlen }, ang);
+                rt.orientation = Normalize(Multiply(dq, rt.orientation));
+            }
+        }
+
         // エフェクト全体の向き worldRotation_ を適用：
-        // offset をその回転で回し、Primitive の向きにも加算する（弾の進行方向追従など）。
+        // offset をその回転で回し、Primitive の向きにも合成する（弾の進行方向追従など）。
         const bool hasWorldRot = (worldRotation_.x != 0.0f || worldRotation_.y != 0.0f || worldRotation_.z != 0.0f);
         Vector3 offset = pc.offset;
+        Quaternion finalQ = rt.orientation;
         if (hasWorldRot) {
             Matrix4x4 rotMat = MakeRotateMatrix(worldRotation_);
             offset = TransformMatrix(pc.offset, rotMat);
-            rt.renderer->SetRotate({ worldRotation_.x + pc.rotate.x, worldRotation_.y + pc.rotate.y, worldRotation_.z + pc.rotate.z });
+            finalQ = Multiply(EulerToQuat(worldRotation_), rt.orientation);
         }
+        rt.renderer->SetRotateQuaternion(finalQ);
         Vector3 pos = { worldPos_.x + offset.x, worldPos_.y + offset.y, worldPos_.z + offset.z };
 
         rt.renderer->SetTranslate(pos);
@@ -229,9 +270,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                 float remaining = max(0.0001f, def_.totalDuration - pc.startTime);
                 particleLife = min(particleLife, remaining);
             }
+            Vector3 rotRange = pc.randomRotateOnSpawn ? pc.randomRotateRange : Vector3{ 0.0f, 0.0f, 0.0f };
             gpu_->BurstEmit(pc.gpuParticleGroupName, pos, pc.burstCount, pc.emitRadius,
                             static_cast<uint32_t>(pc.colorMode), pc.startColor, pc.endColor,
-                            pc.scaleMin, pc.scaleMax, pc.uniformScale, particleLife);
+                            pc.scaleMin, pc.scaleMax, pc.uniformScale, particleLife,
+                            pc.startScale, pc.endScale,
+                            rotRange, pc.rotateSpeed);
         }
         rt.burstFired = true;
     }

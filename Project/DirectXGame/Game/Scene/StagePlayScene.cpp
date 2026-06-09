@@ -2254,8 +2254,8 @@ void StagePlayScene::Initialize() {
 
 	// Skybox 生成（DemoScene と同じ Cubemap を使用）
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/passendorf_snow_8k.dds");
-	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/passendorf_snow_8k.dds");
+	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_8k.dds");
+	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_8k.dds");
 
 	// レールカメラ用スプライン（位置）
 	cameraPath_ = std::make_unique<SplineCurveActor>();

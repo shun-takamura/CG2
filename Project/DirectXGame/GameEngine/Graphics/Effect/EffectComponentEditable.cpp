@@ -90,6 +90,25 @@ void EffectComponentEditable::OnImGuiInspector() {
                 c.rotate = DegToRad(rotateDegree);
                 dirty = true;
             }
+
+            // ----- 回転アニメーション（内部はクオータニオン。度数で表示） -----
+            ImGui::SeparatorText("Rotation Animation");
+            dirty |= ImGui::Checkbox("Random Rotate On Spawn", &c.randomRotateOnSpawn);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("出現時に各軸 ±範囲 のランダム角を1回だけ加える");
+            if (c.randomRotateOnSpawn) {
+                Vector3 randRangeDeg = RadToDeg(c.randomRotateRange);
+                if (ImGui::DragFloat3("Random Range (±deg)", &randRangeDeg.x, 1.0f, 0.0f, 360.0f)) {
+                    c.randomRotateRange = DegToRad(randRangeDeg);
+                    dirty = true;
+                }
+            }
+            Vector3 rotateSpeedDeg = RadToDeg(c.rotateSpeed);
+            if (ImGui::DragFloat3("Rotate Speed (deg/s)", &rotateSpeedDeg.x, 1.0f)) {
+                c.rotateSpeed = DegToRad(rotateSpeedDeg);
+                dirty = true;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("出ている間、各軸を回し続ける角速度（0で停止）");
+
             dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
             dirty |= ImGui::DragFloat("Lifetime",   &c.lifetime,  0.01f, 0.0f, 60.0f);
             dirty |= ImGui::DragFloat3("Start Scale", &c.startScale.x, 0.05f);
@@ -375,6 +394,27 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty = true;
         }
 
+        // ===== Rotation（3D姿勢。ビルボード None で有効） =====
+        ImGui::SeparatorText("Rotation (3D)");
+        if (c.billboardMode != BillboardMode::None) {
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Billboard を None にすると3D回転が有効（破片タンブル）");
+        }
+        dirty |= ImGui::Checkbox("Random Rotate On Spawn", &c.randomRotateOnSpawn);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("出現時に各軸 ±範囲のランダム初期姿勢を粒子ごとに与える");
+        if (c.randomRotateOnSpawn) {
+            Vector3 randRangeDeg = RadToDeg(c.randomRotateRange);
+            if (ImGui::DragFloat3("Random Range (±deg)", &randRangeDeg.x, 1.0f, 0.0f, 180.0f)) {
+                c.randomRotateRange = DegToRad(randRangeDeg);
+                dirty = true;
+            }
+        }
+        Vector3 rotateSpeedDeg = RadToDeg(c.rotateSpeed);
+        if (ImGui::DragFloat3("Rotate Speed (deg/s)", &rotateSpeedDeg.x, 1.0f)) {
+            c.rotateSpeed = DegToRad(rotateSpeedDeg);
+            dirty = true;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("出ている間、各軸を回し続ける角速度（全粒子共通。0で停止）");
+
         // ===== Color =====
         ImGui::Separator();
         const char* colorModeNames[] = { "Random", "Fixed" };
@@ -426,6 +466,10 @@ void EffectComponentEditable::OnImGuiInspector() {
         if (c.uniformScale) {
             ImGui::TextDisabled("(Uniform: Min/Max の X 範囲のみ使われ、W=H に固定)");
         }
+        // 寿命に沿ったサイズ倍率（発生サイズ × lerp(Start,End)）
+        dirty |= ImGui::DragFloat("Start Scale", &c.startScale, 0.01f, 0.0f, 100.0f);
+        dirty |= ImGui::DragFloat("End Scale",   &c.endScale,   0.01f, 0.0f, 100.0f);
+        ImGui::TextDisabled("(発生サイズ × 寿命比率で Start→End 倍率。1/1 で変化なし)");
 
         // ===== Emit / Lifetime =====
         ImGui::Separator();

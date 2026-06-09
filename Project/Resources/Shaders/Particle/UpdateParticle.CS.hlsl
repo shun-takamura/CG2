@@ -10,6 +10,9 @@ struct Particle
     float4 color;
     float4 startColor;
     float4 endColor;
+    float2 lifeScale; // 寿命に沿ったサイズ倍率（.x=開始, .y=終了）
+    float4 orientation; // 3D姿勢クオータニオン（ビルボードNone時に使用）
+    float3 angularVel;  // 各軸の角速度（rad/s）
 };
 
 struct PerFrame
@@ -44,6 +47,16 @@ struct ParticleOrbit
     float3 tumbleAxis;   // 帯自体の回転軸
     float pad3;
 };
+
+// ハミルトン積（エンジンの Multiply(q1,q2) と一致）
+float4 QMul(float4 a, float4 b)
+{
+    return float4(
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}
 
 // axis まわりに v を ang 回転（ロドリゲス）
 float3 RotateAxis(float3 v, float3 axis, float ang)
@@ -103,6 +116,18 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 gParticles[particleIndex].translate += gParticles[particleIndex].velocity * gPerFrame.deltaTime;
             }
             gParticles[particleIndex].currentTime += gPerFrame.deltaTime;
+
+            // 3D姿勢：角速度ベクトルをクオータニオン積分（ジンバルロックなし）
+            float3 w = gParticles[particleIndex].angularVel;
+            float wl = length(w);
+            if (wl > 1e-6f)
+            {
+                float ang = wl * gPerFrame.deltaTime;
+                float h = ang * 0.5f;
+                float4 dq = float4((w / wl) * sin(h), cos(h));
+                float4 q = QMul(dq, gParticles[particleIndex].orientation);
+                gParticles[particleIndex].orientation = normalize(q);
+            }
 
             // 寿命比率で色補間。グラデーションキーが2個以上なら多色補間、なければ start→end の2色。
             float t = saturate(gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);

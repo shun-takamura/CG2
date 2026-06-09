@@ -12,6 +12,9 @@ struct Particle
     float4 color;
     float4 startColor;
     float4 endColor;
+    float2 lifeScale; // 寿命に沿ったサイズ倍率（.x=開始, .y=終了）
+    float4 orientation; // 3D姿勢クオータニオン（ビルボードNone時に使用）
+    float3 angularVel;  // 各軸の角速度（rad/s）
 };
 
 struct EmitterSphere
@@ -35,8 +38,39 @@ struct EmitterSphere
     float  shapeMode;     // 0=Sphere(従来), 1=Ring(円周)
     float3 ringNormal;    // Ring の法線（リング平面の向き）
     float  ringThickness; // Ring の太さ（円周まわりのランダム散らばり）
-    float3 pad2;
+    float  lifeScaleStart;// 寿命開始時のサイズ倍率
+    float  lifeScaleEnd;  // 寿命終了時のサイズ倍率
+    float  pad2;          // 16B境界合わせ
+    float4 rotRandomRange;// .xyz=出現時ランダム初期姿勢の各軸最大角（rad）
+    float4 rotateSpeed;   // .xyz=各軸の角速度（rad/s）
 };
+
+// ハミルトン積（エンジンの Multiply(q1,q2) と一致）
+float4 QMul(float4 a, float4 b)
+{
+    return float4(
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}
+
+float4 AxisAngleQ(float3 axis, float ang)
+{
+    float l = length(axis);
+    if (l < 1e-6f) return float4(0, 0, 0, 1);
+    float h = ang * 0.5f;
+    return float4((axis / l) * sin(h), cos(h));
+}
+
+// オイラー角(rad)→クオータニオン（Z*Y*X 順。EffectInstance::EulerToQuat と一致）
+float4 EulerToQ(float3 e)
+{
+    float4 qx = AxisAngleQ(float3(1, 0, 0), e.x);
+    float4 qy = AxisAngleQ(float3(0, 1, 0), e.y);
+    float4 qz = AxisAngleQ(float3(0, 0, 1), e.z);
+    return QMul(QMul(qz, qy), qx);
+}
 
 struct PerFrame
 {
@@ -127,6 +161,12 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 }
                 gParticles[particleIndex].lifeTime = gEmitter.particleLifeTime;
                 gParticles[particleIndex].currentTime = 0.0f;
+                gParticles[particleIndex].lifeScale = float2(gEmitter.lifeScaleStart, gEmitter.lifeScaleEnd);
+
+                // 3D姿勢：出現時ランダム初期姿勢（各軸 ±range）＋角速度
+                float3 randEuler = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.rotRandomRange.xyz;
+                gParticles[particleIndex].orientation = EulerToQ(randEuler);
+                gParticles[particleIndex].angularVel = gEmitter.rotateSpeed.xyz;
 
                 // 色モード
                 if (gEmitter.colorMode == 0) {
