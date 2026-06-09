@@ -237,9 +237,10 @@ void SpriteInstance::OnImGuiInspector()
         ImGui::DragFloat2("Position", &position_.x, 1.0f);
         ImGui::DragFloat2("Size", &size_.x, 1.0f);
 
-        float rotationDegree = rotation_ * (180.0f / 3.14159265f);
+        // 回転をDegreeで表示（内部はラジアン保存）
+        float rotationDegree = RadToDeg(rotation_);
         if (ImGui::DragFloat("Rotation", &rotationDegree, 1.0f)) {
-            rotation_ = rotationDegree * (3.14159265f / 180.0f);
+            rotation_ = DegToRad(rotationDegree);
         }
 
         ImGui::DragFloat2("Anchor Point", &anchorPoint_.x, 0.01f, 0.0f, 1.0f);

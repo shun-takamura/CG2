@@ -7,6 +7,22 @@
 #include "TransformationMatrix.h"
 
 //===================================
+// 角度変換ヘルパー
+//   内部表現・保存はラジアンのまま。人間が触れるUI層でのみ度数⇔ラジアンを変換する。
+//===================================
+inline constexpr float kPi = 3.14159265358979323846f;
+
+// 度 → ラジアン
+inline constexpr float DegToRad(float deg) { return deg * (kPi / 180.0f); }
+// ラジアン → 度
+inline constexpr float RadToDeg(float rad) { return rad * (180.0f / kPi); }
+
+// 度 → ラジアン（3軸まとめて）
+inline Vector3 DegToRad(const Vector3& deg) { return { DegToRad(deg.x), DegToRad(deg.y), DegToRad(deg.z) }; }
+// ラジアン → 度（3軸まとめて）
+inline Vector3 RadToDeg(const Vector3& rad) { return { RadToDeg(rad.x), RadToDeg(rad.y), RadToDeg(rad.z) }; }
+
+//===================================
 // MT3でも使う関数の宣言
 //===================================
 
