@@ -1,4 +1,4 @@
-// J.A.R.V.I.S. 統合テスト
+// J.A.R.V.I.S.
 #include "Game.h"
 
 // Windowsアプリでのエントリーポイント(main関数)
