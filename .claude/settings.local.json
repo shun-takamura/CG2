@@ -19,7 +19,9 @@
       "Bash(git log *)",
       "PowerShell($o = Get-Command ollama -ErrorAction SilentlyContinue; if \\($o\\) { \"ollama: $\\($o.Source\\)\"; ollama list } else { \"ollama: 未インストール\" }; \"---\"; $c = Get-Command claude -ErrorAction SilentlyContinue; if \\($c\\) { \"claude: $\\($c.Source\\)\" } else { \"claude: 未インストール\" })",
       "WebFetch(domain:docs.claude.com)",
-      "Bash(python -m py_compile jarvis_bot.py git_pipeline.py ai_edit.py test_run.py)"
+      "Bash(python -m py_compile jarvis_bot.py git_pipeline.py ai_edit.py test_run.py)",
+      "Bash(python -m py_compile jarvis_bot.py live_control.py)",
+      "Bash(python -m py_compile live_control.py)"
     ]
   }
 }

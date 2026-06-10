@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 import test_run  # 同フォルダの「ゲーム起動＆スクショ」モジュール
 import git_pipeline  # 同フォルダの「AI編集→ビルド→push」モジュール
+import live_control  # 同フォルダの「配信制御」モジュール
 
 # /refactor で使う定型指示（規約クリーンアップ。実際の規約は ai_edit のシステムプロンプト側）
 REFACTOR_INSTRUCTION = "コーディング規約に従って変数名・冗長コードを整理してリファクタリングして"
@@ -141,6 +142,32 @@ async def push_cmd(interaction: discord.Interaction):
         await interaction.followup.send(f"{interaction.user.mention} ❌ push 失敗: {e}")
     except Exception as e:
         await interaction.followup.send(f"{interaction.user.mention} ❌ push 失敗: {e}")
+
+
+# /live_start コマンド：ゲーム起動→OBS仮想カメラ→DiscordカメラONで配信開始
+@tree.command(name="live_start", description="ゲームを起動してVCにライブ配信を開始する")
+async def live_start_cmd(interaction: discord.Interaction):
+    await interaction.response.defer()  # 起動+待機で3秒を超えるので即「考え中」
+    try:
+        await asyncio.to_thread(live_control.start_live)
+        await interaction.followup.send(
+            f"{interaction.user.mention} 🔴 配信開始！ ボイスチャンネルでゲーム画面を視聴できます。"
+        )
+    except Exception as e:
+        await interaction.followup.send(f"{interaction.user.mention} ❌ 配信開始失敗: {e}")
+
+
+# /live_stop コマンド：DiscordカメラOFF→OBS仮想カメラ停止→ゲーム終了
+@tree.command(name="live_stop", description="ライブ配信を停止してゲームを閉じる")
+async def live_stop_cmd(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        await asyncio.to_thread(live_control.stop_live)
+        await interaction.followup.send(
+            f"{interaction.user.mention} ⏹️ 配信終了。ゲームを閉じました。"
+        )
+    except Exception as e:
+        await interaction.followup.send(f"{interaction.user.mention} ❌ 配信停止失敗: {e}")
 
 
 # Botがログインしてオンラインになった瞬間に1度だけ呼ばれる
