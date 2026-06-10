@@ -273,6 +273,29 @@ Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float botto
 	return orthographicMatrix;
 }
 
+Matrix4x4 MakeLookAtMatrix(const Vector3& eye, const Vector3& target, const Vector3& up)
+{
+	// 外積（ここだけで使うのでローカルに用意。グローバル Cross は他所と衝突するため置かない）
+	auto cross = [](const Vector3& a, const Vector3& b) -> Vector3 {
+		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+	};
+
+	// LH：前方(z) は視点→注視点
+	Vector3 zaxis = Normalize({ target.x - eye.x, target.y - eye.y, target.z - eye.z });
+	Vector3 xaxis = Normalize(cross(up, zaxis));
+	Vector3 yaxis = cross(zaxis, xaxis);
+
+	Matrix4x4 result;
+	result.m[0][0] = xaxis.x; result.m[0][1] = yaxis.x; result.m[0][2] = zaxis.x; result.m[0][3] = 0.0f;
+	result.m[1][0] = xaxis.y; result.m[1][1] = yaxis.y; result.m[1][2] = zaxis.y; result.m[1][3] = 0.0f;
+	result.m[2][0] = xaxis.z; result.m[2][1] = yaxis.z; result.m[2][2] = zaxis.z; result.m[2][3] = 0.0f;
+	result.m[3][0] = -Dot(xaxis, eye);
+	result.m[3][1] = -Dot(yaxis, eye);
+	result.m[3][2] = -Dot(zaxis, eye);
+	result.m[3][3] = 1.0f;
+	return result;
+}
+
 Matrix4x4 Inverse(Matrix4x4 matrix4x4)
 {
 	// 行列式|A|を求める

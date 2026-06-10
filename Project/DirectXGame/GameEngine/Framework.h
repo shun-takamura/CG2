@@ -23,6 +23,7 @@
 
 #include "SkyboxManager.h"
 #include "SkinningComputeManager.h"
+#include "ShadowMap.h"
 
 // 前方宣言
 class ConvertStringClass;
@@ -75,6 +76,11 @@ public:
 	/// </summary>
 	void Run();
 
+	/// <summary>
+	/// CSM シャドウマップ（全シーン共有）。ImGui 調整などから参照する。
+	/// </summary>
+	ShadowMap* GetShadowMap() const { return shadowMap_.get(); }
+
 protected:
 	// 終了リクエストフラグ
 	bool endRequest_ = false;
@@ -98,6 +104,9 @@ protected:
 	std::unique_ptr<Object3DManager> object3DManager_;
 	std::unique_ptr<SkyboxManager> skyboxManager_;
 	std::unique_ptr<SkinningComputeManager> skinningComputeManager_;
+
+	// CSM シャドウマップ（平行光源1個。全シーン共有）
+	std::unique_ptr<ShadowMap> shadowMap_;
 
 	// 入力
 	std::unique_ptr<InputManager> input_;

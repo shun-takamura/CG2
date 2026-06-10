@@ -76,6 +76,10 @@ private:
     Microsoft::WRL::ComPtr<ID3D12PipelineState> idPipelineState_;
     void CreateIdPassObjects();
 
+    // シャドウ受光リソース（毎フレーム Framework から設定）。0 のうちは未バインド。
+    D3D12_GPU_VIRTUAL_ADDRESS   shadowConstantsAddr_ = 0;       // b5 = ShadowConstants
+    D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle_{};             // t3 = シャドウマップ SRV
+
 public:
   
 	void Initialize(DirectXCore* dxCore);
@@ -112,6 +116,13 @@ public:
     // 環境マップを設定（シーン全体で使用するCubemapファイルパス）
     void SetEnvironmentTexture(const std::string& filePath) {
         environmentTexturePath_ = filePath;
+    }
+
+    // シャドウ受光リソースを設定（毎フレーム、シャドウパス後に Framework から呼ぶ）。
+    // DrawSetting で b5(ShadowConstants)/t3(シャドウマップ) をバインドする。
+    void SetShadowBindings(D3D12_GPU_VIRTUAL_ADDRESS constantsAddr, D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
+        shadowConstantsAddr_ = constantsAddr;
+        shadowSrvHandle_ = srvHandle;
     }
 
 	// ゲッターロボ

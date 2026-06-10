@@ -282,6 +282,10 @@ void Framework::Initialize() {
 	object3DManager_ = std::make_unique<Object3DManager>();
 	object3DManager_->Initialize(dxCore_.get());
 
+	// CSM シャドウマップの初期化（平行光源1個・全シーン共有）
+	shadowMap_ = std::make_unique<ShadowMap>();
+	shadowMap_->Initialize(dxCore_.get(), srvManager_.get());
+
 	// ComputeShader版Skinningの共通部分の初期化
 	skinningComputeManager_ = std::make_unique<SkinningComputeManager>();
 	skinningComputeManager_->Initialize(dxCore_.get());

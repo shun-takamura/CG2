@@ -63,6 +63,12 @@ void Object3DManager::DrawSetting()
         );
     }
 
+    // シャドウ受光リソースをバインド（b5=ShadowConstants / t3=シャドウマップ）
+    if (shadowConstantsAddr_ != 0) {
+        dxCore_->GetCommandList()->SetGraphicsRootConstantBufferView(8, shadowConstantsAddr_);
+        dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
+    }
+
 }
 
 void Object3DManager::SetBlendMode(BlendMode blendMode)
@@ -108,7 +114,14 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeEnvironment[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
     descriptorRangeEnvironment[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
 
-    D3D12_ROOT_PARAMETER rootParameters[8] = {};
+    // PS: SRV(t3) - シャドウマップ（CSM, Texture2DArray）
+    D3D12_DESCRIPTOR_RANGE descriptorRangeShadow[1] = {};
+    descriptorRangeShadow[0].BaseShaderRegister = 3;                      // t3
+    descriptorRangeShadow[0].NumDescriptors = 1;
+    descriptorRangeShadow[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeShadow[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[10] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -155,9 +168,24 @@ void Object3DManager::CreateRootSignature()
     rootParameters[7].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeEnvironment);
 
     // ============================================
-    // Sampler (PS の s0)
+    // PS: CBV(b5) - シャドウ情報（ShadowConstants）
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
+    rootParameters[8].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[8].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[8].Descriptor.ShaderRegister = 5;  // b5
+
+    // ============================================
+    // PS: DescriptorTable(t3) - シャドウマップ（CSM）
+    // ============================================
+    rootParameters[9].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[9].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[9].DescriptorTable.pDescriptorRanges = descriptorRangeShadow;
+    rootParameters[9].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeShadow);
+
+    // ============================================
+    // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み)
+    // ============================================
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[3] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;         // バイリニアフィルタ
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 0~1の範囲をリピート
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -166,6 +194,26 @@ void Object3DManager::CreateRootSignature()
     staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;                       // Mipmapをあるだけ使用
     staticSamplers[0].ShaderRegister = 0;                               // レジスタ番号0を使用
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
+
+    // シャドウ比較サンプラー（PCF）。深度比較で「手前にあるか」を返す
+    staticSamplers[1].Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+    staticSamplers[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL; // current<=stored で「照らされている」
+    staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
+    staticSamplers[1].ShaderRegister = 1;                               // s1
+    staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    // シャドウ生深度読みサンプラー（ブロッカー探索用）。ポイント＋クランプ
+    staticSamplers[2].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    staticSamplers[2].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[2].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[2].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    staticSamplers[2].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    staticSamplers[2].MaxLOD = D3D12_FLOAT32_MAX;
+    staticSamplers[2].ShaderRegister = 2;                               // s2
+    staticSamplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};
     rootSignaturDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;

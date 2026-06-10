@@ -1415,6 +1415,12 @@ void BaseScene::DrawDynamicObjects() {
 	}
 }
 
+void BaseScene::DrawShadowCasters() {
+	for (auto& o : object3DInstances_) {
+		o->DrawShadowPass(dxCore_);
+	}
+}
+
 void BaseScene::UpdateDynamicAnimated(float deltaTime) {
 	for (auto& a : dynamicAnimated_) {
 		a->Update(deltaTime);
