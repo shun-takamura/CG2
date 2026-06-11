@@ -39,6 +39,13 @@ void KeyboardInput::Update() {
 
 }
 
+void KeyboardInput::ApplyReplay(const BYTE keys[256]) {
+	// 前フレームのキー状態を保存（TriggerKey 判定のため、通常 Update と同じ順序）
+	memcpy(preKeys_, keys_, sizeof(keys_));
+	// ハードを読まず、記録した押下状態を流し込む
+	memcpy(keys_, keys, sizeof(keys_));
+}
+
 bool KeyboardInput::PuhsKey(BYTE keyNum)
 {
 	// 指定キーを押していればtrueを返す

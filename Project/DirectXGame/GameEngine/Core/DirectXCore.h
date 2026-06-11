@@ -128,6 +128,11 @@ public:
 	// デルタタイムの取得（生の値）
 	float GetDeltaTime() const { return deltaTime_; }
 
+	// リプレイ再生：ON にすると UpdateFixFPS は実時計を読まず、OverrideDeltaTime で
+	// 与えた値をそのまま使う（フレーム制限のスリープも行わず最速で回す）。
+	void SetReplayMode(bool enable) { replayMode_ = enable; }
+	void OverrideDeltaTime(float dt) { deltaTime_ = dt; }
+
 	// GPU 完了待機（リソース解放前など、外部からも呼ぶ用）
 	void WaitForGpu();
 
@@ -227,7 +232,8 @@ private:
 	// デルタタイム
 	std::chrono::steady_clock::time_point lastFrameTime_;
 	float deltaTime_ = 1.0f / 60.0f;
-	bool useFixedFrameRate_ = true; // true: 固定, false: 可変
+	bool useFixedFrameRate_ = false; // true: 60fps固定, false: 可変(VSyncの上限=モニタリフレッシュまで)
+	bool replayMode_ = false;       // true: dt は外部供給（UpdateFixFPS は実時計を読まない）
 
 	// グローバルタイムスケール（0で停止、1で等速、0.5でスロー、2で倍速）
 	float timeScale_ = 1.0f;

@@ -31,8 +31,8 @@ void FadeTransition::Start(std::function<void()> onSceneChange) {
 void FadeTransition::Update() {
 	if (!isTransitioning_) return;
 
-	// 1フレーム分の時間を加算
-	currentTime_ += 1.0f / 60.0f;
+	// 経過時間を加算（フレームレート非依存にするため実 dt を使う）
+	currentTime_ += dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
 
 	// 状態に応じた処理
 	if (state_ == TransitionState::FadeIn) {

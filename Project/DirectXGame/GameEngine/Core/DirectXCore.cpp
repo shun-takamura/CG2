@@ -738,6 +738,27 @@ void DirectXCore::InitializeFixFPS(){
 }
 
 void DirectXCore::UpdateFixFPS(){
+    // リプレイ再生中は実時計で deltaTime_ を上書きしない（OverrideDeltaTime で供給済み）。
+    // ただし記録時と同じ体感速度になるよう、1フレームを deltaTime_ 秒に間延びさせる
+    // （これをしないとフレーム制限が外れて早送りになる）。
+    if (replayMode_) {
+        const std::chrono::microseconds target(
+            static_cast<long long>(deltaTime_ * 1000000.0f));
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        std::chrono::microseconds elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
+        if (elapsed < target) {
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                static_cast<long long>((target - elapsed).count() * 0.9)));
+            do {
+                now = std::chrono::steady_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
+            } while (elapsed < target);
+        }
+        reference_ = now;
+        return;
+    }
+
     // 現在時刻を取得
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
