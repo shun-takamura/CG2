@@ -3314,6 +3314,19 @@ void StagePlayScene::Update() {
 	if (lightningTest_ && lightningTest_->IsActive()) {
 		lightningTest_->Update(camera_.get(), dxCore_->GetDeltaTime());
 	}
+
+	// state.log: SUNDAY のハング検知（更新が止まる）・スタック判定（座標が動かない）の基準。
+	// フレーム末尾でプレイヤーの最終位置・HP・シーンを毎フレーム記録する。
+	if (player_) {
+		const Vector3 p = player_->GetTranslate();
+		const HP& hp = player_->GetHP();
+		SessionLogger::Instance().Write(SessionLogger::Category::State, SessionLogger::Level::Trace,
+			"frame=" + std::to_string(stateFrame_)
+			+ " x=" + std::to_string(p.x) + " y=" + std::to_string(p.y) + " z=" + std::to_string(p.z)
+			+ " hp=" + std::to_string(hp.currentHP) + "/" + std::to_string(hp.maxHP)
+			+ " scene=" + SceneManager::GetInstance()->GetCurrentSceneName());
+		++stateFrame_;
+	}
 }
 
 void StagePlayScene::Draw() {

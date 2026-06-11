@@ -9,6 +9,7 @@
 #include <vector>
 #include <unordered_set>
 #include <utility>
+#include <cstdint>
 
 class Camera;
 class Skybox;
@@ -109,6 +110,9 @@ private:
 	// 移動阻止(壁押し戻し)の前フレーム状態。立ち上がりエッジで MOVE_BLOCKED を出すため軸ごとに保持。
 	bool prevMoveBlockedX_ = false;
 	bool prevMoveBlockedY_ = false;
+
+	// state.log 用のフレーム番号（このシーン開始からの経過フレーム。SUNDAY のハング/スタック判定の基準）。
+	uint64_t stateFrame_ = 0;
 
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;
