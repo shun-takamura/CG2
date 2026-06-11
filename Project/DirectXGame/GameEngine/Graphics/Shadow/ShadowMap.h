@@ -31,7 +31,8 @@ public:
         float     softness;                             // 深度差→ボケ幅の係数（接地で硬く、離れるほど柔らかく）
         float     debug;                                // 1=影係数をグレースケール出力（デバッグ）
         float     maxBlur;                              // ボケ半径の上限（UV）。washout防止
-        float     pad_[2];
+        float     fadeRadius;                           // penumbra がこの値で影が消える（距離フェード）。0で無効
+        float     pad_;
     };
 
     void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
@@ -131,6 +132,9 @@ private:
 
     // ボケ半径の上限（UV）。距離で柔らかくなる影もこの値で頭打ち。Vogel化で大きめでも崩れにくい。
     float maxBlur_ = 0.04f;
+
+    // 距離フェード：penumbra がこの値に達すると影が完全に消える。0でフェード無効。
+    float fadeRadius_ = 0.1f;
 
     // デバッグ：影係数をそのままグレースケール表示する
     bool debugShadowOnly_ = false;

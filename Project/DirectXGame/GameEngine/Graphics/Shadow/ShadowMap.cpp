@@ -99,6 +99,7 @@ void ShadowMap::CreateResources()
     mappedConstants_->softness = softness_;
     mappedConstants_->debug = debugShadowOnly_ ? 1.0f : 0.0f;
     mappedConstants_->maxBlur = maxBlur_;
+    mappedConstants_->fadeRadius = fadeRadius_;
 }
 
 void ShadowMap::CreatePipeline()
@@ -350,6 +351,7 @@ void ShadowMap::UpdateCascades(const Camera& camera, const Vector3& lightDirecti
     mappedConstants_->softness = softness_;
     mappedConstants_->debug = debugShadowOnly_ ? 1.0f : 0.0f;
     mappedConstants_->maxBlur = maxBlur_;
+    mappedConstants_->fadeRadius = fadeRadius_;
 }
 
 void ShadowMap::OnImGui()
@@ -362,6 +364,8 @@ void ShadowMap::OnImGui()
         // 距離で変化するボケ（PCSS）：Softness=変化の強さ、Max Blur=ボケ上限(washout防止)
         ImGui::SliderFloat("Softness", &softness_, 0.0f, 0.5f, "%.3f");
         ImGui::SliderFloat("Max Blur", &maxBlur_, 0.0f, 0.1f, "%.4f");
+        // 距離フェード：小さいほど近くで影が消える。0でフェードOFF（消えない）
+        ImGui::SliderFloat("Fade Dist", &fadeRadius_, 0.0f, 2.0f, "%.3f");
         ImGui::SliderFloat("Cascade Lambda", &cascadeLambda_, 0.0f, 1.0f);
         // デバッグ：影係数をそのままグレースケール表示（ボケ具合の確認用）
         ImGui::Checkbox("Debug: Shadow Only", &debugShadowOnly_);

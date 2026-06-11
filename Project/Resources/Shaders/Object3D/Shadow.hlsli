@@ -21,7 +21,8 @@ cbuffer ShadowBuffer : register(b5)
     float    gShadowSoftness;     // 深度差→ボケ幅の係数（接地で硬く、離れるほど柔らかく＝距離で変化）
     float    gShadowDebug;        // 1=影係数をそのままグレースケール出力（デバッグ）
     float    gShadowMaxBlur;      // ボケ半径の上限（UV）。washout/サンプル不足対策の頭打ち
-    float2   gShadowPad;
+    float    gShadowFadeRadius;   // penumbra がこの値に達すると影が消える（距離フェード）。0で無効
+    float    gShadowPad;
 }
 Texture2DArray<float> gShadowMap : register(t3);
 SamplerComparisonState gShadowSampler : register(s1); // 深度比較（PCF）
@@ -118,7 +119,17 @@ float ShadowSampleCascade(float3 offsetPos, int cascade, float rotAngle, out flo
 
     float penumbra = (current - blocker) * gShadowSoftness;
     float filterRadius = clamp(penumbra, minBlur, maxBlur);
-    return ShadowPcf(uv, cascade, current, filterRadius, rotAngle);
+    float shadow = ShadowPcf(uv, cascade, current, filterRadius, rotAngle);
+
+    // 距離フェード：penumbra（＝深度差×Softness）が大きいほど影を薄く（lit側へ）。
+    // 物体が地面から離れるほど影が薄くなり、FadeRadius で完全に消える。
+    // ※ MaxBlur で filterRadius は頭打ちでも penumbra は伸び続けるので、頭打ち後も薄くなる。
+    if (gShadowFadeRadius > 0.0f)
+    {
+        float fade = saturate(penumbra / gShadowFadeRadius);
+        shadow = lerp(shadow, 1.0f, fade);
+    }
+    return shadow;
 }
 
 // ワールド座標が平行光源から見て影かを返す（1=照らされる, 0=影）。PCSS＋カスケード境界ブレンド。
