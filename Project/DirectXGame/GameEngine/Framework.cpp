@@ -24,6 +24,7 @@
 #include "SpriteManager.h"
 #include "Object3DManager.h"
 #include "Log.h"
+#include "SessionLogger.h"
 #include "TextureManager.h"
 #include "ModelManager.h"
 #include "SRVManager.h"
@@ -73,6 +74,9 @@ void Framework::Run() {
 }
 
 void Framework::Initialize() {
+	// セッションログ基盤を最初に起こす（以降の Log() がファイルに残る）
+	SessionLogger::Instance().Initialize();
+
 	// COMの初期化
 	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
 	assert(SUCCEEDED(hr));
@@ -501,4 +505,6 @@ void Framework::Finalize() {
 	CloseWindow(winApp_->GetHwnd());
 	winApp_->Finalize();
 
+	// セッションログを閉じる（全ファイルを flush）
+	SessionLogger::Instance().Finalize();
 }

@@ -21,7 +21,10 @@
       "WebFetch(domain:docs.claude.com)",
       "Bash(python -m py_compile jarvis_bot.py git_pipeline.py ai_edit.py test_run.py)",
       "Bash(python -m py_compile jarvis_bot.py live_control.py)",
-      "Bash(python -m py_compile live_control.py)"
+      "Bash(python -m py_compile live_control.py)",
+      "Bash(Select-String -Pattern \"Debug|Logger|Log|Random|Input|KeyConfig\")",
+      "Bash(Select-Object -First 60)",
+      "PowerShell(git ls-files | ForEach-Object { \\($_ -split '/'\\)[0..1] -join '/' } | Sort-Object -Unique)"
     ]
   }
 }

@@ -60,6 +60,9 @@
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Utility\SessionLogger.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonValue.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -495,6 +498,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Utility\SessionLogger.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonValue.h">
