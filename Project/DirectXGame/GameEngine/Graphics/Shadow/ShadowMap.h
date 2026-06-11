@@ -28,7 +28,10 @@ public:
         float     shadowBias;                           // 深度比較バイアス
         float     normalOffset;                         // 法線オフセットバイアス（ワールド単位）
         float     enabled;                              // 1=影あり, 0=影なし（受光側で常に1.0を返す）
-        float     lightSize;                            // PCSS ソフトネス（仮想太陽の角サイズ。0で硬い影）
+        float     softness;                             // 深度差→ボケ幅の係数（接地で硬く、離れるほど柔らかく）
+        float     debug;                                // 1=影係数をグレースケール出力（デバッグ）
+        float     maxBlur;                              // ボケ半径の上限（UV）。washout防止
+        float     pad_[2];
     };
 
     void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
@@ -123,6 +126,12 @@ private:
     // 影の有効/無効
     bool enabled_ = true;
 
-    // PCSS ソフトネス（UV単位の探索半径＝仮想太陽の角サイズ）。0で硬い影、大きいほど柔らかい。
-    float lightSize_ = 0.02f;
+    // 距離で変化するボケの強さ（深度差→ボケ幅の係数）。大きいほど離れた影が柔らかい。
+    float softness_ = 0.15f;
+
+    // ボケ半径の上限（UV）。距離で柔らかくなる影もこの値で頭打ち。Vogel化で大きめでも崩れにくい。
+    float maxBlur_ = 0.04f;
+
+    // デバッグ：影係数をそのままグレースケール表示する
+    bool debugShadowOnly_ = false;
 };

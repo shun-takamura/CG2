@@ -96,7 +96,9 @@ void ShadowMap::CreateResources()
     mappedConstants_->shadowBias = bias_;
     mappedConstants_->normalOffset = normalOffset_;
     mappedConstants_->enabled = enabled_ ? 1.0f : 0.0f;
-    mappedConstants_->lightSize = lightSize_;
+    mappedConstants_->softness = softness_;
+    mappedConstants_->debug = debugShadowOnly_ ? 1.0f : 0.0f;
+    mappedConstants_->maxBlur = maxBlur_;
 }
 
 void ShadowMap::CreatePipeline()
@@ -345,7 +347,9 @@ void ShadowMap::UpdateCascades(const Camera& camera, const Vector3& lightDirecti
     mappedConstants_->shadowBias = bias_;
     mappedConstants_->normalOffset = normalOffset_;
     mappedConstants_->enabled = enabled_ ? 1.0f : 0.0f;
-    mappedConstants_->lightSize = lightSize_;
+    mappedConstants_->softness = softness_;
+    mappedConstants_->debug = debugShadowOnly_ ? 1.0f : 0.0f;
+    mappedConstants_->maxBlur = maxBlur_;
 }
 
 void ShadowMap::OnImGui()
@@ -355,10 +359,13 @@ void ShadowMap::OnImGui()
         ImGui::Checkbox("Enable Shadow", &enabled_);
         ImGui::DragFloat("Depth Bias", &bias_, 0.0001f, 0.0f, 0.05f, "%.4f");
         ImGui::DragFloat("Normal Offset", &normalOffset_, 0.005f, 0.0f, 2.0f, "%.3f");
-        // PCSS ソフトネス：0=硬い影、大きいほど離れた影が柔らかく広がる
-        ImGui::SliderFloat("Soft (Light Size)", &lightSize_, 0.0f, 0.2f, "%.3f");
+        // 距離で変化するボケ（PCSS）：Softness=変化の強さ、Max Blur=ボケ上限(washout防止)
+        ImGui::SliderFloat("Softness", &softness_, 0.0f, 0.5f, "%.3f");
+        ImGui::SliderFloat("Max Blur", &maxBlur_, 0.0f, 0.1f, "%.4f");
         ImGui::SliderFloat("Cascade Lambda", &cascadeLambda_, 0.0f, 1.0f);
-        ImGui::TextDisabled("cascades=%u  res=%u  PCSS", kShadowCascadeCount, kResolution);
+        // デバッグ：影係数をそのままグレースケール表示（ボケ具合の確認用）
+        ImGui::Checkbox("Debug: Shadow Only", &debugShadowOnly_);
+        ImGui::TextDisabled("cascades=%u  res=%u  PCSS 7x7", kShadowCascadeCount, kResolution);
     }
 #endif
 }

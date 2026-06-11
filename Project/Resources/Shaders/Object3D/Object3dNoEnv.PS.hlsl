@@ -124,6 +124,13 @@ PixelShaderOutput main(VertexShaderOutput input)
         // 平行光源の影係数（平行光源の直接光のみに掛ける）
         float shadow = CalcShadowFactor(input.worldPosition, normal, input.position.xy);
 
+        // デバッグ：影係数をそのままグレースケール表示（ボケ具合の確認用）
+        if (gShadowDebug > 0.5f)
+        {
+            output.color = float4(shadow, shadow, shadow, 1.0f);
+            return output;
+        }
+
         float3 totalDiffuse = float3(0.0f, 0.0f, 0.0f);
         float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
 
