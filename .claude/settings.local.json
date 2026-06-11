@@ -24,7 +24,10 @@
       "Bash(python -m py_compile live_control.py)",
       "Bash(Select-String -Pattern \"Debug|Logger|Log|Random|Input|KeyConfig\")",
       "Bash(Select-Object -First 60)",
-      "PowerShell(git ls-files | ForEach-Object { \\($_ -split '/'\\)[0..1] -join '/' } | Sort-Object -Unique)"
+      "PowerShell(git ls-files | ForEach-Object { \\($_ -split '/'\\)[0..1] -join '/' } | Sort-Object -Unique)",
+      "Bash(grep -n 'DirectXGame\\\\\\\\GameEngine\\\\\\\\Core\\\\\\\\DirectXCore.cpp\"' Project/CG2_0_1.vcxproj)",
+      "Bash(grep -n 'DirectXGame\\\\\\\\GameEngine\\\\\\\\Core\\\\\\\\DirectXCore.h\"' Project/CG2_0_1.vcxproj)",
+      "Bash(grep -n 'Core\\\\\\\\DirectXCore' Project/CG2_0_1.vcxproj.filters)"
     ]
   }
 }

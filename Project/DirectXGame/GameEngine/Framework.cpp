@@ -25,7 +25,10 @@
 #include "Object3DManager.h"
 #include "Log.h"
 #include "SessionLogger.h"
+#include "RandomGenerator.h"
+#include "ReplaySystem.h"
 #include "TextureManager.h"
+#include <random>
 #include "ModelManager.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
@@ -76,6 +79,33 @@ void Framework::Run() {
 void Framework::Initialize() {
 	// セッションログ基盤を最初に起こす（以降の Log() がファイルに残る）
 	SessionLogger::Instance().Initialize();
+
+	// 中央乱数の初期化: 起動引数 --seed N があればそれを採用、無ければ random_device で生成。
+	// 使用シードは session.log に記録し、リプレイ時に同一シードから再現できるようにする。
+	{
+		uint32_t seed = 0;
+		bool seedProvided = false;
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (argv) {
+			for (int i = 1; i < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--seed") == 0 && i + 1 < argc) {
+					seed = static_cast<uint32_t>(std::wcstoul(argv[i + 1], nullptr, 10));
+					seedProvided = true;
+				}
+			}
+			::LocalFree(argv);
+		}
+		if (!seedProvided) {
+			std::random_device rd;
+			seed = rd();
+		}
+		RandomGenerator::Instance().Initialize(seed);
+		Log("[Random] seed=" + std::to_string(seed) + (seedProvided ? " (injected)\n" : " (generated)\n"));
+
+		// リプレイ記録の開始（dt と入力を input.log に毎フレーム記録する）
+		ReplaySystem::Instance().InitializeRecord(seed);
+	}
 
 	// COMの初期化
 	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
@@ -452,6 +482,10 @@ void Framework::Update() {
 
 	// シーンマネージャーの更新
 	SceneManager::GetInstance()->Update();
+
+	// リプレイ記録：このフレームが実際に使った dt と入力を input.log へ。
+	// 入力・シーン更新の後（dt 確定済み、UpdateFixFPS は Draw 後なので今フレームの値）に記録する。
+	ReplaySystem::Instance().RecordFrame(dxCore_->GetDeltaTime(), input_.get());
 }
 
 void Framework::Finalize() {

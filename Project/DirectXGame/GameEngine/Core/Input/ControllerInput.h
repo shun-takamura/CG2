@@ -115,6 +115,11 @@ public:
 	/// </summary>
 	BYTE GetRightTriggerRaw() const { return currentState_.Gamepad.bRightTrigger; }
 
+	/// <summary>
+	/// ボタンの生ビットを取得（XINPUT_GAMEPAD_* のビット和）。リプレイ記録用。
+	/// </summary>
+	WORD GetButtonsRaw() const { return currentState_.Gamepad.wButtons; }
+
 	//====================
 	// 振動
 	//====================
