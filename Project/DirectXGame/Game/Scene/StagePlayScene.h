@@ -106,6 +106,10 @@ private:
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };
 	Vector2 playerVelocity_{ 0.0f, 0.0f };
 
+	// 移動阻止(壁押し戻し)の前フレーム状態。立ち上がりエッジで MOVE_BLOCKED を出すため軸ごとに保持。
+	bool prevMoveBlockedX_ = false;
+	bool prevMoveBlockedY_ = false;
+
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;
 
