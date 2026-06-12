@@ -16,6 +16,9 @@
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "SceneFactory.h"
+#include "IImGuiEditable.h"
+#include "Components/Gameplay.h"
+#include "Components/CollisionManager.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
@@ -48,6 +51,20 @@ ISceneRunner* Game::GetSceneRunner() {
 }
 
 void Game::Initialize() {
+	// エンティティ生成/破棄フックを配線（依存性の逆転）。
+	// 以降に生成される全 IImGuiEditable はここで登録した処理を通る。
+	IImGuiEditable::SetHooks(
+		[](IImGuiEditable* e) {
+			Gameplay::Of(e); // ゲームプレイコンポーネントのエントリを確保
+			ImGuiManager::Instance().Register(e);
+			CollisionManager::GetInstance()->Register(e);
+		},
+		[](IImGuiEditable* e) {
+			CollisionManager::GetInstance()->Unregister(e);
+			ImGuiManager::Instance().Unregister(e);
+			Gameplay::Remove(e);
+		});
+
 	// 基底クラスの初期化処理
 	Framework::Initialize();
 

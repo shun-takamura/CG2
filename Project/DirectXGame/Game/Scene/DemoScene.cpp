@@ -1,4 +1,5 @@
 #include "DemoScene.h"
+#include "Components/Gameplay.h"
 #include "SceneManager.h"
 #include <algorithm>
 
@@ -901,7 +902,7 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Object3D";
 		e["name"] = o->GetName();
-		e["tag"] = std::string(GetTagName(o->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(o).GetTag()));
 		e["dir"] = o->GetDirectoryPath();
 		e["file"] = o->GetModelFileName();
 		e["transform"] = TransformToJson(o->GetScale(), o->GetRotate(), o->GetTranslate());
@@ -914,7 +915,7 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "AnimatedObject3D";
 		e["name"] = a->GetName();
-		e["tag"] = std::string(GetTagName(a->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(a).GetTag()));
 		e["dir"] = a->GetDirectoryPath();
 		e["file"] = a->GetModelFileName();
 		e["transform"] = TransformToJson(a->GetScale(), a->GetRotate(), a->GetTranslate());
@@ -927,7 +928,7 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Primitive";
 		e["name"] = p->GetName();
-		e["tag"] = std::string(GetTagName(p->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(p).GetTag()));
 		e["primitiveType"] = static_cast<int64_t>(p->GetPrimitiveType());
 		const Transform& tr = p->GetMesh().GetTransform();
 		e["transform"] = TransformToJson(tr.scale, tr.rotate, tr.translate);
@@ -943,7 +944,7 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Sprite";
 		e["name"] = s->GetName();
-		e["tag"] = std::string(GetTagName(s->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(s).GetTag()));
 		e["texture"] = s->GetTextureFilePath();
 		const Vector2& p = s->GetPosition();
 		JsonValue pos = JsonValue::MakeArray();
@@ -959,7 +960,7 @@ bool DemoScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Spline";
 		e["name"] = sp->GetName();
-		e["tag"] = std::string(GetTagName(sp->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(sp).GetTag()));
 		JsonValue ptsArr = JsonValue::MakeArray();
 		for (const auto& p : sp->GetPoints()) {
 			ptsArr.Push(Vec3ToJson(p));
@@ -1040,7 +1041,7 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!object3DInstances_.empty()) {
 				auto& back = object3DInstances_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 			}
@@ -1049,7 +1050,7 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicAnimated_.empty()) {
 				auto& back = dynamicAnimated_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 			}
@@ -1059,7 +1060,7 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicPrimitives_.empty()) {
 				auto& back = dynamicPrimitives_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 				std::string tex = e["texture"].AsString();
@@ -1072,7 +1073,7 @@ bool DemoScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicSprites_.empty()) {
 				auto& back = dynamicSprites_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 			}
 		} else if (type == "Spline") {
 			AddDynamicSpline(static_cast<int>(tag));

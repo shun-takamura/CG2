@@ -1,4 +1,5 @@
 #include "GameScene.h"
+#include "Components/Gameplay.h"
 #include "Enemy/EnemyController.h"
 #include "Enemy/EnemyContext.h"
 #include "Effect/EffectManager.h"
@@ -33,7 +34,7 @@ GameScene::~GameScene() = default;
 
 void GameScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
 	auto spline = std::make_unique<SplineCurveActor>();
-	spline->SetTag(static_cast<EntityTag>(tagInt));
+	Gameplay::Of(spline).SetTag(static_cast<EntityTag>(tagInt));
 
 	std::string base = "Spline";
 	std::string name = base;
@@ -99,25 +100,25 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 	auto applyHPAndDamage = [&](IImGuiEditable* e) {
 		if (!e) return;
 		if (def->hasHP) {
-			HP& hp = e->GetHP();
+			HP& hp = Gameplay::Of(e).GetHP();
 			hp.enabled = true;
 			hp.maxHP = def->maxHP;
 			hp.currentHP = def->maxHP;
 		}
 		if (def->hasDamageDealer) {
-			DamageDealer& dd = e->GetDamageDealer();
+			DamageDealer& dd = Gameplay::Of(e).GetDamageDealer();
 			dd.enabled = true;
 			dd.damage = def->damage;
 			dd.multiplier = def->attackMultiplier;
 		}
 		if (def->hasAttackPower) {
-			e->SetHasAttackPower(true);
-			e->SetAttackPower(def->attackPower);
+			Gameplay::Of(e).SetHasAttackPower(true);
+			Gameplay::Of(e).SetAttackPower(def->attackPower);
 		}
 		// 敵撃破スコア（タグに関わらずコピー、StagePlay 側で Enemy/Boss だけ参照する）
-		e->SetScoreValue(def->scoreValue);
+		Gameplay::Of(e).SetScoreValue(def->scoreValue);
 		if (def->hasBullet) {
-			BulletParams& bp = e->GetBulletParams();
+			BulletParams& bp = Gameplay::Of(e).GetBulletParams();
 			bp.enabled        = true;
 			bp.speed          = def->bulletSpeed;
 			bp.lifetime       = def->bulletLifetime;
@@ -129,7 +130,7 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			bp.penetrateEffect      = def->bulletPenetrateEffect;
 		}
 		if (def->hasMelee) {
-			MeleeParams& mp = e->GetMeleeParams();
+			MeleeParams& mp = Gameplay::Of(e).GetMeleeParams();
 			mp.enabled         = true;
 			mp.startup         = def->meleeStartup;
 			mp.activeDuration  = def->meleeActiveDuration;
@@ -141,32 +142,32 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			mp.lateMultiplier  = def->meleeLateMultiplier;
 		}
 		if (def->hasCarrier) {
-			CarrierParams& cp = e->GetCarrierParams();
+			CarrierParams& cp = Gameplay::Of(e).GetCarrierParams();
 			cp.enabled           = true;
 			cp.childLifetimeSec  = def->carrierChildLifetimeSec;
 			cp.childWanderRadius = def->carrierChildWanderRadius;
 			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
 		}
 		if (def->hasCharge) {
-			ChargeParams& chp = e->GetChargeParams();
+			ChargeParams& chp = Gameplay::Of(e).GetChargeParams();
 			chp.enabled    = true;
 			chp.stage1Time = def->chargeStage1Time;
 			chp.stage2Time = def->chargeStage2Time;
 			chp.fireRate   = def->chargeFireRate;
 		}
 		if (def->hasPrecision) {
-			PrecisionParams& pp = e->GetPrecisionParams();
+			PrecisionParams& pp = Gameplay::Of(e).GetPrecisionParams();
 			pp.enabled   = true;
 			pp.speedAdd  = def->precisionSpeedAdd;
 			pp.homingAdd = def->precisionHomingAdd;
 		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
-			e->GetEffects() = def->effects;
+			Gameplay::Of(e).GetEffects() = def->effects;
 		}
 		// 弾プレハブスロットを丸ごとコピー
 		if (!def->bulletPrefabs.empty()) {
-			e->GetBulletPrefabs() = def->bulletPrefabs;
+			Gameplay::Of(e).GetBulletPrefabs() = def->bulletPrefabs;
 		}
 	};
 
@@ -184,12 +185,12 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			name = base + " (" + std::to_string(suffix++) + ")";
 		}
 		back->SetName(name);
-		back->SetTag(def->tag);
+		Gameplay::Of(back).SetTag(def->tag);
 		back->ApplyPrefabParams(def->primitiveParams);
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		back->SetTranslate(worldPos);
-		if (def->hasCollider) applyCollider(back->GetCollider());
+		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
 		applyHPAndDamage(back.get());
 	} else if (def->kind == PrefabKind::Animated || def->isAnimated) {
 		AddDynamicAnimated(def->modelDir, def->modelFile, worldPos);
@@ -203,10 +204,10 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			name = base + " (" + std::to_string(suffix++) + ")";
 		}
 		back->SetName(name);
-		back->SetTag(def->tag);
+		Gameplay::Of(back).SetTag(def->tag);
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
-		if (def->hasCollider) applyCollider(back->GetCollider());
+		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
 		applyHPAndDamage(back.get());
 	} else {
 		AddDynamicObject(def->modelDir, def->modelFile, worldPos);
@@ -220,10 +221,10 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			name = base + " (" + std::to_string(suffix++) + ")";
 		}
 		back->SetName(name);
-		back->SetTag(def->tag);
+		Gameplay::Of(back).SetTag(def->tag);
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
-		if (def->hasCollider) applyCollider(back->GetCollider());
+		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
 		applyHPAndDamage(back.get());
 	}
 }
@@ -439,9 +440,9 @@ void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
 	if (spawned) {
 		spawned->Update();
-		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+		Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 			if (!other) return;
-			if (other->GetTag() != EntityTag::Player) return;
+			if (Gameplay::Of(other).GetTag() != EntityTag::Player) return;
 			for (auto& b : bullets_) {
 				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
 			}
@@ -456,7 +457,7 @@ void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 	br.originPos         = pos;
 	br.homingTarget      = homingTarget;
 	br.homingStrength    = homingStrength;
-	if (spawned) br.baseColliderRadius = spawned->GetCollider().radius;
+	if (spawned) br.baseColliderRadius = Gameplay::Of(spawned).GetCollider().radius;
 	bullets_.push_back(br);
 }
 
@@ -479,15 +480,15 @@ void GameScene::ApplyEnemyRepulsion(IImGuiEditable* self) {
 	if (!self) return;
 	Vector3* selfPos = self->GetEditableTranslate();
 	if (!selfPos) return;
-	const float selfR = self->GetCollider().radius;
+	const float selfR = Gameplay::Of(self).GetCollider().radius;
 
 	auto repelAgainst = [&](IImGuiEditable* other) {
 		if (!other || other == self) return;
-		const EntityTag tag = other->GetTag();
+		const EntityTag tag = Gameplay::Of(other).GetTag();
 		if (tag != EntityTag::Enemy) return;
 		Vector3* op = other->GetEditableTranslate();
 		if (!op) return;
-		const float otherR = other->GetCollider().radius;
+		const float otherR = Gameplay::Of(other).GetCollider().radius;
 		const float minDist = selfR + otherR;
 		const float dx = selfPos->x - op->x;
 		const float dy = selfPos->y - op->y;
@@ -612,7 +613,7 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		spawned->Update();
 
 		// プレイヤー攻撃力 × プレハブの倍率で最終ダメージを確定（発射時に焼き込む）
-		DamageDealer& dd = spawned->GetDamageDealer();
+		DamageDealer& dd = Gameplay::Of(spawned).GetDamageDealer();
 		if (dd.enabled) {
 			dd.damage = static_cast<int>(static_cast<float>(attackPower) * dd.multiplier);
 			penetrateDamage = dd.damage;
@@ -623,9 +624,9 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		}
 
 		// 敵に当たったときの処理。実ダメージ適用は通常弾=CollisionManager / 貫通弾=ここで手動。
-		spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+		Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 			if (!other) return;
-			const EntityTag tag = other->GetTag();
+			const EntityTag tag = Gameplay::Of(other).GetTag();
 			if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 
 			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
@@ -640,8 +641,8 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 					auto it = b.hitCooldowns.find(other);
 					const float cd = (it != b.hitCooldowns.end()) ? it->second : 0.0f;
 					if (cd <= 0.0f) {
-						if (other->GetHP().enabled) {
-							other->GetHP().TakeDamage(b.penetrateDamage);
+						if (Gameplay::Of(other).GetHP().enabled) {
+							Gameplay::Of(other).GetHP().TakeDamage(b.penetrateDamage);
 						}
 						if (!b.penetrateEffect.empty()) {
 							EffectManager::GetInstance()->Play(b.penetrateEffect, hitPos);
@@ -666,7 +667,7 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.speed = speed;
 	br.remainingLifetime = lifetime;
 	br.originPos = pos;
-	br.baseColliderRadius = spawned ? spawned->GetCollider().radius : 0.0f;
+	br.baseColliderRadius = spawned ? Gameplay::Of(spawned).GetCollider().radius : 0.0f;
 	br.colliderGrowthPerMeter = colliderGrowthPerMeter;
 	br.homingTarget = homingTarget;
 	br.homingStrength = homingStrength;
@@ -678,7 +679,7 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 
 	// 弾追従エフェクト（trail スロット、ループ前提）を再生。弾消滅時に Stop する。
 	if (spawned) {
-		const std::string trailEff = spawned->FindEffect("trail");
+		const std::string trailEff = Gameplay::Of(spawned).FindEffect("trail");
 		if (!trailEff.empty()) {
 			br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
 			// エフェクトの向きを弾の進行方向に合わせる
@@ -738,18 +739,18 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	spawned->Update(); // 初フレームの CB を確定（弾と同じく (0,0,0) 描画バグ回避）
 
 	// CollisionManager の毎フレーム自動ダメージは使わず、onCollision で本/持続あてを手動適用
-	DamageDealer& dd = spawned->GetDamageDealer();
+	DamageDealer& dd = Gameplay::Of(spawned).GetDamageDealer();
 	dd.enabled = false;
 
 	const int cleanDamage = static_cast<int>(static_cast<float>(attackPower) * cleanMul);
 	const int lateDamage  = static_cast<int>(static_cast<float>(attackPower) * lateMul);
-	const std::string hitEffect = spawned->FindEffect("hit");
+	const std::string hitEffect = Gameplay::Of(spawned).FindEffect("hit");
 
 	// 振りエフェクト（"swing" スロット）：発生時に判定位置で再生し、aim 方向へ向ける。
 	// 以降は UpdateMelees が判定に追従させ、判定の寿命切れで Stop する。
 	uint64_t swingHandle = 0;
 	{
-		const std::string swingEffect = spawned->FindEffect("swing");
+		const std::string swingEffect = Gameplay::Of(spawned).FindEffect("swing");
 		if (!swingEffect.empty()) {
 			swingHandle = EffectManager::GetInstance()->Play(swingEffect, spawnPos);
 			EffectManager::GetInstance()->SetRotation(swingHandle, DirectionToEuler(forward));
@@ -757,9 +758,9 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	}
 
 	// 敵に当たったときの処理。同じ敵には1回だけ、当たった瞬間の経過時間で本/持続あてを切替。
-	spawned->GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+	Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 		if (!other) return;
-		const EntityTag tag = other->GetTag();
+		const EntityTag tag = Gameplay::Of(other).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 
 		for (auto& m : melees_) {
@@ -767,9 +768,9 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 			if (m.hitTargets.count(other)) return; // この判定では既に当てた敵
 			m.hitTargets.insert(other);
 
-			if (other->GetHP().enabled) {
+			if (Gameplay::Of(other).GetHP().enabled) {
 				const int dmg = (m.elapsed <= m.cleanWindow) ? m.cleanDamage : m.lateDamage;
-				other->GetHP().TakeDamage(dmg);
+				Gameplay::Of(other).GetHP().TakeDamage(dmg);
 			}
 			if (!m.hitEffect.empty()) {
 				Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
@@ -801,8 +802,8 @@ void GameScene::SweepDeadEntities() {
 	dead.reserve(8);
 	auto collect = [&](IImGuiEditable* e) {
 		if (!e) return;
-		if (e->GetTag() == EntityTag::Player) return;
-		if (e->GetHP().IsDead()) dead.push_back(e);
+		if (Gameplay::Of(e).GetTag() == EntityTag::Player) return;
+		if (Gameplay::Of(e).GetHP().IsDead()) dead.push_back(e);
 	};
 	for (auto& p : dynamicPrimitives_) collect(p.get());
 	for (auto& o : object3DInstances_) collect(o.get());
@@ -881,7 +882,7 @@ void GameScene::UpdateBullets(float deltaTime) {
 			}
 #ifdef USE_IMGUI
 			// デバッグ：プレイヤー弾の進行方向に線を表示（黄色）
-			if (b.primitive->GetTag() == EntityTag::PlayerBullet) {
+			if (Gameplay::Of(b.primitive).GetTag() == EntityTag::PlayerBullet) {
 				DebugDraw::Ray(*t, d, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
 			}
 #endif
@@ -903,7 +904,7 @@ void GameScene::UpdateBullets(float deltaTime) {
 
 		// 進行距離に応じて collider 半径を拡大（STG 的「遠距離ほど判定太く」）
 		if (b.colliderGrowthPerMeter > 0.0f) {
-			b.primitive->GetCollider().radius =
+			Gameplay::Of(b.primitive).GetCollider().radius =
 				b.baseColliderRadius + traveled * b.colliderGrowthPerMeter;
 		}
 

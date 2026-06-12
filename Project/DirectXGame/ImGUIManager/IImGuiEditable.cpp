@@ -1,6 +1,4 @@
 #include "IImGuiEditable.h"
-#include "ImGuiManager.h"
-#include "Components/CollisionManager.h"
 
 namespace {
     // 0 を予約とし、1..255 を循環で配布する（uint8 が一周しても挙動はする）
@@ -12,12 +10,18 @@ namespace {
     }
 }
 
+IImGuiEditable::LifecycleHook IImGuiEditable::s_onConstructed;
+IImGuiEditable::LifecycleHook IImGuiEditable::s_onDestroyed;
+
+void IImGuiEditable::SetHooks(LifecycleHook onConstructed, LifecycleHook onDestroyed) {
+    s_onConstructed = std::move(onConstructed);
+    s_onDestroyed   = std::move(onDestroyed);
+}
+
 IImGuiEditable::IImGuiEditable() {
     objectId_ = NextObjectId();
-    // ImGuiManagerに自動登録（Debug ビルドのみ実体的に効く）
-    ImGuiManager::Instance().Register(this);
-    // CollisionManager にも登録（Release でも動く必要があるため別系統）
-    CollisionManager::GetInstance()->Register(this);
+    // 生成フック（ゲーム側で CollisionManager 登録・GameplayComponents 確保・ImGuiManager 登録など）
+    if (s_onConstructed) s_onConstructed(this);
 }
 
 IImGuiEditable::IImGuiEditable(NoAutoRegister) {
@@ -27,6 +31,6 @@ IImGuiEditable::IImGuiEditable(NoAutoRegister) {
 }
 
 IImGuiEditable::~IImGuiEditable() {
-    CollisionManager::GetInstance()->Unregister(this);
-    ImGuiManager::Instance().Unregister(this);
+    // 破棄フック（ゲーム側で登録解除・GameplayComponents 破棄など）
+    if (s_onDestroyed) s_onDestroyed(this);
 }
