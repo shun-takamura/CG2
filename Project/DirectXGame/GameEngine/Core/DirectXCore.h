@@ -69,6 +69,11 @@ public:
 	ID3D12Device* GetDevice() const { return device_.Get(); }
 
 	/// <summary>
+	/// コマンドキューの取得。
+	/// </summary>
+	ID3D12CommandQueue* GetCommandQueue() const { return commandQueue_.Get(); }
+
+	/// <summary>
 	/// コマンドリストの取得。
 	/// </summary>
 	ID3D12GraphicsCommandList* GetCommandList() const { return commandList_.Get(); }

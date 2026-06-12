@@ -76,6 +76,7 @@ bool FontAtlas::Initialize(DirectXCore* dxCore, SRVManager* srvManager,
 		return false;
 	}
 	currentState_ = D3D12_RESOURCE_STATE_COPY_DEST;
+	atlasResource_->SetName(L"FontAtlas");
 
 	// SRV 確保
 	srvIndex_ = srvManager_->Allocate();

@@ -71,6 +71,8 @@ void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r,
         textureData.metadata
     );
 
+    textureData.resource->SetName(std::wstring(name.begin(), name.end()).c_str());
+
     // テクスチャデータ転送
     spriteManager_->UploadTextureData(
         textureData.resource.Get(),
@@ -199,6 +201,9 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
         textureDatas.erase(name);
         return;
     }
+
+    // GPU検証エラー等でリソースを特定できるよう名前を付ける（動的テクスチャ＝カメラ/QR等）
+    textureData.resource->SetName(std::wstring(name.begin(), name.end()).c_str());
 
     // SRVインデックスを確保
     textureData.srvIndex = srvManager_->Allocate();
@@ -512,6 +517,9 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
             nullptr, IID_PPV_ARGS(&data->resource));
         assert(SUCCEEDED(hr));
 
+        // GPU検証エラー等でリソースを特定できるよう名前を付ける（DStorage経路）
+        data->resource->SetName(std::wstring(filePath.begin(), filePath.end()).c_str());
+
         // 2. DirectStorage で payload を全 subresource に転送
         //    pack ファイル側で D3D12 placed-footprint レイアウト (行256B/開始512B 整列)
         //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエストにまとめられる。
@@ -566,6 +574,9 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
     // --- 既存経路: CPU メモリ経由でアップロード ---
     data->resource = spriteManager_->CreateTextureResource(
         dxCore_->GetDevice(), data->metadata);
+
+    // GPU検証エラー等でリソースを特定できるよう名前を付ける（非DStorage経路）
+    data->resource->SetName(std::wstring(filePath.begin(), filePath.end()).c_str());
 
     spriteManager_->UploadTextureData(
         data->resource.Get(), data->cpuImage,
