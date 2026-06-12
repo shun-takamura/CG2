@@ -48,6 +48,12 @@ public:
 	/// </summary>
 	void Update();
 
+	/// <summary>
+	/// リプレイ再生用：記録した移動量とボタンを注入（btnMask: bit0=L,1=R,2=M,3=B4）。
+	/// 絶対座標(screen/client)は記録対象外のため更新しない。
+	/// </summary>
+	void ApplyReplay(LONG dx, LONG dy, LONG wheel, int btnMask);
+
 	//====================
 	// ボタン入力
 	//====================

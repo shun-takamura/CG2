@@ -72,7 +72,8 @@ void StripeTransition::Update() {
 
 	// 通常のトランジション処理
 	if (isTransitioning_) {
-		currentTime_ += 1.0f / 60.0f;
+		// 経過時間を加算（フレームレート非依存にするため実 dt を使う）
+		currentTime_ += dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
 
 		if (state_ == TransitionState::FadeIn) {
 			bool allComplete = true;

@@ -46,6 +46,12 @@ public:
 	/// </summary>
 	void Update();
 
+	/// <summary>
+	/// リプレイ再生用：記録した生値を注入して通常 Update と同じ補正処理を通す。
+	/// </summary>
+	void ApplyReplay(bool connected, SHORT lx, SHORT ly, SHORT rx, SHORT ry,
+		BYTE lt, BYTE rt, WORD buttons);
+
 	//====================
 	// ボタン入力
 	//====================
@@ -115,6 +121,11 @@ public:
 	/// </summary>
 	BYTE GetRightTriggerRaw() const { return currentState_.Gamepad.bRightTrigger; }
 
+	/// <summary>
+	/// ボタンの生ビットを取得（XINPUT_GAMEPAD_* のビット和）。リプレイ記録用。
+	/// </summary>
+	WORD GetButtonsRaw() const { return currentState_.Gamepad.wButtons; }
+
 	//====================
 	// 振動
 	//====================
@@ -175,6 +186,11 @@ public:
 	void SetRightTriggerDeadZone(BYTE value) { deadZone_.rightTrigger = value; }
 
 private:
+	/// <summary>
+	/// currentState_ からスティック/トリガーの補正値を計算する（Update / ApplyReplay 共通）。
+	/// </summary>
+	void ProcessCurrentState();
+
 	/// <summary>
 	/// スティックの入力を円形デッドゾーンで補正
 	/// </summary>

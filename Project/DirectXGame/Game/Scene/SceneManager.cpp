@@ -4,6 +4,7 @@
 #include "TransitionManager.h"
 #include "DStorageManager.h"
 #include "Components/CollisionManager.h"
+#include "SessionLogger.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -141,6 +142,9 @@ void SceneManager::ChangeSceneImmediate(const std::string& sceneName) {
 	assert(sceneFactory_);
 	assert(nextScene_ == nullptr);
 
+	SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+		"SCENE_CHANGE from=" + (currentSceneName_.empty() ? std::string("(none)") : currentSceneName_) + " to=" + sceneName + " immediate=1");
+
 	pendingSceneName_ = sceneName;
 	nextScene_ = sceneFactory_->CreateScene(sceneName);
 	currentSceneName_ = sceneName;
@@ -152,6 +156,9 @@ void SceneManager::ExecuteSceneChange() {
 	if (currentScene_) {
 		currentScene_->Finalize();
 	}
+
+	SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+		"SCENE_CHANGE from=" + (currentSceneName_.empty() ? std::string("(none)") : currentSceneName_) + " to=" + pendingSceneName_);
 
 	currentScene_ = sceneFactory_->CreateScene(pendingSceneName_);
 	currentSceneName_ = pendingSceneName_;

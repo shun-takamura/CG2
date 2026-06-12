@@ -24,7 +24,11 @@
 #include "SpriteManager.h"
 #include "Object3DManager.h"
 #include "Log.h"
+#include "SessionLogger.h"
+#include "RandomGenerator.h"
+#include "ReplaySystem.h"
 #include "TextureManager.h"
+#include <random>
 #include "ModelManager.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
@@ -73,6 +77,55 @@ void Framework::Run() {
 }
 
 void Framework::Initialize() {
+	// セッションログ基盤を最初に起こす（以降の Log() がファイルに残る）
+	SessionLogger::Instance().Initialize();
+
+	// 中央乱数とリプレイの初期化。
+	//   --replay <dir> : そのセッションフォルダの input.log を再生（シードも session.log から復元）
+	//   --seed N        : シードを明示指定（再生時は --replay の復元より優先）
+	//   どちらも無ければ random_device でシード生成し、通常プレイを記録する。
+	{
+		uint32_t seed = 0;
+		bool seedProvided = false;
+		std::string replayDir;
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (argv) {
+			for (int i = 1; i < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--seed") == 0 && i + 1 < argc) {
+					seed = static_cast<uint32_t>(std::wcstoul(argv[i + 1], nullptr, 10));
+					seedProvided = true;
+				} else if (std::wcscmp(argv[i], L"--replay") == 0 && i + 1 < argc) {
+					const std::wstring w = argv[i + 1];
+					replayDir.assign(w.begin(), w.end());  // パスは ASCII 前提
+				}
+			}
+			::LocalFree(argv);
+		}
+
+		const bool replay = !replayDir.empty();
+		if (replay) {
+			// input.log を読み込み、記録時シードも復元する
+			ReplaySystem::Instance().InitializeReplay(replayDir);
+			if (!seedProvided && ReplaySystem::Instance().HasLoadedSeed()) {
+				seed = ReplaySystem::Instance().GetLoadedSeed();
+				seedProvided = true;
+			}
+		}
+		if (!seedProvided) {
+			std::random_device rd;
+			seed = rd();
+		}
+		RandomGenerator::Instance().Initialize(seed);
+		Log("[Random] seed=" + std::to_string(seed) +
+			(replay ? " (replay)\n" : (seedProvided ? " (injected)\n" : " (generated)\n")));
+
+		// 通常プレイのときだけ記録を開始する（再生中は記録しない）
+		if (!replay) {
+			ReplaySystem::Instance().InitializeRecord(seed);
+		}
+	}
+
 	// COMの初期化
 	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
 	assert(SUCCEEDED(hr));
@@ -145,6 +198,11 @@ void Framework::Initialize() {
 
 	dxCore_ = std::make_unique<DirectXCore>();
 	dxCore_->Initialize(winApp_.get());
+
+	// リプレイ再生中は dt を記録値で供給するため、実時計ベースの FPS 制御を止める
+	if (ReplaySystem::Instance().GetMode() == ReplaySystem::Mode::Replay) {
+		dxCore_->SetReplayMode(true);
+	}
 
 	// DirectStorage 初期化（device 作成後すぐ）
 	if (DStorageManager::GetInstance()->Initialize(dxCore_->GetDevice())) {
@@ -443,11 +501,26 @@ void Framework::Update() {
 	// ===== ImGuiフレーム開始 =====
 	ImGuiManager::Instance().BeginFrame();
 
-	// 入力の更新
-	input_->Update();
+	// 入力の更新（再生中はハードを読まず、記録した入力を注入して dt も差し替える）
+	if (ReplaySystem::Instance().GetMode() == ReplaySystem::Mode::Replay) {
+		float replayDt = 0.0f;
+		if (!ReplaySystem::Instance().AdvanceReplay(input_.get(), replayDt)) {
+			// 記録を再生し終えた → 終了
+			endRequest_ = true;
+			return;
+		}
+		dxCore_->OverrideDeltaTime(replayDt);
+	} else {
+		input_->Update();
+	}
 
 	// シーンマネージャーの更新
 	SceneManager::GetInstance()->Update();
+
+	// リプレイ記録：このフレームが実際に使った dt と入力を input.log へ。
+	// 入力・シーン更新の後（dt 確定済み、UpdateFixFPS は Draw 後なので今フレームの値）に記録する。
+	// （RecordFrame は Record モードのときだけ書き込む）
+	ReplaySystem::Instance().RecordFrame(dxCore_->GetDeltaTime(), input_.get());
 }
 
 void Framework::Finalize() {
@@ -501,4 +574,6 @@ void Framework::Finalize() {
 	CloseWindow(winApp_->GetHwnd());
 	winApp_->Finalize();
 
+	// セッションログを閉じる（全ファイルを flush）
+	SessionLogger::Instance().Finalize();
 }

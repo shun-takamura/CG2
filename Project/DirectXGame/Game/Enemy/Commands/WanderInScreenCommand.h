@@ -1,6 +1,6 @@
 #pragma once
 #include <cmath>
-#include <cstdlib>
+#include "RandomGenerator.h"
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
@@ -148,7 +148,8 @@ private:
 	int   lastShotIdx_ = -1;
 	Vector3 targetOffset_{ 0.0f, 0.0f, 0.0f };
 
-	float Frand() { return static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX); }
+	// 中央乱数から [0,1) を引く（リプレイ決定性のため std::rand は使わない）。
+	float Frand() { return RandomGenerator::Instance().NextFloat01(); }
 
 	Vector3 PickRandomOffset() {
 		// XZ 円盤 + Y 縦は半分の幅でランダム

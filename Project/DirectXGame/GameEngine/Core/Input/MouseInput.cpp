@@ -90,6 +90,21 @@ void MouseInput::Update() {
 	ScreenToClient(winApp_->GetHwnd(), &clientPosition_);
 }
 
+void MouseInput::ApplyReplay(LONG dx, LONG dy, LONG wheel, int btnMask) {
+	// 前フレームの状態を保存（Triggered/Released 判定のため、通常 Update と同じ順序）
+	previousState_ = currentState_;
+
+	ZeroMemory(&currentState_, sizeof(currentState_));
+	currentState_.lX = dx;
+	currentState_.lY = dy;
+	currentState_.lZ = wheel;
+	currentState_.rgbButtons[0] = (btnMask & (1 << 0)) ? 0x80 : 0;
+	currentState_.rgbButtons[1] = (btnMask & (1 << 1)) ? 0x80 : 0;
+	currentState_.rgbButtons[2] = (btnMask & (1 << 2)) ? 0x80 : 0;
+	currentState_.rgbButtons[3] = (btnMask & (1 << 3)) ? 0x80 : 0;
+	// screen/client 座標は記録していないので据え置き。
+}
+
 bool MouseInput::IsButtonPressed(Button button) const {
 	int index = static_cast<int>(button);
 	if (index < 0 || index >= 4) return false;

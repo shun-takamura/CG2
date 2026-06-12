@@ -200,6 +200,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyCommandFactory.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Core\ReplaySystem.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\DStorageManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
@@ -278,6 +279,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\SessionLogger.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\RandomGenerator.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\CrashHandler.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonValue.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonParser.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp" />
@@ -397,6 +401,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Core\ReplaySystem.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\DStorageManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Core\TimeGroup.h" />
@@ -467,6 +472,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\SessionLogger.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\RandomGenerator.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\CrashHandler.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />

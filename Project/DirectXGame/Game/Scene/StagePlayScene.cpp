@@ -31,6 +31,7 @@
 #include "SpriteInstance.h"
 #include "LightManager.h"
 #include "LogBuffer.h"
+#include "SessionLogger.h"
 #include "Components/SphereCollider.h"
 #include "KeyboardInput.h"
 #include "ControllerInput.h"
@@ -2576,17 +2577,33 @@ void StagePlayScene::Update() {
 
 		// 軸ごとに採否判定（X 単独・Y 単独で押し戻し）。拒否された軸は速度もゼロに（壁にぶつかった扱い）。
 		Vector2 next = playerInputOffset_;
+		bool blockedX = false;
+		bool blockedY = false;
 		if (isInsideClip(candidate.x, playerInputOffset_.y)) {
 			next.x = candidate.x;
 		} else {
 			playerVelocity_.x = 0.0f;
+			blockedX = true;
 		}
 		if (isInsideClip(next.x, candidate.y)) {
 			next.y = candidate.y;
 		} else {
 			playerVelocity_.y = 0.0f;
+			blockedY = true;
 		}
 		playerInputOffset_ = next;
+
+		// MOVE_BLOCKED: 非ブロック→ブロックの立ち上がりエッジでのみ出力（SUNDAY のスタック判定材料）
+		if (blockedX && !prevMoveBlockedX_) {
+			SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+				"MOVE_BLOCKED axis=X x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
+		}
+		if (blockedY && !prevMoveBlockedY_) {
+			SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+				"MOVE_BLOCKED axis=Y x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
+		}
+		prevMoveBlockedX_ = blockedX;
+		prevMoveBlockedY_ = blockedY;
 
 		// 追加回避の戻り：コライダー 8 角の最大 NDC で軸ごとに判定。
 		// 通常マージンを超えてる軸だけ内側へ押し戻す（ダッシュで取った別軸位置は維持）。
@@ -3297,6 +3314,19 @@ void StagePlayScene::Update() {
 	if (lightningTest_ && lightningTest_->IsActive()) {
 		lightningTest_->Update(camera_.get(), dxCore_->GetDeltaTime());
 	}
+
+	// state.log: SUNDAY のハング検知（更新が止まる）・スタック判定（座標が動かない）の基準。
+	// フレーム末尾でプレイヤーの最終位置・HP・シーンを毎フレーム記録する。
+	if (player_) {
+		const Vector3 p = player_->GetTranslate();
+		const HP& hp = player_->GetHP();
+		SessionLogger::Instance().Write(SessionLogger::Category::State, SessionLogger::Level::Trace,
+			"frame=" + std::to_string(stateFrame_)
+			+ " x=" + std::to_string(p.x) + " y=" + std::to_string(p.y) + " z=" + std::to_string(p.z)
+			+ " hp=" + std::to_string(hp.currentHP) + "/" + std::to_string(hp.maxHP)
+			+ " scene=" + SceneManager::GetInstance()->GetCurrentSceneName());
+		++stateFrame_;
+	}
 }
 
 void StagePlayScene::Draw() {
@@ -3960,6 +3990,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// HP=0 でゲームオーバー（リトライ：シーン再ロード）
 	if (player_->GetHP().IsDead() && !gameOverTriggered_) {
 		gameOverTriggered_ = true;
+		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
 		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
 	}
 }

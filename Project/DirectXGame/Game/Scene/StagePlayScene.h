@@ -9,6 +9,7 @@
 #include <vector>
 #include <unordered_set>
 #include <utility>
+#include <cstdint>
 
 class Camera;
 class Skybox;
@@ -105,6 +106,13 @@ private:
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };
 	Vector2 playerVelocity_{ 0.0f, 0.0f };
+
+	// 移動阻止(壁押し戻し)の前フレーム状態。立ち上がりエッジで MOVE_BLOCKED を出すため軸ごとに保持。
+	bool prevMoveBlockedX_ = false;
+	bool prevMoveBlockedY_ = false;
+
+	// state.log 用のフレーム番号（このシーン開始からの経過フレーム。SUNDAY のハング/スタック判定の基準）。
+	uint64_t stateFrame_ = 0;
 
 	// レティクル
 	std::unique_ptr<Reticle> reticle_;

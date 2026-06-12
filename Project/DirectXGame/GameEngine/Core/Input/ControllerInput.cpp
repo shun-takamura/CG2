@@ -25,6 +25,31 @@ void ControllerInput::Update() {
 	DWORD result = XInputGetState(controllerIndex_, &currentState_);
 	isConnected_ = (result == ERROR_SUCCESS);
 
+	// スティック/トリガーの補正
+	ProcessCurrentState();
+}
+
+void ControllerInput::ApplyReplay(bool connected, SHORT lx, SHORT ly, SHORT rx, SHORT ry,
+	BYTE lt, BYTE rt, WORD buttons) {
+	// 前フレームの状態を保存（Triggered/Released 判定のため）
+	previousState_ = currentState_;
+
+	// 記録した生値を currentState_ に流し込む（XInputGetState の代わり）
+	ZeroMemory(&currentState_, sizeof(currentState_));
+	isConnected_ = connected;
+	currentState_.Gamepad.sThumbLX = lx;
+	currentState_.Gamepad.sThumbLY = ly;
+	currentState_.Gamepad.sThumbRX = rx;
+	currentState_.Gamepad.sThumbRY = ry;
+	currentState_.Gamepad.bLeftTrigger = lt;
+	currentState_.Gamepad.bRightTrigger = rt;
+	currentState_.Gamepad.wButtons = buttons;
+
+	// 通常 Update と同じ補正処理を通す
+	ProcessCurrentState();
+}
+
+void ControllerInput::ProcessCurrentState() {
 	if (isConnected_) {
 		// 左スティックの補正
 		leftStick_ = ApplyCircularDeadZone(

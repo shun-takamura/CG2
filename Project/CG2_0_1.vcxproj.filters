@@ -45,6 +45,9 @@
     <ClCompile Include="DirectXGame\GameEngine\Core\DirectXCore.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Core\ReplaySystem.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Core\AssetLocator.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -58,6 +61,15 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Utility\SessionLogger.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Utility\RandomGenerator.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\GameEngine\Utility\CrashHandler.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonValue.cpp">
@@ -479,6 +491,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Core\DirectXCore.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Core\ReplaySystem.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Core\AssetLocator.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -495,6 +510,15 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Utility\SessionLogger.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Utility\RandomGenerator.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Utility\CrashHandler.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonValue.h">
