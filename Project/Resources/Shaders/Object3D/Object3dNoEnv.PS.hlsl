@@ -105,6 +105,9 @@ cbuffer SpotLightBuffer : register(b4)
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
 
+// ===== Shadow (CSM + PCSS) =====
+#include "Shadow.hlsli"
+
 
 PixelShaderOutput main(VertexShaderOutput input)
 {
@@ -117,7 +120,17 @@ PixelShaderOutput main(VertexShaderOutput input)
     {
         float3 normal = normalize(input.normal);
         float3 toEye = normalize(gCamera.worldPosition - input.worldPosition);
-        
+
+        // 平行光源の影係数（平行光源の直接光のみに掛ける）
+        float shadow = CalcShadowFactor(input.worldPosition, normal, input.position.xy);
+
+        // デバッグ：影係数をそのままグレースケール表示（ボケ具合の確認用）
+        if (gShadowDebug > 0.5f)
+        {
+            output.color = float4(shadow, shadow, shadow, 1.0f);
+            return output;
+        }
+
         float3 totalDiffuse = float3(0.0f, 0.0f, 0.0f);
         float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
 
@@ -142,9 +155,10 @@ PixelShaderOutput main(VertexShaderOutput input)
             float NDotH = dot(normal, halfVector);
             float specularPow = pow(saturate(NDotH), gMaterial.shininess);
             float3 specular = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow;
-            
-            totalDiffuse += diffuse;
-            totalSpecular += specular;
+
+            // 平行光源の直接光だけに影を適用
+            totalDiffuse += diffuse * shadow;
+            totalSpecular += specular * shadow;
         }
 
         // ===== PointLights =====

@@ -27,6 +27,7 @@
 #include "Effect/EffectManager.h"
 #include "Components/PrefabManager.h"
 #include "Scene/BaseScene.h"
+#include "LightManager.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -125,6 +126,30 @@ void Game::Update() {
 }
 
 void Game::Draw() {
+	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
+	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
+	if (shadowMap_) {
+		if (BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+			if (Camera* cam = scene->GetCamera()) {
+				auto* dl = LightManager::GetInstance()->GetDirectionalLightData();
+				// 無効時もカスケード更新（enabled フラグを CB に反映）するが、深度描画は省略
+				shadowMap_->UpdateCascades(*cam, dl->direction);
+
+				if (shadowMap_->IsEnabled()) {
+					auto* cmd = dxCore_->GetCommandList();
+					shadowMap_->BeginPass(cmd);
+					for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
+						shadowMap_->BindCascade(cmd, c);
+						scene->DrawShadowCasters();
+					}
+					shadowMap_->EndPass(cmd);
+				}
+			}
+		}
+		object3DManager_->SetShadowBindings(
+			shadowMap_->GetConstantsGpuAddress(), shadowMap_->GetSrvGpuHandle());
+	}
+
 	// 1. PostEffectのRenderTextureにシーンを描画
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
 		dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();

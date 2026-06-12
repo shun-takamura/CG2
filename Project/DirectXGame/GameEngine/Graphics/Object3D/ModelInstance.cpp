@@ -98,6 +98,14 @@ void ModelInstance::DrawIdPass(DirectXCore* dxCore)
 	dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void ModelInstance::DrawShadowPass(DirectXCore* dxCore)
+{
+	if (!indexResource_ || indexCount_ == 0) return;
+	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
+	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+	dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
 	const size_t sizeInBytes = useDirectStorage_

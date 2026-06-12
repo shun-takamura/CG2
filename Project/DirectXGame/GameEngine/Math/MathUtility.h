@@ -87,6 +87,15 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 
 /// <summary>
+/// 左手系のビュー行列（LookAt）を作成する。
+/// </summary>
+/// <param name="eye">視点（ワールド座標）</param>
+/// <param name="target">注視点（ワールド座標）</param>
+/// <param name="up">上方向</param>
+/// <returns>ワールド→ビューの変換行列</returns>
+Matrix4x4 MakeLookAtMatrix(const Vector3& eye, const Vector3& target, const Vector3& up);
+
+/// <summary>
 /// 4x4逆行列を求める関数
 /// </summary>
 /// <param name="matrix4x4">逆行列を求めたい行列</param>

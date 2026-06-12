@@ -81,6 +81,10 @@ public:
     // ID Pass 用：idMaskRT に objectId_ を書き込む
     void DrawIdPass(class DirectXCore* dxCore);
 
+    // シャドウパス用：transform を b0 にバインドして深度を書き込む
+    // （PSO/RootSig/カスケード行列はパス側で設定済みの前提）
+    void DrawShadowPass(class DirectXCore* dxCore);
+
     //==============================
     // セッター
     //==============================

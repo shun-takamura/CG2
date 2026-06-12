@@ -120,6 +120,20 @@ void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
     modelInstance_->DrawIdPass(dxCore);
 }
 
+void Object3DInstance::DrawShadowPass(DirectXCore* dxCore)
+{
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!modelInstance_) return;
+
+    // VS CBV b0 = TransformationMatrix（シャドウVSは .World を使う）
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        0, transformationMatrixResource_->GetGPUVirtualAddress());
+
+    modelInstance_->DrawShadowPass(dxCore);
+}
+
 void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     // サイズを設定

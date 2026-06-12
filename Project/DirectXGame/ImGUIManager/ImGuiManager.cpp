@@ -139,7 +139,15 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             if (camera_) camera_->OnImGui();
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Light",
-        []() { LightManager::GetInstance()->OnImGui(); }));
+        []() {
+            LightManager::GetInstance()->OnImGui();
+            // シャドウ（CSM）調整 UI を同じ Light パネルに差し込む
+            if (Game* g = Game::GetInstance()) {
+                if (ShadowMap* sm = g->GetShadowMap()) {
+                    sm->OnImGui();
+                }
+            }
+        }));
     windows_.push_back(std::make_unique<CallbackWindow>("PostEffect",
         []() { if (auto* p = Game::GetPostEffect()) p->ShowImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("Particle",

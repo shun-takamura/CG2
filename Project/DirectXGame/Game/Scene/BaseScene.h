@@ -413,6 +413,12 @@ public:
 	/// </summary>
 	void RunIdPass(struct ID3D12GraphicsCommandList* commandList);
 
+	/// <summary>
+	/// Game::Draw から呼ばれる：動的 Object3D をシャドウパスへ描画する
+	/// （カスケードのバインドは呼び出し側で済ませる）。
+	/// </summary>
+	void DrawShadowCasters();
+
 protected:
 	/// <summary>
 	/// 動的プリミティブの更新（派生シーンの Update から呼ぶ）
