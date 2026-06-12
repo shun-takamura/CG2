@@ -1416,8 +1416,13 @@ void BaseScene::DrawDynamicObjects() {
 }
 
 void BaseScene::DrawShadowCasters() {
+	// 静的 Object3D
 	for (auto& o : object3DInstances_) {
 		o->DrawShadowPass(dxCore_);
+	}
+	// スキニングモデル（スキニングは事前にDispatch済みの前提）
+	for (auto& a : dynamicAnimated_) {
+		a->DrawShadowPass(dxCore_);
 	}
 }
 

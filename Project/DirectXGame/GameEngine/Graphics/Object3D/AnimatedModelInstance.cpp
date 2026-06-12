@@ -85,6 +85,14 @@ void AnimatedModelInstance::DrawIdPass(DirectXCore* dxCore, const SkinCluster& s
     dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void AnimatedModelInstance::DrawShadowPass(DirectXCore* dxCore, const SkinCluster& skinCluster)
+{
+    // スキニング済みVBVで深度のみ描画（PSO/RootSig/カスケードはパス側で設定済み）
+    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
+    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void AnimatedModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
     const size_t sizeInBytes = sizeof(VertexData) * vertexCount_;

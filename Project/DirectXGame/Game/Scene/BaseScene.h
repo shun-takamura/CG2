@@ -419,6 +419,12 @@ public:
 	/// </summary>
 	void DrawShadowCasters();
 
+	/// <summary>
+	/// Game::Draw から呼ばれる：動的 AnimatedObject3D のスキニングを Dispatch する
+	/// （シャドウパスでキャストさせるため、描画前にスキニング済み頂点を確定する）。
+	/// </summary>
+	void DispatchDynamicAnimatedSkinning();
+
 protected:
 	/// <summary>
 	/// 動的プリミティブの更新（派生シーンの Update から呼ぶ）
@@ -440,7 +446,6 @@ protected:
 	/// 動的 AnimatedObject3D の Update（dt 必須） / DispatchSkinning / Draw / SkeletonDebug
 	/// </summary>
 	void UpdateDynamicAnimated(float deltaTime);
-	void DispatchDynamicAnimatedSkinning();
 	void DrawDynamicAnimated();
 	void DrawDynamicAnimatedSkeletonDebug();
 
