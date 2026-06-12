@@ -42,6 +42,11 @@ Game::~Game() {
 	instance_ = nullptr;
 }
 
+ISceneRunner* Game::GetSceneRunner() {
+	// シーン駆動の実体はゲームの SceneManager。Framework はこの IF 経由で回す。
+	return SceneManager::GetInstance();
+}
+
 void Game::Initialize() {
 	// 基底クラスの初期化処理
 	Framework::Initialize();

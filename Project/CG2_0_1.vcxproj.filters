@@ -752,7 +752,10 @@
     <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h">
+    <ClInclude Include="DirectXGame\GameEngine\Scene\AbstractSceneFactory.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Scene\ISceneRunner.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h">
@@ -879,6 +882,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePrefabParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\EmitParam.h">

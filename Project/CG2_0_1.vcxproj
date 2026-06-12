@@ -423,7 +423,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Scene\AbstractSceneFactory.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Scene\ISceneRunner.h" />
     <ClInclude Include="DirectXGame\GameEngine\Scene\Scene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
@@ -512,6 +513,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePrefabParams.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Quaternion.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />

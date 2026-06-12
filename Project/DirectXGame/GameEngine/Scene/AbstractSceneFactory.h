@@ -7,7 +7,7 @@ class Scene;
 
 /// <summary>
 /// シーン工場（概念）
-/// 抽象クラス - 継承して使う前提
+/// 抽象クラス - 継承して使う前提。生成物はエンジン基底 Scene として返す。
 /// </summary>
 class AbstractSceneFactory {
 public:

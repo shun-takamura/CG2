@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include "BaseTransition.h"
+#include "ISceneRunner.h"
 
 // 前方宣言
 class Scene;
@@ -15,9 +16,9 @@ class InputManager;
 class SkinningComputeManager;
 
 /// <summary>
-/// シーン管理クラス
+/// シーン管理クラス。エンジンの Framework からは ISceneRunner 経由で駆動される。
 /// </summary>
-class SceneManager {
+class SceneManager : public ISceneRunner {
 public:
 	/// <summary>
 	/// シングルトンインスタンスの取得
@@ -35,17 +36,17 @@ public:
 		SRVManager* srvManager,
 		InputManager* input,
 		SkinningComputeManager* skinningComputeManager
-	);
+	) override;
 
 	/// <summary>
 	/// 終了処理
 	/// </summary>
-	void Finalize();
+	void Finalize() override;
 
 	/// <summary>
 	/// 更新
 	/// </summary>
-	void Update();
+	void Update() override;
 
 	/// <summary>
 	/// 描画

@@ -3,7 +3,6 @@
 #include "MathUtility.h"
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "EngineTime.h"
-#include "Components/Prefab.h"
 #include "imgui.h"
 
 const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
