@@ -101,6 +101,9 @@ void AnimatedObject3DInstance::PlayAnimation(const std::string& animPath, float 
 
 void AnimatedObject3DInstance::Update(float deltaTime)
 {
+    // このフレームのスキニングはまだ未実行。シャドウパス or メイン描画のどちらか1回だけ走らせる。
+    skinningDispatchedThisFrame_ = false;
+
     // アニメーション再生時刻の更新
     if (animatedModelInstance_ && isPlaying_) {
         animationTime_ += deltaTime * playbackSpeed_;
@@ -198,6 +201,13 @@ void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
     if (!skinningComputeManager_ || !hasSkinCluster_ || !animatedModelInstance_) {
         return;
     }
+
+    // 1フレームに1回だけ実行（シャドウパス先行Dispatchとメイン描画の二重実行を防ぐ）。
+    // 同一フレーム内ではスケルトンが変わらないため再計算は不要。
+    if (skinningDispatchedThisFrame_) {
+        return;
+    }
+    skinningDispatchedThisFrame_ = true;
 
     auto* commandList = dxCore->GetCommandList();
 
@@ -356,6 +366,22 @@ void AnimatedObject3DInstance::DrawSkeletonDebug(DirectXCore* dxCore)
     }
 }
 #endif
+
+void AnimatedObject3DInstance::DrawShadowPass(DirectXCore* dxCore)
+{
+    if (!visible_) return;
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!animatedModelInstance_ || !hasSkinCluster_) return;
+
+    // VS CBV b0 = TransformationMatrix（シャドウVSは .World を使う）
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        0, transformationMatrixResource_->GetGPUVirtualAddress());
+
+    // スキニング済みVBVで深度描画（スキニングは事前にDispatch済み）
+    animatedModelInstance_->DrawShadowPass(dxCore, skinCluster_);
+}
 
 void AnimatedObject3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {

@@ -89,6 +89,10 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     SkinCluster skinCluster_;
     bool hasSkinCluster_ = false;
 
+    // このフレームで既にスキニングをDispatch済みか。Update でリセットし、
+    // DispatchSkinning で立てる。シャドウパス先行Dispatchとメイン描画の二重実行を防ぐ。
+    bool skinningDispatchedThisFrame_ = false;
+
 #ifdef USE_IMGUI
     // デバッグ描画用
     bool showSkeleton_ = false;
@@ -203,6 +207,10 @@ public:
 
     // ID Pass 用（Skinning 済み VBV を再利用、Object3DManager の ID PSO を使用）
     void DrawIdPass(DirectXCore* dxCore);
+
+    // シャドウパス用：transform を b0 にバインドし、Skinning 済み VBV で深度を書く。
+    // スキニングのDispatchは事前に済んでいる前提（DispatchDynamicAnimatedSkinning）。
+    void DrawShadowPass(DirectXCore* dxCore);
 
 #ifdef USE_IMGUI
     // Skeletonのデバッグ描画（全モデル描画後に呼ぶ）

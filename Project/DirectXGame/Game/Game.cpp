@@ -137,6 +137,11 @@ void Game::Draw() {
 
 				if (shadowMap_->IsEnabled()) {
 					auto* cmd = dxCore_->GetCommandList();
+					// スキニングモデルをキャストさせるため、シャドウパス前にスキニングを確定する。
+					// Compute は SRV ヒープを使うので先に PreDraw でヒープを束ねる。
+					srvManager_->PreDraw();
+					scene->DispatchDynamicAnimatedSkinning();
+
 					shadowMap_->BeginPass(cmd);
 					for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
 						shadowMap_->BindCascade(cmd, c);
