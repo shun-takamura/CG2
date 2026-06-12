@@ -5,6 +5,8 @@
 #include <sstream>
 #include <filesystem>
 
+#include "CrashHandler.h"
+
 namespace {
     // カテゴリ → ファイル名 / レコード上の表記
     const char* CategoryFileName(SessionLogger::Category c) {
@@ -104,6 +106,9 @@ void SessionLogger::Initialize() {
             sessionDir_ + "/" + CategoryFileName(static_cast<Category>(i));
         files_[i].open(path, std::ios::out | std::ios::trunc);
     }
+
+    // クラッシュダンプの出力先を、このセッションフォルダに向ける
+    CrashHandler::SetDumpDir(sessionDir_);
 
     initialized_ = true;
 }

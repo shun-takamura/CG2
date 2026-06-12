@@ -281,6 +281,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\SessionLogger.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\RandomGenerator.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\CrashHandler.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonValue.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonParser.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp" />
@@ -473,6 +474,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\SessionLogger.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\RandomGenerator.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\CrashHandler.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />
