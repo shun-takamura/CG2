@@ -80,14 +80,24 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
     // DirectX12初期化
     // 注意: RTVはSRGBフォーマットで作成されているため、SRGB版を指定
-    ImGui_ImplDX12_Init(
-        dxCore_->GetDevice(),
-        dxCore_->GetBackBufferCount(),
-        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,  // RTVのフォーマットに合わせる
-        nullptr,  // SRVヒープはSRVManagerが管理
-        srvManager_->GetCPUDescriptorHandle(srvIndex_),
-        srvManager_->GetGPUDescriptorHandle(srvIndex_)
-    );
+    // 新しい InitInfo 版で初期化し、テクスチャ(フォント)アップロードを
+    // 「エンジンのメインキュー」で行わせる。
+    // レガシー Init は ImGui 内部で別コマンドキューを作り、そこでフォントを
+    // COPY_DEST→PIXEL_SHADER_RESOURCE に遷移するため、メインキューでの描画と
+    // クロスキューになり GPU-Based Validation がレイアウト不整合(COPY_DEST)で弾いていた。
+    ImGui_ImplDX12_InitInfo initInfo = {};
+    initInfo.Device = dxCore_->GetDevice();
+    initInfo.CommandQueue = dxCore_->GetCommandQueue();   // ★クロスキュー解消の要
+    initInfo.NumFramesInFlight = dxCore_->GetBackBufferCount();
+    initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;  // RTVのフォーマットに合わせる
+    initInfo.SrvDescriptorHeap = nullptr;                  // SRVヒープはSRVManagerが管理
+    initInfo.LegacySingleSrvCpuDescriptor = srvManager_->GetCPUDescriptorHandle(srvIndex_);
+    initInfo.LegacySingleSrvGpuDescriptor = srvManager_->GetGPUDescriptorHandle(srvIndex_);
+    ImGui_ImplDX12_Init(&initInfo);
+
+    // ImGui::Image 等の複数テクスチャはアプリ(SRVManager)側が SRV を管理するので、
+    // バックエンドの動的テクスチャ機能は使わない（レガシー Init と同じ挙動を維持）。
+    io.BackendFlags &= ~ImGuiBackendFlags_RendererHasTextures;
 
     // フォントアトラスを明示的にビルド（docking版のレガシーAPI対応）
     unsigned char* pixels;
