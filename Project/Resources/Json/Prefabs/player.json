@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      0.11213962733745575,
-      -0.41052427887916565,
+      0.14170607924461365,
+      -0.39751550555229187,
       0
     ]
   },
@@ -51,16 +51,16 @@
   },
   "effects": {
     "charge_start": "Hit_Small",
-    "charge_hold": "Aura",
     "charge_hold2": "Aura",
+    "charge_hold": "Aura",
     "charge_start2": "Hit_Small"
   },
   "bulletPrefabs": {
     "normal": "TemporaryPlayerBullet",
-    "charge1": "",
     "melee_w1": "TemporaryPlayerMelee",
-    "charge2": "",
+    "charge1": "",
     "melee_w2": "TemporaryPlayerMelee",
+    "charge2": "",
     "melee_w3": "TemporaryPlayerMelee",
     "melee_w4": "TemporaryPlayerMelee",
     "melee_strong": "PlayerMeleeStrong"
