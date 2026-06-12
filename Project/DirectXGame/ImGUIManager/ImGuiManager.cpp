@@ -27,7 +27,7 @@
 #include "Vector3.h"
 #include "MathUtility.h"
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
 #include "StagePlayScene.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
@@ -36,7 +36,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
 #include "Components/CollisionManager.h"
 #include "TimeGroup.h"
 
@@ -105,7 +105,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<CallbackWindow>("Camera",
         [this]() {
             // ===== Debug Camera toggle =====
-            BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+            Scene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
             if (scene) {
                 bool useDebug = scene->GetUseDebugCamera();
                 if (ImGui::Checkbox("Use Debug Camera", &useDebug)) {
@@ -163,7 +163,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<CallbackWindow>("Highlights",
         [this]() {
             auto* sm = SceneManager::GetInstance();
-            BaseScene* scene = sm ? sm->GetCurrentScene() : nullptr;
+            Scene* scene = sm ? sm->GetCurrentScene() : nullptr;
             if (!scene) {
                 ImGui::TextDisabled("No active scene.");
                 return;
@@ -238,7 +238,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<CallbackWindow>("TimeControler",
         [this]() {
             auto* sm = SceneManager::GetInstance();
-            BaseScene* scene = sm ? sm->GetCurrentScene() : nullptr;
+            Scene* scene = sm ? sm->GetCurrentScene() : nullptr;
             const std::string& name = sm ? sm->GetCurrentSceneName() : std::string{};
 
             // ===== シーン情報 =====

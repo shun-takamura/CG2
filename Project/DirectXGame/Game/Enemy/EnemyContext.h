@@ -2,7 +2,7 @@
 #include "Vector3.h"
 
 class IImGuiEditable;
-class BaseScene;
+class GameScene;
 
 /// <summary>
 /// コマンドの Update に渡すコンテキスト。
@@ -11,7 +11,7 @@ class BaseScene;
 struct EnemyContext {
 	// --- in ---
 	IImGuiEditable* player        = nullptr;
-	BaseScene*      scene         = nullptr;
+	GameScene*      scene         = nullptr;
 	float           railT         = 0.0f;   // 現在のカメラ進行度 t
 	bool            splineArrived = false;  // スプライン終端到達済み（Rusher の溜め開始判定用）
 	float           triggerT      = 0.0f;   // このエントリの trigger_t（射撃間隔計算基準）

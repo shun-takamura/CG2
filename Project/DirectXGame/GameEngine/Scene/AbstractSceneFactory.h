@@ -3,11 +3,11 @@
 #include <string>
 
 // 前方宣言
-class BaseScene;
+class Scene;
 
 /// <summary>
 /// シーン工場（概念）
-/// 抽象クラス - 継承して使う前提
+/// 抽象クラス - 継承して使う前提。生成物はエンジン基底 Scene として返す。
 /// </summary>
 class AbstractSceneFactory {
 public:
@@ -19,5 +19,5 @@ public:
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
 	/// <returns>生成したシーン</returns>
-	virtual std::unique_ptr<BaseScene> CreateScene(const std::string& sceneName) = 0;
+	virtual std::unique_ptr<Scene> CreateScene(const std::string& sceneName) = 0;
 };

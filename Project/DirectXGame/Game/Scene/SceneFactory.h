@@ -13,5 +13,5 @@ public:
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
 	/// <returns>生成したシーン</returns>
-	std::unique_ptr<BaseScene> CreateScene(const std::string& sceneName) override;
+	std::unique_ptr<Scene> CreateScene(const std::string& sceneName) override;
 };

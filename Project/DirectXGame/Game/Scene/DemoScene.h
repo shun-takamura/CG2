@@ -1,5 +1,5 @@
 #pragma once
-#include "BaseScene.h"
+#include "GameScene.h"
 #include "Vector3.h"
 #include <memory>
 #include <vector>
@@ -19,7 +19,7 @@ class GPUParticleManager;
 class IImGuiEditable;
 class SplineCurveActor;
 
-class DemoScene :public BaseScene
+class DemoScene :public GameScene
 {
 public:
 	/// <summary>
@@ -58,15 +58,15 @@ public:
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
 
-	// シーン保存/読込（BaseScene の動的エンティティ群を JSON へ）
+	// シーン保存/読込（GameScene の動的エンティティ群を JSON へ）
 	bool SaveSceneToJson(const std::string& filePath) override;
 	bool LoadSceneFromJson(const std::string& filePath) override;
 
 private:
 
-	// DebugCamera は BaseScene が管理（GetDebugCamera() で取得）
+	// DebugCamera は GameScene が管理（GetDebugCamera() で取得）
 
-	// 動的エンティティ群（Object3D / Sprite / Animated / Spline / Primitive）は BaseScene に集約済み
+	// 動的エンティティ群（Object3D / Sprite / Animated / Spline / Primitive）は GameScene に集約済み
 
 	// スプライト関連
 	std::unique_ptr<SpriteInstance> sprite_;

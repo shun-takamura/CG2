@@ -2,9 +2,10 @@
 #include <memory>
 #include <string>
 #include "BaseTransition.h"
+#include "ISceneRunner.h"
 
 // 前方宣言
-class BaseScene;
+class Scene;
 class AbstractSceneFactory;
 class SpriteManager;
 class Object3DManager;
@@ -15,9 +16,9 @@ class InputManager;
 class SkinningComputeManager;
 
 /// <summary>
-/// シーン管理クラス
+/// シーン管理クラス。エンジンの Framework からは ISceneRunner 経由で駆動される。
 /// </summary>
-class SceneManager {
+class SceneManager : public ISceneRunner {
 public:
 	/// <summary>
 	/// シングルトンインスタンスの取得
@@ -35,17 +36,17 @@ public:
 		SRVManager* srvManager,
 		InputManager* input,
 		SkinningComputeManager* skinningComputeManager
-	);
+	) override;
 
 	/// <summary>
 	/// 終了処理
 	/// </summary>
-	void Finalize();
+	void Finalize() override;
 
 	/// <summary>
 	/// 更新
 	/// </summary>
-	void Update();
+	void Update() override;
 
 	/// <summary>
 	/// 描画
@@ -79,7 +80,7 @@ public:
 	/// <summary>
 	/// 現在のシーンを取得
 	/// </summary>
-	BaseScene* GetCurrentScene() const { return currentScene_.get(); }
+	Scene* GetCurrentScene() const { return currentScene_.get(); }
 
 	/// <summary>
 	/// 現在のシーン名を取得
@@ -118,15 +119,15 @@ private:
 	SceneManager(const SceneManager&) = delete;
 	SceneManager& operator=(const SceneManager&) = delete;
 
-	void SetupScene(BaseScene* scene);
+	void SetupScene(Scene* scene);
 	void ExecuteSceneChange();
 
 	// 現在のシーン
-	std::unique_ptr<BaseScene> currentScene_;
+	std::unique_ptr<Scene> currentScene_;
 	std::string currentSceneName_;
 
 	// 次のシーン（即時切り替え用）
-	std::unique_ptr<BaseScene> nextScene_;
+	std::unique_ptr<Scene> nextScene_;
 
 	// 予約されたシーン名（トランジション用）
 	std::string pendingSceneName_;

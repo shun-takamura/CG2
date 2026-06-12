@@ -210,7 +210,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\OffscreenRendering\RenderTexture.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Math\MathUtility.cpp" />
-    <ClCompile Include="DirectXGame\Game\Scene\BaseScene.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Scene\Scene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneFactory.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\TitleScene.cpp" />
@@ -279,6 +280,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelInstance.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.cpp" />
+    <ClCompile Include="DirectXGame\GameEngine\Utility\EngineTime.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\Log.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\SessionLogger.cpp" />
     <ClCompile Include="DirectXGame\GameEngine\Utility\RandomGenerator.cpp" />
@@ -421,8 +423,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Math\MathUtility.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Vector2Int.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\AbstractSceneFactory.h" />
-    <ClInclude Include="DirectXGame\Game\Scene\BaseScene.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Scene\AbstractSceneFactory.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Scene\ISceneRunner.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Scene\Scene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />
     <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h" />
@@ -473,6 +477,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelCore.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\ConvertString.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\EngineTime.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Utility\ITimeScaleProvider.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\Log.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\SessionLogger.h" />
     <ClInclude Include="DirectXGame\GameEngine\Utility\RandomGenerator.h" />
@@ -507,6 +513,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.h" />
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitivePrefabParams.h" />
     <ClInclude Include="DirectXGame\GameEngine\Math\Quaternion.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />

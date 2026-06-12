@@ -1,5 +1,5 @@
 #pragma once
-#include "BaseScene.h"
+#include "GameScene.h"
 #include "Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
@@ -24,7 +24,7 @@ class LightningRuntime;
 /// 道中レールSTG(2-3分) → ボス戦3Dアクション(3-5分) をシームレスに繋ぐ
 /// 内部に Phase（Rail / Landing / Boss）を持つ予定
 /// </summary>
-class StagePlayScene : public BaseScene {
+class StagePlayScene : public GameScene {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中

@@ -1,5 +1,5 @@
 #pragma once
-#include "BaseScene.h"
+#include "GameScene.h"
 #include <memory>
 
 class Camera;
@@ -8,7 +8,7 @@ class Camera;
 /// リザルトシーン
 /// スコア・タイムを集計し、スキルポイント(SP)を獲得して Hub へ戻る
 /// </summary>
-class ResultScene : public BaseScene {
+class ResultScene : public GameScene {
 public:
 	ResultScene();
 	~ResultScene() override;

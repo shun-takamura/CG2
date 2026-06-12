@@ -10,7 +10,7 @@ class IImGuiEditable;
 
 /// <summary>
 /// 敵1体分の AI コマンド列を管理するコントローラ。
-/// BaseScene::enemyControllers_ に格納され、毎フレーム Update が呼ばれる。
+/// GameScene::enemyControllers_ に格納され、毎フレーム Update が呼ばれる。
 /// </summary>
 class EnemyController {
 public:

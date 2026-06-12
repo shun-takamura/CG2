@@ -6,6 +6,7 @@
 #include "Config/KeyConfig.h"
 
 class GPUParticleManager;
+class ISceneRunner;
 
 /// <summary>
 /// ゲーム（ゲーム固有の処理）
@@ -13,6 +14,11 @@ class GPUParticleManager;
 /// </summary>
 class Game : public Framework {
 public:
+	/// <summary>
+	/// Framework にシーン駆動の実体（SceneManager）を渡す（依存性の逆転）。
+	/// </summary>
+	ISceneRunner* GetSceneRunner() override;
+
 	/// <summary>
 	/// コンストラクタ
 	/// </summary>

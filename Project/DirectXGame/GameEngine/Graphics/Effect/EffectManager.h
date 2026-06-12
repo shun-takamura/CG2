@@ -28,6 +28,10 @@ public:
     void Initialize(GPUParticleManager* gpuParticleManager);
     void Finalize();
 
+    // Initialize で受け取った GPUParticleManager を返す（所有元は Game）。
+    // エンジン側 Scene が Game.h に依存せず GPU パーティクルを駆動するために使う。
+    GPUParticleManager* GetGPUParticleManager() const { return gpuParticleManager_; }
+
     void SetCamera(Camera* camera) { camera_ = camera; }
 
     // Effect Editor のプレビュー用カメラ。同じインスタンスをプレビュー RT にも描画する。

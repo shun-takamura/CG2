@@ -169,7 +169,7 @@ void DemoScene::Initialize() {
 
 	Game::GetPostEffect()->ResetEffects();
 
-	// デバッグカメラは BaseScene 側で必要時に生成（GetDebugCamera で生成）
+	// デバッグカメラは GameScene 側で必要時に生成（GetDebugCamera で生成）
 
 	//// スプライトの初期化
 	//sprite_ = std::make_unique<SpriteInstance>();
@@ -195,7 +195,7 @@ void DemoScene::Initialize() {
 	//ParticleManager::GetInstance()->SetCamera(camera_.get());
 	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
 
-	// GPU Particle + EffectManager は Game が共通管理する（BaseScene::UpdateGlobalEffects 経由で使用）
+	// GPU Particle + EffectManager は Game が共通管理する（GameScene::UpdateGlobalEffects 経由で使用）
 
 	//// 加速度フィールドの設定
 	//AccelerationField field;
@@ -353,7 +353,7 @@ void DemoScene::Initialize() {
 
 	//dxCore_->SetUseFixedFrameRate(false);
 
-	// Camera/RenderTextureはBaseScene::GetCamera経由とGame::Initialize側で中央化済み
+	// Camera/RenderTextureはGameScene::GetCamera経由とGame::Initialize側で中央化済み
 	// ImGui への GPUParticleManager 通知も Game::Initialize で行う
 
 	// 前回保存したシーン配置があれば自動ロード（ファイル無しは何もしない）
@@ -440,7 +440,7 @@ void DemoScene::Update() {
 		}
 	}
 
-	// カメラプレビューとQRコード読み取り（BaseSceneが自動で更新・描画する）
+	// カメラプレビューとQRコード読み取り（GameSceneが自動で更新・描画する）
 	UseCameraCapture(true);
 	UseQRCodeReader(true);
 
@@ -716,7 +716,7 @@ void DemoScene::Update() {
 		s->Update();
 	}
 
-	// debug camera の更新は BaseScene::UpdateDebugCameraIfActive() で行う
+	// debug camera の更新は GameScene::UpdateDebugCameraIfActive() で行う
 }
 
 void DemoScene::Draw() {
@@ -840,13 +840,13 @@ void DemoScene::Draw() {
 // =============================================================
 // 動的オブジェクトの追加・削除（SceneEditorWindow 経由）
 // =============================================================
-// 動的エンティティの Add/Remove/Instantiate は BaseScene に集約済み。
+// 動的エンティティの Add/Remove/Instantiate は GameScene に集約済み。
 // ここでは DemoScene 固有の名前付きメンバ（sprite_ / sprites_ / sneakWalkInstance_ 等）も
 // IsDynamicObject の対象に含めるための薄い override のみ残す。
 
 #ifdef USE_IMGUI
 bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
-	if (BaseScene::IsDynamicObject(editable)) return true;
+	if (GameScene::IsDynamicObject(editable)) return true;
 	for (const auto& s : sprites_) {
 		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
 	}

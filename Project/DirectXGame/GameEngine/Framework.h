@@ -35,6 +35,7 @@ class Object3DManager;
 class SkyboxManager;
 class InputManager;
 class AbstractSceneFactory;
+class ISceneRunner;
 
 /// <summary>
 /// フレームワーク（汎用部分）
@@ -45,6 +46,13 @@ public:
 	/// 仮想デストラクタ
 	/// </summary>
 	virtual ~Framework() = default;
+
+	/// <summary>
+	/// シーン駆動の委譲先を返す（依存性の逆転）。
+	/// 既定は nullptr。ゲーム側（Game）が自身の SceneManager を返すよう override する。
+	/// Framework はこの IF だけを通してシーンを Initialize/Update/Finalize する。
+	/// </summary>
+	virtual ISceneRunner* GetSceneRunner() { return nullptr; }
 
 	/// <summary>
 	/// 初期化

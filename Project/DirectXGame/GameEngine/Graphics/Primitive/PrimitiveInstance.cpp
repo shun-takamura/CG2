@@ -2,9 +2,7 @@
 #include "PrimitiveGenerator.h"
 #include "MathUtility.h"
 #include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
-#include "SceneManager.h"
-#include "BaseScene.h"
-#include "Components/Prefab.h"
+#include "EngineTime.h"
 #include "imgui.h"
 
 const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
@@ -95,13 +93,9 @@ void PrimitiveInstance::Update() {
         RegenerateGeometry();
     }
 
-    // 現在シーンの TimeGroup 連動デルタタイムを使って UV スクロール等を進める。
-    // シーン未取得時は dxCore のグローバル時間にフォールバック
-    float dt = 0.0f;
-    auto* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
-    if (scene) {
-        dt = scene->GetScaledDeltaTime(timeGroup_);
-    }
+    // TimeGroup 連動デルタタイムを使って UV スクロール等を進める。
+    // 供給元（シーン）が無ければ 0 にフォールバック
+    float dt = EngineTime::ScaledDeltaTime(timeGroup_, 0.0f);
     mesh_.Update(camera_, dt);
 }
 

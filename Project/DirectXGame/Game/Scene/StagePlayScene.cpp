@@ -2736,7 +2736,7 @@ void StagePlayScene::Update() {
 		skybox_->Update();
 	}
 
-	// BaseScene の動的エンティティ群（プレハブ生成物含む）の Update
+	// Scene の動的エンティティ群（プレハブ生成物含む）の Update
 	UpdateDynamicObjects();
 	UpdateDynamicAnimated(GetScaledDeltaTime());
 	UpdateDynamicPrimitives();
@@ -3352,7 +3352,7 @@ void StagePlayScene::Draw() {
 	// （Object3DInstance::Draw はライト系を bind しないため、ここで一括設定しないと GBV #935 が出る）
 	LightManager::GetInstance()->BindLights(commandList);
 
-	// BaseScene の動的エンティティ描画
+	// Scene の動的エンティティ描画
 	DrawDynamicObjects();
 	DrawDynamicAnimated();
 	DrawDynamicPrimitives();
@@ -3475,7 +3475,7 @@ void StagePlayScene::Draw() {
 }
 
 void StagePlayScene::Seek(float seconds) {
-	BaseScene::Seek(seconds);
+	Scene::Seek(seconds);
 
 	// RailCamera の進行度を経過秒から再構築する（speed と loop を尊重）
 	if (railCamera_) {

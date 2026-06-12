@@ -4,7 +4,7 @@
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
-#include "Scene/BaseScene.h"
+#include "Scene/GameScene.h"
 #include "Camera.h"
 
 /// <summary>

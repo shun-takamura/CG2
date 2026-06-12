@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "PrimitiveMesh.h"
 #include "PrimitiveGenerator.h"  // RingParams / CylinderParams
+#include "PrimitivePrefabParams.h"
 #include "IImGuiEditable.h"
 #include "TimeGroup.h"
 #include "Vector2.h"
@@ -8,7 +9,6 @@
 
 // 前方宣言
 class Camera;
-struct PrimitivePrefabParams;
 
 /// <summary>
 /// シーン内に配置できるプリミティブ（Plane/Box/Sphere/Ring/Cylinder）。

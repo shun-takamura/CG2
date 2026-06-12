@@ -5,8 +5,7 @@
 #include "VertexData.h"
 #include "Material.h"
 #include "Log.h"
-#include "SceneManager.h"
-#include "BaseScene.h"
+#include "EngineTime.h"
 #include <cassert>
 #include <cmath>
 #include "imgui.h"
@@ -297,16 +296,13 @@ void ParticleManager::Update(float deltaTime)
         return m;
         };
 
-    // シーンが取得できればグループ別TimeGroupでdtを上書きする
-    BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
-
     // 全てのパーティクルグループについて処理する
     for (auto& pair : particleGroups_) {
         ParticleGroup& group = pair.second;
         uint32_t instanceIndex = 0;
 
-        // このグループの実dt（TimeGroup連動）
-        float groupDt = scene ? scene->GetScaledDeltaTime(group.timeGroup) : deltaTime;
+        // このグループの実dt（TimeGroup連動）。供給元（シーン）が無ければ deltaTime にフォールバック
+        float groupDt = EngineTime::ScaledDeltaTime(group.timeGroup, deltaTime);
 
         // グループ内の全てのパーティクルについて処理する
         auto it = group.particles.begin();

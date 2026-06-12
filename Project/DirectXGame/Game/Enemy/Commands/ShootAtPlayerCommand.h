@@ -3,7 +3,7 @@
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
-#include "Scene/BaseScene.h"
+#include "Scene/GameScene.h"
 
 /// <summary>
 /// カメラ進行度 t の一定間隔でプレイヤー方向に敵弾を発射する。

@@ -37,7 +37,7 @@
 #include "InputManager.h"
 #include "ImGuiManager.h"
 #include "LightManager.h"
-#include "SceneManager.h"
+#include "ISceneRunner.h"
 #include "CameraCapture.h"
 #include "PrimitivePipeline.h"
 #include "LineRenderer.h"
@@ -379,17 +379,19 @@ void Framework::Initialize() {
 	input_->Initialize(winApp_.get());
 
 	//==============================
-	// SceneManagerの初期化
+	// シーンランナー（実体はゲームの SceneManager）の初期化
 	//==============================
-	SceneManager::GetInstance()->Initialize(
-		spriteManager_.get(),
-		object3DManager_.get(),
-		skyboxManager_.get(),
-		dxCore_.get(),
-		srvManager_.get(),
-		input_.get(),
-		skinningComputeManager_.get()
-	);
+	if (auto* runner = GetSceneRunner()) {
+		runner->Initialize(
+			spriteManager_.get(),
+			object3DManager_.get(),
+			skyboxManager_.get(),
+			dxCore_.get(),
+			srvManager_.get(),
+			input_.get(),
+			skinningComputeManager_.get()
+		);
+	}
 
 	//=========================
 	// ViewportとScissor
@@ -518,8 +520,8 @@ void Framework::Update() {
 		input_->Update();
 	}
 
-	// シーンマネージャーの更新
-	SceneManager::GetInstance()->Update();
+	// シーンランナー（ゲームの SceneManager）の更新
+	if (auto* runner = GetSceneRunner()) runner->Update();
 
 	// リプレイ記録：このフレームが実際に使った dt と入力を input.log へ。
 	// 入力・シーン更新の後（dt 確定済み、UpdateFixFPS は Draw 後なので今フレームの値）に記録する。
@@ -539,8 +541,8 @@ void Framework::Finalize() {
 	//=============
 	// 生成と逆順に行う
 
-	// シーンマネージャーの終了処理
-	SceneManager::GetInstance()->Finalize();
+	// シーンランナー（ゲームの SceneManager）の終了処理
+	if (auto* runner = GetSceneRunner()) runner->Finalize();
 
 	// 入力を解放
 	input_->Finalize();
