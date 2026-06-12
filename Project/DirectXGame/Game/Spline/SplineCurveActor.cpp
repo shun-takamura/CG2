@@ -1,6 +1,7 @@
 #include "SplineCurveActor.h"
 
 #include "Primitive/DebugDraw.h"
+#include "Components/Gameplay.h"
 
 #ifdef USE_IMGUI
 #include "imgui.h"
@@ -84,7 +85,7 @@ void SplineCurveActor::DrawDebug() const {
 	if (points_.empty()) return;
 
 	float r, g, b, a;
-	GetTagColor(GetTag(), r, g, b, a);
+	GetTagColor(Gameplay::Of(this).GetTag(), r, g, b, a);
 	const Vector4 curveColor{ r, g, b, 1.0f };
 	const Vector4 pointColor{ r * 1.2f, g * 1.2f, b * 1.2f, 1.0f };
 	const Vector4 selColor{ 1.0f, 1.0f, 0.0f, 1.0f }; // 選択中は黄

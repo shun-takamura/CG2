@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include "Components/Gameplay.h"
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
@@ -25,7 +26,7 @@ public:
 		// Approach 中はスプライン追従に任せる（requestDetach しない）
 		ctx.billboardToPlayer = true;
 		// 溜め前は当たり判定 OFF（接触ダメージなし）
-		if (entity) entity->GetCollider().enabled = false;
+		if (entity) Gameplay::Of(entity).GetCollider().enabled = false;
 	}
 
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
@@ -55,7 +56,7 @@ public:
 			if (chargeTimer_ >= chargeTime_) {
 				phase_ = Phase::Rush;
 				ctx.billboardToPlayer = false;
-				if (entity) entity->GetCollider().enabled = true; // 突進中は当たり判定 ON
+				if (entity) Gameplay::Of(entity).GetCollider().enabled = true; // 突進中は当たり判定 ON
 				ctx.useFreeVelocity = true;
 				ctx.freeVelocity = {
 					rushDir_.x * rushSpeed_, rushDir_.y * rushSpeed_, rushDir_.z * rushSpeed_ };
@@ -72,7 +73,7 @@ public:
 	}
 
 	void OnExit(IImGuiEditable* entity, EnemyContext& ctx) override {
-		if (entity) entity->GetCollider().enabled = false;
+		if (entity) Gameplay::Of(entity).GetCollider().enabled = false;
 	}
 
 	bool IsFinished() const override { return phase_ == Phase::Done; }

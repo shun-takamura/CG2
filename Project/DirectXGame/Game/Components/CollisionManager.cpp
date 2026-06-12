@@ -1,4 +1,5 @@
 #include "CollisionManager.h"
+#include "Components/Gameplay.h"
 
 #include "IImGuiEditable.h"
 #include "SphereCollider.h"
@@ -268,16 +269,16 @@ namespace {
 
 void CollisionManager::Update() {
 	for (IImGuiEditable* e : entities_) {
-		if (e) e->GetCollider().isCollidingThisFrame = false;
+		if (e) Gameplay::Of(e).GetCollider().isCollidingThisFrame = false;
 	}
 
 	const size_t n = entities_.size();
 	for (size_t i = 0; i < n; ++i) {
 		IImGuiEditable* a = entities_[i];
 		if (!a) continue;
-		Collider& ca = a->GetCollider();
+		Collider& ca = Gameplay::Of(a).GetCollider();
 		if (!ca.enabled) continue;
-		EntityTag ta = a->GetTag();
+		EntityTag ta = Gameplay::Of(a).GetTag();
 		if (!CollisionMatrix::IsCollidableTag(ta)) continue;
 
 		WorldData wA;
@@ -286,9 +287,9 @@ void CollisionManager::Update() {
 		for (size_t j = i + 1; j < n; ++j) {
 			IImGuiEditable* b = entities_[j];
 			if (!b) continue;
-			Collider& cb = b->GetCollider();
+			Collider& cb = Gameplay::Of(b).GetCollider();
 			if (!cb.enabled) continue;
-			EntityTag tb = b->GetTag();
+			EntityTag tb = Gameplay::Of(b).GetTag();
 
 			if (!CollisionMatrix::ShouldCollide(ta, tb)) continue;
 
@@ -304,12 +305,12 @@ void CollisionManager::Update() {
 				// DamageDealer 側の damage を HP 側に適用する。両方向に成立しうる（突進敵がプレイヤーに突っ込み、
 				// 同時にプレイヤーが近接でカウンターしているケース等）。
 				{
-					DamageDealer& dda = a->GetDamageDealer();
-					HP&           hpb = b->GetHP();
+					DamageDealer& dda = Gameplay::Of(a).GetDamageDealer();
+					HP&           hpb = Gameplay::Of(b).GetHP();
 					if (dda.enabled && hpb.enabled) hpb.TakeDamage(dda.damage);
 
-					DamageDealer& ddb = b->GetDamageDealer();
-					HP&           hpa = a->GetHP();
+					DamageDealer& ddb = Gameplay::Of(b).GetDamageDealer();
+					HP&           hpa = Gameplay::Of(a).GetHP();
 					if (ddb.enabled && hpa.enabled) hpa.TakeDamage(ddb.damage);
 				}
 
@@ -329,7 +330,7 @@ void CollisionManager::DrawDebug() {
 
 	for (IImGuiEditable* e : entities_) {
 		if (!e) continue;
-		const Collider& c = e->GetCollider();
+		const Collider& c = Gameplay::Of(e).GetCollider();
 		if (!c.enabled || !c.showDebug) continue;
 		WorldData w;
 		if (!TryGetWorldData(e, c, w)) continue;
@@ -339,7 +340,7 @@ void CollisionManager::DrawDebug() {
 			color = { 1.0f, 0.15f, 0.15f, 1.0f };
 		} else {
 			float r, g, b, a;
-			GetTagColor(e->GetTag(), r, g, b, a);
+			GetTagColor(Gameplay::Of(e).GetTag(), r, g, b, a);
 			color = { r, g, b, 1.0f };
 		}
 

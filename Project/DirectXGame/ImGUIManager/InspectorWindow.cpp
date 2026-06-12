@@ -1,4 +1,5 @@
 #include "InspectorWindow.h"
+#include "Components/Gameplay.h"
 #include "ImGuiManager.h"
 #include "SceneEditorWindow.h"
 #include "Components/EntityTag.h"
@@ -44,14 +45,14 @@ void InspectorWindow::OnDraw() {
 
     // ----- Tag 選択 -----
     {
-        EntityTag currentTag = selected->GetTag();
+        EntityTag currentTag = Gameplay::Of(selected).GetTag();
         std::string currentName(GetTagName(currentTag));
         if (ImGui::BeginCombo("Tag", currentName.c_str())) {
             for (int i = 0; i < static_cast<int>(EntityTag::Count); ++i) {
                 EntityTag t = static_cast<EntityTag>(i);
                 bool sel = (t == currentTag);
                 if (ImGui::Selectable(std::string(GetTagName(t)).c_str(), sel)) {
-                    selected->SetTag(t);
+                    Gameplay::Of(selected).SetTag(t);
                 }
                 if (sel) ImGui::SetItemDefaultFocus();
             }
@@ -71,7 +72,7 @@ void InspectorWindow::OnDraw() {
 
     // ----- タグごとに表示する設定項目を決める -----
     // 各タグに必要なコンポーネントだけを Inspector / Prefab 保存に出す。
-    const EntityTag inspTag = selected->GetTag();
+    const EntityTag inspTag = Gameplay::Of(selected).GetTag();
     const bool isPlayer       = (inspTag == EntityTag::Player);
     const bool isPlayerBullet = (inspTag == EntityTag::PlayerBullet);
     const bool isPlayerMelee  = (inspTag == EntityTag::PlayerMelee);
@@ -98,10 +99,10 @@ void InspectorWindow::OnDraw() {
 
     // ----- コライダー（タグが衝突可能、かつ 3D エンティティの場合のみ表示） -----
     {
-        const EntityTag tag = selected->GetTag();
+        const EntityTag tag = Gameplay::Of(selected).GetTag();
         if (CollisionMatrix::IsCollidableTag(tag) && selected->GetEditableTranslate()) {
             if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen)) {
-                Collider& c = selected->GetCollider();
+                Collider& c = Gameplay::Of(selected).GetCollider();
                 ImGui::Checkbox("OnCollision", &c.enabled);
                 if (c.enabled) {
                     // 形状コンボ
@@ -144,7 +145,7 @@ void InspectorWindow::OnDraw() {
             // HP（Player / Enemy / Boss）
             if (showHP) {
                 sep();
-                HP& hp = selected->GetHP();
+                HP& hp = Gameplay::Of(selected).GetHP();
                 ImGui::Checkbox("HP Enabled", &hp.enabled);
                 if (hp.enabled) {
                     ImGui::DragInt("Max HP", &hp.maxHP, 1, 1, 99999);
@@ -160,14 +161,14 @@ void InspectorWindow::OnDraw() {
             // AttackPower（Player のみ：攻撃力の実数値）
             if (showAttackPower) {
                 sep();
-                bool hasAP = selected->HasAttackPower();
+                bool hasAP = Gameplay::Of(selected).HasAttackPower();
                 if (ImGui::Checkbox("AttackPower Enabled", &hasAP)) {
-                    selected->SetHasAttackPower(hasAP);
+                    Gameplay::Of(selected).SetHasAttackPower(hasAP);
                 }
                 if (hasAP) {
-                    int ap = selected->GetAttackPower();
+                    int ap = Gameplay::Of(selected).GetAttackPower();
                     if (ImGui::DragInt("Attack Power", &ap, 1, 0, 99999)) {
-                        selected->SetAttackPower(ap);
+                        Gameplay::Of(selected).SetAttackPower(ap);
                     }
                 }
                 ImGui::TextDisabled("(弾・近接の攻撃倍率と掛けて敵へのダメージになる)");
@@ -176,7 +177,7 @@ void InspectorWindow::OnDraw() {
             // 固定ダメージ（Enemy / EnemyAttack / Boss）
             if (showRawDamage) {
                 sep();
-                DamageDealer& dd = selected->GetDamageDealer();
+                DamageDealer& dd = Gameplay::Of(selected).GetDamageDealer();
                 ImGui::Checkbox("Damage Enabled", &dd.enabled);
                 if (dd.enabled) {
                     ImGui::DragInt("Damage", &dd.damage, 1, 0, 99999);
@@ -187,7 +188,7 @@ void InspectorWindow::OnDraw() {
             // 攻撃倍率（PlayerBullet / PlayerMelee：攻撃力 × 倍率 = 敵へのダメージ）
             if (showAtkMultiplier) {
                 sep();
-                DamageDealer& dd = selected->GetDamageDealer();
+                DamageDealer& dd = Gameplay::Of(selected).GetDamageDealer();
                 ImGui::Checkbox("Damage Enabled", &dd.enabled);
                 if (dd.enabled) {
                     ImGui::DragFloat("Attack Multiplier", &dd.multiplier, 0.05f, 0.0f, 100.0f, "%.2f");
@@ -198,7 +199,7 @@ void InspectorWindow::OnDraw() {
             // BulletParams（PlayerBullet / EnemyAttack）
             if (showBullet) {
                 sep();
-                BulletParams& bp = selected->GetBulletParams();
+                BulletParams& bp = Gameplay::Of(selected).GetBulletParams();
                 ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
                 if (bp.enabled) {
                     ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
@@ -238,7 +239,7 @@ void InspectorWindow::OnDraw() {
             // MeleeParams（PlayerMelee：持続・オフセット・コンボ・本/持続あて倍率）
             if (showMelee) {
                 sep();
-                MeleeParams& mp = selected->GetMeleeParams();
+                MeleeParams& mp = Gameplay::Of(selected).GetMeleeParams();
                 ImGui::Checkbox("MeleeParams Enabled", &mp.enabled);
                 if (mp.enabled) {
                     ImGui::DragFloat("Startup", &mp.startup, 0.01f, 0.0f, 5.0f, "%.2f sec");
@@ -264,7 +265,7 @@ void InspectorWindow::OnDraw() {
             // CarrierParams（Enemy / Boss）
             if (showCarrier) {
                 sep();
-                CarrierParams& cp = selected->GetCarrierParams();
+                CarrierParams& cp = Gameplay::Of(selected).GetCarrierParams();
                 ImGui::Checkbox("CarrierParams Enabled", &cp.enabled);
                 if (cp.enabled) {
                     ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
@@ -276,7 +277,7 @@ void InspectorWindow::OnDraw() {
             // ChargeParams（Player）
             if (showCharge) {
                 sep();
-                ChargeParams& chp = selected->GetChargeParams();
+                ChargeParams& chp = Gameplay::Of(selected).GetChargeParams();
                 ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
                 if (chp.enabled) {
                     ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
@@ -292,7 +293,7 @@ void InspectorWindow::OnDraw() {
             // PrecisionParams（Player：精密射撃モード中の弾性能加算）
             if (showPrecision) {
                 sep();
-                PrecisionParams& pp = selected->GetPrecisionParams();
+                PrecisionParams& pp = Gameplay::Of(selected).GetPrecisionParams();
                 ImGui::Checkbox("Precision Enabled", &pp.enabled);
                 if (pp.enabled) {
                     ImGui::DragFloat("Precision Speed +", &pp.speedAdd, 0.5f, 0.0f, 2000.0f, "%.1f /sec");
@@ -310,7 +311,7 @@ void InspectorWindow::OnDraw() {
             if (showBulletSlots) {
                 sep();
                 ImGui::TextDisabled("Bullet Prefab Slots");
-                auto& bulletPrefabs = selected->GetBulletPrefabs();
+                auto& bulletPrefabs = Gameplay::Of(selected).GetBulletPrefabs();
                 // 弾スロットと近接スロット（攻撃スロットとして同じ map を流用）
                 const char* slotNames[8] = {
                     "normal", "charge1", "charge2",
@@ -340,9 +341,9 @@ void InspectorWindow::OnDraw() {
             // ScoreValue（Enemy / Boss）
             if (showScore) {
                 sep();
-                int sv = selected->GetScoreValue();
+                int sv = Gameplay::Of(selected).GetScoreValue();
                 if (ImGui::DragInt("Score Value", &sv, 1, 0, 99999)) {
-                    selected->SetScoreValue(sv);
+                    Gameplay::Of(selected).SetScoreValue(sv);
                 }
                 ImGui::TextDisabled("(撃破時の獲得スコア。0 で加点なし)");
             }
@@ -355,7 +356,7 @@ void InspectorWindow::OnDraw() {
     // DnD ターゲット（SceneEditor の Effects 一覧から）と手入力の両対応。
     if (showEffects) {
         if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
-            auto& effects = selected->GetEffects();
+            auto& effects = Gameplay::Of(selected).GetEffects();
 
             // タグに応じた推奨スロット名
             std::vector<const char*> suggested;
@@ -454,7 +455,7 @@ void InspectorWindow::OnDraw() {
                 if (ImGui::Button("Save as Prefab")) {
                     PrefabDef def{};
                     def.name = prefabNameBuf;
-                    def.tag = selected->GetTag();
+                    def.tag = Gameplay::Of(selected).GetTag();
 
                     if (isObj3D) {
                         def.kind = PrefabKind::Object3D;
@@ -502,7 +503,7 @@ void InspectorWindow::OnDraw() {
                         pp.helixParams    = prim->GetHelixParams();
                     }
 
-                    const auto& col = selected->GetCollider();
+                    const auto& col = Gameplay::Of(selected).GetCollider();
                     if (col.enabled) {
                         def.hasCollider = true;
                         def.colliderShape = col.shape;
@@ -514,23 +515,23 @@ void InspectorWindow::OnDraw() {
                     }
 
                     // バトル系：タグが使う項目だけプレハブに保存する
-                    const HP& hp = selected->GetHP();
+                    const HP& hp = Gameplay::Of(selected).GetHP();
                     if (showHP && hp.enabled) {
                         def.hasHP = true;
                         def.maxHP = hp.maxHP;
                     }
                     // ダメージ：敵側=固定ダメージ / 自機攻撃=攻撃倍率（どちらも DamageDealer）
-                    const DamageDealer& dd = selected->GetDamageDealer();
+                    const DamageDealer& dd = Gameplay::Of(selected).GetDamageDealer();
                     if ((showRawDamage || showAtkMultiplier) && dd.enabled) {
                         def.hasDamageDealer = true;
                         def.damage = dd.damage;
                         def.attackMultiplier = dd.multiplier;
                     }
-                    if (showAttackPower && selected->HasAttackPower()) {
+                    if (showAttackPower && Gameplay::Of(selected).HasAttackPower()) {
                         def.hasAttackPower = true;
-                        def.attackPower = selected->GetAttackPower();
+                        def.attackPower = Gameplay::Of(selected).GetAttackPower();
                     }
-                    const BulletParams& bp = selected->GetBulletParams();
+                    const BulletParams& bp = Gameplay::Of(selected).GetBulletParams();
                     if (showBullet && bp.enabled) {
                         def.hasBullet            = true;
                         def.bulletSpeed          = bp.speed;
@@ -542,7 +543,7 @@ void InspectorWindow::OnDraw() {
                         def.bulletPenetrateDamageRate = bp.penetrateDamageRate;
                         def.bulletPenetrateEffect     = bp.penetrateEffect;
                     }
-                    const MeleeParams& mp = selected->GetMeleeParams();
+                    const MeleeParams& mp = Gameplay::Of(selected).GetMeleeParams();
                     if (showMelee && mp.enabled) {
                         def.hasMelee            = true;
                         def.meleeStartup        = mp.startup;
@@ -554,32 +555,32 @@ void InspectorWindow::OnDraw() {
                         def.meleeCleanMultiplier = mp.cleanMultiplier;
                         def.meleeLateMultiplier  = mp.lateMultiplier;
                     }
-                    const CarrierParams& cp = selected->GetCarrierParams();
+                    const CarrierParams& cp = Gameplay::Of(selected).GetCarrierParams();
                     if (showCarrier && cp.enabled) {
                         def.hasCarrier               = true;
                         def.carrierChildLifetimeSec  = cp.childLifetimeSec;
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
                     }
-                    const ChargeParams& chp = selected->GetChargeParams();
+                    const ChargeParams& chp = Gameplay::Of(selected).GetChargeParams();
                     if (showCharge && chp.enabled) {
                         def.hasCharge        = true;
                         def.chargeStage1Time = chp.stage1Time;
                         def.chargeStage2Time = chp.stage2Time;
                         def.chargeFireRate   = chp.fireRate;
                     }
-                    const PrecisionParams& prp = selected->GetPrecisionParams();
+                    const PrecisionParams& prp = Gameplay::Of(selected).GetPrecisionParams();
                     if (showPrecision && prp.enabled) {
                         def.hasPrecision       = true;
                         def.precisionSpeedAdd  = prp.speedAdd;
                         def.precisionHomingAdd = prp.homingAdd;
                     }
                     // ScoreValue（Enemy/Boss のみ反映）
-                    if (showScore) def.scoreValue = selected->GetScoreValue();
+                    if (showScore) def.scoreValue = Gameplay::Of(selected).GetScoreValue();
                     // エフェクトスロットをまるごと保存
-                    def.effects = selected->GetEffects();
+                    def.effects = Gameplay::Of(selected).GetEffects();
                     // 弾プレハブスロットをまるごと保存
-                    def.bulletPrefabs = selected->GetBulletPrefabs();
+                    def.bulletPrefabs = Gameplay::Of(selected).GetBulletPrefabs();
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";
                     bool ok = PrefabManager::Save(def, path);

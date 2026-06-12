@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include "Components/Gameplay.h"
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "Enemy/EnemyController.h"
@@ -40,7 +41,7 @@ public:
 		// CarrierParams から子のパラメータを取得（運び屋 = entity）
 		float lifetime = 10.0f, radius = 8.0f, speed = 5.0f;
 		if (entity) {
-			const CarrierParams& cp = entity->GetCarrierParams();
+			const CarrierParams& cp = Gameplay::Of(entity).GetCarrierParams();
 			if (cp.enabled) {
 				lifetime = cp.childLifetimeSec;
 				radius   = cp.childWanderRadius;

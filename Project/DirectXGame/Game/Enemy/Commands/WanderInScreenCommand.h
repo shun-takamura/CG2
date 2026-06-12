@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include "Components/Gameplay.h"
 #include "RandomGenerator.h"
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
@@ -99,7 +100,7 @@ public:
 					(pos->y - camPos.y) * ny +
 					(pos->z - camPos.z) * nz;
 				// ドローン半径分の余裕も引いて手前側に押し戻す
-				const float safety = entity->GetCollider().radius;
+				const float safety = Gameplay::Of(entity).GetCollider().radius;
 				const float maxDot = dotCarrier - safety;
 				if (dotDrone > maxDot) {
 					const float excess = dotDrone - maxDot;

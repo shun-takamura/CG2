@@ -195,6 +195,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\GameEngine\Core\Input\InputAction.cpp" />
     <ClCompile Include="DirectXGame\Game\Config\KeyConfig.cpp" />
     <ClCompile Include="DirectXGame\Game\Components\CollisionManager.cpp" />
+    <ClCompile Include="DirectXGame\Game\Components\Gameplay.cpp" />
     <ClCompile Include="DirectXGame\Game\Components\PrefabManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyController.cpp" />
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyCommandFactory.cpp" />
@@ -390,6 +391,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionMatrix.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionManager.h" />
+    <ClInclude Include="DirectXGame\Game\Components\Gameplay.h" />
+    <ClInclude Include="DirectXGame\Game\Components\GameplayComponents.h" />
     <ClInclude Include="DirectXGame\Game\Components\Prefab.h" />
     <ClInclude Include="DirectXGame\Game\Components\PrefabManager.h" />
     <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h" />

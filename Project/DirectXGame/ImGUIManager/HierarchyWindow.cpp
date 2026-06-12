@@ -1,4 +1,5 @@
 #include "HierarchyWindow.h"
+#include "Components/Gameplay.h"
 #include "ImGuiManager.h"
 #include "SceneManager.h"
 #include "Scene.h"
@@ -28,7 +29,7 @@ void HierarchyWindow::OnDraw() {
     std::array<std::vector<IImGuiEditable*>, kTagCount> grouped{};
     for (IImGuiEditable* e : editables) {
         if (!e) continue;
-        const int idx = static_cast<int>(e->GetTag());
+        const int idx = static_cast<int>(Gameplay::Of(e).GetTag());
         if (idx >= 0 && idx < kTagCount) {
             grouped[idx].push_back(e);
         }

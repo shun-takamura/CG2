@@ -1,4 +1,5 @@
 #include "StagePlayScene.h"
+#include "Components/Gameplay.h"
 
 #include "Camera.h"
 #include "Object3DManager.h"
@@ -1070,7 +1071,7 @@ void StagePlayScene::SpawnJustDodgeClones()
 		if (object3DInstances_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
 		Object3DInstance* clone = object3DInstances_.back().get();
 		if (!clone) continue;
-		clone->GetCollider().enabled = false; // 当たり判定なし
+		Gameplay::Of(clone).GetCollider().enabled = false; // 当たり判定なし
 		clone->SetMaterialColor(jdCloneColor_); // 半透明色（alpha<1 で半透明）
 		clone->Update(); // 初フレームの CB を確定（原点描画バグ回避）
 		AddHighlight(clone); // 分身はグレースケール対象外（色つきのまま）にする
@@ -1229,7 +1230,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		case CounterDir::Left: {
 			// 回復（小回復・無制限）：上限チェックなし
 			if (player_) {
-				player_->GetHP().Heal(healSmallAmount_);
+				Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
 			}
 			// 即座に派生終了（演出はジャスト回避のフェードアウトに任せる）
 			EndJustDodgeCounterAction();
@@ -1283,7 +1284,7 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 						default: slot = "melee_w1"; break;
 					}
 				}
-				std::string prefab = player_ ? player_->FindBulletPrefab(slot) : std::string();
+				std::string prefab = player_ ? Gameplay::Of(player_).FindBulletPrefab(slot) : std::string();
 				if (prefab.empty()) prefab = "TemporaryPlayerMelee";
 				float startup = 0.05f, active = 0.20f, recovery = 0.15f, comboWindow = 0.40f;
 				if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab); mdef && mdef->hasMelee) {
@@ -1495,7 +1496,7 @@ void StagePlayScene::UpdateHeal(InputActionMap* actions)
 	const int cap  = isBoss ? healMaxBoss_  : healMaxStg_;
 	if (used >= cap) return;
 
-	player_->GetHP().Heal(healAmount_);
+	Gameplay::Of(player_).GetHP().Heal(healAmount_);
 	++used;
 }
 
@@ -1542,7 +1543,7 @@ void StagePlayScene::SpawnPendingMelee()
 	if (!player_) return;
 	Vector3 right, up, forward;
 	ComputeAimBasis(right, up, forward);
-	const int atk = player_->HasAttackPower() ? player_->GetAttackPower() : 0;
+	const int atk = Gameplay::Of(player_).HasAttackPower() ? Gameplay::Of(player_).GetAttackPower() : 0;
 	SpawnPlayerMelee(player_, right, up, forward, meleePendingPrefab_, atk);
 }
 
@@ -1596,7 +1597,7 @@ void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 		meleeComboIndex_ = next;
 	}
 
-	std::string prefab = player_->FindBulletPrefab(slot);
+	std::string prefab = Gameplay::Of(player_).FindBulletPrefab(slot);
 	if (prefab.empty()) prefab = "TemporaryPlayerMelee"; // フォールバック
 
 	// 発生/持続/後隙/受付猶予をプレハブの MeleeParams から
@@ -2122,7 +2123,7 @@ void StagePlayScene::OnImGuiTuning() {
 			OnPlayerTakeDamage(10);
 		}
 		if (player_) {
-			const HP& hp = player_->GetHP();
+			const HP& hp = Gameplay::Of(player_).GetHP();
 			ImGui::Text("Player HP: %d / %d  (invuln=%.2f, lockout=%.2f)",
 				hp.currentHP, hp.maxHP, playerInvincibilityTimer_, shootLockoutTimer_);
 		}
@@ -2261,7 +2262,7 @@ void StagePlayScene::Initialize() {
 	// レールカメラ用スプライン（位置）
 	cameraPath_ = std::make_unique<SplineCurveActor>();
 	cameraPath_->SetName("CameraPath");
-	cameraPath_->SetTag(EntityTag::CameraPathSpline);
+	Gameplay::Of(cameraPath_).SetTag(EntityTag::CameraPathSpline);
 	cameraPath_->MutablePoints() = {
 		{   0.0f, 5.0f,   0.0f },
 		{  10.0f, 5.0f,  20.0f },
@@ -2273,7 +2274,7 @@ void StagePlayScene::Initialize() {
 	// レールカメラ用スプライン（注視点）— cameraPath を +Z に平行移動して前進視点にする
 	lookAtPath_ = std::make_unique<SplineCurveActor>();
 	lookAtPath_->SetName("LookAtPath");
-	lookAtPath_->SetTag(EntityTag::CameraLookAtSpline);
+	Gameplay::Of(lookAtPath_).SetTag(EntityTag::CameraLookAtSpline);
 	{
 		auto& src = cameraPath_->GetPoints();
 		std::vector<Vector3> dst;
@@ -2495,7 +2496,7 @@ void StagePlayScene::Update() {
 				{ rot.m[2][0], rot.m[2][1], rot.m[2][2] },
 			};
 
-			const Collider& col = player_->GetCollider();
+			const Collider& col = Gameplay::Of(player_).GetCollider();
 			Vector3 center = {
 				worldPos.x + col.offset.x,
 				worldPos.y + col.offset.y,
@@ -2618,7 +2619,7 @@ void StagePlayScene::Update() {
 				{ rotN.m[1][0], rotN.m[1][1], rotN.m[1][2] },
 				{ rotN.m[2][0], rotN.m[2][1], rotN.m[2][2] },
 			};
-			const Collider& colN = player_->GetCollider();
+			const Collider& colN = Gameplay::Of(player_).GetCollider();
 			Vector3 centerN = { worldPosN.x + colN.offset.x, worldPosN.y + colN.offset.y, worldPosN.z + colN.offset.z };
 			Vector3 heN{ 0.0f, 0.0f, 0.0f };
 			switch (colN.shape) {
@@ -2843,8 +2844,8 @@ void StagePlayScene::Update() {
 		const float clientH = static_cast<float>(WindowsApplication::kClientHeight);
 
 		auto checkEnemy = [&](IImGuiEditable* e, const Vector3& pos) {
-			if (!e || e->GetTag() != EntityTag::Enemy) return;
-			const auto& col = e->GetCollider();
+			if (!e || Gameplay::Of(e).GetTag() != EntityTag::Enemy) return;
+			const auto& col = Gameplay::Of(e).GetCollider();
 			if (!col.enabled || col.shape != ColliderShape::Sphere) return;
 			const Vector3 center{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
 
@@ -2951,7 +2952,7 @@ void StagePlayScene::Update() {
 		// レティクルが敵に重なっている時(hitEnemy)だけ判定。届くなら近接用テクスチャに切替。
 		bool meleeInRange = false;
 		if (hitEnemy && player_) {
-			std::string mprefab = player_->FindBulletPrefab("melee_w1");
+			std::string mprefab = Gameplay::Of(player_).FindBulletPrefab("melee_w1");
 			if (mprefab.empty()) mprefab = "TemporaryPlayerMelee";
 			float meleeRadius = 0.0f;
 			Vector3 meleeOff{ 0.0f, 0.0f, 0.0f };
@@ -3002,7 +3003,7 @@ void StagePlayScene::Update() {
 
 		// プレイヤープレハブからチャージ時間を反映（有効時のみ）
 		if (player_) {
-			const ChargeParams& chp = player_->GetChargeParams();
+			const ChargeParams& chp = Gameplay::Of(player_).GetChargeParams();
 			if (chp.enabled) {
 				chargeStage1Time_ = chp.stage1Time;
 				chargeStage2Time_ = chp.stage2Time;
@@ -3039,8 +3040,8 @@ void StagePlayScene::Update() {
 				// プレイヤープレハブのエフェクトスロットから取得（charge_start=瞬間 / charge_hold=保持ループ）
 				auto* effectMgr = EffectManager::GetInstance();
 				if (effectMgr) {
-					const std::string startEff = player_->FindEffect("charge_start");
-					const std::string holdEff  = player_->FindEffect("charge_hold");
+					const std::string startEff = Gameplay::Of(player_).FindEffect("charge_start");
+					const std::string holdEff  = Gameplay::Of(player_).FindEffect("charge_hold");
 					if (!startEff.empty()) chargeStartEffectHandle_ = effectMgr->Play(startEff, player_->GetTranslate());
 					if (!holdEff.empty())  chargeHoldEffectHandle_  = effectMgr->Play(holdEff, player_->GetTranslate());
 				}
@@ -3052,8 +3053,8 @@ void StagePlayScene::Update() {
 				playerChargeLevel_ = 2.0f;
 				auto* effectMgr = EffectManager::GetInstance();
 				if (effectMgr) {
-					const std::string startEff2 = player_->FindEffect("charge_start2");
-					const std::string holdEff2  = player_->FindEffect("charge_hold2");
+					const std::string startEff2 = Gameplay::Of(player_).FindEffect("charge_start2");
+					const std::string holdEff2  = Gameplay::Of(player_).FindEffect("charge_hold2");
 					if (!startEff2.empty()) effectMgr->Play(startEff2, player_->GetTranslate());
 					// charge_hold を charge_hold2 に差し替え
 					if (chargeHoldEffectHandle_ != kInvalidEffectHandle) {
@@ -3092,9 +3093,9 @@ void StagePlayScene::Update() {
 
 				// チャージレベルで弾プレハブを選択（normal / charge1 / charge2）
 				std::string bulletPrefab;
-				if (playerChargeLevel_ >= 2.0f)      bulletPrefab = player_->FindBulletPrefab("charge2");
-				else if (playerChargeLevel_ >= 1.0f) bulletPrefab = player_->FindBulletPrefab("charge1");
-				else                                  bulletPrefab = player_->FindBulletPrefab("normal");
+				if (playerChargeLevel_ >= 2.0f)      bulletPrefab = Gameplay::Of(player_).FindBulletPrefab("charge2");
+				else if (playerChargeLevel_ >= 1.0f) bulletPrefab = Gameplay::Of(player_).FindBulletPrefab("charge1");
+				else                                  bulletPrefab = Gameplay::Of(player_).FindBulletPrefab("normal");
 				if (bulletPrefab.empty()) bulletPrefab = "TemporaryPlayerBullet"; // フォールバック
 
 				// ロック中（レティクルが敵に重なっている）なら強ホーミング、最近敵のみなら軽ホーミング
@@ -3113,7 +3114,7 @@ void StagePlayScene::Update() {
 				// 精密射撃モードの加算（precisionBlend_ で補間）。
 				// 弾速は全弾に加算、ホーミング加算はロック中（強ホーミング）の弾だけに効かせる。
 				if (player_) {
-					const PrecisionParams& pp = player_->GetPrecisionParams();
+					const PrecisionParams& pp = Gameplay::Of(player_).GetPrecisionParams();
 					if (pp.enabled && precisionBlend_ > 0.0f) {
 						speed += pp.speedAdd * precisionBlend_;
 						if (isLocked) homing += pp.homingAdd * precisionBlend_;
@@ -3122,13 +3123,13 @@ void StagePlayScene::Update() {
 
 				const float homeStrength = homeTarget ? homing : 0.0f;
 				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
-				const int atk = (player_ && player_->HasAttackPower()) ? player_->GetAttackPower() : 0;
+				const int atk = (player_ && Gameplay::Of(player_).HasAttackPower()) ? Gameplay::Of(player_).GetAttackPower() : 0;
 				SpawnPlayerBullet(origin, dir, speed, lifetime,
 					colliderGrowth, homeTarget, homeStrength,
 					aimPlaneDistance_, bulletPrefab, atk);
 
 				// 連射間隔はプレイヤープレハブの ChargeParams.fireRate から
-				const float fr = player_->GetChargeParams().fireRate;
+				const float fr = Gameplay::Of(player_).GetChargeParams().fireRate;
 				fireTimer_ = (fr > 0.0f) ? fr : 0.12f;
 
 				// チャージ状態だった場合はリセット
@@ -3216,10 +3217,10 @@ void StagePlayScene::Update() {
 				if (m.waveEntryIndex < 0) continue;
 				if (static_cast<size_t>(m.waveEntryIndex) >= killAtT_.size()) continue;
 				if (killAtT_[m.waveEntryIndex] >= 0.0f) continue; // 既記録
-				if (m.entity->GetHP().IsDead()) {
+				if (Gameplay::Of(m.entity).GetHP().IsDead()) {
 					killAtT_[m.waveEntryIndex] = currentT;
 					// 撃破で加点（プレハブ側で設定された scoreValue を使う）
-					ScoreManager::GetInstance()->AddScore(m.entity->GetScoreValue());
+					ScoreManager::GetInstance()->AddScore(Gameplay::Of(m.entity).GetScoreValue());
 				}
 			}
 		}
@@ -3319,7 +3320,7 @@ void StagePlayScene::Update() {
 	// フレーム末尾でプレイヤーの最終位置・HP・シーンを毎フレーム記録する。
 	if (player_) {
 		const Vector3 p = player_->GetTranslate();
-		const HP& hp = player_->GetHP();
+		const HP& hp = Gameplay::Of(player_).GetHP();
 		SessionLogger::Instance().Write(SessionLogger::Category::State, SessionLogger::Level::Trace,
 			"frame=" + std::to_string(stateFrame_)
 			+ " x=" + std::to_string(p.x) + " y=" + std::to_string(p.y) + " z=" + std::to_string(p.z)
@@ -3504,7 +3505,7 @@ void StagePlayScene::Seek(float seconds) {
 	ResetDodgeState();
 	for (auto& p : dynamicPrimitives_) {
 		if (!p) continue;
-		const EntityTag t = p->GetTag();
+		const EntityTag t = Gameplay::Of(p).GetTag();
 		if (t == EntityTag::Enemy || t == EntityTag::Boss
 			|| t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack
 			|| t == EntityTag::PlayerMelee) {
@@ -3518,7 +3519,7 @@ void StagePlayScene::Seek(float seconds) {
 
 	for (auto& a : dynamicAnimated_) {
 		if (!a) continue;
-		const EntityTag t = a->GetTag();
+		const EntityTag t = Gameplay::Of(a).GetTag();
 		if (t == EntityTag::Enemy || t == EntityTag::Boss) {
 			deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
 		}
@@ -3646,7 +3647,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Object3D";
 		e["name"] = o->GetName();
-		e["tag"] = std::string(GetTagName(o->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(o).GetTag()));
 		e["dir"] = o->GetDirectoryPath();
 		e["file"] = o->GetModelFileName();
 		e["transform"] = TransformToJson(o->GetScale(), o->GetRotate(), o->GetTranslate());
@@ -3655,11 +3656,11 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 	for (const auto& a : dynamicAnimated_) {
 		if (!a) continue;
 		// プレイヤーは常にプレハブから復元するので保存しない（collider 等のプレハブ属性を確実に反映するため）
-		if (a->GetTag() == EntityTag::Player) continue;
+		if (Gameplay::Of(a).GetTag() == EntityTag::Player) continue;
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "AnimatedObject3D";
 		e["name"] = a->GetName();
-		e["tag"] = std::string(GetTagName(a->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(a).GetTag()));
 		e["dir"] = a->GetDirectoryPath();
 		e["file"] = a->GetModelFileName();
 		e["transform"] = TransformToJson(a->GetScale(), a->GetRotate(), a->GetTranslate());
@@ -3668,7 +3669,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 	for (const auto& p : dynamicPrimitives_) {
 		if (!p) continue;
 		// 弾は一時オブジェクトなのでシーン保存に含めない
-		const EntityTag t = p->GetTag();
+		const EntityTag t = Gameplay::Of(p).GetTag();
 		if (t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack) continue;
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Primitive";
@@ -3687,7 +3688,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Sprite";
 		e["name"] = s->GetName();
-		e["tag"] = std::string(GetTagName(s->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(s).GetTag()));
 		e["texture"] = s->GetTextureFilePath();
 		const Vector2& pos = s->GetPosition();
 		JsonValue p = JsonValue::MakeArray();
@@ -3701,7 +3702,7 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Spline";
 		e["name"] = sp->GetName();
-		e["tag"] = std::string(GetTagName(sp->GetTag()));
+		e["tag"] = std::string(GetTagName(Gameplay::Of(sp).GetTag()));
 		JsonValue ptsArr = JsonValue::MakeArray();
 		for (const auto& pt : sp->GetPoints()) {
 			ptsArr.Push(Vec3ToJson(pt));
@@ -3785,7 +3786,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!object3DInstances_.empty()) {
 				auto& back = object3DInstances_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 			}
@@ -3794,7 +3795,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicAnimated_.empty()) {
 				auto& back = dynamicAnimated_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 				if (tag == EntityTag::Player) player_ = back.get();
@@ -3809,7 +3810,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicPrimitives_.empty()) {
 				auto& back = dynamicPrimitives_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 				back->SetScale(sc);
 				back->SetRotate(ro);
 				std::string tex = e["texture"].AsString();
@@ -3822,7 +3823,7 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 			if (!dynamicSprites_.empty()) {
 				auto& back = dynamicSprites_.back();
 				back->SetName(name);
-				back->SetTag(tag);
+				Gameplay::Of(back).SetTag(tag);
 			}
 		} else if (type == "Spline") {
 			AddDynamicSpline(static_cast<int>(tag));
@@ -3875,7 +3876,7 @@ void StagePlayScene::InitializeHPBarUI() {
 
 	// プレイヤー HP を有効化（プレハブで enabled=false の場合に備えて）
 	if (player_) {
-		player_->GetHP().enabled = true;
+		Gameplay::Of(player_).GetHP().enabled = true;
 	}
 }
 
@@ -3922,7 +3923,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。
 	if (!justInv) {
 		const Vector3 playerPos = player_->GetTranslate();
-		const float playerR = player_->GetCollider().radius;
+		const float playerR = Gameplay::Of(player_).GetCollider().radius;
 
 		bool            hitFound = false;
 		int             incomingDamage = 0;
@@ -3933,14 +3934,14 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		for (size_t i = 0; i < bullets_.size(); ++i) {
 			auto& b = bullets_[i];
 			if (!b.primitive) continue;
-			if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+			if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
 			const Vector3* bp = b.primitive->GetEditableTranslate();
 			if (!bp) continue;
-			const float bulletR = b.primitive->GetCollider().radius;
+			const float bulletR = Gameplay::Of(b.primitive).GetCollider().radius;
 			float dx = playerPos.x - bp->x, dy = playerPos.y - bp->y, dz = playerPos.z - bp->z;
 			float sumR = playerR + bulletR;
 			if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
-				incomingDamage = b.primitive->GetDamageDealer().damage;
+				incomingDamage = Gameplay::Of(b.primitive).GetDamageDealer().damage;
 				if (incomingDamage <= 0) incomingDamage = 10;
 				hitBulletIndex = static_cast<int>(i);
 				attacker = nearestEnemy_; // 弾の発射元は不明なので画面上最近の敵を演出対象に
@@ -3956,11 +3957,11 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				IImGuiEditable* e = ctrl->entity_;
 				const Vector3* ep = e->GetEditableTranslate();
 				if (!ep) continue;
-				const float er = e->GetCollider().radius;
+				const float er = Gameplay::Of(e).GetCollider().radius;
 				float dx = playerPos.x - ep->x, dy = playerPos.y - ep->y, dz = playerPos.z - ep->z;
 				float sumR = playerR + er;
 				if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
-					incomingDamage = e->GetDamageDealer().damage;
+					incomingDamage = Gameplay::Of(e).GetDamageDealer().damage;
 					if (incomingDamage <= 0) incomingDamage = 10;
 					attacker = e;
 					hitFound = true;
@@ -3988,7 +3989,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	UpdateHPBarUI();
 
 	// HP=0 でゲームオーバー（リトライ：シーン再ロード）
-	if (player_->GetHP().IsDead() && !gameOverTriggered_) {
+	if (Gameplay::Of(player_).GetHP().IsDead() && !gameOverTriggered_) {
 		gameOverTriggered_ = true;
 		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
@@ -3999,7 +4000,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 	if (!player_) return;
 
-	player_->GetHP().TakeDamage(damageAmount);
+	Gameplay::Of(player_).GetHP().TakeDamage(damageAmount);
 
 	playerInvincibilityTimer_ = playerInvincibilityDuration_;
 	shootLockoutTimer_ = shootLockoutDuration_;
@@ -4012,7 +4013,7 @@ void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 void StagePlayScene::UpdateHPBarUI() {
 	if (!player_ || !hpBarForeground_ || !hpBarBackground_) return;
 
-	const HP& hp = player_->GetHP();
+	const HP& hp = Gameplay::Of(player_).GetHP();
 	if (hp.maxHP <= 0) return;
 
 	// 現在 HP の比率（緑ゲージはこれに即時追従、赤ゲージは追従目標）
@@ -4498,10 +4499,10 @@ void StagePlayScene::ExecuteDisruptorSlash() {
 	// 敵弾（EnemyAttack）：コライダー中心で判定
 	for (auto& b : bullets_) {
 		if (!b.primitive) continue;
-		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
 		const Vector3* p = b.primitive->GetEditableTranslate();
 		if (!p) continue;
-		const Collider& bc = b.primitive->GetCollider();
+		const Collider& bc = Gameplay::Of(b.primitive).GetCollider();
 		const Vector3 center{ p->x + bc.offset.x, p->y + bc.offset.y, p->z + bc.offset.z };
 		if (onLine(center, colliderWorldRadius(bc))) disruptorPendingBulletPrims_.push_back(static_cast<IImGuiEditable*>(b.primitive));
 	}
@@ -4510,11 +4511,11 @@ void StagePlayScene::ExecuteDisruptorSlash() {
 	std::unordered_set<IImGuiEditable*> seen;
 	auto consider = [&](IImGuiEditable* e) {
 		if (!e || !seen.insert(e).second) return;
-		const EntityTag tag = e->GetTag();
+		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 		const Vector3* p = e->GetEditableTranslate();
 		if (!p) return;
-		const Collider& col = e->GetCollider();
+		const Collider& col = Gameplay::Of(e).GetCollider();
 		const Vector3 center{ p->x + col.offset.x, p->y + col.offset.y, p->z + col.offset.z };
 		if (!onLine(center, colliderWorldRadius(col))) return;
 		accumDepth(center);
@@ -4690,15 +4691,15 @@ void StagePlayScene::ExecuteDisruptorKills() {
 	// 通常敵=即死（HP持ちは HP=0 で既存 kill-t/スコア/SweepDead 経路へ）。ボス=固定ダメージ。
 	for (IImGuiEditable* e : disruptorPendingEnemies_) {
 		if (!IsDynamicEntityAlive(e)) continue;
-		const EntityTag tag = e->GetTag();
+		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag == EntityTag::Boss) {
-			e->GetHP().TakeDamage(disruptorBossDamage_);
+			Gameplay::Of(e).GetHP().TakeDamage(disruptorBossDamage_);
 		} else {
-			HP& hp = e->GetHP();
+			HP& hp = Gameplay::Of(e).GetHP();
 			if (hp.enabled) {
 				hp.TakeDamage(hp.currentHP);
 			} else {
-				ScoreManager::GetInstance()->AddScore(e->GetScoreValue());
+				ScoreManager::GetInstance()->AddScore(Gameplay::Of(e).GetScoreValue());
 				DestroyDynamicEntity(e);
 			}
 		}
@@ -5223,7 +5224,7 @@ void StagePlayScene::UpdateSpecialBarrier() {
 	const float r2 = r * r;
 	for (auto& b : bullets_) {
 		if (!b.primitive) continue;
-		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
 		const Vector3* bp = b.primitive->GetEditableTranslate();
 		if (!bp) continue;
 		float dx = bp->x - playerPos.x;
@@ -5425,7 +5426,7 @@ void StagePlayScene::EnumerateLockonTargets() {
 	for (size_t i = 0; i < bullets_.size(); ++i) {
 		auto& b = bullets_[i];
 		if (!b.primitive) continue;
-		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
 		const Vector3* p = b.primitive->GetEditableTranslate();
 		if (!p) continue;
 		if (!isVisibleInClip(*p)) continue;
@@ -5433,7 +5434,7 @@ void StagePlayScene::EnumerateLockonTargets() {
 		c.entity = b.primitive;
 		c.bulletIndex = static_cast<int>(i);
 		c.dist2 = sqDistToPlayer(*p);
-		c.radius = b.primitive->GetCollider().radius;
+		c.radius = Gameplay::Of(b.primitive).GetCollider().radius;
 		cands.push_back(c);
 	}
 
@@ -5445,7 +5446,7 @@ void StagePlayScene::EnumerateLockonTargets() {
 	auto pushEnemy = [&](IImGuiEditable* e) {
 		if (!e) return;
 		if (!enemySeen.insert(e).second) return; // 重複
-		const EntityTag tag = e->GetTag();
+		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 		const Vector3* p = e->GetEditableTranslate();
 		if (!p) return;
@@ -5454,7 +5455,7 @@ void StagePlayScene::EnumerateLockonTargets() {
 		c.entity = e;
 		c.bulletIndex = -1;
 		c.dist2 = sqDistToPlayer(*p);
-		c.radius = e->GetCollider().radius;
+		c.radius = Gameplay::Of(e).GetCollider().radius;
 		cands.push_back(c);
 	};
 	for (auto& up : dynamicPrimitives_)  { pushEnemy(up.get()); }
@@ -5709,7 +5710,7 @@ void StagePlayScene::UpdateSpecialPhaseLockon(float realDt) {
 		float ellipseA = specialChargeStartRadiusH_; // 水平
 		float ellipseB = specialChargeStartRadiusV_; // 垂直
 		if ((ellipseA <= 0.0f || ellipseB <= 0.0f) && player_) {
-			const Collider& col = player_->GetCollider();
+			const Collider& col = Gameplay::Of(player_).GetCollider();
 			const float cr = col.capsuleRadius;
 			const float ch = col.capsuleHeight;
 			if (ellipseA <= 0.0f) ellipseA = (cr > 0.01f ? cr : 0.5f);
@@ -5839,7 +5840,7 @@ void StagePlayScene::CollectScreenTargets(std::vector<std::pair<IImGuiEditable*,
 	// 敵弾（EnemyAttack）
 	for (auto& b : bullets_) {
 		if (!b.primitive) continue;
-		if (b.primitive->GetTag() != EntityTag::EnemyAttack) continue;
+		if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
 		const Vector3* p = b.primitive->GetEditableTranslate();
 		if (!p || !isVisibleInClip(*p)) continue;
 		out.emplace_back(static_cast<IImGuiEditable*>(b.primitive), true);
@@ -5848,7 +5849,7 @@ void StagePlayScene::CollectScreenTargets(std::vector<std::pair<IImGuiEditable*,
 	std::unordered_set<IImGuiEditable*> seen;
 	auto pushEnemy = [&](IImGuiEditable* e) {
 		if (!e || !seen.insert(e).second) return;
-		const EntityTag tag = e->GetTag();
+		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 		const Vector3* p = e->GetEditableTranslate();
 		if (!p || !isVisibleInClip(*p)) return;
@@ -5863,7 +5864,7 @@ Vector3 StagePlayScene::SpecialPlayerCenter() const {
 	Vector3 base = player_ ? player_->GetTranslate() : Vector3{ 0.0f, 0.0f, 0.0f };
 	if (!player_) return base;
 	float off = specialPlayerCenterOffset_;
-	if (off <= 0.0f) off = player_->GetCollider().offset.y; // プレハブの足元→カプセル中心
+	if (off <= 0.0f) off = Gameplay::Of(player_).GetCollider().offset.y; // プレハブの足元→カプセル中心
 	if (off == 0.0f) return base;
 	// カメラ平面ベースの演出（楕円射影/放射）と整合するよう up はカメラ up を使う
 	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
@@ -5877,7 +5878,7 @@ Vector3 StagePlayScene::SpecialBoltStart(const Vector3& playerPos, const Vector3
 	float ellipseA = specialChargeStartRadiusH_;
 	float ellipseB = specialChargeStartRadiusV_;
 	if ((ellipseA <= 0.0f || ellipseB <= 0.0f) && player_) {
-		const Collider& col = player_->GetCollider();
+		const Collider& col = Gameplay::Of(player_).GetCollider();
 		const float cr = col.capsuleRadius;
 		const float ch = col.capsuleHeight;
 		if (ellipseA <= 0.0f) ellipseA = (cr > 0.01f ? cr : 0.5f);
@@ -5997,7 +5998,7 @@ void StagePlayScene::UpdateSpecialPhaseFire(float dt) {
 		// ダメージティック
 		while (fb.elapsed >= fb.nextTickTime) {
 			if (!fb.isBullet) {
-				fb.entity->GetHP().TakeDamage(specialFireTickDamage_);
+				Gameplay::Of(fb.entity).GetHP().TakeDamage(specialFireTickDamage_);
 			}
 			fb.nextTickTime += specialFireTickInterval_;
 		}
@@ -6012,7 +6013,7 @@ void StagePlayScene::UpdateSpecialPhaseFire(float dt) {
 				fb.done = true;
 			}
 		} else {
-			const bool dead = fb.entity->GetHP().IsDead();
+			const bool dead = Gameplay::Of(fb.entity).GetHP().IsDead();
 			if (dead && fb.elapsed >= specialFireMinHold_) {
 				fb.done = true; // 撃破（scoreは SweepDeadEntities 前の加点経路で処理）
 			} else if (fb.elapsed >= specialFireMaxHold_) {
@@ -6302,5 +6303,5 @@ void StagePlayScene::RefreshPlayerHpInvincibility() {
 	const bool specialInv = specialActive_ && specialInvincible_;  // 後隙(Recover)では false ＝被弾可能
 	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
 
-	player_->GetHP().enabled = !invincible;
+	Gameplay::Of(player_).GetHP().enabled = !invincible;
 }
