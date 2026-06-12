@@ -1,5 +1,5 @@
 #pragma once
-#include "BaseScene.h"
+#include "GameScene.h"
 #include <memory>
 
 class Camera;
@@ -9,7 +9,7 @@ class Camera;
 /// SPACE/Enter で Hub へ遷移。
 /// 一定時間無操作でデモプレイ動画を再生する仕様（未実装）
 /// </summary>
-class TitleScene : public BaseScene {
+class TitleScene : public GameScene {
 public:
 	TitleScene();
 	~TitleScene() override;

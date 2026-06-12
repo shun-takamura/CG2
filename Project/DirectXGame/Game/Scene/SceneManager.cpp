@@ -1,5 +1,6 @@
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
+#include "EngineTime.h"
 #include "AbstractSceneFactory.h"
 #include "TransitionManager.h"
 #include "DStorageManager.h"
@@ -43,6 +44,9 @@ void SceneManager::Finalize() {
 	if (currentScene_) {
 		currentScene_->Finalize();
 	}
+
+	// エンジン側の時間スケール供給元を解除（dangling 参照防止）
+	EngineTime::SetProvider(nullptr);
 }
 
 void SceneManager::Update() {
@@ -187,7 +191,7 @@ std::string SceneManager::GetLastUsedTransitionName() const {
 	return TransitionManager::GetInstance()->GetLastTransitionRecord().transitionName;
 }
 
-void SceneManager::SetupScene(BaseScene* scene) {
+void SceneManager::SetupScene(Scene* scene) {
 	if (scene) {
 		scene->SetSpriteManager(spriteManager_);
 		scene->SetObject3DManager(object3DManager_);
@@ -196,5 +200,8 @@ void SceneManager::SetupScene(BaseScene* scene) {
 		scene->SetDirectXCore(dxCore_);
 		scene->SetSRVManager(srvManager_);
 		scene->SetInputManager(input_);
+
+		// このシーンをエンジン側の時間スケール供給元として登録（Scene は ITimeScaleProvider）
+		EngineTime::SetProvider(scene);
 	}
 }

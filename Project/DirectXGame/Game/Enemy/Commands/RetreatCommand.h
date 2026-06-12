@@ -6,7 +6,7 @@
 /// <summary>
 /// 敵を一定ベクトルで画面外へ退避させて消滅させる。
 /// OnEnter でスプライン追従を切り離し、freeVelocity を設定する。
-/// 指定距離を移動したら IsFinished() → BaseScene がエンティティを破棄する。
+/// 指定距離を移動したら IsFinished() → GameScene がエンティティを破棄する。
 /// </summary>
 class RetreatCommand : public IEnemyCommand {
 public:

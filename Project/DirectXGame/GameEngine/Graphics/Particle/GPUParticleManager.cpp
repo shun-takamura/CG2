@@ -5,8 +5,7 @@
 #include "Material.h"
 #include "VertexData.h"
 #include "Log.h"
-#include "SceneManager.h"
-#include "BaseScene.h"
+#include "EngineTime.h"
 #include <cassert>
 
 #ifdef USE_IMGUI
@@ -231,14 +230,12 @@ void GPUParticleManager::Update(const Camera* camera, float deltaTime)
         cameraPosition_ = camera->GetTranslate();
     }
 
-    // シーン取得（TimeGroup連動dt用）
-    BaseScene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
-
     // 各グループのCBを更新
     for (auto& pair : groups_) {
         GPUParticleGroup& g = pair.second;
 
-        float dt = scene ? scene->GetScaledDeltaTime(g.timeGroup) : deltaTime;
+        // TimeGroup連動dt。供給元（シーン）が無ければ deltaTime にフォールバック
+        float dt = EngineTime::ScaledDeltaTime(g.timeGroup, deltaTime);
         g.elapsedTime += dt;
 
         // PerFrame

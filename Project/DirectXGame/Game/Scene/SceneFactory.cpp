@@ -5,7 +5,7 @@
 #include "ResultScene.h"
 #include "DemoScene.h"
 
-std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string& sceneName) {
+std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
 
     if (sceneName == "TITLE") {
         return std::make_unique<TitleScene>();

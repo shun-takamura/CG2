@@ -1,5 +1,5 @@
 #pragma once
-#include "BaseScene.h"
+#include "GameScene.h"
 #include <memory>
 
 class Camera;
@@ -9,7 +9,7 @@ class Camera;
 /// タブUIで「ステージセレクト / スキルショップ / スキル装備 / タイトル / 終了」を切り替える
 /// シーン遷移を挟まずタブ切替でビューを切り替える設計。
 /// </summary>
-class HubScene : public BaseScene {
+class HubScene : public GameScene {
 public:
 	enum class Tab {
 		StageSelect,

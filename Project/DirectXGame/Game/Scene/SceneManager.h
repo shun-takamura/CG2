@@ -4,7 +4,7 @@
 #include "BaseTransition.h"
 
 // 前方宣言
-class BaseScene;
+class Scene;
 class AbstractSceneFactory;
 class SpriteManager;
 class Object3DManager;
@@ -79,7 +79,7 @@ public:
 	/// <summary>
 	/// 現在のシーンを取得
 	/// </summary>
-	BaseScene* GetCurrentScene() const { return currentScene_.get(); }
+	Scene* GetCurrentScene() const { return currentScene_.get(); }
 
 	/// <summary>
 	/// 現在のシーン名を取得
@@ -118,15 +118,15 @@ private:
 	SceneManager(const SceneManager&) = delete;
 	SceneManager& operator=(const SceneManager&) = delete;
 
-	void SetupScene(BaseScene* scene);
+	void SetupScene(Scene* scene);
 	void ExecuteSceneChange();
 
 	// 現在のシーン
-	std::unique_ptr<BaseScene> currentScene_;
+	std::unique_ptr<Scene> currentScene_;
 	std::string currentSceneName_;
 
 	// 次のシーン（即時切り替え用）
-	std::unique_ptr<BaseScene> nextScene_;
+	std::unique_ptr<Scene> nextScene_;
 
 	// 予約されたシーン名（トランジション用）
 	std::string pendingSceneName_;

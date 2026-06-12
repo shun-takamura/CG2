@@ -1,7 +1,7 @@
 #include "HierarchyWindow.h"
 #include "ImGuiManager.h"
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
 #include "Components/EntityTag.h"
 
 #include <array>
@@ -13,7 +13,7 @@ void HierarchyWindow::OnDraw() {
 
     const auto& editables = manager_->GetEditables();
     IImGuiEditable* selected = manager_->GetSelected();
-    BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+    Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
 
     // 検索フィルター
     static char searchBuffer[256] = "";

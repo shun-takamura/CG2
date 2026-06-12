@@ -4,7 +4,7 @@
 #include "PrimitiveInstance.h"
 #include "AssetLocator.h"
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
 #include "Components/EntityTag.h"
 #include "Components/PrefabManager.h"
 #include "Components/Prefab.h"

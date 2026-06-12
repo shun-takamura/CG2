@@ -5,7 +5,7 @@
 
 #include "SceneEditorWindow.h"  // ModelDropPayload / SpriteDropPayload / AnimatedDropPayload
 #include "SceneManager.h"
-#include "BaseScene.h"
+#include "Scene.h"
 #include "WindowsApplication.h"  // kClientWidth / kClientHeight
 #include "Camera.h"
 #include "Matrix4x4.h"
@@ -73,7 +73,7 @@ void ViewportWindow::OnDraw() {
 
     // --- 再生/停止コントロール（現在シーンの sceneTimeScale を 0/1 に切り替え） ---
     {
-        BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+        Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
         const bool isPaused = scene && scene->GetSceneTimeScale() == 0.0f;
         if (ImGui::Button(isPaused ? "Play" : "Pause")) {
             if (scene) scene->SetSceneTimeScale(isPaused ? 1.0f : 0.0f);
@@ -117,7 +117,7 @@ void ViewportWindow::OnDraw() {
 
     // ----- SceneEditor からのドロップ受付 -----
     if (ImGui::BeginDragDropTarget()) {
-        BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene();
+        Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
 
         // マウス位置 → ビューポート画像相対座標 (0..1) → ワールド座標 (Y=0平面)
         Vector3 worldPos{ 0.0f, 0.0f, 0.0f };

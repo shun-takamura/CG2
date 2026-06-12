@@ -6,7 +6,7 @@
 #include "Commands/WanderInScreenCommand.h"
 #include "Commands/RetreatCommand.h"
 #include "IImGuiEditable.h"
-#include "Scene/BaseScene.h"
+#include "Scene/GameScene.h"
 
 /// <summary>
 /// 運び屋（Carrier）用：一定間隔で子敵を生成する。

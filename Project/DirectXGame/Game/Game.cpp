@@ -26,7 +26,7 @@
 #include "GPUParticleManager.h"
 #include "Effect/EffectManager.h"
 #include "Components/PrefabManager.h"
-#include "Scene/BaseScene.h"
+#include "Scene/Scene.h"
 #include "LightManager.h"
 #include <memory>
 
@@ -129,7 +129,7 @@ void Game::Draw() {
 	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
 	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
 	if (shadowMap_) {
-		if (BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+		if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
 			if (Camera* cam = scene->GetCamera()) {
 				auto* dl = LightManager::GetInstance()->GetDirectionalLightData();
 				// 無効時もカスケード更新（enabled フラグを CB に反映）するが、深度描画は省略
@@ -173,7 +173,7 @@ void Game::Draw() {
 	postEffect_->EndSceneRender(dxCore_->GetCommandList());
 
 	// ----- ID Pass：ハイライト対象を idMaskRT に書き込む -----
-	if (BaseScene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+	if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
 		if (!scene->GetHighlights().empty()) {
 			auto* cmd = dxCore_->GetCommandList();
 			postEffect_->BeginIdPass(cmd);
@@ -251,7 +251,7 @@ void Game::Draw() {
 	// Releaseビルド: Swapchainへ直接出力
 	// Debugビルド  : Viewport表示用 RenderTexture へ出力 → ImGui::Image で表示
 	auto* cmd = dxCore_->GetCommandList();
-	BaseScene* afterScene = SceneManager::GetInstance()->GetCurrentScene();
+	Scene* afterScene = SceneManager::GetInstance()->GetCurrentScene();
 #ifdef _DEBUG
 	postEffect_->Draw(cmd, viewportRenderTexture_.get());
 	// PostEffect 後のオーバーレイ（崩壊破片など）を viewportRT に重ねる。
