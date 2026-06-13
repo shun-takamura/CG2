@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.12.35728.132
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11822.322 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CG2_0_1", "CG2_0_1.vcxproj", "{ED0974D8-3163-48C5-9656-8F616C55D717}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -16,6 +16,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DirectXTex", "externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj", "{371B9FA9-4C90-4AC6-A123-ACED756D6C77}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gdeflate_compress", "tools\cpp\gdeflate_compress\gdeflate_compress.vcxproj", "{C0DEF1A7-1234-4567-89AB-CDEF01234567}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EngineCore", "EngineCore\EngineCore.vcxproj", "{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,6 +44,12 @@ Global
 		{C0DEF1A7-1234-4567-89AB-CDEF01234567}.Development|x64.Build.0 = Development|x64
 		{C0DEF1A7-1234-4567-89AB-CDEF01234567}.Release|x64.ActiveCfg = Release|x64
 		{C0DEF1A7-1234-4567-89AB-CDEF01234567}.Release|x64.Build.0 = Release|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Debug|x64.ActiveCfg = Debug|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Debug|x64.Build.0 = Debug|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Development|x64.ActiveCfg = Development|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Development|x64.Build.0 = Development|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Release|x64.ActiveCfg = Release|x64
+		{E662EA4F-4173-4E9C-92CC-4E4F11809A7F}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

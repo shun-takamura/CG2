@@ -97,7 +97,10 @@ void Framework::Initialize() {
 					seedProvided = true;
 				} else if (std::wcscmp(argv[i], L"--replay") == 0 && i + 1 < argc) {
 					const std::wstring w = argv[i + 1];
-					replayDir.assign(w.begin(), w.end());  // パスは ASCII 前提
+					// パスは ASCII 前提。wchar_t→char は明示キャストして C4244 を避ける
+					replayDir.clear();
+					replayDir.reserve(w.size());
+					for (wchar_t c : w) replayDir.push_back(static_cast<char>(c));
 				}
 			}
 			::LocalFree(argv);

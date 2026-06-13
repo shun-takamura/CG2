@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{e662ea4f-4173-4e9c-92cc-4e4f11809a7f}</ProjectGuid>
+    <RootNamespace>EngineCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(SolutionDir)Common.props" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IntDir>$(SolutionDir)..\Generated\Obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\Generated\Output\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <IntDir>$(SolutionDir)..\Generated\Obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\Generated\Output\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IntDir>$(SolutionDir)..\Generated\Obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\Generated\Output\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\CameraCapture.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\CameraPreviewSprite.cpp" />
+    <ClCompile Include="..\DirectXGame\Debug\Debug.cpp" />
+    <ClCompile Include="..\DirectXGame\Debug\LogBuffer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\PhysicalBinding.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\InputAction.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Camera\Camera.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\DirectXCore.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\ReplaySystem.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\AssetLocator.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\DStorageManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\ConvertStringClass.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Camera\DebugCamera.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Light\LightManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Shadow\ShadowMap.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\RenderTexture.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\MathUtility.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Scene\Scene.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Easing.cpp" />
+    <ClCompile Include="..\externals\ImGui_Docking\imgui.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\imgui_demo.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\imgui_draw.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\backends\imgui_impl_dx12.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\backends\imgui_impl_win32.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\imgui_tables.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\externals\ImGui_Docking\imgui_widgets.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceObject.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\PathManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\WindowsApplication.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelCore.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\EngineTime.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\Log.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\SessionLogger.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\RandomGenerator.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\CrashHandler.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\TextureManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectDef.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\LightningRuntime.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Sound\SoundManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\MouseInput.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Framework.cpp" />
+    <ClCompile Include="..\externals\quirc\decode.c" />
+    <ClCompile Include="..\externals\quirc\identify.c">
+      <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</TreatWarningAsError>
+      <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="..\externals\quirc\quirc.c" />
+    <ClCompile Include="..\externals\quirc\version_db.c" />
+    <ClCompile Include="..\DirectXGame\GameEngine\QRCodeReader.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\GameData.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\RadialBlurEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DissolveEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineDepthEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineNormalEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Skybox\Skybox.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Quaternion.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Skeleton.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Text\FontAtlas.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Text\TextRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\External\stb_truetype_impl.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\BillboardMode.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectDef.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectPrimitiveRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\LightningRuntime.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\MeshData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMaterial.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxTransformationMatrix.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxVertexData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Interpolator.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\QuaternionTransform.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\CameraCapture.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\CameraPreviewSprite.h" />
+    <ClInclude Include="..\DirectXGame\Debug\Debug.h" />
+    <ClInclude Include="..\DirectXGame\Debug\LogBuffer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\ControllerInput.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\PhysicalBinding.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\InputAction.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Camera\Camera.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\DirectXCore.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\ReplaySystem.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\AssetLocator.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\DStorageManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\TimeGroup.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\ConvertStringClass.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Camera\CameraForGPU.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Camera\DebugCamera.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\DirectionalLight.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\LightManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Shadow\ShadowMap.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\PointLight.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\SpotLight.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\RenderTexture.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteMaterialData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteVertexData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\MathUtility.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector2.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector2Int.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Scene\AbstractSceneFactory.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Scene\ISceneRunner.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Easing.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\EmitParam.h" />
+    <ClInclude Include="..\externals\ImGUI\imconfig.h" />
+    <ClInclude Include="..\externals\ImGUI\imgui.h" />
+    <ClInclude Include="..\externals\ImGUI\imgui_impl_dx12.h" />
+    <ClInclude Include="..\externals\ImGUI\imgui_impl_win32.h" />
+    <ClInclude Include="..\externals\ImGUI\imgui_internal.h" />
+    <ClInclude Include="..\externals\ImGUI\imstb_rectpack.h" />
+    <ClInclude Include="..\externals\ImGUI\imstb_textedit.h" />
+    <ClInclude Include="..\externals\ImGUI\imstb_truetype.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Material.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Matrix3x3.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Matrix4x4.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceObject.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Transform.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\TransformationMatrix.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector3.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector4.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\VertexData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\PathManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\WindowsApplication.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Object3DManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Object3DInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelCore.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\ConvertString.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\EngineTime.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\ITimeScaleProvider.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Log.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\SessionLogger.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\RandomGenerator.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\CrashHandler.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\TextureManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\DDSHeader.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\SRVManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\ParticleManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Sound\SoundManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\MouseInput.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\InputManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Framework.h" />
+    <ClInclude Include="..\externals\quirc\quirc.h" />
+    <ClInclude Include="..\externals\quirc\quirc_internal.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\QRCodeReader.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\GameData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\RadialBlurEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DissolveEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineDepthEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\OutlineNormalEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\Skybox.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveGenerator.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitivePipeline.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMesh.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitivePrefabParams.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Quaternion.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinningComputeManager.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Text\FontAtlas.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Text\TextRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Utf8.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
