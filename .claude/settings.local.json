@@ -27,7 +27,10 @@
       "PowerShell(git ls-files | ForEach-Object { \\($_ -split '/'\\)[0..1] -join '/' } | Sort-Object -Unique)",
       "Bash(grep -n 'DirectXGame\\\\\\\\GameEngine\\\\\\\\Core\\\\\\\\DirectXCore.cpp\"' Project/CG2_0_1.vcxproj)",
       "Bash(grep -n 'DirectXGame\\\\\\\\GameEngine\\\\\\\\Core\\\\\\\\DirectXCore.h\"' Project/CG2_0_1.vcxproj)",
-      "Bash(grep -n 'Core\\\\\\\\DirectXCore' Project/CG2_0_1.vcxproj.filters)"
+      "Bash(grep -n 'Core\\\\\\\\DirectXCore' Project/CG2_0_1.vcxproj.filters)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(git remote *)"
     ]
   }
 }

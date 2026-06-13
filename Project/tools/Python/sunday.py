@@ -28,6 +28,8 @@ import pygetwindow as gw
 import vgamepad as vg  # 仮想Xboxコントローラ（要 ViGEmBus ドライバ + pip install vgamepad）
 
 import test_run  # GAME_EXE / PROJECT_DIR / WINDOW_TITLE を借りる
+import crash_analyze  # Step8b: Ollama原因究明 + Haikuダブルチェック
+import github_report  # Step8c: REPRODUCIBLE クラッシュを GitHub Issue 起票
 
 # ---- 調整パラメータ（しきい値は環境に合わせて触る） ----
 LOGS_DIR = test_run.PROJECT_DIR / "Logs"
@@ -44,6 +46,10 @@ NAV_INTERVAL = 0.7      # Title/Hub/Result で Enter を送る間隔
 # state.log の frame がここまで進んだら「ゲームが本当に動き出した」とみなして検知を始める。
 READY_FRAMES = 30       # この frame に到達したら稼働中と判定
 STARTUP_TIMEOUT = 60.0  # この秒数内に動き出さなければ起動失敗として扱う
+
+# 再現性判定（CRASH検知時）: --replay でM回再生し、再現するか確認
+REPLAY_RUNS = 3
+REPLAY_TIMEOUT = 180.0  # 1回の再生がこの秒数を超えたら打ち切り（記録分を再生し終える想定）
 
 # STAGEPLAY中のランダム入力。仮想Xboxコントローラ(vgamepad)で送るため
 # ウィンドウのフォーカス/マウス位置に依存しない（XInputはフォーカス無関係に読まれる）。
@@ -373,6 +379,107 @@ def report_anomaly(finding):
     print("=" * 60 + "\n")
 
 
+def reproduce_crash(orig_session_dir):
+    """記録セッションを --replay で REPLAY_RUNS 回再生し、クラッシュが再現するか判定。
+    決定論リプレイ（同一シード＋dt列＋入力）なので、ロジック起因なら毎回再現する。
+    (reproduced_count, total) を返す。"""
+    print(f"[SUNDAY] 再現性判定: {orig_session_dir.name} を {REPLAY_RUNS} 回再生して確認...")
+    reproduced = 0
+    for i in range(REPLAY_RUNS):
+        launch_ts = time.time()
+        proc = subprocess.Popen(
+            [str(test_run.GAME_EXE), "--replay", str(orig_session_dir)],
+            cwd=str(test_run.PROJECT_DIR))
+        replay_dir = find_session_dir(launch_ts)
+
+        # プロセス終了まで待つ（再生し終える=正常終了 / クラッシュ=異常終了+crash.dmp）
+        deadline = time.time() + REPLAY_TIMEOUT
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(0.2)
+
+        crashed = False
+        if proc.poll() is None:
+            proc.terminate()  # タイムアウト（再現せずに走り切れなかった）
+        elif replay_dir and (replay_dir / "crash.dmp").exists():
+            crashed = True
+        elif proc.returncode not in (0, None):
+            crashed = True  # dmp は無いが異常終了
+
+        reproduced += 1 if crashed else 0
+        tag = "再現(CRASH)" if crashed else "再現せず"
+        print(f"  [{i + 1}/{REPLAY_RUNS}] {tag}"
+              + (f"  ({replay_dir.name})" if replay_dir else ""))
+        time.sleep(0.5)
+    return reproduced, REPLAY_RUNS
+
+
+def report_reproduce(finding, result):
+    """再現性判定の結果を anomalies.jsonl に追記し通知。"""
+    reproduced, total = result
+    if reproduced == total:
+        verdict = "REPRODUCIBLE"     # 毎回再現＝再現性ありバグ（高優先）
+    elif reproduced > 0:
+        verdict = "FLAKY"            # たまに再現
+    else:
+        verdict = "NOT_REPRODUCED"   # 環境・タイミング依存
+
+    rec = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "type": "REPRODUCE_RESULT",
+        "of": finding["type"],
+        "verdict": verdict,
+        "reproduced": reproduced,
+        "runs": total,
+        "seed": finding["seed"],
+        "session_dir": finding["session_dir"],
+    }
+    out = Path(finding["session_dir"]) / "anomalies.jsonl"
+    with out.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print("\n" + "#" * 60)
+    print(f"[SUNDAY] 再現性判定: {verdict}  ({reproduced}/{total} 回再現)")
+    print(f"  seed={finding['seed']}  session={finding['session_dir']}")
+    print("#" * 60 + "\n")
+    return verdict
+
+
+def save_analysis(finding, analysis):
+    """Ollama のクラッシュ原因分析を anomalies.jsonl に追記し、コンソールへ表示。"""
+    rec = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "type": "CRASH_ANALYSIS",
+        "session_dir": finding["session_dir"],
+        "seed": finding["seed"],
+        "analysis": analysis,
+    }
+    out = Path(finding["session_dir"]) / "anomalies.jsonl"
+    with out.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print("\n----- クラッシュ原因究明 (Ollama) -----")
+    print(analysis)
+    print("--------------------------------------\n")
+
+
+def save_double_check(finding, ollama_analysis, check):
+    """Haikuダブルチェックの結果(verdict+両者の分析)を anomalies.jsonl に追記し表示。"""
+    rec = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "type": "DOUBLE_CHECK",
+        "session_dir": finding["session_dir"],
+        "seed": finding["seed"],
+        "verdict": check["verdict"],     # AGREE / DISAGREE / OLLAMA_LOCATION_WRONG / UNKNOWN
+        "ollama": ollama_analysis,
+        "haiku": check["analysis"],
+    }
+    out = Path(finding["session_dir"]) / "anomalies.jsonl"
+    with out.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print("\n----- ダブルチェック (Haiku) -----")
+    print(f"VERDICT: {check['verdict']}")
+    print(check["analysis"])
+    print("----------------------------------\n")
+
+
 def run_session():
     """ゲームを1回起動し、終了/異常まで監視する。finding or None を返す。"""
     launch_ts = time.time()
@@ -458,7 +565,22 @@ def main():
     print("[SUNDAY] 起動。Ctrl+C で停止。")
     try:
         while True:
-            run_session()
+            finding = run_session()
+            # CRASH を検知したら、同じ記録を再生して再現性を判定する
+            if finding and finding.get("type") == "CRASH":
+                result = reproduce_crash(Path(finding["session_dir"]))
+                verdict = report_reproduce(finding, result)
+                # 再現性ありのクラッシュ: Ollamaで原因究明 → Haikuでダブルチェック → Issue起票
+                if verdict == "REPRODUCIBLE":
+                    analysis = crash_analyze.analyze_crash(finding["session_dir"])
+                    check = None
+                    if analysis:
+                        save_analysis(finding, analysis)
+                        check = crash_analyze.double_check(finding["session_dir"], analysis)
+                        if check:
+                            save_double_check(finding, analysis, check)
+                    # GitHub Issue 起票（GITHUB_TOKEN が無ければ内部でスキップ）
+                    github_report.report_crash(finding, analysis, check)
             time.sleep(1.0)  # 次セッションまで小休止
     except KeyboardInterrupt:
         print("\n[SUNDAY] 停止しました。")
