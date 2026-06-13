@@ -8,6 +8,7 @@
 
 import asyncio
 import os
+import threading
 from pathlib import Path
 
 import discord
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 import test_run  # 同フォルダの「ゲーム起動＆スクショ」モジュール
 import git_pipeline  # 同フォルダの「AI編集→ビルド→push」モジュール
 import live_control  # 同フォルダの「配信制御」モジュール
+import sunday  # 無人ゲーム自動検証(S.U.N.D.A.Y.)本体
 
 # /refactor で使う定型指示（規約クリーンアップ。実際の規約は ai_edit のシステムプロンプト側）
 REFACTOR_INSTRUCTION = "コーディング規約に従って変数名・冗長コードを整理してリファクタリングして"
@@ -168,6 +170,68 @@ async def live_stop_cmd(interaction: discord.Interaction):
         )
     except Exception as e:
         await interaction.followup.send(f"{interaction.user.mention} ❌ 配信停止失敗: {e}")
+
+
+# S.U.N.D.A.Y. の稼働状態（Botプロセス内で同時に1つだけ動かす）
+_sunday_thread = None   # sunday.run を回している別スレッド
+_sunday_stop = None     # その停止フラグ（threading.Event）
+
+
+# /sunday_start コマンド：無人ゲーム自動検証を別スレッドで開始する
+@tree.command(name="sunday_start", description="無人ゲーム自動検証(S.U.N.D.A.Y.)を開始する")
+async def sunday_start_cmd(interaction: discord.Interaction):
+    global _sunday_thread, _sunday_stop
+    await interaction.response.defer()
+    if _sunday_thread and _sunday_thread.is_alive():
+        await interaction.followup.send(
+            f"{interaction.user.mention} ⚠️ S.U.N.D.A.Y. は既に稼働中です。停止は `/sunday_stop`。")
+        return
+
+    # 通知先チャンネルと asyncio ループを今のうちに掴んでおく
+    # （sunday.run は別スレッドで回るので、Discord送信はこのループへ橋渡しする必要がある）
+    channel = interaction.channel
+    loop = asyncio.get_running_loop()
+
+    def on_issue(issue_no, finding):
+        # 別スレッド(sunday.run)から呼ばれる。discord送信はループ上でしか出来ないので投げ込む。
+        url = f"https://github.com/shun-takamura/CG2/issues/{issue_no}"
+        msg = (f"🐛 S.U.N.D.A.Y. がクラッシュを検知し Issue #{issue_no} を起票/更新しました。\n"
+               f"シーン: `{finding.get('scene')}`  seed: `{finding.get('seed')}`\n{url}")
+        asyncio.run_coroutine_threadsafe(channel.send(msg), loop)
+
+    _sunday_stop = threading.Event()
+    _sunday_thread = threading.Thread(
+        target=sunday.run,
+        kwargs={"stop_event": _sunday_stop, "on_issue": on_issue},
+        daemon=True,  # Botを閉じたら一緒に落とす
+    )
+    _sunday_thread.start()
+    await interaction.followup.send(
+        f"{interaction.user.mention} ▶️ S.U.N.D.A.Y. 開始。無人でゲームを遊び続け、"
+        f"再現性のあるクラッシュを見つけたらこのチャンネルに Issue 番号を通知します。停止は `/sunday_stop`。")
+
+
+# /sunday_stop コマンド：無人ゲーム自動検証を停止する
+@tree.command(name="sunday_stop", description="無人ゲーム自動検証(S.U.N.D.A.Y.)を停止する")
+async def sunday_stop_cmd(interaction: discord.Interaction):
+    global _sunday_thread, _sunday_stop
+    await interaction.response.defer()
+    if not (_sunday_thread and _sunday_thread.is_alive()):
+        await interaction.followup.send(
+            f"{interaction.user.mention} ⚠️ S.U.N.D.A.Y. は稼働していません。")
+        return
+
+    _sunday_stop.set()  # ループに停止を依頼（現在のセッション/再生は速やかに畳まれる）
+    # クラッシュ解析中(Ollama/Haiku)だと止まるまで時間がかかるので、待ち過ぎない範囲で join
+    await asyncio.to_thread(_sunday_thread.join, 60.0)
+    if _sunday_thread.is_alive():
+        await interaction.followup.send(
+            f"{interaction.user.mention} ⏳ 停止要求を送りました。"
+            f"クラッシュ解析中のため、現在の処理が終わり次第停止します。")
+    else:
+        _sunday_thread = None
+        _sunday_stop = None
+        await interaction.followup.send(f"{interaction.user.mention} ⏹️ S.U.N.D.A.Y. 停止しました。")
 
 
 # Botがログインしてオンラインになった瞬間に1度だけ呼ばれる

@@ -43,10 +43,14 @@
 
 ## 3. 次のタスク（ここから再開）
 
-**ステップ8（Ollama下書き→Haikuダブルチェック→3分類→GitHub Issue起票）は完了・実起票まで動作確認済(2026-06-13)。次はステップ9。**
+**ステップ8・9とも実装完了。全工程（C++計装→Python検知→再現→原因究明→ダブルチェック→Issue起票→Discord遠隔操作）が一通り繋がった。残りは実セッションでの通しソーク検証と運用調整。**
 
-### 9: JARVIS統合（ここから再開）
-- `jarvis_bot.py` に `/sunday_start` `/sunday_stop`(別スレッドでsunday.pyをオーケストレート)。Discordには「Issue #N 起票」通知のみ。
+### 実装済（要・実セッション通し検証）
+- **9: JARVIS統合(2026-06-13実装)**: `jarvis_bot.py` に `/sunday_start` `/sunday_stop` 追加。`sunday.run(stop_event, on_issue)` を **daemonスレッド**で回す。`sunday.py` は `main()`→`run()` に分離、`run_session`/`reproduce_crash` に `stop_event` を通し稼働中セッション/再生も速やかに畳める(クラッシュ解析中=Ollama/Haikuのみ即停止不可→現処理後に停止)。Issue起票時 `on_issue(issue_no, finding)` → `asyncio.run_coroutine_threadsafe` でDiscordへ「Issue #N」通知(起動チャンネル宛)。同時稼働は1つ(`_sunday_thread`/`_sunday_stop` で管理)。`/sunday_stop` は `stop_event.set()`＋60s join、解析中なら「現処理後に停止」と返す。
+
+### 次にやること
+- **実セッション通しソーク検証**: 自宅PCで `python jarvis_bot.py` → スマホDiscordで `/sunday_start` → 温存バグ(下記)でクラッシュ→再現→Ollama+Haiku→Issue起票→Discord通知、までの一気通貫を実機確認。複数クラッシュで同シーンが**同一Issueにコメント集約**されるか、`/sunday_stop` の停止応答も確認。
+- 運用調整候補: STUCK実効化(画面内オフセットをstate.logへ／要C++小改修・要相談)、ソーク中のGPU検証コスト、FLAKY/NOT_REPRODUCEDの扱い、起票対象を広げるか。
 
 ---
 
