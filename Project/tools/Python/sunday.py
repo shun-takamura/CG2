@@ -379,13 +379,15 @@ def report_anomaly(finding):
     print("=" * 60 + "\n")
 
 
-def reproduce_crash(orig_session_dir):
+def reproduce_crash(orig_session_dir, stop_event=None):
     """記録セッションを --replay で REPLAY_RUNS 回再生し、クラッシュが再現するか判定。
     決定論リプレイ（同一シード＋dt列＋入力）なので、ロジック起因なら毎回再現する。
-    (reproduced_count, total) を返す。"""
+    (reproduced_count, total) を返す。stop_event.set() で途中打ち切り。"""
     print(f"[SUNDAY] 再現性判定: {orig_session_dir.name} を {REPLAY_RUNS} 回再生して確認...")
     reproduced = 0
     for i in range(REPLAY_RUNS):
+        if stop_event and stop_event.is_set():
+            break
         launch_ts = time.time()
         proc = subprocess.Popen(
             [str(test_run.GAME_EXE), "--replay", str(orig_session_dir)],
@@ -395,6 +397,9 @@ def reproduce_crash(orig_session_dir):
         # プロセス終了まで待つ（再生し終える=正常終了 / クラッシュ=異常終了+crash.dmp）
         deadline = time.time() + REPLAY_TIMEOUT
         while proc.poll() is None and time.time() < deadline:
+            if stop_event and stop_event.is_set():
+                proc.terminate()
+                break
             time.sleep(0.2)
 
         crashed = False
@@ -480,8 +485,9 @@ def save_double_check(finding, ollama_analysis, check):
     print("----------------------------------\n")
 
 
-def run_session():
-    """ゲームを1回起動し、終了/異常まで監視する。finding or None を返す。"""
+def run_session(stop_event=None):
+    """ゲームを1回起動し、終了/異常まで監視する。finding or None を返す。
+    stop_event.set() で起動待ち中・監視中いずれも速やかに畳んで None を返す。"""
     launch_ts = time.time()
     proc = subprocess.Popen([str(test_run.GAME_EXE)], cwd=str(test_run.PROJECT_DIR))
 
@@ -501,6 +507,9 @@ def run_session():
     while True:
         now = time.time()
         sess.pump_logs()
+        if stop_event and stop_event.is_set():
+            proc.terminate()
+            return None
         if proc.poll() is not None:
             dmp = session_dir / "crash.dmp"
             finding = sess._finding(
@@ -532,6 +541,9 @@ def run_session():
             now = time.time()
             sess.pump_logs()
 
+            if stop_event and stop_event.is_set():
+                return None  # finally で driver 解放 + proc 終了
+
             finding = sess.detect(driver)
             if finding:
                 report_anomaly(finding)
@@ -561,27 +573,50 @@ def run_session():
             proc.terminate()
 
 
+def _interruptible_sleep(seconds, stop_event):
+    """stop_event を見ながら待つ（停止要求に素早く反応できるよう細切れに眠る）。"""
+    end = time.time() + seconds
+    while time.time() < end:
+        if stop_event and stop_event.is_set():
+            return
+        time.sleep(0.1)
+
+
+def run(stop_event=None, on_issue=None):
+    """SUNDAY のメインループ。無人でゲームを起動し続け、異常→再現→原因究明→Issue起票を回す。
+    stop_event.set() で停止（JARVIS の /sunday_stop から別スレッド越しに使う）。
+    Issue を起票/更新できたら on_issue(issue_no, finding) を呼ぶ（Discord通知用）。"""
+    print("[SUNDAY] 起動。")
+    while not (stop_event and stop_event.is_set()):
+        finding = run_session(stop_event)
+        # CRASH を検知したら、同じ記録を再生して再現性を判定する
+        if finding and finding.get("type") == "CRASH":
+            result = reproduce_crash(Path(finding["session_dir"]), stop_event)
+            verdict = report_reproduce(finding, result)
+            # 再現性ありのクラッシュ: Ollamaで原因究明 → Haikuでダブルチェック → Issue起票
+            if verdict == "REPRODUCIBLE":
+                analysis = crash_analyze.analyze_crash(finding["session_dir"])
+                check = None
+                if analysis:
+                    save_analysis(finding, analysis)
+                    check = crash_analyze.double_check(finding["session_dir"], analysis)
+                    if check:
+                        save_double_check(finding, analysis, check)
+                # GitHub Issue 起票（GITHUB_TOKEN が無ければ内部でスキップ）
+                issue_no = github_report.report_crash(finding, analysis, check)
+                if issue_no and on_issue:
+                    try:
+                        on_issue(issue_no, finding)
+                    except Exception as e:
+                        print(f"[SUNDAY] Issue通知に失敗: {e}")
+        _interruptible_sleep(1.0, stop_event)  # 次セッションまで小休止
+    print("[SUNDAY] 停止しました。")
+
+
 def main():
-    print("[SUNDAY] 起動。Ctrl+C で停止。")
+    print("[SUNDAY] 単体起動。Ctrl+C で停止。")
     try:
-        while True:
-            finding = run_session()
-            # CRASH を検知したら、同じ記録を再生して再現性を判定する
-            if finding and finding.get("type") == "CRASH":
-                result = reproduce_crash(Path(finding["session_dir"]))
-                verdict = report_reproduce(finding, result)
-                # 再現性ありのクラッシュ: Ollamaで原因究明 → Haikuでダブルチェック → Issue起票
-                if verdict == "REPRODUCIBLE":
-                    analysis = crash_analyze.analyze_crash(finding["session_dir"])
-                    check = None
-                    if analysis:
-                        save_analysis(finding, analysis)
-                        check = crash_analyze.double_check(finding["session_dir"], analysis)
-                        if check:
-                            save_double_check(finding, analysis, check)
-                    # GitHub Issue 起票（GITHUB_TOKEN が無ければ内部でスキップ）
-                    github_report.report_crash(finding, analysis, check)
-            time.sleep(1.0)  # 次セッションまで小休止
+        run()
     except KeyboardInterrupt:
         print("\n[SUNDAY] 停止しました。")
 
