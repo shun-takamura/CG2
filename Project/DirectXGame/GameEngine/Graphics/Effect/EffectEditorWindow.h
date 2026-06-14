@@ -101,6 +101,10 @@ private:
     // プレビュー再生中のエフェクトハンドル（Timeline をシーン内の他エフェクトと混同しないため）
     uint64_t previewHandle_ = 0;
 
+    // ===== 専用タイムライン（エディタ所有の再生制御） =====
+    bool  previewPaused_ = false; // 一時停止（ON で dt=0、編集や姿勢確認はできる）
+    float previewSpeed_  = 1.0f;  // 再生速度倍率（unscaled 実 delta に乗算）
+
     // ON の間、シーンのゲームプレイを凍結する（エフェクト再生は進める）
     bool pauseScene_ = false;
 

@@ -3,6 +3,8 @@
 #include "Camera.h"
 #include "Log.h"
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #ifdef USE_IMGUI
 #include "imgui.h"
@@ -19,15 +21,21 @@ void EffectManager::Initialize(GPUParticleManager* gpuParticleManager) {
     activeInstances_.clear();
     pendingDelete_.clear();
     handleToInstance_.clear();
+    previewInstances_.clear();
+    previewPendingDelete_.clear();
+    previewHandleToInstance_.clear();
     nextHandle_ = 1;
 }
 
 void EffectManager::Finalize() {
     StopAll();
+    StopAllPreview();
     // シーン終了時は GPU が待たれている前提なので pendingDelete もここで安全に解放
     pendingDelete_.clear();
+    previewPendingDelete_.clear();
     defs_.clear();
     handleToInstance_.clear();
+    previewHandleToInstance_.clear();
 }
 
 //==========================================================
@@ -147,6 +155,29 @@ EffectHandle EffectManager::PlayWithDef(const EffectDef& def, const Vector3& wor
     return h;
 }
 
+EffectHandle EffectManager::PlayPreview(const EffectDef& def, const Vector3& worldPos) {
+    auto inst = std::make_unique<EffectInstance>();
+    inst->SetPreview(true); // GPUパーティクルを $preview$ グループへ隔離する
+    inst->Initialize(def, worldPos, gpuParticleManager_);
+    EffectHandle h = nextHandle_++;
+    inst->SetHandle(h);
+    previewHandleToInstance_[h] = inst.get();
+    previewInstances_.push_back(std::move(inst));
+    return h;
+}
+
+void EffectManager::StopAllPreview() {
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->Cleanup();
+    }
+    // Primitive renderer の解放は Draw のコマンドより遅らせる（次フレーム頭で解放）。
+    for (auto& inst : previewInstances_) {
+        if (inst) previewPendingDelete_.push_back(std::move(inst));
+    }
+    previewInstances_.clear();
+    previewHandleToInstance_.clear();
+}
+
 void EffectManager::Stop(EffectHandle handle) {
     auto it = handleToInstance_.find(handle);
     if (it == handleToInstance_.end()) return;
@@ -212,6 +243,79 @@ void EffectManager::Update(float deltaTime) {
     }
 }
 
+void EffectManager::UpdatePreview(float deltaTime) {
+    // 前フレームの描画後に解放予約したインスタンスをここで安全に破棄。
+    previewPendingDelete_.clear();
+
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->Update(previewCamera_ ? previewCamera_ : camera_, deltaTime);
+    }
+
+    for (auto it = previewInstances_.begin(); it != previewInstances_.end();) {
+        if (!(*it)) {
+            it = previewInstances_.erase(it);
+            continue;
+        }
+        if ((*it)->IsFinished()) {
+            // ループ表示 ON なら消さずに巻き戻して再生し続ける（編集中の常時プレビュー）。
+            if (previewLoop_) {
+                (*it)->Rewind();
+                ++it;
+                continue;
+            }
+            previewHandleToInstance_.erase((*it)->GetHandle());
+            (*it)->Cleanup();
+            previewPendingDelete_.push_back(std::move(*it));
+            it = previewInstances_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // GPUパーティクルのプレビューグループをエディタの unscaled delta で独立シミュレートし、
+    // 今プレビュー中のエフェクトが使わなくなったグループは遅延リサイクルする（working set を有界化）。
+    if (gpuParticleManager_) {
+        std::vector<std::string> keepNames;
+        for (const auto& inst : previewInstances_) {
+            if (inst) inst->CollectPreviewGroupNames(keepNames);
+        }
+        gpuParticleManager_->UpdatePreviewSim(deltaTime);
+        gpuParticleManager_->RecyclePreviewGroups(keepNames);
+    }
+}
+
+void EffectManager::SyncPreview(const EffectDef& def, const Vector3& worldPos) {
+    for (auto& inst : previewInstances_) {
+        if (!inst) continue;
+        inst->SyncFromDef(def);
+        inst->SetWorldPosition(worldPos);
+    }
+}
+
+void EffectManager::RewindPreview() {
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->Rewind();
+    }
+}
+
+void EffectManager::SeekPreview(float targetTime) {
+    if (targetTime < 0.0f) targetTime = 0.0f;
+    const float step = 1.0f / 60.0f;
+    Camera* cam = previewCamera_ ? previewCamera_ : camera_;
+    for (auto& inst : previewInstances_) {
+        if (!inst) continue;
+        inst->Rewind();
+        float remaining = targetTime;
+        // ステップ数の暴走ガード（長尺シークでもフレームを潰しすぎない）。
+        for (int guard = 0; remaining > 1e-5f && guard < 4000; ++guard) {
+            const float dt = (remaining > step) ? step : remaining;
+            inst->Update(cam, dt);
+            if (inst->IsFinished()) break; // 寿命を終えたらそこで停止
+            remaining -= dt;
+        }
+    }
+}
+
 void EffectManager::Draw() {
     for (auto& inst : activeInstances_) {
         if (inst) inst->Draw();
@@ -225,7 +329,7 @@ void EffectManager::DrawDistortionPass() {
 }
 
 void EffectManager::DrawDistortionPassPreview() {
-    for (auto& inst : activeInstances_) {
+    for (auto& inst : previewInstances_) {
         if (inst) inst->DrawDistortionPassPreview();
     }
 }
@@ -245,7 +349,7 @@ void EffectManager::DrawPreview() {
     const Vector3 cameraPos = previewCamera_->GetTranslate();
 
     // 1. 各Primitive renderer のプレビューWVPを再計算
-    for (auto& inst : activeInstances_) {
+    for (auto& inst : previewInstances_) {
         if (inst) inst->UpdatePreviewWVP(viewMatrix, viewProjectionMatrix, cameraPos);
     }
     // 2. GPU Particle のプレビュー用PerViewを更新
@@ -254,7 +358,7 @@ void EffectManager::DrawPreview() {
     }
 
     // 3. 描画。Primitive → GPU Particle の順（メインと同順）
-    for (auto& inst : activeInstances_) {
+    for (auto& inst : previewInstances_) {
         if (inst) inst->DrawPreview();
     }
     if (gpuParticleManager_) {

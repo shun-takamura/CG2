@@ -5,7 +5,7 @@
 #include "LineRenderer.h"
 #include "EffectManager.h"
 #include "ImGuiManager.h"
-#include "SceneEditorWindow.h"
+#include "EditorDropPayload.h"  // EFFECT_COMP_DROP / EffectComponentDropPayload
 #include "PostEffect.h"
 #include "Game.h"
 #include "FilterEffect/DistortionEffect.h"
@@ -155,6 +155,19 @@ void EffectEditorWindow::Render() {
         debugCamera_.GetViewMatrix(),
         debugCamera_.GetProjectionMatrix(),
         debugCamera_.GetTranslate());
+
+    // プレビューはエディタが自前タイムラインで進める（シーンのタイムスケール非依存）。
+    // unscaled な実 delta を使い、シーンが停止していても等速で動かす。
+    EffectManager* emPrev = EffectManager::GetInstance();
+    emPrev->SetPreviewCamera(&camera_);
+    // 編集中 def をライブ反映してから更新（Restart 不要でスライダー操作が即反映される）。
+    if (previewHandle_ != 0) {
+        emPrev->SyncPreview(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+    }
+    // 専用タイムライン：一時停止中は dt=0（カメラ追従や編集反映は効く）、それ以外は実 delta×速度。
+    const float realDt = dxCore_->GetDeltaTime();
+    const float previewDt = (previewHandle_ != 0 && !previewPaused_) ? realDt * previewSpeed_ : 0.0f;
+    emPrev->UpdatePreview(previewDt);
 
     auto* commandList = dxCore_->GetCommandList();
     D3D12_CPU_DESCRIPTOR_HANDLE dsv = dxCore_->GetDsvHandle();
@@ -384,16 +397,37 @@ void EffectEditorWindow::OnDraw() {
     ImGui::Separator();
     ImGui::DragFloat3("Play Pos", playPos_, 0.1f);
     if (ImGui::Button("Play")) {
-        // editBuffer の現在の状態をそのまま再生（未保存でも反映）
-        previewHandle_ = em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+        // プレビューが無ければ生成、あれば頭から。以後は毎フレーム SyncPreview でライブ反映されるので
+        // 編集のたびに押し直す必要はない（Restart 不要）。
+        if (previewHandle_ == 0 || !em->GetInstanceByHandle(previewHandle_)) {
+            previewHandle_ = em->PlayPreview(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+        } else {
+            em->RewindPreview();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Restart")) {
-        em->StopAll();
-        previewHandle_ = em->PlayWithDef(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+        // t=0 へ巻き戻し（破棄せず同じインスタンスを再生し直す）
+        em->RewindPreview();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Stop")) { em->StopAll(); previewHandle_ = 0; }
+    if (ImGui::Button("Stop")) { em->StopAllPreview(); previewHandle_ = 0; previewPaused_ = false; }
+    ImGui::SameLine();
+    ImGui::Checkbox("Pause", &previewPaused_);
+    ImGui::SameLine();
+    {
+        bool loopPrev = em->GetPreviewLoop();
+        if (ImGui::Checkbox("Loop preview", &loopPrev)) em->SetPreviewLoop(loopPrev);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("ON: 寿命を終えても自動的に頭から再生し続ける（編集中の常時プレビュー）。\n"
+                              "OFF: 1回再生して終了。");
+        }
+    }
+
+    // 再生速度
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::DragFloat("Speed", &previewSpeed_, 0.01f, 0.0f, 4.0f, "%.2fx");
+    if (previewSpeed_ < 0.0f) previewSpeed_ = 0.0f;
 
     // シーンのゲームプレイだけ凍結（エフェクト再生は進む）。
     // 編集中にプレイヤーが死んでシーンリセットされるのを防ぐ。
@@ -406,7 +440,8 @@ void EffectEditorWindow::OnDraw() {
                           "このウィンドウを閉じると自動的に解除される。");
     }
 
-    // Timeline：プレビュー再生中インスタンス（このエディタが Play したもの）の経過時間 / 総寿命を表示。
+    // Timeline：シーク可能なスライダー。ドラッグ中は SeekPreview で t=0 から早送り再シミュレート。
+    // 非ドラッグ時はスライダー値を現在の経過時間に追従させ、再生位置を表示する。
     // シーン内の他エフェクトのタイムラインを拾わないよう、ハンドル指定で取得する。
     {
         EffectInstance* inst = (previewHandle_ != 0) ? em->GetInstanceByHandle(previewHandle_) : nullptr;
@@ -414,10 +449,13 @@ void EffectEditorWindow::OnDraw() {
         float elapsed = inst ? inst->GetElapsedTime() : 0.0f;
         float total   = inst ? inst->GetTotalDuration() : editBuffer_.totalDuration;
         if (total < 0.0001f) total = 0.0001f;
-        float ratio = std::clamp(elapsed / total, 0.0f, 1.0f);
-        char overlay[64];
-        std::snprintf(overlay, sizeof(overlay), "%.2f / %.2f s", elapsed, total);
-        ImGui::ProgressBar(ratio, ImVec2(-FLT_MIN, 0), overlay);
+
+        float seekT = std::clamp(elapsed, 0.0f, total);
+        char fmt[32];
+        std::snprintf(fmt, sizeof(fmt), "%.2f / %.2f s", seekT, total);
+        if (ImGui::SliderFloat("Seek", &seekT, 0.0f, total, fmt)) {
+            if (inst) em->SeekPreview(std::clamp(seekT, 0.0f, total));
+        }
     }
 
     ImGui::Separator();

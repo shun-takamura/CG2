@@ -26,6 +26,12 @@ class GPUParticleManager
 public:
     static const uint32_t kMaxParticles = 1024;
 
+    // プレビュー専用グループ名のプレフィックス。EffectInstance がプレビュー時に
+    // グループ名へ付加し、シーン用とは物理バッファを分離する（隔離の要）。
+    static constexpr const char* kPreviewPrefix = "$preview$";
+    // 名前がプレビュー専用グループ（上記プレフィックス付き）かどうか。
+    static bool IsPreviewName(const std::string& name);
+
     void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
     void Finalize();
 
@@ -102,13 +108,24 @@ public:
     void SetGroupTimeGroup(const std::string& name, TimeGroup group);
 
     // ===== 毎フレーム =====
+    // シーン用グループのみを更新する（プレビュー用グループはスキップ）。
     void Update(const Camera* camera, float deltaTime);
+    // シーン用グループのみをシミュレート＋描画する（プレビュー用は DrawPreview 側）。
     void Draw();
 
-    // プレビュー用 PerView を更新（メインの Update とは独立）
+    // ===== プレビュー（エディタ専用・シーンから独立） =====
+    // プレビュー用グループの emit/PerFrame をエディタの unscaled delta で進める。
+    // 併せて前フレームに遅延予約したプレビューグループを安全に解放する。
+    void UpdatePreviewSim(float deltaTime);
+
+    // keepNames に無いプレビュー用グループを遅延解放キューへ移す（次フレーム頭で実解放）。
+    // 「今プレビュー中のエフェクトが使うグループ」だけを残し、working set を有界化する。
+    void RecyclePreviewGroups(const std::vector<std::string>& keepNames);
+
+    // プレビュー用 PerView（カメラ）を更新（メインの Update とは独立）
     void UpdatePreviewView(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos);
 
-    // プレビュー用 PerView を使って描画（Emit/Update CS は走らない、SRV化された粒子データを描画するだけ）
+    // プレビュー用グループを独立シミュレート＋描画（プレビュー用 PerView を使う）
     void DrawPreview();
 
     // ImGui デバッグUI
@@ -251,6 +268,10 @@ private:
         // バースト要求（Update で CB.emit に転写）。
         // CPU 側で持つ理由：CB は persistent-mapped で、GPU が Emit CS を実行する前に CPU が書き換えるとレースになる。
         bool          pendingBurst = false;
+
+        // プレビュー専用グループ（名前が kPreviewPrefix 付き）。シーン用とは
+        // 更新経路（unscaled delta）も描画経路（プレビュー PerView）も分ける。
+        bool          isPreview = false;
     };
 
     DirectXCore* dxCore_ = nullptr;
@@ -279,6 +300,10 @@ private:
     // グループ群
     std::unordered_map<std::string, GPUParticleGroup> groups_;
 
+    // 遅延解放待ちのプレビューグループ（フレーム途中の GPU 使用中バッファ解放を避けるため
+    // RecyclePreviewGroups で一旦ここへ退避し、次フレーム頭の UpdatePreviewSim で実解放する）。
+    std::vector<GPUParticleGroup> previewGroupPendingDelete_;
+
     // 内部ヘルパ
     void CreateInitializePipeline();
     void CreateEmitPipeline();
@@ -293,6 +318,11 @@ private:
     void DispatchInitializeCS(GPUParticleGroup& g);
     void DispatchEmitCS(GPUParticleGroup& g);
     void DispatchUpdateCS(GPUParticleGroup& g);
+
+    // 1グループ分の emit フラグ確定 + PerFrame(dt) 書き込み（Update / UpdatePreviewSim 共用）。
+    void UpdateGroupSim(GPUParticleGroup& g, float dt);
+    // 1グループを Init/Emit/Update CS でシミュレートし、指定 PerView CB で描画（Draw / DrawPreview 共用）。
+    void SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resource* perViewCB);
 
     void TransitionParticle(GPUParticleGroup& g, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 };

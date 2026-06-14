@@ -7,6 +7,7 @@
 #include "Log.h"
 #include "EngineTime.h"
 #include <cassert>
+#include <algorithm>
 
 #ifdef USE_IMGUI
 #include "imgui.h"
@@ -28,6 +29,11 @@ void GPUParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 
 void GPUParticleManager::Finalize()
 {
+    for (auto& g : previewGroupPendingDelete_) {
+        ReleaseGroupResources(g);
+    }
+    previewGroupPendingDelete_.clear();
+
     for (auto& pair : groups_) {
         ReleaseGroupResources(pair.second);
     }
@@ -49,11 +55,19 @@ void GPUParticleManager::Finalize()
 // グループ管理
 //==========================================================
 
+bool GPUParticleManager::IsPreviewName(const std::string& name)
+{
+    const std::string prefix = kPreviewPrefix;
+    return name.size() >= prefix.size() &&
+           name.compare(0, prefix.size(), prefix) == 0;
+}
+
 void GPUParticleManager::CreateGroup(const std::string& name, const std::string& texturePath)
 {
     if (groups_.find(name) != groups_.end()) return;
 
     GPUParticleGroup g{};
+    g.isPreview = IsPreviewName(name);
     CreateGroupResources(g, texturePath);
     groups_.emplace(name, std::move(g));
 }
@@ -230,48 +244,85 @@ void GPUParticleManager::Update(const Camera* camera, float deltaTime)
         cameraPosition_ = camera->GetTranslate();
     }
 
-    // 各グループのCBを更新
+    // 各グループのCBを更新（プレビュー用は UpdatePreviewSim で別途進めるのでスキップ）
     for (auto& pair : groups_) {
         GPUParticleGroup& g = pair.second;
+        if (g.isPreview) continue;
 
         // TimeGroup連動dt。供給元（シーン）が無ければ deltaTime にフォールバック
-        float dt = EngineTime::ScaledDeltaTime(g.timeGroup, deltaTime);
-        g.elapsedTime += dt;
+        const float dt = EngineTime::ScaledDeltaTime(g.timeGroup, deltaTime);
+        UpdateGroupSim(g, dt);
 
-        // PerFrame
-        if (g.perFrameData) {
-            g.perFrameData->time = g.elapsedTime;
-            g.perFrameData->deltaTime = dt;
-        }
-
-        // Emitter の emit フラグをこのフレームの最終値で確定させる
-        //   - pendingBurst が立っていれば 1（その後フラグを下ろす）
-        //   - 連続発射なら frequency に従って 0/1
-        //   - それ以外は 0
-        if (g.emitterData) {
-            if (g.pendingBurst) {
-                g.emitterData->emit = 1;
-                g.pendingBurst = false;
-            } else if (g.continuousEnabled) {
-                g.emitterData->frequencyTime += dt;
-                if (g.emitterData->frequency <= g.emitterData->frequencyTime) {
-                    g.emitterData->frequencyTime -= g.emitterData->frequency;
-                    g.emitterData->emit = 1;
-                } else {
-                    g.emitterData->emit = 0;
-                }
-            } else {
-                g.emitterData->emit = 0;
-            }
-        }
-
-        // PerView
+        // PerView（メイン用）
         if (g.perViewData) {
             g.perViewData->viewProjection = viewProjectionMatrix_;
             g.perViewData->billboardMatrix = fullBillboardMatrix_;
             g.perViewData->cameraPosition = cameraPosition_;
             g.perViewData->billboardMode = static_cast<uint32_t>(g.billboardMode);
         }
+    }
+}
+
+void GPUParticleManager::UpdateGroupSim(GPUParticleGroup& g, float dt)
+{
+    g.elapsedTime += dt;
+
+    // PerFrame
+    if (g.perFrameData) {
+        g.perFrameData->time = g.elapsedTime;
+        g.perFrameData->deltaTime = dt;
+    }
+
+    // Emitter の emit フラグをこのフレームの最終値で確定させる
+    //   - pendingBurst が立っていれば 1（その後フラグを下ろす）
+    //   - 連続発射なら frequency に従って 0/1
+    //   - それ以外は 0
+    if (g.emitterData) {
+        if (g.pendingBurst) {
+            g.emitterData->emit = 1;
+            g.pendingBurst = false;
+        } else if (g.continuousEnabled) {
+            g.emitterData->frequencyTime += dt;
+            if (g.emitterData->frequency <= g.emitterData->frequencyTime) {
+                g.emitterData->frequencyTime -= g.emitterData->frequency;
+                g.emitterData->emit = 1;
+            } else {
+                g.emitterData->emit = 0;
+            }
+        } else {
+            g.emitterData->emit = 0;
+        }
+    }
+}
+
+void GPUParticleManager::UpdatePreviewSim(float deltaTime)
+{
+    // 前フレームに遅延予約したプレビューグループをここ（描画コマンドを積む前）で実解放。
+    for (auto& g : previewGroupPendingDelete_) {
+        ReleaseGroupResources(g);
+    }
+    previewGroupPendingDelete_.clear();
+
+    // プレビュー用グループだけを unscaled な実 delta で進める（シーンのタイムスケール非依存）。
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (!g.isPreview) continue;
+        UpdateGroupSim(g, deltaTime);
+    }
+}
+
+void GPUParticleManager::RecyclePreviewGroups(const std::vector<std::string>& keepNames)
+{
+    for (auto it = groups_.begin(); it != groups_.end();) {
+        GPUParticleGroup& g = it->second;
+        if (!g.isPreview) { ++it; continue; }
+
+        const bool keep = std::find(keepNames.begin(), keepNames.end(), it->first) != keepNames.end();
+        if (keep) { ++it; continue; }
+
+        // 今プレビュー中のエフェクトが参照していないプレビューグループは遅延解放へ。
+        previewGroupPendingDelete_.push_back(std::move(g));
+        it = groups_.erase(it);
     }
 }
 
@@ -297,27 +348,12 @@ void GPUParticleManager::DrawPreview()
 {
     if (groups_.empty()) return;
 
-    auto commandList = dxCore_->GetCommandList();
-
-    // 注意: メインの Draw() が同フレーム内で先に呼ばれていることを前提にする。
-    // メインの Draw() の末尾で Particle リソースは NPS 状態になっているため、ここでは遷移不要。
-    // Emit/Update CS は走らせない（シミュレーションはメイン1回のみ）。
+    // プレビュー用グループを独立してシミュレート＋描画する（シーンの Draw からは完全に分離）。
+    // シーンが停止していても、プレビューは UpdatePreviewSim の unscaled delta で進んだ状態が描かれる。
     for (auto& pair : groups_) {
         GPUParticleGroup& g = pair.second;
-        if (!g.initializedOnGPU) continue;  // 未初期化グループはスキップ
-
-        commandList->SetGraphicsRootSignature(drawRootSig_.Get());
-        commandList->SetPipelineState(drawPSO_.Get());
-        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
-
-        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
-        // プレビュー用 PerView CB をbind
-        commandList->SetGraphicsRootConstantBufferView(1, g.perViewPreviewResource->GetGPUVirtualAddress());
-        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
-        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
-
-        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+        if (!g.isPreview) continue;
+        SimulateAndDrawGroup(g, g.perViewPreviewResource.Get());
     }
 }
 
@@ -325,87 +361,93 @@ void GPUParticleManager::Draw()
 {
     if (groups_.empty()) return;
 
+    // シーン用グループのみ（プレビュー用は DrawPreview 側で独立処理）。
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (g.isPreview) continue;
+        SimulateAndDrawGroup(g, g.perViewResource.Get());
+    }
+}
+
+void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resource* perViewCB)
+{
     auto commandList = dxCore_->GetCommandList();
 
-    // 各グループを単独のサイクルで処理する
+    // 1グループを単独のサイクルで処理する
     //   未初期化:  COMMON -> UAV + Init CS + UAV barrier
     //   初期化済:  NPS    -> UAV
     //   共通:      Emit CS -> UAV barrier -> Update CS -> UAV -> NPS -> Draw
-    for (auto& pair : groups_) {
-        GPUParticleGroup& g = pair.second;
+    if (!g.initializedOnGPU) {
+        // COMMON -> UAV へ遷移
+        D3D12_RESOURCE_BARRIER toUav[3] = {};
+        toUav[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toUav[0].Transition.pResource = g.particleResource.Get();
+        toUav[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        toUav[0].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        toUav[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        toUav[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toUav[1].Transition.pResource = g.freeListIndexResource.Get();
+        toUav[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        toUav[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        toUav[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        toUav[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toUav[2].Transition.pResource = g.freeListResource.Get();
+        toUav[2].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        toUav[2].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        toUav[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        commandList->ResourceBarrier(3, toUav);
 
-        if (!g.initializedOnGPU) {
-            // COMMON -> UAV へ遷移
-            D3D12_RESOURCE_BARRIER toUav[3] = {};
-            toUav[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            toUav[0].Transition.pResource = g.particleResource.Get();
-            toUav[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-            toUav[0].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            toUav[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            toUav[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            toUav[1].Transition.pResource = g.freeListIndexResource.Get();
-            toUav[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-            toUav[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            toUav[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            toUav[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            toUav[2].Transition.pResource = g.freeListResource.Get();
-            toUav[2].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-            toUav[2].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            toUav[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            commandList->ResourceBarrier(3, toUav);
+        DispatchInitializeCS(g);
 
-            DispatchInitializeCS(g);
+        // Init後のUAVバリアでEmit前の書き込みを保証
+        D3D12_RESOURCE_BARRIER initUavBarrier[3] = {};
+        initUavBarrier[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        initUavBarrier[0].UAV.pResource = g.particleResource.Get();
+        initUavBarrier[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        initUavBarrier[1].UAV.pResource = g.freeListIndexResource.Get();
+        initUavBarrier[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        initUavBarrier[2].UAV.pResource = g.freeListResource.Get();
+        commandList->ResourceBarrier(3, initUavBarrier);
 
-            // Init後のUAVバリアでEmit前の書き込みを保証
-            D3D12_RESOURCE_BARRIER initUavBarrier[3] = {};
-            initUavBarrier[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            initUavBarrier[0].UAV.pResource = g.particleResource.Get();
-            initUavBarrier[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            initUavBarrier[1].UAV.pResource = g.freeListIndexResource.Get();
-            initUavBarrier[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            initUavBarrier[2].UAV.pResource = g.freeListResource.Get();
-            commandList->ResourceBarrier(3, initUavBarrier);
-
-            g.initializedOnGPU = true;
-            // ここでは Particle は UAV 状態（NPS には行っていない）
-        } else {
-            // 既に init 済み：前フレーム描画後の NPS から UAV に戻す
-            TransitionParticle(g, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        }
-
-        // Emit （emit フラグは Update で確定済み。Draw中に CB を書き換えると GPU 実行前にレースするので触らない）
-        DispatchEmitCS(g);
-
-        {
-            D3D12_RESOURCE_BARRIER barriers[3] = {};
-            barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            barriers[0].UAV.pResource = g.particleResource.Get();
-            barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            barriers[1].UAV.pResource = g.freeListIndexResource.Get();
-            barriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            barriers[2].UAV.pResource = g.freeListResource.Get();
-            commandList->ResourceBarrier(3, barriers);
-        }
-
-        // Update
-        DispatchUpdateCS(g);
-
-        // 描画用 NPS へ
-        TransitionParticle(g, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-        // 描画
-        commandList->SetGraphicsRootSignature(drawRootSig_.Get());
-        commandList->SetPipelineState(drawPSO_.Get());
-        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
-
-        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
-        commandList->SetGraphicsRootConstantBufferView(1, g.perViewResource->GetGPUVirtualAddress());
-        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
-        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
-
-        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+        g.initializedOnGPU = true;
+        // ここでは Particle は UAV 状態（NPS には行っていない）
+    } else {
+        // 既に init 済み：前フレーム描画後の NPS から UAV に戻す
+        TransitionParticle(g, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
+
+    // Emit （emit フラグは Update で確定済み。Draw中に CB を書き換えると GPU 実行前にレースするので触らない）
+    DispatchEmitCS(g);
+
+    {
+        D3D12_RESOURCE_BARRIER barriers[3] = {};
+        barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        barriers[0].UAV.pResource = g.particleResource.Get();
+        barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        barriers[1].UAV.pResource = g.freeListIndexResource.Get();
+        barriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        barriers[2].UAV.pResource = g.freeListResource.Get();
+        commandList->ResourceBarrier(3, barriers);
+    }
+
+    // Update
+    DispatchUpdateCS(g);
+
+    // 描画用 NPS へ
+    TransitionParticle(g, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    // 描画
+    commandList->SetGraphicsRootSignature(drawRootSig_.Get());
+    commandList->SetPipelineState(drawPSO_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+    srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(1, perViewCB->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+
+    commandList->DrawInstanced(6, kMaxParticles, 0, 0);
 }
 
 void GPUParticleManager::OnImGui()
@@ -637,7 +679,20 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
     g.freeListResource.Reset();
     g.freeListIndexResource.Reset();
     g.particleResource.Reset();
-    // SRV/UAV インデックスは SRVManager に返却するAPIがないため保持しない（リーク扱い、Finalize時のみ問題）
+
+    // このクラスが Allocate した SRV/UAV スロットを SRVManager へ返却する（再利用される）。
+    // textureSrvIndex は TextureManager 所有なのでここでは返却しない。
+    // ※ GPU 使用中の解放を避けるため、呼び出し側で遅延（次フレーム）解放すること。
+    if (srvManager_) {
+        srvManager_->Free(g.particleUavIndex);
+        srvManager_->Free(g.particleSrvIndex);
+        srvManager_->Free(g.freeListIndexUavIndex);
+        srvManager_->Free(g.freeListUavIndex);
+    }
+    g.particleUavIndex = 0;
+    g.particleSrvIndex = 0;
+    g.freeListIndexUavIndex = 0;
+    g.freeListUavIndex = 0;
 }
 
 //==========================================================

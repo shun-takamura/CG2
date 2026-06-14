@@ -11,7 +11,7 @@
 #include "AnimatedModelInstance.h"
 #include "Material.h"
 #include "TextureManager.h"
-#include "SceneEditorWindow.h"  // ドロップペイロード定義
+#include "SceneEditorWindow.h"  // MATERIAL_DROP / ANIM_DROP / MODEL_DROP 等ゲーム側ペイロード（SPRITE は transitive）
 
 AnimatedObject3DInstance::~AnimatedObject3DInstance() = default;
 

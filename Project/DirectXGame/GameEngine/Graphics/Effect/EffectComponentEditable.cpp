@@ -2,7 +2,7 @@
 #include "EffectEditorWindow.h"
 #include "EffectDef.h"
 #include "MathUtility.h"
-#include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
+#include "EditorDropPayload.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "imgui.h"
 #include <cstdio>
 #include <string>

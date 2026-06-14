@@ -586,6 +586,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\ConvertString.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\EditorDropPayload.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\EngineTime.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
