@@ -30,7 +30,10 @@
       "Bash(grep -n 'Core\\\\\\\\DirectXCore' Project/CG2_0_1.vcxproj.filters)",
       "Skill(claude-api)",
       "Skill(claude-api:*)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(git -C C:/Users/sleon/source/repos/CG2 branch -a)",
+      "Bash(git -C C:/Users/sleon/source/repos/CG2 log --oneline -15)",
+      "Bash(git fetch *)"
     ]
   }
 }

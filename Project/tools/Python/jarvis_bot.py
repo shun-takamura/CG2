@@ -195,7 +195,7 @@ async def sunday_start_cmd(interaction: discord.Interaction):
     def on_issue(issue_no, finding):
         # 別スレッド(sunday.run)から呼ばれる。discord送信はループ上でしか出来ないので投げ込む。
         url = f"https://github.com/shun-takamura/CG2/issues/{issue_no}"
-        msg = (f"🐛 S.U.N.D.A.Y. がクラッシュを検知し Issue #{issue_no} を起票/更新しました。\n"
+        msg = (f"S.U.N.D.A.Y. がクラッシュを検知し Issue #{issue_no} を起票/更新しました。\n"
                f"シーン: `{finding.get('scene')}`  seed: `{finding.get('seed')}`\n{url}")
         asyncio.run_coroutine_threadsafe(channel.send(msg), loop)
 
