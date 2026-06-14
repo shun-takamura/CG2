@@ -251,6 +251,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\ISceneRunner.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\IEditorSelection.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Easing.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\EmitParam.h" />
     <ClInclude Include="..\externals\ImGUI\imconfig.h" />

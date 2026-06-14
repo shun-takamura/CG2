@@ -11,6 +11,8 @@
 class DirectXCore;
 class SRVManager;
 class RenderTexture;
+class PostEffect;
+class IEditorSelection;
 
 /// <summary>
 /// Effect Editor 用ウィンドウ。
@@ -19,7 +21,7 @@ class RenderTexture;
 /// </summary>
 class EffectEditorWindow : public IImGuiWindow {
 public:
-    EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager);
+    EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager, IEditorSelection* selection);
     ~EffectEditorWindow() override;
 
     void Initialize();
@@ -38,7 +40,8 @@ public:
     void MarkEditBufferDirty() { editBufferDirty_ = true; }
 
     // ===== コンポーネント操作 =====
-    void AddComponent(EffectComponentEditable::Kind kind);
+    // Primitive を追加する場合は meshType（0=Plane..7=Lightning）で形状を確定する。
+    void AddComponent(EffectComponentEditable::Kind kind, int meshType = 0);
     // 即時削除ではなく、次の OnDraw 冒頭で削除する（OnImGuiInspector 中の self-destroy 回避）
     void RemoveComponent(EffectComponentEditable::Kind kind, int index);
     // 指定コンポーネントの複製を末尾に追加（同じく次フレーム冒頭で安全に処理）
@@ -61,6 +64,8 @@ protected:
 
 private:
     void EnsureRenderTextureSize(uint32_t width, uint32_t height);
+    // 自前 PostEffect を遅延生成（初回利用時。起動時は TextureManager 未準備でクラッシュするため）。
+    void EnsurePostEffect();
     void HandleMouseInput();
     void AddGridLines();
 
@@ -71,6 +76,13 @@ private:
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager*  srvManager_ = nullptr;
+    // エディタ選択状態の抽象（ImGuiManager が実装）。ImGuiManager 具象型への依存を断つため注入。
+    IEditorSelection* selection_ = nullptr;
+
+    // エディタ自前の PostEffect（distortion プレビュー合成に使う。Game への依存を断つため自前所有）。
+    std::unique_ptr<PostEffect> postEffect_;
+    // プレビューに歪みを適用するか（自前化により Game の PostEffect 設定に依存しない）。
+    bool previewDistortion_ = true;
 
     std::unique_ptr<RenderTexture> renderTexture_;
     uint32_t rtWidth_  = 0;

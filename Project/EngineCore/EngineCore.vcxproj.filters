@@ -493,6 +493,9 @@
     <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\IEditorSelection.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Easing.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

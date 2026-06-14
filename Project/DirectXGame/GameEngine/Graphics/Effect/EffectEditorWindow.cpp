@@ -4,10 +4,9 @@
 #include "SRVManager.h"
 #include "LineRenderer.h"
 #include "EffectManager.h"
-#include "ImGuiManager.h"
+#include "IEditorSelection.h"
 #include "EditorDropPayload.h"  // EFFECT_COMP_DROP / EffectComponentDropPayload
 #include "PostEffect.h"
-#include "Game.h"
 #include "FilterEffect/DistortionEffect.h"
 #include "Vector3.h"
 #include "Vector4.h"
@@ -28,8 +27,8 @@ namespace {
     }
 }
 
-EffectEditorWindow::EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager)
-    : IImGuiWindow("EffectEditor"), dxCore_(dxCore), srvManager_(srvManager) {
+EffectEditorWindow::EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager, IEditorSelection* selection)
+    : IImGuiWindow("EffectEditor"), dxCore_(dxCore), srvManager_(srvManager), selection_(selection) {
     SetInitialSize(ImVec2(640, 480));
 }
 
@@ -46,10 +45,24 @@ void EffectEditorWindow::Initialize() {
 
     EnsureRenderTextureSize(512, 512);
 
+    // 自前 PostEffect はここでは作らない。Initialize() は ImGuiManager::Initialize 段階で
+    // 呼ばれ、その時点では TextureManager の SRVManager がまだ未設定。PostEffect 内の
+    // DissolveEffect がマスクテクスチャをロードすると CanAllocate() で null 参照クラッシュする。
+    // 全システムが揃った後の初回利用時に EnsurePostEffect() で遅延生成する。
+
     NewEffect();
 }
 
+void EffectEditorWindow::EnsurePostEffect() {
+    if (postEffect_) return;
+    // distortion 合成パス用の RS/PSO を用意する。RunDistortionForPreview は外部 SRV と
+    // dxCore 共有深度のみ使い内部 RT は使わないので、サイズはプレビュー既定で十分。
+    postEffect_ = std::make_unique<PostEffect>();
+    postEffect_->Initialize(dxCore_, srvManager_, 512, 512);
+}
+
 void EffectEditorWindow::Finalize() {
+    if (postEffect_) { postEffect_->Finalize(); postEffect_.reset(); }
     if (oldRenderTexture_) { oldRenderTexture_->Finalize(); oldRenderTexture_.reset(); }
     if (renderTexture_)    { renderTexture_->Finalize();    renderTexture_.reset(); }
     if (oldPreviewDistortionRT_) { oldPreviewDistortionRT_->Finalize(); oldPreviewDistortionRT_.reset(); }
@@ -197,10 +210,13 @@ void EffectEditorWindow::Render() {
     renderTexture_->EndRender(commandList);
 
     // ===== Distortion プレビュー合成 =====
-    // 本番 PostEffect の distortion フィルタが ON のときだけ、プレビューにも歪みを適用する。
+    // エディタ自前の PostEffect を使う（Game の設定には依存しない）。
+    // 「Distortion」トグルが ON のときだけプレビューに歪みを適用する。
     lastFrameDistortionApplied_ = false;
-    PostEffect* postEffect = Game::GetPostEffect();
-    const bool distortionOn = postEffect && postEffect->distortion && postEffect->distortion->IsEnabled();
+    // 自前 PostEffect は初回の歪み利用時に遅延生成する（起動時は TextureManager 未準備のため）。
+    if (previewDistortion_) EnsurePostEffect();
+    PostEffect* postEffect = postEffect_.get();
+    const bool distortionOn = previewDistortion_ && postEffect && postEffect->distortion;
 
     if (distortionOn && previewDistortionRT_ && previewOutputRT_) {
         // (A) 歪みマップ用 RT に effect primitives の distortion パスを描画
@@ -277,7 +293,7 @@ void EffectEditorWindow::OnDraw() {
         }
         pendingRemovals_.clear();
         editBufferDirty_ = true;
-        ImGuiManager::Instance().SetSelected(nullptr);
+        if (selection_) selection_->SetSelected(nullptr);
         RebuildEditables();
     }
 
@@ -429,6 +445,21 @@ void EffectEditorWindow::OnDraw() {
     ImGui::DragFloat("Speed", &previewSpeed_, 0.01f, 0.0f, 4.0f, "%.2fx");
     if (previewSpeed_ < 0.0f) previewSpeed_ = 0.0f;
 
+    // 歪みプレビュー（自前 PostEffect を使うので Game の設定とは独立）
+    ImGui::Checkbox("Distortion", &previewDistortion_);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("ON: distortion コンポーネントの歪みをプレビューに合成する。\n"
+                          "エディタ自前の PostEffect を使うため、シーンの PostEffect 設定には影響されない。");
+    }
+    if (previewDistortion_ && postEffect_ && postEffect_->distortion) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(160.0f);
+        float strength = postEffect_->distortion->GetStrength();
+        if (ImGui::DragFloat("Strength", &strength, 0.005f, 0.0f, 2.0f, "%.3f")) {
+            postEffect_->distortion->SetStrength(strength);
+        }
+    }
+
     // シーンのゲームプレイだけ凍結（エフェクト再生は進む）。
     // 編集中にプレイヤーが死んでシーンリセットされるのを防ぐ。
     ImGui::Checkbox("SceneStop", &pauseScene_);
@@ -499,7 +530,7 @@ void EffectEditorWindow::OnDraw() {
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(EFFECT_COMP_DROP_PAYLOAD_TYPE)) {
             const EffectComponentDropPayload* p = static_cast<const EffectComponentDropPayload*>(payload->Data);
-            AddComponent(static_cast<EffectComponentEditable::Kind>(p->kind));
+            AddComponent(static_cast<EffectComponentEditable::Kind>(p->kind), p->meshType);
         }
         ImGui::EndDragDropTarget();
     }
@@ -548,9 +579,14 @@ void EffectEditorWindow::SaveCurrent() {
     }
 }
 
-void EffectEditorWindow::AddComponent(EffectComponentEditable::Kind kind) {
+void EffectEditorWindow::AddComponent(EffectComponentEditable::Kind kind, int meshType) {
     switch (kind) {
-    case EffectComponentEditable::Kind::Primitive: editBuffer_.primitives.push_back({}); break;
+    case EffectComponentEditable::Kind::Primitive: {
+        EffectPrimitiveComponent c{};
+        c.meshType = meshType; // 置いた瞬間に形状確定
+        editBuffer_.primitives.push_back(c);
+        break;
+    }
     case EffectComponentEditable::Kind::Particle:  editBuffer_.particles.push_back({});  break;
     case EffectComponentEditable::Kind::Light:     editBuffer_.lights.push_back({});     break;
     case EffectComponentEditable::Kind::Sound:     editBuffer_.sounds.push_back({});     break;
@@ -579,12 +615,13 @@ void EffectEditorWindow::DuplicateComponent(EffectComponentEditable::Kind kind, 
 
 void EffectEditorWindow::RebuildEditables() {
     // 選択中の Editable があれば、その kind+index を覚えておいて再構築後に対応する Editable を再選択
-    ImGuiManager& mgr = ImGuiManager::Instance();
     EffectComponentEditable::Kind selKind = EffectComponentEditable::Kind::Primitive;
     int selIndex = -1;
-    if (auto* sel = dynamic_cast<EffectComponentEditable*>(mgr.GetSelected())) {
-        selKind = sel->GetKind();
-        selIndex = sel->GetIndex();
+    if (selection_) {
+        if (auto* sel = dynamic_cast<EffectComponentEditable*>(selection_->GetSelected())) {
+            selKind = sel->GetKind();
+            selIndex = sel->GetIndex();
+        }
     }
 
     editables_.clear();
@@ -602,12 +639,14 @@ void EffectEditorWindow::RebuildEditables() {
     }
 
     // 選択復元
-    mgr.SetSelected(nullptr);
-    if (selIndex >= 0) {
-        for (auto& e : editables_) {
-            if (e->GetKind() == selKind && e->GetIndex() == selIndex) {
-                mgr.SetSelected(e.get());
-                break;
+    if (selection_) {
+        selection_->SetSelected(nullptr);
+        if (selIndex >= 0) {
+            for (auto& e : editables_) {
+                if (e->GetKind() == selKind && e->GetIndex() == selIndex) {
+                    selection_->SetSelected(e.get());
+                    break;
+                }
             }
         }
     }

@@ -22,6 +22,7 @@
 #include "Effect/EffectManager.h"
 #include "Effect/EffectEditorWindow.h"
 #include "EffectHierarchyWindow.h"
+#include "EffectPaletteWindow.h"
 #include "TransitionManager.h"
 #include "DebugCamera.h"
 #include "Vector3.h"
@@ -228,13 +229,15 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
         }));
 
     // Effect Editor（プレビューRT付き）
-    auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_);
+    auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_, this);
     effectEditor->Initialize();
     effectEditorWindow_ = effectEditor.get();
     windows_.push_back(std::move(effectEditor));
 
     // Effect Hierarchy（編集中エフェクトのコンポーネントを種類別表示）
     windows_.push_back(std::make_unique<EffectHierarchyWindow>(this, effectEditorWindow_));
+    // Effect Components パレット（コンポーネント追加用の独立した D&D ソースウィンドウ）
+    windows_.push_back(std::make_unique<EffectPaletteWindow>());
     windows_.push_back(std::make_unique<CallbackWindow>("Collision",
         []() {
             auto* cm = CollisionManager::GetInstance();
