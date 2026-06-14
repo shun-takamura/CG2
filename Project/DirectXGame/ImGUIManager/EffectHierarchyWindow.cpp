@@ -1,11 +1,11 @@
 #include "EffectHierarchyWindow.h"
-#include "ImGuiManager.h"
+#include "IEditorSelection.h"
 #include "Effect/EffectEditorWindow.h"
 #include "Effect/EffectComponentEditable.h"
 #include "imgui.h"
 
-EffectHierarchyWindow::EffectHierarchyWindow(ImGuiManager* mgr, EffectEditorWindow* editor)
-    : IImGuiWindow("EffectHierarchy"), mgr_(mgr), editor_(editor) {
+EffectHierarchyWindow::EffectHierarchyWindow(IEditorSelection* selection, EffectEditorWindow* editor)
+    : IImGuiWindow("EffectHierarchy"), selection_(selection), editor_(editor) {
     SetInitialSize(ImVec2(260, 360));
 
 }
@@ -21,7 +21,7 @@ void EffectHierarchyWindow::OnDraw() {
     ImGui::Separator();
 
     const auto& editables = editor_->GetEditables();
-    IImGuiEditable* selected = mgr_ ? mgr_->GetSelected() : nullptr;
+    IImGuiEditable* selected = selection_ ? selection_->GetSelected() : nullptr;
 
     auto drawGroup = [&](const char* label, EffectComponentEditable::Kind kind) {
         // グループのコンポーネント数
@@ -43,7 +43,7 @@ void EffectHierarchyWindow::OnDraw() {
                 const float availW = ImGui::GetContentRegionAvail().x;
                 const float btnW = ImGui::GetFrameHeight();
                 if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availW - btnW * 2.0f - 8.0f, 0))) {
-                    if (mgr_) mgr_->SetSelected(e.get());
+                    if (selection_) selection_->SetSelected(e.get());
                 }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("+")) {

@@ -54,9 +54,6 @@ ImGuiManager& ImGuiManager::Instance() {
     return instance;
 }
 
-bool ImGuiManager::IsSceneEditFreeze() const {
-    return effectEditorWindow_ && effectEditorWindow_->IsScenePaused();
-}
 
 void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvManager) {
 #ifdef _DEBUG
