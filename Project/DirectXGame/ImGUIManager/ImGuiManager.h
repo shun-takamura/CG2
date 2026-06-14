@@ -135,13 +135,6 @@ public:
     /// </summary>
     ViewportWindow* GetViewportWindow() { return viewportWindow_; }
 
-    /// <summary>
-    /// エフェクトエディタの「シーンを一時停止」が有効か。
-    /// 有効なら SceneManager はシーンのゲームプレイ更新を凍結し、
-    /// エフェクト再生だけを進める。
-    /// </summary>
-    bool IsSceneEditFreeze() const;
-
 private:
 
     // 編集可能オブジェクト一覧

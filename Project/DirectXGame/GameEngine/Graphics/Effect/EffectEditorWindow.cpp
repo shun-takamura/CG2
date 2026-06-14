@@ -460,17 +460,6 @@ void EffectEditorWindow::OnDraw() {
         }
     }
 
-    // シーンのゲームプレイだけ凍結（エフェクト再生は進む）。
-    // 編集中にプレイヤーが死んでシーンリセットされるのを防ぐ。
-    ImGui::Checkbox("SceneStop", &pauseScene_);
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("ON の間、シーンのゲームプレイ（プレイヤー/敵/当たり判定）を凍結する。\n"
-                          "エフェクトの再生は進むので、シーン内での実際の映りを確認できる。\n"
-                          "このウィンドウを閉じると自動的に解除される。");
-    }
-
     // Timeline：シーク可能なスライダー。ドラッグ中は SeekPreview で t=0 から早送り再シミュレート。
     // 非ドラッグ時はスライダー値を現在の経過時間に追従させ、再生位置を表示する。
     // シーン内の他エフェクトのタイムラインを拾わないよう、ハンドル指定で取得する。

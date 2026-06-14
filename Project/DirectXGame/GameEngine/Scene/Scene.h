@@ -145,8 +145,6 @@ public:
 	//====================
 	void UpdateGlobalEffects(Camera* camera, float deltaTime);
 	void DrawGlobalEffects();
-	/// <summary>シーン凍結中もエフェクト再生だけ実時間で進める。</summary>
-	void UpdateFrozenEffects();
 
 	//====================
 	// シーン共通サービス（カメラキャプチャ / QRコード）

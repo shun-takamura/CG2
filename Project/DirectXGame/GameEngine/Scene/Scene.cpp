@@ -109,13 +109,6 @@ void Scene::DrawGlobalEffects() {
 	EffectManager::GetInstance()->Draw();
 }
 
-void Scene::UpdateFrozenEffects() {
-	// 実時間 delta（タイムスケール非適用）で進める。
-	// ヒットストップ等でシーンが 0 倍速でも、エディタのプレビューは等速で動く。
-	const float dt = dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
-	UpdateGlobalEffects(GetCamera(), dt);
-}
-
 void Scene::SetUseDebugCamera(bool enabled) {
 	if (enabled == useDebugCamera_) return;
 	Camera* sc = GetCamera();

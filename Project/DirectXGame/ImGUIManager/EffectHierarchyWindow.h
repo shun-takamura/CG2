@@ -2,7 +2,7 @@
 #include "IImGuiWindow.h"
 
 class EffectEditorWindow;
-class ImGuiManager;
+class IEditorSelection;
 
 /// <summary>
 /// EffectEditor で編集中エフェクトのコンポーネントを種類別に表示するヒエラルキー風ウィンドウ。
@@ -10,13 +10,13 @@ class ImGuiManager;
 /// </summary>
 class EffectHierarchyWindow : public IImGuiWindow {
 public:
-    EffectHierarchyWindow(ImGuiManager* mgr, EffectEditorWindow* editor);
+    EffectHierarchyWindow(IEditorSelection* selection, EffectEditorWindow* editor);
     ~EffectHierarchyWindow() override = default;
 
 protected:
     void OnDraw() override;
 
 private:
-    ImGuiManager*       mgr_ = nullptr;
+    IEditorSelection*   selection_ = nullptr;
     EffectEditorWindow* editor_ = nullptr;
 };

@@ -150,12 +150,6 @@
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="DirectXGame\ImGUIManager\EffectPaletteWindow.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Sound\SoundManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -927,12 +921,6 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectXGame\ImGUIManager\EffectPaletteWindow.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMaterial.h">
