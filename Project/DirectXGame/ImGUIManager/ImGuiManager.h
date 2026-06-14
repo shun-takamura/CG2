@@ -6,6 +6,7 @@
 
 #include "Gizmo.h"
 #include "SpriteGizmo.h"
+#include "IEditorSelection.h"
 
 // 前方宣言
 class IImGuiWindow;
@@ -28,7 +29,7 @@ typedef HWND__* HWND;
 /// <summary>
 /// ImGui管理クラス（シングルトン）
 /// </summary>
-class ImGuiManager {
+class ImGuiManager : public IEditorSelection {
 public:
     /// <summary>
     /// シングルトンインスタンスの取得
@@ -71,12 +72,12 @@ public:
     /// <summary>
     /// 選択オブジェクトを設定
     /// </summary>
-    void SetSelected(IImGuiEditable* editable) { selectedObject_ = editable; }
+    void SetSelected(IImGuiEditable* editable) override { selectedObject_ = editable; }
 
     /// <summary>
     /// 選択オブジェクトを取得
     /// </summary>
-    IImGuiEditable* GetSelected() const { return selectedObject_; }
+    IImGuiEditable* GetSelected() const override { return selectedObject_; }
 
     /// <summary>
     /// 登録済みオブジェクト一覧を取得

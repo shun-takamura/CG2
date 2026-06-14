@@ -20,7 +20,10 @@ struct SpriteDropPayload {
     char texturePath[384];
 };
 
-// Effect Component（種別だけ運ぶ。0=Primitive, 1=Particle, 2=Light, 3=Sound）
+// Effect Component（種別を運ぶ。0=Primitive, 1=Particle, 2=Light, 3=Sound）
+// kind==Primitive のときだけ meshType（0=Plane, 1=Box, 2=Sphere, 3=Ring,
+// 4=Cylinder, 5=Helix, 6=Beam, 7=Lightning）が意味を持つ＝置いた瞬間に形状確定。
 struct EffectComponentDropPayload {
     int kind;
+    int meshType;
 };

@@ -152,6 +152,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ImGuiManager.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.cpp" />
+    <ClCompile Include="DirectXGame\ImGUIManager\EffectPaletteWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\InspectorWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\SceneEditorWindow.cpp" />
     <ClCompile Include="DirectXGame\ImGUIManager\ViewportWindow.cpp" />
@@ -210,8 +211,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\ImGUIManager\FPSWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\HierarchyWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiWindow.h" />
+    <ClInclude Include="DirectXGame\ImGUIManager\IEditorSelection.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ImGuiManager.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\EffectHierarchyWindow.h" />
+    <ClInclude Include="DirectXGame\ImGUIManager\EffectPaletteWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\InspectorWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\SceneEditorWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\ViewportWindow.h" />
