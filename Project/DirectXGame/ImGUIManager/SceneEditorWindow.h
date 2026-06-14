@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "IImGuiWindow.h"
+#include "EditorDropPayload.h"  // SPRITE_DROP / EFFECT_COMP_DROP（エンジン共有ペイロード）
 #include <string>
 #include <vector>
 #include <thread>
@@ -11,29 +12,22 @@
 class ImGuiManager;
 
 // ============================================
-// ドラッグ&ドロップで運ぶペイロード
+// ドラッグ&ドロップで運ぶペイロード（ゲーム専用ぶん）
 // SceneEditorWindow（source）→ ViewportWindow（target）
+// SPRITE_DROP / EFFECT_COMP_DROP はエンジン側も使うため EditorDropPayload.h に分離済み。
 // ============================================
 #define MODEL_DROP_PAYLOAD_TYPE     "MODEL_DROP"
-#define SPRITE_DROP_PAYLOAD_TYPE    "SPRITE_DROP"
 #define ANIMATED_DROP_PAYLOAD_TYPE  "ANIMATED_DROP"
 #define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
 #define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
 #define PREFAB_DROP_PAYLOAD_TYPE    "PREFAB_DROP"
 #define ANIM_DROP_PAYLOAD_TYPE      "ANIM_DROP"
-// Effect Editor 用：エフェクトのコンポーネント種別だけを運ぶ
-#define EFFECT_COMP_DROP_PAYLOAD_TYPE "EFFECT_COMP_DROP"
 // SceneEditor のエフェクト一覧から運ぶリソース名
 #define EFFECT_RES_DROP_PAYLOAD_TYPE "EFFECT_RES_DROP"
 
 struct ModelDropPayload {
     char dirPath[256];
     char filename[128];
-};
-
-// テクスチャパスをそのまま運ぶ
-struct SpriteDropPayload {
-    char texturePath[384];
 };
 
 // アニメーションモデル（dirPath + filename + 拡張子）
@@ -60,11 +54,6 @@ struct AnimDropPayload {
 // プリファブ名
 struct PrefabDropPayload {
     char prefabName[128];
-};
-
-// Effect Component（種別だけ運ぶ。0=Primitive, 1=Particle, 2=Light, 3=Sound）
-struct EffectComponentDropPayload {
-    int kind;
 };
 
 // エフェクト名（EffectManager に登録されたエフェクトの name）

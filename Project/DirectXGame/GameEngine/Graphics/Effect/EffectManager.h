@@ -88,6 +88,49 @@ public:
     /// </summary>
     EffectHandle PlayWithDef(const EffectDef& def, const Vector3& worldPos);
 
+    // ===== プレビュー専用（EffectEditor 用、ゲームと完全分離） =====
+    /// <summary>
+    /// 指定 def をプレビュー専用リストで再生する。activeInstances_（ゲーム）には
+    /// 一切混ざらないため、シーン描画に漏れず、エディタが自前タイムラインで更新する。
+    /// </summary>
+    EffectHandle PlayPreview(const EffectDef& def, const Vector3& worldPos);
+
+    /// <summary>
+    /// プレビューインスタンスだけを更新する。エディタが unscaled な実 delta で
+    /// 毎フレーム呼ぶ（シーンのタイムスケールに依存しない）。
+    /// </summary>
+    void UpdatePreview(float deltaTime);
+
+    /// <summary>
+    /// プレビューインスタンスだけを全停止する（ゲームの activeInstances_ には触れない）。
+    /// </summary>
+    void StopAllPreview();
+
+    /// <summary>
+    /// 全プレビューインスタンスへ編集中 def をライブ反映し、中心位置を追従させる。
+    /// エディタが editBuffer の変化に応じて毎フレーム呼ぶ。
+    /// </summary>
+    void SyncPreview(const EffectDef& def, const Vector3& worldPos);
+
+    /// <summary>
+    /// 全プレビューインスタンスを t=0 へ巻き戻す（「Restart」の実体）。
+    /// </summary>
+    void RewindPreview();
+
+    /// <summary>
+    /// プレビューを指定時刻へシークする。完全ランダムアクセスは不可なので
+    /// 一旦 Rewind して固定ステップで targetTime まで早送り再シミュレートする。
+    /// （パーティクル burst / 出現時ランダムは厳密再現できない点に注意）
+    /// </summary>
+    void SeekPreview(float targetTime);
+
+    /// <summary>
+    /// プレビューのループ表示。ON のとき、寿命を終えたプレビューを削除せず自動 Rewind して
+    /// 編集中ずっと再生し続ける（既定 ON）。
+    /// </summary>
+    void SetPreviewLoop(bool loop) { previewLoop_ = loop; }
+    bool GetPreviewLoop() const { return previewLoop_; }
+
     /// <summary>
     /// 指定ハンドルのエフェクトが再生中なら停止要求を出す（次フレームで終了）。
     /// loop エフェクトを外から終わらせる場合に使う。
@@ -159,6 +202,8 @@ public:
     /// 指定ハンドルの再生中インスタンスを返す（EffectEditor のプレビュー Timeline 表示用）。無ければnullptr。
     /// </summary>
     EffectInstance* GetInstanceByHandle(EffectHandle handle) {
+        auto pit = previewHandleToInstance_.find(handle);
+        if (pit != previewHandleToInstance_.end()) return pit->second;
         auto it = handleToInstance_.find(handle);
         return (it != handleToInstance_.end()) ? it->second : nullptr;
     }
@@ -179,7 +224,8 @@ private:
     std::unordered_map<std::string, EffectDef> defs_;
     std::vector<std::unique_ptr<EffectInstance>> activeInstances_;
 
-    // ハンドル発行用カウンタ（0は無効値なので 1 から開始）
+    // ハンドル発行用カウンタ（0は無効値なので 1 から開始）。
+    // プレビューとゲームでハンドル空間は共有（重複しない）。
     EffectHandle nextHandle_ = 1;
 
     // ハンドル → activeInstances_ の生ポインタ。インスタンス破棄時に erase する。
@@ -189,4 +235,13 @@ private:
     // CloseCommandList より先に解放すると D3D12 ERROR #921 になるため、
     // 次フレームの Update 冒頭まで保持する。
     std::vector<std::unique_ptr<EffectInstance>> pendingDelete_;
+
+    // ===== プレビュー専用（EffectEditor）。activeInstances_ とは別系統で、
+    // シーンの Update/Draw には一切載らない。更新はエディタの UpdatePreview のみ。
+    std::vector<std::unique_ptr<EffectInstance>> previewInstances_;
+    std::unordered_map<EffectHandle, EffectInstance*> previewHandleToInstance_;
+    std::vector<std::unique_ptr<EffectInstance>> previewPendingDelete_;
+
+    // プレビューを寿命終了で消さず自動 Rewind してループ表示するか（編集中の常時プレビュー用）。
+    bool previewLoop_ = true;
 };

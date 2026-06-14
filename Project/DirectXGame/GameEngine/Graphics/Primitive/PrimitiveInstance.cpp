@@ -1,7 +1,7 @@
 #include "PrimitiveInstance.h"
 #include "PrimitiveGenerator.h"
 #include "MathUtility.h"
-#include "SceneEditorWindow.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
+#include "EditorDropPayload.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
 #include "EngineTime.h"
 #include "imgui.h"
 

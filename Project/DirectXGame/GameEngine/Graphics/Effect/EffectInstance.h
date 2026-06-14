@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <string>
 
 class Camera;
 class GPUParticleManager;
@@ -24,6 +25,20 @@ public:
 
     void Update(Camera* camera, float deltaTime);
     void Draw();
+
+    /// <summary>
+    /// 編集中の def をライブ反映する（EffectEditor プレビュー用）。
+    /// 値（scale/color/timing 等の毎フレーム読みフィールド）は def_ 差し替えで即反映。
+    /// コンポーネント数が変わった型はその型の runtime を作り直す。
+    /// meshType / ジオメトリ params が変わった primitive runtime だけレンダラを部分リビルド。
+    /// elapsedTime_ は保持する。
+    /// </summary>
+    void SyncFromDef(const EffectDef& newDef);
+
+    /// <summary>
+    /// t=0 へ巻き戻す（runtime を片付けて最初から再生し直す）。「Restart」の実体。
+    /// </summary>
+    void Rewind();
 
     // useDistortion 有効な各 primitive renderer を distortionRT へ描画する
     void DrawDistortionPass();
@@ -75,11 +90,30 @@ public:
     /// </summary>
     void RequestStop() { stopRequested_ = true; }
 
+    /// <summary>
+    /// プレビュー（エディタ）インスタンスとして扱うか。true の場合、GPUパーティクルの
+    /// グループ名にプレフィックスを付けてシーンと物理バッファを分離する。
+    /// </summary>
+    void SetPreview(bool p) { isPreview_ = p; }
+    bool IsPreview() const { return isPreview_; }
+
+    /// <summary>
+    /// このインスタンスが使用する GPUパーティクルグループ名（プレビューならプレフィックス込み）を
+    /// out に追加する。EffectManager がプレビューグループのリサイクル keep set を作るのに使う。
+    /// </summary>
+    void CollectPreviewGroupNames(std::vector<std::string>& out) const;
+
 private:
     /// <summary>
     /// loop 用：elapsedTime と各 runtime をリセット（現在確保中のリソースは解放）。
     /// </summary>
     void ResetForLoop();
+
+    /// <summary>
+    /// GPUパーティクルグループ名を解決する。プレビューインスタンスなら kPreviewPrefix を付け、
+    /// シーン用グループと物理バッファを分離する。空名はそのまま返す。
+    /// </summary>
+    std::string EffGroupName(const std::string& name) const;
 
     EffectDef def_{};
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
@@ -90,6 +124,7 @@ private:
     bool stopRequested_ = false;
     uint64_t handle_ = 0;
     GPUParticleManager* gpu_ = nullptr;
+    bool isPreview_ = false; // プレビュー（エディタ）インスタンスなら true
 
     struct PrimitiveRuntime {
         std::unique_ptr<EffectPrimitiveRenderer> renderer;

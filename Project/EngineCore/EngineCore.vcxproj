@@ -282,6 +282,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelCore.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\ModelManager.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\ConvertString.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\EditorDropPayload.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\EngineTime.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\ITimeScaleProvider.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Log.h" />
