@@ -1,0 +1,251 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "effectdef.schema.json",
+  "title": "EffectDef",
+  "description": "1 ファイル = 1 EffectDef。権威ソースは GameEngine/Graphics/Effect/EffectDef.cpp の LoadFromFile/SaveToFile。LoadFromFile は完全寛容で、未指定キーは構造体デフォルトにフォールバックする → 生成側は『デフォルトと異なる値だけ』書けばよい（最小 JSON で動く）。",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "description": "エフェクト名（ファイル名と一致させる）" },
+    "totalDuration": { "type": "number", "default": 1.0, "description": "エフェクト全体の長さ（秒）。loop 時はこの周期で繰り返す" },
+    "loop": { "type": "boolean", "default": false, "description": "true で totalDuration 経過後に自動再開（弾の trail 等。寿命を外から切る場合は Stop(handle)）" },
+    "primitives": { "type": "array", "items": { "$ref": "#/$defs/primitive" } },
+    "particles":  { "type": "array", "items": { "$ref": "#/$defs/particle" } },
+    "lights":     { "type": "array", "items": { "$ref": "#/$defs/light" } },
+    "sounds":     { "type": "array", "items": { "$ref": "#/$defs/sound" } }
+  },
+
+  "$defs": {
+    "vec2":  { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "vec3":  { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "color": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4, "description": "RGBA 0..1" },
+
+    "billboardMode": {
+      "type": "string", "enum": ["None", "Full", "YAxis"], "default": "Full",
+      "description": "None=板を3D回転（破片/帯）, Full=常にカメラ正対, YAxis=Y軸ビルボード"
+    },
+    "blendMode": {
+      "type": "integer", "enum": [0, 1, 2, 3, 4, 5], "default": 2,
+      "description": "0=None, 1=Normal, 2=Add(発光・炎・閃光), 3=Subtract, 4=Multiply, 5=Screen"
+    },
+    "meshType": {
+      "type": "integer", "enum": [0, 1, 2, 3, 4, 5, 6, 7], "default": 0,
+      "description": "0=Plane(板/閃光/斬撃), 1=Box, 2=Sphere, 3=Ring(衝撃波), 4=Cylinder(柱/オーラ), 5=Helix(螺旋), 6=Beam(レーザー), 7=Lightning(稲妻)"
+    },
+
+    "ringParams": {
+      "type": "object", "description": "meshType=3(Ring) で使用",
+      "properties": {
+        "outerRadius": { "type": "number", "default": 1.0 },
+        "innerRadius": { "type": "number", "default": 0.5 },
+        "divisions":   { "type": "integer", "default": 32 },
+        "innerColor":  { "$ref": "#/$defs/color" },
+        "outerColor":  { "$ref": "#/$defs/color" },
+        "startAngle":  { "type": "number", "default": 0.0, "description": "radian" },
+        "endAngle":    { "type": "number", "default": 6.2831853, "description": "radian。全周=2π" }
+      }
+    },
+    "cylinderParams": {
+      "type": "object", "description": "meshType=4(Cylinder) で使用",
+      "properties": {
+        "topRadius":    { "type": "number" },
+        "bottomRadius": { "type": "number" },
+        "height":       { "type": "number" },
+        "divisions":    { "type": "integer", "default": 32 },
+        "topColor":     { "$ref": "#/$defs/color" },
+        "bottomColor":  { "$ref": "#/$defs/color" },
+        "startAngle":   { "type": "number", "description": "radian" },
+        "endAngle":     { "type": "number", "description": "radian" }
+      }
+    },
+    "helixParams": {
+      "type": "object", "description": "meshType=5(Helix) で使用",
+      "properties": {
+        "startHelixRadius": { "type": "number" },
+        "endHelixRadius":   { "type": "number" },
+        "startTubeRadius":  { "type": "number" },
+        "endTubeRadius":    { "type": "number" },
+        "pitch":            { "type": "number" },
+        "turns":            { "type": "number" },
+        "circleSegments":   { "type": "integer" },
+        "lengthSegments":   { "type": "integer" },
+        "startColor":       { "$ref": "#/$defs/color" },
+        "endColor":         { "$ref": "#/$defs/color" }
+      }
+    },
+    "beamAppearance": {
+      "type": "object",
+      "properties": {
+        "startWidth":      { "type": "number" },
+        "endWidth":        { "type": "number" },
+        "planeCount":      { "type": "integer" },
+        "fadeStartLength": { "type": "number" },
+        "fadeEndLength":   { "type": "number" },
+        "startColor":      { "$ref": "#/$defs/color" },
+        "endColor":        { "$ref": "#/$defs/color" },
+        "uvWrapByLength":  { "type": "boolean" },
+        "uvTilesPerUnit":  { "type": "number" }
+      }
+    },
+    "beamParams": {
+      "type": "object", "description": "meshType=6(Beam) で使用",
+      "properties": {
+        "startPos":       { "$ref": "#/$defs/vec3" },
+        "endPos":         { "$ref": "#/$defs/vec3" },
+        "lengthSegments": { "type": "integer" },
+        "appearance":     { "$ref": "#/$defs/beamAppearance" }
+      }
+    },
+    "lightningParams": {
+      "type": "object", "description": "meshType=7(Lightning) で使用",
+      "properties": {
+        "startPos":          { "$ref": "#/$defs/vec3" },
+        "endPos":            { "$ref": "#/$defs/vec3" },
+        "generations":       { "type": "integer" },
+        "maxOffsetRatio":    { "type": "number" },
+        "randomSeed":        { "type": "integer" },
+        "branchProbability": { "type": "number" },
+        "branchLengthScale": { "type": "number" },
+        "branchMaxAngle":    { "type": "number" },
+        "branchWidthScale":  { "type": "number" },
+        "branchColorScale":  { "type": "number" },
+        "appearance":        { "$ref": "#/$defs/beamAppearance" }
+      }
+    },
+
+    "primitive": {
+      "type": "object",
+      "description": "単発の幾何描画。lifetime 中に scale/color を補間する。",
+      "additionalProperties": true,
+      "properties": {
+        "displayName": { "type": "string" },
+        "meshType": { "$ref": "#/$defs/meshType" },
+        "ringParams":      { "$ref": "#/$defs/ringParams" },
+        "cylinderParams":  { "$ref": "#/$defs/cylinderParams" },
+        "helixParams":     { "$ref": "#/$defs/helixParams" },
+        "beamParams":      { "$ref": "#/$defs/beamParams" },
+        "lightningParams": { "$ref": "#/$defs/lightningParams" },
+        "offset": { "$ref": "#/$defs/vec3", "description": "エフェクト中心からのオフセット" },
+        "rotate": { "$ref": "#/$defs/vec3", "description": "基準回転（radian）" },
+        "randomRotateOnSpawn": { "type": "boolean", "default": false },
+        "randomRotateRange":   { "$ref": "#/$defs/vec3", "description": "spawn 時 ±この範囲でランダム回転（radian）" },
+        "rotateSpeed":         { "$ref": "#/$defs/vec3", "description": "持続回転の角速度（rad/s）" },
+        "startTime": { "type": "number", "default": 0.0, "description": "再生開始からの絶対秒" },
+        "lifetime":  { "type": "number", "default": 1.0 },
+        "startScale": { "$ref": "#/$defs/vec3", "default": [1, 1, 1] },
+        "endScale":   { "$ref": "#/$defs/vec3", "default": [1, 1, 1] },
+        "startColor": { "$ref": "#/$defs/color", "default": [1, 1, 1, 1] },
+        "endColor":   { "$ref": "#/$defs/color", "default": [1, 1, 1, 0], "description": "末尾を α=0 にするとフェードアウト" },
+        "texturePath": { "type": "string", "description": "クック後 DDS パス。空は white1x1 扱い。catalog の runtimePath を書く" },
+        "blendMode":     { "$ref": "#/$defs/blendMode" },
+        "billboardMode": { "$ref": "#/$defs/billboardMode" },
+        "depthWrite":     { "type": "boolean", "default": false },
+        "alphaReference": { "type": "number", "default": 0.0, "description": "この α 未満を discard（抜き）" },
+        "cullBackface":   { "type": "boolean", "default": false },
+        "samplerMode":    { "type": "integer", "enum": [0, 1, 2], "default": 0, "description": "0=WrapAll, 1=WrapU+ClampV, 2=ClampAll" },
+        "viewAngleFadePower": { "type": "number", "default": 0.0, "description": "0=無効。雷/レーザーの斜め面フェードは 2〜4" },
+        "uvAutoScroll":  { "type": "boolean", "default": false },
+        "uvScrollSpeed": { "$ref": "#/$defs/vec2", "description": "1秒あたりのスクロール量" },
+        "uvOffset": { "$ref": "#/$defs/vec2" },
+        "uvScale":  { "$ref": "#/$defs/vec2", "default": [1, 1] },
+        "uvFlipU": { "type": "boolean", "default": false },
+        "uvFlipV": { "type": "boolean", "default": false },
+        "useDistortion":         { "type": "boolean", "default": false, "description": "true で歪み RT に描き込む（陽炎/衝撃波の空間歪み）" },
+        "distortionTexturePath": { "type": "string", "description": "ノーマルマップ風 RG テクスチャ。無ければ歪まない" },
+        "distortionStrength":      { "type": "number", "default": 0.5 },
+        "distortionUvAutoScroll":  { "type": "boolean", "default": false },
+        "distortionUvScrollSpeed": { "$ref": "#/$defs/vec2" },
+        "distortionUvOffset":      { "$ref": "#/$defs/vec2" },
+        "distortionUvScale":       { "$ref": "#/$defs/vec2", "default": [1, 1] },
+        "distortionUvFlipU": { "type": "boolean", "default": false },
+        "distortionUvFlipV": { "type": "boolean", "default": false }
+      }
+    },
+
+    "particle": {
+      "type": "object",
+      "description": "GPU パーティクルグループへバースト発射。未登録のグループ名なら texturePath で自動生成される。",
+      "additionalProperties": true,
+      "properties": {
+        "displayName": { "type": "string" },
+        "gpuParticleGroupName": { "type": "string", "description": "GPUParticleManager 登録名。エフェクト固有のユニーク名を推奨" },
+        "texturePath": { "type": "string", "default": "Resources/Textures/circle.dds", "description": "グループ自動生成時のテクスチャ（既存グループがあれば無視）" },
+        "offset": { "$ref": "#/$defs/vec3" },
+        "startTime": { "type": "number", "default": 0.0 },
+        "duration":  { "type": "number", "default": 0.3, "description": "emit 受付期間（秒）" },
+        "burstCount": { "type": "integer", "minimum": 0, "default": 16 },
+        "billboardMode": { "$ref": "#/$defs/billboardMode" },
+        "colorMode": { "type": "integer", "enum": [0, 1], "default": 0, "description": "0=Random(start/end無視), 1=Fixed(start→end 補間, colorKeys で多色)" },
+        "startColor": { "$ref": "#/$defs/color", "default": [1, 1, 1, 1] },
+        "endColor":   { "$ref": "#/$defs/color", "default": [1, 1, 1, 0] },
+        "colorKeys": {
+          "type": "array",
+          "description": "Fixed 時の多色グラデ。2個以上で start/end の代わりに多色補間",
+          "items": {
+            "type": "object",
+            "properties": {
+              "location": { "type": "number", "minimum": 0, "maximum": 1 },
+              "color": { "$ref": "#/$defs/color" }
+            }
+          }
+        },
+        "scaleMin": { "$ref": "#/$defs/vec2", "default": [0.1, 0.1] },
+        "scaleMax": { "$ref": "#/$defs/vec2", "default": [0.5, 0.5] },
+        "uniformScale": { "type": "boolean", "default": true, "description": "true で 幅=高さ を強制" },
+        "startScale": { "type": "number", "default": 1.0, "description": "Size over Lifetime 開始倍率" },
+        "endScale":   { "type": "number", "default": 1.0, "description": "Size over Lifetime 終了倍率" },
+        "emitRadius": { "type": "number", "default": 0.5, "description": "発生位置の散らばり半径（Ring では円半径）" },
+        "particleLifeTime": { "type": "number", "default": 1.0, "description": "各粒子の寿命（秒）" },
+        "emitShape": { "type": "integer", "enum": [0, 1], "default": 0, "description": "0=Sphere, 1=Ring(円周)" },
+        "ringNormal": { "$ref": "#/$defs/vec3", "default": [0, 0, 1] },
+        "ringThickness": { "type": "number", "default": 0.05 },
+        "velocityMode": { "type": "integer", "enum": [0, 1, 2, 3], "default": 0, "description": "0=全方向ランダム, 1=方向固定, 2=放射(中心から外), 3=接線(公転初速)" },
+        "velocityDir": { "$ref": "#/$defs/vec3", "default": [0, 1, 0], "description": "mode=1 の向き" },
+        "velocitySpeed": { "type": "number", "default": 3.0 },
+        "velocityJitter": { "type": "number", "default": 0.0 },
+        "randomRotateOnSpawn": { "type": "boolean", "default": false, "description": "billboard None 時のみ有効（破片のタンブル）" },
+        "randomRotateRange": { "$ref": "#/$defs/vec3" },
+        "rotateSpeed": { "$ref": "#/$defs/vec3" },
+        "orbitEnabled": { "type": "boolean", "default": false, "description": "中心まわりに周回（外に出ない）" },
+        "orbitSpinSpeed": { "type": "number", "default": 1.0, "description": "帯上を流れる rad/s（軸=ringNormal）" },
+        "orbitTumbleSpeed": { "type": "number", "default": 0.0, "description": "帯自体の回転 rad/s" },
+        "orbitTumbleAxis": { "$ref": "#/$defs/vec3", "default": [0, 1, 0] }
+      }
+    },
+
+    "light": {
+      "type": "object",
+      "description": "PointLight / SpotLight を動的確保。lifetime 中に intensity を補間。",
+      "additionalProperties": true,
+      "properties": {
+        "displayName": { "type": "string" },
+        "kind": { "type": "string", "enum": ["Point", "Spot"], "default": "Point" },
+        "offset": { "$ref": "#/$defs/vec3" },
+        "direction": { "$ref": "#/$defs/vec3", "default": [0, -1, 0], "description": "Spot の照射方向" },
+        "startTime": { "type": "number", "default": 0.0 },
+        "lifetime": { "type": "number", "default": 0.4 },
+        "color": { "$ref": "#/$defs/color", "default": [1, 1, 1, 1] },
+        "startIntensity": { "type": "number", "default": 5.0 },
+        "endIntensity": { "type": "number", "default": 0.0 },
+        "range": { "type": "number", "default": 5.0 },
+        "spotCosAngle": { "type": "number", "default": 0.5, "description": "Spot 専用" },
+        "spotCosFalloffStart": { "type": "number", "default": 0.7, "description": "Spot 専用" }
+      }
+    },
+
+    "sound": {
+      "type": "object",
+      "description": "SoundManager 登録名の音声を 3D 位置で再生。",
+      "additionalProperties": true,
+      "properties": {
+        "displayName": { "type": "string" },
+        "soundName": { "type": "string", "description": "SoundManager::LoadFile の name キー" },
+        "offset": { "$ref": "#/$defs/vec3" },
+        "startTime": { "type": "number", "default": 0.0 },
+        "distanceScale": { "type": "number", "default": 20.0 },
+        "volume": { "type": "number", "default": 1.0 }
+      }
+    }
+  }
+}
