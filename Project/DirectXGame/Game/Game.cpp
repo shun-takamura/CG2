@@ -31,6 +31,7 @@
 #include "Components/PrefabManager.h"
 #include "Scene/Scene.h"
 #include "LightManager.h"
+#include "PepperMacros.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -148,6 +149,8 @@ void Game::Update() {
 }
 
 void Game::Draw() {
+	PEPPER_SCOPE("Framework::Draw");
+
 	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
 	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
 	if (shadowMap_) {

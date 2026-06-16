@@ -23,6 +23,7 @@ public:
         Gfx,      // gfx.log     DirectX警告・デバイスロスト等
         Error,    // error.log   一般エラー
         Session,  // session.log KPI・診断・一般INFO（セッション全体の流れ）
+        Profile,  // profile.log P.E.P.P.E.R.の区間別CPU/GPU時間（高頻度・USE_PEPPER時のみ）
         kCount
     };
 

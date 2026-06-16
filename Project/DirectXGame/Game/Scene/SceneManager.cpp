@@ -6,6 +6,7 @@
 #include "DStorageManager.h"
 #include "Components/CollisionManager.h"
 #include "SessionLogger.h"
+#include "PepperMacros.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -50,6 +51,8 @@ void SceneManager::Finalize() {
 }
 
 void SceneManager::Update() {
+	PEPPER_SCOPE("SceneManager::Update");
+
 	// トランジションの更新
 	TransitionManager::GetInstance()->Update();
 
@@ -88,6 +91,8 @@ void SceneManager::Update() {
 }
 
 void SceneManager::Draw() {
+	PEPPER_SCOPE("SceneManager::Draw");
+
 	if (currentScene_) {
 		currentScene_->Draw();
 

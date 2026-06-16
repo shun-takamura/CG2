@@ -42,6 +42,7 @@
 #include "PrimitivePipeline.h"
 #include "LineRenderer.h"
 #include "SkinningComputeManager.h"
+#include "PepperMacros.h"
 
 void Framework::Run() {
 	// KPI: 計測起点 (Run の入り口 = 実質プロセス開始直後)
@@ -70,6 +71,9 @@ void Framework::Run() {
 
 		// 描画
 		Draw();
+
+		// このフレームの全区間集計を profile.log へ（USE_PEPPER 時のみ）
+		PEPPER_END_FRAME();
 	}
 
 	// ゲームの終了
@@ -415,6 +419,8 @@ void Framework::Initialize() {
 }
 
 void Framework::Update() {
+	PEPPER_SCOPE("Framework::Update");
+
 	// 初回 Update で KPI を 1 度だけ出力
 	// (Initialize 完了 = 最初のシーンが GPU リソース全部揃った直後の地点)
 	if (!kpiLogged_) {
@@ -582,6 +588,9 @@ void Framework::Finalize() {
 
 	CloseWindow(winApp_->GetHwnd());
 	winApp_->Finalize();
+
+	// 未出力のプロファイルウィンドウを書き出す（ログを閉じる前に）
+	PEPPER_FLUSH();
 
 	// セッションログを閉じる（全ファイルを flush）
 	SessionLogger::Instance().Finalize();

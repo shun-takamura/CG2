@@ -17,6 +17,7 @@ namespace {
         case SessionLogger::Category::Gfx:     return "gfx.log";
         case SessionLogger::Category::Error:   return "error.log";
         case SessionLogger::Category::Session: return "session.log";
+        case SessionLogger::Category::Profile: return "profile.log";
         default:                               return "unknown.log";
         }
     }
@@ -29,6 +30,7 @@ namespace {
         case SessionLogger::Category::Gfx:     return "GFX";
         case SessionLogger::Category::Error:   return "ERROR";
         case SessionLogger::Category::Session: return "SESSION";
+        case SessionLogger::Category::Profile: return "PROFILE";
         default:                               return "UNKNOWN";
         }
     }
