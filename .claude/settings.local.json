@@ -33,7 +33,12 @@
       "Bash(git remote *)",
       "Bash(git -C C:/Users/sleon/source/repos/CG2 branch -a)",
       "Bash(git -C C:/Users/sleon/source/repos/CG2 log --oneline -15)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(python tools/Python/analyze_profile.py)",
+      "Bash(python tools/Python/analyze_profile.py --json)",
+      "Bash(python tools/Python/analyze_profile.py --fps 240 --top 3)",
+      "Bash(sed -n '/効率チェック/,$p')",
+      "Bash(python tools/Python/analyze_profile.py --drawcall-warn 10)"
     ]
   }
 }
