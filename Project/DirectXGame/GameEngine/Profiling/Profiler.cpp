@@ -74,6 +74,35 @@ void Profiler::EndSection() {
     s.calls += 1;
 }
 
+void Profiler::AddGpuMs(const char* name, double gpuMs) {
+    auto it = indexByName_.find(name);
+    if (it != indexByName_.end()) {
+        stats_[it->second].gpuMs += gpuMs;
+        return;
+    }
+    // CPU 区間に同名が無い GPU 専用区間（depth=0、cpu/calls は 0 のまま）
+    const size_t index = stats_.size();
+    SectionStat s;
+    s.name = name;
+    s.file = nullptr;
+    s.line = 0;
+    s.depth = 0;
+    s.gpuMs = gpuMs;
+    stats_.push_back(std::move(s));
+    indexByName_.emplace(name, index);
+}
+
+void Profiler::Count(const char* name, int64_t n) {
+    auto it = counterIndexByName_.find(name);
+    if (it == counterIndexByName_.end()) {
+        const size_t index = counters_.size();
+        counters_.push_back({ name, n });
+        counterIndexByName_.emplace(name, index);
+    } else {
+        counters_[it->second].value += n;
+    }
+}
+
 void Profiler::EndFrame() {
     // このフレームの各区間をウィンドウ集計へ畳み込む
     for (const auto& s : stats_) {
@@ -98,12 +127,38 @@ void Profiler::EndFrame() {
         if (s.cpuMs > w.maxCpuMs) {
             w.maxCpuMs = s.cpuMs;
         }
+        w.sumGpuMs += s.gpuMs;
+        if (s.gpuMs > w.maxGpuMs) {
+            w.maxGpuMs = s.gpuMs;
+        }
     }
+
+    // このフレームの各カウンタをウィンドウ集計へ畳み込む
+    for (const auto& c : counters_) {
+        size_t index;
+        auto it = windowCounterIndexByName_.find(c.name);
+        if (it == windowCounterIndexByName_.end()) {
+            index = windowCounters_.size();
+            windowCounters_.push_back({ c.name, 0, 0, 0 });
+            windowCounterIndexByName_.emplace(c.name, index);
+        } else {
+            index = it->second;
+        }
+        WindowCounter& wc = windowCounters_[index];
+        wc.total += c.value;
+        wc.presentFrames += 1;
+        if (c.value > wc.maxPerFrame) {
+            wc.maxPerFrame = c.value;
+        }
+    }
+
     ++windowFrames_;
 
     ++frame_;
     stats_.clear();
     indexByName_.clear();
+    counters_.clear();
+    counterIndexByName_.clear();
 
     // 1秒経過していればウィンドウを書き出す
     const double elapsedMs = static_cast<double>(NowTicks() - windowStartTicks_) * tickToMs_;
@@ -127,6 +182,8 @@ void Profiler::FlushWindow() {
     for (const auto& w : windowStats_) {
         const double avgMs =
             (w.presentFrames > 0) ? (w.sumCpuMs / w.presentFrames) : 0.0;
+        const double gpuAvgMs =
+            (w.presentFrames > 0) ? (w.sumGpuMs / w.presentFrames) : 0.0;
 
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(3)
@@ -140,15 +197,36 @@ void Profiler::FlushWindow() {
             << " sum_ms=" << std::setprecision(3) << w.sumCpuMs
             << " avg_ms=" << avgMs
             << " max_ms=" << w.maxCpuMs
-            << " gpu_ms=0.000"
+            << " gpu_sum_ms=" << w.sumGpuMs
+            << " gpu_avg_ms=" << gpuAvgMs
+            << " gpu_max_ms=" << w.maxGpuMs
             << " file=" << BaseName(w.file)
             << " line=" << w.line;
         SessionLogger::Instance().Write(
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
     }
 
+    // カウンタ行（DrawCall 回数など。時間ではないので別フォーマット）
+    for (const auto& wc : windowCounters_) {
+        const double avgPerFrame =
+            (windowFrames_ > 0) ? (static_cast<double>(wc.total) / windowFrames_) : 0.0;
+
+        std::ostringstream oss;
+        oss << "frame=" << frame_
+            << " window_s=" << std::fixed << std::setprecision(2) << windowSec
+            << " frames=" << windowFrames_
+            << " counter=" << wc.name
+            << " total=" << wc.total
+            << " avg_per_frame=" << std::setprecision(2) << avgPerFrame
+            << " max_per_frame=" << wc.maxPerFrame;
+        SessionLogger::Instance().Write(
+            SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
+    }
+
     windowStats_.clear();
     windowIndexByName_.clear();
+    windowCounters_.clear();
+    windowCounterIndexByName_.clear();
     windowFrames_ = 0;
     windowStartTicks_ = NowTicks();
 }

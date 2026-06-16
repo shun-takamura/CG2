@@ -1,5 +1,6 @@
 #include "SpriteInstance.h"
 #include "MathUtility.h"
+#include "PepperMacros.h"
 
 #ifdef USE_IMGUI
 #include "imgui.h"
@@ -138,6 +139,7 @@ void SpriteInstance::Draw()
         TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
 
+    PEPPER_COUNT("DrawCall");
     commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }
 

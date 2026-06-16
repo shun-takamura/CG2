@@ -1,5 +1,6 @@
 #include "Skybox.h"
 #include "SkyboxManager.h"
+#include "PepperMacros.h"
 
 void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const std::string& cubemapFilePath)
 {
@@ -72,6 +73,7 @@ void Skybox::Draw(DirectXCore* dxCore)
     );
 
     // インデックスを使用して描画
+    PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(36, 1, 0, 0, 0);
 }
 

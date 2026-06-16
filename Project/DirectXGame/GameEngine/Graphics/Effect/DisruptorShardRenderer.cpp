@@ -2,6 +2,7 @@
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "MathUtility.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <cstring>
 #include <algorithm>
@@ -215,6 +216,7 @@ void DisruptorShardRenderer::Draw(const Matrix4x4& viewProjection, uint32_t capt
 		std::memcpy(cbMapped_ + i * cbStride_, &cb, sizeof(cb));
 		const D3D12_GPU_VIRTUAL_ADDRESS addr = cbBuffer_->GetGPUVirtualAddress() + i * cbStride_;
 		cmd->SetGraphicsRootConstantBufferView(0, addr);
+		PEPPER_COUNT("DrawCall");
 		cmd->DrawInstanced(range.count, 1, range.start, 0);
 	}
 }

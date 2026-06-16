@@ -6,6 +6,7 @@
 #include "VertexData.h"
 #include "Log.h"
 #include "EngineTime.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <algorithm>
 
@@ -447,6 +448,7 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
     commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
     srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
 
+    PEPPER_COUNT("DrawCall");
     commandList->DrawInstanced(6, kMaxParticles, 0, 0);
 }
 

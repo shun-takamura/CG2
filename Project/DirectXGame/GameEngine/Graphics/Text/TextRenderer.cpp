@@ -5,6 +5,7 @@
 #include "WindowsApplication.h"
 #include "Utf8.h"
 #include "Log.h"
+#include "PepperMacros.h"
 
 #include <cassert>
 #include <d3dcompiler.h>
@@ -271,6 +272,7 @@ void TextRenderer::Flush()
 	cmd->SetGraphicsRootConstantBufferView(1, screenCB_->GetGPUVirtualAddress());
 	srvManager_->SetGraphicsRootDescriptorTable(2, atlas_->GetSrvIndex());
 
+	PEPPER_COUNT("DrawCall");
 	cmd->DrawInstanced(4, n, 0, 0);
 
 	cpuInstances_.clear();

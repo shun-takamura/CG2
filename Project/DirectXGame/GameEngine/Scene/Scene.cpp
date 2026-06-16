@@ -466,6 +466,7 @@ void Scene::UpdateDynamicObjects() {
 
 void Scene::DrawDynamicObjects() {
 	PEPPER_SCOPE("Scene::DrawDynamicObjects");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicObjects");
 	for (auto& o : object3DInstances_) {
 		o->Draw(dxCore_);
 	}
@@ -498,6 +499,7 @@ void Scene::DispatchDynamicAnimatedSkinning() {
 
 void Scene::DrawDynamicAnimated() {
 	PEPPER_SCOPE("Scene::DrawDynamicAnimated");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
 		a->Draw(dxCore_);
 	}
@@ -520,6 +522,7 @@ void Scene::UpdateDynamicSprites() {
 
 void Scene::DrawDynamicSprites() {
 	PEPPER_SCOPE("Scene::DrawDynamicSprites");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicSprites");
 	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
@@ -536,6 +539,7 @@ void Scene::UpdateDynamicPrimitives() {
 
 void Scene::DrawDynamicPrimitives() {
 	PEPPER_SCOPE("Scene::DrawDynamicPrimitives");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		p->Draw();
 	}

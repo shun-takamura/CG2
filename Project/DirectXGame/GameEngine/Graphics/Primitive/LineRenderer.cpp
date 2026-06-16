@@ -49,6 +49,7 @@ void LineRenderer::Draw(Pass pass) {
     *s.viewProjectionData = s.camera->GetViewProjectionMatrix();
 
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
+    PEPPER_GPU_SCOPE(commandList, "LineRenderer::Draw");
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
     commandList->SetPipelineState(pipelineState_.Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
@@ -56,6 +57,7 @@ void LineRenderer::Draw(Pass pass) {
     commandList->SetGraphicsRootConstantBufferView(
         0, s.viewProjectionResource->GetGPUVirtualAddress());
 
+    PEPPER_COUNT("DrawCall");
     commandList->DrawInstanced(s.lineCount * 2, 1, 0, 0);
 
     s.lineCount = 0;

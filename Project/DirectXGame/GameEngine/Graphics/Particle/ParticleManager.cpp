@@ -383,6 +383,7 @@ void ParticleManager::Draw()
 {
     PEPPER_SCOPE("ParticleManager::Draw");
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
+    PEPPER_GPU_SCOPE(commandList, "ParticleManager::Draw");
 
     // ルートシグネチャを設定
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
@@ -414,6 +415,7 @@ void ParticleManager::Draw()
         srvManager_->SetGraphicsRootDescriptorTable(0, group.instancingSrvIndex);
 
         // DrawCall（インスタンシング描画）
+        PEPPER_COUNT("DrawCall");
         commandList->DrawInstanced(6, group.instanceCount, 0, 0);
     }
 }

@@ -35,6 +35,18 @@ public:
     void EndFrame();
 
     /// <summary>
+    /// GPU 計測結果（区間名・ms）を現フレームの集計へ加算する。
+    /// GpuProfiler がフレーム末リードバック時に呼ぶ。CPU と同名なら同じ行にまとまる。
+    /// </summary>
+    void AddGpuMs(const char* name, double gpuMs);
+
+    /// <summary>
+    /// 名前付きカウンタを n だけ増やす（DrawCall 回数など「個数」の計測）。
+    /// 時間ではないので区間とは別系統。ウィンドウごとに total/avg/max を出す。
+    /// </summary>
+    void Count(const char* name, int64_t n = 1);
+
+    /// <summary>
     /// 未出力のウィンドウを強制的に書き出す。終了処理（Framework::Finalize）で呼ぶ。
     /// </summary>
     void Flush();
@@ -53,6 +65,7 @@ private:
         int depth = 0;               // 区間スタックの深さ（初出時に確定）
         int calls = 0;
         double cpuMs = 0.0;
+        double gpuMs = 0.0;          // GPU タイムスタンプ計測（同名区間に加算）
     };
 
     // 区間ごとの「1秒ウィンドウ」集計
@@ -65,12 +78,27 @@ private:
         int64_t totalCalls = 0;  // ウィンドウ内の総呼び出し回数
         double sumCpuMs = 0.0;   // 各フレームの cpu_ms 合計
         double maxCpuMs = 0.0;   // 1フレームあたり cpu_ms の最大（スパイク把握）
+        double sumGpuMs = 0.0;   // 各フレームの gpu_ms 合計
+        double maxGpuMs = 0.0;   // 1フレームあたり gpu_ms の最大
     };
 
     // 計測中の区間（開始時刻と集計先インデックス）
     struct ActiveScope {
         int64_t startTicks = 0;
         size_t index = 0;
+    };
+
+    // 名前付きカウンタの「1フレーム」値
+    struct FrameCounter {
+        std::string name;
+        int64_t value = 0;
+    };
+    // 名前付きカウンタの「1秒ウィンドウ」集計
+    struct WindowCounter {
+        std::string name;
+        int64_t total = 0;        // ウィンドウ内の合計
+        int64_t maxPerFrame = 0;  // 1フレームの最大
+        int presentFrames = 0;    // 出現フレーム数
     };
 
     void FlushWindow();  // 現ウィンドウを書き出してリセット
@@ -90,6 +118,12 @@ private:
     std::unordered_map<std::string, size_t> windowIndexByName_;
     int windowFrames_ = 0;
     int64_t windowStartTicks_ = 0;
+
+    // カウンタ（フレーム内 / ウィンドウ）
+    std::vector<FrameCounter> counters_;
+    std::unordered_map<std::string, size_t> counterIndexByName_;
+    std::vector<WindowCounter> windowCounters_;
+    std::unordered_map<std::string, size_t> windowCounterIndexByName_;
 };
 
 /// <summary>

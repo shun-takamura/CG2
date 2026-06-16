@@ -4,6 +4,7 @@
 #include "SkinCluster.h"
 #include "AssetLocator.h"
 #include "DStorageManager.h"
+#include "PepperMacros.h"
 
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
@@ -52,6 +53,7 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
         2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
 
+    PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(
         indexCount_, 1, 0, 0, 0);
 }
@@ -74,6 +76,7 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
     );
 
     // ドローコール
+    PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(
         indexCount_, 1, 0, 0, 0);
 }
@@ -82,6 +85,7 @@ void AnimatedModelInstance::DrawIdPass(DirectXCore* dxCore, const SkinCluster& s
 {
     dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
     dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
@@ -90,6 +94,7 @@ void AnimatedModelInstance::DrawShadowPass(DirectXCore* dxCore, const SkinCluste
     // スキニング済みVBVで深度のみ描画（PSO/RootSig/カスケードはパス側で設定済み）
     dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
     dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 

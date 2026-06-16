@@ -3,6 +3,7 @@
 #include <cstring>
 #include "AssetLocator.h"
 #include "DStorageManager.h"
+#include "PepperMacros.h"
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
@@ -86,6 +87,7 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	);
 
 	// ドローコール
+	PEPPER_COUNT("DrawCall");
 	dxCore->GetCommandList()->DrawIndexedInstanced(
 		indexCount_, 1, 0, 0, 0);
 }
@@ -95,6 +97,7 @@ void ModelInstance::DrawIdPass(DirectXCore* dxCore)
 	if (!indexResource_ || indexCount_ == 0) return;
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+	PEPPER_COUNT("DrawCall");
 	dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
@@ -103,6 +106,7 @@ void ModelInstance::DrawShadowPass(DirectXCore* dxCore)
 	if (!indexResource_ || indexCount_ == 0) return;
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+	PEPPER_COUNT("DrawCall");
 	dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
