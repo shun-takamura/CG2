@@ -17,6 +17,7 @@
 #include "MathUtility.h"
 #include "Transform.h"
 #include "Vector4.h"
+#include "PepperMacros.h"
 #include <algorithm>
 #include <cmath>
 
@@ -456,6 +457,7 @@ bool Scene::IsDynamicObject(IImGuiEditable* editable) const {
 #endif
 
 void Scene::UpdateDynamicObjects() {
+	PEPPER_SCOPE("Scene::UpdateDynamicObjects");
 	for (auto& o : object3DInstances_) {
 		o->SetCamera(GetCamera());
 		o->Update();
@@ -463,6 +465,7 @@ void Scene::UpdateDynamicObjects() {
 }
 
 void Scene::DrawDynamicObjects() {
+	PEPPER_SCOPE("Scene::DrawDynamicObjects");
 	for (auto& o : object3DInstances_) {
 		o->Draw(dxCore_);
 	}
@@ -480,18 +483,21 @@ void Scene::DrawShadowCasters() {
 }
 
 void Scene::UpdateDynamicAnimated(float deltaTime) {
+	PEPPER_SCOPE("Scene::UpdateDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
 		a->Update(deltaTime);
 	}
 }
 
 void Scene::DispatchDynamicAnimatedSkinning() {
+	PEPPER_SCOPE("Scene::DispatchSkinning");
 	for (auto& a : dynamicAnimated_) {
 		a->DispatchSkinning(dxCore_);
 	}
 }
 
 void Scene::DrawDynamicAnimated() {
+	PEPPER_SCOPE("Scene::DrawDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
 		a->Draw(dxCore_);
 	}
@@ -506,18 +512,21 @@ void Scene::DrawDynamicAnimatedSkeletonDebug() {
 }
 
 void Scene::UpdateDynamicSprites() {
+	PEPPER_SCOPE("Scene::UpdateDynamicSprites");
 	for (auto& s : dynamicSprites_) {
 		s->Update();
 	}
 }
 
 void Scene::DrawDynamicSprites() {
+	PEPPER_SCOPE("Scene::DrawDynamicSprites");
 	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
 }
 
 void Scene::UpdateDynamicPrimitives() {
+	PEPPER_SCOPE("Scene::UpdateDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		// Camera が後から差し替わった場合に追従させる
 		p->SetCamera(GetCamera());
@@ -526,6 +535,7 @@ void Scene::UpdateDynamicPrimitives() {
 }
 
 void Scene::DrawDynamicPrimitives() {
+	PEPPER_SCOPE("Scene::DrawDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		p->Draw();
 	}

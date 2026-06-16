@@ -1,6 +1,7 @@
 #include "LineRenderer.h"
 #include "Camera.h"
 #include "Log.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <dxcapi.h>
 
@@ -40,6 +41,7 @@ void LineRenderer::AddLine(const Vector3& start, const Vector3& end, const Vecto
 }
 
 void LineRenderer::Draw(Pass pass) {
+    PEPPER_SCOPE("LineRenderer::Draw");
     PassState& s = passes_[static_cast<int>(pass)];
     if (s.lineCount == 0) return;
     if (!s.camera) { s.lineCount = 0; return; }

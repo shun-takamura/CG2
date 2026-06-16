@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "Log.h"
 #include "EngineTime.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <cmath>
 #include "imgui.h"
@@ -255,6 +256,7 @@ void ParticleManager::Emit(const std::string& name, const EmitParam& param)
 
 void ParticleManager::Update(float deltaTime)
 {
+    PEPPER_SCOPE("ParticleManager::Update");
     // カメラ取得
     if (!camera_) {
         return;
@@ -379,6 +381,7 @@ void ParticleManager::Update(float deltaTime)
 
 void ParticleManager::Draw()
 {
+    PEPPER_SCOPE("ParticleManager::Draw");
     ID3D12GraphicsCommandList* commandList = dxCore_->GetCommandList();
 
     // ルートシグネチャを設定
