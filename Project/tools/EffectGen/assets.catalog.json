@@ -1,0 +1,137 @@
+{
+  "_comment": "エフェクトテクスチャ目録。/effectgen が EffectDef を生成する際に参照する。形の理解には sourcePng を Read し、EffectDef の texturePath には runtimePath(DDS) を書く。色はテクスチャに含めず EffectDef のパラメータで付ける。",
+  "convention": {
+    "format": "マスクは α透過PNG(RGB=白, αチャンネルで形)。これで Add/Normal 両対応＋alphaReference で縁を抜ける。色は startColor/endColor + blendMode で乗算（形=テクスチャ / 色=パラメータ）。",
+    "exception_grayscale": "α不透明(α全面255)のグレスケ素材(例 beam)は Add 専用。Normal で使うと黒い四角が出るので注意。",
+    "shape_plane": "ここの textures は全て『完成した形を Plane(板ポリ)にビルボードで貼る』前提の完成形マスク。Ring/Cylinder メッシュへ複雑テクスチャを展開貼りすると引き延ばされ破綻するため非推奨。リング/筒/ビーム/稲妻の幾何そのものは meshType(Ring/Cylinder/Beam/Lightning) で出す。",
+    "meri_hari": "桜井政博メソッド: エフェクトは Add で明るくなりがち＝明るい背景で目立たない。『暗いものを混ぜる』とコントラストが出て映える。明中心(Add)＋暗い縁シルエット(Normal/暗色)を重ねてメリハリを作る。",
+    "lookVsWrite": "見る=sourcePng(Assets/.../*.png は Read で実ピクセル可) / 書く=runtimePath(Resources/.../*.dds はエンジンがロード)。",
+    "selection": "普段は caption/tags で選ぶ（軽い）。迷うときだけ sourcePng を Read して実物を見る（重いので必要時のみ）。"
+  },
+  "textures": [
+    {
+      "name": "circle",
+      "runtimePath": "Resources/Textures/Effect/circle.dds",
+      "sourcePng": "Assets/Textures/Effect/circle.png",
+      "caption": "中心が明るく外周へ滑らかに減衰する柔らかい円形グロー。汎用の発光・火花・煙・オーブ・光の核。",
+      "tags": ["glow", "soft", "round", "spark", "core", "default"]
+    },
+    {
+      "name": "gradationLine",
+      "runtimePath": "Resources/Textures/Effect/gradationLine.dds",
+      "sourcePng": "Assets/Textures/Effect/gradationLine.png",
+      "caption": "縦方向の細い集中線・流線が密集したストリーク。斬撃の尾・スピード線・エネルギーの流れ。UVスクロール(uvAutoScroll)素材にも。",
+      "tags": ["streak", "lines", "speed", "energy", "gradient", "scroll"]
+    },
+    {
+      "name": "beam",
+      "runtimePath": "Resources/Textures/Effect/beam.dds",
+      "sourcePng": "Assets/Textures/Effect/beam.png",
+      "caption": "中央が明るく上下へ減衰する横長の光帯。レーザー・ビーム・エネルギー放射の芯・帯状の閃光。",
+      "tags": ["beam", "laser", "light", "energy", "horizontal", "glow"],
+      "note": "α全面不透明(グレスケ)＝Add専用。横長512x256。meshType=6(Beam)や横長Planeと相性。"
+    },
+    {
+      "name": "aquillos_00",
+      "runtimePath": "Resources/Textures/Effect/aquillos_00.dds",
+      "sourcePng": "Assets/Textures/Effect/aquillos_00.png",
+      "caption": "中心から不揃いに噴き出す鋭いトゲ・羽毛状のバースト。爆発の芯・衝撃の飛散・刺々しいヒット。",
+      "tags": ["burst", "explosion", "spiky", "jagged", "impact", "shard"]
+    },
+    {
+      "name": "gizagiza_00",
+      "runtimePath": "Resources/Textures/Effect/gizagiza_00.dds",
+      "sourcePng": "Assets/Textures/Effect/gizagiza_00.png",
+      "caption": "外周がギザギザの太陽状バースト円。中央に花型のコア。爆発・衝撃波の輪郭・被弾の閃光リング。",
+      "tags": ["burst", "explosion", "spiky", "ring", "impact", "star"]
+    },
+    {
+      "name": "BrokenGlass_00",
+      "runtimePath": "Resources/Textures/Effect/BrokenGlass_00.dds",
+      "sourcePng": "Assets/Textures/Effect/BrokenGlass_00.png",
+      "caption": "網目状に細かくひび割れたガラス。破片とクラックが面に広がる。ガラス割れ・シールド破砕・地割れ。",
+      "tags": ["glass", "crack", "shatter", "break", "web"]
+    },
+    {
+      "name": "BrokenGlass_01",
+      "runtimePath": "Resources/Textures/Effect/BrokenGlass_01.dds",
+      "sourcePng": "Assets/Textures/Effect/BrokenGlass_01.png",
+      "caption": "中心から放射状に鋭く伸びる割れ目。一点への強い衝撃の亀裂・インパクトのヒビ。",
+      "tags": ["glass", "crack", "radial", "shatter", "impact"]
+    },
+    {
+      "name": "Feathers_00",
+      "runtimePath": "Resources/Textures/Effect/Feathers_00.dds",
+      "sourcePng": "Assets/Textures/Effect/Feathers_00.png",
+      "caption": "柔らかく舞う羽根（1〜2枚）。羽根エフェクト・天使的演出・ふわりとした浮遊。",
+      "tags": ["feather", "soft", "fluff", "wing", "float"]
+    },
+    {
+      "name": "Feathers_01",
+      "runtimePath": "Resources/Textures/Effect/Feathers_01.dds",
+      "sourcePng": "Assets/Textures/Effect/Feathers_01.png",
+      "caption": "複数の羽根が舞い散る。羽根の飛散・撃破演出・ふわふわした拡散。",
+      "tags": ["feather", "soft", "fluff", "wing", "scatter"]
+    },
+    {
+      "name": "Lightning_00",
+      "runtimePath": "Resources/Textures/Effect/Lightning_00.dds",
+      "sourcePng": "Assets/Textures/Effect/Lightning_00.png",
+      "caption": "枝分かれする稲妻（バリエーション0）。電撃・帯電・雷撃のヒット。",
+      "tags": ["lightning", "electric", "bolt", "spark", "thunder"]
+    },
+    {
+      "name": "Lightning_01",
+      "runtimePath": "Resources/Textures/Effect/Lightning_01.dds",
+      "sourcePng": "Assets/Textures/Effect/Lightning_01.png",
+      "caption": "枝分かれする稲妻（バリエーション1）。電撃・帯電・雷撃のヒット。",
+      "tags": ["lightning", "electric", "bolt", "spark", "thunder"]
+    },
+    {
+      "name": "Lightning_02",
+      "runtimePath": "Resources/Textures/Effect/Lightning_02.dds",
+      "sourcePng": "Assets/Textures/Effect/Lightning_02.png",
+      "caption": "枝分かれする稲妻（バリエーション2）。電撃・帯電・雷撃のヒット。",
+      "tags": ["lightning", "electric", "bolt", "spark", "thunder"]
+    },
+    {
+      "name": "rise_00",
+      "runtimePath": "Resources/Textures/Effect/rise_00.dds",
+      "sourcePng": "Assets/Textures/Effect/rise_00.png",
+      "caption": "斜めに立ち上る炎・エネルギーの流れ（上昇ストリーク）。立ち昇る炎・気・オーラの吹き上がり。",
+      "tags": ["rise", "flame", "energy", "streak", "upward", "aura"]
+    },
+    {
+      "name": "smoke_00",
+      "runtimePath": "Resources/Textures/Effect/smoke_00.dds",
+      "sourcePng": "Assets/Textures/Effect/smoke_00.png",
+      "caption": "もくもくとした煙の塊（雲状）。爆発の煙・粉塵・もうもうとした煙幕。ディゾルブと組むと消散表現に。",
+      "tags": ["smoke", "cloud", "puff", "soft", "dust"]
+    },
+    {
+      "name": "sparkles_00",
+      "runtimePath": "Resources/Textures/Effect/sparkles_00.dds",
+      "sourcePng": "Assets/Textures/Effect/sparkles_00.png",
+      "caption": "複数の十字きらめき（星状の輝き）。キラキラ・収集アイテム・回復・星屑。",
+      "tags": ["sparkle", "star", "twinkle", "cross", "glint"]
+    },
+    {
+      "name": "sparkles_01",
+      "runtimePath": "Resources/Textures/Effect/sparkles_01.dds",
+      "sourcePng": "Assets/Textures/Effect/sparkles_01.png",
+      "caption": "中央の強い発光＋十字の光芒（レンズフレア風の輝き）。強い光のきらめき・聖なる光・チャージ完了。",
+      "tags": ["sparkle", "flare", "glow", "star", "cross", "charge"]
+    }
+  ],
+  "distortionMaps": [
+    {
+      "name": "rippleNormal",
+      "runtimePath": "Resources/Textures/NormalMapTexture/DistorionNormalmapTexture.dds",
+      "sourcePng": "Assets/Textures/NormalMapTexture/DistorionNormalmapTexture.png",
+      "caption": "水面の同心円波紋＋細かいさざ波をエンコードしたノーマルマップ風RG（青紫ベース）。陽炎・水中・衝撃波の空間歪み用。",
+      "tags": ["distortion", "ripple", "water", "normalmap", "heathaze", "wave"],
+      "usage": "primitive の distortionTexturePath に runtimePath を書き、useDistortion:true で歪む。これは白黒αマスクではない（textures とは別カテゴリ。色マスク規約の対象外）。"
+    }
+  ],
+  "_distortionNote": "歪みマップは法線方向(RG)をエンコードしたテクスチャで、参考画像から AI 生成するのは困難。基本は既存プリセットを使い回す。クックは本来線形が正しいが、既存 DistorionNormalmapTexture は SRGB クック(cook_assets.py の LINEAR_TEXTURE_HINTS に NormalMapTexture 未登録)。見た目が変わるため現状は据え置き。"
+}
