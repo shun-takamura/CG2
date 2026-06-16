@@ -44,18 +44,16 @@ def find_profile_log(arg_path):
             return latest_in_logs_root(p)
         raise FileNotFoundError(f"パスが見つからない: {arg_path}")
 
-    # 無指定: リポジトリ標準の Project/Logs から最新セッション
+    # 無指定: ログ出力先（Project/Logs）を探す。実行場所やスクリプト位置に依存しないよう、
+    # カレントと自分の祖先を辿って "Logs" / "Project/Logs" を見つける。
     here = Path(__file__).resolve()
-    candidates = [
-        Path.cwd() / "Project" / "Logs",
-        Path.cwd() / "Logs",
-        here.parents[2] / "Project" / "Logs",  # <repo>/tools/Python/ から
-    ]
-    for root in candidates:
-        if root.is_dir():
-            log = latest_in_logs_root(root)
-            if log:
-                return log
+    bases = [Path.cwd(), *Path.cwd().parents, *here.parents]
+    for base in bases:
+        for root in (base / "Logs", base / "Project" / "Logs"):
+            if root.is_dir():
+                log = latest_in_logs_root(root)
+                if log:
+                    return log
     raise FileNotFoundError("profile.log が見つからない。パスを指定してください。")
 
 

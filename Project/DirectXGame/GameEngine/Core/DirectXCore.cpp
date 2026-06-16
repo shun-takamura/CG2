@@ -134,15 +134,21 @@ void DirectXCore::EndDraw() {
     ID3D12CommandList* commandLists[] = { commandList_.Get() };
     commandQueue_->ExecuteCommandLists(1, commandLists);
 
-    // 画面に表示
-    swapChain_->Present(1, 0);
+    // Present と GPU 完了待ち（VSync 待ちを含む）は CPU が遊んで待つ時間。
+    // ここを別スコープに切り出し、Framework::Draw の「本当のCPU作業」と区別する。
+    {
+        PEPPER_SCOPE("GpuWait/Present");
 
-    // フェンス処理
-    ++fenceValue_;
-    commandQueue_->Signal(fence_.Get(), fenceValue_);
-    if (fence_->GetCompletedValue() < fenceValue_) {
-        fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
-        WaitForSingleObject(fenceEvent_, INFINITE);
+        // 画面に表示
+        swapChain_->Present(1, 0);
+
+        // フェンス処理
+        ++fenceValue_;
+        commandQueue_->Signal(fence_.Get(), fenceValue_);
+        if (fence_->GetCompletedValue() < fenceValue_) {
+            fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
+            WaitForSingleObject(fenceEvent_, INFINITE);
+        }
     }
 
     // P.E.P.P.E.R. GPU 完了後にタイムスタンプを読んで Profiler へ反映
