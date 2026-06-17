@@ -207,6 +207,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\Transition\StripeTransition.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Transition\TransitionManager.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\FPSWindow.h" />
+    <ClInclude Include="DirectXGame\ImGUIManager\PepperWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\HierarchyWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\IImGuiWindow.h" />
     <ClInclude Include="DirectXGame\ImGUIManager\IEditorSelection.h" />

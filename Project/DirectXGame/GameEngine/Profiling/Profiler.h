@@ -57,6 +57,52 @@ public:
     /// </summary>
     void Flush();
 
+    // ============================================================
+    // ライブ表示用 API（PEPPER ImGui ウィンドウが毎フレーム読む）。
+    // 直近に確定した1秒ウィンドウの集計スナップショットを保持する（毎秒更新＝数値は安定）。
+    // 将来 EMA(毎フレーム平滑化) へ移行する場合も、ウィンドウUI・グラフ・カウンタ/ゲージは
+    // そのまま流用でき、区間テーブルのデータソースだけ差し替えればよい設計。
+    // 計測層はメインスレッド専用、ImGui もメインスレッド描画なのでロック不要。
+    // ============================================================
+    struct LiveSection {
+        std::string name;
+        const char* file = nullptr;
+        int line = 0;
+        int depth = 0;
+        int presentFrames = 0;   // ウィンドウ内で出現したフレーム数
+        int64_t totalCalls = 0;  // ウィンドウ内の総呼び出し回数
+        double cpuAvgMs = 0.0;   // 1フレームあたり平均 CPU ms
+        double cpuMaxMs = 0.0;   // 1フレームあたり最大 CPU ms（スパイク把握）
+        double gpuAvgMs = 0.0;
+        double gpuMaxMs = 0.0;
+    };
+    struct LiveCounter {
+        std::string name;
+        int64_t total = 0;
+        int64_t maxPerFrame = 0;
+        double avgPerFrame = 0.0;
+    };
+    struct LiveGauge {
+        std::string name;
+        double cur = 0.0;
+        double minv = 0.0;
+        double maxv = 0.0;
+        double avg = 0.0;
+    };
+
+    const std::vector<LiveSection>& GetLiveSections() const { return liveSections_; }
+    const std::vector<LiveCounter>& GetLiveCounters() const { return liveCounters_; }
+    const std::vector<LiveGauge>&   GetLiveGauges()   const { return liveGauges_; }
+    double GetLiveWindowSec()    const { return liveWindowSec_; }
+    int    GetLiveWindowFrames() const { return liveWindowFrames_; }
+
+    // フレーム時間（壁時計 ms、VSync 待ち込み）のリングバッファ。折れ線グラフ用。毎フレーム更新。
+    static constexpr int kFrameRingSize = 240;
+    const float* GetFrameMsRing() const { return frameMsRing_; }
+    int    GetFrameMsRingSize()   const { return kFrameRingSize; }
+    int    GetFrameMsRingHead()   const { return frameRingHead_; } // 次に書く位置(=最古)
+    double GetLastFrameMs()       const { return lastFrameMs_; }
+
 private:
     Profiler();
     ~Profiler() = default;
@@ -151,6 +197,19 @@ private:
     std::unordered_map<std::string, size_t> gaugeIndexByName_;
     std::vector<WindowGauge> windowGauges_;
     std::unordered_map<std::string, size_t> windowGaugeIndexByName_;
+
+    // ライブ表示スナップショット（FlushWindow ごとに更新）
+    std::vector<LiveSection> liveSections_;
+    std::vector<LiveCounter> liveCounters_;
+    std::vector<LiveGauge>   liveGauges_;
+    double liveWindowSec_ = 0.0;
+    int    liveWindowFrames_ = 0;
+
+    // フレーム時間リング（EndFrame ごとに更新）
+    float   frameMsRing_[kFrameRingSize] = {};
+    int     frameRingHead_ = 0;
+    int64_t lastEndFrameTicks_ = 0;
+    double  lastFrameMs_ = 0.0;
 };
 
 /// <summary>

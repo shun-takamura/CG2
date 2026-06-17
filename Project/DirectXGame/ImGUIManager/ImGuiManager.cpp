@@ -3,6 +3,7 @@
 #include "IImGuiEditable.h"
 #include "AssetLocator.h"
 #include "FPSWindow.h"
+#include "PepperWindow.h"
 #include "LogWindow.h"
 #include "HierarchyWindow.h"
 #include "InspectorWindow.h"
@@ -105,6 +106,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     // 各ウィンドウを生成
     windows_.push_back(std::make_unique<ViewportWindow>(srvManager_));
     windows_.push_back(std::make_unique<FPSWindow>());
+    windows_.push_back(std::make_unique<PepperWindow>());
     windows_.push_back(std::make_unique<LogWindow>());
     windows_.push_back(std::make_unique<HierarchyWindow>(this));
     windows_.push_back(std::make_unique<InspectorWindow>(this));
