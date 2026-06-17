@@ -61,6 +61,11 @@ void Object3DManager::DrawSetting()
         dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
             7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
         );
+        // 法線マップ(t2)のフォールバックも貼っておく（個別オブジェクトで上書きされる。
+        // PBR を使わないオブジェクトでも未バインドにならないようにするため）
+        dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
+            10, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
+        );
     }
 
     // シャドウ受光リソースをバインド（b5=ShadowConstants / t3=シャドウマップ）
@@ -121,7 +126,14 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeShadow[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeShadow[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[10] = {};
+    // PS: SRV(t2) - 法線マップ
+    D3D12_DESCRIPTOR_RANGE descriptorRangeNormalMap[1] = {};
+    descriptorRangeNormalMap[0].BaseShaderRegister = 2;                      // t2
+    descriptorRangeNormalMap[0].NumDescriptors = 1;
+    descriptorRangeNormalMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeNormalMap[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[11] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -181,6 +193,14 @@ void Object3DManager::CreateRootSignature()
     rootParameters[9].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[9].DescriptorTable.pDescriptorRanges = descriptorRangeShadow;
     rootParameters[9].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeShadow);
+
+    // ============================================
+    // PS: DescriptorTable(t2) - 法線マップ
+    // ============================================
+    rootParameters[10].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[10].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[10].DescriptorTable.pDescriptorRanges = descriptorRangeNormalMap;
+    rootParameters[10].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeNormalMap);
 
     // ============================================
     // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み)
@@ -271,7 +291,7 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     );
 
     // 入力レイアウト設定
-    D3D12_INPUT_ELEMENT_DESC inputElements[3] = {};
+    D3D12_INPUT_ELEMENT_DESC inputElements[4] = {};
     inputElements[0].SemanticName = "POSITION";
     inputElements[0].SemanticIndex = 0;
     inputElements[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -286,6 +306,11 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     inputElements[2].SemanticIndex = 0;
     inputElements[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
     inputElements[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+    inputElements[3].SemanticName = "TANGENT";
+    inputElements[3].SemanticIndex = 0;
+    inputElements[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    inputElements[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 
     D3D12_INPUT_LAYOUT_DESC inputLayout{};
     inputLayout.pInputElementDescs = inputElements;
@@ -418,7 +443,8 @@ void Object3DManager::CreateIdPassObjects()
     IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Object3D/WriteID.PS.hlsl", L"ps_6_0");
     assert(vs && ps);
 
-    D3D12_INPUT_ELEMENT_DESC elems[3] = {};
+    // Object3d.VS が TANGENT0 を要求するため、ID パスの入力レイアウトにも含める
+    D3D12_INPUT_ELEMENT_DESC elems[4] = {};
     elems[0].SemanticName = "POSITION";
     elems[0].SemanticIndex = 0;
     elems[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -431,6 +457,10 @@ void Object3DManager::CreateIdPassObjects()
     elems[2].SemanticIndex = 0;
     elems[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
     elems[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[3].SemanticName = "TANGENT";
+    elems[3].SemanticIndex = 0;
+    elems[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    elems[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 
     D3D12_INPUT_LAYOUT_DESC inputLayout{};
     inputLayout.pInputElementDescs = elems;

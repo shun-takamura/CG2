@@ -289,6 +289,11 @@ void Object3DInstance::OnImGuiInspector()
                                 TextureManager::GetInstance()->LoadTexture(textureFilePath_);
                                 modelInstance_->SetTextureFilePath(textureFilePath_);
                             }
+                            // 法線マップも反映（mat->useNormalMap は LoadMatFile が設定済み）
+                            if (!data.normalMapFilePath.empty()) {
+                                TextureManager::GetInstance()->LoadTexture(data.normalMapFilePath);
+                            }
+                            modelInstance_->SetNormalMapFilePath(data.normalMapFilePath);
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -320,6 +325,17 @@ void Object3DInstance::OnImGuiInspector()
                 if (usePBR) {
                     ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);
                     ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
+
+                    // 法線マップ ON/OFF（比較用）。法線マップ未設定なら無効表示
+                    const bool hasNormalMap = modelInstance_ && !modelInstance_->GetNormalMapFilePath().empty();
+                    if (hasNormalMap) {
+                        bool useNrm = (mat->useNormalMap != 0);
+                        if (ImGui::Checkbox("Use Normal Map", &useNrm)) {
+                            mat->useNormalMap = useNrm ? 1 : 0;
+                        }
+                    } else {
+                        ImGui::TextDisabled("Normal Map: (none)");
+                    }
                 }
             }
         }

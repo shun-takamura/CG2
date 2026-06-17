@@ -16,13 +16,15 @@ typedef struct Material {
 	float metallic;             // PBR: 金属度 0..1
 	float roughness;            // PBR: 粗さ 0..1
 	int32_t shadingModel;       // 0=BlinnPhong, 1=PBR（PSO 選択に使用）
-	float padding2[2];
+	int32_t useNormalMap;       // 1=法線マップ(t2)を適用, 0=ジオメトリ法線
+	float padding2;
 }Material;
 
 
 struct MaterialData
 {
 	std::string textureFilePath;
+	std::string normalMapFilePath;   // 法線マップ DDS パス（空＝なし）
 	uint32_t textureIndex = 0;
 };
 
@@ -42,7 +44,7 @@ inline bool LoadMatFile(const std::string& matPath,
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version != 1 && version != 2) return false;
+	if (version < 1 || version > 3) return false;
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);
@@ -69,6 +71,13 @@ inline bool LoadMatFile(const std::string& matPath,
 		h.Read(&shadingModel, 4);
 	}
 
+	// v3 で追加された法線マップパス
+	if (version >= 3) {
+		char normalMapPath[256]{};
+		h.Read(normalMapPath, 256);
+		out_data.normalMapFilePath = std::string(normalMapPath);
+	}
+
 	if (out_gpu_material) {
 		out_gpu_material->color = Vector4(color[0], color[1], color[2], color[3]);
 		out_gpu_material->enableLighting = enableLighting;
@@ -78,6 +87,7 @@ inline bool LoadMatFile(const std::string& matPath,
 		out_gpu_material->metallic = metallic;
 		out_gpu_material->roughness = roughness;
 		out_gpu_material->shadingModel = shadingModel;
+		out_gpu_material->useNormalMap = out_data.normalMapFilePath.empty() ? 0 : 1;
 	}
 	return true;
 }

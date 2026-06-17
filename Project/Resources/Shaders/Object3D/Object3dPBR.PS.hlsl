@@ -77,7 +77,8 @@ struct Material
     float metallic;
     float roughness;
     int shadingModel;
-    float2 padding2;
+    int useNormalMap;
+    float padding2;
 };
 
 struct PixelShaderOutput
@@ -111,6 +112,7 @@ cbuffer SpotLightBuffer : register(b4)
 }
 
 Texture2D<float4> gTexture : register(t0);
+Texture2D<float4> gNormalMap : register(t2);
 SamplerState gSampler : register(s0);
 
 // ===== Shadow (CSM + PCSS) =====
@@ -179,6 +181,15 @@ PixelShaderOutput main(VertexShaderOutput input)
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
 
     float3 N = normalize(input.normal);
+    // 法線マップで N をピクセル単位に差し替え（TBN でタンジェント空間→ワールド）
+    if (gMaterial.useNormalMap != 0)
+    {
+        float3 normalTS = gNormalMap.Sample(gSampler, transformedUV.xy).xyz * 2.0f - 1.0f;
+        float3 T = normalize(input.tangent);
+        float3 B = normalize(input.bitangent);
+        float3x3 TBN = float3x3(T, B, N);
+        N = normalize(mul(normalTS, TBN));
+    }
     float3 V = normalize(gCamera.worldPosition - input.worldPosition);
 
     float3 albedo = gMaterial.color.rgb * textureColor.rgb;
