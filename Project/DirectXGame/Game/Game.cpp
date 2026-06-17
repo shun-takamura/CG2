@@ -31,6 +31,7 @@
 #include "Components/PrefabManager.h"
 #include "Scene/Scene.h"
 #include "LightManager.h"
+#include "PepperMacros.h"
 #include <memory>
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
@@ -148,9 +149,12 @@ void Game::Update() {
 }
 
 void Game::Draw() {
+	PEPPER_SCOPE("Framework::Draw");
+
 	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
 	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
 	if (shadowMap_) {
+		PEPPER_SCOPE("Game::ShadowPass");
 		if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
 			if (Camera* cam = scene->GetCamera()) {
 				auto* dl = LightManager::GetInstance()->GetDirectionalLightData();
@@ -196,6 +200,7 @@ void Game::Draw() {
 
 	// ----- ID Pass：ハイライト対象を idMaskRT に書き込む -----
 	if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+		PEPPER_SCOPE("Game::IdPass");
 		if (!scene->GetHighlights().empty()) {
 			auto* cmd = dxCore_->GetCommandList();
 			postEffect_->BeginIdPass(cmd);
@@ -235,6 +240,7 @@ void Game::Draw() {
 		postEffect_->distortion->SetEnabled(distortionActive);
 	}
 	if (distortionActive) {
+		PEPPER_SCOPE("Game::DistortionPass");
 		auto* cmd = dxCore_->GetCommandList();
 		postEffect_->BeginDistortionPass(cmd);
 
@@ -275,7 +281,7 @@ void Game::Draw() {
 	auto* cmd = dxCore_->GetCommandList();
 	Scene* afterScene = SceneManager::GetInstance()->GetCurrentScene();
 #ifdef _DEBUG
-	postEffect_->Draw(cmd, viewportRenderTexture_.get());
+	{ PEPPER_SCOPE("Game::PostEffectDraw"); postEffect_->Draw(cmd, viewportRenderTexture_.get()); }
 	// PostEffect 後のオーバーレイ（崩壊破片など）を viewportRT に重ねる。
 	// viewportRT は Draw 後 SRV 状態なので、合成画像を消さないよう手動バリアで RT 化（クリアしない・DSVなし）。
 	if (afterScene) {
@@ -307,7 +313,7 @@ void Game::Draw() {
 	dxCore_->RestoreSwapchainRenderTarget(cmd);
 	srvManager_->PreDraw();
 #else
-	postEffect_->Draw(cmd);
+	{ PEPPER_SCOPE("Game::PostEffectDraw"); postEffect_->Draw(cmd); }
 	// PostEffect 後のオーバーレイ（崩壊破片など）。Swapchain RTV は DSVなしでバインド済み。
 	if (afterScene) {
 		srvManager_->PreDraw();

@@ -48,6 +48,9 @@ public:
 	// シングルトンインスタンスの取得
 	static ModelManager* GetInstance();
 
+	// 読み込み済みモデル数（P.E.P.P.E.R. 計測用）
+	size_t GetModelCount() const { std::lock_guard<std::mutex> lock(mutex_); return models.size(); }
+
 	// 終了
 	void Finalize();
 

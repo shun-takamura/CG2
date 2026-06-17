@@ -6,6 +6,7 @@
 #include "DStorageManager.h"
 #include "Components/CollisionManager.h"
 #include "SessionLogger.h"
+#include "PepperMacros.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -50,6 +51,8 @@ void SceneManager::Finalize() {
 }
 
 void SceneManager::Update() {
+	PEPPER_SCOPE("SceneManager::Update");
+
 	// トランジションの更新
 	TransitionManager::GetInstance()->Update();
 
@@ -71,6 +74,9 @@ void SceneManager::Update() {
 
 	// 現在のシーンを更新
 	if (currentScene_) {
+		// P.E.P.P.E.R. へオブジェクト/リソース数を報告（USE_PEPPER 未定義時は空）
+		currentScene_->ReportProfileGauges();
+
 		currentScene_->Update();
 
 		// シーン経過秒の加算（Debugシークバー / 仕掛けタイミングの基準）
@@ -88,6 +94,8 @@ void SceneManager::Update() {
 }
 
 void SceneManager::Draw() {
+	PEPPER_SCOPE("SceneManager::Draw");
+
 	if (currentScene_) {
 		currentScene_->Draw();
 

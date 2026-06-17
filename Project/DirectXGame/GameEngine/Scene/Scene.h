@@ -53,6 +53,12 @@ public:
 	virtual void DrawAfterPostEffect(struct ID3D12GraphicsCommandList* commandList) {}
 
 	/// <summary>
+	/// シーン内オブジェクト数・読み込み済みリソース数を P.E.P.P.E.R. ゲージへ報告する。
+	/// 毎フレーム SceneManager::Update から呼ぶ（USE_PEPPER 未定義時は中身が空展開）。
+	/// </summary>
+	void ReportProfileGauges();
+
+	/// <summary>
 	/// シーンが使用しているアクティブな Camera を返す（無ければ nullptr）。
 	/// </summary>
 	virtual Camera* GetCamera() { return nullptr; }

@@ -17,6 +17,9 @@
 #include "MathUtility.h"
 #include "Transform.h"
 #include "Vector4.h"
+#include "TextureManager.h"
+#include "ModelManager.h"
+#include "PepperMacros.h"
 #include <algorithm>
 #include <cmath>
 
@@ -455,7 +458,19 @@ bool Scene::IsDynamicObject(IImGuiEditable* editable) const {
 }
 #endif
 
+void Scene::ReportProfileGauges() {
+	// シーン内オブジェクト数（描画対象）
+	PEPPER_GAUGE("Obj3D_Count", static_cast<double>(object3DInstances_.size()));
+	PEPPER_GAUGE("Anim_Count", static_cast<double>(dynamicAnimated_.size()));
+	PEPPER_GAUGE("Sprite_Count", static_cast<double>(dynamicSprites_.size()));
+	PEPPER_GAUGE("Prim_Count", static_cast<double>(dynamicPrimitives_.size()));
+	// 読み込み済みリソース数（全シーン共有のマネージャー）
+	PEPPER_GAUGE("Tex_Count", static_cast<double>(TextureManager::GetInstance()->GetLoadedTextureCount()));
+	PEPPER_GAUGE("Model_Count", static_cast<double>(ModelManager::GetInstance()->GetModelCount()));
+}
+
 void Scene::UpdateDynamicObjects() {
+	PEPPER_SCOPE("Scene::UpdateDynamicObjects");
 	for (auto& o : object3DInstances_) {
 		o->SetCamera(GetCamera());
 		o->Update();
@@ -463,6 +478,8 @@ void Scene::UpdateDynamicObjects() {
 }
 
 void Scene::DrawDynamicObjects() {
+	PEPPER_SCOPE("Scene::DrawDynamicObjects");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicObjects");
 	for (auto& o : object3DInstances_) {
 		o->Draw(dxCore_);
 	}
@@ -480,18 +497,22 @@ void Scene::DrawShadowCasters() {
 }
 
 void Scene::UpdateDynamicAnimated(float deltaTime) {
+	PEPPER_SCOPE("Scene::UpdateDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
 		a->Update(deltaTime);
 	}
 }
 
 void Scene::DispatchDynamicAnimatedSkinning() {
+	PEPPER_SCOPE("Scene::DispatchSkinning");
 	for (auto& a : dynamicAnimated_) {
 		a->DispatchSkinning(dxCore_);
 	}
 }
 
 void Scene::DrawDynamicAnimated() {
+	PEPPER_SCOPE("Scene::DrawDynamicAnimated");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
 		a->Draw(dxCore_);
 	}
@@ -506,18 +527,22 @@ void Scene::DrawDynamicAnimatedSkeletonDebug() {
 }
 
 void Scene::UpdateDynamicSprites() {
+	PEPPER_SCOPE("Scene::UpdateDynamicSprites");
 	for (auto& s : dynamicSprites_) {
 		s->Update();
 	}
 }
 
 void Scene::DrawDynamicSprites() {
+	PEPPER_SCOPE("Scene::DrawDynamicSprites");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicSprites");
 	for (auto& s : dynamicSprites_) {
 		s->Draw();
 	}
 }
 
 void Scene::UpdateDynamicPrimitives() {
+	PEPPER_SCOPE("Scene::UpdateDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		// Camera が後から差し替わった場合に追従させる
 		p->SetCamera(GetCamera());
@@ -526,6 +551,8 @@ void Scene::UpdateDynamicPrimitives() {
 }
 
 void Scene::DrawDynamicPrimitives() {
+	PEPPER_SCOPE("Scene::DrawDynamicPrimitives");
+	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		p->Draw();
 	}

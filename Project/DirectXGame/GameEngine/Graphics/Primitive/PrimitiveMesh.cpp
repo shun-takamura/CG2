@@ -2,6 +2,7 @@
 #include "Camera.h"
 #include "TextureManager.h"
 #include "MathUtility.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <cmath>
 
@@ -211,6 +212,7 @@ void PrimitiveMesh::Draw() {
     }
 
     // 描画
+    PEPPER_COUNT("DrawCall");
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
@@ -232,6 +234,7 @@ void PrimitiveMesh::DrawIdPass(uint32_t objectId) {
     // PS Root Constant b0 = objectId
     cmd->SetGraphicsRoot32BitConstant(1, objectId, 0);
 
+    PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
@@ -258,6 +261,7 @@ void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
     SRVManager* srvManager = pp->GetSRVManager();
     cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
 
+    PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 

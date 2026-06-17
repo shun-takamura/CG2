@@ -1,5 +1,6 @@
 #include "DirectXCore.h"
 #include "SRVManager.h"
+#include "PepperMacros.h"
 #include <cassert>
 #include <algorithm>
 #include <cstring>
@@ -55,6 +56,8 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     hr = dxcUtils_->CreateDefaultIncludeHandler(&includeHandler_);
     assert(SUCCEEDED(hr));
 
+    // P.E.P.P.E.R. GPU 計測の初期化（タイムスタンプクエリヒープ + readback）
+    PEPPER_GPU_INIT(device_.Get(), commandQueue_.Get());
 }
 
 void DirectXCore::BeginDraw() {
@@ -120,6 +123,9 @@ void DirectXCore::EndDraw() {
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
     commandList_->ResourceBarrier(1, &barrier);
 
+    // P.E.P.P.E.R. GPU タイムスタンプを readback バッファへ解決（Close 直前）
+    PEPPER_GPU_RESOLVE(commandList_.Get());
+
     // コマンドリストを閉じる
     hr = commandList_->Close();
     assert(SUCCEEDED(hr));
@@ -128,16 +134,25 @@ void DirectXCore::EndDraw() {
     ID3D12CommandList* commandLists[] = { commandList_.Get() };
     commandQueue_->ExecuteCommandLists(1, commandLists);
 
-    // 画面に表示
-    swapChain_->Present(1, 0);
+    // Present と GPU 完了待ち（VSync 待ちを含む）は CPU が遊んで待つ時間。
+    // ここを別スコープに切り出し、Framework::Draw の「本当のCPU作業」と区別する。
+    {
+        PEPPER_SCOPE("GpuWait/Present");
 
-    // フェンス処理
-    ++fenceValue_;
-    commandQueue_->Signal(fence_.Get(), fenceValue_);
-    if (fence_->GetCompletedValue() < fenceValue_) {
-        fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
-        WaitForSingleObject(fenceEvent_, INFINITE);
+        // 画面に表示
+        swapChain_->Present(1, 0);
+
+        // フェンス処理
+        ++fenceValue_;
+        commandQueue_->Signal(fence_.Get(), fenceValue_);
+        if (fence_->GetCompletedValue() < fenceValue_) {
+            fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
+            WaitForSingleObject(fenceEvent_, INFINITE);
+        }
     }
+
+    // P.E.P.P.E.R. GPU 完了後にタイムスタンプを読んで Profiler へ反映
+    PEPPER_GPU_READBACK();
 
     // 次フレーム準備
     hr = commandAllocator_->Reset();

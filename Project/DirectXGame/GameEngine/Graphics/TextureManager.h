@@ -140,6 +140,9 @@ public:
 	// シングルトンインスタンスの取得
 	static TextureManager* GetInstance();
 
+	// 読み込み済みテクスチャ数（P.E.P.P.E.R. 計測用）
+	size_t GetLoadedTextureCount() const { return textureDatas.size(); }
+
 	// SRVインデックスの開始番号
 	//uint32_t GetTextureIndexByFilePath(const std::string& filePath);
 
