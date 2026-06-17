@@ -689,6 +689,9 @@
     <ClInclude Include="DirectXGame\ImGUIManager\FPSWindow.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\ImGUIManager\PepperWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\ImGUIManager\HierarchyWindow.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

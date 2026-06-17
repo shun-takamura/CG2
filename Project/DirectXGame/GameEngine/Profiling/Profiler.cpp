@@ -115,6 +115,16 @@ void Profiler::SetGauge(const char* name, double value) {
 }
 
 void Profiler::EndFrame() {
+    // フレーム壁時計時間（VSync 待ち込みのフレーム全体）をリングへ記録（グラフ用）。
+    // EndFrame はフレームループ末尾で1回呼ばれるので、連続呼び出し間隔＝実フレーム時間。
+    const int64_t nowFrameTicks = NowTicks();
+    if (lastEndFrameTicks_ != 0) {
+        lastFrameMs_ = static_cast<double>(nowFrameTicks - lastEndFrameTicks_) * tickToMs_;
+        frameMsRing_[frameRingHead_] = static_cast<float>(lastFrameMs_);
+        frameRingHead_ = (frameRingHead_ + 1) % kFrameRingSize;
+    }
+    lastEndFrameTicks_ = nowFrameTicks;
+
     // このフレームの各区間をウィンドウ集計へ畳み込む
     for (const auto& s : stats_) {
         size_t index;
@@ -267,6 +277,50 @@ void Profiler::FlushWindow() {
             << " avg=" << avg;
         SessionLogger::Instance().Write(
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
+    }
+
+    // ---- ライブ表示用スナップショットを作る（クリア前に確定値をコピー）----
+    liveWindowSec_ = windowSec;
+    liveWindowFrames_ = windowFrames_;
+
+    liveSections_.clear();
+    liveSections_.reserve(windowStats_.size());
+    for (const auto& w : windowStats_) {
+        LiveSection ls;
+        ls.name = w.name;
+        ls.file = w.file;
+        ls.line = w.line;
+        ls.depth = w.depth;
+        ls.presentFrames = w.presentFrames;
+        ls.totalCalls = w.totalCalls;
+        ls.cpuAvgMs = (w.presentFrames > 0) ? (w.sumCpuMs / w.presentFrames) : 0.0;
+        ls.cpuMaxMs = w.maxCpuMs;
+        ls.gpuAvgMs = (w.presentFrames > 0) ? (w.sumGpuMs / w.presentFrames) : 0.0;
+        ls.gpuMaxMs = w.maxGpuMs;
+        liveSections_.push_back(std::move(ls));
+    }
+
+    liveCounters_.clear();
+    liveCounters_.reserve(windowCounters_.size());
+    for (const auto& wc : windowCounters_) {
+        LiveCounter lc;
+        lc.name = wc.name;
+        lc.total = wc.total;
+        lc.maxPerFrame = wc.maxPerFrame;
+        lc.avgPerFrame = (windowFrames_ > 0) ? (static_cast<double>(wc.total) / windowFrames_) : 0.0;
+        liveCounters_.push_back(std::move(lc));
+    }
+
+    liveGauges_.clear();
+    liveGauges_.reserve(windowGauges_.size());
+    for (const auto& g : windowGauges_) {
+        LiveGauge lg;
+        lg.name = g.name;
+        lg.cur = g.last;
+        lg.minv = g.minv;
+        lg.maxv = g.maxv;
+        lg.avg = (g.count > 0) ? (g.sum / g.count) : 0.0;
+        liveGauges_.push_back(std::move(lg));
     }
 
     windowStats_.clear();
