@@ -21,8 +21,23 @@ void ControllerInput::Update() {
 	// 現在の状態を初期化
 	ZeroMemory(&currentState_, sizeof(currentState_));
 
-	// コントローラーの状態を取得
+	// まず今のスロットを読む。未接続なら 0~3 を走査して最初に繋がっているスロットへ切り替える。
+	// （物理パッドが繋がっていない時に仮想パッド(SUNDAY/ViGEm)が 0 以外へ割り当てられても拾えるようにする）
 	DWORD result = XInputGetState(controllerIndex_, &currentState_);
+	if (result != ERROR_SUCCESS) {
+		for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
+			if (i == controllerIndex_) {
+				continue;
+			}
+			XINPUT_STATE probe{};
+			if (XInputGetState(i, &probe) == ERROR_SUCCESS) {
+				controllerIndex_ = i;       // 以降はこのスロットを優先して読む
+				currentState_ = probe;
+				result = ERROR_SUCCESS;
+				break;
+			}
+		}
+	}
 	isConnected_ = (result == ERROR_SUCCESS);
 
 	// スティック/トリガーの補正

@@ -48,7 +48,8 @@ DISCONNECT_HOTKEY = (["ctrl", "shift"], "f12")  # VCから切断
 WARMUP_SEC = 5
 
 # コマンドを跨いで覚えておく状態（このモジュールが生きている間だけ保持）
-_state = {"game": None, "live": False}
+# owns_game: このモジュールがゲームを起動したか（SUNDAY等が起動した窓を間借りした場合は False）
+_state = {"game": None, "live": False, "owns_game": False}
 
 
 # グローバルホットキーを送る（修飾キーを押しっぱなしで主キーを叩く）
@@ -141,15 +142,34 @@ def _obs_client():
         raise RuntimeError(f"OBSに接続できません（OBS起動とWebSocket設定を確認）: {e}")
 
 
-def start_live():
-    """配信開始：ゲーム起動 → OBS仮想カメラ → DiscordカメラON"""
+def start_live(launch_game=True):
+    """配信開始：（必要なら）ゲーム起動 → OBS仮想カメラ → DiscordカメラON
+
+    launch_game=False のときは新規起動せず、既に動いているゲーム窓（SUNDAY等が
+    起動したもの）へそのまま配信を繋ぐ。二重に窓が開くのを防ぐ。"""
     if _state["live"]:
         raise RuntimeError("すでに配信中です。先に /live_stop してください。")
 
-    # 1. ゲームを起動（開いたまま保持。cwdをProjectにしないとResourcesを読めない）
-    game = subprocess.Popen([str(test_run.GAME_EXE)], cwd=str(test_run.PROJECT_DIR))
-    _state["game"] = game
-    time.sleep(WARMUP_SEC)  # 描画とOBSの捕捉が安定するまで待つ
+    # 1. ゲームを起動（開いたまま保持。cwdをProjectにしないとResourcesを読めない）。
+    #    既にゲーム窓が開いていれば、誰が起動したか（SUNDAYのスレッド/別プロセス/手動）に
+    #    関係なく間借りして二重起動を防ぐ。窓が無ければ launch_game に従って起動する。
+    existing = gw.getWindowsWithTitle(test_run.WINDOW_TITLE)
+    launched = False
+    if existing:
+        _state["game"] = None
+        _state["owns_game"] = False  # 間借り＝stop_liveで閉じない
+        print(f"[live] 既存のゲーム窓を間借り（{len(existing)}枚検出、新規起動しない）")
+    elif launch_game:
+        game = subprocess.Popen([str(test_run.GAME_EXE)], cwd=str(test_run.PROJECT_DIR))
+        _state["game"] = game
+        _state["owns_game"] = True
+        launched = True
+        print("[live] ゲーム窓が無かったので新規起動")
+        time.sleep(WARMUP_SEC)  # 描画とOBSの捕捉が安定するまで待つ
+    else:
+        _state["game"] = None
+        _state["owns_game"] = False
+        print("[live] launch_game=False かつ窓無し（起動しない）")
 
     # 2. OBSの仮想カメラを開始（既に起動済みなら何もしない。500が出ても実際に点いていればOK扱い）
     client = _obs_client()
@@ -202,13 +222,29 @@ def start_live():
         )
 
     _state["live"] = True
-    return {"ok": True}
+    return {"ok": True, "launched": launched}
 
 
-def stop_live():
-    """配信停止：DiscordカメラOFF → OBS仮想カメラ停止 → ゲーム終了"""
+def stop_live(keep_game=False):
+    """配信停止：DiscordカメラOFF → OBS仮想カメラ停止 → ゲーム終了
+
+    keep_game=True のときはゲーム窓を閉じない。SUNDAY稼働中に窓を閉じると、
+    SUNDAYがプロセス終了をクラッシュと誤検知してしまうため、その防止用。"""
     if not _state["live"]:
         raise RuntimeError("配信していません。")
+
+    # 0. ホットキーは「今フォアグラウンドのウィンドウ」へ届く。ライブ中はゲーム窓が前面のことが
+    #    多く、そのまま送るとゲームに入力が漏れて閉じてしまう（WM_CLOSE→code=0終了）。
+    #    Discordを確実に前面化してからホットキーを送る（start_liveと対称に）。
+    dw = _get_discord_window()
+    if dw:
+        try:
+            if dw.isMinimized:
+                dw.restore()
+            dw.activate()
+        except Exception:
+            pass
+        time.sleep(0.5)
 
     # 1. DiscordのカメラをOFF（同じホットキーで切替）
     _send_hotkey(CAM_HOTKEY)
@@ -226,12 +262,14 @@ def stop_live():
     except Exception:
         pass
 
-    # 4. ゲームを終了
+    # 4. ゲームを終了（自分で起動した窓だけ。SUNDAY等の窓は間借りなので閉じない）。
+    #    keep_game=True（SUNDAY稼働中）なら、自分で起動した窓でも閉じない＝誤クラッシュ検知を防ぐ。
     game = _state.get("game")
-    if game:
+    if game and _state.get("owns_game") and not keep_game:
         game.terminate()
 
     _state["game"] = None
+    _state["owns_game"] = False
     _state["live"] = False
     return {"ok": True}
 
