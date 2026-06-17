@@ -2306,10 +2306,11 @@ void StagePlayScene::Initialize() {
 	reticleBaseStickSpeed_ = reticle_->GetStickSpeed();   // 精密射撃モードの感度低下の基準
 
 	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
+	bool sceneLoaded = false;
 	{
 		const std::string kAutoLoadPath = "Resources/Json/Scenes/StagePlay.json";
 		if (std::filesystem::exists(kAutoLoadPath)) {
-			LoadSceneFromJson(kAutoLoadPath);
+			sceneLoaded = LoadSceneFromJson(kAutoLoadPath);
 		}
 	}
 
@@ -2334,10 +2335,15 @@ void StagePlayScene::Initialize() {
 		}
 	}
 
-	// HP バー UI 初期化
-	InitializeHPBarUI();
-	// 必殺技ゲージ UI 初期化
-	InitializeSpecialGaugeUI();
+	// UI 初期化（auto-load した場合は LoadSceneFromJson 内で建て直し済みなので二重生成しない）
+	if (!sceneLoaded) {
+		InitializeHPBarUI();
+		InitializeSpecialGaugeUI();
+	}
+	// プレイヤーの HP を有効化（auto-load 時は UI 建て直しが Player 生成前に走るためここで明示する）
+	if (player_) {
+		Gameplay::Of(player_).GetHP().enabled = true;
+	}
 }
 
 void StagePlayScene::Finalize() {
@@ -3685,6 +3691,9 @@ bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
 	}
 	for (const auto& s : dynamicSprites_) {
 		if (!s) continue;
+		// ランタイム UI（HP バー / 必殺ゲージ）は一時オブジェクト扱いで保存しない（弾と同様）
+		if (s.get() == hpBarBackground_   || s.get() == hpBarForeground_ ||
+			s.get() == gaugeBarBackground_ || s.get() == gaugeBarForeground_) continue;
 		JsonValue e = JsonValue::MakeObject();
 		e["type"] = "Sprite";
 		e["name"] = s->GetName();
@@ -3765,14 +3774,17 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 	// LoadScene で全エンティティが消えたので参照ポインタもリセット
 	player_ = nullptr;
 	movingEnemies_.clear();
+	// enemyControllers_ は entity_ がダングリングになるので必ずクリアする（Seek リセットと同様）
+	enemyControllers_.clear();
+	pendingEnemyControllers_.clear();
 	bullets_.clear();
 	melees_.clear();
 	ResetDodgeState();
 
 	const JsonValue& objs = result.value["objects"];
-	if (!objs.IsArray()) return true;
+	const bool hasObjs = objs.IsArray();
 
-	for (size_t i = 0; i < objs.Size(); ++i) {
+	for (size_t i = 0; hasObjs && i < objs.Size(); ++i) {
 		const JsonValue& e = objs[i];
 		std::string type = e["type"].AsString();
 		std::string name = e["name"].AsString();
@@ -3819,7 +3831,11 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 		} else if (type == "Sprite") {
 			float cx = static_cast<float>(e["pos"][0].AsDouble(0.0));
 			float cy = static_cast<float>(e["pos"][1].AsDouble(0.0));
-			AddDynamicSprite(e["texture"].AsString(), cx, cy);
+			if (name == "HPBarBackground" || name == "HPBarForeground" ||
+					name == "SpecialGaugeBackground" || name == "SpecialGaugeForeground") {
+					continue; // ランタイム UI は別途建て直すので古い save の混入を無視
+				}
+				AddDynamicSprite(e["texture"].AsString(), cx, cy);
 			if (!dynamicSprites_.empty()) {
 				auto& back = dynamicSprites_.back();
 				back->SetName(name);
@@ -3839,6 +3855,22 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 				}
 			}
 		}
+	}
+
+	// Player はセーブに含めないため、ロード後に存在しなければプレハブから再生成する
+	if (!player_) {
+		InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
+		if (!dynamicAnimated_.empty()) {
+			player_ = dynamicAnimated_.back().get();
+			player_->SetName("Player");
+		}
+	}
+
+	// dynamicSprites_ を全削除したので UI スプライトを建て直す（生ポインタの dangling 回避）
+	InitializeHPBarUI();
+	InitializeSpecialGaugeUI();
+	if (player_) {
+		Gameplay::Of(player_).GetHP().enabled = true;
 	}
 
 	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);

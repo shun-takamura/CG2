@@ -52,11 +52,12 @@ MESH_PATH_LEN = 256
 MESH_FLAG_HAS_SKINNING = 0x1
 
 # ---- .mat フォーマット定数 ----
-# Header: magic(4) + version(4) + base_color_path(256) + color(16) + enable_lighting(4)
-#       + shininess(4) + env_coeff(4) + use_env_map(4)
+# v2 Header: magic(4) + version(4) + base_color_path(256) + color(16) + enable_lighting(4)
+#          + shininess(4) + env_coeff(4) + use_env_map(4)
+#          + metallic(4) + roughness(4) + shading_model(4)
 MAT_MAGIC = b"MATL"
-MAT_VERSION = 1
-MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4  # = 296
+MAT_VERSION = 2
+MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4 + 4 + 4 + 4  # = 308
 
 # ---- マテリアルデフォルト値（ModelInstance::CreateMaterialData と合わせる）----
 MAT_DEFAULT_COLOR = (1.0, 1.0, 1.0, 1.0)
@@ -64,6 +65,9 @@ MAT_DEFAULT_ENABLE_LIGHTING = 1
 MAT_DEFAULT_SHININESS = 50.0
 MAT_DEFAULT_ENV_COEFF = 1.0
 MAT_DEFAULT_USE_ENV_MAP = 0
+MAT_DEFAULT_METALLIC = 0.0
+MAT_DEFAULT_ROUGHNESS = 0.5
+MAT_DEFAULT_SHADING_MODEL = 0  # 0=BlinnPhong, 1=PBR（既存の見た目を変えないよう既定は BlinnPhong）
 
 
 class Action(Enum):
@@ -320,12 +324,15 @@ def _write_mesh_v2(out_path: Path,
             f.write(_fixed_path_bytes(mat_path))
 
 
-def _write_mat_v1(out_path: Path, base_color_path: str,
+def _write_mat_v2(out_path: Path, base_color_path: str,
                   color=MAT_DEFAULT_COLOR,
                   enable_lighting=MAT_DEFAULT_ENABLE_LIGHTING,
                   shininess=MAT_DEFAULT_SHININESS,
                   env_coeff=MAT_DEFAULT_ENV_COEFF,
-                  use_env_map=MAT_DEFAULT_USE_ENV_MAP) -> None:
+                  use_env_map=MAT_DEFAULT_USE_ENV_MAP,
+                  metallic=MAT_DEFAULT_METALLIC,
+                  roughness=MAT_DEFAULT_ROUGHNESS,
+                  shading_model=MAT_DEFAULT_SHADING_MODEL) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("wb") as f:
         f.write(MAT_MAGIC)
@@ -336,6 +343,9 @@ def _write_mat_v1(out_path: Path, base_color_path: str,
         f.write(struct.pack("<f", shininess))
         f.write(struct.pack("<f", env_coeff))
         f.write(struct.pack("<i", use_env_map))
+        f.write(struct.pack("<f", metallic))
+        f.write(struct.pack("<f", roughness))
+        f.write(struct.pack("<i", shading_model))
 
 
 # ============================================================
@@ -647,6 +657,17 @@ def _gltf_extract_animations(gltf, buffers):
 # ============================================================
 # glTF → base_color テクスチャパス解決
 # ============================================================
+def _gltf_find_pbr_factors(gltf):
+    """最初のマテリアルから metallicFactor / roughnessFactor を返す（無ければ glTF 既定の 1.0）"""
+    materials = gltf.get("materials", [])
+    if not materials:
+        return (MAT_DEFAULT_METALLIC, MAT_DEFAULT_ROUGHNESS)
+    pbr = materials[0].get("pbrMetallicRoughness", {})
+    metallic = float(pbr.get("metallicFactor", 1.0))
+    roughness = float(pbr.get("roughnessFactor", 1.0))
+    return (metallic, roughness)
+
+
 def _gltf_find_base_color_path(gltf, gltf_path: Path) -> str:
     materials = gltf.get("materials", [])
     if not materials:
@@ -766,9 +787,10 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     mat_resource_path = _resolve_resource_path(task.src, ".mat")
     skel_resource_path = _resolve_resource_path(task.src, ".skel") if has_skinning else ""
 
-    # .mat
+    # .mat（glTF は PBR 形式なので metallic/roughness factor を読む。shading_model は既定の BlinnPhong）
     base_color_path = _gltf_find_base_color_path(gltf, task.src)
-    _write_mat_v1(mat_path, base_color_path)
+    metallic, roughness = _gltf_find_pbr_factors(gltf)
+    _write_mat_v2(mat_path, base_color_path, metallic=metallic, roughness=roughness)
 
     # .skel
     if has_skinning:
@@ -834,7 +856,8 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
             except ValueError:
                 pass
 
-    _write_mat_v1(mat_dst, base_color_path)
+    # OBJ/MTL は PBR 情報を持たないのでデフォルト（BlinnPhong）で書く
+    _write_mat_v2(mat_dst, base_color_path)
 
     # ---- .mesh の出力 ----
     submeshes = [(0, len(ib), mat_resource_path)]

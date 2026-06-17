@@ -13,7 +13,10 @@ typedef struct Material {
 	float shininess;
 	float environmentCoefficient;
 	int32_t useEnvironmentMap;  // 環境マップの使用ON/OFF
-	float padding2;
+	float metallic;             // PBR: 金属度 0..1
+	float roughness;            // PBR: 粗さ 0..1
+	int32_t shadingModel;       // 0=BlinnPhong, 1=PBR（PSO 選択に使用）
+	float padding2[2];
 }Material;
 
 
@@ -39,7 +42,7 @@ inline bool LoadMatFile(const std::string& matPath,
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version != 1) return false;
+	if (version != 1 && version != 2) return false;
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);
@@ -56,12 +59,25 @@ inline bool LoadMatFile(const std::string& matPath,
 	h.Read(&envCoeff, 4);
 	h.Read(&useEnvMap, 4);
 
+	// v2 で追加された PBR パラメータ（v1 はデフォルト補完）
+	float metallic = 0.0f;
+	float roughness = 0.5f;
+	int32_t shadingModel = 0;
+	if (version >= 2) {
+		h.Read(&metallic, 4);
+		h.Read(&roughness, 4);
+		h.Read(&shadingModel, 4);
+	}
+
 	if (out_gpu_material) {
 		out_gpu_material->color = Vector4(color[0], color[1], color[2], color[3]);
 		out_gpu_material->enableLighting = enableLighting;
 		out_gpu_material->shininess = shininess;
 		out_gpu_material->environmentCoefficient = envCoeff;
 		out_gpu_material->useEnvironmentMap = useEnvMap;
+		out_gpu_material->metallic = metallic;
+		out_gpu_material->roughness = roughness;
+		out_gpu_material->shadingModel = shadingModel;
 	}
 	return true;
 }

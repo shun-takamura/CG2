@@ -187,7 +187,12 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 	material_->environmentCoefficient = 1.0f;
 
 	// デフォルトで環境マップを使用しない
-	material_->useEnvironmentMap = false;  
+	material_->useEnvironmentMap = false;
+
+	// PBR パラメータの初期値（shadingModel=0=BlinnPhong。未初期化のゴミ値で誤って PBR に飛ばないよう明示）
+	material_->metallic = 0.0f;
+	material_->roughness = 0.5f;
+	material_->shadingModel = 0;
 }
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)

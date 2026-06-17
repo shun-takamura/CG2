@@ -252,6 +252,9 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     case kShaderNoEnvironmentMap:
         psFilePath = L"Resources/Shaders/Object3D/Object3dNoEnv.PS.hlsl";
         break;
+    case kShaderPBR:
+        psFilePath = L"Resources/Shaders/Object3D/Object3dPBR.PS.hlsl";
+        break;
     default:
         assert(false);
     }

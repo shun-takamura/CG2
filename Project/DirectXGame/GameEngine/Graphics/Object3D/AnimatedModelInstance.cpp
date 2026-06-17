@@ -150,6 +150,9 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
     material_->shininess = 50.0f;
     material_->environmentCoefficient = 1.0f;
     material_->useEnvironmentMap = false;
+    material_->metallic = 0.0f;
+    material_->roughness = 0.5f;
+    material_->shadingModel = 0;
 }
 
 void AnimatedModelInstance::CreateIndexData(DirectXCore* dxCore)

@@ -3,10 +3,10 @@
   "objects": [
     {
       "type": "Object3D",
-      "name": "playerBullet.mesh",
+      "name": "enemy.mesh",
       "tag": "None",
-      "dir": "Resources/Models/Player/Bullet",
-      "file": "playerBullet.mesh",
+      "dir": "Resources/Models/Enemy",
+      "file": "enemy.mesh",
       "transform": {
         "scale": [
           10,
@@ -19,11 +19,51 @@
           0
         ],
         "translate": [
-          2.3349792957305908,
-          4.2758517265319824,
-          24.769767761230469
+          12.5,
+          0,
+          47.5
         ]
       }
+    },
+    {
+      "type": "Sprite",
+      "name": "HPBarBackground",
+      "tag": "None",
+      "texture": "Resources/Textures/white1x1.dds",
+      "pos": [
+        64,
+        32
+      ]
+    },
+    {
+      "type": "Sprite",
+      "name": "HPBarForeground",
+      "tag": "None",
+      "texture": "Resources/Textures/white1x1.dds",
+      "pos": [
+        64,
+        32
+      ]
+    },
+    {
+      "type": "Sprite",
+      "name": "SpecialGaugeBackground",
+      "tag": "None",
+      "texture": "Resources/Textures/white1x1.dds",
+      "pos": [
+        60,
+        60
+      ]
+    },
+    {
+      "type": "Sprite",
+      "name": "SpecialGaugeForeground",
+      "tag": "None",
+      "texture": "Resources/Textures/white1x1.dds",
+      "pos": [
+        60,
+        60
+      ]
     },
     {
       "type": "Spline",

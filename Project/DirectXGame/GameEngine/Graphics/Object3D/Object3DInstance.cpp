@@ -72,7 +72,11 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
   // Materialのフラグに応じてPSOを切り替え
     if (modelInstance_) {
         Material* mat = modelInstance_->GetMaterialPointer();
-        if (mat && mat->useEnvironmentMap) {
+        if (mat && mat->shadingModel == 1) {
+            dxCore->GetCommandList()->SetPipelineState(
+                object3DManager_->GetPipelineState(Object3DManager::kShaderPBR)
+            );
+        } else if (mat && mat->useEnvironmentMap) {
             dxCore->GetCommandList()->SetPipelineState(
                 object3DManager_->GetPipelineState(Object3DManager::kShaderEnvironmentMap)
             );
@@ -215,6 +219,30 @@ void Object3DInstance::SetMaterialColor(const Vector4& color)
     mat->color = color;
 }
 
+void Object3DInstance::SetMetallic(float metallic)
+{
+    if (!modelInstance_) return;
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) return;
+    mat->metallic = metallic;
+}
+
+void Object3DInstance::SetRoughness(float roughness)
+{
+    if (!modelInstance_) return;
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) return;
+    mat->roughness = roughness;
+}
+
+void Object3DInstance::SetShadingModel(int shadingModel)
+{
+    if (!modelInstance_) return;
+    Material* mat = modelInstance_->GetMaterialPointer();
+    if (!mat) return;
+    mat->shadingModel = shadingModel;
+}
+
 Vector4 Object3DInstance::GetMaterialColor() const
 {
     if (!modelInstance_) return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -281,6 +309,18 @@ void Object3DInstance::OnImGuiInspector()
 
                 // Shininess
                 ImGui::DragFloat("Shininess", &mat->shininess, 1.0f, 0.0f, 1000.0f);
+
+                ImGui::Separator();
+
+                // PBR シェーディング切り替え
+                bool usePBR = (mat->shadingModel == 1);
+                if (ImGui::Checkbox("Use PBR (Cook-Torrance)", &usePBR)) {
+                    mat->shadingModel = usePBR ? 1 : 0;
+                }
+                if (usePBR) {
+                    ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);
+                    ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
+                }
             }
         }
     }
