@@ -103,6 +103,17 @@ void Profiler::Count(const char* name, int64_t n) {
     }
 }
 
+void Profiler::SetGauge(const char* name, double value) {
+    auto it = gaugeIndexByName_.find(name);
+    if (it == gaugeIndexByName_.end()) {
+        const size_t index = gauges_.size();
+        gauges_.push_back({ name, value });
+        gaugeIndexByName_.emplace(name, index);
+    } else {
+        gauges_[it->second].value = value;  // 最新で上書き
+    }
+}
+
 void Profiler::EndFrame() {
     // このフレームの各区間をウィンドウ集計へ畳み込む
     for (const auto& s : stats_) {
@@ -152,6 +163,23 @@ void Profiler::EndFrame() {
         }
     }
 
+    // このフレームの各ゲージをウィンドウ集計へ畳み込む
+    for (const auto& g : gauges_) {
+        auto it = windowGaugeIndexByName_.find(g.name);
+        if (it == windowGaugeIndexByName_.end()) {
+            const size_t index = windowGauges_.size();
+            windowGauges_.push_back({ g.name, g.value, g.value, g.value, g.value, 1 });
+            windowGaugeIndexByName_.emplace(g.name, index);
+        } else {
+            WindowGauge& wg = windowGauges_[it->second];
+            wg.last = g.value;
+            wg.minv = (g.value < wg.minv) ? g.value : wg.minv;
+            wg.maxv = (g.value > wg.maxv) ? g.value : wg.maxv;
+            wg.sum += g.value;
+            wg.count += 1;
+        }
+    }
+
     ++windowFrames_;
 
     ++frame_;
@@ -159,6 +187,8 @@ void Profiler::EndFrame() {
     indexByName_.clear();
     counters_.clear();
     counterIndexByName_.clear();
+    gauges_.clear();
+    gaugeIndexByName_.clear();
 
     // 1秒経過していればウィンドウを書き出す
     const double elapsedMs = static_cast<double>(NowTicks() - windowStartTicks_) * tickToMs_;
@@ -223,10 +253,28 @@ void Profiler::FlushWindow() {
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
     }
 
+    // ゲージ行（RAM/VRAM/オブジェクト数など。現在値のレベル）
+    for (const auto& g : windowGauges_) {
+        const double avg = (g.count > 0) ? (g.sum / g.count) : 0.0;
+        std::ostringstream oss;
+        oss << "frame=" << frame_
+            << " window_s=" << std::fixed << std::setprecision(2) << windowSec
+            << " frames=" << windowFrames_
+            << " gauge=" << g.name
+            << " cur=" << std::setprecision(3) << g.last
+            << " min=" << g.minv
+            << " max=" << g.maxv
+            << " avg=" << avg;
+        SessionLogger::Instance().Write(
+            SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
+    }
+
     windowStats_.clear();
     windowIndexByName_.clear();
     windowCounters_.clear();
     windowCounterIndexByName_.clear();
+    windowGauges_.clear();
+    windowGaugeIndexByName_.clear();
     windowFrames_ = 0;
     windowStartTicks_ = NowTicks();
 }

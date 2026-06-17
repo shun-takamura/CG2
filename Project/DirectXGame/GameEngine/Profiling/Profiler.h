@@ -47,6 +47,12 @@ public:
     void Count(const char* name, int64_t n = 1);
 
     /// <summary>
+    /// 名前付きゲージに「現在値」をセットする（RAM/VRAM/オブジェクト数など、合計でなくレベル）。
+    /// 毎フレーム上書き。ウィンドウごとに cur(最新)/min/max/avg を出す。
+    /// </summary>
+    void SetGauge(const char* name, double value);
+
+    /// <summary>
     /// 未出力のウィンドウを強制的に書き出す。終了処理（Framework::Finalize）で呼ぶ。
     /// </summary>
     void Flush();
@@ -101,6 +107,21 @@ private:
         int presentFrames = 0;    // 出現フレーム数
     };
 
+    // 名前付きゲージの「1フレーム」値（最新のレベル）
+    struct FrameGauge {
+        std::string name;
+        double value = 0.0;
+    };
+    // 名前付きゲージの「1秒ウィンドウ」集計
+    struct WindowGauge {
+        std::string name;
+        double last = 0.0;
+        double minv = 0.0;
+        double maxv = 0.0;
+        double sum = 0.0;
+        int count = 0;
+    };
+
     void FlushWindow();  // 現ウィンドウを書き出してリセット
 
     static constexpr double kWindowMs = 1000.0;  // 集計ウィンドウ長（1秒）
@@ -124,6 +145,12 @@ private:
     std::unordered_map<std::string, size_t> counterIndexByName_;
     std::vector<WindowCounter> windowCounters_;
     std::unordered_map<std::string, size_t> windowCounterIndexByName_;
+
+    // ゲージ（フレーム内 / ウィンドウ）
+    std::vector<FrameGauge> gauges_;
+    std::unordered_map<std::string, size_t> gaugeIndexByName_;
+    std::vector<WindowGauge> windowGauges_;
+    std::unordered_map<std::string, size_t> windowGaugeIndexByName_;
 };
 
 /// <summary>

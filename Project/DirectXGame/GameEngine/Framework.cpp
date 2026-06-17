@@ -72,6 +72,9 @@ void Framework::Run() {
 		// 描画
 		Draw();
 
+		// RAM/VRAM サンプリング（区間スコープ外で。OS問い合わせは内部で1秒throttle）
+		PEPPER_SAMPLE_MEMORY();
+
 		// このフレームの全区間集計を profile.log へ（USE_PEPPER 時のみ）
 		PEPPER_END_FRAME();
 	}

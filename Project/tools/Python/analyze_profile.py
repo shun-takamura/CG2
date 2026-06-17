@@ -94,6 +94,7 @@ def analyze(log_path, min_frames):
     """profile.log を読み、区間/カウンタ/ウィンドウを集計する。"""
     sections = {}   # name -> 集計
     counters = {}   # name -> 集計
+    gauges = {}     # name -> 集計（RAM/VRAM/オブジェクト数などの現在値）
     windows = {}    # frame_id -> (frames, window_s)  ※重複ウィンドウの二重計上を防ぐ
 
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
@@ -133,6 +134,17 @@ def analyze(log_path, min_frames):
                 c["frames"] += frames
                 c["max_per_frame"] = max(c["max_per_frame"], to_int(kv, "max_per_frame"))
 
+            elif "gauge" in kv:
+                name = kv["gauge"]
+                g = gauges.setdefault(name, {
+                    "cur": 0.0, "min": float("inf"), "max": 0.0, "sum_avg": 0.0, "n": 0,
+                })
+                g["cur"] = to_float(kv, "cur")  # ログは時系列順なので最後が最新
+                g["min"] = min(g["min"], to_float(kv, "min"))
+                g["max"] = max(g["max"], to_float(kv, "max"))
+                g["sum_avg"] += to_float(kv, "avg")
+                g["n"] += 1
+
     total_frames = sum(fr for fr, _ in windows.values())
     total_secs = sum(ws for _, ws in windows.values())
     avg_fps = (total_frames / total_secs) if total_secs > 0 else 0.0
@@ -162,6 +174,14 @@ def analyze(log_path, min_frames):
             "max_per_frame": c["max_per_frame"], "total": c["total"],
         })
 
+    gauge_rows = []
+    for name, g in gauges.items():
+        gauge_rows.append({
+            "gauge": name, "cur": g["cur"],
+            "min": (g["min"] if g["n"] > 0 else 0.0), "max": g["max"],
+            "avg": (g["sum_avg"] / g["n"]) if g["n"] > 0 else 0.0,
+        })
+
     return {
         "session": log_path.parent.name,
         "log_path": str(log_path),
@@ -170,6 +190,7 @@ def analyze(log_path, min_frames):
         "avg_fps": avg_fps,
         "sections": rows,
         "counters": counter_rows,
+        "gauges": gauge_rows,
     }
 
 
@@ -251,6 +272,14 @@ def print_report(result, fps, top, hints):
         for c in result["counters"]:
             print(f"  {c['counter']}: 平均 {c['avg_per_frame']:.1f} /フレーム  "
                   f"最大 {c['max_per_frame']}  (累計 {c['total']})")
+        print()
+
+    if result.get("gauges"):
+        print("== メモリ/リソース（ゲージ・現在値）==")
+        print(f"  {'名前':<16}{'現在':>10}{'最小':>10}{'最大':>10}{'平均':>10}")
+        for g in result["gauges"]:
+            print(f"  {g['gauge']:<16}{g['cur']:>10.1f}{g['min']:>10.1f}"
+                  f"{g['max']:>10.1f}{g['avg']:>10.1f}")
         print()
 
     print_efficiency(result, top, hints)

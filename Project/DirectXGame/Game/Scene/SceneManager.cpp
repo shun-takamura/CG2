@@ -74,6 +74,9 @@ void SceneManager::Update() {
 
 	// 現在のシーンを更新
 	if (currentScene_) {
+		// P.E.P.P.E.R. へオブジェクト/リソース数を報告（USE_PEPPER 未定義時は空）
+		currentScene_->ReportProfileGauges();
+
 		currentScene_->Update();
 
 		// シーン経過秒の加算（Debugシークバー / 仕掛けタイミングの基準）

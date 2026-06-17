@@ -17,6 +17,8 @@
 #include "MathUtility.h"
 #include "Transform.h"
 #include "Vector4.h"
+#include "TextureManager.h"
+#include "ModelManager.h"
 #include "PepperMacros.h"
 #include <algorithm>
 #include <cmath>
@@ -455,6 +457,17 @@ bool Scene::IsDynamicObject(IImGuiEditable* editable) const {
 	return false;
 }
 #endif
+
+void Scene::ReportProfileGauges() {
+	// シーン内オブジェクト数（描画対象）
+	PEPPER_GAUGE("Obj3D_Count", static_cast<double>(object3DInstances_.size()));
+	PEPPER_GAUGE("Anim_Count", static_cast<double>(dynamicAnimated_.size()));
+	PEPPER_GAUGE("Sprite_Count", static_cast<double>(dynamicSprites_.size()));
+	PEPPER_GAUGE("Prim_Count", static_cast<double>(dynamicPrimitives_.size()));
+	// 読み込み済みリソース数（全シーン共有のマネージャー）
+	PEPPER_GAUGE("Tex_Count", static_cast<double>(TextureManager::GetInstance()->GetLoadedTextureCount()));
+	PEPPER_GAUGE("Model_Count", static_cast<double>(ModelManager::GetInstance()->GetModelCount()));
+}
 
 void Scene::UpdateDynamicObjects() {
 	PEPPER_SCOPE("Scene::UpdateDynamicObjects");

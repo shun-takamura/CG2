@@ -165,6 +165,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Framework.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\Profiler.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\GpuProfiler.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Profiling\MemoryProbe.cpp" />
     <ClCompile Include="..\externals\quirc\decode.c" />
     <ClCompile Include="..\externals\quirc\identify.c">
       <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</TreatWarningAsError>
@@ -311,6 +312,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\Profiler.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\PepperMacros.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\GpuProfiler.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Profiling\MemoryProbe.h" />
     <ClInclude Include="..\externals\quirc\quirc.h" />
     <ClInclude Include="..\externals\quirc\quirc_internal.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\QRCodeReader.h" />

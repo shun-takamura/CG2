@@ -8,6 +8,7 @@
 
 #include "Profiler.h"
 #include "GpuProfiler.h"
+#include "MemoryProbe.h"
 
 // __LINE__ を変数名に連結し、同一スコープ内で名前衝突しない一時オブジェクトを作る
 #define PEPPER_CONCAT_INNER(a, b) a##b
@@ -24,6 +25,12 @@
 // 名前付きカウンタ（DrawCall 回数など「個数」）。描画呼び出しの直前などに1行。
 #define PEPPER_COUNT(name) Profiler::Instance().Count((name), 1)
 #define PEPPER_COUNT_N(name, n) Profiler::Instance().Count((name), (n))
+
+// 名前付きゲージ（RAM/VRAM/オブジェクト数など「現在値のレベル」）。
+#define PEPPER_GAUGE(name, value) Profiler::Instance().SetGauge((name), (value))
+
+// RAM/VRAM を継続サンプリング（OS問い合わせは内部で1秒throttle）。フレームループで毎フレーム1回。
+#define PEPPER_SAMPLE_MEMORY() MemoryProbe::Instance().Sample()
 
 // 1フレーム分の集計をウィンドウへ畳み込み、1秒ごとに profile.log へ書き出す。フレームループ末尾で1回。
 #define PEPPER_END_FRAME() Profiler::Instance().EndFrame()
@@ -44,6 +51,8 @@
 #define PEPPER_GPU_SCOPE(commandList, name) ((void)0)
 #define PEPPER_COUNT(name) ((void)0)
 #define PEPPER_COUNT_N(name, n) ((void)0)
+#define PEPPER_GAUGE(name, value) ((void)0)
+#define PEPPER_SAMPLE_MEMORY() ((void)0)
 #define PEPPER_END_FRAME() ((void)0)
 #define PEPPER_FLUSH() ((void)0)
 #define PEPPER_GPU_INIT(device, queue) ((void)0)
