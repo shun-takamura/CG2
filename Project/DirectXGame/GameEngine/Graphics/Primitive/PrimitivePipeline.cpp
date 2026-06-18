@@ -61,7 +61,14 @@ void PrimitivePipeline::CreateRootSignature() {
     descriptorRangeTexture[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeTexture[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[3] = {};
+    // DescriptorRange: SRV(t1) - ディゾルブマスク用（PS）。t0 とは別テーブル（任意SRVを単独でbindするため）。
+    D3D12_DESCRIPTOR_RANGE descriptorRangeMask[1] = {};
+    descriptorRangeMask[0].BaseShaderRegister = 1;
+    descriptorRangeMask[0].NumDescriptors = 1;
+    descriptorRangeMask[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeMask[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[4] = {};
 
     // [0] VS: CBV(b0) - TransformationMatrix
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -78,6 +85,12 @@ void PrimitivePipeline::CreateRootSignature() {
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
     rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+
+    // [3] PS: DescriptorTable - DissolveMask(t1)。全描画でwhite1x1かマスクを必ずbindする。
+    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRangeMask;
+    rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
 
     // Sampler 3種類（material.samplerMode で PS 側が選択）
     //   s0: WRAP U  / WRAP V  （タイリング用）

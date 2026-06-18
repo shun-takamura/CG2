@@ -36,27 +36,31 @@ RESOURCES_DIR = Path("Resources")
 CACHE_FILE = Path("tools/Python/sync_cache.json")
 TEXCONV = Path("externals/texconv/Texconv.exe")
 
-# パスにこの部分文字列が含まれる PNG は線形値として圧縮する（マスク・ノーマル等）
-LINEAR_TEXTURE_HINTS = ("MaskTexture",)
+# パスにこの部分文字列が含まれる PNG は線形値として圧縮する（マスク・ノーマル等）。
+# 法線マップは sRGB だと法線がずれるので、ファイル名/フォルダ名に "NormalMap" を含めること。
+LINEAR_TEXTURE_HINTS = ("MaskTexture", "NormalMap")
 
-# ---- .mesh v2 フォーマット定数 ----
+# ---- .mesh v3 フォーマット定数 ----
 # Header: magic(4) + version(4) + flags(4) + vc(4) + ic(4) + smc(4)
 #       + vo(4) + io(4) + so(4) + smo(4) + skeleton_path(256)
+# v3 で頂点に tangent(Vector4) を追加（法線マップ用。w=handedness）
 MESH_MAGIC = b"MESH"
-MESH_VERSION = 2
+MESH_VERSION = 3
 MESH_HEADER_SIZE = 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256  # = 288
-MESH_VERTEX_SIZE = 16 + 8 + 12                                   # = 36
+MESH_VERTEX_SIZE = 16 + 8 + 12 + 16                              # = 52 (pos + uv + normal + tangent)
 MESH_SKIN_VERTEX_SIZE = 16 + 16                                  # = 32 (joint_indices + weights)
 MESH_SUBMESH_SIZE = 4 + 4 + 256                                  # = 264
 MESH_PATH_LEN = 256
 MESH_FLAG_HAS_SKINNING = 0x1
 
 # ---- .mat フォーマット定数 ----
-# Header: magic(4) + version(4) + base_color_path(256) + color(16) + enable_lighting(4)
-#       + shininess(4) + env_coeff(4) + use_env_map(4)
+# v3 Header: magic(4) + version(4) + base_color_path(256) + color(16) + enable_lighting(4)
+#          + shininess(4) + env_coeff(4) + use_env_map(4)
+#          + metallic(4) + roughness(4) + shading_model(4)
+#          + normal_map_path(256)
 MAT_MAGIC = b"MATL"
-MAT_VERSION = 1
-MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4  # = 296
+MAT_VERSION = 3
+MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256  # = 564
 
 # ---- マテリアルデフォルト値（ModelInstance::CreateMaterialData と合わせる）----
 MAT_DEFAULT_COLOR = (1.0, 1.0, 1.0, 1.0)
@@ -64,6 +68,10 @@ MAT_DEFAULT_ENABLE_LIGHTING = 1
 MAT_DEFAULT_SHININESS = 50.0
 MAT_DEFAULT_ENV_COEFF = 1.0
 MAT_DEFAULT_USE_ENV_MAP = 0
+MAT_DEFAULT_METALLIC = 0.0
+MAT_DEFAULT_ROUGHNESS = 0.5
+MAT_DEFAULT_SHADING_MODEL = 0  # 0=BlinnPhong, 1=PBR（既存の見た目を変えないよう既定は BlinnPhong）
+MAT_DEFAULT_NORMAL_MAP = ""    # 法線マップ DDS パス（空＝法線マップなし）
 
 
 class Action(Enum):
@@ -139,6 +147,59 @@ def needs_rebuild(task: FileTask, cache: dict[str, float], force: bool) -> bool:
 
 
 # ============================================================
+# Tangent 計算（法線マップ用 TBN）
+# ============================================================
+def _compute_tangents(vertex_buffer, index_buffer):
+    """9要素タプル (px,py,pz,pw, u,v, nx,ny,nz) のリストに tangent(Vec4) を計算し、
+    13要素 (..., tx,ty,tz,tw) のリストにして返す。tw は handedness(±1)。
+    三角形ごとに UV と位置から tangent/bitangent を求め、頂点ごとに累積→正規化→
+    グラムシュミット直交化→handedness 判定する。"""
+    n = len(vertex_buffer)
+    tan = [[0.0, 0.0, 0.0] for _ in range(n)]
+    bit = [[0.0, 0.0, 0.0] for _ in range(n)]
+    for t in range(0, len(index_buffer) - 2, 3):
+        i0, i1, i2 = index_buffer[t], index_buffer[t + 1], index_buffer[t + 2]
+        v0, v1, v2 = vertex_buffer[i0], vertex_buffer[i1], vertex_buffer[i2]
+        e1x, e1y, e1z = v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]
+        e2x, e2y, e2z = v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]
+        du1, dv1 = v1[4] - v0[4], v1[5] - v0[5]
+        du2, dv2 = v2[4] - v0[4], v2[5] - v0[5]
+        denom = du1 * dv2 - du2 * dv1
+        if abs(denom) < 1e-8:
+            continue  # UV が潰れた三角形はスキップ
+        r = 1.0 / denom
+        tx = (e1x * dv2 - e2x * dv1) * r
+        ty = (e1y * dv2 - e2y * dv1) * r
+        tz = (e1z * dv2 - e2z * dv1) * r
+        bx = (e2x * du1 - e1x * du2) * r
+        by = (e2y * du1 - e1y * du2) * r
+        bz = (e2z * du1 - e1z * du2) * r
+        for i in (i0, i1, i2):
+            tan[i][0] += tx; tan[i][1] += ty; tan[i][2] += tz
+            bit[i][0] += bx; bit[i][1] += by; bit[i][2] += bz
+    out = []
+    for i, v in enumerate(vertex_buffer):
+        nx, ny, nz = v[6], v[7], v[8]
+        tx, ty, tz = tan[i]
+        # グラムシュミット: t = normalize(t - n*dot(n,t))
+        d = nx * tx + ny * ty + nz * tz
+        tx -= nx * d; ty -= ny * d; tz -= nz * d
+        length = (tx * tx + ty * ty + tz * tz) ** 0.5
+        if length > 1e-8:
+            tx /= length; ty /= length; tz /= length
+        else:
+            tx, ty, tz = 1.0, 0.0, 0.0
+        # handedness: w = sign(dot(cross(n,t), bitangent))
+        cx = ny * tz - nz * ty
+        cy = nz * tx - nx * tz
+        cz = nx * ty - ny * tx
+        bx, by, bz = bit[i]
+        w = -1.0 if (cx * bx + cy * by + cz * bz) < 0.0 else 1.0
+        out.append((v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], tx, ty, tz, w))
+    return out
+
+
+# ============================================================
 # OBJ / MTL パース
 # ============================================================
 def _parse_mtl_for_texture(mtl_path: Path) -> str | None:
@@ -150,6 +211,20 @@ def _parse_mtl_for_texture(mtl_path: Path) -> str | None:
             tokens = line.split()
             if tokens and tokens[0] == "map_Kd":
                 return tokens[1]
+    return None
+
+
+def _parse_mtl_for_normal(mtl_path: Path) -> str | None:
+    """.mtl 内の法線マップ指定（map_Bump / bump / norm）のファイル名を返す。
+    map_Bump は -bm 等のオプションが付くことがあるので、最後のトークンをパスとみなす。"""
+    if not mtl_path.exists():
+        return None
+    keys = ("map_Bump", "map_bump", "bump", "norm")
+    with mtl_path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            tokens = line.split()
+            if tokens and tokens[0] in keys and len(tokens) >= 2:
+                return tokens[-1]  # オプションを飛ばして末尾をファイル名とみなす
     return None
 
 
@@ -255,6 +330,8 @@ def _build_obj_mesh_buffers(obj_path: Path):
             vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
             index_buffer.append(new_index)
 
+    # OBJ は tangent を持たないので UV+位置から計算（9要素→13要素）
+    vertex_buffer = _compute_tangents(vertex_buffer, index_buffer)
     return vertex_buffer, index_buffer, mtllib
 
 
@@ -301,9 +378,9 @@ def _write_mesh_v2(out_path: Path,
                             submesh_offset))
         f.write(_fixed_path_bytes(skeleton_path))
 
-        # ---- Vertex Data ----
+        # ---- Vertex Data ---- (v3: pos4 + uv2 + normal3 + tangent4 = 13 float)
         for v in vertex_buffer:
-            f.write(struct.pack("<9f", *v))
+            f.write(struct.pack("<13f", *v))
 
         # ---- Index Data ----
         if index_count > 0:
@@ -320,12 +397,16 @@ def _write_mesh_v2(out_path: Path,
             f.write(_fixed_path_bytes(mat_path))
 
 
-def _write_mat_v1(out_path: Path, base_color_path: str,
+def _write_mat_v2(out_path: Path, base_color_path: str,
                   color=MAT_DEFAULT_COLOR,
                   enable_lighting=MAT_DEFAULT_ENABLE_LIGHTING,
                   shininess=MAT_DEFAULT_SHININESS,
                   env_coeff=MAT_DEFAULT_ENV_COEFF,
-                  use_env_map=MAT_DEFAULT_USE_ENV_MAP) -> None:
+                  use_env_map=MAT_DEFAULT_USE_ENV_MAP,
+                  metallic=MAT_DEFAULT_METALLIC,
+                  roughness=MAT_DEFAULT_ROUGHNESS,
+                  shading_model=MAT_DEFAULT_SHADING_MODEL,
+                  normal_map_path=MAT_DEFAULT_NORMAL_MAP) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("wb") as f:
         f.write(MAT_MAGIC)
@@ -336,6 +417,10 @@ def _write_mat_v1(out_path: Path, base_color_path: str,
         f.write(struct.pack("<f", shininess))
         f.write(struct.pack("<f", env_coeff))
         f.write(struct.pack("<i", use_env_map))
+        f.write(struct.pack("<f", metallic))
+        f.write(struct.pack("<f", roughness))
+        f.write(struct.pack("<i", shading_model))
+        f.write(_fixed_path_bytes(normal_map_path))
 
 
 # ============================================================
@@ -456,6 +541,7 @@ def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
     texcoords = _gltf_read_accessor(gltf, buffers, attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else None
     joints_attr = _gltf_read_accessor(gltf, buffers, attrs["JOINTS_0"]) if "JOINTS_0" in attrs else None
     weights_attr = _gltf_read_accessor(gltf, buffers, attrs["WEIGHTS_0"]) if "WEIGHTS_0" in attrs else None
+    tangents_attr = _gltf_read_accessor(gltf, buffers, attrs["TANGENT"]) if "TANGENT" in attrs else None
 
     indices_idx = prim.get("indices")
     if indices_idx is None:
@@ -475,7 +561,12 @@ def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
         px = -px
         nx = -nx
         v = 1.0 - v
-        vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
+        if tangents_attr:
+            tgx, tgy, tgz, tgw = tangents_attr[i]
+            # RH→LH: tangent.x 反転、handedness(w) 反転
+            vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz, -tgx, tgy, tgz, -tgw))
+        else:
+            vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
 
         if has_skinning:
             j = joints_attr[i]
@@ -488,6 +579,10 @@ def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
     for i in range(0, len(raw_indices), 3):
         a, b, c = raw_indices[i], raw_indices[i + 1], raw_indices[i + 2]
         index_buffer.extend([a, c, b])
+
+    # TANGENT 属性が無い glTF は UV+位置から計算（9要素→13要素）
+    if not tangents_attr:
+        vertex_buffer = _compute_tangents(vertex_buffer, index_buffer)
 
     return vertex_buffer, index_buffer, (skin_buffer if has_skinning else None)
 
@@ -647,6 +742,42 @@ def _gltf_extract_animations(gltf, buffers):
 # ============================================================
 # glTF → base_color テクスチャパス解決
 # ============================================================
+def _gltf_find_pbr_factors(gltf):
+    """最初のマテリアルから metallicFactor / roughnessFactor を返す（無ければ glTF 既定の 1.0）"""
+    materials = gltf.get("materials", [])
+    if not materials:
+        return (MAT_DEFAULT_METALLIC, MAT_DEFAULT_ROUGHNESS)
+    pbr = materials[0].get("pbrMetallicRoughness", {})
+    metallic = float(pbr.get("metallicFactor", 1.0))
+    roughness = float(pbr.get("roughnessFactor", 1.0))
+    return (metallic, roughness)
+
+
+def _gltf_find_normal_map_path(gltf, gltf_path: Path) -> str:
+    """最初のマテリアルの normalTexture から Resources 相対の DDS パスを返す（無ければ空）"""
+    materials = gltf.get("materials", [])
+    if not materials:
+        return ""
+    nrm = materials[0].get("normalTexture", {})
+    if "index" not in nrm:
+        return ""
+    textures = gltf.get("textures", [])
+    if nrm["index"] >= len(textures):
+        return ""
+    image_idx = textures[nrm["index"]].get("source")
+    images = gltf.get("images", [])
+    if image_idx is None or image_idx >= len(images):
+        return ""
+    uri = images[image_idx].get("uri", "")
+    if not uri or uri.startswith("data:"):
+        return ""
+    try:
+        rel = gltf_path.relative_to(ASSETS_DIR)
+        return (RESOURCES_DIR / (rel.parent / uri).with_suffix(".dds")).as_posix()
+    except ValueError:
+        return ""
+
+
 def _gltf_find_base_color_path(gltf, gltf_path: Path) -> str:
     materials = gltf.get("materials", [])
     if not materials:
@@ -766,9 +897,12 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     mat_resource_path = _resolve_resource_path(task.src, ".mat")
     skel_resource_path = _resolve_resource_path(task.src, ".skel") if has_skinning else ""
 
-    # .mat
+    # .mat（glTF は PBR 形式なので metallic/roughness factor を読む。shading_model は既定の BlinnPhong）
     base_color_path = _gltf_find_base_color_path(gltf, task.src)
-    _write_mat_v1(mat_path, base_color_path)
+    metallic, roughness = _gltf_find_pbr_factors(gltf)
+    normal_map_path = _gltf_find_normal_map_path(gltf, task.src)
+    _write_mat_v2(mat_path, base_color_path, metallic=metallic, roughness=roughness,
+                  normal_map_path=normal_map_path)
 
     # .skel
     if has_skinning:
@@ -821,20 +955,28 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
     mat_dst = task.dst.with_suffix(".mat")
     mat_resource_path = _resolve_resource_path(task.src, ".mat")
 
+    # .mtl のテクスチャ名 → Resources/.../{name}.dds に変換するヘルパー
+    def _mtl_tex_to_resource(tex_name: str) -> str:
+        try:
+            rel = task.src.relative_to(ASSETS_DIR)
+            tex_in_assets = rel.parent / tex_name
+            return (RESOURCES_DIR / tex_in_assets.with_suffix(".dds")).as_posix()
+        except ValueError:
+            return ""
+
     # ベースカラーテクスチャ: .mtl の map_Kd を見て Resources/.../{stem}.dds に変換
     base_color_path = ""
+    normal_map_path = ""
     if mtllib:
         tex_name = _parse_mtl_for_texture(task.src.parent / mtllib)
         if tex_name:
-            try:
-                rel = task.src.relative_to(ASSETS_DIR)
-                tex_in_assets = rel.parent / tex_name
-                tex_in_resources = RESOURCES_DIR / tex_in_assets.with_suffix(".dds")
-                base_color_path = tex_in_resources.as_posix()
-            except ValueError:
-                pass
+            base_color_path = _mtl_tex_to_resource(tex_name)
+        nrm_name = _parse_mtl_for_normal(task.src.parent / mtllib)
+        if nrm_name:
+            normal_map_path = _mtl_tex_to_resource(nrm_name)
 
-    _write_mat_v1(mat_dst, base_color_path)
+    # OBJ/MTL は metallic/roughness を持たないのでデフォルト（BlinnPhong）。法線マップがあれば設定
+    _write_mat_v2(mat_dst, base_color_path, normal_map_path=normal_map_path)
 
     # ---- .mesh の出力 ----
     submeshes = [(0, len(ib), mat_resource_path)]

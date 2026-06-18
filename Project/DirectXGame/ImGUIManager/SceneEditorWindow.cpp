@@ -240,7 +240,7 @@ void SceneEditorWindow::OnDraw() {
     // シーン保存 / 読込
     // ============================================
     {
-        static char scenePathBuf[256] = "Resources/Json/Scenes/demo.json";
+        static char scenePathBuf[256] = "Resources/Json/Scenes/StagePlay.json";
         ImGui::InputText("Scene File", scenePathBuf, sizeof(scenePathBuf));
         if (ImGui::Button("Save Scene")) {
             if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {

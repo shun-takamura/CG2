@@ -62,6 +62,11 @@ public:
     void SetUVFlipV(bool b)            { mesh_.SetUVFlipV(b); }
     void SetTexture(const std::string& path) { mesh_.SetTexture(path); }
 
+    // ===== Dissolve（オブジェクト単位のディゾルブ）=====
+    void SetDissolveMask(const std::string& path) { mesh_.SetDissolveMask(path); }
+    void SetDissolve(bool enable, float threshold) { mesh_.SetDissolve(enable, threshold); }
+    void SetDissolveEdge(bool enable, const Vector4& color, float width) { mesh_.SetDissolveEdge(enable, color, width); }
+
     // ===== Distortion =====
     /// <summary>
     /// 歪み源ノーマルマップを設定（空文字でリセット）。SRV は TextureManager 経由でキャッシュ。

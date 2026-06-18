@@ -128,6 +128,13 @@ public:
     Vector4 GetMaterialColor() const;
 
     //==============================
+    // PBR マテリアルセッター
+    //==============================
+    void SetMetallic(float metallic);              // 金属度 0..1
+    void SetRoughness(float roughness);            // 粗さ 0..1
+    void SetShadingModel(int shadingModel);        // 0=BlinnPhong, 1=PBR（kShaderPBR を使用）
+
+    //==============================
     // TODO: 将来的に拡張予定のMaterialセッター
     //==============================
     // void SetColor(const Vector4& color);

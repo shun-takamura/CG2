@@ -14,6 +14,7 @@ struct Vertex
     float4 position;
     float2 texcoord;
     float3 normal;
+    float4 tangent;  // 法線マップ用。当面はスキニングせずパススルー（アニメ法線マップは将来）
 };
 
 // VertexInfluence（C++のVertexInfluenceに対応）
@@ -56,6 +57,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     // Skinning計算
     Vertex skinned;
     skinned.texcoord = input.texcoord;
+    skinned.tangent = input.tangent;  // 当面パススルー（位置/法線のみスキニング）
 
     float totalWeight = influence.weight.x + influence.weight.y + influence.weight.z + influence.weight.w;
 

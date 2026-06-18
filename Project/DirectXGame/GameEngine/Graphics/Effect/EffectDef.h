@@ -100,6 +100,25 @@ struct EffectPrimitiveComponent {
     Vector2     distortionUvScale       = { 1.0f, 1.0f };
     bool        distortionUvFlipU = false;
     bool        distortionUvFlipV = false;
+
+    // ----- Dissolve（オブジェクト単位のディゾルブ） -----
+    // useDissolve かつ dissolveMaskPath が指定されているとき、マスク(グレースケール)を読み、
+    // mask.r < threshold のピクセルを discard する（threshold: 0=完全表示 / 1=完全に消えた）。
+    // threshold は In（出現:1→0）と Out（消滅:0→1）の max で時間合成する。
+    bool        useDissolve = false;       // マスター（マスクをバインドするか）
+    std::string dissolveMaskPath;          // In/Out で共用するマスク
+    // 出現（In）：コンポーネント出現から InStartTime 後、InDuration 秒かけて threshold を 1→0（ディゾルブで出てくる）
+    bool        dissolveInEnable    = false;
+    float       dissolveInStartTime = 0.0f;
+    float       dissolveInDuration  = 0.5f;
+    // 消滅（Out）：OutStartTime 後、OutDuration 秒かけて threshold を 0→1（ディゾルブで消えていく）
+    bool        dissolveOutEnable    = false;
+    float       dissolveOutStartTime = 0.0f;
+    float       dissolveOutDuration  = 0.5f;
+    // アウトライン（燃えるエッジ）：In/Out 共用。閾値近傍の帯を発光色で塗る。
+    bool        dissolveEdgeEnable = false;
+    Vector4     dissolveEdgeColor  = { 1.0f, 0.4f, 0.1f, 1.0f };
+    float       dissolveEdgeWidth  = 0.05f;
 };
 
 /// <summary>

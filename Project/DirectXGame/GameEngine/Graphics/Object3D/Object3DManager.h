@@ -18,6 +18,7 @@ public:
     enum ShaderType {
         kShaderEnvironmentMap,     // 環境マップあり
         kShaderNoEnvironmentMap,   // 環境マップなし
+        kShaderPBR,                // PBR（Cook-Torrance）
         kCountOfShaderType
     };
 

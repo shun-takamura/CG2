@@ -149,6 +149,14 @@ namespace {
         } else {
             r.SetDistortionTexture("");
         }
+        // Dissolve：マスク反映（有効かつパスありのときのみ。閾値は毎フレーム別途 push する）。
+        if (pc.useDissolve && !pc.dissolveMaskPath.empty()) {
+            r.SetDissolveMask(pc.dissolveMaskPath);
+        } else {
+            r.SetDissolveMask("");
+        }
+        // アウトライン（時間非依存なのでここで静的に反映）
+        r.SetDissolveEdge(pc.dissolveEdgeEnable, pc.dissolveEdgeColor, pc.dissolveEdgeWidth);
     }
 }
 
@@ -252,6 +260,28 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         rt.renderer->SetTranslate(pos);
         rt.renderer->SetScale(scale);
         rt.renderer->SetColor(color);
+
+        // ディゾルブ閾値：コンポーネント出現(local)を基準に、In(出現:1→0) と Out(消滅:0→1) を
+        // max で時間合成する（0=完全表示 / 1=完全に消えた）。マスク未設定や In/Out 両方OFFなら無効。
+        {
+            float th = 0.0f;
+            if (pc.dissolveInEnable) {
+                float t = local - pc.dissolveInStartTime;
+                float d = pc.dissolveInDuration > 0.0001f ? pc.dissolveInDuration : 0.0001f;
+                float inTh = (t <= 0.0f) ? 1.0f : (t >= d ? 0.0f : 1.0f - t / d);
+                if (inTh > th) th = inTh;
+            }
+            if (pc.dissolveOutEnable) {
+                float t = local - pc.dissolveOutStartTime;
+                float d = pc.dissolveOutDuration > 0.0001f ? pc.dissolveOutDuration : 0.0001f;
+                float outTh = (t <= 0.0f) ? 0.0f : (t >= d ? 1.0f : t / d);
+                if (outTh > th) th = outTh;
+            }
+            bool active = pc.useDissolve && !pc.dissolveMaskPath.empty()
+                       && (pc.dissolveInEnable || pc.dissolveOutEnable);
+            rt.renderer->SetDissolve(active, th);
+        }
+
         rt.renderer->Update(camera, deltaTime);
 
         // 寿命終了（totalDuration を超えた場合も含む）

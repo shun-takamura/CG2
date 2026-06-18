@@ -68,6 +68,13 @@ void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
         materialData_->cameraPos = camera->GetTranslate();
     }
 
+    // ディゾルブ（毎フレーム閾値を反映）
+    materialData_->dissolveEnable = dissolveEnable_;
+    materialData_->dissolveThreshold = dissolveThreshold_;
+    materialData_->dissolveEdgeEnable = dissolveEdgeEnable_;
+    materialData_->dissolveEdgeWidth = dissolveEdgeWidth_;
+    materialData_->dissolveEdgeColor = dissolveEdgeColor_;
+
     // --- Distortion 用 UV 変換の累積（通常 UV と完全に独立） ---
     if (distortionMaterialData_) {
         distortionUVScrollAccumulated_.x += distortionUVScrollSpeed_.x * deltaTime;
@@ -211,6 +218,13 @@ void PrimitiveMesh::Draw() {
             2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
     }
 
+    // [3] PS: ディゾルブマスク（t1）。未設定時は white1x1 を必ずバインド。
+    {
+        SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
+        uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
+        commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+    }
+
     // 描画
     PEPPER_COUNT("DrawCall");
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -260,6 +274,8 @@ void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
     // [2] PS: Texture (t0) — ノーマルマップ
     SRVManager* srvManager = pp->GetSRVManager();
     cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+    // [3] PS: t1 — Distortion パスでは未使用だがルートシグネチャ上必須。white1x1 をバインド。
+    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
 
     PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -285,6 +301,8 @@ void PrimitiveMesh::DrawDistortionPassPreview(uint32_t normalMapSrvIndex) {
     // PS SRV = ノーマルマップ
     SRVManager* srvManager = pp->GetSRVManager();
     cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+    // t1（未使用だが必須）→ white1x1
+    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
 
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
@@ -314,6 +332,13 @@ void PrimitiveMesh::DrawPreview() {
             2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
     }
 
+    // [3] PS: ディゾルブマスク（t1）。未設定時は white1x1 を必ずバインド。
+    {
+        SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
+        uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
+        commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+    }
+
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
@@ -321,6 +346,16 @@ void PrimitiveMesh::SetTexture(const std::string& textureFilePath) {
     TextureManager::GetInstance()->LoadTexture(textureFilePath);
     textureSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex(textureFilePath);
     hasTexture_ = true;
+}
+
+void PrimitiveMesh::SetDissolveMask(const std::string& textureFilePath) {
+    if (textureFilePath.empty()) {
+        hasDissolveMask_ = false;
+        return;
+    }
+    TextureManager::GetInstance()->LoadTexture(textureFilePath);
+    dissolveMaskSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex(textureFilePath);
+    hasDissolveMask_ = true;
 }
 
 void PrimitiveMesh::CreateVertexResource(const MeshData& meshData) {
@@ -410,6 +445,15 @@ void PrimitiveMesh::CreateMaterialResource() {
     materialData_->uvTransform = MakeIdentity4x4();
     materialData_->cameraPos = { 0.0f, 0.0f, 0.0f };
     materialData_->viewAngleFadePower = 0.0f;
+    materialData_->dissolveEnable = 0;
+    materialData_->dissolveThreshold = 0.0f;
+    materialData_->dissolveEdgeEnable = 0;
+    materialData_->dissolveEdgeWidth = 0.05f;
+    materialData_->dissolveEdgeColor = { 1.0f, 0.4f, 0.1f, 1.0f };
+
+    // t1 既定マスク（white1x1）を確保。マスク未設定でも t1 は常にバインドする必要があるため。
+    TextureManager::GetInstance()->LoadTexture("Resources/Textures/white1x1.dds");
+    whiteSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex("Resources/Textures/white1x1.dds");
 
     // Distortion 用 CB（PS の Material と同じレイアウト、独立した uvTransform を持つ）
     distortionMaterialResource_ = dxCore->CreateBufferResource(sizeof(PrimitiveMaterial));
@@ -423,4 +467,9 @@ void PrimitiveMesh::CreateMaterialResource() {
     distortionMaterialData_->uvTransform = MakeIdentity4x4();
     distortionMaterialData_->cameraPos = { 0.0f, 0.0f, 0.0f };
     distortionMaterialData_->viewAngleFadePower = 0.0f;
+    distortionMaterialData_->dissolveEnable = 0; // Distortion パスではディゾルブ無効
+    distortionMaterialData_->dissolveThreshold = 0.0f;
+    distortionMaterialData_->dissolveEdgeEnable = 0;
+    distortionMaterialData_->dissolveEdgeWidth = 0.0f;
+    distortionMaterialData_->dissolveEdgeColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 }

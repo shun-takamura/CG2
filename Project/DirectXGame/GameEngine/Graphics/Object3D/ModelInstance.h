@@ -55,6 +55,7 @@ class ModelInstance
 	// メンバ変数
 	//==============================
 	std::string textureFilePath_;  // テクスチャファイルパスを保持
+	std::string normalMapFilePath_;  // 法線マップ DDS パス（空＝なし）
 
 	ModelData modelData_;
 
@@ -112,6 +113,13 @@ public:
 		modelData_.materialData.textureFilePath = filePath;
 	}
 	const std::string& GetTextureFilePath() const { return textureFilePath_; }
+
+	// 法線マップの差し替え（GPU リソース作成・useNormalMap 反映は呼び出し側）
+	void SetNormalMapFilePath(const std::string& filePath) {
+		normalMapFilePath_ = filePath;
+		modelData_.materialData.normalMapFilePath = filePath;
+	}
+	const std::string& GetNormalMapFilePath() const { return normalMapFilePath_; }
 
 	// ロード状態の確認
 	bool IsCPUReady() const { return loadState_ >= LoadState::CPUReady; }

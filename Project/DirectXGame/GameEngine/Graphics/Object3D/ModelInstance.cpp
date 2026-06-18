@@ -28,6 +28,7 @@ void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string&
 
 	// テクスチャファイルパスは文字列コピーのみ（GPUロードはGPUフェーズで検証する）
 	textureFilePath_ = modelData_.materialData.textureFilePath;
+	normalMapFilePath_ = modelData_.materialData.normalMapFilePath;
 
 	// CPU 経路のときは modelData_ から count を反映（DStorage 経路は LoadMeshBinary で設定済み）
 	if (!useDirectStorage_) {
@@ -57,6 +58,14 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 	// テクスチャを TextureManager に登録（GPU リソース作成）
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 
+	// 法線マップがあればロードして useNormalMap を立てる
+	if (!normalMapFilePath_.empty()) {
+		TextureManager::GetInstance()->LoadTexture(normalMapFilePath_);
+		if (material_) material_->useNormalMap = 1;
+	} else {
+		if (material_) material_->useNormalMap = 0;
+	}
+
 	loadState_ = LoadState::GPUReady;
 }
 
@@ -84,6 +93,12 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	// SRVのDescriptorTableの先頭を設定
 	dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
 		2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
+	);
+
+	// 法線マップ(t2)を rootParameter[10] にバインド。無い場合はベースで埋める（未バインド回避。PS は useNormalMap で判定）
+	const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
+	dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+		10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
 	);
 
 	// ドローコール
@@ -187,7 +202,13 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 	material_->environmentCoefficient = 1.0f;
 
 	// デフォルトで環境マップを使用しない
-	material_->useEnvironmentMap = false;  
+	material_->useEnvironmentMap = false;
+
+	// PBR パラメータの初期値（shadingModel=0=BlinnPhong。未初期化のゴミ値で誤って PBR に飛ばないよう明示）
+	material_->metallic = 0.0f;
+	material_->roughness = 0.5f;
+	material_->shadingModel = 0;
+	material_->useNormalMap = 0;
 }
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)
@@ -265,7 +286,8 @@ Node ModelInstance::ReadNode(aiNode* node)
 	return result;
 }
 
-// .mat (MATL) v1 から base_color_path を抽出するヘルパー
+// .mat (MATL) から base_color_path を抽出するヘルパー。
+// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v3 を許容する。
 static std::string ReadMatBaseColorPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
@@ -277,11 +299,31 @@ static std::string ReadMatBaseColorPath(const std::string& matPath)
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version != 1) return {};
+	if (version < 1 || version > 3) return {};
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);
 	return std::string(baseColorPath);
+}
+
+// .mat (MATL) v3 から normal_map_path を抽出するヘルパー（固定オフセット 308）
+static std::string ReadMatNormalMapPath(const std::string& matPath)
+{
+	auto h = AssetLocator::GetInstance()->Open(matPath);
+	if (!h.IsValid()) return {};
+
+	char magic[4]{};
+	h.Read(magic, 4);
+	if (std::memcmp(magic, "MATL", 4) != 0) return {};
+
+	uint32_t version = 0;
+	h.Read(&version, 4);
+	if (version < 3) return {};  // v3 から normal_map_path
+
+	h.Seek(308);  // magic+ver+base(256)+color(16)+enable+shininess+env+useenv+metallic+roughness+shading
+	char normalPath[256]{};
+	h.Read(normalPath, 256);
+	return std::string(normalPath);
 }
 
 void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::string& filename)
@@ -316,7 +358,7 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 	h.Read(&skinOffset, 4);
 	h.Read(&submeshOffset, 4);
 
-	if (version != 2) return;  // v2 のみサポート
+	if (version != 3) return;  // v3 のみサポート（tangent 付き）
 
 	// skeleton_path は今は使わない（スキニングモデルは別経路）
 	h.Seek(h.GetPosition() + 256);
@@ -357,9 +399,10 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 		char matPath[256]{};
 		h.Read(matPath, 256);
 
-		// .mat を開いて base_color_path を取得
+		// .mat を開いて base_color_path / normal_map_path を取得
 		std::string baseColor = ReadMatBaseColorPath(std::string(matPath));
 		modelData_.materialData.textureFilePath = baseColor;
+		modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath(std::string(matPath));
 	}
 }
 
@@ -369,7 +412,7 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 	std::string filePath = directoryPath + "/" + filename;
 
 	const aiScene* scene = importer.ReadFile(filePath.c_str(),
-		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
+		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate | aiProcess_CalcTangentSpace);
 	assert(scene->HasMeshes());
 
 	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
@@ -390,6 +433,12 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 			vertex.position = { -position.x, position.y, position.z, 1.0f };
 			vertex.normal = { -normal.x, normal.y, normal.z };
 			vertex.texcoord = { texcoord.x, texcoord.y };
+			// tangent（X 反転と整合。handedness は簡易に +1）
+			vertex.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+			if (mesh->HasTangentsAndBitangents()) {
+				aiVector3D& tangent = mesh->mTangents[vertexIndex];
+				vertex.tangent = { -tangent.x, tangent.y, tangent.z, 1.0f };
+			}
 			modelData_.vertices.push_back(vertex);
 		}
 

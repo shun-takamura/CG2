@@ -358,6 +358,72 @@ void EffectComponentEditable::OnImGuiInspector() {
                 ImGui::Unindent();
             }
         }
+
+        // ===== Dissolve（オブジェクト単位のディゾルブ） =====
+        if (ImGui::CollapsingHeader("Dissolve", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Checkbox("Use Dissolve", &c.useDissolve);
+
+            if (c.useDissolve) {
+                ImGui::Indent();
+
+                // --- マスクテクスチャ（Sprite ドラッグ&ドロップ） ---
+                ImGui::Text("Mask:");
+                const std::string mkcurr = c.dissolveMaskPath.empty() ? "(none)" : c.dissolveMaskPath;
+                ImGui::Button(mkcurr.c_str(), ImVec2(-FLT_MIN, 0));
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                        const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                        c.dissolveMaskPath = p->texturePath;
+                        dirty = true;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::TextDisabled("drop a Sprite from SceneEditor here");
+                if (ImGui::Button("Reset Mask")) {
+                    c.dissolveMaskPath.clear();
+                    dirty = true;
+                }
+
+                ImGui::Separator();
+
+                // --- 出現（In）: コンポーネント出現を 0 秒として、ディゾルブで現れる ---
+                dirty |= ImGui::Checkbox("Dissolve In (出現)", &c.dissolveInEnable);
+                if (c.dissolveInEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::DragFloat("Start Time##DissolveIn", &c.dissolveInStartTime, 0.01f, 0.0f, 60.0f,
+                        "%.2f s (出現から何秒後に現れ始めるか)");
+                    dirty |= ImGui::DragFloat("Duration##DissolveIn", &c.dissolveInDuration, 0.01f, 0.0001f, 60.0f,
+                        "%.2f s (現れ切るまでの秒数)");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Separator();
+
+                // --- 消滅（Out）: ディゾルブで消えていく ---
+                dirty |= ImGui::Checkbox("Dissolve Out (消滅)", &c.dissolveOutEnable);
+                if (c.dissolveOutEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::DragFloat("Start Time##DissolveOut", &c.dissolveOutStartTime, 0.01f, 0.0f, 60.0f,
+                        "%.2f s (出現から何秒後に消え始めるか)");
+                    dirty |= ImGui::DragFloat("Duration##DissolveOut", &c.dissolveOutDuration, 0.01f, 0.0001f, 60.0f,
+                        "%.2f s (消え切るまでの秒数)");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Separator();
+
+                // --- アウトライン（燃えるエッジ）: In/Out 共用 ---
+                dirty |= ImGui::Checkbox("Edge Outline (アウトライン)", &c.dissolveEdgeEnable);
+                if (c.dissolveEdgeEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::ColorEdit4("Edge Color##Dissolve", &c.dissolveEdgeColor.x);
+                    dirty |= ImGui::SliderFloat("Edge Width##Dissolve", &c.dissolveEdgeWidth, 0.0f, 0.5f, "%.3f");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Unindent();
+            }
+        }
     }
     else if (kind_ == Kind::Particle) {
         if (index_ < 0 || index_ >= static_cast<int>(buf.particles.size())) { ImGui::Text("(removed)"); return; }

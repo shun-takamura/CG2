@@ -150,6 +150,10 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
     material_->shininess = 50.0f;
     material_->environmentCoefficient = 1.0f;
     material_->useEnvironmentMap = false;
+    material_->metallic = 0.0f;
+    material_->roughness = 0.5f;
+    material_->shadingModel = 0;
+    material_->useNormalMap = 0;
 }
 
 void AnimatedModelInstance::CreateIndexData(DirectXCore* dxCore)
@@ -229,7 +233,7 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
     std::string filePath = directoryPath + "/" + filename;
 
     const aiScene* scene = importer.ReadFile(filePath.c_str(),
-        aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
+        aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate | aiProcess_CalcTangentSpace);
     assert(scene->HasMeshes());
 
     for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
@@ -250,6 +254,11 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
             vertex.position = { -position.x, position.y, position.z, 1.0f };
             vertex.normal = { -normal.x, normal.y, normal.z };
             vertex.texcoord = { texcoord.x, texcoord.y };
+            vertex.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+            if (mesh->HasTangentsAndBitangents()) {
+                aiVector3D& tangent = mesh->mTangents[vertexIndex];
+                vertex.tangent = { -tangent.x, tangent.y, tangent.z, 1.0f };
+            }
             modelData_.vertices.push_back(vertex);
         }
 
@@ -325,7 +334,8 @@ std::string ReadMatBaseColorPath_V2(const std::string& matPath)
     if (std::memcmp(magic, "MATL", 4) != 0) return {};
     uint32_t version = 0;
     h.Read(&version, 4);
-    if (version != 1) return {};
+    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v3 を許容
+    if (version < 1 || version > 3) return {};
     char path[256]{};
     h.Read(path, 256);
     return std::string(path);
@@ -493,7 +503,7 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
     h.Read(&indexOffset, 4);
     h.Read(&skinOffset, 4);
     h.Read(&submeshOffset, 4);
-    assert(version == 2 && "expected .mesh v2");
+    assert(version == 3 && "expected .mesh v3");
 
     char skeletonPathBuf[256]{};
     h.Read(skeletonPathBuf, 256);
