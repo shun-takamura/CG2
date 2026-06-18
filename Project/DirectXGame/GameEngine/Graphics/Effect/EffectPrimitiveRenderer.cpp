@@ -4,7 +4,7 @@
 
 namespace {
     // primitiveType（int）から MeshData を生成。EffectDef.h のmeshType値と互換。
-    // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix, 6=Beam, 7=Lightning
+    // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix, 6=Beam, 7=Lightning, 8=Hemisphere
     MeshData GenerateByType(int type,
                             const PrimitiveGenerator::RingParams& ring,
                             const PrimitiveGenerator::CylinderParams& cyl,
@@ -20,6 +20,7 @@ namespace {
         case 5: return PrimitiveGenerator::CreateHelix(helix);
         case 6: return PrimitiveGenerator::CreateBeam(beam);
         case 7: return PrimitiveGenerator::CreateLightningBolt(lightning);
+        case 8: return PrimitiveGenerator::CreateHemisphere();
         default: return PrimitiveGenerator::CreatePlane();
         }
     }

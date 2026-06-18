@@ -13,6 +13,7 @@ const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
     case PrimitiveType::Ring:     return "Ring";
     case PrimitiveType::Cylinder: return "Cylinder";
     case PrimitiveType::Helix:    return "Helix";
+    case PrimitiveType::Hemisphere: return "Hemisphere";
     default:                      return "Unknown";
     }
 }
@@ -43,6 +44,9 @@ void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) 
         break;
     case PrimitiveType::Helix:
         meshData = PrimitiveGenerator::CreateHelix(helixParams_);
+        break;
+    case PrimitiveType::Hemisphere:
+        meshData = PrimitiveGenerator::CreateHemisphere();
         break;
     default:
         meshData = PrimitiveGenerator::CreatePlane();

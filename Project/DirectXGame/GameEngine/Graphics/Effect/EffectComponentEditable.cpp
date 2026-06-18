@@ -8,7 +8,7 @@
 #include <string>
 
 namespace {
-    const char* MeshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning" };
+    const char* MeshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning", "Hemisphere" };
     const char* BlendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
     const char* BillboardNames[] = { "None", "Full", "YAxis" };
     const char* LightKindNames[] = { "Point", "Spot" };
