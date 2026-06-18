@@ -262,6 +262,16 @@ namespace {
         c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
         c.orbitTumbleSpeed = AsFloat(o["orbitTumbleSpeed"], c.orbitTumbleSpeed);
         c.orbitTumbleAxis  = AsVec3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
+        // Dissolve（粒子ごとの寿命）
+        if (o["useDissolve"].IsBool()) c.useDissolve = o["useDissolve"].AsBool(c.useDissolve);
+        if (o["dissolveMaskPath"].IsString()) c.dissolveMaskPath = o["dissolveMaskPath"].AsString();
+        if (o["dissolveInEnable"].IsBool()) c.dissolveInEnable = o["dissolveInEnable"].AsBool(c.dissolveInEnable);
+        c.dissolveInEnd = AsFloat(o["dissolveInEnd"], c.dissolveInEnd);
+        if (o["dissolveOutEnable"].IsBool()) c.dissolveOutEnable = o["dissolveOutEnable"].AsBool(c.dissolveOutEnable);
+        c.dissolveOutStart = AsFloat(o["dissolveOutStart"], c.dissolveOutStart);
+        if (o["dissolveEdgeEnable"].IsBool()) c.dissolveEdgeEnable = o["dissolveEdgeEnable"].AsBool(c.dissolveEdgeEnable);
+        c.dissolveEdgeColor = AsVec4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
+        c.dissolveEdgeWidth = AsFloat(o["dissolveEdgeWidth"], c.dissolveEdgeWidth);
         // 多色グラデーションキー
         c.colorKeys.clear();
         const JsonValue& ck = o["colorKeys"];
@@ -585,6 +595,16 @@ namespace EffectDefIO {
             o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
             o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
             o["orbitTumbleAxis"]  = Vec3ToJson(c.orbitTumbleAxis);
+            // Dissolve（粒子ごとの寿命）
+            o["useDissolve"]        = c.useDissolve;
+            o["dissolveMaskPath"]   = c.dissolveMaskPath;
+            o["dissolveInEnable"]   = c.dissolveInEnable;
+            o["dissolveInEnd"]      = static_cast<double>(c.dissolveInEnd);
+            o["dissolveOutEnable"]  = c.dissolveOutEnable;
+            o["dissolveOutStart"]   = static_cast<double>(c.dissolveOutStart);
+            o["dissolveEdgeEnable"] = c.dissolveEdgeEnable;
+            o["dissolveEdgeColor"]  = Vec4ToJson(c.dissolveEdgeColor);
+            o["dissolveEdgeWidth"]  = static_cast<double>(c.dissolveEdgeWidth);
             {
                 JsonValue ckArr = JsonValue::MakeArray();
                 for (const auto& k : c.colorKeys) {

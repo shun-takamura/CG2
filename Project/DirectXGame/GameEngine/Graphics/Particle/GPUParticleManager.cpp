@@ -209,6 +209,48 @@ void GPUParticleManager::SetEmitterGradient(const std::string& name, const std::
     }
 }
 
+void GPUParticleManager::SetGroupDissolve(const std::string& name, bool enable, const std::string& maskPath,
+                                          bool inEnable, float inEnd, bool outEnable, float outStart,
+                                          bool edgeEnable, const Vector4& edgeColor, float edgeWidth)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.dissolveData) return;
+    auto& g = it->second;
+
+    g.dissolveData->enable     = enable ? 1 : 0;
+    g.dissolveData->inEnable   = inEnable ? 1 : 0;
+    g.dissolveData->outEnable  = outEnable ? 1 : 0;
+    g.dissolveData->edgeEnable = edgeEnable ? 1 : 0;
+    g.dissolveData->inEnd      = inEnd;
+    g.dissolveData->outStart   = outStart;
+    g.dissolveData->edgeWidth  = edgeWidth;
+    g.dissolveData->edgeColor  = edgeColor;
+
+    // マスク（変化時のみロード）。enable かつパスありのときだけ t1 をマスクに、それ以外は white1x1。
+    if (enable && !maskPath.empty()) {
+        if (g.dissolveMaskPath != maskPath) {
+            TextureManager::GetInstance()->LoadTexture(maskPath);
+            g.dissolveMaskSrvIndex = TextureManager::GetInstance()->GetSrvIndex(maskPath);
+            g.dissolveMaskPath = maskPath;
+        }
+        g.hasDissolveMask = true;
+    } else {
+        g.hasDissolveMask = false;
+    }
+}
+
+void GPUParticleManager::SetGroupTexture(const std::string& name, const std::string& texturePath)
+{
+    if (texturePath.empty()) return;
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    auto& g = it->second;
+    if (g.textureFilePath == texturePath) return; // 変化なし
+    TextureManager::GetInstance()->LoadTexture(texturePath);
+    g.textureSrvIndex = TextureManager::GetInstance()->GetSrvIndex(texturePath);
+    g.textureFilePath = texturePath;
+}
+
 //==========================================================
 // ビルボード / TimeGroup
 //==========================================================
@@ -447,6 +489,9 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
     commandList->SetGraphicsRootConstantBufferView(1, perViewCB->GetGPUVirtualAddress());
     commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
     srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+    // [5] PS b2: Dissolve（per-group）、[6] PS t1: マスク（未設定時は white1x1）
+    commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
 
     PEPPER_COUNT("DrawCall");
     commandList->DrawInstanced(6, kMaxParticles, 0, 0);
@@ -644,6 +689,11 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.perViewPreviewData->billboardMatrix = MakeIdentity4x4();
     g.perViewPreviewData->cameraPosition = { 0.0f, 0.0f, 0.0f };
     g.perViewPreviewData->billboardMode = static_cast<uint32_t>(BillboardMode::Full);
+
+    // Dissolve CB（描画 PS b2）。既定 enable=0（無効）
+    g.dissolveResource = dxCore_->CreateBufferResource(sizeof(DissolveParticle));
+    g.dissolveResource->Map(0, nullptr, reinterpret_cast<void**>(&g.dissolveData));
+    *g.dissolveData = DissolveParticle{};
 }
 
 void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
@@ -672,12 +722,17 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
         g.perViewPreviewResource->Unmap(0, nullptr);
         g.perViewPreviewData = nullptr;
     }
+    if (g.dissolveResource && g.dissolveData) {
+        g.dissolveResource->Unmap(0, nullptr);
+        g.dissolveData = nullptr;
+    }
     g.emitterResource.Reset();
     g.gradientResource.Reset();
     g.orbitResource.Reset();
     g.perFrameResource.Reset();
     g.perViewResource.Reset();
     g.perViewPreviewResource.Reset();
+    g.dissolveResource.Reset();
     g.freeListResource.Reset();
     g.freeListIndexResource.Reset();
     g.particleResource.Reset();
@@ -924,7 +979,14 @@ void GPUParticleManager::CreateDrawPipeline()
     rangeTexture[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     rangeTexture[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[5] = {};
+    // ディゾルブマスク（t1）
+    D3D12_DESCRIPTOR_RANGE rangeMask[1] = {};
+    rangeMask[0].BaseShaderRegister = 1;
+    rangeMask[0].NumDescriptors = 1;
+    rangeMask[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    rangeMask[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[7] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticleSrv;
@@ -942,6 +1004,15 @@ void GPUParticleManager::CreateDrawPipeline()
     rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[4].Descriptor.ShaderRegister = 1;
+    // [5] PS: CBV(b2) - Dissolve（per-group）
+    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[5].Descriptor.ShaderRegister = 2;
+    // [6] PS: DescriptorTable - DissolveMask(t1)。未設定時は white1x1 を必ずバインド。
+    rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[6].DescriptorTable.pDescriptorRanges = rangeMask;
+    rootParameters[6].DescriptorTable.NumDescriptorRanges = 1;
 
     D3D12_STATIC_SAMPLER_DESC sampler[1] = {};
     sampler[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -972,7 +1043,7 @@ void GPUParticleManager::CreateDrawPipeline()
     assert(SUCCEEDED(hr));
 
     IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Particle/GPUParticle.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Particle/Particle.PS.hlsl", L"ps_6_0");
+    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Particle/GPUParticle.PS.hlsl", L"ps_6_0");
 
     D3D12_INPUT_ELEMENT_DESC inputElements[3] = {};
     inputElements[0].SemanticName = "POSITION";
@@ -1083,4 +1154,8 @@ void GPUParticleManager::CreateMaterial()
     materialData->environmentCoefficient = 0.0f;
     materialData->useEnvironmentMap = false;
     materialResource_->Unmap(0, nullptr);
+
+    // ディゾルブマスク未設定時に t1 へバインドする既定 white1x1 を確保
+    TextureManager::GetInstance()->LoadTexture("Resources/Textures/white1x1.dds");
+    whiteSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex("Resources/Textures/white1x1.dds");
 }

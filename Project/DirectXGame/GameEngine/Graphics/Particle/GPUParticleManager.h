@@ -103,6 +103,20 @@ public:
     /// </summary>
     void SetEmitterGradient(const std::string& name, const std::vector<std::pair<float, Vector4>>& keys);
 
+    /// <summary>
+    /// グループの「粒子ごとの寿命ディゾルブ」を設定。各粒子が自分の寿命比率(0..1)に応じて
+    /// In(出現:[0,inEnd]) / Out(消滅:[outStart,1]) でマスク discard される。maskPath 空 or enable=false で無効。
+    /// </summary>
+    void SetGroupDissolve(const std::string& name, bool enable, const std::string& maskPath,
+                          bool inEnable, float inEnd, bool outEnable, float outStart,
+                          bool edgeEnable, const Vector4& edgeColor, float edgeWidth);
+
+    /// <summary>
+    /// 既存グループのテクスチャを差し替える（パスが変われば SRV を貼り直す）。
+    /// グループ生成時のテクスチャを後から変更したいとき（エディタの D&D 等）に使う。
+    /// </summary>
+    void SetGroupTexture(const std::string& name, const std::string& texturePath);
+
     // ===== ビルボード / TimeGroup =====
     void SetGroupBillboardMode(const std::string& name, BillboardMode mode);
     void SetGroupTimeGroup(const std::string& name, TimeGroup group);
@@ -216,6 +230,20 @@ private:
         float pad[2];
     };
 
+    // ディゾルブ（描画 PS の b2、粒子ごとの寿命比率ベース）。GPUParticle.PS.hlsl と一致させること。
+    struct DissolveParticle
+    {
+        int   enable = 0;       // 0=無効 / 1=有効
+        int   inEnable = 0;     // 出現 0/1
+        int   outEnable = 0;    // 消滅 0/1
+        int   edgeEnable = 0;   // アウトライン 0/1
+        float inEnd = 0.3f;     // 寿命比率: ここまでに出現完了
+        float outStart = 0.7f;  // 寿命比率: ここから消え始める
+        float edgeWidth = 0.05f;
+        float pad0 = 0.0f;
+        Vector4 edgeColor = { 1.0f, 0.4f, 0.1f, 1.0f };
+    };
+
     // 1グループ分のリソース束
     struct GPUParticleGroup
     {
@@ -259,6 +287,13 @@ private:
         std::string textureFilePath;
         uint32_t textureSrvIndex = 0;
 
+        // ディゾルブ（描画 PS b2）＋マスク(t1)
+        Microsoft::WRL::ComPtr<ID3D12Resource> dissolveResource;
+        DissolveParticle* dissolveData = nullptr;
+        std::string dissolveMaskPath;
+        uint32_t dissolveMaskSrvIndex = 0;
+        bool     hasDissolveMask = false;
+
         // 状態
         BillboardMode billboardMode = BillboardMode::Full;
         TimeGroup     timeGroup     = TimeGroup::World;
@@ -291,6 +326,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
+
+    // ディゾルブマスク未設定時に t1 へバインドする既定テクスチャ（white1x1）
+    uint32_t whiteSrvIndex_ = 0;
 
     // 描画時に必要な共通行列（毎フレーム算出）
     Matrix4x4 viewProjectionMatrix_ = {};

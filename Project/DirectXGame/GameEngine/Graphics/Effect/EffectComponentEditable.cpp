@@ -445,7 +445,20 @@ void EffectComponentEditable::OnImGuiInspector() {
             c.texturePath = texBuf;
             dirty = true;
         }
-        ImGui::TextDisabled("(グループ自動生成時のテクスチャ。既存グループには無効)");
+        // テクスチャ D&D（SceneEditor の Sprite をドロップ）。既存グループにもライブ反映される。
+        {
+            const std::string txcurr = c.texturePath.empty() ? "(default circle)" : c.texturePath;
+            ImGui::Button(("Tex: " + txcurr).c_str(), ImVec2(-FLT_MIN, 0));
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                    const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                    c.texturePath = p->texturePath;
+                    dirty = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::TextDisabled("drop a Sprite from SceneEditor here (live反映)");
+        }
         dirty |= ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
         dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
         dirty |= ImGui::DragFloat("Duration",   &c.duration,  0.01f, 0.0f, 60.0f);
@@ -583,6 +596,70 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty |= ImGui::DragFloat("Tumble Speed (帯自体の回転)", &c.orbitTumbleSpeed, 0.05f, -50.0f, 50.0f);
             dirty |= ImGui::DragFloat3("Tumble Axis", &c.orbitTumbleAxis.x, 0.01f);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("帯（リング平面）自体を回す軸。Ring Normal と直交させると首を振る");
+        }
+
+        // ===== Dissolve（粒子ごとの寿命ディゾルブ）=====
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Dissolve", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Checkbox("Use Dissolve##Particle", &c.useDissolve);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("各粒子が自分の寿命比率(0..1)に応じて個別に溶ける");
+
+            if (c.useDissolve) {
+                ImGui::Indent();
+
+                // --- マスク（Sprite ドラッグ&ドロップ） ---
+                ImGui::Text("Mask:");
+                const std::string mkcurr = c.dissolveMaskPath.empty() ? "(none)" : c.dissolveMaskPath;
+                ImGui::Button(mkcurr.c_str(), ImVec2(-FLT_MIN, 0));
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                        const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                        c.dissolveMaskPath = p->texturePath;
+                        dirty = true;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::TextDisabled("drop a Sprite from SceneEditor here");
+                if (ImGui::Button("Reset Mask##Particle")) {
+                    c.dissolveMaskPath.clear();
+                    dirty = true;
+                }
+
+                ImGui::Separator();
+
+                // --- 出現（In）: 寿命の最初で材質化 ---
+                dirty |= ImGui::Checkbox("Dissolve In (出現)##Particle", &c.dissolveInEnable);
+                if (c.dissolveInEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::SliderFloat("In End (寿命比)##Particle", &c.dissolveInEnd, 0.0f, 1.0f, "%.2f");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("寿命のこの比率までに出現完了");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Separator();
+
+                // --- 消滅（Out）: 寿命の最後で燃え尽き ---
+                dirty |= ImGui::Checkbox("Dissolve Out (消滅)##Particle", &c.dissolveOutEnable);
+                if (c.dissolveOutEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::SliderFloat("Out Start (寿命比)##Particle", &c.dissolveOutStart, 0.0f, 1.0f, "%.2f");
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("寿命のこの比率から消え始める");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Separator();
+
+                // --- アウトライン ---
+                dirty |= ImGui::Checkbox("Edge Outline (アウトライン)##Particle", &c.dissolveEdgeEnable);
+                if (c.dissolveEdgeEnable) {
+                    ImGui::Indent();
+                    dirty |= ImGui::ColorEdit4("Edge Color##Particle", &c.dissolveEdgeColor.x);
+                    dirty |= ImGui::SliderFloat("Edge Width##Particle", &c.dissolveEdgeWidth, 0.0f, 0.5f, "%.3f");
+                    ImGui::Unindent();
+                }
+
+                ImGui::Unindent();
+            }
         }
     }
     else if (kind_ == Kind::Light) {
