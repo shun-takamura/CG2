@@ -35,4 +35,10 @@ struct Material
     float4x4 uvTransform;
     float3 cameraPos;
     float viewAngleFadePower; // 0=無効
+    // ディゾルブ（オブジェクト単位）。mask.r < threshold のピクセルを discard する。
+    int    dissolveEnable;     // 0=無効 / 1=有効
+    float  dissolveThreshold;  // 0..1（時間で 0→1 に上げると暗い部分から消えていく）
+    int    dissolveEdgeEnable; // アウトライン（燃えるエッジ）0=無効 / 1=有効
+    float  dissolveEdgeWidth;  // エッジの太さ（マスク値での幅）
+    float4 dissolveEdgeColor;  // エッジの発光色
 };

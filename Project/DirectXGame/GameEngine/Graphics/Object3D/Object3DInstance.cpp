@@ -325,6 +325,8 @@ void Object3DInstance::OnImGuiInspector()
                 if (usePBR) {
                     ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);
                     ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
+                    // IBL（環境反射）強度。金属感・映り込みの調整に使う
+                    ImGui::SliderFloat("IBL (Env) Intensity", &mat->environmentCoefficient, 0.0f, 2.0f);
 
                     // 法線マップ ON/OFF（比較用）。法線マップ未設定なら無効表示
                     const bool hasNormalMap = modelInstance_ && !modelInstance_->GetNormalMapFilePath().empty();

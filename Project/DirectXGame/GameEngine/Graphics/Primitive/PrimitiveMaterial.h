@@ -19,4 +19,10 @@ struct PrimitiveMaterial {
     // 0=無効。>0 のとき pow(|dot(viewDir, normal)|, power) を α に乗算する
     Vector3 cameraPos;        // ワールド空間のカメラ位置（PS用）
     float viewAngleFadePower; // 0で無効、推奨2〜4
+    // ディゾルブ（オブジェクト単位）。mask.r < threshold を discard。HLSL の Material 末尾と一致させること。
+    int   dissolveEnable = 0;        // 0=無効 / 1=有効
+    float dissolveThreshold = 0.0f;  // 0..1
+    int   dissolveEdgeEnable = 0;    // アウトライン 0=無効 / 1=有効
+    float dissolveEdgeWidth = 0.05f; // エッジの太さ（マスク値での幅）
+    Vector4 dissolveEdgeColor = { 1.0f, 0.4f, 0.1f, 1.0f }; // エッジの発光色
 };

@@ -53,6 +53,15 @@ public:
     // テクスチャ設定（パスを指定。未指定時は白テクスチャ相当の扱い）
     void SetTexture(const std::string& textureFilePath);
 
+    // ディゾルブ用マスクテクスチャ（空文字でリセット）。SRV は TextureManager 経由でキャッシュ。
+    void SetDissolveMask(const std::string& textureFilePath);
+    // ディゾルブの有効/無効と閾値（0..1）。閾値を時間で 0→1 に上げると暗い部分から消える。
+    void SetDissolve(bool enable, float threshold) { dissolveEnable_ = enable ? 1 : 0; dissolveThreshold_ = threshold; }
+    // ディゾルブのアウトライン（燃えるエッジ）。閾値近傍の帯を color で塗る。
+    void SetDissolveEdge(bool enable, const Vector4& color, float width) {
+        dissolveEdgeEnable_ = enable ? 1 : 0; dissolveEdgeColor_ = color; dissolveEdgeWidth_ = width;
+    }
+
     // 各種設定
     void SetBlendMode(PrimitivePipeline::BlendMode mode) { blendMode_ = mode; }
     void SetDepthWrite(bool enable) { depthWrite_ = enable; }
@@ -196,4 +205,15 @@ private:
     // テクスチャ（SRVインデックスで管理）
     uint32_t textureSrvIndex_ = 0;
     bool hasTexture_ = false;
+
+    // ディゾルブ
+    uint32_t dissolveMaskSrvIndex_ = 0;
+    bool     hasDissolveMask_ = false;
+    int      dissolveEnable_ = 0;
+    float    dissolveThreshold_ = 0.0f;
+    int      dissolveEdgeEnable_ = 0;
+    float    dissolveEdgeWidth_ = 0.05f;
+    Vector4  dissolveEdgeColor_ = { 1.0f, 0.4f, 0.1f, 1.0f };
+    // t1 に常時バインドする既定マスク（white1x1）。マスク未設定時のフォールバック。
+    uint32_t whiteSrvIndex_ = 0;
 };

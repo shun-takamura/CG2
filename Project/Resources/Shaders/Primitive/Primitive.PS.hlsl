@@ -2,6 +2,8 @@
 
 ConstantBuffer<Material> gMaterial : register(b0);
 Texture2D<float4> gTexture : register(t0);
+// ディゾルブ用マスク（グレースケール）。無効時も white1x1 が必ずバインドされる。
+Texture2D<float4> gDissolveMask : register(t1);
 
 // 3つのサンプラー（material.samplerMode で選択）
 //   s0: WRAP U  / WRAP V
@@ -55,6 +57,25 @@ PixelOutput main(VertexOutput input)
     if (output.color.a <= gMaterial.alphaReference)
     {
         discard;
+    }
+
+    // ディゾルブ：マスク値が閾値未満のピクセルを破棄（オブジェクト単位で時間経過とともに消える）
+    // マスクUVは本体UVと独立させたいので uvTransform を掛けず生の texcoord を使う。
+    if (gMaterial.dissolveEnable != 0)
+    {
+        float mask = gDissolveMask.Sample(gSamplerWrap, input.texcoord).r;
+        if (mask < gMaterial.dissolveThreshold)
+        {
+            discard;
+        }
+        // アウトライン：閾値のすぐ外側の帯を発光色で塗る（ディゾルブ進行中のみ＝0<threshold<1）。
+        if (gMaterial.dissolveEdgeEnable != 0 &&
+            gMaterial.dissolveThreshold > 0.0001f &&
+            gMaterial.dissolveThreshold < 1.0f &&
+            mask < gMaterial.dissolveThreshold + gMaterial.dissolveEdgeWidth)
+        {
+            output.color = gMaterial.dissolveEdgeColor;
+        }
     }
 
     return output;

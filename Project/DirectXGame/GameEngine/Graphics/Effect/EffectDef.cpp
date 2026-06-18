@@ -199,6 +199,26 @@ namespace {
         c.distortionUvScale       = AsVec2(o["distortionUvScale"],       c.distortionUvScale);
         if (o["distortionUvFlipU"].IsBool()) c.distortionUvFlipU = o["distortionUvFlipU"].AsBool(c.distortionUvFlipU);
         if (o["distortionUvFlipV"].IsBool()) c.distortionUvFlipV = o["distortionUvFlipV"].AsBool(c.distortionUvFlipV);
+
+        // Dissolve
+        if (o["useDissolve"].IsBool()) c.useDissolve = o["useDissolve"].AsBool(c.useDissolve);
+        if (o["dissolveMaskPath"].IsString()) c.dissolveMaskPath = o["dissolveMaskPath"].AsString();
+        // 出現（In）
+        if (o["dissolveInEnable"].IsBool()) c.dissolveInEnable = o["dissolveInEnable"].AsBool(c.dissolveInEnable);
+        c.dissolveInStartTime = AsFloat(o["dissolveInStartTime"], c.dissolveInStartTime);
+        c.dissolveInDuration  = AsFloat(o["dissolveInDuration"],  c.dissolveInDuration);
+        // 消滅（Out）。旧キー dissolveStartTime/dissolveDuration を後方互換でフォールバック。
+        if (o["dissolveOutEnable"].IsBool()) c.dissolveOutEnable = o["dissolveOutEnable"].AsBool(c.dissolveOutEnable);
+        c.dissolveOutStartTime = AsFloat(o["dissolveOutStartTime"], AsFloat(o["dissolveStartTime"], c.dissolveOutStartTime));
+        c.dissolveOutDuration  = AsFloat(o["dissolveOutDuration"],  AsFloat(o["dissolveDuration"],  c.dissolveOutDuration));
+        // 旧形式（In/Out フラグが無く useDissolve のみ）の互換：Out を有効化。
+        if (o["useDissolve"].IsBool() && !o["dissolveInEnable"].IsBool() && !o["dissolveOutEnable"].IsBool()) {
+            c.dissolveOutEnable = c.useDissolve;
+        }
+        // アウトライン
+        if (o["dissolveEdgeEnable"].IsBool()) c.dissolveEdgeEnable = o["dissolveEdgeEnable"].AsBool(c.dissolveEdgeEnable);
+        c.dissolveEdgeColor = AsVec4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
+        c.dissolveEdgeWidth = AsFloat(o["dissolveEdgeWidth"], c.dissolveEdgeWidth);
     }
 
     void ParseParticle(const JsonValue& o, EffectParticleComponent& c) {
@@ -514,6 +534,18 @@ namespace EffectDefIO {
             o["distortionUvScale"]       = Vec2ToJson(c.distortionUvScale);
             o["distortionUvFlipU"]       = c.distortionUvFlipU;
             o["distortionUvFlipV"]       = c.distortionUvFlipV;
+            // Dissolve
+            o["useDissolve"]          = c.useDissolve;
+            o["dissolveMaskPath"]     = c.dissolveMaskPath;
+            o["dissolveInEnable"]     = c.dissolveInEnable;
+            o["dissolveInStartTime"]  = static_cast<double>(c.dissolveInStartTime);
+            o["dissolveInDuration"]   = static_cast<double>(c.dissolveInDuration);
+            o["dissolveOutEnable"]    = c.dissolveOutEnable;
+            o["dissolveOutStartTime"] = static_cast<double>(c.dissolveOutStartTime);
+            o["dissolveOutDuration"]  = static_cast<double>(c.dissolveOutDuration);
+            o["dissolveEdgeEnable"]   = c.dissolveEdgeEnable;
+            o["dissolveEdgeColor"]    = Vec4ToJson(c.dissolveEdgeColor);
+            o["dissolveEdgeWidth"]    = static_cast<double>(c.dissolveEdgeWidth);
             primArr.Push(std::move(o));
         }
         root["primitives"] = std::move(primArr);

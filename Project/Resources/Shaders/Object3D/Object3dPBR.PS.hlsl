@@ -112,6 +112,7 @@ cbuffer SpotLightBuffer : register(b4)
 }
 
 Texture2D<float4> gTexture : register(t0);
+TextureCube<float4> gEnvironmentTexture : register(t1);  // IBL 用スカイボックス
 Texture2D<float4> gNormalMap : register(t2);
 SamplerState gSampler : register(s0);
 
@@ -148,6 +149,14 @@ float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 float3 FresnelSchlick(float cosTheta, float3 F0)
 {
     return F0 + (1.0f - F0) * pow(saturate(1.0f - cosTheta), 5.0f);
+}
+
+// roughness を考慮したフレネル（IBL の環境光用）。粗い面ほどグレージング反射を弱める
+float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
+{
+    float oneMinusR = 1.0f - roughness;
+    float3 r = max(float3(oneMinusR, oneMinusR, oneMinusR), F0);
+    return F0 + (r - F0) * pow(saturate(1.0f - cosTheta), 5.0f);
 }
 
 // 1ライト分の寄与（radiance = 光色 * 強度 * 減衰）
@@ -240,8 +249,27 @@ PixelShaderOutput main(VertexShaderOutput input)
         Lo += PBRLight(N, V, L, radiance, albedo, metallic, roughness);
     }
 
-    // 仮の環境光（IBL はフェーズ3で置換）。影では暗くしない。
-    float3 ambient = albedo * 0.03f;
+    // ===== IBL（簡易：Skybox キューブマップを光源化）。影では暗くしない =====
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
+    float NdotV = saturate(dot(N, V));
+    float3 Fr = FresnelSchlickRoughness(NdotV, F0, roughness);
+    float3 kdIBL = (1.0f - Fr) * (1.0f - metallic); // 金属は拡散しない
+
+    // mip 数を取得（prefiltered 環境マップの代用に roughness で mip を選ぶ）
+    uint envW, envH, envMips;
+    gEnvironmentTexture.GetDimensions(0, envW, envH, envMips);
+    float maxMip = max((float) envMips - 1.0f, 0.0f);
+
+    // 拡散 IBL：最も粗い mip（≒平均＝irradiance 近似）を N 方向でサンプル
+    float3 irradiance = gEnvironmentTexture.SampleLevel(gSampler, N, maxMip).rgb;
+    float3 diffuseIBL = kdIBL * albedo * irradiance;
+
+    // 鏡面 IBL：反射ベクトルを roughness に応じた mip でサンプル（粗い面ほどボケた反射）
+    float3 R = reflect(-V, N);
+    float3 prefiltered = gEnvironmentTexture.SampleLevel(gSampler, R, roughness * maxMip).rgb;
+    float3 specularIBL = prefiltered * Fr;
+
+    float3 ambient = (diffuseIBL + specularIBL) * gMaterial.environmentCoefficient;
 
     output.color.rgb = Lo + ambient;
     output.color.a = gMaterial.color.a * textureColor.a;
