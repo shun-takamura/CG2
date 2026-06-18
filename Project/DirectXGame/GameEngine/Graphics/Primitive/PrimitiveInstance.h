@@ -26,6 +26,7 @@ public:
         Ring,
         Cylinder,
         Helix,
+        Hemisphere, // 末尾に追加（既存の保存値 0〜5 を保つため kCount の手前）
         kCount,
     };
 

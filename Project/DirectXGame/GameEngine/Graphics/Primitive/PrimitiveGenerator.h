@@ -88,6 +88,14 @@ namespace PrimitiveGenerator {
         const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
+    // Hemisphere（半球＝ドーム）を生成。蓋なしの中空シェル（おわん型の片割れ）。
+    // 上半球：頂点が +Y、開口（リム）が Y=0 平面。中が空なので両面描画推奨。
+    MeshData CreateHemisphere(
+        float radius = 0.5f,
+        uint32_t divisions = 16,
+        const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
+    );
+
     // Helix（螺旋チューブ）の生成パラメータ
     // Y軸沿いに伸びる開いた管。蓋なし。プレイヤー弾の弾道などを想定。
     struct HelixParams {

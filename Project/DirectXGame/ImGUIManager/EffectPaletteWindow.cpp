@@ -43,7 +43,7 @@ void EffectPaletteWindow::OnDraw() {
         };
 
     // meshType の順番は EffectDef.h / EffectComponentEditable の MeshTypeNames に対応
-    const char* meshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning" };
+    const char* meshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning", "Hemisphere" };
     ImGui::SeparatorText("Primitive");
     for (int i = 0; i < IM_ARRAYSIZE(meshTypeNames); ++i) {
         primitiveSource(meshTypeNames[i], i);
