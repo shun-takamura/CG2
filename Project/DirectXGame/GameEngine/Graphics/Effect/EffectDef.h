@@ -200,6 +200,20 @@ struct EffectParticleComponent {
     float   orbitSpinSpeed  = 1.0f;     // 帯上を流れる速度 rad/s（軸＝Ring Normal）
     float   orbitTumbleSpeed = 0.0f;    // 帯自体の回転速度 rad/s
     Vector3 orbitTumbleAxis  = { 0.0f, 1.0f, 0.0f }; // 帯回転の軸
+
+    // ----- Dissolve（粒子ごとの寿命ディゾルブ） -----
+    // 各粒子が自分の寿命比率(0..1)に応じて、In(出現:[0,inEnd]) / Out(消滅:[outStart,1]) で
+    // マスクを discard する。useDissolve かつ dissolveMaskPath 指定で有効。
+    bool        useDissolve = false;
+    std::string dissolveMaskPath;
+    bool        dissolveInEnable = false;
+    float       dissolveInEnd    = 0.3f;  // 寿命比率: ここまでに出現完了
+    bool        dissolveOutEnable = false;
+    float       dissolveOutStart  = 0.7f; // 寿命比率: ここから消え始める
+    // アウトライン（燃えるエッジ）
+    bool        dissolveEdgeEnable = false;
+    Vector4     dissolveEdgeColor  = { 1.0f, 0.4f, 0.1f, 1.0f };
+    float       dissolveEdgeWidth  = 0.05f;
 };
 
 /// <summary>

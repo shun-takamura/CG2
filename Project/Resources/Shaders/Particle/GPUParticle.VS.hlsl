@@ -89,5 +89,6 @@ VertexShaderOutput main(VertexShaderInput input, uint instanceId : SV_InstanceID
     output.texcoord = input.texcoord;
     output.normal = input.normal;
     output.color = particle.color;
+    output.dissolveLife = lifeT; // 粒子ごとの寿命比率（ディゾルブ用）
     return output;
 }
