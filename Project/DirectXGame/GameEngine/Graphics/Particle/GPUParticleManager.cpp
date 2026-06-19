@@ -42,7 +42,7 @@ void GPUParticleManager::Finalize()
 
     materialResource_.Reset();
     vertexResource_.Reset();
-    drawPSO_.Reset();
+    for (auto& pso : drawPSOs_) pso.Reset();
     drawRootSig_.Reset();
     updatePSO_.Reset();
     updateRootSig_.Reset();
@@ -254,6 +254,14 @@ void GPUParticleManager::SetGroupTexture(const std::string& name, const std::str
 //==========================================================
 // ビルボード / TimeGroup
 //==========================================================
+
+void GPUParticleManager::SetGroupBlendMode(const std::string& name, int mode)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    if (mode < 0 || mode >= kCountOfBlendMode) mode = kBlendModeAdd;
+    it->second.blendMode = static_cast<BlendMode>(mode);
+}
 
 void GPUParticleManager::SetGroupBillboardMode(const std::string& name, BillboardMode mode)
 {
@@ -481,7 +489,7 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
 
     // 描画
     commandList->SetGraphicsRootSignature(drawRootSig_.Get());
-    commandList->SetPipelineState(drawPSO_.Get());
+    commandList->SetPipelineState(drawPSOs_[g.blendMode].Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
@@ -1069,16 +1077,6 @@ void GPUParticleManager::CreateDrawPipeline()
     rasterizer.CullMode = D3D12_CULL_MODE_NONE;
     rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
 
-    D3D12_BLEND_DESC blend{};
-    blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-    blend.RenderTarget[0].BlendEnable = TRUE;
-    blend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-    blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-    blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-    blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-    blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
-
     D3D12_DEPTH_STENCIL_DESC depth{};
     depth.DepthEnable = true;
     depth.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
@@ -1089,7 +1087,6 @@ void GPUParticleManager::CreateDrawPipeline()
     psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
     psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
     psoDesc.InputLayout = inputLayout;
-    psoDesc.BlendState = blend;
     psoDesc.RasterizerState = rasterizer;
     psoDesc.DepthStencilState = depth;
     psoDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
@@ -1099,8 +1096,52 @@ void GPUParticleManager::CreateDrawPipeline()
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.SampleDesc.Count = 1;
 
-    hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&drawPSO_));
-    assert(SUCCEEDED(hr));
+    // ブレンドモード別に PSO を生成（グループ単位で切替）。アルファ系の式は CPU 版 ParticleManager と揃える。
+    for (int mode = 0; mode < kCountOfBlendMode; ++mode) {
+        D3D12_BLEND_DESC blend{};
+        blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        blend.RenderTarget[0].BlendEnable = TRUE;
+        blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+        blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+
+        switch (static_cast<BlendMode>(mode)) {
+        case kBlendModeNone:
+            blend.RenderTarget[0].BlendEnable = FALSE;
+            break;
+        case kBlendModeNormal:
+            blend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+            blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+            blend.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+            break;
+        case kBlendModeAdd:
+            blend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+            blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+            blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+            break;
+        case kBlendModeSubtract:
+            blend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+            blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+            blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+            break;
+        case kBlendModeMultiply:
+            blend.RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
+            blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+            blend.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
+            break;
+        case kBlendModeScreen:
+            blend.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+            blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+            blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+            break;
+        default:
+            break;
+        }
+
+        psoDesc.BlendState = blend;
+        hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&drawPSOs_[mode]));
+        assert(SUCCEEDED(hr));
+    }
 }
 
 void GPUParticleManager::CreateVertexData()

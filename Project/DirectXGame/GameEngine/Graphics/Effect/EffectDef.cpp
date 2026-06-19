@@ -283,6 +283,7 @@ namespace {
         c.duration   = AsFloat(o["duration"], c.duration);
         c.burstCount = AsUInt(o["burstCount"], c.burstCount);
         c.billboardMode = AsBillboardMode(o["billboardMode"], c.billboardMode);
+        c.blendMode  = AsInt(o["blendMode"], c.blendMode);
         c.colorMode  = AsInt(o["colorMode"], c.colorMode);
         c.startColor = AsVec4(o["startColor"], c.startColor);
         c.endColor   = AsVec4(o["endColor"], c.endColor);
@@ -650,6 +651,7 @@ namespace EffectDefIO {
             o["duration"]   = static_cast<double>(c.duration);
             o["burstCount"] = static_cast<int64_t>(c.burstCount);
             o["billboardMode"] = std::string(BillboardModeStr(c.billboardMode));
+            o["blendMode"]  = static_cast<int64_t>(c.blendMode);
             o["colorMode"]  = static_cast<int64_t>(c.colorMode);
             o["startColor"] = Vec4ToJson(c.startColor);
             o["endColor"]   = Vec4ToJson(c.endColor);

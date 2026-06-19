@@ -615,6 +615,8 @@ void EffectComponentEditable::OnImGuiInspector() {
             c.billboardMode = static_cast<BillboardMode>(bb);
             dirty = true;
         }
+        dirty |= ImGui::Combo("BlendMode", &c.blendMode, BlendModeNames, IM_ARRAYSIZE(BlendModeNames));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("加算(Add)では黒系の粒子が映らない。黒い煙などは Normal を選ぶ");
 
         // ===== Rotation（3D姿勢。ビルボード None で有効） =====
         ImGui::SeparatorText("Rotation (3D)");
