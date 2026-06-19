@@ -499,6 +499,48 @@ namespace PrimitiveGenerator {
         return mesh;
     }
 
+    MeshData CreateFrame(const FrameParams& p) {
+        MeshData mesh;
+
+        float ow = p.outerWidth  * 0.5f;
+        float oh = p.outerHeight * 0.5f;
+        float iw = p.innerWidth  * 0.5f;
+        float ih = p.innerHeight * 0.5f;
+        // 穴は非負かつ外周を超えないようにクランプ
+        if (iw < 0.0f) iw = 0.0f;
+        if (ih < 0.0f) ih = 0.0f;
+        if (iw > ow)   iw = ow;
+        if (ih > oh)   ih = oh;
+
+        const float fullW = (p.outerWidth  > 1e-6f) ? p.outerWidth  : 1.0f;
+        const float fullH = (p.outerHeight > 1e-6f) ? p.outerHeight : 1.0f;
+
+        auto addVertex = [&](float x, float y) {
+            MeshVertex v{};
+            v.position = { x, y, 0.0f };
+            // UV は外周を [0,1] にマップ（Plane と同じく v は上下反転）
+            v.texcoord = { x / fullW + 0.5f, 1.0f - (y / fullH + 0.5f) };
+            v.normal   = { 0.0f, 0.0f, 1.0f };
+            v.color    = p.color;
+            mesh.vertices.push_back(v);
+        };
+        // 0..3 = 外周(bl,br,tr,tl)、4..7 = 内周(bl,br,tr,tl)
+        addVertex(-ow, -oh); addVertex(ow, -oh); addVertex(ow, oh); addVertex(-ow, oh);
+        addVertex(-iw, -ih); addVertex(iw, -ih); addVertex(iw, ih); addVertex(-iw, ih);
+
+        // CCW(+Z視点)の台形 a,b,c,d を 三角形 (a,c,b),(a,d,c) で張る（CreatePlane と同じ表向き）
+        auto addTrap = [&](uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+            mesh.indices.push_back(a); mesh.indices.push_back(c); mesh.indices.push_back(b);
+            mesh.indices.push_back(a); mesh.indices.push_back(d); mesh.indices.push_back(c);
+        };
+        addTrap(0, 1, 5, 4); // 下辺
+        addTrap(1, 2, 6, 5); // 右辺
+        addTrap(2, 3, 7, 6); // 上辺
+        addTrap(3, 0, 4, 7); // 左辺
+
+        return mesh;
+    }
+
     MeshData CreateBeamFromPolyline(const std::vector<Vector3>& polyline, const BeamAppearance& app) {
         MeshData mesh;
         if (polyline.size() < 2) return mesh;

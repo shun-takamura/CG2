@@ -107,6 +107,12 @@ namespace {
             && a.branchColorScale == b.branchColorScale;
     }
 
+    bool FrameEq(const PrimitiveGenerator::FrameParams& a, const PrimitiveGenerator::FrameParams& b) {
+        return a.outerWidth == b.outerWidth && a.outerHeight == b.outerHeight
+            && a.innerWidth == b.innerWidth && a.innerHeight == b.innerHeight
+            && V4Eq(a.color, b.color);
+    }
+
     // メッシュそのものを作り直す必要がある変更か（meshType / テクスチャ / 該当ジオメトリparams）。
     // blend / billboard / material / UV / distortion はレンダラの setter でライブ適用できるので含めない。
     bool PrimitiveMeshNeedsRebuild(const EffectPrimitiveComponent& a, const EffectPrimitiveComponent& b) {
@@ -118,7 +124,8 @@ namespace {
         case 5: return !HelixEq(a.helixParams, b.helixParams);    // Helix
         case 6: return !BeamEq(a.beamParams, b.beamParams);       // Beam
         case 7: return !LightningEq(a.lightningParams, b.lightningParams); // Lightning
-        default: return false; // Plane/Box/Sphere は meshType + texture のみ
+        case 9: return !FrameEq(a.frameParams, b.frameParams);    // Frame
+        default: return false; // Plane/Box/Sphere/Hemisphere は meshType + texture のみ
         }
     }
 
@@ -207,7 +214,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
             rt.renderer->Initialize(pc.meshType, pc.texturePath,
                                     pc.ringParams, pc.cylinderParams, pc.helixParams, pc.beamParams,
-                                    pc.lightningParams);
+                                    pc.lightningParams, pc.frameParams);
 
             // 向きの初期化：基準 rotate（× 出現時ランダム）をクオータニオンで合成。
             Quaternion baseQ = EulerToQuat(pc.rotate);
@@ -230,7 +237,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (life > maxLife) life = maxLife;
 
         float t = Saturate(local / life);
-        Vector3 scale = LerpV3(pc.startScale, pc.endScale, t);
+        // Scale はカーブ（イージング）で t を再マップしてから補間（既定 enabled=false なら線形）
+        Vector3 scale = LerpV3(pc.startScale, pc.endScale, pc.scaleCurve.Evaluate(t));
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
 
         // 持続回転：角速度ベクトル rotateSpeed を毎フレーム積分（クオータニオン合成。ジンバルロックなし）。
@@ -247,11 +255,15 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         // エフェクト全体の向き worldRotation_ を適用：
         // offset をその回転で回し、Primitive の向きにも合成する（弾の進行方向追従など）。
         const bool hasWorldRot = (worldRotation_.x != 0.0f || worldRotation_.y != 0.0f || worldRotation_.z != 0.0f);
-        Vector3 offset = pc.offset;
+        // 位置：usePositionAnim なら StartPos→EndPos をカーブで補間、そうでなければ静的 offset。
+        Vector3 baseOffset = pc.usePositionAnim
+            ? LerpV3(pc.startPos, pc.endPos, pc.posCurve.Evaluate(t))
+            : pc.offset;
+        Vector3 offset = baseOffset;
         Quaternion finalQ = rt.orientation;
         if (hasWorldRot) {
             Matrix4x4 rotMat = MakeRotateMatrix(worldRotation_);
-            offset = TransformMatrix(pc.offset, rotMat);
+            offset = TransformMatrix(baseOffset, rotMat);
             finalQ = Multiply(EulerToQuat(worldRotation_), rt.orientation);
         }
         rt.renderer->SetRotateQuaternion(finalQ);
@@ -268,13 +280,17 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             if (pc.dissolveInEnable) {
                 float t = local - pc.dissolveInStartTime;
                 float d = pc.dissolveInDuration > 0.0001f ? pc.dissolveInDuration : 0.0001f;
-                float inTh = (t <= 0.0f) ? 1.0f : (t >= d ? 0.0f : 1.0f - t / d);
+                // 進行度 progress(0→1) をカーブで再マップ。In は threshold = 1 - progress。
+                float p = Saturate(t / d);
+                float inTh = (t <= 0.0f) ? 1.0f : 1.0f - pc.dissolveCurve.Evaluate(p);
                 if (inTh > th) th = inTh;
             }
             if (pc.dissolveOutEnable) {
                 float t = local - pc.dissolveOutStartTime;
                 float d = pc.dissolveOutDuration > 0.0001f ? pc.dissolveOutDuration : 0.0001f;
-                float outTh = (t <= 0.0f) ? 0.0f : (t >= d ? 1.0f : t / d);
+                // 進行度 progress(0→1) をカーブで再マップ。Out は threshold = progress。
+                float p = Saturate(t / d);
+                float outTh = (t <= 0.0f) ? 0.0f : pc.dissolveCurve.Evaluate(p);
                 if (outTh > th) th = outTh;
             }
             bool active = pc.useDissolve && !pc.dissolveMaskPath.empty()

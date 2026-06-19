@@ -26,6 +26,19 @@ enum class EffectLightKind {
 };
 
 /// <summary>
+/// アニメーションカーブ（イージング）。
+/// 横軸 x=正規化時間(0..1)、縦軸 y=出力(0..1)。制御点は x 昇順、x/y は 0..1。
+/// 既定は (0,0)-(1,1) の直線＝恒等（enabled=false なら線形そのまま）。
+/// </summary>
+struct EffectCurve {
+    bool                 enabled = false;
+    std::vector<Vector2> points  = { { 0.0f, 0.0f }, { 1.0f, 1.0f } };
+
+    // t(0..1) を区分線形で評価して返す。enabled=false や点が不足なら t をそのまま返す。
+    float Evaluate(float t) const;
+};
+
+/// <summary>
 /// Primitive コンポーネント
 /// 単発の幾何描画。lifetime 中に scale/color を補間する。
 /// </summary>
@@ -33,7 +46,7 @@ struct EffectPrimitiveComponent {
     // Inspector / Hierarchy で表示する名前（空ならデフォルト "Primitive"）
     std::string displayName;
 
-    // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5, Beam=6, Lightning=7）
+    // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5, Beam=6, Lightning=7, Hemisphere=8, Frame=9）
     int meshType = 0;
 
     // ----- 形状ごとのジオメトリパラメータ（meshType が該当する場合のみ使用。PrimitiveInstance と同等） -----
@@ -42,6 +55,7 @@ struct EffectPrimitiveComponent {
     PrimitiveGenerator::HelixParams        helixParams;
     PrimitiveGenerator::BeamParams         beamParams;
     PrimitiveGenerator::LightningBoltParams lightningParams;
+    PrimitiveGenerator::FrameParams        frameParams;
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
@@ -63,6 +77,16 @@ struct EffectPrimitiveComponent {
     Vector3 endScale   = { 1.0f, 1.0f, 1.0f };
     Vector4 startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
     Vector4 endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
+
+    // Scale 補間のイージングカーブ（enabled 時、t を scaleCurve で再マップしてから Lerp）
+    EffectCurve scaleCurve;
+
+    // ----- 位置アニメ（StartPos→EndPos を時間で補間。Plane 等を動かす用途） -----
+    // usePositionAnim が true のとき offset の代わりに Lerp(startPos,endPos, posCurve(t)) を使う。
+    bool        usePositionAnim = false;
+    Vector3     startPos = { 0.0f, 0.0f, 0.0f };
+    Vector3     endPos   = { 0.0f, 0.0f, 0.0f };
+    EffectCurve posCurve;
 
     // テクスチャ（空文字は white1x1 扱い）
     std::string texturePath;
@@ -115,6 +139,8 @@ struct EffectPrimitiveComponent {
     bool        dissolveOutEnable    = false;
     float       dissolveOutStartTime = 0.0f;
     float       dissolveOutDuration  = 0.5f;
+    // ディゾルブ進行度(0..1)のイージングカーブ（In/Out 共用。enabled 時に progress を再マップ）
+    EffectCurve dissolveCurve;
     // アウトライン（燃えるエッジ）：In/Out 共用。閾値近傍の帯を発光色で塗る。
     bool        dissolveEdgeEnable = false;
     Vector4     dissolveEdgeColor  = { 1.0f, 0.4f, 0.1f, 1.0f };

@@ -96,6 +96,18 @@ namespace PrimitiveGenerator {
         const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
+    // Frame（額縁）の生成パラメータ：外周 Plane から内側矩形をくり抜いた枠（XY平面、Z+法線、中心が原点）。
+    struct FrameParams {
+        float   outerWidth  = 1.0f;
+        float   outerHeight = 1.0f;
+        float   innerWidth  = 0.5f; // くり抜く穴の幅（outerWidth 以下）
+        float   innerHeight = 0.5f; // くり抜く穴の高さ（outerHeight 以下）
+        Vector4 color       = { 1.0f, 1.0f, 1.0f, 1.0f };
+    };
+
+    // Frame（額縁状の枠）を生成。外周と内側穴の差分を4つの台形でタイル化する。
+    MeshData CreateFrame(const FrameParams& params);
+
     // Helix（螺旋チューブ）の生成パラメータ
     // Y軸沿いに伸びる開いた管。蓋なし。プレイヤー弾の弾道などを想定。
     struct HelixParams {
