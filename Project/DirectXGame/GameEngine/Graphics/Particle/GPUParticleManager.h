@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <vector>
 #include <utility>
+#include <array>
 
 class Camera;
 
@@ -25,6 +26,17 @@ class GPUParticleManager
 {
 public:
     static const uint32_t kMaxParticles = 1024;
+
+    // ブレンドモード（EffectDef の int 値と互換。None=0, Normal=1, Add=2, Subtract=3, Multiply=4, Screen=5）
+    enum BlendMode {
+        kBlendModeNone,
+        kBlendModeNormal,
+        kBlendModeAdd,
+        kBlendModeSubtract,
+        kBlendModeMultiply,
+        kBlendModeScreen,
+        kCountOfBlendMode
+    };
 
     // プレビュー専用グループ名のプレフィックス。EffectInstance がプレビュー時に
     // グループ名へ付加し、シーン用とは物理バッファを分離する（隔離の要）。
@@ -117,7 +129,11 @@ public:
     /// </summary>
     void SetGroupTexture(const std::string& name, const std::string& texturePath);
 
-    // ===== ビルボード / TimeGroup =====
+    // ===== ブレンド / ビルボード / TimeGroup =====
+    /// <summary>
+    /// グループの描画ブレンドモードを設定（None=0..Screen=5）。加算では黒系粒子が映らないため Normal 等を選ぶ。
+    /// </summary>
+    void SetGroupBlendMode(const std::string& name, int mode);
     void SetGroupBillboardMode(const std::string& name, BillboardMode mode);
     void SetGroupTimeGroup(const std::string& name, TimeGroup group);
 
@@ -295,6 +311,7 @@ private:
         bool     hasDissolveMask = false;
 
         // 状態
+        BlendMode     blendMode    = kBlendModeAdd; // 描画ブレンド（既定 Add＝後方互換）
         BillboardMode billboardMode = BillboardMode::Full;
         TimeGroup     timeGroup     = TimeGroup::World;
         bool          continuousEnabled = false;
@@ -320,7 +337,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12RootSignature> updateRootSig_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> updatePSO_;
     Microsoft::WRL::ComPtr<ID3D12RootSignature> drawRootSig_;
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> drawPSO_;
+    std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kCountOfBlendMode> drawPSOs_;
 
     // 共通リソース
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;

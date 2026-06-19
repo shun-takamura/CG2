@@ -1,0 +1,190 @@
+{
+  "name": "Explosion_00",
+  "totalDuration": 5,
+  "loop": false,
+  "primitives": [],
+  "particles": [
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "Circle",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.5,
+      "burstCount": 256,
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "colorMode": 1,
+      "startColor": [
+        1,
+        0.41176474094390869,
+        0,
+        1
+      ],
+      "endColor": [
+        0.66262942552566528,
+        0.044117629528045654,
+        1,
+        0.19607843458652496
+      ],
+      "scaleMin": [
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "scaleMax": [
+        0.5,
+        0.5
+      ],
+      "uniformScale": true,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 1.5,
+      "particleLifeTime": 3,
+      "emitShape": 1,
+      "ringNormal": [
+        0,
+        -1.4700000286102295,
+        1
+      ],
+      "ringThickness": 0.5,
+      "velocityMode": 2,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 0,
+      "velocityJitter": 1,
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 3,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": []
+    },
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "Circle_2",
+      "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.5,
+      "burstCount": 128,
+      "billboardMode": "Full",
+      "blendMode": 1,
+      "colorMode": 1,
+      "startColor": [
+        0.079924009740352631,
+        0.055699735879898071,
+        0.093137264251708984,
+        0.19607843458652496
+      ],
+      "endColor": [
+        0,
+        0,
+        0,
+        0.19607843458652496
+      ],
+      "scaleMin": [
+        0.20000000298023224,
+        0.20000000298023224
+      ],
+      "scaleMax": [
+        1,
+        1
+      ],
+      "uniformScale": true,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 2,
+      "particleLifeTime": 3,
+      "emitShape": 1,
+      "ringNormal": [
+        0,
+        -1.4700000286102295,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
+      "velocityMode": 2,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 0,
+      "velocityJitter": 1,
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 1.5,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": []
+    }
+  ],
+  "lights": [],
+  "sounds": []
+}

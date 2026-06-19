@@ -334,6 +334,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             }
             // テクスチャのライブ反映（エディタで Texture を差し替えたら既存グループにも適用）
             gpu_->SetGroupTexture(groupName, pc.texturePath);
+            // ブレンドモードのライブ反映（時間非依存。エディタで切替えたら即反映）
+            gpu_->SetGroupBlendMode(groupName, pc.blendMode);
             // ディゾルブ（粒子ごとの寿命）。時間非依存なので毎フレーム設定でライブ反映も効く。
             gpu_->SetGroupDissolve(groupName, pc.useDissolve, pc.dissolveMaskPath,
                                    pc.dissolveInEnable, pc.dissolveInEnd,

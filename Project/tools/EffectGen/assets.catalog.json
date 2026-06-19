@@ -131,6 +131,14 @@
       "caption": "水面の同心円波紋＋細かいさざ波をエンコードしたノーマルマップ風RG（青紫ベース）。陽炎・水中・衝撃波の空間歪み用。",
       "tags": ["distortion", "ripple", "water", "normalmap", "heathaze", "wave"],
       "usage": "primitive の distortionTexturePath に runtimePath を書き、useDistortion:true で歪む。これは白黒αマスクではない（textures とは別カテゴリ。色マスク規約の対象外）。"
+    },
+    {
+      "name": "blackHoleLens",
+      "runtimePath": "Resources/Textures/NormalMapTexture/BlackHoleLensNormal.dds",
+      "sourcePng": "Assets/Textures/NormalMapTexture/BlackHoleLensNormal.png",
+      "caption": "全方位対称の渦レンズ歪み。RG=接線(回り込み)+わずかな内向き放射、A=強度(中心0→中リング最大→外周0)。中心が無歪みなので Plane 全面貼りでも中央の球を歪ませない。継ぎ目・スクロール不要。ブラックホール/重力レンズ/吸い込み専用。",
+      "tags": ["distortion", "blackhole", "vortex", "swirl", "lens", "gravity", "normalmap"],
+      "usage": "primitive(meshType:0 Plane)の distortionTexturePath に runtimePath を書き useDistortion:true。samplerMode:2(ClampAll)・distortionUvAutoScroll:false 推奨。Plane スケールで無歪みの中心穴を球の見かけ半径に合わせる。生成: tools/Python/gen_blackhole_lens_normal.py"
     }
   ],
   "_distortionNote": "歪みマップは法線方向(RG)をエンコードしたテクスチャで、参考画像から AI 生成するのは困難。基本は既存プリセットを使い回す。クックは本来線形が正しいが、既存 DistorionNormalmapTexture は SRGB クック(cook_assets.py の LINEAR_TEXTURE_HINTS に NormalMapTexture 未登録)。見た目が変わるため現状は据え置き。"

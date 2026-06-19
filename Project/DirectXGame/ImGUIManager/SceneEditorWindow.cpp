@@ -15,6 +15,10 @@
 #include <cctype>
 #include <cstring>
 #include <cstdio>
+#include <map>
+#include <vector>
+#include <string>
+#include <utility>
 
 namespace {
     // 文字配列ペイロードへの安全コピー
@@ -22,6 +26,75 @@ namespace {
         size_t n = src.size() < cap - 1 ? src.size() : cap - 1;
         std::memcpy(dst, src.data(), n);
         dst[n] = '\0';
+    }
+
+    // 大文字小文字を無視した比較（フォルダ/ファイルのアルファベット順用）
+    struct CiLess {
+        bool operator()(const std::string& a, const std::string& b) const {
+            return std::lexicographical_compare(
+                a.begin(), a.end(), b.begin(), b.end(),
+                [](char c1, char c2) {
+                    return std::tolower(static_cast<unsigned char>(c1)) <
+                           std::tolower(static_cast<unsigned char>(c2));
+                });
+        }
+    };
+
+    // アセット一覧をファイルブラウザ風に見せるためのツリーノード。
+    // folders は CiLess で自動的にアルファベット順。files は葉（表示名＋元コレクションでの index）。
+    struct AssetTreeNode {
+        std::map<std::string, AssetTreeNode, CiLess> folders;
+        std::vector<std::pair<std::string, int>>     files; // (葉の表示名, 元 index)
+    };
+
+    // files を再帰的にアルファベット順（CiLess）へソート。
+    void SortAssetTree(AssetTreeNode& node) {
+        std::sort(node.files.begin(), node.files.end(),
+            [](const std::pair<std::string, int>& a, const std::pair<std::string, int>& b) {
+                return CiLess{}(a.first, b.first);
+            });
+        for (auto& [name, child] : node.folders) {
+            (void)name;
+            SortAssetTree(child);
+        }
+    }
+
+    // (displayName, index) の一覧から、'/' 区切りでフォルダ階層ツリーを構築する。
+    // 葉のラベルにはパス末尾（ファイル名）のみを格納する。
+    AssetTreeNode BuildAssetTree(const std::vector<std::pair<std::string, int>>& items) {
+        AssetTreeNode root;
+        for (const auto& [displayName, index] : items) {
+            AssetTreeNode* cur = &root;
+            size_t start = 0;
+            while (true) {
+                size_t slash = displayName.find('/', start);
+                if (slash == std::string::npos) {
+                    cur->files.emplace_back(displayName.substr(start), index);
+                    break;
+                }
+                std::string folder = displayName.substr(start, slash - start);
+                cur = &cur->folders[folder];
+                start = slash + 1;
+            }
+        }
+        SortAssetTree(root);
+        return root;
+    }
+
+    // ツリーを描画。フォルダを TreeNode で再帰描画 → その階層の葉を renderLeaf(葉名, index) で描画。
+    // forceOpen=true（検索中など）のとき全フォルダを開いた状態で見せる。
+    template<typename LeafFn>
+    void RenderAssetTree(const AssetTreeNode& node, const LeafFn& renderLeaf, bool forceOpen) {
+        for (const auto& [folderName, child] : node.folders) {
+            if (forceOpen) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            if (ImGui::TreeNode(folderName.c_str())) {
+                RenderAssetTree(child, renderLeaf, forceOpen);
+                ImGui::TreePop();
+            }
+        }
+        for (const auto& [leafName, index] : node.files) {
+            renderLeaf(leafName, index);
+        }
     }
 }
 
@@ -370,22 +443,32 @@ void SceneEditorWindow::OnDraw() {
     auto matchesSearch = [&](const std::string& s) {
         return searchBuf_[0] == '\0' || s.find(searchBuf_) != std::string::npos;
     };
+    const bool searching = (searchBuf_[0] != '\0');
+
+    // 検索フィルタを適用しつつ (displayName, index) を集めてツリー化するヘルパ
+    auto buildTreeFrom = [&](const auto& entries) {
+        std::vector<std::pair<std::string, int>> items;
+        for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+            if (!matchesSearch(entries[i].displayName)) continue;
+            items.emplace_back(entries[i].displayName, i);
+        }
+        return BuildAssetTree(items);
+    };
 
     // ============================================
     // Models セクション（Object3D 用 .mesh）
     // ============================================
     if (ImGui::CollapsingHeader("Models  (.mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("drag onto Scene to add");
-        for (size_t i = 0; i < models.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(models);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = models[i];
-            if (!matchesSearch(entry.displayName)) continue;
-
-            ImGui::PushID(static_cast<int>(i) + 100000);
+            ImGui::PushID(i + 100000);
 
             const bool gpuReady = ModelManager::GetInstance()->IsGPUReady(entry.filename);
             const bool cpuReady = ModelManager::GetInstance()->IsCPUReady(entry.filename);
             const char* icon = gpuReady ? "[v]" : (cpuReady ? "[~]" : "[.]");
-            std::string label = std::string(icon) + " " + entry.displayName;
+            std::string label = std::string(icon) + " " + leafName;
 
             ImGui::Selectable(label.c_str(), false);
 
@@ -399,7 +482,7 @@ void SceneEditorWindow::OnDraw() {
             }
 
             ImGui::PopID();
-        }
+        }, searching);
     }
 
     // ============================================
@@ -407,13 +490,12 @@ void SceneEditorWindow::OnDraw() {
     // ============================================
     if (ImGui::CollapsingHeader("Sprites  (.dds)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("drag onto Scene to place at cursor");
-        for (size_t i = 0; i < textures.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(textures);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = textures[i];
-            if (!matchesSearch(entry.displayName)) continue;
+            ImGui::PushID(i + 200000);
 
-            ImGui::PushID(static_cast<int>(i) + 200000);
-
-            ImGui::Selectable(entry.displayName.c_str(), false);
+            ImGui::Selectable(leafName.c_str(), false);
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 SpriteDropPayload payload{};
@@ -424,7 +506,7 @@ void SceneEditorWindow::OnDraw() {
             }
 
             ImGui::PopID();
-        }
+        }, searching);
     }
 
     // ============================================
@@ -432,13 +514,12 @@ void SceneEditorWindow::OnDraw() {
     // ============================================
     if (ImGui::CollapsingHeader("Materials  (.mat)", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("drag onto Object3D/Animated Inspector to apply");
-        for (size_t i = 0; i < materials.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(materials);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = materials[i];
-            if (!matchesSearch(entry.displayName)) continue;
+            ImGui::PushID(i + 500000);
 
-            ImGui::PushID(static_cast<int>(i) + 500000);
-
-            ImGui::Selectable(entry.displayName.c_str(), false);
+            ImGui::Selectable(leafName.c_str(), false);
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 MaterialDropPayload payload{};
@@ -449,7 +530,7 @@ void SceneEditorWindow::OnDraw() {
             }
 
             ImGui::PopID();
-        }
+        }, searching);
     }
 
     // ============================================
@@ -492,12 +573,11 @@ void SceneEditorWindow::OnDraw() {
         if (anims.empty()) {
             ImGui::TextDisabled("(none found)");
         }
-        for (size_t i = 0; i < anims.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(anims);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = anims[i];
-            if (!matchesSearch(entry.displayName)) continue;
-
-            ImGui::PushID(static_cast<int>(i) + 400000);
-            ImGui::Selectable(entry.displayName.c_str(), false);
+            ImGui::PushID(i + 400000);
+            ImGui::Selectable(leafName.c_str(), false);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 AnimDropPayload payload{};
                 SafeCopy(payload.animPath, sizeof(payload.animPath), entry.filePath);
@@ -506,7 +586,7 @@ void SceneEditorWindow::OnDraw() {
                 ImGui::EndDragDropSource();
             }
             ImGui::PopID();
-        }
+        }, searching);
     }
 
     if (ImGui::CollapsingHeader("Animated  (.mesh w/ skin)", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -514,13 +594,12 @@ void SceneEditorWindow::OnDraw() {
         if (animated.empty()) {
             ImGui::TextDisabled("(none found)");
         }
-        for (size_t i = 0; i < animated.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(animated);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = animated[i];
-            if (!matchesSearch(entry.displayName)) continue;
+            ImGui::PushID(i + 300000);
 
-            ImGui::PushID(static_cast<int>(i) + 300000);
-
-            ImGui::Selectable(entry.displayName.c_str(), false);
+            ImGui::Selectable(leafName.c_str(), false);
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 AnimatedDropPayload payload{};
@@ -532,7 +611,7 @@ void SceneEditorWindow::OnDraw() {
             }
 
             ImGui::PopID();
-        }
+        }, searching);
     }
 
     // ============================================
@@ -543,13 +622,12 @@ void SceneEditorWindow::OnDraw() {
         if (discoveredEffects_.empty()) {
             ImGui::TextDisabled("(none found)");
         }
-        for (size_t i = 0; i < discoveredEffects_.size(); ++i) {
+        AssetTreeNode tree = buildTreeFrom(discoveredEffects_);
+        RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = discoveredEffects_[i];
-            if (!matchesSearch(entry.displayName)) continue;
+            ImGui::PushID(i + 600000);
 
-            ImGui::PushID(static_cast<int>(i) + 600000);
-
-            ImGui::Selectable(entry.displayName.c_str(), false);
+            ImGui::Selectable(leafName.c_str(), false);
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 EffectResDropPayload payload{};
@@ -560,7 +638,7 @@ void SceneEditorWindow::OnDraw() {
             }
 
             ImGui::PopID();
-        }
+        }, searching);
     }
 
 #endif // _DEBUG

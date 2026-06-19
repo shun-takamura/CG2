@@ -183,6 +183,10 @@ struct EffectParticleComponent {
     // ビルボード
     BillboardMode billboardMode = BillboardMode::Full;
 
+    // ブレンドモード（GPUParticleManager::BlendMode と互換。None=0, Normal=1, Add=2, Subtract=3, Multiply=4, Screen=5）
+    // 加算(Add)では黒系の粒子が映らないため、黒い煙などは Normal を選ぶ。
+    int blendMode = 2; // Add
+
     // ----- 色設定 -----
     // 0=Random（startColor/endColor無視）、1=Fixed（startColor→endColorで補間）
     int     colorMode = 0;
