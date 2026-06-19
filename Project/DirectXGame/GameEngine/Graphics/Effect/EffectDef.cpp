@@ -3,6 +3,23 @@
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
 
+// アニメーションカーブの評価（区分線形）。enabled=false や点が2個未満なら t をそのまま返す＝恒等。
+float EffectCurve::Evaluate(float t) const {
+    if (!enabled || points.size() < 2) return t;
+    if (t <= points.front().x) return points.front().y;
+    if (t >= points.back().x)  return points.back().y;
+    for (size_t i = 1; i < points.size(); ++i) {
+        if (t <= points[i].x) {
+            const Vector2& a = points[i - 1];
+            const Vector2& b = points[i];
+            float span = b.x - a.x;
+            float u = (span > 1e-6f) ? (t - a.x) / span : 0.0f;
+            return a.y + (b.y - a.y) * u;
+        }
+    }
+    return points.back().y;
+}
+
 namespace {
     // ===== 小さなパースヘルパ =====
 
@@ -36,6 +53,21 @@ namespace {
     float AsFloat(const JsonValue& v, float fallback) {
         if (!v.IsNumber()) return fallback;
         return static_cast<float>(v.AsDouble(fallback));
+    }
+
+    // EffectCurve をパース。{ "enabled": bool, "points": [[x,y], ...] }
+    EffectCurve AsCurve(const JsonValue& v, const EffectCurve& fallback) {
+        if (!v.IsObject()) return fallback;
+        EffectCurve c;
+        if (v["enabled"].IsBool()) c.enabled = v["enabled"].AsBool(c.enabled);
+        const JsonValue& pts = v["points"];
+        if (pts.IsArray() && pts.Size() >= 2) {
+            c.points.clear();
+            for (size_t i = 0; i < pts.Size(); ++i) {
+                c.points.push_back(AsVec2(pts[i], { 0.0f, 0.0f }));
+            }
+        }
+        return c;
     }
 
     int AsInt(const JsonValue& v, int fallback) {
@@ -73,6 +105,15 @@ namespace {
     }
 
     // ===== 形状パラメータのパース =====
+
+    void ParseFrameParams(const JsonValue& o, PrimitiveGenerator::FrameParams& p) {
+        if (!o.IsObject()) return;
+        p.outerWidth  = AsFloat(o["outerWidth"],  p.outerWidth);
+        p.outerHeight = AsFloat(o["outerHeight"], p.outerHeight);
+        p.innerWidth  = AsFloat(o["innerWidth"],  p.innerWidth);
+        p.innerHeight = AsFloat(o["innerHeight"], p.innerHeight);
+        p.color       = AsVec4(o["color"], p.color);
+    }
 
     void ParseRingParams(const JsonValue& o, PrimitiveGenerator::RingParams& p) {
         if (!o.IsObject()) return;
@@ -158,6 +199,7 @@ namespace {
         ParseHelixParams(o["helixParams"], c.helixParams);
         ParseBeamParams(o["beamParams"], c.beamParams);
         ParseLightningParams(o["lightningParams"], c.lightningParams);
+        ParseFrameParams(o["frameParams"], c.frameParams);
         c.offset     = AsVec3(o["offset"], c.offset);
         c.rotate     = AsVec3(o["rotate"], c.rotate);
         // 回転アニメーション
@@ -170,6 +212,12 @@ namespace {
         c.endScale   = AsVec3(o["endScale"], c.endScale);
         c.startColor = AsVec4(o["startColor"], c.startColor);
         c.endColor   = AsVec4(o["endColor"], c.endColor);
+        c.scaleCurve = AsCurve(o["scaleCurve"], c.scaleCurve);
+        // 位置アニメ
+        if (o["usePositionAnim"].IsBool()) c.usePositionAnim = o["usePositionAnim"].AsBool(c.usePositionAnim);
+        c.startPos = AsVec3(o["startPos"], c.startPos);
+        c.endPos   = AsVec3(o["endPos"],   c.endPos);
+        c.posCurve = AsCurve(o["posCurve"], c.posCurve);
         if (o["texturePath"].IsString()) c.texturePath = o["texturePath"].AsString();
         c.blendMode     = AsInt(o["blendMode"], c.blendMode);
         c.billboardMode = AsBillboardMode(o["billboardMode"], c.billboardMode);
@@ -215,6 +263,7 @@ namespace {
         if (o["useDissolve"].IsBool() && !o["dissolveInEnable"].IsBool() && !o["dissolveOutEnable"].IsBool()) {
             c.dissolveOutEnable = c.useDissolve;
         }
+        c.dissolveCurve = AsCurve(o["dissolveCurve"], c.dissolveCurve);
         // アウトライン
         if (o["dissolveEdgeEnable"].IsBool()) c.dissolveEdgeEnable = o["dissolveEdgeEnable"].AsBool(c.dissolveEdgeEnable);
         c.dissolveEdgeColor = AsVec4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
@@ -404,6 +453,19 @@ namespace EffectDefIO {
             arr.Push(JsonValue(static_cast<double>(v.w)));
             return arr;
         }
+        JsonValue CurveToJson(const EffectCurve& c) {
+            JsonValue o = JsonValue::MakeObject();
+            o["enabled"] = c.enabled;
+            JsonValue pts = JsonValue::MakeArray();
+            for (const auto& p : c.points) {
+                JsonValue a = JsonValue::MakeArray();
+                a.Push(JsonValue(static_cast<double>(p.x)));
+                a.Push(JsonValue(static_cast<double>(p.y)));
+                pts.Push(std::move(a));
+            }
+            o["points"] = std::move(pts);
+            return o;
+        }
         const char* BillboardModeStr(BillboardMode m) {
             switch (m) {
             case BillboardMode::None:  return "None";
@@ -489,6 +551,15 @@ namespace EffectDefIO {
             o["endColor"]         = Vec4ToJson(p.endColor);
             return o;
         }
+        JsonValue FrameParamsToJson(const PrimitiveGenerator::FrameParams& p) {
+            JsonValue o = JsonValue::MakeObject();
+            o["outerWidth"]  = static_cast<double>(p.outerWidth);
+            o["outerHeight"] = static_cast<double>(p.outerHeight);
+            o["innerWidth"]  = static_cast<double>(p.innerWidth);
+            o["innerHeight"] = static_cast<double>(p.innerHeight);
+            o["color"]       = Vec4ToJson(p.color);
+            return o;
+        }
     }
 
     bool SaveToFile(const std::string& filePath, const EffectDef& def) {
@@ -507,6 +578,7 @@ namespace EffectDefIO {
             o["helixParams"]    = HelixParamsToJson(c.helixParams);
             o["beamParams"]     = BeamParamsToJson(c.beamParams);
             o["lightningParams"] = LightningParamsToJson(c.lightningParams);
+            o["frameParams"]    = FrameParamsToJson(c.frameParams);
             o["offset"]     = Vec3ToJson(c.offset);
             o["rotate"]     = Vec3ToJson(c.rotate);
             o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
@@ -518,6 +590,12 @@ namespace EffectDefIO {
             o["endScale"]   = Vec3ToJson(c.endScale);
             o["startColor"] = Vec4ToJson(c.startColor);
             o["endColor"]   = Vec4ToJson(c.endColor);
+            o["scaleCurve"] = CurveToJson(c.scaleCurve);
+            // 位置アニメ
+            o["usePositionAnim"] = c.usePositionAnim;
+            o["startPos"]   = Vec3ToJson(c.startPos);
+            o["endPos"]     = Vec3ToJson(c.endPos);
+            o["posCurve"]   = CurveToJson(c.posCurve);
             o["texturePath"] = c.texturePath;
             o["blendMode"]   = static_cast<int64_t>(c.blendMode);
             o["billboardMode"] = std::string(BillboardModeStr(c.billboardMode));
@@ -553,6 +631,7 @@ namespace EffectDefIO {
             o["dissolveOutEnable"]    = c.dissolveOutEnable;
             o["dissolveOutStartTime"] = static_cast<double>(c.dissolveOutStartTime);
             o["dissolveOutDuration"]  = static_cast<double>(c.dissolveOutDuration);
+            o["dissolveCurve"]        = CurveToJson(c.dissolveCurve);
             o["dissolveEdgeEnable"]   = c.dissolveEdgeEnable;
             o["dissolveEdgeColor"]    = Vec4ToJson(c.dissolveEdgeColor);
             o["dissolveEdgeWidth"]    = static_cast<double>(c.dissolveEdgeWidth);

@@ -31,7 +31,8 @@ public:
                     const PrimitiveGenerator::CylinderParams& cylinderParams = {},
                     const PrimitiveGenerator::HelixParams& helixParams = {},
                     const PrimitiveGenerator::BeamParams& beamParams = {},
-                    const PrimitiveGenerator::LightningBoltParams& lightningParams = {});
+                    const PrimitiveGenerator::LightningBoltParams& lightningParams = {},
+                    const PrimitiveGenerator::FrameParams& frameParams = {});
 
     void Update(Camera* camera, float deltaTime);
     void Draw();
