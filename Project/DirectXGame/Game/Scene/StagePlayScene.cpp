@@ -100,6 +100,34 @@ void StagePlayScene::LoadTuningFromJson() {
 	playerSmoothTime_ = static_cast<float>(
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
 
+	// ----- skybox -----
+	const JsonValue& sky = root["skybox"];
+	if (sky.IsObject()) {
+		const JsonValue& tint = sky["tint"];
+		if (tint.IsArray() && tint.Size() >= 4) {
+			skyboxTint_ = {
+				static_cast<float>(tint[0].AsDouble(skyboxTint_.x)),
+				static_cast<float>(tint[1].AsDouble(skyboxTint_.y)),
+				static_cast<float>(tint[2].AsDouble(skyboxTint_.z)),
+				static_cast<float>(tint[3].AsDouble(skyboxTint_.w)),
+			};
+		}
+		const JsonValue& dark = sky["specialDarkColor"];
+		if (dark.IsArray() && dark.Size() >= 4) {
+			specialSkyboxDarkColor_ = {
+				static_cast<float>(dark[0].AsDouble(specialSkyboxDarkColor_.x)),
+				static_cast<float>(dark[1].AsDouble(specialSkyboxDarkColor_.y)),
+				static_cast<float>(dark[2].AsDouble(specialSkyboxDarkColor_.z)),
+				static_cast<float>(dark[3].AsDouble(specialSkyboxDarkColor_.w)),
+			};
+		}
+		specialSkyboxFadeIn_     = static_cast<float>(sky["specialFadeIn"].AsDouble(specialSkyboxFadeIn_));
+		specialSkyboxFadeOut_    = static_cast<float>(sky["specialFadeOut"].AsDouble(specialSkyboxFadeOut_));
+		bossSkyboxBlendDuration_ = static_cast<float>(sky["bossBlendDuration"].AsDouble(bossSkyboxBlendDuration_));
+		if (sky["defaultPath"].IsString()) defaultSkyboxPath_ = sky["defaultPath"].AsString();
+		if (sky["bossPath"].IsString())    bossSkyboxPath_    = sky["bossPath"].AsString();
+	}
+
 	const JsonValue& spd = root["player"]["moveSpeed"];
 	if (spd.IsArray() && spd.Size() >= 2) {
 		playerMoveSpeed_.x = static_cast<float>(spd[0].AsDouble(playerMoveSpeed_.x));
@@ -242,13 +270,9 @@ void StagePlayScene::LoadTuningFromJson() {
 		disruptorCamCollapsePullback_ = static_cast<float>(sg["disruptorCamCollapsePullback"].AsDouble(disruptorCamCollapsePullback_));
 		disruptorCamCollapseUpAdd_    = static_cast<float>(sg["disruptorCamCollapseUpAdd"].AsDouble(disruptorCamCollapseUpAdd_));
 		disruptorCutDepth_         = static_cast<float>(sg["disruptorCutDepth"].AsDouble(disruptorCutDepth_));
-		// Step5-B: 発射ビーム / 衝撃波 / 断裂線
-		disruptorBeamLength_  = static_cast<float>(sg["disruptorBeamLength"].AsDouble(disruptorBeamLength_));
-		disruptorBeamWidth_   = static_cast<float>(sg["disruptorBeamWidth"].AsDouble(disruptorBeamWidth_));
-		disruptorBeamRunTime_ = static_cast<float>(sg["disruptorBeamRunTime"].AsDouble(disruptorBeamRunTime_));
-		disruptorShockRadius_    = static_cast<float>(sg["disruptorShockRadius"].AsDouble(disruptorShockRadius_));
-		disruptorShockThickness_ = static_cast<float>(sg["disruptorShockThickness"].AsDouble(disruptorShockThickness_));
-		disruptorShockTime_   = static_cast<float>(sg["disruptorShockTime"].AsDouble(disruptorShockTime_));
+		// Step5-B: 発射ビーム(EffectDef化) / 衝撃波 / 断裂線
+		if (sg["disruptorBeamEffect"].IsString()) disruptorBeamEffectName_ = sg["disruptorBeamEffect"].AsString();
+		if (sg["disruptorChargeEffect"].IsString()) disruptorChargeEffectName_ = sg["disruptorChargeEffect"].AsString();
 		disruptorRiftWidthScale_ = static_cast<float>(sg["disruptorRiftWidthScale"].AsDouble(disruptorRiftWidthScale_));
 		disruptorRiftRevealTime_ = static_cast<float>(sg["disruptorRiftRevealTime"].AsDouble(disruptorRiftRevealTime_));
 		disruptorRevealIntensity_    = static_cast<float>(sg["disruptorRevealIntensity"].AsDouble(disruptorRevealIntensity_));
@@ -282,8 +306,6 @@ void StagePlayScene::LoadTuningFromJson() {
 					      static_cast<float>(v[2].AsDouble(c.z)), static_cast<float>(v[3].AsDouble(c.w)) };
 				}
 			};
-			loadColor("disruptorBeamColor",  disruptorBeamColor_);
-			loadColor("disruptorShockColor", disruptorShockColor_);
 			loadColor("disruptorRiftColor",  disruptorRiftColor_);
 		}
 		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
@@ -552,6 +574,30 @@ void StagePlayScene::SaveTuningToJson() const {
 	camObj["speed"] = static_cast<double>(railCameraSpeed_);
 	root["camera"] = std::move(camObj);
 
+	JsonValue skyObj = JsonValue::MakeObject();
+	{
+		JsonValue tint = JsonValue::MakeArray();
+		tint.Push(JsonValue(static_cast<double>(skyboxTint_.x)));
+		tint.Push(JsonValue(static_cast<double>(skyboxTint_.y)));
+		tint.Push(JsonValue(static_cast<double>(skyboxTint_.z)));
+		tint.Push(JsonValue(static_cast<double>(skyboxTint_.w)));
+		skyObj["tint"] = std::move(tint);
+
+		JsonValue dark = JsonValue::MakeArray();
+		dark.Push(JsonValue(static_cast<double>(specialSkyboxDarkColor_.x)));
+		dark.Push(JsonValue(static_cast<double>(specialSkyboxDarkColor_.y)));
+		dark.Push(JsonValue(static_cast<double>(specialSkyboxDarkColor_.z)));
+		dark.Push(JsonValue(static_cast<double>(specialSkyboxDarkColor_.w)));
+		skyObj["specialDarkColor"] = std::move(dark);
+
+		skyObj["specialFadeIn"]     = static_cast<double>(specialSkyboxFadeIn_);
+		skyObj["specialFadeOut"]    = static_cast<double>(specialSkyboxFadeOut_);
+		skyObj["bossBlendDuration"] = static_cast<double>(bossSkyboxBlendDuration_);
+		skyObj["defaultPath"]       = JsonValue(defaultSkyboxPath_);
+		skyObj["bossPath"]          = JsonValue(bossSkyboxPath_);
+	}
+	root["skybox"] = std::move(skyObj);
+
 	JsonValue aimObj = JsonValue::MakeObject();
 	aimObj["planeDistance"]      = static_cast<double>(aimPlaneDistance_);
 	aimObj["smoothTime"]         = static_cast<double>(aimSmoothTime_);
@@ -791,13 +837,9 @@ void StagePlayScene::SaveTuningToJson() const {
 		arr.Push(JsonValue(static_cast<double>(specialFireColor_.w)));
 		sgObj["fireColor"] = std::move(arr);
 	}
-	// Step5-B: 発射ビーム / 衝撃波 / 断裂線
-	sgObj["disruptorBeamLength"]  = static_cast<double>(disruptorBeamLength_);
-	sgObj["disruptorBeamWidth"]   = static_cast<double>(disruptorBeamWidth_);
-	sgObj["disruptorBeamRunTime"] = static_cast<double>(disruptorBeamRunTime_);
-	sgObj["disruptorShockRadius"]    = static_cast<double>(disruptorShockRadius_);
-	sgObj["disruptorShockThickness"] = static_cast<double>(disruptorShockThickness_);
-	sgObj["disruptorShockTime"]   = static_cast<double>(disruptorShockTime_);
+	// Step5-B: 発射ビーム(EffectDef化) / 衝撃波 / 断裂線
+	sgObj["disruptorBeamEffect"]  = disruptorBeamEffectName_;
+	sgObj["disruptorChargeEffect"] = disruptorChargeEffectName_;
 	sgObj["disruptorRiftWidthScale"] = static_cast<double>(disruptorRiftWidthScale_);
 	sgObj["disruptorRiftRevealTime"] = static_cast<double>(disruptorRiftRevealTime_);
 	sgObj["disruptorRevealIntensity"]    = static_cast<double>(disruptorRevealIntensity_);
@@ -832,8 +874,6 @@ void StagePlayScene::SaveTuningToJson() const {
 		arr.Push(JsonValue(static_cast<double>(c.w)));
 		sgObj[key] = std::move(arr);
 	};
-	saveColor("disruptorBeamColor",  disruptorBeamColor_);
-	saveColor("disruptorShockColor", disruptorShockColor_);
 	saveColor("disruptorRiftColor",  disruptorRiftColor_);
 	// ゲージ UI
 	JsonValue barObj = JsonValue::MakeObject();
@@ -1796,6 +1836,59 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 	}
 
+	if (ImGui::CollapsingHeader("Skybox")) {
+		// 候補 Cubemap（手持ちの3枚）。新しい dds を足したらここに追記する。
+		static const char* kCubemaps[] = {
+			"Resources/Cubemaps/rogland_clear_night_8k.dds",
+			"Resources/Cubemaps/rogland_clear_night_4k.dds",
+			"Resources/Cubemaps/passendorf_snow_8k.dds",
+		};
+
+		// --- 常時の着色（即反映）---
+		if (ImGui::ColorEdit4("Tint (常時着色)", &skyboxTint_.x)) {
+			if (skybox_) skybox_->SetColor(skyboxTint_);
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		// --- Cubemap 切替（即 / クロスフェード）---
+		ImGui::SeparatorText("Cubemap 切替（テスト）");
+		static int sel = 0;
+		ImGui::Combo("Cubemap", &sel, kCubemaps, IM_ARRAYSIZE(kCubemaps));
+		if (ImGui::Button("Apply (即差替)")) {
+			if (skybox_) skybox_->SetCubemap(kCubemaps[sel]);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Blend (クロスフェード)")) {
+			if (skybox_) skybox_->BlendTo(kCubemaps[sel], bossSkyboxBlendDuration_);
+		}
+		if (skybox_) {
+			ImGui::Text("Now: %s%s", skybox_->GetCubemapFilePath().c_str(),
+				skybox_->IsBlending() ? "  (blending...)" : "");
+		}
+
+		// --- 必殺技中の暗転 ---
+		ImGui::SeparatorText("必殺技中の暗転");
+		ImGui::ColorEdit4("Dark Color", &specialSkyboxDarkColor_.x);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fade In (s)", &specialSkyboxFadeIn_, 0.01f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Fade Out (s)", &specialSkyboxFadeOut_, 0.01f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		// --- ボス戦（フラグ未実装のためテスト用チェックで疑似トリガー）---
+		ImGui::SeparatorText("ボス戦（テスト）");
+		static int bossSel = 2;
+		if (ImGui::Combo("Boss Cubemap", &bossSel, kCubemaps, IM_ARRAYSIZE(kCubemaps))) {
+			bossSkyboxPath_ = kCubemaps[bossSel];
+			changed = true;
+		}
+		ImGui::DragFloat("Blend Duration (s)", &bossSkyboxBlendDuration_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		// チェックの立ち上がり/下がりを Update 側が拾って BlendTo する
+		ImGui::Checkbox("Boss Battle Active (test)", &bossBattleActive_);
+		ImGui::TextDisabled("  ON で boss空へ / OFF で平常時の空へクロスフェード");
+	}
+
 	if (ImGui::CollapsingHeader("Shooting")) {
 		ImGui::TextDisabled("弾パラメータ（速度/寿命/collider拡大/ホーミング/貫通）は\n弾プレハブの BulletParams で設定する。");
 		ImGui::TextDisabled("連射間隔(Fire Rate)はプレイヤープレハブの ChargeParams で設定する。");
@@ -1915,6 +2008,7 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Charge TimeScale",  &disruptorChargeTimeScale_,  0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("  チャージ演出（受付時間中）は EffectDef \"%s\"（エフェクトエディター）で作る", disruptorChargeEffectName_.c_str());
 		ImGui::DragFloat("Line Half Width (px)", &disruptorLineWidthPx_, 1.0f, 1.0f, 400.0f, "%.0f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragInt("Boss Damage (fixed)", &disruptorBossDamage_, 1.0f, 0, 99999);
@@ -1960,23 +2054,7 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::Text("[発射ビーム] 固定方向の一閃（狙い角度と無関係）");
 		ImGui::DragFloat3("Beam Dir (world)", &disruptorBeamDir_.x, 0.02f, -1.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Beam Length", &disruptorBeamLength_, 0.5f, 1.0f, 300.0f, "%.1f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Beam Width", &disruptorBeamWidth_, 0.02f, 0.02f, 10.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Beam Run Time (s)", &disruptorBeamRunTime_, 0.01f, 0.01f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Beam Color", &disruptorBeamColor_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::Text("[衝撃波] 筒先の加算リング");
-		ImGui::DragFloat("Shock Radius", &disruptorShockRadius_, 0.1f, 0.0f, 40.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Shock Thickness (0-1)", &disruptorShockThickness_, 0.01f, 0.05f, 0.95f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Shock Time (s)", &disruptorShockTime_, 0.01f, 0.01f, 2.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::ColorEdit4("Shock Color", &disruptorShockColor_.x);
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("  色/サイズ/先細り/伸長＋衝撃波(Ringコンポ追加)は EffectDef \"%s\"（エフェクトエディター）で編集", disruptorBeamEffectName_.c_str());
 		ImGui::Text("[断裂線] 仮ビーム（Collapse で右→左に走り込む。幅=判定帯に一致）");
 		ImGui::DragFloat("Rift Width Scale (x判定帯)", &disruptorRiftWidthScale_, 0.02f, 0.05f, 4.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
@@ -2254,10 +2332,11 @@ void StagePlayScene::Initialize() {
 	disruptorShards_->Initialize(dxCore_, PrimitivePipeline::GetInstance()->GetSRVManager(), kDisruptorShardCap_);
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
-	// Skybox 生成（DemoScene と同じ Cubemap を使用）
+	// Skybox 生成（平常時の空。LoadTuningFromJson 後なので保存値が反映される）
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/rogland_clear_night_8k.dds");
-	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/rogland_clear_night_8k.dds");
+	skybox_->Initialize(skyboxManager_, dxCore_, defaultSkyboxPath_);
+	skybox_->SetColor(skyboxTint_);  // 保存済みの常時着色を適用
+	object3DManager_->SetEnvironmentTexture(defaultSkyboxPath_);
 
 	// レールカメラ用スプライン（位置）
 	cameraPath_ = std::make_unique<SplineCurveActor>();
@@ -2358,10 +2437,12 @@ void StagePlayScene::Finalize() {
 		specialBarrierEffectHandle_ = kInvalidEffectHandle;
 	}
 	if (disruptorShards_) { disruptorShards_->Finalize(); disruptorShards_.reset(); }
+	if (disruptorBeamHandle_ != kInvalidEffectHandle) {
+		if (auto* em = EffectManager::GetInstance()) em->Stop(disruptorBeamHandle_);
+		disruptorBeamHandle_ = kInvalidEffectHandle;
+	}
 	specialTrash_.clear();
 	specialBarrierVis_.reset();
-	disruptorBeam_.reset();
-	disruptorShockwave_.reset();
 	disruptorRift_.reset();
 	specialLockonTargets_.clear();
 	specialChargeBolts_.clear();
@@ -2740,7 +2821,25 @@ void StagePlayScene::Update() {
 
 	// カメラが確定した後に Skybox を更新する（VP 焼き込みのため、回り込みを背景にも反映）。
 	if (skybox_) {
-		skybox_->Update();
+		// --- Skybox 演出トリガー（フラグの立ち上がり/立ち下がりを見て呼ぶ）---
+		// 必殺技中は空を暗転、終了で常時の着色へ戻す。
+		if (specialActive_ && !prevSpecialActive_) {
+			skybox_->FadeColor(specialSkyboxDarkColor_, specialSkyboxFadeIn_); // 暗転
+		} else if (!specialActive_ && prevSpecialActive_) {
+			skybox_->FadeColor(skyboxTint_, specialSkyboxFadeOut_);            // 復帰
+		}
+		prevSpecialActive_ = specialActive_;
+
+		// ボス戦突入で空をクロスフェード（離脱で平常時の空へ戻す）。
+		if (bossBattleActive_ && !prevBossBattleActive_) {
+			skybox_->BlendTo(bossSkyboxPath_, bossSkyboxBlendDuration_);
+		} else if (!bossBattleActive_ && prevBossBattleActive_) {
+			skybox_->BlendTo(defaultSkyboxPath_, bossSkyboxBlendDuration_);
+		}
+		prevBossBattleActive_ = bossBattleActive_;
+
+		// クロスフェード/着色補間はヒットストップの影響を受けない実時間で進める
+		skybox_->Update(GetScaledDeltaTime(TimeGroup::UI));
 	}
 
 	// Scene の動的エンティティ群（プレハブ生成物含む）の Update
@@ -2755,8 +2854,15 @@ void StagePlayScene::Update() {
 
 #endif // _DEBUG
 
-	// 全シーン共通の EffectManager + GPUParticle を更新
-	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
+	// 全シーン共通の EffectManager + GPUParticle を更新。
+	// ディスラプターのチャージ(受付時間)／一閃中は World が停止(scaledDt=0)するが、チャージ演出や
+	// 発射ビーム(EffectDef)は実時間で進めたいので、その間だけ unscaled な実 delta を渡す
+	// （World 停止中は他エフェクトもほぼ無いので副作用は小さい）。
+	const bool disruptorRealtimeFx =
+		(equippedSpecial_ == SpecialKind::Disruptor && specialActive_ &&
+		 (disruptorPhase_ == DisruptorPhase::Charge || disruptorPhase_ == DisruptorPhase::Slash));
+	UpdateGlobalEffects(camera_.get(),
+		disruptorRealtimeFx ? dxCore_->GetDeltaTime() : GetScaledDeltaTime());
 
 	// ジャスト回避演出のタイマ更新。受付期間/フェードは実時間（UI グループ）で計測する
 	// （World をスローにしても受付 3 秒は実時間で一定にしたいため）。
@@ -3403,9 +3509,7 @@ void StagePlayScene::Draw() {
 		TrashDisruptorVisual(disruptorRift_);                       // 断裂線は役目を終えたので片付ける（殻の下に残さない）
 	}
 
-	// 必殺技ディスラプター：発射ビーム／衝撃波／断裂線（Step5-B）
-	if (disruptorBeam_)      disruptorBeam_->Draw();
-	if (disruptorShockwave_) disruptorShockwave_->Draw();
+	// 必殺技ディスラプター：断裂線（Step5-B）。発射ビーム／衝撃波は EffectManager が描画する（DrawGlobalEffects）。
 	if (disruptorRift_)      disruptorRift_->Draw();
 	// 飛び散る破片は PostEffect 後（DrawAfterPostEffect）に描く＝崩壊リビールの再反転による
 	// 二重反転を回避する。ここでは描かない。
@@ -4259,11 +4363,13 @@ void StagePlayScene::EnterDisruptor() {
 	disruptorCamActive_ = true;
 	disruptorCamInit_   = false;
 
-	// 前回の演出残骸があれば遅延削除へ（発射ビーム／衝撃波／断裂線）
-	TrashDisruptorVisual(disruptorBeam_);
-	TrashDisruptorVisual(disruptorShockwave_);
+	// 前回の演出残骸があれば片付ける（発射ビーム／チャージ演出は EffectManager、断裂線は遅延削除）
+	if (auto* em = EffectManager::GetInstance()) {
+		if (disruptorBeamHandle_ != kInvalidEffectHandle) { em->Stop(disruptorBeamHandle_); disruptorBeamHandle_ = kInvalidEffectHandle; }
+		if (disruptorChargeHandle_ != kInvalidEffectHandle) { em->Stop(disruptorChargeHandle_); disruptorChargeHandle_ = kInvalidEffectHandle; }
+	}
 	TrashDisruptorVisual(disruptorRift_);
-	disruptorBeamTimer_ = disruptorShockTimer_ = disruptorRiftTimer_ = 0.0f;
+	disruptorRiftTimer_ = 0.0f;
 	// 遅延キルの保留をリセット
 	disruptorPendingEnemies_.clear();
 	disruptorPendingBulletPrims_.clear();
@@ -4285,11 +4391,24 @@ void StagePlayScene::EnterDisruptorPhase(DisruptorPhase p) {
 		// 収束：World 停止/スロー（disruptorChargeTimeScale_、既定0=停止で敵が固定）＋無敵
 		SetTimeScale(TimeGroup::World, disruptorChargeTimeScale_);
 		specialInvincible_ = true;
+		// チャージ演出（受付時間中）をプレイヤー中央で再生。中身はエフェクトエディターで作る（loop=true）。
+		// World 停止中でも進めたいので、Update は Charge の間だけ実時間で回す（UpdateGlobalEffects 側で分岐）。
+		if (auto* em = EffectManager::GetInstance()) {
+			if (disruptorChargeHandle_ != kInvalidEffectHandle) em->Stop(disruptorChargeHandle_);
+			disruptorChargeHandle_ = kInvalidEffectHandle;
+			if (!disruptorChargeEffectName_.empty() && em->HasDef(disruptorChargeEffectName_)) {
+				disruptorChargeHandle_ = em->Play(disruptorChargeEffectName_, SpecialPlayerCenter());
+			}
+		}
 		break;
 	case DisruptorPhase::Slash:
-		// 一閃：World 停止＋無敵
+		// 一閃：World 停止＋無敵。チャージ演出は受付終了なので停止。
 		SetTimeScale(TimeGroup::World, 0.0f);
 		specialInvincible_ = true;
+		if (auto* em = EffectManager::GetInstance(); em && disruptorChargeHandle_ != kInvalidEffectHandle) {
+			em->Stop(disruptorChargeHandle_);
+			disruptorChargeHandle_ = kInvalidEffectHandle;
+		}
 		break;
 	case DisruptorPhase::Collapse:
 		// 崩壊：World 停止のまま＋無敵。発射ビーム/衝撃波を片付け、断裂線を生成（右→左に走り込む）。
@@ -4299,8 +4418,10 @@ void StagePlayScene::EnterDisruptorPhase(DisruptorPhase p) {
 		// camArrived が Slash 到達のまま true で残っている。明示的に false に落として、
 		// 後方アングルへ戻り切ってからキャプチャ＆セル形状 bake させる（横アングルで焼くと殻がズレる）。
 		disruptorCamArrived_ = false;
-		TrashDisruptorVisual(disruptorBeam_);
-		TrashDisruptorVisual(disruptorShockwave_);
+		if (auto* em = EffectManager::GetInstance(); em && disruptorBeamHandle_ != kInvalidEffectHandle) {
+			em->Stop(disruptorBeamHandle_);
+			disruptorBeamHandle_ = kInvalidEffectHandle;
+		}
 		BuildDisruptorRift();
 		// F1: 事前分割セルを構築（種点はスクリーン空間固定＝seed で割れ方が決まる）。
 		if (!disruptorFractureSeedLock_) disruptorFractureSeed_ = std::random_device{}();
@@ -4623,51 +4744,18 @@ void StagePlayScene::BuildDisruptorFireVisuals() {
 	disruptorBeamMuzzle_  = SpecialBoltStart(player, disruptorBeamFireDir_);
 	const Vector3 euler   = DisruptorDirToEuler(disruptorBeamFireDir_);
 
-	// 既存があれば遅延削除へ
-	TrashDisruptorVisual(disruptorBeam_);
-	TrashDisruptorVisual(disruptorShockwave_);
-
-	// 発射ビーム（ローカル: 原点→+Z*length。SetScale.z で伸長）
-	{
-		PrimitiveGenerator::BeamParams bp{};
-		bp.startPos = { 0.0f, 0.0f, 0.0f };
-		bp.endPos   = { 0.0f, 0.0f, disruptorBeamLength_ };
-		bp.appearance.startWidth = disruptorBeamWidth_;
-		bp.appearance.endWidth   = disruptorBeamWidth_ * 0.6f; // 先細り
-		bp.appearance.planeCount = 3;
-		bp.appearance.startColor = disruptorBeamColor_;
-		bp.appearance.endColor   = disruptorBeamColor_;
-		bp.appearance.fadeStartLength = 0.0f;
-		bp.appearance.fadeEndLength   = disruptorBeamLength_ * 0.15f;
-		bp.lengthSegments = 8;
-		disruptorBeam_ = std::make_unique<EffectPrimitiveRenderer>();
-		disruptorBeam_->Initialize(6 /*Beam*/, "Resources/Textures/white1x1.dds", {}, {}, {}, bp);
-		disruptorBeam_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
-		disruptorBeam_->SetDepthWrite(false);
-		disruptorBeam_->SetCullBackface(false);
-		disruptorBeam_->SetTranslate(disruptorBeamMuzzle_);
-		disruptorBeam_->SetRotate(euler);
-		disruptorBeam_->SetScale({ 1.0f, 1.0f, 0.0f }); // 伸長 0 から
+	// 発射ビーム：EffectDef(DisruptorBeam) を筒先で再生し、確定発射方向へ向ける。
+	// 色/サイズ/先細り/フェード/伸長カーブは JSON＝エフェクトエディターで編集。伸長は scaleCurve が駆動。
+	// World 停止中(Slash)でも伸びるよう、Update は Slash の間だけ実時間で回す（Update 内で分岐）。
+	// 衝撃波リングはこの EffectDef に Ring コンポーネントを足してエディターで作る（直書きは廃止）。
+	if (auto* em = EffectManager::GetInstance()) {
+		if (disruptorBeamHandle_ != kInvalidEffectHandle) em->Stop(disruptorBeamHandle_);
+		disruptorBeamHandle_ = kInvalidEffectHandle;
+		if (!disruptorBeamEffectName_.empty() && em->HasDef(disruptorBeamEffectName_)) {
+			disruptorBeamHandle_ = em->Play(disruptorBeamEffectName_, disruptorBeamMuzzle_);
+			em->SetRotation(disruptorBeamHandle_, euler);
+		}
 	}
-	// 衝撃波リング（ローカル XY 面・法線+Z。SetScale で外径を拡大）
-	{
-		PrimitiveGenerator::RingParams rp{};
-		rp.outerRadius = 1.0f;
-		rp.innerRadius = 1.0f - std::clamp(disruptorShockThickness_, 0.05f, 0.95f);
-		rp.divisions   = 48;
-		rp.innerColor  = disruptorShockColor_;
-		rp.outerColor  = { disruptorShockColor_.x, disruptorShockColor_.y, disruptorShockColor_.z, 0.0f };
-		disruptorShockwave_ = std::make_unique<EffectPrimitiveRenderer>();
-		disruptorShockwave_->Initialize(3 /*Ring*/, "Resources/Textures/white1x1.dds", rp);
-		disruptorShockwave_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
-		disruptorShockwave_->SetDepthWrite(false);
-		disruptorShockwave_->SetCullBackface(false);
-		disruptorShockwave_->SetTranslate(disruptorBeamMuzzle_);
-		disruptorShockwave_->SetRotate(euler);
-		disruptorShockwave_->SetScale({ 0.0f, 0.0f, 0.0f });
-	}
-	disruptorBeamTimer_  = 0.0f;
-	disruptorShockTimer_ = 0.0f;
 }
 
 void StagePlayScene::BuildDisruptorRift() {
@@ -4743,26 +4831,8 @@ void StagePlayScene::UpdateDisruptorVisuals(float realDt) {
 	if (!camera_) return;
 	auto smooth = [](float u) { if (u < 0.0f) u = 0.0f; if (u > 1.0f) u = 1.0f; return u * u * (3.0f - 2.0f * u); };
 
-	// 発射ビーム：Slash 中に筒先→全長へ伸長
-	if (disruptorBeam_) {
-		if (disruptorPhase_ == DisruptorPhase::Slash) {
-			disruptorBeamTimer_ += realDt;
-			const float s = smooth((disruptorBeamRunTime_ > 1e-4f) ? (disruptorBeamTimer_ / disruptorBeamRunTime_) : 1.0f);
-			disruptorBeam_->SetScale({ 1.0f, 1.0f, s });
-		}
-		disruptorBeam_->Update(camera_.get(), realDt);
-	}
-	// 衝撃波：Slash 中に拡大＋αフェード
-	if (disruptorShockwave_) {
-		if (disruptorPhase_ == DisruptorPhase::Slash) {
-			disruptorShockTimer_ += realDt;
-			const float u = (disruptorShockTime_ > 1e-4f) ? (disruptorShockTimer_ / disruptorShockTime_) : 1.0f;
-			const float r = disruptorShockRadius_ * smooth(u);
-			disruptorShockwave_->SetScale({ r, r, r });
-			disruptorShockwave_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f - (std::min)(u, 1.0f) }); // 末に消える
-		}
-		disruptorShockwave_->Update(camera_.get(), realDt);
-	}
+	// 発射ビーム・衝撃波は EffectDef(DisruptorBeam) 化済み。伸長/拡大・描画・更新は EffectManager が担う
+	// （Slash 中は World 停止だが、Update 内で Slash の間だけ EffectManager を実時間で回して進める）。
 	// 断裂線：Collapse 中に右→左へ走り込む。引き切った瞬間に敵を一括キル。
 	if (disruptorRift_) {
 		// カメラが狙うアングルへ戻り切ってから断裂線を走り込ませる（復帰中は止める）。
@@ -6109,9 +6179,11 @@ void StagePlayScene::EndSpecialMove() {
 	if (auto* pe = Game::GetPostEffect(); pe && pe->colorInvert) {
 		pe->colorInvert->SetEnabled(false);
 	}
-	// Step5-B 演出を遅延削除へ＋遅延キルの保留をクリア
-	TrashDisruptorVisual(disruptorBeam_);
-	TrashDisruptorVisual(disruptorShockwave_);
+	// Step5-B 演出を遅延削除へ＋遅延キルの保留をクリア（発射ビーム／チャージ演出は EffectManager 側を停止）
+	if (auto* em = EffectManager::GetInstance()) {
+		if (disruptorBeamHandle_ != kInvalidEffectHandle) { em->Stop(disruptorBeamHandle_); disruptorBeamHandle_ = kInvalidEffectHandle; }
+		if (disruptorChargeHandle_ != kInvalidEffectHandle) { em->Stop(disruptorChargeHandle_); disruptorChargeHandle_ = kInvalidEffectHandle; }
+	}
 	TrashDisruptorVisual(disruptorRift_);
 	disruptorCellMeshUploaded_ = false; // 次の崩壊でセル形状を再アップロード
 	disruptorPendingEnemies_.clear();

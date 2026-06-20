@@ -410,6 +410,22 @@ private:
 	// ----- LightningRuntime 動作確認用テストパネル（Phase2B、必殺技実装後に削除予定）-----
 	std::unique_ptr<LightningRuntime> lightningTest_;
 
+	// ----- ボス戦（未実装。Skybox演出などのトリガー用フラグだけ先に持つ）-----
+	bool bossBattleActive_ = false;
+
+	// ----- Skybox 演出トリガー用の前フレーム値（立ち上がり/立ち下がり検出）-----
+	bool prevSpecialActive_    = false;
+	bool prevBossBattleActive_ = false;
+
+	// ----- Skybox 調整パラメータ（ImGui で編集／StagePlay.json に保存）-----
+	std::string defaultSkyboxPath_ = "Resources/Cubemaps/rogland_clear_night_8k.dds"; // 平常時の空
+	std::string bossSkyboxPath_    = "Resources/Cubemaps/passendorf_snow_8k.dds";      // ボス戦の空
+	Vector4 skyboxTint_{ 1.0f, 1.0f, 1.0f, 1.0f };               // 常時の着色（テクスチャに乗算）
+	Vector4 specialSkyboxDarkColor_{ 0.3f, 0.3f, 0.4f, 1.0f };   // 必殺技中の暗転色
+	float   specialSkyboxFadeIn_     = 0.4f;                     // 暗転にかける秒
+	float   specialSkyboxFadeOut_    = 0.6f;                     // 復帰にかける秒
+	float   bossSkyboxBlendDuration_ = 2.0f;                     // ボス突入/離脱のクロスフェード秒
+
 	// ----- 必殺技「傲慢サンダー」 -----
 	// Phase 1 (Barrier): バリア展開・プレイヤー強制位置・カメラ引き・無敵・バリア当たり判定
 	// Phase 2-5 は Step B-2 以降で追加
@@ -653,24 +669,19 @@ private:
 	float   disruptorCutDepth_ = 40.0f;   // ヒット敵が無いときの焼き付け奥行き（敵があれば平均で上書き）
 
 	// ----- Step5-B: 発射ビーム / 衝撃波 / 断裂線ビジュアル（A案・FREEDOM風） -----
-	// 共通方式：ローカル空間でメッシュを1回生成し、SetRotate で発射方向へ向け、SetScale.z で伸長（再生成なし）。
-	// 発射ビーム（固定方向の一閃。Slash 中に筒先→全長へ伸びる transient）
-	std::unique_ptr<class EffectPrimitiveRenderer> disruptorBeam_;
+	// 共通方式：衝撃波/断裂線はローカル空間でメッシュを1回生成し、SetRotate で発射方向へ向け、SetScale で伸長（再生成なし）。
+	// 発射ビーム（固定方向の一閃。Slash 中に筒先→全長へ伸びる transient）は EffectDef(DisruptorBeam) 化し
+	// EffectManager で再生＝色/サイズ/先細り/伸長カーブをエフェクトエディターで編集する。
+	std::string  disruptorBeamEffectName_ = "DisruptorBeam";    // Resources/Json/Effects/DisruptorBeam.json
+	EffectHandle disruptorBeamHandle_     = kInvalidEffectHandle; // ランタイム：再生中ビームのハンドル
+	// チャージ演出（収束パーティクル＋虹色光条など）。受付時間＝Charge フェーズ中だけプレイヤー中央で再生。
+	// 中身はエフェクトエディターで作る（loop=true で受付が伸びても保つ。Slash 入り/終了で Stop）。
+	std::string  disruptorChargeEffectName_ = "DisruptorCharge"; // Resources/Json/Effects/DisruptorCharge.json
+	EffectHandle disruptorChargeHandle_     = kInvalidEffectHandle; // ランタイム：再生中チャージ演出のハンドル
 	Vector3 disruptorBeamDir_{ 0.0f, 0.15f, 1.0f };  // 固定発射方向（ワールド。既定=前方やや上＝戦場へ）。狙い角度とは無関係
-	float   disruptorBeamLength_  = 80.0f;           // ビーム全長
-	float   disruptorBeamWidth_   = 0.8f;            // ビーム幅（startWidth）
-	Vector4 disruptorBeamColor_{ 0.7f, 0.5f, 1.0f, 1.0f }; // 紫
-	float   disruptorBeamRunTime_ = 0.12f;           // 筒先→全長へ伸びる時間（Slash 内・決定的）
-	float   disruptorBeamTimer_   = 0.0f;            // ランタイム：伸長経過秒
 	Vector3 disruptorBeamFireDir_{ 0.0f, 0.0f, 1.0f };// ランタイム：確定発射方向
 	Vector3 disruptorBeamMuzzle_{ 0.0f, 0.0f, 0.0f }; // ランタイム：筒先位置
-	// 衝撃波（筒先の加算リング。Slash 中に拡大＋αフェード）
-	std::unique_ptr<class EffectPrimitiveRenderer> disruptorShockwave_;
-	float   disruptorShockRadius_    = 6.0f;         // 最大外半径
-	float   disruptorShockThickness_ = 0.4f;         // リング太さ（0..1、outer に対する内側の食い込み）
-	Vector4 disruptorShockColor_{ 0.8f, 0.6f, 1.0f, 1.0f };
-	float   disruptorShockTime_   = 0.25f;           // 拡大時間
-	float   disruptorShockTimer_  = 0.0f;            // ランタイム
+	// 衝撃波は EffectDef(DisruptorBeam) に Ring コンポーネントを足してエディターで作る（直書きは廃止）。
 	// 断裂線ビジュアル（細い Beam・仮。Collapse 中に P1[右]→P2[左] へ走り込む）
 	std::unique_ptr<class EffectPrimitiveRenderer> disruptorRift_;
 	// 案1：見た目を「判定帯（disruptorLineWidthPx_ 半幅px）」に一致させる。焼き付け深度で px→world 換算した

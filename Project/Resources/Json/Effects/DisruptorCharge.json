@@ -1,0 +1,9 @@
+{
+  "name": "DisruptorCharge",
+  "totalDuration": 1,
+  "loop": true,
+  "primitives": [],
+  "particles": [],
+  "lights": [],
+  "sounds": []
+}

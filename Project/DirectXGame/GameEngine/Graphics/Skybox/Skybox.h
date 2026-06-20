@@ -2,6 +2,7 @@
 #include "SkyboxManager.h"
 #include "SkyboxVertexData.h"
 #include "SkyboxTransformationMatrix.h"
+#include "SkyboxMaterial.h"
 #include "Material.h"
 #include "Transform.h"
 #include "Camera.h"
@@ -43,13 +44,31 @@ private:
 
     // バッファ内データへのCPU側ポインタ
     SkyboxTransformationMatrix* transformationMatrixData_ = nullptr;
-    Material* materialData_ = nullptr;
+    SkyboxMaterial* materialData_ = nullptr;
 
     // Transform（Skyboxは基本原点固定だが、一応持つ）
     Transform transform_;
 
     // Cubemapテクスチャのファイルパス
-    std::string cubemapFilePath_;
+    std::string cubemapFilePath_;       // 現在スロット(t0)
+    std::string nextCubemapFilePath_;   // 次スロット(t1)
+
+    //==============================
+    // クロスフェード状態
+    //==============================
+    bool  isBlending_ = false;
+    float blendTime_ = 0.0f;
+    float blendDuration_ = 1.0f;
+
+    //==============================
+    // 着色フェード状態
+    //==============================
+    bool    isColorFading_ = false;
+    float   colorFadeTime_ = 0.0f;
+    float   colorFadeDuration_ = 1.0f;
+    Vector4 colorFadeStart_{ 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4 colorFadeTarget_{ 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4 currentColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
 
     //==============================
     // メンバ関数
@@ -81,12 +100,32 @@ public:
     // セッター
     //==============================
     void SetCamera(Camera* camera) { camera_ = camera; }
-    void SetColor(const Vector4& color) { if (materialData_) materialData_->color = color; }
+
+    /// <summary>全体着色を即座に設定（補間なし）</summary>
+    void SetColor(const Vector4& color);
+
+    /// <summary>Cubemapを即座に差し替える（補間なし）</summary>
+    void SetCubemap(const std::string& cubemapFilePath);
+
+    //==============================
+    // 演出用API
+    //==============================
+
+    /// <summary>指定Cubemapへ時間をかけてクロスフェードする</summary>
+    /// <param name="cubemapFilePath">遷移先のCubemap</param>
+    /// <param name="durationSec">遷移にかける秒数</param>
+    void BlendTo(const std::string& cubemapFilePath, float durationSec);
+
+    /// <summary>着色を時間をかけて目標色へ補間する（暗転などに使う）</summary>
+    /// <param name="targetColor">目標の着色</param>
+    /// <param name="durationSec">補間にかける秒数</param>
+    void FadeColor(const Vector4& targetColor, float durationSec);
 
     //==============================
     // ゲッター
     //==============================
     const std::string& GetCubemapFilePath() const { return cubemapFilePath_; }
+    bool IsBlending() const { return isBlending_; }
 
     //==============================
     // 初期化・更新・描画
@@ -98,9 +137,10 @@ public:
     void Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const std::string& cubemapFilePath);
 
     /// <summary>
-    /// 更新（毎フレームWVP行列を計算）
+    /// 更新（毎フレームWVP行列を計算＋クロスフェード/着色補間を進める）
     /// </summary>
-    void Update();
+    /// <param name="deltaTime">経過時間（秒）。0なら補間は進まない</param>
+    void Update(float deltaTime = 0.0f);
 
     /// <summary>
     /// 描画

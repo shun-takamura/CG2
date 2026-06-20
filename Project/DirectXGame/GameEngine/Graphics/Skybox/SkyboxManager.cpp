@@ -24,15 +24,22 @@ void SkyboxManager::CreateRootSignature()
 {
     HRESULT hr;
 
-    // DescriptorRange 
-    // PS: SRV(t0) - TextureCube用
-    D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-    descriptorRange[0].BaseShaderRegister = 0;                      // t0
-    descriptorRange[0].NumDescriptors = 1;
-    descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    // DescriptorRange
+    // PS: SRV(t0) - 現在スロットのTextureCube用
+    D3D12_DESCRIPTOR_RANGE descriptorRange0[1] = {};
+    descriptorRange0[0].BaseShaderRegister = 0;                      // t0
+    descriptorRange0[0].NumDescriptors = 1;
+    descriptorRange0[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRange0[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[3] = {};
+    // PS: SRV(t1) - 次スロットのTextureCube用（クロスフェード用）
+    D3D12_DESCRIPTOR_RANGE descriptorRange1[1] = {};
+    descriptorRange1[0].BaseShaderRegister = 1;                      // t1
+    descriptorRange1[0].NumDescriptors = 1;
+    descriptorRange1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRange1[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[4] = {};
 
     // VS: CBV(b0) - TransformationMatrix用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -44,11 +51,17 @@ void SkyboxManager::CreateRootSignature()
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[1].Descriptor.ShaderRegister = 0;
 
-    // PS: DescriptorTable(t0) - TextureCube用
+    // PS: DescriptorTable(t0) - 現在スロットのTextureCube用
     rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
+    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange0;
+    rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange0);
+
+    // PS: DescriptorTable(t1) - 次スロットのTextureCube用
+    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRange1;
+    rootParameters[3].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange1);
 
     // ============================================
     // Sampler (PS の s0)
