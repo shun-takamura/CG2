@@ -130,6 +130,7 @@ private:
         std::unique_ptr<EffectPrimitiveRenderer> renderer;
         bool started = false;
         bool finished = false;
+        float clock = 0.0f; // この成分の TimeGroup でスケールした専用経過時間（spawn/アニメ進行に使う）
         // 持続回転を積分した現在の向き（基準rotate＋出現時ランダムを spawn 時に初期化）。
         Quaternion orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
     };
@@ -137,6 +138,7 @@ private:
 
     struct ParticleRuntime {
         bool burstFired = false;
+        float clock = 0.0f; // この成分の TimeGroup でスケールした専用経過時間（burst スケジュールに使う）
     };
     std::vector<ParticleRuntime> particles_;
 

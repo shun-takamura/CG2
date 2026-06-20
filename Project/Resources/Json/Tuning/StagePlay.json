@@ -115,7 +115,7 @@
     "gaugeMaxGouman": 100,
     "gaugeMaxDisruptor": 120,
     "cooldown": 30,
-    "equipped": 0,
+    "equipped": 1,
     "disruptorCharge": 2.5,
     "disruptorSlash": 1.5,
     "disruptorCollapse": 4,

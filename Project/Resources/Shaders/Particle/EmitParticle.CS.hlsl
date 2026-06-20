@@ -134,7 +134,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
                     spawnOffset = (generator.Generate3d() * 2.0f - 1.0f) * gEmitter.radius;
                 }
                 gParticles[particleIndex].translate = gEmitter.translate + spawnOffset;
-                if (gEmitter.velocityMode > 2.5f) {
+                if (gEmitter.velocityMode > 3.5f) {
+                    // 収束モード：velocity フィールドに spawn ワールド位置を保持する（物理速度は使わない）。
+                    // Update CS がこの spawn 位置から convergeCenter へカーブで寄せる。
+                    gParticles[particleIndex].velocity = gParticles[particleIndex].translate;
+                } else if (gEmitter.velocityMode > 2.5f) {
                     // 接線モード（公転）：ringNormal まわりに、発生位置の半径方向の接線へ流す
                     float3 nrm = gEmitter.ringNormal;
                     float nl = length(nrm);

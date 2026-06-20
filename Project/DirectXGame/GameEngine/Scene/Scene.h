@@ -149,6 +149,8 @@ public:
 	//====================
 	// エフェクト（EffectManager / GPUParticle）
 	//====================
+	// deltaTime は unscaled な実 delta（realDt）を渡すこと。各コンポーネント/グループの TimeGroup で
+	// EffectInstance / GPUParticleManager が内部スケールする（既定 World＝従来どおりシーンのスローに従う）。
 	void UpdateGlobalEffects(Camera* camera, float deltaTime);
 	void DrawGlobalEffects();
 
@@ -240,8 +242,8 @@ protected:
 	InputManager* input_ = nullptr;
 	SkinningComputeManager* skinningComputeManager_ = nullptr;
 
-	// グループ別タイムスケール [0]=World, [1]=Player, [2]=UI
-	float timeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f };
+	// グループ別タイムスケール [0]=World, [1]=Player, [2]=UI, [3]=Effect
+	float timeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	// シーン開始からの経過秒
 	float elapsedSeconds_ = 0.0f;

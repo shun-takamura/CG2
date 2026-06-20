@@ -81,6 +81,12 @@ struct EffectPrimitiveComponent {
     // Scale 補間のイージングカーブ（enabled 時、t を scaleCurve で再マップしてから Lerp）
     EffectCurve scaleCurve;
 
+    // ----- Hue 回転（生存中のシームレス色変化） -----
+    // hueShiftEnable のとき、start→end 補間後の色相を時間に沿って回す（パッと変わらず滑らか）。
+    // hueShiftSpeed は 1秒あたりの回転数（1.0=毎秒1周）。彩度/明度/アルファは保つ。
+    bool  hueShiftEnable = false;
+    float hueShiftSpeed  = 0.2f;
+
     // ----- 位置アニメ（StartPos→EndPos を時間で補間。Plane 等を動かす用途） -----
     // usePositionAnim が true のとき offset の代わりに Lerp(startPos,endPos, posCurve(t)) を使う。
     bool        usePositionAnim = false;
@@ -93,6 +99,10 @@ struct EffectPrimitiveComponent {
 
     // ブレンドモード（PrimitivePipeline::BlendMode と互換。None=0, Normal=1, Add=2, Subtract=3, Multiply=4, Screen=5）
     int blendMode = 2; // Add
+
+    // 時間グループ（TimeGroup と互換。World=0/Player=1/UI=2/Effect=3）。この成分のアニメ進行倍率を選ぶ。
+    // 既定 World（シーンのスローに従う）。必殺技の全停止中でも動かしたい演出は Effect を選ぶ。
+    int timeGroup = 0; // World
 
     // ビルボード
     BillboardMode billboardMode = BillboardMode::Full;
@@ -187,6 +197,10 @@ struct EffectParticleComponent {
     // 加算(Add)では黒系の粒子が映らないため、黒い煙などは Normal を選ぶ。
     int blendMode = 2; // Add
 
+    // 時間グループ（TimeGroup と互換。World=0/Player=1/UI=2/Effect=3）。粒子シミュレーションの進行倍率を選ぶ。
+    // 既定 World。必殺技の全停止中でも動かしたい演出は Effect を選ぶ（グループ既定スケール 1.0）。
+    int timeGroup = 0; // World
+
     // ----- 色設定 -----
     // 0=Random（startColor/endColor無視）、1=Fixed（startColor→endColorで補間）
     int     colorMode = 0;
@@ -195,6 +209,13 @@ struct EffectParticleComponent {
     // Fixed カラーモードで使う多色グラデーション。2個以上で start/end の代わりに多色補間。
     // 空 or 1個なら従来どおり startColor→endColor の2色補間。
     std::vector<EffectColorKey> colorKeys;
+
+    // ----- Hue 回転（生存中のシームレス色変化） -----
+    // hueShiftEnable のとき、寿命補間色の色相を時間に沿って回す（虹色ドリフト）。
+    // hueShiftSpeed=1秒あたりの回転数。hueShiftRandomPhase で粒子ごとに位相をばらしてシームレスに。
+    bool  hueShiftEnable      = false;
+    float hueShiftSpeed       = 0.2f;
+    bool  hueShiftRandomPhase = true;
 
     // ----- スケール（粒子サイズ） -----
     Vector2 scaleMin = { 0.1f, 0.1f }; // 最小サイズ（幅, 高さ）
@@ -230,6 +251,12 @@ struct EffectParticleComponent {
     float   orbitSpinSpeed  = 1.0f;     // 帯上を流れる速度 rad/s（軸＝Ring Normal）
     float   orbitTumbleSpeed = 0.0f;    // 帯自体の回転速度 rad/s
     Vector3 orbitTumbleAxis  = { 0.0f, 1.0f, 0.0f }; // 帯回転の軸
+
+    // ----- 収束（移動をグラフで制御：spawn位置→エミッタ中心） -----
+    // convergeEnable のとき velocity 物理/orbit を使わず、各粒子を spawn 位置から中心へ寄せる。
+    // 進み具合は convergeCurve(0→1) で制御（Scale/Dissolve と同じカーブ。0=spawn, 1=中心）。
+    bool        convergeEnable = false;
+    EffectCurve convergeCurve;
 
     // ----- Dissolve（粒子ごとの寿命ディゾルブ） -----
     // 各粒子が自分の寿命比率(0..1)に応じて、In(出現:[0,inEnd]) / Out(消滅:[outStart,1]) で

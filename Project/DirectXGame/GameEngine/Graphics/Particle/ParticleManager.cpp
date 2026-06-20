@@ -433,7 +433,7 @@ void ParticleManager::OnImGui()
 #ifdef _DEBUG
     if (!particleGroups_.empty()) {
         if (ImGui::CollapsingHeader("Particle Groups")) {
-            const char* timeGroupItems[] = { "World", "Player", "UI" };
+            const char* timeGroupItems[] = { "World", "Player", "UI", "Effect" };
             for (auto& pair : particleGroups_) {
                 ImGui::PushID(pair.first.c_str());
                 ImGui::Text("%s (%zu)", pair.first.c_str(), pair.second.particles.size());

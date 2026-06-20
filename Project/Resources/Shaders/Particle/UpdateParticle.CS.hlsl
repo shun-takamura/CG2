@@ -25,13 +25,30 @@ static const uint kMaxParticles = 1024;
 static const uint kMaxGradientKeys = 8;
 
 // 多色グラデーション（Fixed カラーモードで keyCount>=2 のとき有効）
+// 旧 pad を Hue 回転（生存中のシームレス色変化）に転用（CB サイズ不変）。
 struct ParticleGradient
 {
     uint keyCount;
-    float3 pad;
+    float hueEnable;      // 0/1
+    float hueSpeed;       // 1秒あたりの回転数（1.0=毎秒1周）
+    float hueRandomPhase; // 0/1（粒子ごとに位相をばらす）
     float4 keyColor[kMaxGradientKeys];
     float4 keyLoc[kMaxGradientKeys]; // .x に位置(0..1)。CPU 側で昇順ソート済み
 };
+
+// 色相回転：輝度軸(1,1,1)まわりに RGB を ang ラジアン回す（彩度/明度を保ったまま色相だけ変える）。
+float3 HueRotate(float3 c, float ang)
+{
+    const float3 k = float3(0.57735026f, 0.57735026f, 0.57735026f); // 1/sqrt(3)
+    float cosA = cos(ang);
+    return c * cosA + cross(k, c) * sin(ang) + k * dot(k, c) * (1.0f - cosA);
+}
+
+// particleIndex から 0..1 の擬似乱数（位相ばらし用）
+float Hash01(uint i)
+{
+    return frac(sin((float) i * 12.9898f) * 43758.5453f);
+}
 
 // 周回（orbit）：粒子を center まわりに2軸で回す。spin=帯上を流れる(法線軸) / tumble=帯自体の回転(別軸)。
 struct ParticleOrbit
@@ -46,6 +63,12 @@ struct ParticleOrbit
     float pad2;
     float3 tumbleAxis;   // 帯自体の回転軸
     float pad3;
+    // 収束（移動をカーブで制御：spawn位置→convergeCenter）。enable で velocity/orbit より優先。
+    float convergeEnable;
+    float3 pad4;
+    float3 convergeCenter;
+    float pad7;
+    float4 convergeLUT[8]; // 32サンプル（convergeCurve を焼いた 0..1。4成分=連続4サンプル）
 };
 
 // ハミルトン積（エンジンの Multiply(q1,q2) と一致）
@@ -92,6 +115,20 @@ float4 EvalGradient(float t)
     return gGradient.keyColor[gGradient.keyCount - 1];
 }
 
+// 収束カーブ LUT（32サンプル＝float4[8]）を t(0..1) で区分線形サンプル。
+float SampleConvergeLUT(float t)
+{
+    t = saturate(t);
+    float f = t * 31.0f;
+    int i = (int) floor(f);
+    if (i >= 31) return gOrbit.convergeLUT[7].w;
+    float fr = f - (float) i;
+    int j = i + 1;
+    float a = gOrbit.convergeLUT[i >> 2][i & 3];
+    float b = gOrbit.convergeLUT[j >> 2][j & 3];
+    return lerp(a, b, fr);
+}
+
 [numthreads(1024, 1, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
@@ -101,7 +138,15 @@ void main(uint3 DTid : SV_DispatchThreadID)
         // lifeTime > 0 を生存条件とする（Init CS 直後は全粒子 lifeTime=0 で死亡扱い）
         if (gParticles[particleIndex].lifeTime > 0.0f)
         {
-            if (gOrbit.enabled > 0.5f)
+            if (gOrbit.convergeEnable > 0.5f)
+            {
+                // 収束：velocity に保持した spawn 位置から convergeCenter へ、カーブ進行度で寄せる。
+                float tt = saturate(gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
+                float s = SampleConvergeLUT(tt);
+                gParticles[particleIndex].translate =
+                    lerp(gParticles[particleIndex].velocity, gOrbit.convergeCenter, s);
+            }
+            else if (gOrbit.enabled > 0.5f)
             {
                 // 2軸の剛体回転。半径一定＝外に出ない。
                 float3 rel = gParticles[particleIndex].translate - gOrbit.center;
@@ -131,17 +176,26 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
             // 寿命比率で色補間。グラデーションキーが2個以上なら多色補間、なければ start→end の2色。
             float t = saturate(gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
+            float4 col;
             if (gGradient.keyCount >= 2)
             {
-                gParticles[particleIndex].color = EvalGradient(t);
+                col = EvalGradient(t);
             }
             else
             {
-                gParticles[particleIndex].color = lerp(
+                col = lerp(
                     gParticles[particleIndex].startColor,
                     gParticles[particleIndex].endColor,
                     t);
             }
+            // Hue 回転（生存中のシームレス色変化）。位相を粒子ごとにばらしてパッと変わらないようにする。
+            if (gGradient.hueEnable > 0.5f)
+            {
+                float phase = (gGradient.hueRandomPhase > 0.5f) ? (Hash01(particleIndex) * 6.2831853f) : 0.0f;
+                float ang = gGradient.hueSpeed * 6.2831853f * gParticles[particleIndex].currentTime + phase;
+                col.rgb = HueRotate(col.rgb, ang);
+            }
+            gParticles[particleIndex].color = col;
 
             // 寿命を超えたら FreeList に返す
             if (gParticles[particleIndex].currentTime >= gParticles[particleIndex].lifeTime)

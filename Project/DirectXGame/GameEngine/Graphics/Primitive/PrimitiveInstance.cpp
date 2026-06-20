@@ -177,7 +177,7 @@ void PrimitiveInstance::OnImGuiInspector() {
 
     // TimeGroup（UVスクロール等の進行倍率に影響）
     {
-        const char* items[] = { "World", "Player", "UI" };
+        const char* items[] = { "World", "Player", "UI", "Effect" };
         int idx = static_cast<int>(timeGroup_);
         if (ImGui::Combo("Time Group", &idx, items, IM_ARRAYSIZE(items))) {
             timeGroup_ = static_cast<TimeGroup>(idx);

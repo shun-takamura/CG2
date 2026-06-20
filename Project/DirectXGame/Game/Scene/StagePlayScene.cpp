@@ -2855,14 +2855,9 @@ void StagePlayScene::Update() {
 #endif // _DEBUG
 
 	// 全シーン共通の EffectManager + GPUParticle を更新。
-	// ディスラプターのチャージ(受付時間)／一閃中は World が停止(scaledDt=0)するが、チャージ演出や
-	// 発射ビーム(EffectDef)は実時間で進めたいので、その間だけ unscaled な実 delta を渡す
-	// （World 停止中は他エフェクトもほぼ無いので副作用は小さい）。
-	const bool disruptorRealtimeFx =
-		(equippedSpecial_ == SpecialKind::Disruptor && specialActive_ &&
-		 (disruptorPhase_ == DisruptorPhase::Charge || disruptorPhase_ == DisruptorPhase::Slash));
-	UpdateGlobalEffects(camera_.get(),
-		disruptorRealtimeFx ? dxCore_->GetDeltaTime() : GetScaledDeltaTime());
+	// 実 delta（unscaled）を渡す。各エフェクト成分は EffectDef の TimeGroup（既定 World）で内部スケールされる。
+	// 必殺技の全停止中でも進めたい演出は TimeGroup=Effect にしておけば動く（Effect グループ既定 1.0）。
+	UpdateGlobalEffects(camera_.get(), dxCore_->GetDeltaTime());
 
 	// ジャスト回避演出のタイマ更新。受付期間/フェードは実時間（UI グループ）で計測する
 	// （World をスローにしても受付 3 秒は実時間で一定にしたいため）。
