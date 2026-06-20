@@ -110,10 +110,23 @@ public:
                        const Vector3& tumbleAxis, float tumbleSpeed);
 
     /// <summary>
+    /// 収束（移動をカーブで制御）を設定。enable で各粒子を spawn 位置から center へ寄せる。
+    /// lut32 は convergeCurve(0..1) を 32 サンプルに焼いた配列（0=spawn, 1=center）。
+    /// 併せて velocityMode=4（emit 時に spawn 位置を保持）にしておくこと。
+    /// </summary>
+    void SetGroupConverge(const std::string& name, bool enable, const Vector3& center, const float lut32[32]);
+
+    /// <summary>
     /// 多色グラデーションを設定。locations(0..1) と colors の組を最大 kMaxGradientKeys 個。
     /// 2個未満なら無効化（粒子の start/end 2色補間に戻る）。CPU 側で location 昇順にソートして渡す。
     /// </summary>
     void SetEmitterGradient(const std::string& name, const std::vector<std::pair<float, Vector4>>& keys);
+
+    /// <summary>
+    /// 生存中のシームレスな色変化（Hue 回転）を設定。enable で寿命補間色の色相を時間に沿って回す。
+    /// speed=1秒あたりの回転数（1.0=毎秒1周）。randomPhase で粒子ごとに位相をばらす（虹色ドリフト）。
+    /// </summary>
+    void SetGroupHueShift(const std::string& name, bool enable, float speed, bool randomPhase);
 
     /// <summary>
     /// グループの「粒子ごとの寿命ディゾルブ」を設定。各粒子が自分の寿命比率(0..1)に応じて
@@ -139,6 +152,7 @@ public:
 
     // ===== 毎フレーム =====
     // シーン用グループのみを更新する（プレビュー用グループはスキップ）。
+    // dt は各グループの TimeGroup（SetGroupTimeGroup）で EngineTime 経由にスケールされる。
     void Update(const Camera* camera, float deltaTime);
     // シーン用グループのみをシミュレート＋描画する（プレビュー用は DrawPreview 側）。
     void Draw();
@@ -219,7 +233,10 @@ private:
     struct ParticleGradient
     {
         uint32_t keyCount = 0;
-        float    pad[3] = { 0.0f, 0.0f, 0.0f };
+        // 旧 pad[3] を Hue 回転（生存中のシームレス色変化）に転用（CB サイズ不変）。
+        float    hueEnable      = 0.0f; // 0/1
+        float    hueSpeed       = 0.0f; // 1秒あたりの回転数（1.0=毎秒1周）
+        float    hueRandomPhase = 0.0f; // 0/1（粒子ごとに位相をばらす）
         Vector4  keyColor[kMaxGradientKeys] = {};
         Vector4  keyLoc[kMaxGradientKeys]   = {}; // .x に位置(0..1)。昇順
     };
@@ -237,6 +254,12 @@ private:
         float   pad2 = 0.0f;
         Vector3 tumbleAxis = { 0.0f, 1.0f, 0.0f };
         float   pad3 = 0.0f;
+        // 収束（移動をカーブで制御：spawn位置→convergeCenter）。enable で velocity/orbit より優先。
+        float   convergeEnable = 0.0f; // 0/1
+        float   pad4 = 0.0f, pad5 = 0.0f, pad6 = 0.0f;
+        Vector3 convergeCenter = { 0.0f, 0.0f, 0.0f };
+        float   pad7 = 0.0f;
+        Vector4 convergeLUT[8] = {}; // 32サンプル（convergeCurve を焼いた 0..1。4成分=4サンプル）
     };
 
     struct PerFrame

@@ -5,6 +5,8 @@
 #include "SoundManager.h"
 #include "MathUtility.h"
 #include "Quaternion.h"
+#include "EngineTime.h"
+#include "TimeGroup.h"
 #include <algorithm>
 #include <random>
 #define NOMINMAX
@@ -33,6 +35,25 @@ namespace {
         };
     }
     float LerpF(float a, float b, float t) { return a + (b - a) * t; }
+
+    // 色相回転：輝度軸(1,1,1)まわりに RGB を ang ラジアン回す（彩度/明度を保ったまま色相だけ変える）。
+    // GPU 版 UpdateParticle.CS.hlsl の HueRotate と同じ式。
+    Vector4 HueRotate(const Vector4& c, float ang) {
+        const float k = 0.57735026f; // 1/sqrt(3)
+        const float cosA = std::cos(ang);
+        const float sinA = std::sin(ang);
+        // cross(k, c) （k=(k,k,k)）
+        const float crx = k * c.z - k * c.y;
+        const float cry = k * c.x - k * c.z;
+        const float crz = k * c.y - k * c.x;
+        const float kd = k * (c.x + c.y + c.z); // dot(k, rgb)
+        return {
+            c.x * cosA + crx * sinA + k * kd * (1.0f - cosA),
+            c.y * cosA + cry * sinA + k * kd * (1.0f - cosA),
+            c.z * cosA + crz * sinA + k * kd * (1.0f - cosA),
+            c.w,
+        };
+    }
 
     // [-r, r] の一様乱数
     float RandSym(float r) {
@@ -197,8 +218,16 @@ void EffectInstance::CollectPreviewGroupNames(std::vector<std::string>& out) con
 }
 
 void EffectInstance::Update(Camera* camera, float deltaTime) {
-    elapsedTime_ += deltaTime;
-    orbitClock_  += deltaTime; // ループでリセットしない（GPU orbit と同じく連続）
+    // deltaTime は unscaled な実 delta（呼び出し側が realDt を渡す）。
+    // 各コンポーネントの TimeGroup でスケールして進める。プレビューはシーン時間に依存させず raw のまま。
+    // マスタークロック（spawn スケジュール / totalDuration / loop）は World グループに従う（従来互換）。
+    auto groupDt = [this, deltaTime](int tg) -> float {
+        if (isPreview_) return deltaTime;
+        return EngineTime::ScaledDeltaTime(static_cast<TimeGroup>(tg), deltaTime);
+    };
+    const float masterDt = groupDt(static_cast<int>(TimeGroup::World));
+    elapsedTime_ += masterDt;
+    orbitClock_  += masterDt; // ループでリセットしない（GPU orbit と同じく連続）
 
     // ===== Primitive =====
     for (size_t i = 0; i < def_.primitives.size(); ++i) {
@@ -206,7 +235,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         PrimitiveRuntime& rt = primitives_[i];
         if (rt.finished) continue;
 
-        float local = elapsedTime_ - pc.startTime;
+        // この成分の TimeGroup でスケールした専用クロックで進める（World 以外なら独立して止まる/進む）。
+        const float compDt = groupDt(pc.timeGroup);
+        rt.clock += compDt;
+        float local = rt.clock - pc.startTime;
         if (local < 0.0f) continue;
 
         // 開始：レンダラ生成
@@ -240,13 +272,17 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         // Scale はカーブ（イージング）で t を再マップしてから補間（既定 enabled=false なら線形）
         Vector3 scale = LerpV3(pc.startScale, pc.endScale, pc.scaleCurve.Evaluate(t));
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
+        // Hue 回転（生存中のシームレス色変化）。経過秒に沿って色相を回す（彩度/明度/α保持）。
+        if (pc.hueShiftEnable) {
+            color = HueRotate(color, pc.hueShiftSpeed * 6.28318530718f * local);
+        }
 
         // 持続回転：角速度ベクトル rotateSpeed を毎フレーム積分（クオータニオン合成。ジンバルロックなし）。
         {
             const Vector3& w = pc.rotateSpeed;
             float wlen = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
             if (wlen > 1e-6f) {
-                float ang = wlen * deltaTime;
+                float ang = wlen * compDt;
                 Quaternion dq = MakeRotateAxisAngleQuaternion({ w.x / wlen, w.y / wlen, w.z / wlen }, ang);
                 rt.orientation = Normalize(Multiply(dq, rt.orientation));
             }
@@ -298,7 +334,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             rt.renderer->SetDissolve(active, th);
         }
 
-        rt.renderer->Update(camera, deltaTime);
+        rt.renderer->Update(camera, compDt);
 
         // 寿命終了（totalDuration を超えた場合も含む）
         if (local >= life || elapsedTime_ >= def_.totalDuration) {
@@ -312,6 +348,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         const EffectParticleComponent& pc = def_.particles[i];
         ParticleRuntime& rt = particles_[i];
         if (!gpu_) { rt.burstFired = true; continue; }
+
+        // burst スケジュールも成分の TimeGroup でスケールしたクロックで判定する
+        // （Effect グループなら必殺技の World 停止中でも startTime に達して発射できる）。
+        rt.clock += groupDt(pc.timeGroup);
 
         // プレビューインスタンスならグループ名にプレフィックスを付け、シーンと物理バッファを分離する。
         const std::string groupName = EffGroupName(pc.gpuParticleGroupName);
@@ -336,15 +376,26 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             gpu_->SetGroupTexture(groupName, pc.texturePath);
             // ブレンドモードのライブ反映（時間非依存。エディタで切替えたら即反映）
             gpu_->SetGroupBlendMode(groupName, pc.blendMode);
+            // 時間グループのライブ反映。シーン用粒子は gpu->Update が EngineTime でこのグループの倍率で進める
+            // （プレビュー粒子は UpdatePreviewSim が raw delta で進めるのでこの設定の影響を受けない）。
+            gpu_->SetGroupTimeGroup(groupName, static_cast<TimeGroup>(pc.timeGroup));
             // ディゾルブ（粒子ごとの寿命）。時間非依存なので毎フレーム設定でライブ反映も効く。
             gpu_->SetGroupDissolve(groupName, pc.useDissolve, pc.dissolveMaskPath,
                                    pc.dissolveInEnable, pc.dissolveInEnd,
                                    pc.dissolveOutEnable, pc.dissolveOutStart,
                                    pc.dissolveEdgeEnable, pc.dissolveEdgeColor, pc.dissolveEdgeWidth);
+            // 収束（移動をカーブで制御）。orbit と排他（シェーダは converge を優先）。中心はエフェクト位置＋offset。
+            // convergeCurve を 32 サンプルに焼いて渡す（時間非依存＝毎フレーム設定でライブ反映）。
+            float convLut[32];
+            for (int s = 0; s < 32; ++s) {
+                const float tt = static_cast<float>(s) / 31.0f;
+                convLut[s] = Saturate(pc.convergeCurve.Evaluate(tt));
+            }
+            gpu_->SetGroupConverge(groupName, pc.convergeEnable, center, convLut);
         }
 
         if (rt.burstFired) continue;
-        if (elapsedTime_ < pc.startTime) continue;
+        if (rt.clock < pc.startTime) continue;
 
         // グループ名が指定されていて未登録なら、texturePath で自動生成（エディタで完結できるように）
         if (!groupName.empty() && !gpu_->HasGroup(groupName)) {
@@ -357,8 +408,19 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             gpu_->SetGroupBillboardMode(groupName, pc.billboardMode);
             Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
 
+            // 収束モードは初速を持たず、velocityMode=4 で emit 時に spawn 位置を velocity フィールドへ保持させる。
+            // この発射フレームでも converge CB を確実に設定しておく（次の Emit+Update CS が同フレームで走るため）。
+            if (pc.convergeEnable) {
+                gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 4);
+                float convLut[32];
+                for (int s = 0; s < 32; ++s) {
+                    const float tt = static_cast<float>(s) / 31.0f;
+                    convLut[s] = Saturate(pc.convergeCurve.Evaluate(tt));
+                }
+                gpu_->SetGroupConverge(groupName, true, pos, convLut);
+            }
             // 初速モード（0=ランダム / 1=方向固定 / 2=放射）。mode に応じた baseVelocity を渡す。
-            if (pc.velocityMode == 1) {
+            else if (pc.velocityMode == 1) {
                 float len = std::sqrt(pc.velocityDir.x * pc.velocityDir.x +
                                       pc.velocityDir.y * pc.velocityDir.y +
                                       pc.velocityDir.z * pc.velocityDir.z);
@@ -395,6 +457,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             } else {
                 gpu_->SetEmitterGradient(groupName, {});
             }
+            // Hue 回転（生存中のシームレス色変化）。時間非依存なので毎フレーム設定でライブ反映が効く。
+            gpu_->SetGroupHueShift(groupName, pc.hueShiftEnable, pc.hueShiftSpeed, pc.hueShiftRandomPhase);
 
             // 粒子寿命：ループ時は周期を超えて生き残らせる（境界で全消えしないように）。
             // 非ループ時のみ totalDuration を超えないようにクランプ。
@@ -563,9 +627,11 @@ void EffectInstance::ResetForLoop() {
         rt.renderer.reset();
         rt.started = false;
         rt.finished = false;
+        rt.clock = 0.0f;
     }
     for (auto& rt : particles_) {
         rt.burstFired = false;
+        rt.clock = 0.0f;
     }
     elapsedTime_ = 0.0f;
 }

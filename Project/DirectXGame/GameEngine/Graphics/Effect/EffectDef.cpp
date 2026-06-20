@@ -213,6 +213,9 @@ namespace {
         c.startColor = AsVec4(o["startColor"], c.startColor);
         c.endColor   = AsVec4(o["endColor"], c.endColor);
         c.scaleCurve = AsCurve(o["scaleCurve"], c.scaleCurve);
+        // Hue 回転
+        if (o["hueShiftEnable"].IsBool()) c.hueShiftEnable = o["hueShiftEnable"].AsBool(c.hueShiftEnable);
+        c.hueShiftSpeed = AsFloat(o["hueShiftSpeed"], c.hueShiftSpeed);
         // 位置アニメ
         if (o["usePositionAnim"].IsBool()) c.usePositionAnim = o["usePositionAnim"].AsBool(c.usePositionAnim);
         c.startPos = AsVec3(o["startPos"], c.startPos);
@@ -220,6 +223,7 @@ namespace {
         c.posCurve = AsCurve(o["posCurve"], c.posCurve);
         if (o["texturePath"].IsString()) c.texturePath = o["texturePath"].AsString();
         c.blendMode     = AsInt(o["blendMode"], c.blendMode);
+        c.timeGroup     = AsInt(o["timeGroup"], c.timeGroup);
         c.billboardMode = AsBillboardMode(o["billboardMode"], c.billboardMode);
 
         // 静的マテリアル
@@ -284,6 +288,7 @@ namespace {
         c.burstCount = AsUInt(o["burstCount"], c.burstCount);
         c.billboardMode = AsBillboardMode(o["billboardMode"], c.billboardMode);
         c.blendMode  = AsInt(o["blendMode"], c.blendMode);
+        c.timeGroup  = AsInt(o["timeGroup"], c.timeGroup);
         c.colorMode  = AsInt(o["colorMode"], c.colorMode);
         c.startColor = AsVec4(o["startColor"], c.startColor);
         c.endColor   = AsVec4(o["endColor"], c.endColor);
@@ -312,6 +317,9 @@ namespace {
         c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
         c.orbitTumbleSpeed = AsFloat(o["orbitTumbleSpeed"], c.orbitTumbleSpeed);
         c.orbitTumbleAxis  = AsVec3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
+        // 収束（spawn→中心）
+        if (o["convergeEnable"].IsBool()) c.convergeEnable = o["convergeEnable"].AsBool(c.convergeEnable);
+        c.convergeCurve = AsCurve(o["convergeCurve"], c.convergeCurve);
         // Dissolve（粒子ごとの寿命）
         if (o["useDissolve"].IsBool()) c.useDissolve = o["useDissolve"].AsBool(c.useDissolve);
         if (o["dissolveMaskPath"].IsString()) c.dissolveMaskPath = o["dissolveMaskPath"].AsString();
@@ -334,6 +342,10 @@ namespace {
                 c.colorKeys.push_back(key);
             }
         }
+        // Hue 回転
+        if (o["hueShiftEnable"].IsBool()) c.hueShiftEnable = o["hueShiftEnable"].AsBool(c.hueShiftEnable);
+        c.hueShiftSpeed = AsFloat(o["hueShiftSpeed"], c.hueShiftSpeed);
+        if (o["hueShiftRandomPhase"].IsBool()) c.hueShiftRandomPhase = o["hueShiftRandomPhase"].AsBool(c.hueShiftRandomPhase);
     }
 
     void ParseSound(const JsonValue& o, EffectSoundComponent& c) {
@@ -592,6 +604,8 @@ namespace EffectDefIO {
             o["startColor"] = Vec4ToJson(c.startColor);
             o["endColor"]   = Vec4ToJson(c.endColor);
             o["scaleCurve"] = CurveToJson(c.scaleCurve);
+            o["hueShiftEnable"] = c.hueShiftEnable;
+            o["hueShiftSpeed"]  = static_cast<double>(c.hueShiftSpeed);
             // 位置アニメ
             o["usePositionAnim"] = c.usePositionAnim;
             o["startPos"]   = Vec3ToJson(c.startPos);
@@ -599,6 +613,7 @@ namespace EffectDefIO {
             o["posCurve"]   = CurveToJson(c.posCurve);
             o["texturePath"] = c.texturePath;
             o["blendMode"]   = static_cast<int64_t>(c.blendMode);
+            o["timeGroup"]   = static_cast<int64_t>(c.timeGroup);
             o["billboardMode"] = std::string(BillboardModeStr(c.billboardMode));
             // 静的マテリアル
             o["depthWrite"]     = c.depthWrite;
@@ -652,6 +667,7 @@ namespace EffectDefIO {
             o["burstCount"] = static_cast<int64_t>(c.burstCount);
             o["billboardMode"] = std::string(BillboardModeStr(c.billboardMode));
             o["blendMode"]  = static_cast<int64_t>(c.blendMode);
+            o["timeGroup"]  = static_cast<int64_t>(c.timeGroup);
             o["colorMode"]  = static_cast<int64_t>(c.colorMode);
             o["startColor"] = Vec4ToJson(c.startColor);
             o["endColor"]   = Vec4ToJson(c.endColor);
@@ -676,6 +692,8 @@ namespace EffectDefIO {
             o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
             o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
             o["orbitTumbleAxis"]  = Vec3ToJson(c.orbitTumbleAxis);
+            o["convergeEnable"]   = c.convergeEnable;
+            o["convergeCurve"]    = CurveToJson(c.convergeCurve);
             // Dissolve（粒子ごとの寿命）
             o["useDissolve"]        = c.useDissolve;
             o["dissolveMaskPath"]   = c.dissolveMaskPath;
@@ -696,6 +714,9 @@ namespace EffectDefIO {
                 }
                 o["colorKeys"] = std::move(ckArr);
             }
+            o["hueShiftEnable"]      = c.hueShiftEnable;
+            o["hueShiftSpeed"]       = static_cast<double>(c.hueShiftSpeed);
+            o["hueShiftRandomPhase"] = c.hueShiftRandomPhase;
             partArr.Push(std::move(o));
         }
         root["particles"] = std::move(partArr);

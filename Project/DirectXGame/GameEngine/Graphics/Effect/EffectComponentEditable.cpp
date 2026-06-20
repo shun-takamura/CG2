@@ -13,6 +13,8 @@ namespace {
     const char* MeshTypeNames[] = { "Plane", "Box", "Sphere", "Ring", "Cylinder", "Helix", "Beam", "Lightning", "Hemisphere", "Frame" };
     const char* BlendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
     const char* BillboardNames[] = { "None", "Full", "YAxis" };
+    // TimeGroup（World/Player/UI/Effect）。Effect は必殺技の全停止中でも動く（既定 1.0）。
+    const char* TimeGroupNames[] = { "World", "Player", "UI", "Effect" };
     const char* LightKindNames[] = { "Point", "Spot" };
 
     // グリッド吸着の分割数（1/kCurveGridDiv 刻みに吸着）
@@ -228,6 +230,11 @@ void EffectComponentEditable::OnImGuiInspector() {
             }
             dirty |= ImGui::ColorEdit4("Start Color", &c.startColor.x);
             dirty |= ImGui::ColorEdit4("End Color",   &c.endColor.x);
+            // Hue 回転（生存中のシームレス色変化）。経過秒に沿って色相を回す。
+            dirty |= ImGui::Checkbox("Hue Shift", &c.hueShiftEnable);
+            if (c.hueShiftEnable) {
+                dirty |= ImGui::DragFloat("Hue Speed (rev/s)", &c.hueShiftSpeed, 0.01f, -5.0f, 5.0f, "%.2f");
+            }
             int bb = static_cast<int>(c.billboardMode);
             if (ImGui::Combo("Billboard", &bb, BillboardNames, IM_ARRAYSIZE(BillboardNames))) {
                 c.billboardMode = static_cast<BillboardMode>(bb);
@@ -378,6 +385,8 @@ void EffectComponentEditable::OnImGuiInspector() {
         // ===== Material（PrimitiveInstance Inspector と同等） =====
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
             dirty |= ImGui::Combo("BlendMode", &c.blendMode, BlendModeNames, IM_ARRAYSIZE(BlendModeNames));
+            dirty |= ImGui::Combo("Time Group", &c.timeGroup, TimeGroupNames, IM_ARRAYSIZE(TimeGroupNames));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("アニメ進行の時間グループ。World=シーンのスローに従う / Effect=必殺技の全停止中でも動く");
             dirty |= ImGui::Checkbox("DepthWrite", &c.depthWrite);
             dirty |= ImGui::SliderFloat("Alpha Discard", &c.alphaReference, 0.0f, 1.0f, "%.3f");
             dirty |= ImGui::Checkbox("Cull Backface", &c.cullBackface);
@@ -616,6 +625,8 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty = true;
         }
         dirty |= ImGui::Combo("BlendMode", &c.blendMode, BlendModeNames, IM_ARRAYSIZE(BlendModeNames));
+        dirty |= ImGui::Combo("Time Group", &c.timeGroup, TimeGroupNames, IM_ARRAYSIZE(TimeGroupNames));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("粒子シミュの時間グループ。World=シーンのスローに従う / Effect=必殺技の全停止中でも動く");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("加算(Add)では黒系の粒子が映らない。黒い煙などは Normal を選ぶ");
 
         // ===== Rotation（3D姿勢。ビルボード None で有効） =====
@@ -681,6 +692,12 @@ void EffectComponentEditable::OnImGuiInspector() {
         } else {
             ImGui::TextDisabled("(Random: 色は GPU 側でランダム生成)");
         }
+        // Hue 回転（生存中のシームレス色変化）。Random/Fixed どちらにも乗る。位相を粒子ごとにばらすと虹色ドリフト。
+        dirty |= ImGui::Checkbox("Hue Shift", &c.hueShiftEnable);
+        if (c.hueShiftEnable) {
+            dirty |= ImGui::DragFloat("Hue Speed (rev/s)", &c.hueShiftSpeed, 0.01f, -5.0f, 5.0f, "%.2f");
+            dirty |= ImGui::Checkbox("Hue Random Phase (粒子ごとにばらす)", &c.hueShiftRandomPhase);
+        }
 
         // ===== Scale Range =====
         ImGui::Separator();
@@ -741,6 +758,15 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty |= ImGui::DragFloat("Tumble Speed (帯自体の回転)", &c.orbitTumbleSpeed, 0.05f, -50.0f, 50.0f);
             dirty |= ImGui::DragFloat3("Tumble Axis", &c.orbitTumbleAxis.x, 0.01f);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("帯（リング平面）自体を回す軸。Ring Normal と直交させると首を振る");
+        }
+
+        // ===== Converge（収束：spawn位置→中心。移動をカーブで制御）=====
+        ImGui::Separator();
+        dirty |= ImGui::Checkbox("Converge (中心へ収束)", &c.convergeEnable);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("ON で各粒子を spawn 位置からエミッタ中心へ寄せる（初速/Orbit より優先）。\n集まり方は下のカーブで制御（0=spawn, 1=中心）。Emit Shape を球にすると球状から収束。");
+        if (c.convergeEnable) {
+            dirty |= DrawCurveEditor("ConvergeCurve", c.convergeCurve);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("収束の進み具合（横=寿命比率0..1 / 縦=spawn→中心 0..1）。\n後半で急に寄せる、等の緩急を Scale/Dissolve と同じ感覚で描ける。");
         }
 
         // ===== Dissolve（粒子ごとの寿命ディゾルブ）=====

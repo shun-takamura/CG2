@@ -195,6 +195,19 @@ void GPUParticleManager::SetGroupOrbit(const std::string& name, bool enabled, co
     o.tumbleSpeed = tumbleSpeed;
 }
 
+void GPUParticleManager::SetGroupConverge(const std::string& name, bool enable, const Vector3& center, const float lut32[32])
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.orbitData) return;
+    auto& o = *it->second.orbitData;
+    o.convergeEnable = enable ? 1.0f : 0.0f;
+    o.convergeCenter = center;
+    // 32 サンプルを float4[8] にパック（.x..w=連続4サンプル）
+    for (int i = 0; i < 8; ++i) {
+        o.convergeLUT[i] = { lut32[i * 4 + 0], lut32[i * 4 + 1], lut32[i * 4 + 2], lut32[i * 4 + 3] };
+    }
+}
+
 void GPUParticleManager::SetEmitterGradient(const std::string& name, const std::vector<std::pair<float, Vector4>>& keys)
 {
     auto it = groups_.find(name);
@@ -207,6 +220,16 @@ void GPUParticleManager::SetEmitterGradient(const std::string& name, const std::
         g.keyLoc[i]   = { keys[i].first, 0.0f, 0.0f, 0.0f };
         g.keyColor[i] = keys[i].second;
     }
+}
+
+void GPUParticleManager::SetGroupHueShift(const std::string& name, bool enable, float speed, bool randomPhase)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.gradientData) return;
+    auto& g = *it->second.gradientData;
+    g.hueEnable      = enable ? 1.0f : 0.0f;
+    g.hueSpeed       = speed;
+    g.hueRandomPhase = randomPhase ? 1.0f : 0.0f;
 }
 
 void GPUParticleManager::SetGroupDissolve(const std::string& name, bool enable, const std::string& maskPath,
@@ -300,7 +323,7 @@ void GPUParticleManager::Update(const Camera* camera, float deltaTime)
         GPUParticleGroup& g = pair.second;
         if (g.isPreview) continue;
 
-        // TimeGroup連動dt。供給元（シーン）が無ければ deltaTime にフォールバック
+        // TimeGroup連動dt。供給元（シーン）が無ければ deltaTime にフォールバック。
         const float dt = EngineTime::ScaledDeltaTime(g.timeGroup, deltaTime);
         UpdateGroupSim(g, dt);
 
@@ -512,7 +535,7 @@ void GPUParticleManager::OnImGui()
     ImGui::Separator();
 
     const char* billboardItems[] = { "None", "Full", "YAxis" };
-    const char* timeGroupItems[] = { "World", "Player", "UI" };
+    const char* timeGroupItems[] = { "World", "Player", "UI", "Effect" };
 
     for (auto& pair : groups_) {
         GPUParticleGroup& g = pair.second;
