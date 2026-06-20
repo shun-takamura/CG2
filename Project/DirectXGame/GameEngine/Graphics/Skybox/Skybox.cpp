@@ -6,6 +6,7 @@ void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const
 {
     skyboxManager_ = skyboxManager;
     cubemapFilePath_ = cubemapFilePath;
+    nextCubemapFilePath_ = cubemapFilePath;  // 初期は両スロット同一
 
     camera_ = skyboxManager_->GetDefaultCamera();
 
@@ -29,8 +30,103 @@ void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const
     };
 }
 
-void Skybox::Update()
+void Skybox::SetColor(const Vector4& color)
 {
+    isColorFading_ = false;          // 進行中のフェードを打ち切って即適用
+    currentColor_ = color;
+    if (materialData_) {
+        materialData_->color = color;
+    }
+}
+
+void Skybox::SetCubemap(const std::string& cubemapFilePath)
+{
+    // ブレンドせず即差し替え。両スロットを同じテクスチャにして blendT を無効化。
+    TextureManager::GetInstance()->LoadTexture(cubemapFilePath);
+    cubemapFilePath_ = cubemapFilePath;
+    nextCubemapFilePath_ = cubemapFilePath;
+    isBlending_ = false;
+    blendTime_ = 0.0f;
+    if (materialData_) {
+        materialData_->blendT = 0.0f;
+    }
+}
+
+void Skybox::BlendTo(const std::string& cubemapFilePath, float durationSec)
+{
+    // 既に同じ空なら何もしない
+    if (cubemapFilePath == cubemapFilePath_ && !isBlending_) {
+        return;
+    }
+
+    // 遷移先を次スロットへロードして配置
+    TextureManager::GetInstance()->LoadTexture(cubemapFilePath);
+    nextCubemapFilePath_ = cubemapFilePath;
+
+    // 即時遷移指定なら確定して終了
+    if (durationSec <= 0.0f) {
+        SetCubemap(cubemapFilePath);
+        return;
+    }
+
+    isBlending_ = true;
+    blendTime_ = 0.0f;
+    blendDuration_ = durationSec;
+    if (materialData_) {
+        materialData_->blendT = 0.0f;
+    }
+}
+
+void Skybox::FadeColor(const Vector4& targetColor, float durationSec)
+{
+    if (durationSec <= 0.0f) {
+        SetColor(targetColor);
+        return;
+    }
+    isColorFading_ = true;
+    colorFadeTime_ = 0.0f;
+    colorFadeDuration_ = durationSec;
+    colorFadeStart_ = currentColor_;
+    colorFadeTarget_ = targetColor;
+}
+
+void Skybox::Update(float deltaTime)
+{
+    // --- クロスフェードの進行 ---
+    if (isBlending_) {
+        blendTime_ += deltaTime;
+        float t = (blendDuration_ > 0.0f) ? (blendTime_ / blendDuration_) : 1.0f;
+        if (t >= 1.0f) {
+            // 遷移完了：次スロットを現在スロットへ確定し、blendTをリセット
+            t = 1.0f;
+            cubemapFilePath_ = nextCubemapFilePath_;
+            isBlending_ = false;
+            blendTime_ = 0.0f;
+            if (materialData_) {
+                materialData_->blendT = 0.0f;
+            }
+        } else if (materialData_) {
+            materialData_->blendT = t;
+        }
+    }
+
+    // --- 着色フェードの進行 ---
+    if (isColorFading_) {
+        colorFadeTime_ += deltaTime;
+        float t = (colorFadeDuration_ > 0.0f) ? (colorFadeTime_ / colorFadeDuration_) : 1.0f;
+        if (t >= 1.0f) {
+            t = 1.0f;
+            isColorFading_ = false;
+        }
+        currentColor_.x = colorFadeStart_.x + (colorFadeTarget_.x - colorFadeStart_.x) * t;
+        currentColor_.y = colorFadeStart_.y + (colorFadeTarget_.y - colorFadeStart_.y) * t;
+        currentColor_.z = colorFadeStart_.z + (colorFadeTarget_.z - colorFadeStart_.z) * t;
+        currentColor_.w = colorFadeStart_.w + (colorFadeTarget_.w - colorFadeStart_.w) * t;
+        if (materialData_) {
+            materialData_->color = currentColor_;
+        }
+    }
+
     // Skyboxの位置をカメラに合わせる（追従）
     if (camera_) {
         transform_.translate = camera_->GetTranslate();
@@ -67,9 +163,14 @@ void Skybox::Draw(DirectXCore* dxCore)
         1, materialResource_->GetGPUVirtualAddress()
     );
 
-    // SRVのDescriptorTableの先頭を設定（Cubemapテクスチャ）
+    // SRV t0：現在スロットのCubemap
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         2, TextureManager::GetInstance()->GetSrvHandleGPU(cubemapFilePath_)
+    );
+
+    // SRV t1：次スロットのCubemap（クロスフェード先。非ブレンド時は現在と同一）
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        3, TextureManager::GetInstance()->GetSrvHandleGPU(nextCubemapFilePath_)
     );
 
     // インデックスを使用して描画
@@ -172,7 +273,7 @@ void Skybox::CreateTransformationMatrixResource(DirectXCore* dxCore)
 void Skybox::CreateMaterialResource(DirectXCore* dxCore)
 {
     // サイズを256アライメントに調整
-    UINT materialSize = (sizeof(Material) + 255) & ~255;
+    UINT materialSize = (sizeof(SkyboxMaterial) + 255) & ~255;
 
     // リソースを作る
     materialResource_ = dxCore->CreateBufferResource(materialSize);
@@ -182,8 +283,8 @@ void Skybox::CreateMaterialResource(DirectXCore* dxCore)
 
     // 初期値を設定
     materialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };    // 白
-    materialData_->enableLighting = 0;                     // ライティング無効（Skyboxでは使わない）
-    materialData_->uvTransform = MakeIdentity4x4();        // 単位行列
-    materialData_->shininess = 0.0f;                       // 未使用
-    materialData_->environmentCoefficient = 0.0f;         // 未使用
+    materialData_->blendT = 0.0f;                          // 補間なし（現在スロットのみ表示）
+    materialData_->padding[0] = 0.0f;
+    materialData_->padding[1] = 0.0f;
+    materialData_->padding[2] = 0.0f;
 }

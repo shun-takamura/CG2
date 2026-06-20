@@ -18,6 +18,25 @@
   "camera": {
     "speed": 0.0083333337679505348
   },
+  "skybox": {
+    "tint": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "specialDarkColor": [
+      0.30000001192092896,
+      0.30000001192092896,
+      0.40000000596046448,
+      1
+    ],
+    "specialFadeIn": 0.40000000596046448,
+    "specialFadeOut": 0.60000002384185791,
+    "bossBlendDuration": 2,
+    "defaultPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
+    "bossPath": "Resources/Cubemaps/passendorf_snow_8k.dds"
+  },
   "aim": {
     "planeDistance": 200,
     "smoothTime": 0.079999998211860657,
@@ -96,7 +115,7 @@
     "gaugeMaxGouman": 100,
     "gaugeMaxDisruptor": 120,
     "cooldown": 30,
-    "equipped": 1,
+    "equipped": 0,
     "disruptorCharge": 2.5,
     "disruptorSlash": 1.5,
     "disruptorCollapse": 4,
@@ -237,12 +256,8 @@
       1,
       1
     ],
-    "disruptorBeamLength": 80,
-    "disruptorBeamWidth": 0.80000001192092896,
-    "disruptorBeamRunTime": 0.11999999731779099,
-    "disruptorShockRadius": 6,
-    "disruptorShockThickness": 0.40000000596046448,
-    "disruptorShockTime": 0.25,
+    "disruptorBeamEffect": "DisruptorBeam",
+    "disruptorChargeEffect": "DisruptorCharge",
     "disruptorRiftWidthScale": 1,
     "disruptorRiftRevealTime": 0.44999998807907104,
     "disruptorRevealIntensity": 1,
@@ -265,18 +280,6 @@
     "disruptorBeamDir": [
       0,
       0.15000000596046448,
-      1
-    ],
-    "disruptorBeamColor": [
-      0.69999998807907104,
-      0.5,
-      1,
-      1
-    ],
-    "disruptorShockColor": [
-      0.80000001192092896,
-      0.60000002384185791,
-      1,
       1
     ],
     "disruptorRiftColor": [

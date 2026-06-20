@@ -224,6 +224,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\PrimitiveMaterial.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxTransformationMatrix.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxVertexData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxMaterial.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Interpolator.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\QuaternionTransform.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\CameraCapture.h" />

@@ -866,6 +866,9 @@
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxVertexData.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxMaterial.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Skybox\SkyboxTransformationMatrix.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
