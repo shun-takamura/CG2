@@ -2,30 +2,6 @@
   "scene": "StagePlayScene",
   "objects": [
     {
-      "type": "Object3D",
-      "name": "playerBullet.mesh",
-      "tag": "None",
-      "dir": "Resources/Models/Player/Bullet",
-      "file": "playerBullet.mesh",
-      "transform": {
-        "scale": [
-          10,
-          10,
-          10
-        ],
-        "rotate": [
-          0,
-          0,
-          0
-        ],
-        "translate": [
-          2.3349792957305908,
-          4.2758517265319824,
-          24.769767761230469
-        ]
-      }
-    },
-    {
       "type": "Spline",
       "name": "EnemyPath_01",
       "tag": "EnemyPathSpline",

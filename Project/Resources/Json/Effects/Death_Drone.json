@@ -1,11 +1,11 @@
 {
-  "name": "DisruptorBeam",
-  "totalDuration": 5,
+  "name": "Death_Drone",
+  "totalDuration": 1,
   "loop": false,
   "primitives": [
     {
-      "displayName": "Beam",
-      "meshType": 6,
+      "displayName": "",
+      "meshType": 0,
       "ringParams": {
         "outerRadius": 1,
         "innerRadius": 0.5,
@@ -76,23 +76,23 @@
         "endPos": [
           0,
           0,
-          80
+          1
         ],
-        "lengthSegments": 8,
+        "lengthSegments": 16,
         "appearance": {
-          "startWidth": 0.02500000037252903,
-          "endWidth": 2,
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
           "planeCount": 3,
-          "fadeStartLength": 0,
-          "fadeEndLength": 12,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
           "startColor": [
-            0,
+            1,
             1,
             1,
             1
           ],
           "endColor": [
-            0,
+            1,
             1,
             1,
             1
@@ -164,7 +164,7 @@
         0,
         0
       ],
-      "randomRotateOnSpawn": false,
+      "randomRotateOnSpawn": true,
       "randomRotateRange": [
         0,
         0,
@@ -175,16 +175,16 @@
         0,
         0
       ],
-      "startTime": 0.20000000298023224,
-      "lifetime": 4.8000001907348633,
+      "startTime": 0,
+      "lifetime": 0.20000000298023224,
       "startScale": [
-        1,
-        1,
-        0
+        12,
+        12,
+        1
       ],
       "endScale": [
-        1,
-        1,
+        12,
+        12,
         1
       ],
       "startColor": [
@@ -197,18 +197,14 @@
         1,
         1,
         1,
-        1
+        0
       ],
       "scaleCurve": {
-        "enabled": true,
+        "enabled": false,
         "points": [
           [
             0,
             0
-          ],
-          [
-            0.024000000208616257,
-            1
           ],
           [
             1,
@@ -242,10 +238,10 @@
           ]
         ]
       },
-      "texturePath": "Resources/Textures/white1x1.dds",
+      "texturePath": "Resources/Textures/Effect/Glow_00.dds",
       "blendMode": 2,
-      "timeGroup": 3,
-      "billboardMode": "None",
+      "timeGroup": 0,
+      "billboardMode": "Full",
       "depthWrite": false,
       "alphaReference": 0,
       "cullBackface": false,
@@ -315,8 +311,8 @@
       "dissolveEdgeWidth": 0.05000000074505806
     },
     {
-      "displayName": "Impact_00",
-      "meshType": 4,
+      "displayName": "",
+      "meshType": 0,
       "ringParams": {
         "outerRadius": 1,
         "innerRadius": 0.5,
@@ -337,624 +333,10 @@
         "endAngle": 6.2831854820251465
       },
       "cylinderParams": {
-        "topRadius": 0.5,
-        "bottomRadius": 2,
-        "height": 1,
+        "topRadius": 1,
+        "bottomRadius": 1,
+        "height": 3,
         "divisions": 32,
-        "topColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "bottomColor": [
-          1,
-          1,
-          1,
-          0.25098040699958801
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "helixParams": {
-        "startHelixRadius": 0.30000001192092896,
-        "endHelixRadius": 0.30000001192092896,
-        "startTubeRadius": 0.05000000074505806,
-        "endTubeRadius": 0.05000000074505806,
-        "pitch": 1,
-        "turns": 5,
-        "circleSegments": 8,
-        "lengthSegments": 64,
-        "startColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "endColor": [
-          1,
-          0.30000001192092896,
-          0,
-          0.20000000298023224
-        ]
-      },
-      "beamParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "lengthSegments": 16,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "lightningParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "generations": 5,
-        "maxOffsetRatio": 0.15000000596046448,
-        "randomSeed": 0,
-        "branchProbability": 0.15000000596046448,
-        "branchLengthScale": 0.25,
-        "branchMaxAngle": 0.60000002384185791,
-        "branchWidthScale": 0.5,
-        "branchColorScale": 0.5,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "frameParams": {
-        "outerWidth": 1,
-        "outerHeight": 1,
-        "innerWidth": 0.5,
-        "innerHeight": 0.5,
-        "color": [
-          1,
-          1,
-          1,
-          1
-        ]
-      },
-      "offset": [
-        0,
-        0,
-        -1
-      ],
-      "rotate": [
-        1.5707963705062866,
-        0,
-        0
-      ],
-      "randomRotateOnSpawn": false,
-      "randomRotateRange": [
-        0,
-        0,
-        0
-      ],
-      "rotateSpeed": [
-        0,
-        0,
-        0
-      ],
-      "startTime": 0,
-      "lifetime": 0.30000001192092896,
-      "startScale": [
-        1,
-        1,
-        1
-      ],
-      "endScale": [
-        2,
-        2,
-        1
-      ],
-      "startColor": [
-        1,
-        1,
-        1,
-        1
-      ],
-      "endColor": [
-        1,
-        1,
-        1,
-        0
-      ],
-      "scaleCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "hueShiftEnable": false,
-      "hueShiftSpeed": 0.20000000298023224,
-      "usePositionAnim": false,
-      "startPos": [
-        0,
-        0,
-        0
-      ],
-      "endPos": [
-        0,
-        0,
-        0
-      ],
-      "posCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "texturePath": "Resources/Textures/Effect/gradationLine.dds",
-      "blendMode": 2,
-      "timeGroup": 3,
-      "billboardMode": "None",
-      "depthWrite": false,
-      "alphaReference": 0.057000000029802322,
-      "cullBackface": false,
-      "samplerMode": 0,
-      "viewAngleFadePower": 0,
-      "uvAutoScroll": true,
-      "uvScrollSpeed": [
-        0,
-        -2
-      ],
-      "uvOffset": [
-        0,
-        0
-      ],
-      "uvScale": [
-        1,
-        1
-      ],
-      "uvFlipU": false,
-      "uvFlipV": false,
-      "useDistortion": true,
-      "distortionTexturePath": "Resources/Textures/NormalMapTexture/BlackHoleLensNormal.dds",
-      "distortionStrength": 1,
-      "distortionUvAutoScroll": false,
-      "distortionUvScrollSpeed": [
-        0,
-        0
-      ],
-      "distortionUvOffset": [
-        0,
-        0
-      ],
-      "distortionUvScale": [
-        1,
-        1
-      ],
-      "distortionUvFlipU": false,
-      "distortionUvFlipV": false,
-      "useDissolve": false,
-      "dissolveMaskPath": "",
-      "dissolveInEnable": false,
-      "dissolveInStartTime": 0,
-      "dissolveInDuration": 0.5,
-      "dissolveOutEnable": false,
-      "dissolveOutStartTime": 0,
-      "dissolveOutDuration": 0.5,
-      "dissolveCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "dissolveEdgeEnable": false,
-      "dissolveEdgeColor": [
-        1,
-        0.40000000596046448,
-        0.10000000149011612,
-        1
-      ],
-      "dissolveEdgeWidth": 0.05000000074505806
-    },
-    {
-      "displayName": "Impact_01",
-      "meshType": 4,
-      "ringParams": {
-        "outerRadius": 1,
-        "innerRadius": 0.5,
-        "divisions": 32,
-        "innerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "outerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "cylinderParams": {
-        "topRadius": 0.5,
-        "bottomRadius": 2,
-        "height": 1,
-        "divisions": 32,
-        "topColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "bottomColor": [
-          1,
-          1,
-          1,
-          0.25098040699958801
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "helixParams": {
-        "startHelixRadius": 0.30000001192092896,
-        "endHelixRadius": 0.30000001192092896,
-        "startTubeRadius": 0.05000000074505806,
-        "endTubeRadius": 0.05000000074505806,
-        "pitch": 1,
-        "turns": 5,
-        "circleSegments": 8,
-        "lengthSegments": 64,
-        "startColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "endColor": [
-          1,
-          0.30000001192092896,
-          0,
-          0.20000000298023224
-        ]
-      },
-      "beamParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "lengthSegments": 16,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "lightningParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "generations": 5,
-        "maxOffsetRatio": 0.15000000596046448,
-        "randomSeed": 0,
-        "branchProbability": 0.15000000596046448,
-        "branchLengthScale": 0.25,
-        "branchMaxAngle": 0.60000002384185791,
-        "branchWidthScale": 0.5,
-        "branchColorScale": 0.5,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "frameParams": {
-        "outerWidth": 1,
-        "outerHeight": 1,
-        "innerWidth": 0.5,
-        "innerHeight": 0.5,
-        "color": [
-          1,
-          1,
-          1,
-          1
-        ]
-      },
-      "offset": [
-        0,
-        0,
-        -1
-      ],
-      "rotate": [
-        1.5707963705062866,
-        0,
-        0
-      ],
-      "randomRotateOnSpawn": false,
-      "randomRotateRange": [
-        0,
-        0,
-        0
-      ],
-      "rotateSpeed": [
-        0,
-        0,
-        0
-      ],
-      "startTime": 0.30000001192092896,
-      "lifetime": 0.30000001192092896,
-      "startScale": [
-        1,
-        1,
-        1
-      ],
-      "endScale": [
-        2,
-        2,
-        1
-      ],
-      "startColor": [
-        1,
-        1,
-        1,
-        1
-      ],
-      "endColor": [
-        1,
-        1,
-        1,
-        0
-      ],
-      "scaleCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "hueShiftEnable": false,
-      "hueShiftSpeed": 0.20000000298023224,
-      "usePositionAnim": false,
-      "startPos": [
-        0,
-        0,
-        0
-      ],
-      "endPos": [
-        0,
-        0,
-        0
-      ],
-      "posCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "texturePath": "Resources/Textures/Effect/gradationLine.dds",
-      "blendMode": 2,
-      "timeGroup": 3,
-      "billboardMode": "None",
-      "depthWrite": false,
-      "alphaReference": 0.057000000029802322,
-      "cullBackface": false,
-      "samplerMode": 0,
-      "viewAngleFadePower": 0,
-      "uvAutoScroll": true,
-      "uvScrollSpeed": [
-        0,
-        -2
-      ],
-      "uvOffset": [
-        0,
-        0
-      ],
-      "uvScale": [
-        1,
-        1
-      ],
-      "uvFlipU": false,
-      "uvFlipV": false,
-      "useDistortion": true,
-      "distortionTexturePath": "Resources/Textures/NormalMapTexture/BlackHoleLensNormal.dds",
-      "distortionStrength": 1,
-      "distortionUvAutoScroll": false,
-      "distortionUvScrollSpeed": [
-        0,
-        0
-      ],
-      "distortionUvOffset": [
-        0,
-        0
-      ],
-      "distortionUvScale": [
-        1,
-        1
-      ],
-      "distortionUvFlipU": false,
-      "distortionUvFlipV": false,
-      "useDissolve": false,
-      "dissolveMaskPath": "",
-      "dissolveInEnable": false,
-      "dissolveInStartTime": 0,
-      "dissolveInDuration": 0.5,
-      "dissolveOutEnable": false,
-      "dissolveOutStartTime": 0,
-      "dissolveOutDuration": 0.5,
-      "dissolveCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "dissolveEdgeEnable": false,
-      "dissolveEdgeColor": [
-        1,
-        0.40000000596046448,
-        0.10000000149011612,
-        1
-      ],
-      "dissolveEdgeWidth": 0.05000000074505806
-    },
-    {
-      "displayName": "Glow_00",
-      "meshType": 4,
-      "ringParams": {
-        "outerRadius": 1,
-        "innerRadius": 0.5,
-        "divisions": 32,
-        "innerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "outerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "cylinderParams": {
-        "topRadius": 2.0499999523162842,
-        "bottomRadius": 0,
-        "height": 1,
-        "divisions": 64,
         "topColor": [
           1,
           1,
@@ -1082,29 +464,29 @@
       "offset": [
         0,
         0,
-        0.5
+        0
       ],
       "rotate": [
-        1.5707963705062866,
+        0,
         0,
         0
       ],
       "randomRotateOnSpawn": true,
       "randomRotateRange": [
         0,
-        1.2566370964050293,
+        0,
         0
       ],
       "rotateSpeed": [
         0,
         0,
-        0
+        6.2831854820251465
       ],
-      "startTime": 0.20000000298023224,
-      "lifetime": 0.30000001192092896,
+      "startTime": 0,
+      "lifetime": 0.5,
       "startScale": [
-        1,
-        1,
+        7,
+        7,
         1
       ],
       "endScale": [
@@ -1163,18 +545,18 @@
           ]
         ]
       },
-      "texturePath": "Resources/Textures/Effect/Glow_01.dds",
+      "texturePath": "Resources/Textures/Effect/sparkle_00.dds",
       "blendMode": 2,
-      "timeGroup": 3,
-      "billboardMode": "None",
+      "timeGroup": 0,
+      "billboardMode": "Full",
       "depthWrite": false,
-      "alphaReference": 0.057000000029802322,
+      "alphaReference": 0,
       "cullBackface": false,
       "samplerMode": 0,
       "viewAngleFadePower": 0,
       "uvAutoScroll": false,
       "uvScrollSpeed": [
-        0.5,
+        0,
         0
       ],
       "uvOffset": [
@@ -1186,7 +568,7 @@
         1
       ],
       "uvFlipU": false,
-      "uvFlipV": true,
+      "uvFlipV": false,
       "useDistortion": false,
       "distortionTexturePath": "",
       "distortionStrength": 0.5,
@@ -1234,9 +616,641 @@
         1
       ],
       "dissolveEdgeWidth": 0.05000000074505806
+    },
+    {
+      "displayName": "",
+      "meshType": 2,
+      "ringParams": {
+        "outerRadius": 1,
+        "innerRadius": 0.5,
+        "divisions": 32,
+        "innerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "outerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "cylinderParams": {
+        "topRadius": 1,
+        "bottomRadius": 1,
+        "height": 3,
+        "divisions": 32,
+        "topColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "bottomColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "helixParams": {
+        "startHelixRadius": 0.30000001192092896,
+        "endHelixRadius": 0.30000001192092896,
+        "startTubeRadius": 0.05000000074505806,
+        "endTubeRadius": 0.05000000074505806,
+        "pitch": 1,
+        "turns": 5,
+        "circleSegments": 8,
+        "lengthSegments": 64,
+        "startColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "endColor": [
+          1,
+          0.30000001192092896,
+          0,
+          0.20000000298023224
+        ]
+      },
+      "beamParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "lengthSegments": 16,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "lightningParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "generations": 5,
+        "maxOffsetRatio": 0.15000000596046448,
+        "randomSeed": 0,
+        "branchProbability": 0.15000000596046448,
+        "branchLengthScale": 0.25,
+        "branchMaxAngle": 0.60000002384185791,
+        "branchWidthScale": 0.5,
+        "branchColorScale": 0.5,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "frameParams": {
+        "outerWidth": 1,
+        "outerHeight": 1,
+        "innerWidth": 0.5,
+        "innerHeight": 0.5,
+        "color": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "randomRotateOnSpawn": true,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0.30000001192092896,
+      "lifetime": 0.69999998807907104,
+      "startScale": [
+        1,
+        1,
+        1
+      ],
+      "endScale": [
+        16,
+        16,
+        16
+      ],
+      "startColor": [
+        0.078431367874145508,
+        0.014225294813513756,
+        0.029440023005008698,
+        1
+      ],
+      "endColor": [
+        0.17647057771682739,
+        0.035467121750116348,
+        0.06888030469417572,
+        0
+      ],
+      "scaleCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "usePositionAnim": false,
+      "startPos": [
+        0,
+        0,
+        0
+      ],
+      "endPos": [
+        0,
+        0,
+        0
+      ],
+      "posCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "texturePath": "",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "billboardMode": "None",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "viewAngleFadePower": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false,
+      "useDistortion": false,
+      "distortionTexturePath": "",
+      "distortionStrength": 0.5,
+      "distortionUvAutoScroll": false,
+      "distortionUvScrollSpeed": [
+        0,
+        0
+      ],
+      "distortionUvOffset": [
+        0,
+        0
+      ],
+      "distortionUvScale": [
+        1,
+        1
+      ],
+      "distortionUvFlipU": false,
+      "distortionUvFlipV": false,
+      "useDissolve": true,
+      "dissolveMaskPath": "Resources/Textures/MaskTexture/noise0.dds",
+      "dissolveInEnable": false,
+      "dissolveInStartTime": 0,
+      "dissolveInDuration": 0.5,
+      "dissolveOutEnable": true,
+      "dissolveOutStartTime": 0,
+      "dissolveOutDuration": 0.69999998807907104,
+      "dissolveCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "dissolveEdgeEnable": true,
+      "dissolveEdgeColor": [
+        0.89411753416061401,
+        0.10000002384185791,
+        1,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806
     }
   ],
-  "particles": [],
+  "particles": [
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "smoke",
+      "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0.30000001192092896,
+      "duration": 0.30000001192092896,
+      "burstCount": 16,
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "colorMode": 1,
+      "startColor": [
+        0.99019604921340942,
+        0.16503269970417023,
+        0.35918894410133362,
+        1
+      ],
+      "endColor": [
+        0.83137255907058716,
+        0.30980393290519714,
+        1,
+        0
+      ],
+      "scaleMin": [
+        1,
+        1
+      ],
+      "scaleMax": [
+        3,
+        3
+      ],
+      "uniformScale": true,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 0,
+      "particleLifeTime": 0.5,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
+      "velocityMode": 0,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 3,
+      "velocityJitter": 0,
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
+      "convergeEnable": false,
+      "convergeCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": [],
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "hueShiftRandomPhase": true
+    },
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "smoke_2",
+      "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0.5,
+      "duration": 0.30000001192092896,
+      "burstCount": 16,
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "colorMode": 1,
+      "startColor": [
+        0.99019604921340942,
+        0.16503269970417023,
+        0.35918894410133362,
+        1
+      ],
+      "endColor": [
+        0.83137255907058716,
+        0.30980393290519714,
+        1,
+        0
+      ],
+      "scaleMin": [
+        1,
+        1
+      ],
+      "scaleMax": [
+        3,
+        3
+      ],
+      "uniformScale": true,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 0,
+      "particleLifeTime": 0.5,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
+      "velocityMode": 0,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 3,
+      "velocityJitter": 0,
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
+      "convergeEnable": false,
+      "convergeCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": [],
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "hueShiftRandomPhase": true
+    },
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "smoke_2_2",
+      "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0.30000001192092896,
+      "duration": 0.30000001192092896,
+      "burstCount": 16,
+      "billboardMode": "Full",
+      "blendMode": 3,
+      "timeGroup": 0,
+      "colorMode": 1,
+      "startColor": [
+        0.062745101749897003,
+        0.062745101749897003,
+        0.062745101749897003,
+        0.25098040699958801
+      ],
+      "endColor": [
+        0.062745101749897003,
+        0.062745101749897003,
+        0.062745101749897003,
+        0.76862746477127075
+      ],
+      "scaleMin": [
+        1,
+        1
+      ],
+      "scaleMax": [
+        3,
+        3
+      ],
+      "uniformScale": true,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 0,
+      "particleLifeTime": 0.69999998807907104,
+      "emitShape": 0,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
+      "velocityMode": 0,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 3,
+      "velocityJitter": 0,
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": false,
+      "orbitSpinSpeed": 1,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        1,
+        0
+      ],
+      "convergeEnable": false,
+      "convergeCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": [],
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "hueShiftRandomPhase": true
+    }
+  ],
   "lights": [],
   "sounds": []
 }

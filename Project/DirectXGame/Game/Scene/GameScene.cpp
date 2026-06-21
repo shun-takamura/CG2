@@ -637,22 +637,21 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 			for (auto& b : bullets_) {
 				if (b.primitive != spawned) continue;
 				if (b.penetrate) {
-					// 貫通：damageRate クールタイムが切れていればダメージ + 専用エフェクト
+					// 貫通：damageRate クールタイムが切れていればダメージ + ヒットエフェクト
 					auto it = b.hitCooldowns.find(other);
 					const float cd = (it != b.hitCooldowns.end()) ? it->second : 0.0f;
 					if (cd <= 0.0f) {
 						if (Gameplay::Of(other).GetHP().enabled) {
 							Gameplay::Of(other).GetHP().TakeDamage(b.penetrateDamage);
 						}
-						if (!b.penetrateEffect.empty()) {
-							EffectManager::GetInstance()->Play(b.penetrateEffect, hitPos);
-						}
+						// 攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を再生
+						PlayHitEffects(spawned, other, hitPos);
 						b.hitCooldowns[other] = b.penetrateDamageRate;
 					}
 					// 貫通弾は消えない
 				} else {
-					// 通常弾：ヒットエフェクト発火 + 死亡フラグ（実ダメージは CollisionManager 側）
-					EffectManager::GetInstance()->Play("Hit_Small", hitPos);
+					// 通常弾：攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を再生 + 死亡フラグ（実ダメージは CollisionManager 側）
+					PlayHitEffects(spawned, other, hitPos);
 					b.remainingLifetime = -1.0f;
 				}
 				break;
@@ -744,7 +743,6 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 
 	const int cleanDamage = static_cast<int>(static_cast<float>(attackPower) * cleanMul);
 	const int lateDamage  = static_cast<int>(static_cast<float>(attackPower) * lateMul);
-	const std::string hitEffect = Gameplay::Of(spawned).FindEffect("hit");
 
 	// 振りエフェクト（"swing" スロット）：発生時に判定位置で再生し、aim 方向へ向ける。
 	// 以降は UpdateMelees が判定に追従させ、判定の寿命切れで Stop する。
@@ -772,11 +770,10 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 				const int dmg = (m.elapsed <= m.cleanWindow) ? m.cleanDamage : m.lateDamage;
 				Gameplay::Of(other).GetHP().TakeDamage(dmg);
 			}
-			if (!m.hitEffect.empty()) {
-				Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
-				if (const Vector3* t = spawned->GetEditableTranslate()) hitPos = *t;
-				EffectManager::GetInstance()->Play(m.hitEffect, hitPos);
-			}
+			// ヒット表現：攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を判定位置で両方再生
+			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
+			if (const Vector3* t = spawned->GetEditableTranslate()) hitPos = *t;
+			PlayHitEffects(spawned, other, hitPos);
 			break;
 		}
 		// HPゼロの敵は SweepDeadEntities が後で破棄する
@@ -791,9 +788,23 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	mr.cleanWindow = cleanWindow;
 	mr.cleanDamage = cleanDamage;
 	mr.lateDamage = lateDamage;
-	mr.hitEffect = hitEffect;
 	mr.swingEffectHandle = swingHandle;
 	melees_.push_back(std::move(mr));
+}
+
+void GameScene::PlayHitEffects(IImGuiEditable* attacker, IImGuiEditable* target, const Vector3& pos) {
+	auto* em = EffectManager::GetInstance();
+	if (!em) return;
+	// 攻撃側プレハブの着弾エフェクト（"hit" スロット）
+	if (attacker) {
+		const std::string atkHit = Gameplay::Of(attacker).FindEffect("hit");
+		if (!atkHit.empty()) em->Play(atkHit, pos);
+	}
+	// 被弾側プレハブの被弾エフェクト（"hurt" スロット）
+	if (target) {
+		const std::string hurt = Gameplay::Of(target).FindEffect("hurt");
+		if (!hurt.empty()) em->Play(hurt, pos);
+	}
 }
 
 void GameScene::SweepDeadEntities() {
@@ -812,6 +823,14 @@ void GameScene::SweepDeadEntities() {
 	// DestroyDynamicEntity が movingEnemies_ / bullets_.homingTarget も
 	// 安全にクリアしてくれるので、こちらを経由して破棄する。
 	for (IImGuiEditable* e : dead) {
+		// 死亡エフェクト（"death" スロット）を破棄直前の位置で再生
+		if (auto* em = EffectManager::GetInstance()) {
+			const std::string death = Gameplay::Of(e).FindEffect("death");
+			if (!death.empty()) {
+				const Vector3* t = e->GetEditableTranslate();
+				em->Play(death, t ? *t : Vector3{ 0.0f, 0.0f, 0.0f });
+			}
+		}
 		DestroyDynamicEntity(e);
 	}
 }

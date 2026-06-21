@@ -361,15 +361,17 @@ void InspectorWindow::OnDraw() {
             // タグに応じた推奨スロット名
             std::vector<const char*> suggested;
             if (isPlayer) {
-                suggested = { "charge_start", "charge_hold", "charge_start2", "charge_hold2" };
+                // charge系 + hurt（被弾時：自分が攻撃を受けた瞬間）
+                suggested = { "charge_start", "charge_hold", "charge_start2", "charge_hold2", "hurt" };
             } else if (isPlayerBullet || isEnemyAttack) {
-                // 弾：trail（弾追従ループ）/ hit（着弾）
+                // 弾：trail（弾追従ループ）/ hit（着弾：この攻撃が当てた側で出す）
                 suggested = { "trail", "hit" };
             } else if (isPlayerMelee) {
-                // swing（振り：判定追従）/ hit（着弾）
+                // swing（振り：判定追従）/ hit（着弾：この攻撃が当てた側で出す）
                 suggested = { "swing", "hit" };
             } else if (isEnemy || isBoss) {
-                suggested = { "hit", "death" };
+                // hurt（被弾時：攻撃を受けた瞬間）/ death（撃破時）
+                suggested = { "hurt", "death" };
             }
 
             // 既存スロットを一覧表示（順序安定のためソート）
