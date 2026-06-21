@@ -477,6 +477,11 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <Exec Command="py tools\Python\cook_assets.py" WorkingDirectory="$(ProjectDir)" />
     <!-- gdeflate_compress.exe は同一ソリューション内のサブプロジェクトが先にビルド済みの想定。
          同じ $(Configuration) の出力フォルダから拾う。 -->
+    <!-- gdeflate_compress.exe は dstorage DLL が同フォルダに無いと起動できない。
+         本体のポストビルドコピーはこのターゲットより後に走るため、ここで先回りしてコピーする。 -->
+    <Copy SourceFiles="$(ProjectDir)externals\DirectStorage\bin\x64\dstorage.dll;$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll"
+          DestinationFolder="$(ProjectDir)..\Generated\Output\$(Configuration)"
+          SkipUnchangedFiles="true" />
     <Exec Command="py tools\Python\pack_assets.py --gdeflate-exe ..\Generated\Output\$(Configuration)\gdeflate_compress.exe" WorkingDirectory="$(ProjectDir)" />
   </Target>
 </Project>

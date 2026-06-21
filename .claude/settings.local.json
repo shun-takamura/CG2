@@ -48,7 +48,10 @@
       "PowerShell(if \\($?\\) { \"OK\" })",
       "Bash(\"/c/Users/sleon/.local/bin/claude.exe\" --help)",
       "Bash(python -m py_compile jarvis_bot.py claude_chat.py)",
-      "Bash(python -m py_compile claude_chat.py)"
+      "Bash(python -m py_compile claude_chat.py)",
+      "Bash(py tools/Python/pack_assets.py --gdeflate-exe ../Generated/Output/Release/gdeflate_compress.exe)",
+      "Bash(cp externals/DirectStorage/bin/x64/dstorage.dll externals/DirectStorage/bin/x64/dstoragecore.dll ../Generated/Output/Release/)",
+      "Read(//c/c/Users/sleon/source/repos/CG2/Generated/Output/**)"
     ]
   }
 }

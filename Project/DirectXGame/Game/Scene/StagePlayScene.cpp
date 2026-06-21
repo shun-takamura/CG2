@@ -4247,7 +4247,8 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 		// バリア球の追従＋当たり判定は全フェーズ共通（Fire 中もカメラ前進にズレず追従させる）
 		UpdateSpecialBarrier();
 		// 光の翼（放射状ストリーク）も全フェーズ共通で流す
-		UpdateSpecialWings();
+		// TODO(動画撮影用・一時的): 光の翼を一旦オフ。撮影後に下行を戻す。
+		// UpdateSpecialWings();
 
 		switch (specialPhase_) {
 		case SpecialPhase::Barrier:
@@ -4267,6 +4268,22 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 		default: break;
 		}
 		return;
+	}
+
+	// TODO(動画撮影用・一時的): R3=傲慢サンダー / L3=ディスラプター を
+	// ゲージ・クールタイム・行動ロック無視で即発動。撮影後にこのブロックごと削除する。
+	{
+		auto* pad = input_->GetController();
+		if (pad && pad->IsConnected()) {
+			if (pad->IsButtonTriggered(XINPUT_GAMEPAD_RIGHT_THUMB)) {
+				TriggerSpecialMove(SpecialKind::GoumanThunder);
+				return;
+			}
+			if (pad->IsButtonTriggered(XINPUT_GAMEPAD_LEFT_THUMB)) {
+				TriggerSpecialMove(SpecialKind::Disruptor);
+				return;
+			}
+		}
 	}
 
 	// 非発動時：クールタイムを消化（両必殺技共通）
