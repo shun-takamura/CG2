@@ -216,6 +216,8 @@
           ]
         ]
       },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
       "usePositionAnim": false,
       "startPos": [
         0,
@@ -521,6 +523,8 @@
           ]
         ]
       },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
       "usePositionAnim": false,
       "startPos": [
         0,
@@ -569,9 +573,9 @@
       ],
       "uvFlipU": false,
       "uvFlipV": false,
-      "useDistortion": false,
-      "distortionTexturePath": "",
-      "distortionStrength": 0.5,
+      "useDistortion": true,
+      "distortionTexturePath": "Resources/Textures/NormalMapTexture/BlackHoleLensNormal.dds",
+      "distortionStrength": 1,
       "distortionUvAutoScroll": false,
       "distortionUvScrollSpeed": [
         0,
@@ -826,6 +830,8 @@
           ]
         ]
       },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
       "usePositionAnim": false,
       "startPos": [
         0,
@@ -874,9 +880,9 @@
       ],
       "uvFlipU": false,
       "uvFlipV": false,
-      "useDistortion": false,
-      "distortionTexturePath": "",
-      "distortionStrength": 0.5,
+      "useDistortion": true,
+      "distortionTexturePath": "Resources/Textures/NormalMapTexture/BlackHoleLensNormal.dds",
+      "distortionStrength": 1,
       "distortionUvAutoScroll": false,
       "distortionUvScrollSpeed": [
         0,
@@ -1131,6 +1137,8 @@
           ]
         ]
       },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
       "usePositionAnim": false,
       "startPos": [
         0,
