@@ -109,6 +109,13 @@ protected:
 	void UpdateMovingEnemies(float deltaTime);
 	void UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT);
 
+	/// <summary>
+	/// 攻撃命中時のエフェクト再生。攻撃側プレハブの "hit"（着弾エフェクト）と
+	/// 被弾側プレハブの "hurt"（被弾エフェクト）を同じ位置で両方再生する。
+	/// 未設定のスロットはスキップする。attacker / target が nullptr の側もスキップ。
+	/// </summary>
+	void PlayHitEffects(IImGuiEditable* attacker, IImGuiEditable* target, const Vector3& pos);
+
 	/// <summary>動的スプラインの DebugDraw キュー積み。</summary>
 	void DrawDynamicSplinesDebug();
 
@@ -141,7 +148,6 @@ protected:
 		float cleanWindow = 0.08f;
 		int   cleanDamage = 0;
 		int   lateDamage = 0;
-		std::string hitEffect;
 		uint64_t    swingEffectHandle = 0;
 		std::unordered_set<IImGuiEditable*> hitTargets;
 	};

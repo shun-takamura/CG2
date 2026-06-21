@@ -1,10 +1,10 @@
 {
-  "name": "Hit_Small",
-  "totalDuration": 0.75,
-  "loop": false,
+  "name": "NormalBullet",
+  "totalDuration": 0.5,
+  "loop": true,
   "primitives": [
     {
-      "displayName": "flash",
+      "displayName": "",
       "meshType": 0,
       "ringParams": {
         "outerRadius": 1,
@@ -157,7 +157,7 @@
       "offset": [
         0,
         0,
-        0
+        3
       ],
       "rotate": [
         0,
@@ -173,31 +173,31 @@
       "rotateSpeed": [
         0,
         0,
-        0
+        6.2831854820251465
       ],
       "startTime": 0,
-      "lifetime": 0.20000000298023224,
+      "lifetime": 1,
       "startScale": [
-        1,
-        1,
+        5,
+        5,
         1
       ],
       "endScale": [
-        5,
-        5,
+        3,
+        3,
         1
       ],
       "startColor": [
         1,
-        0.89999997615814209,
-        0.5,
+        1,
+        1,
         1
       ],
       "endColor": [
         1,
-        0.60000002384185791,
-        0.20000000298023224,
-        0
+        1,
+        1,
+        1
       ],
       "scaleCurve": {
         "enabled": false,
@@ -238,7 +238,7 @@
           ]
         ]
       },
-      "texturePath": "Resources/Textures/circle.dds",
+      "texturePath": "Resources/Textures/Effect/ster_00.dds",
       "blendMode": 2,
       "timeGroup": 0,
       "billboardMode": "Full",
@@ -311,10 +311,10 @@
       "dissolveEdgeWidth": 0.05000000074505806
     },
     {
-      "displayName": "impuct",
-      "meshType": 3,
+      "displayName": "",
+      "meshType": 6,
       "ringParams": {
-        "outerRadius": 1.5,
+        "outerRadius": 1,
         "innerRadius": 0.5,
         "divisions": 32,
         "innerColor": [
@@ -378,18 +378,18 @@
         "startPos": [
           0,
           0,
-          0
+          3
         ],
         "endPos": [
           0,
           0,
-          1
+          0
         ],
         "lengthSegments": 16,
         "appearance": {
           "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
+          "endWidth": 0.5,
+          "planeCount": 4,
           "fadeStartLength": 0.20000000298023224,
           "fadeEndLength": 0.20000000298023224,
           "startColor": [
@@ -471,7 +471,7 @@
         0,
         0
       ],
-      "randomRotateOnSpawn": false,
+      "randomRotateOnSpawn": true,
       "randomRotateRange": [
         0,
         0,
@@ -480,31 +480,31 @@
       "rotateSpeed": [
         0,
         0,
-        0
+        6.2831854820251465
       ],
       "startTime": 0,
-      "lifetime": 0.5,
+      "lifetime": 1,
       "startScale": [
-        2,
-        2,
+        1,
+        1,
         1
       ],
       "endScale": [
-        6,
-        6,
+        1,
+        1,
         1
       ],
       "startColor": [
         1,
         1,
         1,
-        1
+        0.25098040699958801
       ],
       "endColor": [
         1,
         1,
         1,
-        0
+        0.25098040699958801
       ],
       "scaleCurve": {
         "enabled": false,
@@ -545,10 +545,10 @@
           ]
         ]
       },
-      "texturePath": "Resources/Textures/gradationLine.dds",
+      "texturePath": "",
       "blendMode": 2,
       "timeGroup": 0,
-      "billboardMode": "Full",
+      "billboardMode": "None",
       "depthWrite": false,
       "alphaReference": 0,
       "cullBackface": false,
@@ -616,344 +616,9 @@
         1
       ],
       "dissolveEdgeWidth": 0.05000000074505806
-    },
-    {
-      "displayName": "ImpuctDistortion",
-      "meshType": 3,
-      "ringParams": {
-        "outerRadius": 1,
-        "innerRadius": 0.60000002384185791,
-        "divisions": 32,
-        "innerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "outerColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "cylinderParams": {
-        "topRadius": 1,
-        "bottomRadius": 1,
-        "height": 3,
-        "divisions": 32,
-        "topColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "bottomColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "startAngle": 0,
-        "endAngle": 6.2831854820251465
-      },
-      "helixParams": {
-        "startHelixRadius": 0.30000001192092896,
-        "endHelixRadius": 0.30000001192092896,
-        "startTubeRadius": 0.05000000074505806,
-        "endTubeRadius": 0.05000000074505806,
-        "pitch": 1,
-        "turns": 5,
-        "circleSegments": 8,
-        "lengthSegments": 64,
-        "startColor": [
-          1,
-          1,
-          1,
-          1
-        ],
-        "endColor": [
-          1,
-          0.30000001192092896,
-          0,
-          0.20000000298023224
-        ]
-      },
-      "beamParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "lengthSegments": 16,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "lightningParams": {
-        "startPos": [
-          0,
-          0,
-          0
-        ],
-        "endPos": [
-          0,
-          0,
-          1
-        ],
-        "generations": 5,
-        "maxOffsetRatio": 0.15000000596046448,
-        "randomSeed": 0,
-        "branchProbability": 0.15000000596046448,
-        "branchLengthScale": 0.25,
-        "branchMaxAngle": 0.60000002384185791,
-        "branchWidthScale": 0.5,
-        "branchColorScale": 0.5,
-        "appearance": {
-          "startWidth": 0.30000001192092896,
-          "endWidth": 0.30000001192092896,
-          "planeCount": 3,
-          "fadeStartLength": 0.20000000298023224,
-          "fadeEndLength": 0.20000000298023224,
-          "startColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "endColor": [
-            1,
-            1,
-            1,
-            1
-          ],
-          "uvWrapByLength": true,
-          "uvTilesPerUnit": 1
-        }
-      },
-      "frameParams": {
-        "outerWidth": 1,
-        "outerHeight": 1,
-        "innerWidth": 0.5,
-        "innerHeight": 0.5,
-        "color": [
-          1,
-          1,
-          1,
-          1
-        ]
-      },
-      "offset": [
-        0,
-        0,
-        0
-      ],
-      "rotate": [
-        0,
-        0,
-        0
-      ],
-      "randomRotateOnSpawn": false,
-      "randomRotateRange": [
-        0,
-        0,
-        0
-      ],
-      "rotateSpeed": [
-        0,
-        0,
-        0
-      ],
-      "startTime": 0.25,
-      "lifetime": 1,
-      "startScale": [
-        2,
-        2,
-        1
-      ],
-      "endScale": [
-        10,
-        10,
-        5
-      ],
-      "startColor": [
-        1,
-        1,
-        1,
-        0
-      ],
-      "endColor": [
-        1,
-        1,
-        1,
-        0
-      ],
-      "scaleCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "hueShiftEnable": false,
-      "hueShiftSpeed": 0.20000000298023224,
-      "usePositionAnim": false,
-      "startPos": [
-        0,
-        0,
-        0
-      ],
-      "endPos": [
-        0,
-        0,
-        0
-      ],
-      "posCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "texturePath": "",
-      "blendMode": 2,
-      "timeGroup": 0,
-      "billboardMode": "Full",
-      "depthWrite": false,
-      "alphaReference": 0,
-      "cullBackface": false,
-      "samplerMode": 0,
-      "viewAngleFadePower": 0,
-      "uvAutoScroll": false,
-      "uvScrollSpeed": [
-        0,
-        0
-      ],
-      "uvOffset": [
-        0,
-        0
-      ],
-      "uvScale": [
-        1,
-        1
-      ],
-      "uvFlipU": false,
-      "uvFlipV": false,
-      "useDistortion": true,
-      "distortionTexturePath": "Resources/Textures/NormalMapTexture/VortexNormalMapTexture.dds",
-      "distortionStrength": 0.50400000810623169,
-      "distortionUvAutoScroll": false,
-      "distortionUvScrollSpeed": [
-        0,
-        0
-      ],
-      "distortionUvOffset": [
-        0,
-        0
-      ],
-      "distortionUvScale": [
-        1,
-        1
-      ],
-      "distortionUvFlipU": false,
-      "distortionUvFlipV": false,
-      "useDissolve": false,
-      "dissolveMaskPath": "",
-      "dissolveInEnable": false,
-      "dissolveInStartTime": 0,
-      "dissolveInDuration": 0.5,
-      "dissolveOutEnable": false,
-      "dissolveOutStartTime": 0,
-      "dissolveOutDuration": 0.5,
-      "dissolveCurve": {
-        "enabled": false,
-        "points": [
-          [
-            0,
-            0
-          ],
-          [
-            1,
-            1
-          ]
-        ]
-      },
-      "dissolveEdgeEnable": false,
-      "dissolveEdgeColor": [
-        1,
-        0.40000000596046448,
-        0.10000000149011612,
-        1
-      ],
-      "dissolveEdgeWidth": 0.05000000074505806
     }
   ],
   "particles": [],
-  "lights": [
-    {
-      "displayName": "flashPointLight",
-      "kind": "Point",
-      "offset": [
-        0,
-        0.20000000298023224,
-        0
-      ],
-      "direction": [
-        0,
-        -1,
-        0
-      ],
-      "startTime": 0,
-      "lifetime": 0.30000001192092896,
-      "color": [
-        1,
-        0.80000001192092896,
-        0.5,
-        1
-      ],
-      "startIntensity": 5,
-      "endIntensity": 0,
-      "range": 4,
-      "spotCosAngle": 0.5,
-      "spotCosFalloffStart": 0.69999998807907104
-    }
-  ],
+  "lights": [],
   "sounds": []
 }

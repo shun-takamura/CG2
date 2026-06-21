@@ -4112,6 +4112,11 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			} else {
 				// 通常被弾
 				OnPlayerTakeDamage(incomingDamage);
+				// 被弾エフェクト：攻撃側（敵弾）の "hit" ＋ プレイヤーの "hurt" を再生
+				IImGuiEditable* atkPrefab = (hitBulletIndex >= 0)
+					? static_cast<IImGuiEditable*>(bullets_[hitBulletIndex].primitive)
+					: attacker;
+				PlayHitEffects(atkPrefab, player_, player_->GetTranslate());
 				if (hitBulletIndex >= 0) bullets_[hitBulletIndex].remainingLifetime = -1.0f;
 			}
 		}

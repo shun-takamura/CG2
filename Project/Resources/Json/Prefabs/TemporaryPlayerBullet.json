@@ -142,6 +142,7 @@
     "penetrateEffect": ""
   },
   "effects": {
-    "trail": "BlackHole"
+    "trail": "NormalBullet",
+    "hit": "HitPlayerNormalBullet"
   }
 }
