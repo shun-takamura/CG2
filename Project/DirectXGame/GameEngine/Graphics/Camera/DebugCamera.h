@@ -40,6 +40,12 @@ public:
     void SetPivot(const Vector3& p)  { pivot_ = p; }
     void SetDistance(float d)        { distance_ = d < kMinDistance ? kMinDistance : d; }
 
+    /// <summary>
+    /// eye(目の位置) / rot(回転行列) / distance から周回状態(pivot,matRot,distance)を逆算してセットする。
+    /// 通常カメラのポーズをそのまま引き継いでデバッグカメラを始めたいときに使う。
+    /// </summary>
+    void SetPose(const Vector3& eye, const Matrix4x4& rot, float distance);
+
     // 取得
     const Matrix4x4& GetViewMatrix() const           { return viewMatrix_; }
     const Matrix4x4& GetProjectionMatrix() const     { return projectionMatrix_; }

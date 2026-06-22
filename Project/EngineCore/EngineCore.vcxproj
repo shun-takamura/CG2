@@ -157,6 +157,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\CurveEditorWidget.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\EffectHierarchyWindow.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\EffectPaletteWindow.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Sound\SoundManager.cpp" />
@@ -218,6 +219,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectManager.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectEditorWindow.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\CurveEditorWidget.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\EffectHierarchyWindow.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\EffectPaletteWindow.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\MeshData.h" />
