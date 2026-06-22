@@ -10,6 +10,17 @@ void DebugCamera::Initialize() {
     Update();
 }
 
+void DebugCamera::SetPose(const Vector3& eye, const Matrix4x4& rot, float distance) {
+    matRot_   = rot;
+    distance_ = (distance < kMinDistance) ? kMinDistance : distance;
+    // eye = pivot + matRot*(0,0,-distance) なので pivot = eye + forward*distance
+    Vector3 forward = { matRot_.m[2][0], matRot_.m[2][1], matRot_.m[2][2] };
+    pivot_ = { eye.x + forward.x * distance_,
+               eye.y + forward.y * distance_,
+               eye.z + forward.z * distance_ };
+    Update();
+}
+
 void DebugCamera::Orbit(float deltaYaw, float deltaPitch) {
     // pitch はカメラの右軸（local X）周り、yaw はワールドY軸周り
     Matrix4x4 dPitch = MakeRotateXMatrix({ deltaPitch, 0.0f, 0.0f });

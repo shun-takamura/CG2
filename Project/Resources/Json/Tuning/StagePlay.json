@@ -26,14 +26,14 @@
       1
     ],
     "specialDarkColor": [
-      0.30000001192092896,
-      0.30000001192092896,
+      0.30196079611778259,
+      0.30196079611778259,
       0.40000000596046448,
       1
     ],
     "specialFadeIn": 0.40000000596046448,
     "specialFadeOut": 0.60000002384185791,
-    "bossBlendDuration": 2,
+    "bossBlendDuration": 5,
     "defaultPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
     "bossPath": "Resources/Cubemaps/passendorf_snow_8k.dds"
   },

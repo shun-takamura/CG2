@@ -129,18 +129,17 @@ void Scene::SetUseDebugCamera(bool enabled) {
 		sceneCameraSnapshot_.nearClip    = sc->GetNearClip();
 		sceneCameraSnapshot_.farClip     = sc->GetFarClip();
 
-		// デバッグカメラの初期配置：シーンカメラ周辺に置く
+		// デバッグカメラの初期配置：通常カメラのポーズ（位置・向き）をそのまま引き継ぐ
 		GetDebugCamera(); // 生成
-		debugCamera_->SetPivot({ 0.0f, 0.0f, 0.0f });
-		// シーンカメラからピボット(原点)までの距離を初期distanceに
-		const Vector3& cp = sceneCameraSnapshot_.translate;
-		float dist = std::sqrt(cp.x * cp.x + cp.y * cp.y + cp.z * cp.z);
-		if (dist < 1.0f) dist = 10.0f;
-		debugCamera_->SetDistance(dist);
 		debugCamera_->SetFovY(sceneCameraSnapshot_.fovY);
 		debugCamera_->SetAspectRatio(sceneCameraSnapshot_.aspectRatio);
 		debugCamera_->SetNearFar(sceneCameraSnapshot_.nearClip, sceneCameraSnapshot_.farClip);
-		debugCamera_->Update();
+
+		// 通常カメラと同じ回転規約(MakeAffineMatrix)で純粋回転行列を作りポーズ継承
+		Transform poseTf{ { 1.0f, 1.0f, 1.0f }, sceneCameraSnapshot_.rotate, { 0.0f, 0.0f, 0.0f } };
+		Matrix4x4 rot = MakeAffineMatrix(poseTf);   // 並進0なので回転のみ
+		const float orbitDist = 10.0f;               // 周回中心を視線の10先に（手応えの好みで調整可）
+		debugCamera_->SetPose(sceneCameraSnapshot_.translate, rot, orbitDist);
 	} else {
 		// シーンカメラのtransformを復元してUpdateさせる
 		sc->SetTranslate(sceneCameraSnapshot_.translate);
