@@ -15,6 +15,8 @@ class Camera;
 class Skybox;
 class SplineCurveActor;
 class RailCameraController;
+class CameraRotKey;
+class RailAimController;
 class AnimatedObject3DInstance;
 class Reticle;
 class LightningRuntime;
@@ -55,10 +57,14 @@ private:
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
 
-	// レールカメラ用の 2 本のスプライン（cameraPath=位置 / lookAtPath=注視点）
+	// レールカメラ：位置スプライン（cameraPath_）＋向き回転キーフレーム列（cameraRotKeys_）
 	std::unique_ptr<SplineCurveActor> cameraPath_;
-	std::unique_ptr<SplineCurveActor> lookAtPath_;
+	std::vector<std::unique_ptr<CameraRotKey>> cameraRotKeys_;
 	std::unique_ptr<RailCameraController> railCamera_;
+	std::unique_ptr<RailAimController> railAim_;   // 向きオーサリング用の見回しローテータ
+	bool aimAuthoring_ = false;       // ON 中はゲーム完全フリーズ＋カメラ見回しでキー作成
+	bool prevAimAuthoring_ = false;   // 立ち上がり/立ち下がり検出用
+	float prevTimeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f, 1.0f }; // Aim 中の TimeScale 退避
 
 	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する

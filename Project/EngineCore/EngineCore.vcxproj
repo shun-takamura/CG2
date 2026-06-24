@@ -146,6 +146,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Level\JsonLevelLoader.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\TextureManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\SRVManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Particle\ParticleManager.cpp" />
@@ -303,6 +304,8 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Level\LevelData.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Level\JsonLevelLoader.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\TextureManager.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\DDSHeader.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\SRVManager.h" />

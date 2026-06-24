@@ -17,6 +17,8 @@
 #include "Primitive/LineRenderer.h"
 #include "Spline/SplineCurveActor.h"
 #include "Spline/RailCameraController.h"
+#include "Spline/CameraRotKey.h"
+#include "Spline/RailAimController.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -97,6 +99,45 @@ void StagePlayScene::LoadTuningFromJson() {
 	}
 	railCameraSpeed_ = static_cast<float>(
 		root["camera"]["speed"].AsDouble(railCameraSpeed_));
+	{
+		// レールカメラ向きキーの復元
+		const JsonValue& keys = root["camera"]["rotKeys"];
+		if (keys.IsArray()) {
+			cameraRotKeys_.clear();
+			for (size_t i = 0; i < keys.Size(); ++i) {
+				const JsonValue& ko = keys[i];
+				auto key = std::make_unique<CameraRotKey>();
+				key->t = static_cast<float>(ko["t"].AsDouble(0.0));
+
+				const JsonValue& rot = ko["rotate"];
+				if (rot.IsArray() && rot.Size() >= 3) {
+					key->rotate = {
+						static_cast<float>(rot[0].AsDouble(0.0)),
+						static_cast<float>(rot[1].AsDouble(0.0)),
+						static_cast<float>(rot[2].AsDouble(0.0)),
+					};
+				}
+
+				const JsonValue& ease = ko["ease"];
+				if (ease.IsObject()) {
+					key->easeToNext.enabled = ease["enabled"].AsBool(false);
+					const JsonValue& pts = ease["points"];
+					if (pts.IsArray() && pts.Size() >= 2) {
+						key->easeToNext.points.clear();
+						for (size_t j = 0; j < pts.Size(); ++j) {
+							const JsonValue& pr = pts[j];
+							if (pr.IsArray() && pr.Size() >= 2) {
+								key->easeToNext.points.push_back({
+									static_cast<float>(pr[0].AsDouble(0.0)),
+									static_cast<float>(pr[1].AsDouble(0.0)) });
+							}
+						}
+					}
+				}
+				cameraRotKeys_.push_back(std::move(key));
+			}
+		}
+	}
 	playerSmoothTime_ = static_cast<float>(
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
 
@@ -572,6 +613,36 @@ void StagePlayScene::SaveTuningToJson() const {
 
 	JsonValue camObj = JsonValue::MakeObject();
 	camObj["speed"] = static_cast<double>(railCameraSpeed_);
+	{
+		// レールカメラ向きキー（t / オイラー角 / 緩急カーブ）
+		JsonValue keysArr = JsonValue::MakeArray();
+		for (const auto& k : cameraRotKeys_) {
+			if (!k) continue;
+			JsonValue keyObj = JsonValue::MakeObject();
+			keyObj["t"] = static_cast<double>(k->t);
+
+			JsonValue rot = JsonValue::MakeArray();
+			rot.Push(JsonValue(static_cast<double>(k->rotate.x)));
+			rot.Push(JsonValue(static_cast<double>(k->rotate.y)));
+			rot.Push(JsonValue(static_cast<double>(k->rotate.z)));
+			keyObj["rotate"] = std::move(rot);
+
+			JsonValue ease = JsonValue::MakeObject();
+			ease["enabled"] = k->easeToNext.enabled;
+			JsonValue pts = JsonValue::MakeArray();
+			for (const auto& p : k->easeToNext.points) {
+				JsonValue pair = JsonValue::MakeArray();
+				pair.Push(JsonValue(static_cast<double>(p.x)));
+				pair.Push(JsonValue(static_cast<double>(p.y)));
+				pts.Push(std::move(pair));
+			}
+			ease["points"] = std::move(pts);
+			keyObj["ease"] = std::move(ease);
+
+			keysArr.Push(std::move(keyObj));
+		}
+		camObj["rotKeys"] = std::move(keysArr);
+	}
 	root["camera"] = std::move(camObj);
 
 	JsonValue skyObj = JsonValue::MakeObject();
@@ -1834,6 +1905,57 @@ void StagePlayScene::OnImGuiTuning() {
 			changed = true;
 			if (railCamera_) railCamera_->SetSpeed(railCameraSpeed_);
 		}
+
+		ImGui::SeparatorText("Authoring（向きキー作成）");
+		ImGui::Checkbox("Aim from rail（編集モード）", &aimAuthoring_);
+		ImGui::TextDisabled("ON中: ゲーム完全フリーズ。3Dビュー上で 左ドラッグ=見回し / Alt+左ドラッグ=roll");
+
+		if (railCamera_) {
+			float p = railCamera_->GetProgress();
+			if (ImGui::SliderFloat("Progress", &p, 0.0f, 1.0f, "%.3f")) {
+				railCamera_->SetProgress(p);
+			}
+
+			char recLabel[64];
+			std::snprintf(recLabel, sizeof(recLabel), "現在のカメラ向きを記録 (t=%.2f)", p);
+			if (ImGui::Button(recLabel) && camera_) {
+				auto key = std::make_unique<CameraRotKey>();
+				key->t = p;
+				key->rotate = camera_->GetRotate();
+				CameraRotKey* raw = key.get();
+				cameraRotKeys_.push_back(std::move(key));
+				std::sort(cameraRotKeys_.begin(), cameraRotKeys_.end(),
+					[](const std::unique_ptr<CameraRotKey>& a, const std::unique_ptr<CameraRotKey>& b) { return a->t < b->t; });
+				ImGuiManager::Instance().SetSelected(raw);
+				changed = true;
+			}
+
+			ImGui::SeparatorText("Keyframes");
+			int deleteIdx = -1;
+			for (int i = 0; i < static_cast<int>(cameraRotKeys_.size()); ++i) {
+				CameraRotKey* k = cameraRotKeys_[i].get();
+				ImGui::PushID(i);
+				Vector3 d = RadToDeg(k->rotate);
+				char label[96];
+				std::snprintf(label, sizeof(label), "t=%.2f  (p%.0f y%.0f r%.0f)", k->t, d.x, d.y, d.z);
+				const bool isSel = (ImGuiManager::Instance().GetSelected() == k);
+				if (ImGui::Selectable(label, isSel)) {
+					ImGuiManager::Instance().SetSelected(k);
+					railCamera_->SetProgress(k->t);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("x")) deleteIdx = i;
+				ImGui::PopID();
+			}
+			if (deleteIdx >= 0) {
+				CameraRotKey* del = cameraRotKeys_[deleteIdx].get();
+				if (ImGuiManager::Instance().GetSelected() == del) {
+					ImGuiManager::Instance().SetSelected(nullptr);
+				}
+				cameraRotKeys_.erase(cameraRotKeys_.begin() + deleteIdx);
+				changed = true;
+			}
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Skybox")) {
@@ -2350,28 +2472,16 @@ void StagePlayScene::Initialize() {
 		{  40.0f, 5.0f,  80.0f },
 	};
 
-	// レールカメラ用スプライン（注視点）— cameraPath を +Z に平行移動して前進視点にする
-	lookAtPath_ = std::make_unique<SplineCurveActor>();
-	lookAtPath_->SetName("LookAtPath");
-	Gameplay::Of(lookAtPath_).SetTag(EntityTag::CameraLookAtSpline);
-	{
-		auto& src = cameraPath_->GetPoints();
-		std::vector<Vector3> dst;
-		dst.reserve(src.size());
-		constexpr float kForwardOffset = 10.0f;
-		for (const auto& p : src) {
-			dst.push_back({ p.x, p.y, p.z + kForwardOffset });
-		}
-		lookAtPath_->MutablePoints() = std::move(dst);
-	}
-
-	// レールカメラコントローラ
+	// レールカメラコントローラ（向きは回転キーフレーム列 cameraRotKeys_。初期は空）
 	railCamera_ = std::make_unique<RailCameraController>();
 	railCamera_->Initialize(camera_.get());
 	railCamera_->SetCameraPath(cameraPath_.get());
-	railCamera_->SetLookAtPath(lookAtPath_.get());
+	railCamera_->SetRotKeys(&cameraRotKeys_);
 	railCamera_->SetSpeed(railCameraSpeed_);
 	railCamera_->SetLoop(true);
+
+	// 向きオーサリング用の見回しローテータ（入力配線・UI は Tuning 側で）
+	railAim_ = std::make_unique<RailAimController>();
 
 	phase_ = Phase::Rail;
 	paused_ = false;
@@ -2467,6 +2577,41 @@ void StagePlayScene::Update() {
 		return;
 	}
 
+	// レールカメラ向きキーは t 昇順を常に保つ（Inspector の t 編集もここで反映）
+	if (cameraRotKeys_.size() > 1) {
+		std::sort(cameraRotKeys_.begin(), cameraRotKeys_.end(),
+			[](const std::unique_ptr<CameraRotKey>& a, const std::unique_ptr<CameraRotKey>& b) {
+				return a->t < b->t;
+			});
+	}
+
+	// Aim オーサリング：ゲームを完全フリーズ（全 TimeGroup を 0）しつつ Update 自体は通常どおり回す。
+	// 早期 return すると各オブジェクトの WVP 再計算や敵/レール描画まで止まり、カメラを回しても
+	// ソリッド/スカイボックスが追従しなくなるため、止めるのは「時間」だけにする。
+	if (aimAuthoring_ && !prevAimAuthoring_) {
+		// 立ち上がり：現在の TimeScale を退避し、見回し開始姿勢を現在のカメラから seed
+		for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+			prevTimeScales_[i] = GetTimeScale(static_cast<TimeGroup>(i));
+		}
+		if (railAim_ && camera_) {
+			railAim_->SetEuler(camera_->GetRotate());
+			camera_->StopShake();
+		}
+	} else if (!aimAuthoring_ && prevAimAuthoring_) {
+		// 立ち下がり：退避した TimeScale を復元
+		for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+			SetTimeScale(static_cast<TimeGroup>(i), prevTimeScales_[i]);
+		}
+	}
+	prevAimAuthoring_ = aimAuthoring_;
+
+	if (aimAuthoring_) {
+		// フリーズ維持（毎フレーム 0 を当てる）
+		for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
+			SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
+		}
+	}
+
 #ifdef _DEBUG
 	// DEBUG専用ショートカット（StagePlayScene完成時に削除）
 	auto* kb = input_->GetKeyboard();
@@ -2488,12 +2633,26 @@ void StagePlayScene::Update() {
 
 	// スプライン可視化（Hierarchy の Debug 表示 ON 時のみ描かれる）
 	if (cameraPath_) cameraPath_->DrawDebug();
-	if (lookAtPath_) lookAtPath_->DrawDebug();
 #endif
 
-	// レール走行
+	// レール走行（Aim オーサリング中はレール位置に固定し、見回し入力で向きを上書き）
 	if (phase_ == Phase::Rail && railCamera_) {
-		railCamera_->Update(GetScaledDeltaTime());
+		if (aimAuthoring_ && cameraPath_ && railAim_ && camera_) {
+			const Vector3 eye = cameraPath_->Sample(railCamera_->GetProgress());
+#ifdef _DEBUG
+			auto* vp = ImGuiManager::Instance().GetViewportWindow();
+			if (vp && vp->IsHovered()) {
+				ImGuiIO& io = ImGui::GetIO();
+				if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+					if (io.KeyAlt) railAim_->AddRoll(io.MouseDelta.x);
+					else           railAim_->AddYawPitch(io.MouseDelta.x, io.MouseDelta.y);
+				}
+			}
+#endif
+			railAim_->Apply(camera_.get(), eye);
+		} else {
+			railCamera_->Update(GetScaledDeltaTime());
+		}
 	}
 
 	// 精密射撃モード（FOV ズーム・感度・演出）。FOV を camera_->Update() の前に反映する

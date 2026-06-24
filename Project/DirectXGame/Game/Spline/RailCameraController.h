@@ -1,27 +1,31 @@
 #pragma once
 
+#include <vector>
+#include <memory>
+
 #include "Vector3.h"
 
 class Camera;
 class SplineCurveActor;
+class CameraRotKey;
 
 /// <summary>
-/// レールカメラ制御。位置スプライン(cameraPath) と注視点スプライン(lookAtPath) を
-/// 同じ進行度 t で評価し、eye と target を毎フレーム算出して Camera へ反映する。
+/// レールカメラ制御。位置は cameraPath（スプライン）、向きは回転キーフレーム列で決める。
 ///
 /// 設計方針:
-///   - 進行方向と視線方向を独立に制御するため、注視点は別パスで定義する。
-///   - 前進カメラ:        lookAtPath = cameraPath を +Z 方向に平行移動
-///   - 右スクロール演出:  lookAtPath = cameraPath を +X 方向に平行移動
-///   - ボス導入演出:      cameraPath を横にオフセット、lookAtPath は別形状
-///   - シューティング中はプレイヤーがカメラを操作することは禁止。
+///   - eye = cameraPath->Sample(progress)。位置は滑らかなレール。
+///   - 向きは progress 上に並べた CameraRotKey 列を Slerp（区間ごとの easeToNext で緩急）。
+///   - キーが無い間は接線方向（前方）を向く保険。
+///   - シューティング中はプレイヤーがカメラを操作することは禁止（オーサリングは別モード）。
 /// </summary>
 class RailCameraController {
 public:
 	void Initialize(Camera* camera);
 
 	void SetCameraPath(const SplineCurveActor* path) { cameraPath_ = path; }
-	void SetLookAtPath(const SplineCurveActor* path) { lookAtPath_ = path; }
+
+	// 向きキー列（所有は Scene 側。t 昇順前提）。
+	void SetRotKeys(const std::vector<std::unique_ptr<CameraRotKey>>* keys) { rotKeys_ = keys; }
 
 	// t の進行速度（1.0 で 1 秒かけて 0→1 を走破）
 	void SetSpeed(float unitsPerSecond) { speed_ = unitsPerSecond; }
@@ -37,7 +41,7 @@ public:
 private:
 	Camera*                  camera_     = nullptr;
 	const SplineCurveActor*  cameraPath_ = nullptr;
-	const SplineCurveActor*  lookAtPath_ = nullptr;
+	const std::vector<std::unique_ptr<CameraRotKey>>* rotKeys_ = nullptr;
 
 	float progress_ = 0.0f;
 	float speed_    = 0.1f;

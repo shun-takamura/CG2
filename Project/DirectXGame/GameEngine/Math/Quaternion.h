@@ -36,6 +36,13 @@ Quaternion Slerp(const Quaternion& q1, const Quaternion& q2, float t);
 // 軸と角度からクオータニオンを生成
 Quaternion MakeRotateAxisAngleQuaternion(const Vector3& axis, float angle);
 
+// オイラー角(radian, Z*Y*X 順)→クオータニオン。MakeRotateMatrix(Vector3) と同じ合成順。
+Quaternion QuaternionFromEuler(const Vector3& euler);
+
+// クオータニオン→オイラー角(radian, x=pitch / y=yaw / z=roll)。
+// MakeRotateMatrix(Vector3)=Rz*Ry*Rx の逆抽出。yaw=±90°近傍(ジンバル)では roll=0 に固定。
+Vector3 EulerFromQuaternion(const Quaternion& q);
+
 // =====================================
 // 行列との連携
 // =====================================

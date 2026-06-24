@@ -130,6 +130,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Wave\WaveDef.cpp" />
     <ClCompile Include="DirectXGame\Game\Spline\SplineCurveActor.cpp" />
     <ClCompile Include="DirectXGame\Game\Spline\RailCameraController.cpp" />
+    <ClCompile Include="DirectXGame\Game\Spline\CameraRotKey.cpp" />
+    <ClCompile Include="DirectXGame\Game\Spline\RailAimController.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
@@ -167,6 +169,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Wave\WaveDef.h" />
     <ClInclude Include="DirectXGame\Game\Spline\SplineCurveActor.h" />
     <ClInclude Include="DirectXGame\Game\Spline\RailCameraController.h" />
+    <ClInclude Include="DirectXGame\Game\Spline\CameraRotKey.h" />
+    <ClInclude Include="DirectXGame\Game\Spline\RailAimController.h" />
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />
