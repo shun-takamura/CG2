@@ -82,6 +82,35 @@ Quaternion MakeRotateAxisAngleQuaternion(const Vector3& axis, float angle)
     };
 }
 
+Quaternion QuaternionFromEuler(const Vector3& euler)
+{
+    // 行列が Z*Y*X（X が最初に点へ適用）なので、合成も q = qz * qy * qx
+    Quaternion qx = MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, euler.x);
+    Quaternion qy = MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, euler.y);
+    Quaternion qz = MakeRotateAxisAngleQuaternion({ 0.0f, 0.0f, 1.0f }, euler.z);
+    return Multiply(Multiply(qz, qy), qx);
+}
+
+Vector3 EulerFromQuaternion(const Quaternion& q)
+{
+    // 回転行列に直してから Rz*Ry*Rx 規約で逆抽出する。
+    const Matrix4x4 m = MakeRotateMatrix(q);
+    // m[2][0]=sin(yaw), cos(yaw)=sqrt(m00^2+m10^2)
+    const float cosYaw = std::sqrt(m.m[0][0] * m.m[0][0] + m.m[1][0] * m.m[1][0]);
+    const float yaw = std::atan2(m.m[2][0], cosYaw);
+
+    float pitch, roll;
+    if (cosYaw > 1e-6f) {
+        pitch = std::atan2(-m.m[2][1], m.m[2][2]);
+        roll  = std::atan2(-m.m[1][0], m.m[0][0]);
+    } else {
+        // ジンバル特異点（yaw=±90°）：roll を 0 に固定し pitch を別経路で求める
+        pitch = std::atan2(m.m[1][2], m.m[1][1]);
+        roll  = 0.0f;
+    }
+    return { pitch, yaw, roll };
+}
+
 Matrix4x4 MakeRotateMatrix(const Quaternion& q)
 {
     Matrix4x4 result;

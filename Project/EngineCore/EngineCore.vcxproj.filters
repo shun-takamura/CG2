@@ -191,6 +191,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Level\JsonLevelLoader.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\TextureManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -644,6 +647,12 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Level\LevelData.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Level\JsonLevelLoader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.h">

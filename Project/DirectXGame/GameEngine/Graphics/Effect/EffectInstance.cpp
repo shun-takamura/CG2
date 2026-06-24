@@ -63,14 +63,7 @@ namespace {
         return dist(rng);
     }
 
-    // オイラー角(radian, Z*Y*X 順)→クオータニオン。MakeRotateMatrix(Vector3) と同じ合成順に合わせる。
-    Quaternion EulerToQuat(const Vector3& e) {
-        Quaternion qx = MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, e.x);
-        Quaternion qy = MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, e.y);
-        Quaternion qz = MakeRotateAxisAngleQuaternion({ 0.0f, 0.0f, 1.0f }, e.z);
-        // 行列が Z*Y*X（Xが最初に適用）なので、点に対し q = qz * qy * qx
-        return Multiply(Multiply(qz, qy), qx);
-    }
+    // オイラー角→クオータニオンは engine math の QuaternionFromEuler を使う（重複解消）。
 
     // axis まわりに v を ang 回転（ロドリゲスの回転公式）
     Vector3 RotateAroundAxis(const Vector3& v, const Vector3& axis, float ang) {
@@ -249,9 +242,9 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                                     pc.lightningParams, pc.frameParams);
 
             // 向きの初期化：基準 rotate（× 出現時ランダム）をクオータニオンで合成。
-            Quaternion baseQ = EulerToQuat(pc.rotate);
+            Quaternion baseQ = QuaternionFromEuler(pc.rotate);
             if (pc.randomRotateOnSpawn) {
-                Quaternion randQ = EulerToQuat({ RandSym(pc.randomRotateRange.x),
+                Quaternion randQ = QuaternionFromEuler({ RandSym(pc.randomRotateRange.x),
                                                  RandSym(pc.randomRotateRange.y),
                                                  RandSym(pc.randomRotateRange.z) });
                 baseQ = Multiply(baseQ, randQ);
@@ -300,7 +293,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (hasWorldRot) {
             Matrix4x4 rotMat = MakeRotateMatrix(worldRotation_);
             offset = TransformMatrix(baseOffset, rotMat);
-            finalQ = Multiply(EulerToQuat(worldRotation_), rt.orientation);
+            finalQ = Multiply(QuaternionFromEuler(worldRotation_), rt.orientation);
         }
         rt.renderer->SetRotateQuaternion(finalQ);
         Vector3 pos = { worldPos_.x + offset.x, worldPos_.y + offset.y, worldPos_.z + offset.z };
