@@ -57,7 +57,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
     // Skinning計算
     Vertex skinned;
     skinned.texcoord = input.texcoord;
-    skinned.tangent = input.tangent;  // 当面パススルー（位置/法線のみスキニング）
 
     float totalWeight = influence.weight.x + influence.weight.y + influence.weight.z + influence.weight.w;
 
@@ -66,6 +65,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
         // Skinning対象外の頂点はそのまま出力
         skinned.position = input.position;
         skinned.normal = input.normal;
+        skinned.tangent = input.tangent;
     }
     else
     {
@@ -82,6 +82,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
         skinned.normal += mul(input.normal, (float3x3) gMatrixPalette[influence.index.z].skeletonSpaceInverseTransposeMatrix) * influence.weight.z;
         skinned.normal += mul(input.normal, (float3x3) gMatrixPalette[influence.index.w].skeletonSpaceInverseTransposeMatrix) * influence.weight.w;
         skinned.normal = normalize(skinned.normal);
+
+        // 接線の変換（位置と同じく skeletonSpaceMatrix の回転で変形。w=handedness は保持）
+        float3 tan = mul(input.tangent.xyz, (float3x3) gMatrixPalette[influence.index.x].skeletonSpaceMatrix) * influence.weight.x;
+        tan += mul(input.tangent.xyz, (float3x3) gMatrixPalette[influence.index.y].skeletonSpaceMatrix) * influence.weight.y;
+        tan += mul(input.tangent.xyz, (float3x3) gMatrixPalette[influence.index.z].skeletonSpaceMatrix) * influence.weight.z;
+        tan += mul(input.tangent.xyz, (float3x3) gMatrixPalette[influence.index.w].skeletonSpaceMatrix) * influence.weight.w;
+        skinned.tangent = float4(normalize(tan), input.tangent.w);
     }
 
     // 結果を書き込み

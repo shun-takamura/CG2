@@ -29,10 +29,26 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
     // マテリアルデータ作成
     CreateMaterialData(modelCore_->GetDXCore());
 
+    // .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を GPU material に反映
+    // （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
+    if (!matFilePath_.empty() && material_) {
+        MaterialData matTmp;
+        LoadMatFile(matFilePath_, matTmp, material_);
+    }
+
     // テクスチャ読み込み
     textureFilePath_ = modelData_.materialData.textureFilePath;
     assert(!textureFilePath_.empty() && "textureFilePath is empty!");
     TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+
+    // 法線マップ（あれば）読み込み＋useNormalMap反映
+    normalMapFilePath_ = modelData_.materialData.normalMapFilePath;
+    if (!normalMapFilePath_.empty()) {
+        TextureManager::GetInstance()->LoadTexture(normalMapFilePath_);
+        if (material_) material_->useNormalMap = 1;
+    } else {
+        if (material_) material_->useNormalMap = 0;
+    }
 }
 
 void AnimatedModelInstance::Draw(DirectXCore* dxCore)
@@ -52,6 +68,14 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
+
+    // RootParam[10] 法線マップ（無ければベースで埋める）
+    {
+        const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
+        dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+            10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+        );
+    }
 
     PEPPER_COUNT("DrawCall");
     dxCore->GetCommandList()->DrawIndexedInstanced(
@@ -74,6 +98,14 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
+
+    // RootParam[10] 法線マップ（無ければベースで埋める。PS は useNormalMap で判定）
+    {
+        const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
+        dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+            10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+        );
+    }
 
     // ドローコール
     PEPPER_COUNT("DrawCall");
@@ -341,6 +373,23 @@ std::string ReadMatBaseColorPath_V2(const std::string& matPath)
     return std::string(path);
 }
 
+// .mat v3 から normal_map_path を取り出すヘルパー（固定オフセット 308）
+std::string ReadMatNormalMapPath_V2(const std::string& matPath)
+{
+    auto h = AssetLocator::GetInstance()->Open(matPath);
+    if (!h.IsValid()) return {};
+    char magic[4]{};
+    h.Read(magic, 4);
+    if (std::memcmp(magic, "MATL", 4) != 0) return {};
+    uint32_t version = 0;
+    h.Read(&version, 4);
+    if (version < 3) return {};  // v3 から normal_map_path
+    h.Seek(308);
+    char path[256]{};
+    h.Read(path, 256);
+    return std::string(path);
+}
+
 // .skel の Joint 1 個ぶん（172 バイト）
 struct SkelJoint {
     char       name[64];
@@ -594,8 +643,10 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
         char matPath[256]{};
         h.Read(matPath, 256);
 
-        std::string baseColor = ReadMatBaseColorPath_V2(std::string(matPath));
+        matFilePath_ = std::string(matPath);
+        std::string baseColor = ReadMatBaseColorPath_V2(matFilePath_);
         modelData_.materialData.textureFilePath = baseColor;
+        modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath_V2(matFilePath_);
     }
 
     // --- 同階層の .anim を探して読み込む（あれば）---

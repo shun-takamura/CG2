@@ -56,6 +56,7 @@ class ModelInstance
 	//==============================
 	std::string textureFilePath_;  // テクスチャファイルパスを保持
 	std::string normalMapFilePath_;  // 法線マップ DDS パス（空＝なし）
+	std::string matFilePath_;        // submesh が参照する .mat パス（GPU material 反映用）
 
 	ModelData modelData_;
 

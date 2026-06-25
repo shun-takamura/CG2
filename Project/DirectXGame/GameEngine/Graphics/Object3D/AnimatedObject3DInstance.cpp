@@ -275,9 +275,14 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
         );
 
         Material* mat = animatedModelInstance_->GetMaterialPointer();
-        Object3DManager::ShaderType shaderType = (mat && mat->useEnvironmentMap)
-            ? Object3DManager::kShaderEnvironmentMap
-            : Object3DManager::kShaderNoEnvironmentMap;
+        Object3DManager::ShaderType shaderType;
+        if (mat && mat->shadingModel == 1) {
+            shaderType = Object3DManager::kShaderPBR;
+        } else if (mat && mat->useEnvironmentMap) {
+            shaderType = Object3DManager::kShaderEnvironmentMap;
+        } else {
+            shaderType = Object3DManager::kShaderNoEnvironmentMap;
+        }
         dxCore->GetCommandList()->SetPipelineState(
             object3DManager_->GetPipelineState(shaderType)
         );
@@ -570,6 +575,10 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                                 TextureManager::GetInstance()->LoadTexture(data.textureFilePath);
                                 animatedModelInstance_->SetTextureFilePath(data.textureFilePath);
                             }
+                            if (!data.normalMapFilePath.empty()) {
+                                TextureManager::GetInstance()->LoadTexture(data.normalMapFilePath);
+                            }
+                            animatedModelInstance_->SetNormalMapFilePath(data.normalMapFilePath);
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -584,6 +593,29 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                         &mat->environmentCoefficient, 0.0f, 1.0f);
                 }
                 ImGui::DragFloat("Shininess", &mat->shininess, 1.0f, 0.0f, 1000.0f);
+
+                ImGui::Separator();
+
+                // PBR シェーディング切り替え（静的 Object3D と同じ）
+                bool usePBR = (mat->shadingModel == 1);
+                if (ImGui::Checkbox("Use PBR (Cook-Torrance)", &usePBR)) {
+                    mat->shadingModel = usePBR ? 1 : 0;
+                }
+                if (usePBR) {
+                    ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);
+                    ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
+                    ImGui::SliderFloat("IBL (Env) Intensity", &mat->environmentCoefficient, 0.0f, 2.0f);
+
+                    const bool hasNormalMap = animatedModelInstance_ && !animatedModelInstance_->GetNormalMapFilePath().empty();
+                    if (hasNormalMap) {
+                        bool useNrm = (mat->useNormalMap != 0);
+                        if (ImGui::Checkbox("Use Normal Map", &useNrm)) {
+                            mat->useNormalMap = useNrm ? 1 : 0;
+                        }
+                    } else {
+                        ImGui::TextDisabled("Normal Map: (none)");
+                    }
+                }
             }
         }
     }

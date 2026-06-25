@@ -29,6 +29,8 @@ class AnimatedModelInstance
     // メンバ変数
     //==============================
     std::string textureFilePath_;
+    std::string normalMapFilePath_;  // 法線マップ DDS パス（空＝なし）
+    std::string matFilePath_;        // submesh が参照する .mat パス（GPU material 反映用）
     std::string animationPath_;   // 現在ロード中の .anim パス（空＝モデル付属のデフォルト）
 
     ModelData modelData_;
@@ -96,6 +98,12 @@ public:
         modelData_.materialData.textureFilePath = filePath;
     }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
+
+    void SetNormalMapFilePath(const std::string& filePath) {
+        normalMapFilePath_ = filePath;
+        modelData_.materialData.normalMapFilePath = filePath;
+    }
+    const std::string& GetNormalMapFilePath() const { return normalMapFilePath_; }
 
     /// <summary>
     /// 別の .anim ファイルでアニメーションを差し替える。Inspector ドロップから呼ばれる。

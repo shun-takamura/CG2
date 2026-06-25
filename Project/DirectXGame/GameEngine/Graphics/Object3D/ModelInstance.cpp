@@ -55,6 +55,13 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 	CreateIndexData(dxCore);
 	CreateMaterialData(dxCore);
 
+	// .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を GPU material に反映。
+	// （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
+	if (!matFilePath_.empty() && material_) {
+		MaterialData tmp;
+		LoadMatFile(matFilePath_, tmp, material_);
+	}
+
 	// テクスチャを TextureManager に登録（GPU リソース作成）
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 
@@ -400,9 +407,10 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 		h.Read(matPath, 256);
 
 		// .mat を開いて base_color_path / normal_map_path を取得
-		std::string baseColor = ReadMatBaseColorPath(std::string(matPath));
+		matFilePath_ = std::string(matPath);
+		std::string baseColor = ReadMatBaseColorPath(matFilePath_);
 		modelData_.materialData.textureFilePath = baseColor;
-		modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath(std::string(matPath));
+		modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath(matFilePath_);
 	}
 }
 
