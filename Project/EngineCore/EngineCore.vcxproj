@@ -59,6 +59,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.cpp" />
@@ -204,6 +205,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.h" />
