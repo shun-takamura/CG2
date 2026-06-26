@@ -1897,6 +1897,30 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::Text("InputOffset: (%.2f, %.2f)  Vel: (%.2f, %.2f)",
 			playerInputOffset_.x, playerInputOffset_.y,
 			playerVelocity_.x, playerVelocity_.y);
+
+		// シーン停止中（エディタ Pause）のみレティクル追従を止めてこの向きで固定（確認用）
+		ImGui::DragFloat3("Paused Facing (rad)", &fixedPlayerFacing_.x, 0.01f);
+	}
+
+	if (ImGui::CollapsingHeader("Weapon (Socket)")) {
+		ImGui::Checkbox("Enabled", &weaponEnabled_);
+		// 追従先ボーン：プレイヤーのスケルトンからジョイント名を列挙して選ぶ
+		if (player_ && player_->HasSkeleton()) {
+			const Skeleton& sk = player_->GetSkeleton();
+			if (ImGui::BeginCombo("Bone", weaponSocket_.jointName.c_str())) {
+				for (const auto& kv : sk.jointMap) {
+					const bool sel = (kv.first == weaponSocket_.jointName);
+					if (ImGui::Selectable(kv.first.c_str(), sel)) weaponSocket_.jointName = kv.first;
+					if (sel) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+		} else {
+			ImGui::TextDisabled("Bone: %s (skeleton not ready)", weaponSocket_.jointName.c_str());
+		}
+		ImGui::DragFloat3("Grip Translate", &weaponSocket_.offset.translate.x, 0.01f);
+		ImGui::DragFloat3("Grip Rotate",    &weaponSocket_.offset.rotate.x, 0.01f);
+		ImGui::DragFloat3("Grip Scale",     &weaponSocket_.offset.scale.x, 0.01f, 0.0f, 10.0f);
 	}
 
 	if (ImGui::CollapsingHeader("Rail Camera")) {
@@ -2512,6 +2536,20 @@ void StagePlayScene::Initialize() {
 		}
 	}
 
+	// 武器（ソケット追従）：剣モデルが無いので playerBullet を仮の武器として読み込む。
+	// 細長くスケールして「刃」に見立て、後で剣モデルへ差し替えるだけにする。
+	weapon_ = std::make_unique<Object3DInstance>();
+	weapon_->Initialize(object3DManager_, dxCore_,
+		"Resources/Models/Player/Bullet", "playerBullet.mesh", "Weapon");
+	weapon_->SetCamera(camera_.get());
+	weaponSocket_.jointName = "mixamorig:RightHand";
+	// 仮：手から突き出す細長い刃。playerBullet は 0.5 角の立方体なので
+	// scale.z=6 で約 3 units の刃になり、確実に視認できる。向き・位置は ImGui で調整。
+	// 剣モデルを握り原点で作れば offset は単位に近づく。
+	weaponSocket_.offset.scale     = { 0.3f, 0.3f, 6.0f };
+	weaponSocket_.offset.rotate    = { 0.0f, 0.0f, 0.0f };
+	weaponSocket_.offset.translate = { 0.0f, 0.0f, 1.5f };
+
 	// ウェーブ定義ロード（存在しなければ空のまま=何も湧かない）
 	{
 		const std::string wavePath = "Resources/Json/Waves/stage1.json";
@@ -3007,6 +3045,19 @@ void StagePlayScene::Update() {
 	UpdateDynamicPrimitives();
 	UpdateDynamicSprites();
 
+	// 武器をプレイヤーの手ボーンへ追従させる。
+	// UpdateDynamicAnimated でプレイヤーのスケルトンが更新済みなのでここで行列を引く。
+	// grip（握りの微調整）× hand（ボーンのワールド）が武器の最終ワールド行列。
+	if (weapon_ && weaponEnabled_ && player_) {
+		weaponSocket_.target = player_;  // プレイヤー再生成（シーン再構築）に毎フレ追従
+		const Matrix4x4 world = weaponSocket_.World();
+		weapon_->SetWorldMatrixOverride(world);
+		// ギズモ/Inspector でも追従を確認できるよう、平行移動成分を transform_ にも反映する
+		// （描画は override 側を使うので見た目には影響しない。デバッグ可視化用）
+		weapon_->SetTranslate(weaponSocket_.Position());
+		weapon_->Update();
+	}
+
 #ifdef _DEBUG
 
 	DrawDynamicSplinesDebug();
@@ -3188,7 +3239,11 @@ void StagePlayScene::Update() {
 		}
 		const Vector3 toAim{ aimTgt.x - playerPos.x, aimTgt.y - playerPos.y, aimTgt.z - playerPos.z };
 		const float horiz = std::sqrt(toAim.x * toAim.x + toAim.z * toAim.z);
-		if (specialActive_) {
+		if (GetSceneTimeScale() == 0.0f) {
+			// シーン停止中（エディタ Pause）はレティクル追従を止めて固定アングルで構える。
+			// 武器ソケット等の確認・編集をしやすくする。位置（クリップ追従）はそのまま。
+			player_->SetRotate(fixedPlayerFacing_);
+		} else if (specialActive_) {
 			// 必殺技中はレティクル追従を止め、正面（+Z）でどっしり構える。
 			// （きょろきょろ防止＋発射時に向きが崩れるのを防ぐ。大技を構えて撃つ演出）
 			player_->SetRotate(specialFirmFacing_);
@@ -3621,6 +3676,10 @@ void StagePlayScene::Draw() {
 
 	// Scene の動的エンティティ描画
 	DrawDynamicObjects();
+	// 武器（ソケット追従）：静的モデルなので Object3D PSO のこの位置で描画する
+	if (weapon_ && weaponEnabled_) {
+		weapon_->Draw(dxCore_);
+	}
 	DrawDynamicAnimated();
 	DrawDynamicPrimitives();
 

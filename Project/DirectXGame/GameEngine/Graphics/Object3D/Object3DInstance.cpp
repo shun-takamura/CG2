@@ -41,7 +41,7 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
 
 void Object3DInstance::Update()
 {
-    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_);
+    Matrix4x4 worldMatrix = hasWorldOverride_ ? worldOverride_ : MakeAffineMatrix(transform_);
     Matrix4x4 worldViewProjectionMatrix;
 
     if (camera_) {

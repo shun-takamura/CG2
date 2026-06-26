@@ -48,6 +48,11 @@ class Object3DInstance : public IImGuiEditable {
     Transform transform_;
     Transform cameraTransform_;
 
+    // ボーン追従などで完成済みワールド行列を外部から渡すための上書き。
+    // hasWorldOverride_ が true の間は transform_ ではなく worldOverride_ を使う。
+    bool hasWorldOverride_ = false;
+    Matrix4x4 worldOverride_{};
+
     // テクスチャファイルパス（テクスチャ変更機能用）
     std::string textureFilePath_;
     std::string modelFileName_;
@@ -96,6 +101,10 @@ public:
     void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
     void SetTranslate(const Vector3& translate) { transform_.translate = translate; }
     void SetTexture(const std::string& filePath);
+
+    // ワールド行列を直接上書きする（ボーン追従用）。Update がこれを優先採用する。
+    void SetWorldMatrixOverride(const Matrix4x4& m) { worldOverride_ = m; hasWorldOverride_ = true; }
+    void ClearWorldMatrixOverride() { hasWorldOverride_ = false; }
 
     //==============================
     // Material関連セッター（環境マッピング関連）

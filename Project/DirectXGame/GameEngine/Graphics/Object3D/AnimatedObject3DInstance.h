@@ -189,6 +189,43 @@ public:
     }
 
     //==============================
+    // ボーン（ソケット）アクセス
+    //==============================
+    bool HasSkeleton() const { return hasSkeleton_; }
+    const Skeleton& GetSkeleton() const { return skeleton_; }
+
+    /// <summary>
+    /// 指定ジョイントのワールド行列を返す（武器追従・エフェクト発生点に使う）。
+    /// skeletonSpaceMatrix × モデルのworldMatrix。スケルトン未生成や名前不一致なら
+    /// モデル本体の worldMatrix をそのまま返す。Update 後に呼ぶこと。
+    /// </summary>
+    Matrix4x4 GetJointWorldMatrix(const std::string& jointName) const {
+        Matrix4x4 world = MakeAffineMatrix(transform_);
+        if (!hasSkeleton_) return world;
+        auto it = skeleton_.jointMap.find(jointName);
+        if (it == skeleton_.jointMap.end()) return world;
+        return Multiply(skeleton_.joints[it->second].skeletonSpaceMatrix, world);
+    }
+
+    /// <summary>
+    /// ソケット用：ジョイントのワールド行列からスケールを除去（基底ベクトルを正規化）し、
+    /// 回転＋位置のみを返す。mixamo の Armature に焼き込まれた cm→m スケール等を取り除き、
+    /// アタッチした武器/エフェクトが極小に潰れるのを防ぐ。サイズはアタッチ側オフセットで決める。
+    /// </summary>
+    Matrix4x4 GetJointSocketMatrix(const std::string& jointName) const {
+        const Matrix4x4 w = GetJointWorldMatrix(jointName);
+        const Vector3 bx = Normalize(Vector3{ w.m[0][0], w.m[0][1], w.m[0][2] });
+        const Vector3 by = Normalize(Vector3{ w.m[1][0], w.m[1][1], w.m[1][2] });
+        const Vector3 bz = Normalize(Vector3{ w.m[2][0], w.m[2][1], w.m[2][2] });
+        return Matrix4x4{ {
+            { bx.x, bx.y, bx.z, 0.0f },
+            { by.x, by.y, by.z, 0.0f },
+            { bz.x, bz.y, bz.z, 0.0f },
+            { w.m[3][0], w.m[3][1], w.m[3][2], 1.0f },
+        } };
+    }
+
+    //==============================
     // 初期化・更新・描画
     //==============================
     void Initialize(Object3DManager* object3DManager,

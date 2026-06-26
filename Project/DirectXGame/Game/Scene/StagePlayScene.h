@@ -5,7 +5,10 @@
 #include "Vector4.h"
 #include "Wave/WaveDef.h"
 #include "Effect/EffectManager.h"
+#include "Transform.h"
+#include "BoneSocket.h"
 #include <memory>
+#include <string>
 #include <vector>
 #include <unordered_set>
 #include <utility>
@@ -18,6 +21,7 @@ class RailCameraController;
 class CameraRotKey;
 class RailAimController;
 class AnimatedObject3DInstance;
+class Object3DInstance;
 class Reticle;
 class LightningRuntime;
 
@@ -69,6 +73,17 @@ private:
 	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する
 	AnimatedObject3DInstance* player_ = nullptr;
+
+	// 武器（ソケット追従）：プレイヤーの手ボーンに毎フレ追従させる。
+	// dynamicAnimated_ には入れず、順序制御のため明示的に Update/Draw する。
+	std::unique_ptr<Object3DInstance> weapon_;
+	BoneSocket weaponSocket_;          // 追従先ボーン名＋マウントオフセット（ImGui調整）
+	bool       weaponEnabled_ = true;  // ON で追従・描画
+
+	// シーン停止中（エディタ Pause = SceneTimeScale==0）だけレティクル照準追従を止め、
+	// この向きで固定する。武器ソケットの確認・編集をしやすくする。再生中は通常照準。
+	// 位置（クリップ追従）には影響しない。
+	Vector3 fixedPlayerFacing_{ 0.0f, 0.0f, 0.0f }; // 停止中の固定向き（rad, +Z正面）
 
 	// ----- ImGui で編集可能な調整値（Resources/Json/Tuning/StagePlay.json に自動同期） -----
 	Vector3 playerLocalOffset_{ 0.0f, -0.5f, 6.0f };  // カメラローカルの中心位置（無入力時）
