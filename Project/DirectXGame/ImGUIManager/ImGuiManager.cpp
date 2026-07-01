@@ -98,6 +98,15 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     // バックエンドの動的テクスチャ機能は使わない（レガシー Init と同じ挙動を維持）。
     io.BackendFlags &= ~ImGuiBackendFlags_RendererHasTextures;
 
+    // 日本語対応フォントを読み込む（無ければ標準フォントにフォールバック）
+    // 同梱の M PLUS 1p を使うことで配布先PCでもフォント依存なく日本語表示できる。
+    const char* kFontPath = "Resources/Fonts/MPLUS1p-Regular.ttf";
+    ImFont* jpFont = io.Fonts->AddFontFromFileTTF(
+        kFontPath, 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+    if (jpFont == nullptr) {
+        io.Fonts->AddFontDefault();
+    }
+
     // フォントアトラスを明示的にビルド（docking版のレガシーAPI対応）
     unsigned char* pixels;
     int width, height;

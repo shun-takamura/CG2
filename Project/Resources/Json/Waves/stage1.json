@@ -4,38 +4,55 @@
     {
       "enemy_type": "Drone",
       "prefab": "drone",
-      "trigger_t": 0.05,
-      "retreat_t": 0.20,
+      "trigger_sec": 6.25,
+      "retreat_sec": 25.0,
+      "traverse_sec": 18.75,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.15,
-      "shoot_interval_t": 0.04
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": ""
     },
     {
       "enemy_type": "Drone",
       "prefab": "drone",
-      "trigger_t": 0.10,
-      "retreat_t": 0.25,
+      "trigger_sec": 12.5,
+      "retreat_sec": 31.25,
+      "traverse_sec": 18.75,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.15,
-      "shoot_interval_t": 0.04
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": ""
     },
     {
       "enemy_type": "Drone",
       "prefab": "drone",
-      "trigger_t": 0.15,
-      "retreat_t": 0.30,
+      "trigger_sec": 18.75,
+      "retreat_sec": 37.5,
+      "traverse_sec": 18.75,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.15,
-      "shoot_interval_t": 0.05
+      "count": 1,
+      "shoot_interval_sec": 6.25,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": ""
     },
     {
       "enemy_type": "Carrier",
       "prefab": "carrier",
-      "trigger_t": 0.35,
-      "retreat_t": 0.55,
+      "trigger_sec": 43.75,
+      "retreat_sec": 68.75,
+      "traverse_sec": 25.0,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.20,
-      "spawn_interval_sec": 4.0,
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 4,
       "spawn_limit": 3,
       "child_prefab": "drone",
       "child_spline_id": "EnemyPath_01"
@@ -43,19 +60,49 @@
     {
       "enemy_type": "Rusher",
       "prefab": "rusher",
-      "trigger_t": 0.60,
-      "retreat_t": -1.0,
+      "trigger_sec": 75.0,
+      "retreat_sec": -1,
+      "traverse_sec": 3.75,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.03
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": ""
     },
     {
       "enemy_type": "Drone",
       "prefab": "drone",
-      "trigger_t": 0.75,
-      "retreat_t": 0.90,
+      "trigger_sec": 93.75,
+      "retreat_sec": 112.5,
+      "traverse_sec": 18.75,
       "spline_id": "EnemyPath_01",
-      "traverse_t": 0.15,
-      "shoot_interval_t": 0.03
+      "count": 1,
+      "shoot_interval_sec": 3.75,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": ""
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 10.75,
+      "retreat_sec": -1,
+      "traverse_sec": 18.75,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 5,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        6.023737907409668,
+        -0.26073399186134338,
+        29.387866973876953
+      ]
     }
   ]
 }

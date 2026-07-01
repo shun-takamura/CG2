@@ -23,6 +23,34 @@ enum class PrefabKind {
 };
 
 /// <summary>
+/// 敵プレハブの移動方法（どう登場し・どう動くか）。
+/// enemyType（WaveEntry）が攻撃ロールを決めるのに対し、こちらは移動を決める。
+/// </summary>
+enum class MovementType {
+	SplineFollow,  // 登場スプラインに乗って移動（splineId は配置時に選択）
+	ScreenHover,   // 画面相対点へ飛来→カメラ相対にロックして停止（プレイヤーから見て静止）→一定時間後に逃走
+	Drift,         // 画面内をゆっくり徘徊
+	Static,        // その場（カメラ相対固定）に即出現
+};
+
+inline const char* MovementTypeToStr(MovementType m) {
+	switch (m) {
+	case MovementType::ScreenHover: return "ScreenHover";
+	case MovementType::Drift:       return "Drift";
+	case MovementType::Static:      return "Static";
+	case MovementType::SplineFollow:
+	default:                        return "SplineFollow";
+	}
+}
+inline MovementType MovementTypeFromStr(const std::string& s, MovementType fallback = MovementType::SplineFollow) {
+	if (s == "ScreenHover")  return MovementType::ScreenHover;
+	if (s == "Drift")        return MovementType::Drift;
+	if (s == "Static")       return MovementType::Static;
+	if (s == "SplineFollow") return MovementType::SplineFollow;
+	return fallback;
+}
+
+/// <summary>
 /// プリファブ定義。kind に応じて Object3D / Animated / Primitive を表現する。
 /// Object3D / Animated は modelDir + modelFile を、Primitive は primitiveParams を使う。
 /// </summary>
@@ -98,6 +126,14 @@ struct PrefabDef {
 	float         meleeCleanWindow     = 0.08f;           // 本あて扱いの秒数
 	float         meleeCleanMultiplier = 1.5f;            // 本あて倍率
 	float         meleeLateMultiplier  = 0.7f;            // 持続あて倍率
+
+	// ----- Movement（敵プレハブ用：登場/移動の方法と速度） -----
+	// hasMovement=false の敵は従来通り SplineFollow 扱い（後方互換）。
+	bool          hasMovement        = false;
+	MovementType  movementType       = MovementType::SplineFollow;
+	float         moveSpeed          = 10.0f;  // SplineFollow の基準速度 / Drift の徘徊速度 [units/sec]
+	float         hoverApproachSpeed = 30.0f;  // ScreenHover: 飛来速度 [units/sec]
+	float         hoverHoldDuration  = 6.0f;   // ScreenHover: 停止して攻撃を続ける時間（経過で逃走）[sec]
 
 	// ----- Carrier（運び屋プレハブ用：子敵の寿命・徘徊半径） -----
 	bool          hasCarrier             = false;

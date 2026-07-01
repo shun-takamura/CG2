@@ -1982,12 +1982,18 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 	}
 
+#ifdef _DEBUG
+	// インゲーム配置エディタ（Debug ビルドのみ）
+	DrawWaveEditorUI(changed);
+#endif
+
 	if (ImGui::CollapsingHeader("Skybox")) {
 		// 候補 Cubemap（手持ちの3枚）。新しい dds を足したらここに追記する。
 		static const char* kCubemaps[] = {
 			"Resources/Cubemaps/rogland_clear_night_8k.dds",
 			"Resources/Cubemaps/rogland_clear_night_4k.dds",
 			"Resources/Cubemaps/passendorf_snow_8k.dds",
+			"Resources/Cubemaps/TrueHDRI_YamagataField_181231_1137_L1000_Unclipped_sRGB.dds",
 		};
 
 		// --- 常時の着色（即反映）---
@@ -3553,21 +3559,45 @@ void StagePlayScene::Update() {
 	// スポーン：カメラ進行度 t でエントリをトリガー
 	if (!gameFrozen) {
 		const float currentT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
+		// ステージ開始からの経過秒（進行度 t を全体尺で割る）。スポーン/退避判定の基準。
+		const float nowSec = (railCameraSpeed_ > 1e-8f) ? currentT / railCameraSpeed_ : 0.0f;
 		for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 			const WaveEntry& we = currentWave_.entries[i];
 
 			// スポーントリガー
-			if (i < spawnFired_.size() && !spawnFired_[i] && currentT >= we.triggerT) {
+			if (i < spawnFired_.size() && !spawnFired_[i] && nowSec >= we.triggerSec) {
+				const PrefabDef* pdef = PrefabManager::GetInstance()->Find(we.prefab);
+				// 移動方法がカメラ相対（ScreenHover/Static）か、エントリにカメラオフセット指定があれば
+				// スプラインを使わずカメラ相対位置に出現させる。
+				const bool cameraRelative = we.useCameraOffset ||
+					(pdef && pdef->hasMovement &&
+						(pdef->movementType == MovementType::ScreenHover ||
+						 pdef->movementType == MovementType::Static));
+
 				IImGuiEditable* spawned = nullptr;
-				if (!we.splineId.empty()) {
+				if (cameraRelative) {
+					const Vector3 wpos = CameraOffsetToWorld(we.cameraOffset);
+					spawned = SpawnEnemyAt(we.prefab, wpos);
+					if (spawned) {
+						// 撃破検知・コントローラ紐付け・Seek 掃除を共通化するため
+						// MovingEnemy にも登録（spline=null/speed=0 なので位置はコントローラが制御）。
+						MovingEnemy me{};
+						me.entity         = spawned;
+						me.spline         = nullptr;
+						me.t              = 0.0f;
+						me.speed          = 0.0f;
+						me.removeAtEnd    = false;
+						me.waveEntryIndex = static_cast<int>(i);
+						movingEnemies_.push_back(me);
+					}
+				} else if (!we.splineId.empty()) {
 					SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
 					if (sp) {
 						// Rusher は終端で止まる（removeAtEnd=false）
 						const bool removeAtEnd = (we.enemyType != "Rusher");
-						// traverse_t [カメラt] → スプライン速度 [enemy_t/sec] へ変換
-						// enemy_speed = railCameraSpeed_ / traverse_t
-						const float enemySpeed = (we.traverseT > 1e-5f)
-							? (railCameraSpeed_ / we.traverseT) : 0.0f;
+						// traverse_sec [秒] → スプライン速度 [spline_t/sec]。速度 = 1 / 踏破秒。
+						const float enemySpeed = (we.traverseSec > 1e-4f)
+							? (1.0f / we.traverseSec) : 0.0f;
 						spawned = SpawnEnemyOnSpline(we.prefab, sp, enemySpeed,
 							removeAtEnd, 0.0f, static_cast<int>(i));
 					} else {
@@ -3583,14 +3613,20 @@ void StagePlayScene::Update() {
 					ctrl->entity_           = spawned;
 					ctrl->waveEntryIndex_   = static_cast<int>(i);
 					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
-					ctrl->triggerT_         = we.triggerT;
-					ctrl->shootIntervalT_   = we.shootIntervalT;
+					ctrl->triggerSec_       = we.triggerSec;
+					ctrl->shootIntervalSec_ = we.shootIntervalSec;
 					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 					ctrl->spawnLimit_       = we.spawnLimit;
 					// 子敵は明示指定があればそれを、なければ自身のプレハブ／スプラインにフォールバック
 					ctrl->childPrefab_      = we.childPrefab.empty()    ? we.prefab   : we.childPrefab;
 					ctrl->childSplineId_    = we.childSplineId.empty()  ? we.splineId : we.childSplineId;
-					ctrl->Init(EnemyCommandFactory::Create(we));
+					// ScreenHover 用パラメータ（移動はプレハブ駆動）
+					ctrl->hoverOffset_      = we.cameraOffset;
+					if (pdef && pdef->hasMovement) {
+						ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
+						ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
+					}
+					ctrl->Init(EnemyCommandFactory::Create(we, pdef));
 
 					// MovingEnemy にコントローラを紐付け
 					for (auto& m : movingEnemies_) {
@@ -3608,7 +3644,7 @@ void StagePlayScene::Update() {
 			// 退避トリガー
 			if (i < retreatFired_.size() && i < spawnFired_.size()
 				&& spawnFired_[i] && !retreatFired_[i]
-				&& we.retreatT >= 0.0f && currentT >= we.retreatT) {
+				&& we.retreatSec >= 0.0f && nowSec >= we.retreatSec) {
 				// 対応するコントローラに退避を指示
 				for (auto& ctrl : enemyControllers_) {
 					if (ctrl && ctrl->waveEntryIndex_ == static_cast<int>(i)) {
@@ -3624,7 +3660,8 @@ void StagePlayScene::Update() {
 	// 敵コントローラ更新（自由移動・ビルボード・退避完了処理）
 	if (!gameFrozen) {
 		const float cameraT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
-		UpdateEnemyControllers(worldDt, player_, cameraT);
+		const float stageSec = (railCameraSpeed_ > 1e-8f) ? cameraT / railCameraSpeed_ : 0.0f;
+		UpdateEnemyControllers(worldDt, player_, stageSec);
 	}
 
 	// スプライン追従敵の進行
@@ -3871,32 +3908,58 @@ void StagePlayScene::Seek(float seconds) {
 	// 厳密にやるなら killAtT_ ごとに wave→prefab→scoreValue を引く必要があり実装コスト高）
 	ScoreManager::GetInstance()->Reset();
 
-	// フラグを seekT から再構築
+	// seek 先の経過秒（進行度 t を全体尺で割る）
+	const float seekSec = (railCameraSpeed_ > 1e-8f) ? seekT / railCameraSpeed_ : 0.0f;
+
+	// フラグを seekSec から再構築
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 		const WaveEntry& we = currentWave_.entries[i];
-		spawnFired_[i]  = (seekT >= we.triggerT);
-		retreatFired_[i] = (we.retreatT >= 0.0f && seekT >= we.retreatT);
+		spawnFired_[i]  = (seekSec >= we.triggerSec);
+		retreatFired_[i] = (we.retreatSec >= 0.0f && seekSec >= we.retreatSec);
 	}
 
-	// 生存中の敵をスプライン上の正しい位置で復元
+	// 生存中の敵を正しい位置で復元（スプライン上 / カメラ相対）
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 		const WaveEntry& we = currentWave_.entries[i];
 		if (!spawnFired_[i]) continue;
 		if (retreatFired_[i]) continue;
 		if (killAtT_[i] >= 0.0f) continue;
-		if (we.splineId.empty()) continue;
 
-		// camera t 進行量 / traverse_t = スプライン上の t
-		if (we.traverseT < 1e-5f) continue;
-		const float tOnSpline = std::clamp((seekT - we.triggerT) / we.traverseT, 0.0f, 1.0f);
-		if (tOnSpline >= 1.0f) continue;
+		const PrefabDef* pdef = PrefabManager::GetInstance()->Find(we.prefab);
+		const bool cameraRelative = we.useCameraOffset ||
+			(pdef && pdef->hasMovement &&
+				(pdef->movementType == MovementType::ScreenHover ||
+				 pdef->movementType == MovementType::Static));
 
-		SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
-		if (!sp) continue;
-		const bool removeAtEnd = (we.enemyType != "Rusher");
-		const float enemySpeed = railCameraSpeed_ / we.traverseT;
-		IImGuiEditable* spawned = SpawnEnemyOnSpline(
-			we.prefab, sp, enemySpeed, removeAtEnd, tOnSpline, static_cast<int>(i));
+		IImGuiEditable* spawned = nullptr;
+		if (cameraRelative) {
+			// カメラ相対敵は seek した瞬間のカメラ基準で再配置（停止状態から再開）。
+			// Seek は開発ツールなので hover の経過時間までは厳密復元しない。
+			spawned = SpawnEnemyAt(we.prefab, CameraOffsetToWorld(we.cameraOffset));
+			if (spawned) {
+				MovingEnemy me{};
+				me.entity         = spawned;
+				me.spline         = nullptr;
+				me.t              = 0.0f;
+				me.speed          = 0.0f;
+				me.removeAtEnd    = false;
+				me.waveEntryIndex = static_cast<int>(i);
+				movingEnemies_.push_back(me);
+			}
+		} else {
+			if (we.splineId.empty()) continue;
+			// 経過秒 / 踏破秒 = スプライン上の進捗 t
+			if (we.traverseSec < 1e-4f) continue;
+			const float tOnSpline = std::clamp((seekSec - we.triggerSec) / we.traverseSec, 0.0f, 1.0f);
+			if (tOnSpline >= 1.0f) continue;
+
+			SplineCurveActor* sp = FindDynamicSplineByName(we.splineId);
+			if (!sp) continue;
+			const bool removeAtEnd = (we.enemyType != "Rusher");
+			const float enemySpeed = 1.0f / we.traverseSec;
+			spawned = SpawnEnemyOnSpline(
+				we.prefab, sp, enemySpeed, removeAtEnd, tOnSpline, static_cast<int>(i));
+		}
 		if (!spawned) continue;
 
 		// Seek 復元された敵にも EnemyController を作って AI を再開させる
@@ -3904,13 +3967,18 @@ void StagePlayScene::Seek(float seconds) {
 		ctrl->entity_           = spawned;
 		ctrl->waveEntryIndex_   = static_cast<int>(i);
 		ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
-		ctrl->triggerT_         = we.triggerT;
-		ctrl->shootIntervalT_   = we.shootIntervalT;
+		ctrl->triggerSec_       = we.triggerSec;
+		ctrl->shootIntervalSec_ = we.shootIntervalSec;
 		ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 		ctrl->spawnLimit_       = we.spawnLimit;
 		ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
 		ctrl->childSplineId_    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
-		ctrl->Init(EnemyCommandFactory::Create(we));
+		ctrl->hoverOffset_      = we.cameraOffset;
+		if (pdef && pdef->hasMovement) {
+			ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
+			ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
+		}
+		ctrl->Init(EnemyCommandFactory::Create(we, pdef));
 
 		for (auto& m : movingEnemies_) {
 			if (m.entity == spawned) {
@@ -3926,6 +3994,244 @@ void StagePlayScene::Seek(float seconds) {
 Camera* StagePlayScene::GetCamera() {
 	return camera_.get();
 }
+
+Vector3 StagePlayScene::CameraOffsetToWorld(const Vector3& off) const {
+	if (!camera_) return off;
+	const Matrix4x4& w = camera_->GetWorldMatrix();
+	const Vector3 c = camera_->GetTranslate();
+	return {
+		c.x + w.m[0][0] * off.x + w.m[1][0] * off.y + w.m[2][0] * off.z,
+		c.y + w.m[0][1] * off.x + w.m[1][1] * off.y + w.m[2][1] * off.z,
+		c.z + w.m[0][2] * off.x + w.m[1][2] * off.y + w.m[2][2] * off.z,
+	};
+}
+
+Vector3 StagePlayScene::WorldToCameraOffset(const Vector3& world) const {
+	if (!camera_) return world;
+	const Matrix4x4& w = camera_->GetWorldMatrix();
+	const Vector3 c = camera_->GetTranslate();
+	const Vector3 d{ world.x - c.x, world.y - c.y, world.z - c.z };
+	// カメラのワールド行列は正規直交（無スケール）→ 転置が逆回転。各基底との内積でローカル化。
+	return {
+		d.x * w.m[0][0] + d.y * w.m[0][1] + d.z * w.m[0][2],
+		d.x * w.m[1][0] + d.y * w.m[1][1] + d.z * w.m[1][2],
+		d.x * w.m[2][0] + d.y * w.m[2][1] + d.z * w.m[2][2],
+	};
+}
+
+bool StagePlayScene::OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY) {
+#ifdef _DEBUG
+	if (!waveEditMode_ || !camera_) return false;
+
+	// 画面相対座標→カメラを通るレイを作り、カメラ前方 waveDropDepth_ の点を採用
+	const float ndcX = relX * 2.0f - 1.0f;
+	const float ndcY = 1.0f - relY * 2.0f;
+	const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
+	const Vector3 nearP = TransformCoordinate({ ndcX, ndcY, 0.0f }, invVP);
+	const Vector3 farP  = TransformCoordinate({ ndcX, ndcY, 1.0f }, invVP);
+	Vector3 dir{ farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
+	const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+	if (len < 1e-5f) return false;
+	dir = { dir.x / len, dir.y / len, dir.z / len };
+	const Vector3 camPos = camera_->GetTranslate();
+	const Vector3 worldPos{
+		camPos.x + dir.x * waveDropDepth_,
+		camPos.y + dir.y * waveDropDepth_,
+		camPos.z + dir.z * waveDropDepth_,
+	};
+
+	// 新規ウェーブエントリを現在の経過秒で作成（カメラ相対配置）
+	const float nowSec = (railCameraSpeed_ > 1e-8f && railCamera_)
+		? railCamera_->GetProgress() / railCameraSpeed_ : 0.0f;
+	WaveEntry e{};
+	e.prefab          = prefabName;
+	e.enemyType       = "Drone"; // 攻撃ロール既定（射撃）。一覧で変更可
+	e.triggerSec      = nowSec;
+	e.retreatSec      = -1.0f;
+	e.useCameraOffset = true;
+	e.cameraOffset    = WorldToCameraOffset(worldPos);
+	currentWave_.entries.push_back(e);
+	waveSelectedEntry_ = static_cast<int>(currentWave_.entries.size()) - 1;
+	RebuildWaveRuntimeState();
+	LogBuffer::Instance().Add(
+		"Wave: added entry '" + prefabName + "' at " + std::to_string(e.triggerSec) + "s",
+		LogBuffer::Level::Info);
+	return true;
+#else
+	(void)prefabName; (void)relX; (void)relY;
+	return false;
+#endif
+}
+
+#ifdef _DEBUG
+void StagePlayScene::SaveWaveToDisk() {
+	if (WaveDefIO::SaveToFile(wavePath_, currentWave_)) {
+		LogBuffer::Instance().Add("Wave saved: " + wavePath_, LogBuffer::Level::Info);
+	} else {
+		LogBuffer::Instance().Add("Wave save FAILED: " + wavePath_, LogBuffer::Level::Warning);
+	}
+}
+
+void StagePlayScene::RebuildWaveRuntimeState() {
+	// entries サイズに追従させ、現在の rail t でスポーン状態を作り直す。
+	// Seek が敵/弾/コントローラを全クリアして seekT 基準で再構築してくれる。
+	spawnFired_.assign(currentWave_.entries.size(), false);
+	retreatFired_.assign(currentWave_.entries.size(), false);
+	killAtT_.assign(currentWave_.entries.size(), -1.0f);
+	const float seconds = (railCameraSpeed_ > 1e-8f && railCamera_)
+		? railCamera_->GetProgress() / railCameraSpeed_ : 0.0f;
+	Seek(seconds);
+}
+
+void StagePlayScene::DrawWaveEditorUI(bool& changed) {
+	if (!ImGui::CollapsingHeader("Wave Editor")) return;
+
+	ImGui::Checkbox("Wave Edit Mode", &waveEditMode_);
+	ImGui::TextDisabled("ON中: ビューポートへプレハブをドロップ＝現在tでエントリ追加");
+	ImGui::DragFloat("Drop Depth (前方)", &waveDropDepth_, 0.5f, 1.0f, 300.0f, "%.1f");
+
+	// エントリの時間系は全て秒(s)。レールカメラは進行度 t なので、UI 上のレール時刻だけ
+	// 進行度⇔秒を換算する（t = 秒 × railCameraSpeed_、全体尺 = 1/railCameraSpeed_ 秒）。
+	const float tps = (railCameraSpeed_ > 1e-8f) ? railCameraSpeed_ : (1.0f / 120.0f);
+	const float totalSec = 1.0f / tps;
+	const float nowSec = railCamera_ ? railCamera_->GetProgress() / tps : 0.0f;
+
+	// rail 時刻スクラブ（配置タイミング合わせ・秒指定）
+	if (railCamera_) {
+		float curSec = nowSec;
+		if (ImGui::SliderFloat("Rail 時刻 (s)", &curSec, 0.0f, totalSec, "%.2f s")) {
+			// Seek は秒引数。スクラブで敵配置も追従させる
+			Seek(curSec);
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("/ %.1f s", totalSec);
+		if (ImGui::Button("現在時刻で中央にエントリ追加")) {
+			WaveEntry e{};
+			e.prefab          = "dummy_enemy";
+			e.enemyType       = "Drone";
+			e.triggerSec      = nowSec;
+			e.retreatSec      = -1.0f;
+			e.useCameraOffset = true;
+			e.cameraOffset    = { 0.0f, 0.0f, waveDropDepth_ }; // 正面 waveDropDepth_
+			currentWave_.entries.push_back(e);
+			waveSelectedEntry_ = static_cast<int>(currentWave_.entries.size()) - 1;
+			RebuildWaveRuntimeState();
+		}
+	}
+
+	ImGui::Separator();
+	if (ImGui::Button("Save Wave")) { SaveWaveToDisk(); }
+	ImGui::SameLine();
+	ImGui::Text("(%s)", wavePath_.c_str());
+
+	// ----- エントリ一覧 -----
+	ImGui::SeparatorText("Entries");
+	int deleteIdx = -1, moveUpIdx = -1, moveDownIdx = -1;
+	for (int i = 0; i < static_cast<int>(currentWave_.entries.size()); ++i) {
+		const WaveEntry& we = currentWave_.entries[i];
+		ImGui::PushID(i);
+		char label[160];
+		std::snprintf(label, sizeof(label), "[%d] %s  %.2fs  %s",
+			i, we.prefab.c_str(), we.triggerSec,
+			we.useCameraOffset ? "camera" : (we.splineId.empty() ? "-" : we.splineId.c_str()));
+		if (ImGui::Selectable(label, waveSelectedEntry_ == i)) {
+			waveSelectedEntry_ = i;
+			Seek(we.triggerSec); // Seek は秒引数
+		}
+		ImGui::SameLine(); if (ImGui::SmallButton("^")) moveUpIdx = i;
+		ImGui::SameLine(); if (ImGui::SmallButton("v")) moveDownIdx = i;
+		ImGui::SameLine(); if (ImGui::SmallButton("x")) deleteIdx = i;
+		ImGui::PopID();
+	}
+
+	// ----- 選択エントリの編集 -----
+	if (waveSelectedEntry_ >= 0 && waveSelectedEntry_ < static_cast<int>(currentWave_.entries.size())) {
+		WaveEntry& we = currentWave_.entries[waveSelectedEntry_];
+		ImGui::SeparatorText("Selected Entry");
+
+		char prefabBuf[128];
+		std::snprintf(prefabBuf, sizeof(prefabBuf), "%s", we.prefab.c_str());
+		if (ImGui::InputText("Prefab", prefabBuf, sizeof(prefabBuf))) we.prefab = prefabBuf;
+
+		const char* kEnemyTypes[] = { "Drone", "Carrier", "Rusher" };
+		int etIdx = (we.enemyType == "Carrier") ? 1 : (we.enemyType == "Rusher") ? 2 : 0;
+		if (ImGui::Combo("Enemy Type (攻撃ロール)", &etIdx, kEnemyTypes, IM_ARRAYSIZE(kEnemyTypes))) {
+			we.enemyType = kEnemyTypes[etIdx];
+		}
+
+		// 出現タイミング（秒）
+		if (ImGui::DragFloat("出現 (s)", &we.triggerSec, 0.05f, 0.0f, totalSec, "%.2f s")) changed = true;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("now##trig")) we.triggerSec = nowSec;
+
+		// 退避（秒）。チェックOFFで「退避なし」(-1)
+		bool hasRetreat = (we.retreatSec >= 0.0f);
+		if (ImGui::Checkbox("退避する", &hasRetreat)) {
+			we.retreatSec = hasRetreat ? (we.triggerSec + 3.0f) : -1.0f;
+			changed = true;
+		}
+		if (hasRetreat) {
+			if (ImGui::DragFloat("退避 (s)", &we.retreatSec, 0.05f, 0.0f, totalSec, "%.2f s")) changed = true;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("now##ret")) we.retreatSec = nowSec;
+		}
+
+		ImGui::DragInt("count", &we.count, 0.1f, 1, 20);
+
+		// 射撃間隔（秒）。0 で射撃なし
+		ImGui::DragFloat("射撃間隔 (s)", &we.shootIntervalSec, 0.02f, 0.0f, 30.0f, "%.2f s");
+
+		// 配置方式：カメラ相対 / スプライン
+		ImGui::Checkbox("Use Camera Offset (画面相対停止)", &we.useCameraOffset);
+		if (we.useCameraOffset) {
+			ImGui::DragFloat3("camera_offset (右/上/前)", &we.cameraOffset.x, 0.25f, -500.0f, 500.0f, "%.2f");
+		} else {
+			// スプライン選択コンボ（EnemyPathSpline 等の動的スプライン名から）
+			const char* curr = we.splineId.empty() ? "(none)" : we.splineId.c_str();
+			if (ImGui::BeginCombo("spline_id", curr)) {
+				for (const auto& sp : dynamicSplines_) {
+					if (!sp) continue;
+					const std::string nm = sp->GetName();
+					if (ImGui::Selectable(nm.c_str(), nm == we.splineId)) we.splineId = nm;
+				}
+				ImGui::EndCombo();
+			}
+			// スプライン踏破にかける時間（秒）
+			if (ImGui::DragFloat("踏破時間 (s)", &we.traverseSec, 0.1f, 0.1f, totalSec, "%.2f s")) {
+				if (we.traverseSec < 0.1f) we.traverseSec = 0.1f;
+			}
+		}
+
+		if (ImGui::Button("この変更を反映 (再構築)")) {
+			RebuildWaveRuntimeState();
+			changed = true;
+		}
+	}
+
+	// 構造変更の後処理（リスト走査後にまとめて行う）
+	bool structureChanged = false;
+	if (deleteIdx >= 0) {
+		currentWave_.entries.erase(currentWave_.entries.begin() + deleteIdx);
+		if (waveSelectedEntry_ == deleteIdx) waveSelectedEntry_ = -1;
+		else if (waveSelectedEntry_ > deleteIdx) --waveSelectedEntry_;
+		structureChanged = true;
+	}
+	if (moveUpIdx > 0) {
+		std::swap(currentWave_.entries[moveUpIdx], currentWave_.entries[moveUpIdx - 1]);
+		if (waveSelectedEntry_ == moveUpIdx) --waveSelectedEntry_;
+		structureChanged = true;
+	}
+	if (moveDownIdx >= 0 && moveDownIdx + 1 < static_cast<int>(currentWave_.entries.size())) {
+		std::swap(currentWave_.entries[moveDownIdx], currentWave_.entries[moveDownIdx + 1]);
+		if (waveSelectedEntry_ == moveDownIdx) ++waveSelectedEntry_;
+		structureChanged = true;
+	}
+	if (structureChanged) {
+		RebuildWaveRuntimeState();
+		changed = true;
+	}
+}
+#endif // _DEBUG
 
 float StagePlayScene::GetCameraProgressT() const {
 	return railCamera_ ? railCamera_->GetProgress() : -1.0f;

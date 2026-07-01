@@ -183,6 +183,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Components\BulletParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\MeleeParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\CarrierParams.h" />
+    <ClInclude Include="DirectXGame\Game\Components\MovementParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\ChargeParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\PrecisionParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
@@ -198,6 +199,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\EnemyController.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\EnemyCommandFactory.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\HoverStationCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h" />

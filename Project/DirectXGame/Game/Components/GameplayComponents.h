@@ -9,6 +9,7 @@
 #include "BulletParams.h"
 #include "MeleeParams.h"
 #include "CarrierParams.h"
+#include "MovementParams.h"
 #include "ChargeParams.h"
 #include "PrecisionParams.h"
 
@@ -45,6 +46,10 @@ struct GameplayComponents {
 	//==================== CarrierParams ====================
 	const CarrierParams& GetCarrierParams() const { return carrierParams; }
 	CarrierParams& GetCarrierParams() { return carrierParams; }
+
+	//==================== MovementParams ====================
+	const MovementParams& GetMovementParams() const { return movementParams; }
+	MovementParams& GetMovementParams() { return movementParams; }
 
 	//==================== ChargeParams ====================
 	const ChargeParams& GetChargeParams() const { return chargeParams; }
@@ -90,6 +95,7 @@ struct GameplayComponents {
 	BulletParams bulletParams{};
 	MeleeParams meleeParams{};
 	CarrierParams carrierParams{};
+	MovementParams movementParams{};
 	ChargeParams chargeParams{};
 	PrecisionParams precisionParams{};
 	bool hasAttackPower = false;

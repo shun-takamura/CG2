@@ -87,6 +87,7 @@ void InspectorWindow::OnDraw() {
     const bool showBullet        = isPlayerBullet || isEnemyAttack; // 弾パラメータ
     const bool showMelee         = isPlayerMelee;                   // 近接パラメータ（持続/オフセット/コンボ/本・持続あて）
     const bool showCarrier       = isEnemy || isBoss;
+    const bool showMovement      = isEnemy;                         // 登場/移動の方法と速度（敵のみ）
     const bool showCharge        = isPlayer;
     const bool showPrecision     = isPlayer;
     const bool showBulletSlots   = isPlayer;
@@ -94,7 +95,7 @@ void InspectorWindow::OnDraw() {
     const bool showEffects       = isPlayer || isPlayerBullet || isPlayerMelee
                                  || isEnemy || isEnemyAttack || isBoss;
     const bool showBattle = showHP || showAttackPower || showRawDamage || showAtkMultiplier
-                         || showBullet || showMelee || showCarrier || showCharge || showPrecision
+                         || showBullet || showMelee || showCarrier || showMovement || showCharge || showPrecision
                          || showBulletSlots || showScore;
 
     // ----- コライダー（タグが衝突可能、かつ 3D エンティティの場合のみ表示） -----
@@ -271,6 +272,25 @@ void InspectorWindow::OnDraw() {
                     ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
                     ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
                     ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
+                }
+            }
+
+            // MovementParams（Enemy：登場/移動の方法と速度）
+            if (showMovement) {
+                sep();
+                MovementParams& mv = Gameplay::Of(selected).GetMovementParams();
+                ImGui::Checkbox("MovementParams Enabled", &mv.enabled);
+                if (mv.enabled) {
+                    const char* kMovementNames[] = { "SplineFollow", "ScreenHover", "Drift", "Static" };
+                    int mtIdx = static_cast<int>(mv.movementType);
+                    if (ImGui::Combo("Movement Type", &mtIdx, kMovementNames, IM_ARRAYSIZE(kMovementNames))) {
+                        mv.movementType = static_cast<MovementType>(mtIdx);
+                    }
+                    ImGui::DragFloat("Move Speed", &mv.moveSpeed, 0.5f, 0.0f, 200.0f, "%.1f /sec");
+                    if (mv.movementType == MovementType::ScreenHover) {
+                        ImGui::DragFloat("Hover Approach Speed", &mv.hoverApproachSpeed, 0.5f, 0.0f, 200.0f, "%.1f /sec");
+                        ImGui::DragFloat("Hover Hold Duration", &mv.hoverHoldDuration, 0.1f, 0.0f, 60.0f, "%.1f sec");
+                    }
                 }
             }
 
@@ -563,6 +583,14 @@ void InspectorWindow::OnDraw() {
                         def.carrierChildLifetimeSec  = cp.childLifetimeSec;
                         def.carrierChildWanderRadius = cp.childWanderRadius;
                         def.carrierChildMoveSpeed    = cp.childMoveSpeed;
+                    }
+                    const MovementParams& mv = Gameplay::Of(selected).GetMovementParams();
+                    if (showMovement && mv.enabled) {
+                        def.hasMovement        = true;
+                        def.movementType       = mv.movementType;
+                        def.moveSpeed          = mv.moveSpeed;
+                        def.hoverApproachSpeed = mv.hoverApproachSpeed;
+                        def.hoverHoldDuration  = mv.hoverHoldDuration;
                     }
                     const ChargeParams& chp = Gameplay::Of(selected).GetChargeParams();
                     if (showCharge && chp.enabled) {

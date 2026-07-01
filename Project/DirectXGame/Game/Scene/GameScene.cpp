@@ -148,6 +148,14 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			cp.childWanderRadius = def->carrierChildWanderRadius;
 			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
 		}
+		if (def->hasMovement) {
+			MovementParams& mv = Gameplay::Of(e).GetMovementParams();
+			mv.enabled            = true;
+			mv.movementType       = def->movementType;
+			mv.moveSpeed          = def->moveSpeed;
+			mv.hoverApproachSpeed = def->hoverApproachSpeed;
+			mv.hoverHoldDuration  = def->hoverHoldDuration;
+		}
 		if (def->hasCharge) {
 			ChargeParams& chp = Gameplay::Of(e).GetChargeParams();
 			chp.enabled    = true;
@@ -321,7 +329,7 @@ void GameScene::UpdateMovingEnemies(float deltaTime) {
 	}
 }
 
-void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT) {
+void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float stageTimeSec) {
 	for (auto& ctrl : enemyControllers_) {
 		if (!ctrl || !ctrl->entity_) continue;
 
@@ -331,14 +339,17 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		EnemyContext ctx{};
 		ctx.player          = player;
 		ctx.scene           = this;
-		ctx.railT           = railT;
-		ctx.triggerT        = ctrl->triggerT_;
-		ctx.shootIntervalT  = ctrl->shootIntervalT_;
+		ctx.stageTimeSec    = stageTimeSec;
+		ctx.triggerSec      = ctrl->triggerSec_;
+		ctx.shootIntervalSec = ctrl->shootIntervalSec_;
 		ctx.spawnIntervalSec = ctrl->spawnIntervalSec_;
 		ctx.spawnLimit      = ctrl->spawnLimit_;
 		ctx.childPrefab     = ctrl->childPrefab_;
 		ctx.childSplineId   = ctrl->childSplineId_;
 		ctx.splineArrived   = ctrl->splineArrived_;
+		ctx.hoverOffset         = ctrl->hoverOffset_;
+		ctx.hoverApproachSpeed  = ctrl->hoverApproachSpeed_;
+		ctx.hoverHoldDuration   = ctrl->hoverHoldDuration_;
 
 		ctrl->Update(deltaTime, ctx);
 

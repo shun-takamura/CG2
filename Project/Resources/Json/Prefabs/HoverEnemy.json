@@ -1,0 +1,43 @@
+{
+  "kind": "Object3D",
+  "model": {
+    "dir": "Resources/Models/Enemy",
+    "file": "enemy.mesh",
+    "animated": false
+  },
+  "tag": "Enemy",
+  "defaults": {
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "collider": {
+    "shape": "Sphere",
+    "offset": [
+      0,
+      0,
+      0
+    ],
+    "radius": 1,
+    "halfExtents": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "capsuleRadius": 0.5,
+    "capsuleHeight": 1
+  },
+  "movement": {
+    "type": "ScreenHover",
+    "moveSpeed": 10,
+    "hoverApproachSpeed": 30,
+    "hoverHoldDuration": 10.5
+  }
+}

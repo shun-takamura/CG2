@@ -116,11 +116,11 @@ public:
 			ctx.scene->ApplyEnemyRepulsion(entity);
 		}
 
-		// 射撃（徘徊と並行）: shoot_interval_t [カメラt 単位] で発射
-		if (ctx.player && ctx.shootIntervalT > 0.0f) {
-			const float tSinceSpawn = ctx.railT - ctx.triggerT;
-			if (tSinceSpawn >= 0.0f) {
-				const int shotIdx = static_cast<int>(tSinceSpawn / ctx.shootIntervalT);
+		// 射撃（徘徊と並行）: shoot_interval_sec [秒] で発射
+		if (ctx.player && ctx.shootIntervalSec > 0.0f) {
+			const float secSinceSpawn = ctx.stageTimeSec - ctx.triggerSec;
+			if (secSinceSpawn >= 0.0f) {
+				const int shotIdx = static_cast<int>(secSinceSpawn / ctx.shootIntervalSec);
 				if (shotIdx > lastShotIdx_) {
 					lastShotIdx_ = shotIdx;
 					Vector3* ppos = ctx.player->GetEditableTranslate();

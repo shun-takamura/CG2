@@ -63,6 +63,15 @@ public:
 	/// </summary>
 	virtual Camera* GetCamera() { return nullptr; }
 
+	/// <summary>
+	/// ビューポートへのプレハブドロップをシーン側で横取りするためのフック。
+	/// relX/relY はビューポート画像内の正規化座標 (0..1)。
+	/// true を返すとドロップを消費したとみなし、呼び出し側は通常配置を行わない。
+	/// 既定は何もせず false（＝通常の InstantiatePrefab に委ねる）。
+	/// Wave Editor 等が override する。
+	/// </summary>
+	virtual bool OnViewportPrefabDrop(const std::string& /*prefabName*/, float /*relX*/, float /*relY*/) { return false; }
+
 	//====================
 	// デバッグカメラ（シーン共通機能）
 	//====================

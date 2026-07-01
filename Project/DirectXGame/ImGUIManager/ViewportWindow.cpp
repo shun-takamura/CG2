@@ -165,12 +165,22 @@ void ViewportWindow::OnDraw() {
             if (scene) scene->AddDynamicPrimitive(p->primitiveType,
                 hasWorldPos ? worldPos : Vector3{});
         }
-        // プリファブ → Y=0 にスナップ配置
+        // プリファブ → まずシーンのフック（Wave Editor 等）に委譲。
+        // 消費されなければ従来通り Y=0 にスナップ配置。
         else if (const ImGuiPayload* payload =
             ImGui::AcceptDragDropPayload(PREFAB_DROP_PAYLOAD_TYPE)) {
             const PrefabDropPayload* p = static_cast<const PrefabDropPayload*>(payload->Data);
-            if (scene) scene->InstantiatePrefab(p->prefabName,
-                hasWorldPos ? worldPos : Vector3{});
+            if (scene) {
+                float relX = 0.5f, relY = 0.5f;
+                if (imageScreenSize_.x > 0 && imageScreenSize_.y > 0) {
+                    ImVec2 mouse = ImGui::GetMousePos();
+                    relX = std::clamp((mouse.x - imageScreenPos_.x) / imageScreenSize_.x, 0.0f, 1.0f);
+                    relY = std::clamp((mouse.y - imageScreenPos_.y) / imageScreenSize_.y, 0.0f, 1.0f);
+                }
+                if (!scene->OnViewportPrefabDrop(p->prefabName, relX, relY)) {
+                    scene->InstantiatePrefab(p->prefabName, hasWorldPos ? worldPos : Vector3{});
+                }
+            }
         }
 
         ImGui::EndDragDropTarget();

@@ -40,16 +40,29 @@ namespace WaveDefIO {
 				WaveEntry entry{};
 				entry.enemyType = e["enemy_type"].AsString();
 				entry.prefab    = e["prefab"].AsString();
-				entry.triggerT  = static_cast<float>(e["trigger_t"].AsDouble(entry.triggerT));
-				entry.retreatT  = static_cast<float>(e["retreat_t"].AsDouble(entry.retreatT));
-				entry.traverseT = static_cast<float>(e["traverse_t"].AsDouble(entry.traverseT));
+				// 時間系は秒で読む。旧フォーマット（*_t = カメラ進行度）は 125秒スケールで換算。
+				// （旧データはカメラ速度 0.008 t/秒 ＝ 全体尺 125 秒で作成されていた）
+				constexpr double kLegacyStageSeconds = 125.0;
+				if (e["trigger_sec"].IsNumber())      entry.triggerSec = static_cast<float>(e["trigger_sec"].AsDouble(entry.triggerSec));
+				else if (e["trigger_t"].IsNumber())   entry.triggerSec = static_cast<float>(e["trigger_t"].AsDouble(0.0) * kLegacyStageSeconds);
+				if (e["retreat_sec"].IsNumber())      entry.retreatSec = static_cast<float>(e["retreat_sec"].AsDouble(entry.retreatSec));
+				else if (e["retreat_t"].IsNumber())   { double rt = e["retreat_t"].AsDouble(-1.0); entry.retreatSec = (rt < 0.0) ? -1.0f : static_cast<float>(rt * kLegacyStageSeconds); }
+				if (e["traverse_sec"].IsNumber())     entry.traverseSec = static_cast<float>(e["traverse_sec"].AsDouble(entry.traverseSec));
+				else if (e["traverse_t"].IsNumber())  entry.traverseSec = static_cast<float>(e["traverse_t"].AsDouble(0.0) * kLegacyStageSeconds);
 				entry.splineId  = e["spline_id"].AsString();
 				entry.count          = static_cast<int>(e["count"].AsDouble(entry.count));
-			entry.shootIntervalT = static_cast<float>(e["shoot_interval_t"].AsDouble(entry.shootIntervalT));
+			if (e["shoot_interval_sec"].IsNumber())    entry.shootIntervalSec = static_cast<float>(e["shoot_interval_sec"].AsDouble(entry.shootIntervalSec));
+			else if (e["shoot_interval_t"].IsNumber()) entry.shootIntervalSec = static_cast<float>(e["shoot_interval_t"].AsDouble(0.0) * kLegacyStageSeconds);
 			entry.spawnIntervalSec = static_cast<float>(e["spawn_interval_sec"].AsDouble(entry.spawnIntervalSec));
 			entry.spawnLimit     = static_cast<int>(e["spawn_limit"].AsDouble(entry.spawnLimit));
 			entry.childPrefab    = e["child_prefab"].AsString();
 			entry.childSplineId  = e["child_spline_id"].AsString();
+
+				const JsonValue& off = e["camera_offset"];
+				if (off.IsArray() && off.Size() >= 3) {
+					entry.useCameraOffset = true;
+					entry.cameraOffset    = JsonToVec3(off);
+				}
 
 				const JsonValue& pos = e["positions"];
 				if (pos.IsArray()) {
@@ -73,16 +86,20 @@ namespace WaveDefIO {
 			JsonValue o = JsonValue::MakeObject();
 			o["enemy_type"] = e.enemyType;
 			o["prefab"]     = e.prefab;
-			o["trigger_t"]  = static_cast<double>(e.triggerT);
-			o["retreat_t"]  = static_cast<double>(e.retreatT);
-			o["traverse_t"] = static_cast<double>(e.traverseT);
+			o["trigger_sec"]  = static_cast<double>(e.triggerSec);
+			o["retreat_sec"]  = static_cast<double>(e.retreatSec);
+			o["traverse_sec"] = static_cast<double>(e.traverseSec);
 			o["spline_id"]  = e.splineId;
 			o["count"]           = static_cast<double>(e.count);
-			o["shoot_interval_t"]  = static_cast<double>(e.shootIntervalT);
+			o["shoot_interval_sec"] = static_cast<double>(e.shootIntervalSec);
 			o["spawn_interval_sec"] = static_cast<double>(e.spawnIntervalSec);
 			o["spawn_limit"]       = static_cast<double>(e.spawnLimit);
 			o["child_prefab"]      = e.childPrefab;
 			o["child_spline_id"]   = e.childSplineId;
+
+			if (e.useCameraOffset) {
+				o["camera_offset"] = Vec3ToJson(e.cameraOffset);
+			}
 
 			if (!e.positions.empty()) {
 				JsonValue posArr = JsonValue::MakeArray();

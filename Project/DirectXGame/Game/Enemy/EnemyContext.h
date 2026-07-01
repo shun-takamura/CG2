@@ -12,14 +12,19 @@ struct EnemyContext {
 	// --- in ---
 	IImGuiEditable* player        = nullptr;
 	GameScene*      scene         = nullptr;
-	float           railT         = 0.0f;   // 現在のカメラ進行度 t
+	float           stageTimeSec  = 0.0f;   // ステージ開始からの経過秒（スポーン/射撃判定の基準）
 	bool            splineArrived = false;  // スプライン終端到達済み（Rusher の溜め開始判定用）
-	float           triggerT      = 0.0f;   // このエントリの trigger_t（射撃間隔計算基準）
-	float           shootIntervalT = 0.04f; // 射撃間隔 [t]
+	float           triggerSec    = 0.0f;   // このエントリの出現秒（射撃間隔計算の起点）
+	float           shootIntervalSec = 3.0f;// 射撃間隔 [秒]（0で射撃なし）
 	float           spawnIntervalSec = 5.0f; // 子スポーン間隔 [秒]（Carrier 用）
 	int             spawnLimit    = 4;      // 子スポーン上限（Carrier 用）
 	std::string     childPrefab;            // 運び屋が生成する子プレハブ名
 	std::string     childSplineId;          // 子スポーン先スプライン名
+
+	// ScreenHover（画面内停止型）用
+	Vector3         hoverOffset{ 0.0f, 0.0f, 30.0f }; // カメラローカルの停止オフセット（右/上/前）
+	float           hoverApproachSpeed = 30.0f;       // 飛来速度 [units/sec]
+	float           hoverHoldDuration  = 6.0f;        // 停止して攻撃を続ける時間 [sec]
 
 	// --- out (コマンドが書き込み、EnemyController が読む) ---
 	bool    requestDetach    = false;          // スプライン追従から切り離す
