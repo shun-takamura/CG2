@@ -357,6 +357,16 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.meleeLateMultiplier  = static_cast<float>(meJ["lateMultiplier"].AsDouble(out.meleeLateMultiplier));
 	}
 
+	// Movement（敵プレハブ用：登場/移動の方法と速度）
+	const JsonValue& mvJ = root["movement"];
+	if (mvJ.IsObject()) {
+		out.hasMovement        = true;
+		out.movementType       = MovementTypeFromStr(mvJ["type"].AsString("SplineFollow"), out.movementType);
+		out.moveSpeed          = static_cast<float>(mvJ["moveSpeed"].AsDouble(out.moveSpeed));
+		out.hoverApproachSpeed = static_cast<float>(mvJ["hoverApproachSpeed"].AsDouble(out.hoverApproachSpeed));
+		out.hoverHoldDuration  = static_cast<float>(mvJ["hoverHoldDuration"].AsDouble(out.hoverHoldDuration));
+	}
+
 	// Carrier（運び屋プレハブ用の子敵パラメータ）
 	const JsonValue& caJ = root["carrier"];
 	if (caJ.IsObject()) {
@@ -514,6 +524,15 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		meObj["cleanMultiplier"] = static_cast<double>(def.meleeCleanMultiplier);
 		meObj["lateMultiplier"]  = static_cast<double>(def.meleeLateMultiplier);
 		root["melee"] = std::move(meObj);
+	}
+
+	if (def.hasMovement) {
+		JsonValue mvObj = JsonValue::MakeObject();
+		mvObj["type"]               = std::string(MovementTypeToStr(def.movementType));
+		mvObj["moveSpeed"]          = static_cast<double>(def.moveSpeed);
+		mvObj["hoverApproachSpeed"] = static_cast<double>(def.hoverApproachSpeed);
+		mvObj["hoverHoldDuration"]  = static_cast<double>(def.hoverHoldDuration);
+		root["movement"] = std::move(mvObj);
 	}
 
 	if (def.hasCarrier) {

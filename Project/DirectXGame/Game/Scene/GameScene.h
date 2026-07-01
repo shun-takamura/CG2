@@ -107,7 +107,7 @@ protected:
 	void SweepDeadEntities();
 	void UpdateMelees(float deltaTime);
 	void UpdateMovingEnemies(float deltaTime);
-	void UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float railT);
+	void UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float stageTimeSec);
 
 	/// <summary>
 	/// 攻撃命中時のエフェクト再生。攻撃側プレハブの "hit"（着弾エフェクト）と

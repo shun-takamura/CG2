@@ -6,19 +6,19 @@
 #include "Scene/GameScene.h"
 
 /// <summary>
-/// カメラ進行度 t の一定間隔でプレイヤー方向に敵弾を発射する。
+/// 一定間隔（秒）でプレイヤー方向に敵弾を発射する。
 /// IsFinished() は常に false（外部から TriggerRetreat で中断する）。
 /// </summary>
 class ShootAtPlayerCommand : public IEnemyCommand {
 public:
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
 		if (!ctx.player || !entity || !ctx.scene) return;
-		if (ctx.shootIntervalT <= 0.0f) return;
+		if (ctx.shootIntervalSec <= 0.0f) return;
 
-		const float tSinceSpawn = ctx.railT - ctx.triggerT;
-		if (tSinceSpawn < 0.0f) return;
+		const float secSinceSpawn = ctx.stageTimeSec - ctx.triggerSec;
+		if (secSinceSpawn < 0.0f) return;
 
-		const int shotIdx = static_cast<int>(tSinceSpawn / ctx.shootIntervalT);
+		const int shotIdx = static_cast<int>(secSinceSpawn / ctx.shootIntervalSec);
 		if (shotIdx > lastShotIdx_) {
 			lastShotIdx_ = shotIdx;
 			Fire(entity, ctx);

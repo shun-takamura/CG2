@@ -28,12 +28,17 @@ public:
 	bool    contactDamageActive_ = false; // 突進など攻撃接触中のみ true（被弾判定側が参照）
 
 	// WaveEntry から設定するパラメータ（UpdateEnemyControllers が ctx にセットする）
-	float       triggerT_        = 0.0f;
-	float       shootIntervalT_  = 0.04f;
+	float       triggerSec_      = 0.0f;   // 出現秒（ステージ開始基準）
+	float       shootIntervalSec_ = 3.0f;  // 射撃間隔 [秒]
 	float       spawnIntervalSec_ = 5.0f;
 	int         spawnLimit_      = 4;
 	std::string childPrefab_;
 	std::string childSplineId_;
+
+	// ScreenHover（画面内停止型）用パラメータ
+	Vector3     hoverOffset_{ 0.0f, 0.0f, 30.0f };
+	float       hoverApproachSpeed_ = 30.0f;
+	float       hoverHoldDuration_  = 6.0f;
 
 	void Init(std::vector<std::unique_ptr<IEnemyCommand>> cmds);
 

@@ -77,7 +77,10 @@ void WindowsApplication::Initialize(const wchar_t* title){
 
 bool WindowsApplication::ProcessMessage(){
     MSG msg{};
-    if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    // 1フレームで溜まったメッセージを全て捌く。
+    // if で1件ずつだとキーボードのオートリピート等でキューが詰まり、
+    // WM_MOUSEMOVE が後ろに滞留してマウス座標（＝レティクル）が遅延する。
+    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
         if (msg.message == WM_QUIT) return false;
         TranslateMessage(&msg);
         DispatchMessage(&msg);

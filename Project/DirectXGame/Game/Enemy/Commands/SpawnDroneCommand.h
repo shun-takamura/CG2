@@ -54,8 +54,8 @@ public:
 		ctrl->entity_           = child;
 		ctrl->waveEntryIndex_   = -1;
 		ctrl->billboardToPlayer_ = true;
-		ctrl->triggerT_         = ctx.railT;        // 子の出現時刻 = 親の現在t
-		ctrl->shootIntervalT_   = ctx.shootIntervalT; // 親の射撃間隔をそのまま継承
+		ctrl->triggerSec_       = ctx.stageTimeSec;    // 子の出現時刻 = 親の現在秒
+		ctrl->shootIntervalSec_ = ctx.shootIntervalSec; // 親の射撃間隔をそのまま継承
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
 		cmds.push_back(std::make_unique<WanderInScreenCommand>(entity, radius, lifetime, speed));
 		cmds.push_back(std::make_unique<RetreatCommand>());

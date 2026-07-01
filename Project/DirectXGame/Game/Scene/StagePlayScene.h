@@ -53,11 +53,20 @@ public:
 
 	Camera* GetCamera() override;
 
+	// Wave Editor 有効時、ビューポートへのプレハブドロップをウェーブエントリ追加として処理する。
+	// 戻り値 true でドロップを消費（通常の InstantiatePrefab を抑止）。Debug ビルドのみ機能。
+	bool OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY) override;
+
 	// シーン配置（プレハブ・スプライン等）の保存/復元
 	bool SaveSceneToJson(const std::string& filePath) override;
 	bool LoadSceneFromJson(const std::string& filePath) override;
 
 private:
+	// カメラローカルオフセット（x=右/y=上/z=前方深度）⇔ ワールド座標の相互変換。
+	// ScreenHover/Static 敵の配置・出現に使う（現在のカメラポーズ基準）。
+	Vector3 CameraOffsetToWorld(const Vector3& off) const;
+	Vector3 WorldToCameraOffset(const Vector3& world) const;
+
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
 
@@ -123,6 +132,19 @@ private:
 	// entries と同じサイズ。そのエントリから生まれた敵が倒された時の t 値。
 	// 負数 = まだ倒されていない。Seek で「killAtT_ > currentT」なら未死亡扱いに戻す。
 	std::vector<float> killAtT_;
+	std::string        wavePath_ = "Resources/Json/Waves/stage1.json"; // ロード/セーブ先
+
+#ifdef _DEBUG
+	// ----- Wave Editor（インゲーム配置・Debug ビルドのみ） -----
+	bool   waveEditMode_      = false;  // ON 中はビューポートへのプレハブドロップでエントリ追加
+	int    waveSelectedEntry_ = -1;     // 一覧で選択中のエントリ index（-1=未選択）
+	float  waveDropDepth_     = 30.0f;  // 「現在 t で追加」時のカメラ前方配置深度
+	// Wave をディスクへ保存し、スポーン状態を再構築する。
+	void SaveWaveToDisk();
+	void RebuildWaveRuntimeState();
+	// Wave Editor の ImGui パネル（StagePlayTuning から呼ぶ）。
+	void DrawWaveEditorUI(bool& changed);
+#endif
 
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };
