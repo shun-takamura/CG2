@@ -192,6 +192,13 @@ private:
 	void ProcessCurrentState();
 
 	/// <summary>
+	/// そのスロットの状態が「実際に操作されている」か判定する。
+	/// ボタン押下・トリガー・デッドゾーン超えのスティックのどれかがあれば true。
+	/// スロット0に居座るドリフトした幽霊パッド（固定値・btns=0）を弾くために使う。
+	/// </summary>
+	static bool HasActivity(const XINPUT_STATE& state);
+
+	/// <summary>
 	/// スティックの入力を円形デッドゾーンで補正
 	/// </summary>
 	StickInput ApplyCircularDeadZone(SHORT rawX, SHORT rawY, SHORT deadZone);
@@ -199,6 +206,7 @@ private:
 private:
 	DWORD controllerIndex_ = 0;     // コントローラー番号
 	bool isConnected_ = false;      // 接続状態
+	bool activeSlotLocked_ = false; // 実際に操作されているスロットを掴んだか（掴んだら切断まで固定）
 
 	XINPUT_STATE currentState_{};   // 現在の入力状態
 	XINPUT_STATE previousState_{};  // 前フレームの入力状態
