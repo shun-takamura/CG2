@@ -21,19 +21,25 @@ void ControllerInput::Update() {
 	// 現在の状態を初期化
 	ZeroMemory(&currentState_, sizeof(currentState_));
 
-	// まず今のスロットを読む。未接続なら 0~3 を走査して最初に繋がっているスロットへ切り替える。
-	// （物理パッドが繋がっていない時に仮想パッド(SUNDAY/ViGEm)が 0 以外へ割り当てられても拾えるようにする）
+	// まず今のスロットを読む。
 	DWORD result = XInputGetState(controllerIndex_, &currentState_);
-	if (result != ERROR_SUCCESS) {
+
+	// まだ「実際に操作されているスロット」を掴んでいない、または今のスロットが切断された場合は
+	// 0~3 を走査して、実際に入力が来ているスロットへ切り替える。
+	// スロット0に固定ドリフト値で居座る幽霊パッド（電源OFFのBluetooth残骸・Steam Input等）が
+	// conn=1 のまま存在しても、HasActivity で弾いて仮想パッド(SUNDAY/ViGEm)や人間の実パッドを拾える。
+	// 一度掴んだら切断されるまで固定するので、通常プレイ中に別スロットへ勝手に奪われない。
+	if (!activeSlotLocked_ || result != ERROR_SUCCESS) {
 		for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
-			if (i == controllerIndex_) {
+			XINPUT_STATE probe{};
+			if (XInputGetState(i, &probe) != ERROR_SUCCESS) {
 				continue;
 			}
-			XINPUT_STATE probe{};
-			if (XInputGetState(i, &probe) == ERROR_SUCCESS) {
+			if (HasActivity(probe)) {
 				controllerIndex_ = i;       // 以降はこのスロットを優先して読む
 				currentState_ = probe;
 				result = ERROR_SUCCESS;
+				activeSlotLocked_ = true;
 				break;
 			}
 		}
@@ -62,6 +68,29 @@ void ControllerInput::ApplyReplay(bool connected, SHORT lx, SHORT ly, SHORT rx, 
 
 	// 通常 Update と同じ補正処理を通す
 	ProcessCurrentState();
+}
+
+bool ControllerInput::HasActivity(const XINPUT_STATE& state) {
+	const XINPUT_GAMEPAD& g = state.Gamepad;
+	// ボタンかトリガーが押されていれば操作中
+	if (g.wButtons != 0) {
+		return true;
+	}
+	if (g.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD ||
+		g.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+		return true;
+	}
+	// スティックはデッドゾーン超えのみ操作中とみなす（ドリフトは弾く）
+	auto beyond = [](SHORT x, SHORT y, SHORT dz) {
+		return (x * x + y * y) > (static_cast<int>(dz) * static_cast<int>(dz));
+	};
+	if (beyond(g.sThumbLX, g.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)) {
+		return true;
+	}
+	if (beyond(g.sThumbRX, g.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)) {
+		return true;
+	}
+	return false;
 }
 
 void ControllerInput::ProcessCurrentState() {

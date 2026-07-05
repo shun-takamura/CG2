@@ -48,7 +48,8 @@
       "PowerShell(if \\($?\\) { \"OK\" })",
       "Bash(\"/c/Users/sleon/.local/bin/claude.exe\" --help)",
       "Bash(python -m py_compile jarvis_bot.py claude_chat.py)",
-      "Bash(python -m py_compile claude_chat.py)"
+      "Bash(python -m py_compile claude_chat.py)",
+      "Bash(python -m py_compile sunday.py)"
     ]
   }
 }
