@@ -36,6 +36,9 @@ class AnimatedModelInstance
     ModelData modelData_;
     Animation animation_;
 
+    // 部位別マテリアル。.mesh 経路は submesh 数ぶん、assimp 経路は 1 個（全 index）を保持
+    std::vector<RenderSubmesh> submeshes_;
+
     ModelCore* modelCore_;
 
     VertexData* vertexData_ = nullptr;
@@ -96,12 +99,14 @@ public:
     void SetTextureFilePath(const std::string& filePath) {
         textureFilePath_ = filePath;
         modelData_.materialData.textureFilePath = filePath;
+        if (!submeshes_.empty()) submeshes_[0].textureFilePath = filePath;
     }
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
     void SetNormalMapFilePath(const std::string& filePath) {
         normalMapFilePath_ = filePath;
         modelData_.materialData.normalMapFilePath = filePath;
+        if (!submeshes_.empty()) submeshes_[0].normalMapFilePath = filePath;
     }
     const std::string& GetNormalMapFilePath() const { return normalMapFilePath_; }
 

@@ -20,35 +20,51 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
         animation_ = LoadAnimationFile(directoryPath, filename);
     }
 
+    // submesh テーブルが無い場合は、全 index を 1 submesh として扱う（Draw を統一）
+    if (submeshes_.empty()) {
+        RenderSubmesh sm;
+        sm.indexStart = 0;
+        sm.indexCount = indexCount_;
+        sm.matFilePath = matFilePath_;
+        sm.textureFilePath = modelData_.materialData.textureFilePath;
+        sm.normalMapFilePath = modelData_.materialData.normalMapFilePath;
+        submeshes_.push_back(std::move(sm));
+    }
+
     // 頂点データ作成
     CreateVertexData(modelCore_->GetDXCore());
 
     // インデックスデータ作成
     CreateIndexData(modelCore_->GetDXCore());
 
-    // マテリアルデータ作成
+    // マテリアルデータ作成（submesh 数ぶんの Material CBV を作る）
     CreateMaterialData(modelCore_->GetDXCore());
 
-    // .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を GPU material に反映
-    // （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
-    if (!matFilePath_.empty() && material_) {
-        MaterialData matTmp;
-        LoadMatFile(matFilePath_, matTmp, material_);
+    // submesh ごとに .mat 値を反映し、テクスチャ／法線マップをロードする
+    for (auto& sm : submeshes_) {
+        // .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を反映
+        // （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
+        if (!sm.matFilePath.empty() && sm.material) {
+            MaterialData matTmp;
+            LoadMatFile(sm.matFilePath, matTmp, sm.material);
+        }
+
+        if (!sm.textureFilePath.empty()) {
+            TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
+        }
+
+        if (!sm.normalMapFilePath.empty()) {
+            TextureManager::GetInstance()->LoadTexture(sm.normalMapFilePath);
+            if (sm.material) sm.material->useNormalMap = 1;
+        } else {
+            if (sm.material) sm.material->useNormalMap = 0;
+        }
     }
 
-    // テクスチャ読み込み
-    textureFilePath_ = modelData_.materialData.textureFilePath;
+    // 後方互換: submesh[0] を既存メンバへ反映
+    textureFilePath_ = submeshes_[0].textureFilePath;
+    normalMapFilePath_ = submeshes_[0].normalMapFilePath;
     assert(!textureFilePath_.empty() && "textureFilePath is empty!");
-    TextureManager::GetInstance()->LoadTexture(textureFilePath_);
-
-    // 法線マップ（あれば）読み込み＋useNormalMap反映
-    normalMapFilePath_ = modelData_.materialData.normalMapFilePath;
-    if (!normalMapFilePath_.empty()) {
-        TextureManager::GetInstance()->LoadTexture(normalMapFilePath_);
-        if (material_) material_->useNormalMap = 1;
-    } else {
-        if (material_) material_->useNormalMap = 0;
-    }
 }
 
 void AnimatedModelInstance::Draw(DirectXCore* dxCore)
@@ -58,59 +74,67 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
     assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
     assert(indexCount_ > 0 && "indexCount is 0 in Draw!");
 
-    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
-    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    auto* cmd = dxCore->GetCommandList();
 
-    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        0, materialResource_->GetGPUVirtualAddress()
-    );
+    // VBV / IBV はモデル全体で共通
+    cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    cmd->IASetIndexBuffer(&indexBufferView_);
 
-    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
-    );
+    // submesh ごとに Material / テクスチャ / 法線を貼り替えて分割ドロー
+    for (const auto& sm : submeshes_) {
+        if (sm.indexCount == 0) continue;
 
-    // RootParam[10] 法線マップ（無ければベースで埋める）
-    {
-        const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
-        dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        cmd->SetGraphicsRootConstantBufferView(
+            0, sm.materialResource->GetGPUVirtualAddress()
+        );
+
+        const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
+        cmd->SetGraphicsRootDescriptorTable(
+            2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+        );
+
+        const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
+        cmd->SetGraphicsRootDescriptorTable(
             10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
         );
-    }
 
-    PEPPER_COUNT("DrawCall");
-    dxCore->GetCommandList()->DrawIndexedInstanced(
-        indexCount_, 1, 0, 0, 0);
+        PEPPER_COUNT("DrawCall");
+        cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
+    }
 }
 
 void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster)
 {
-    // Skinning済みの頂点バッファをVBVとして使う（Slot 0のみ）
-    dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
-    dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+    auto* cmd = dxCore->GetCommandList();
 
-    // Object3DManagerのRootSignatureに合わせる
-    // RootParam[0] Material
-    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        0, materialResource_->GetGPUVirtualAddress()
-    );
+    // Skinning済みの頂点バッファをVBVとして使う（Slot 0のみ）。IBV はモデル全体で共通
+    cmd->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
+    cmd->IASetIndexBuffer(&indexBufferView_);
 
-    // RootParam[2] Texture
-    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
-    );
+    // submesh ごとに Object3DManager の RootSignature に合わせて貼り替えて分割ドロー
+    for (const auto& sm : submeshes_) {
+        if (sm.indexCount == 0) continue;
 
-    // RootParam[10] 法線マップ（無ければベースで埋める。PS は useNormalMap で判定）
-    {
-        const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
-        dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        // RootParam[0] Material
+        cmd->SetGraphicsRootConstantBufferView(
+            0, sm.materialResource->GetGPUVirtualAddress()
+        );
+
+        // RootParam[2] Texture
+        const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
+        cmd->SetGraphicsRootDescriptorTable(
+            2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+        );
+
+        // RootParam[10] 法線マップ（無ければベースで埋める。PS は useNormalMap で判定）
+        const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
+        cmd->SetGraphicsRootDescriptorTable(
             10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
         );
-    }
 
-    // ドローコール
-    PEPPER_COUNT("DrawCall");
-    dxCore->GetCommandList()->DrawIndexedInstanced(
-        indexCount_, 1, 0, 0, 0);
+        PEPPER_COUNT("DrawCall");
+        cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
+    }
 }
 
 void AnimatedModelInstance::DrawIdPass(DirectXCore* dxCore, const SkinCluster& skinCluster)
@@ -173,19 +197,29 @@ void AnimatedModelInstance::CreateVertexData(DirectXCore* dxCore)
 
 void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
 {
-    materialResource_ = dxCore->CreateBufferResource(sizeof(Material));
-    materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&material_));
+    // submesh ごとに Material 定数バッファを作成し、既定値で初期化する
+    for (auto& sm : submeshes_) {
+        sm.materialResource = dxCore->CreateBufferResource(sizeof(Material));
+        sm.materialResource->Map(0, nullptr, reinterpret_cast<void**>(&sm.material));
 
-    material_->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-    material_->enableLighting = true;
-    material_->uvTransform = MakeIdentity4x4();
-    material_->shininess = 50.0f;
-    material_->environmentCoefficient = 1.0f;
-    material_->useEnvironmentMap = false;
-    material_->metallic = 0.0f;
-    material_->roughness = 0.5f;
-    material_->shadingModel = 0;
-    material_->useNormalMap = 0;
+        Material* m = sm.material;
+        m->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+        m->enableLighting = true;
+        m->uvTransform = MakeIdentity4x4();
+        m->shininess = 50.0f;
+        m->environmentCoefficient = 1.0f;
+        m->useEnvironmentMap = false;
+        m->metallic = 0.0f;
+        m->roughness = 0.5f;
+        m->shadingModel = 0;
+        m->useNormalMap = 0;
+    }
+
+    // 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）
+    if (!submeshes_.empty()) {
+        materialResource_ = submeshes_[0].materialResource;
+        material_ = submeshes_[0].material;
+    }
 }
 
 void AnimatedModelInstance::CreateIndexData(DirectXCore* dxCore)
@@ -634,19 +668,31 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
         }
     }
 
-    // --- submesh[0] の material_path を読んで .mat へアクセス ---
+    // --- 全 submesh を読み、部位別マテリアルとして保持する ---
     if (submeshCount > 0) {
         h.Seek(submeshOffset);
-        uint32_t idxStart = 0, idxCount = 0;
-        h.Read(&idxStart, 4);
-        h.Read(&idxCount, 4);
-        char matPath[256]{};
-        h.Read(matPath, 256);
+        submeshes_.clear();
+        submeshes_.reserve(submeshCount);
+        for (uint32_t i = 0; i < submeshCount; ++i) {
+            uint32_t idxStart = 0, idxCount = 0;
+            h.Read(&idxStart, 4);
+            h.Read(&idxCount, 4);
+            char matPath[256]{};
+            h.Read(matPath, 256);
 
-        matFilePath_ = std::string(matPath);
-        std::string baseColor = ReadMatBaseColorPath_V2(matFilePath_);
-        modelData_.materialData.textureFilePath = baseColor;
-        modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath_V2(matFilePath_);
+            RenderSubmesh sm;
+            sm.indexStart = idxStart;
+            sm.indexCount = idxCount;
+            sm.matFilePath = std::string(matPath);
+            sm.textureFilePath = ReadMatBaseColorPath_V2(sm.matFilePath);
+            sm.normalMapFilePath = ReadMatNormalMapPath_V2(sm.matFilePath);
+            submeshes_.push_back(std::move(sm));
+        }
+
+        // 後方互換: submesh[0] を既存メンバへ反映
+        matFilePath_ = submeshes_[0].matFilePath;
+        modelData_.materialData.textureFilePath = submeshes_[0].textureFilePath;
+        modelData_.materialData.normalMapFilePath = submeshes_[0].normalMapFilePath;
     }
 
     // --- 同階層の .anim を探して読み込む（あれば）---

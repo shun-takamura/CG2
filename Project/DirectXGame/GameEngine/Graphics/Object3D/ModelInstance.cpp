@@ -36,6 +36,17 @@ void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string&
 		indexCount_  = static_cast<uint32_t>(modelData_.indices.size());
 	}
 
+	// assimp 経路など submesh テーブルが無い場合は、全 index を 1 submesh として扱う
+	if (submeshes_.empty()) {
+		RenderSubmesh sm;
+		sm.indexStart = 0;
+		sm.indexCount = indexCount_;
+		sm.matFilePath = matFilePath_;  // assimp 経路は空
+		sm.textureFilePath = modelData_.materialData.textureFilePath;
+		sm.normalMapFilePath = modelData_.materialData.normalMapFilePath;
+		submeshes_.push_back(std::move(sm));
+	}
+
 	loadState_ = LoadState::CPUReady;
 }
 
@@ -55,22 +66,27 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 	CreateIndexData(dxCore);
 	CreateMaterialData(dxCore);
 
-	// .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を GPU material に反映。
-	// （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
-	if (!matFilePath_.empty() && material_) {
-		MaterialData tmp;
-		LoadMatFile(matFilePath_, tmp, material_);
-	}
+	// submesh ごとに .mat 値を GPU material へ反映し、テクスチャ／法線マップをロードする
+	for (auto& sm : submeshes_) {
+		// .mat の値（color / metallic / roughness / shadingModel / useNormalMap 等）を反映。
+		// （.mesh 経路のみ。assimp 経路は .mat が無いので CreateMaterialData の既定値のまま）
+		if (!sm.matFilePath.empty() && sm.material) {
+			MaterialData tmp;
+			LoadMatFile(sm.matFilePath, tmp, sm.material);
+		}
 
-	// テクスチャを TextureManager に登録（GPU リソース作成）
-	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+		// ベースカラーテクスチャを TextureManager に登録（GPU リソース作成）
+		if (!sm.textureFilePath.empty()) {
+			TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
+		}
 
-	// 法線マップがあればロードして useNormalMap を立てる
-	if (!normalMapFilePath_.empty()) {
-		TextureManager::GetInstance()->LoadTexture(normalMapFilePath_);
-		if (material_) material_->useNormalMap = 1;
-	} else {
-		if (material_) material_->useNormalMap = 0;
+		// 法線マップがあればロードして useNormalMap を立てる
+		if (!sm.normalMapFilePath.empty()) {
+			TextureManager::GetInstance()->LoadTexture(sm.normalMapFilePath);
+			if (sm.material) sm.material->useNormalMap = 1;
+		} else {
+			if (sm.material) sm.material->useNormalMap = 0;
+		}
 	}
 
 	loadState_ = LoadState::GPUReady;
@@ -86,32 +102,37 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 	assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
 	assert(indexCount_ > 0 && "indexCount is 0 in Draw!");
 
-	// VBVを設定
-	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
+	auto* cmd = dxCore->GetCommandList();
 
-	// インデックスバッファ設定
-	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
+	// VBV / IBV はモデル全体で共通（頂点・インデックスは 1 本のバッファ）
+	cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+	cmd->IASetIndexBuffer(&indexBufferView_);
 
-	// マテリアルCBufferの場所を設定
-	dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-		0, materialResource_->GetGPUVirtualAddress()
-	);
+	// submesh ごとに Material / テクスチャ / 法線を貼り替えて分割ドロー
+	for (const auto& sm : submeshes_) {
+		if (sm.indexCount == 0) continue;
 
-	// SRVのDescriptorTableの先頭を設定
-	dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-		2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
-	);
+		// マテリアルCBuffer(root0)
+		cmd->SetGraphicsRootConstantBufferView(
+			0, sm.materialResource->GetGPUVirtualAddress()
+		);
 
-	// 法線マップ(t2)を rootParameter[10] にバインド。無い場合はベースで埋める（未バインド回避。PS は useNormalMap で判定）
-	const std::string& normalSrvPath = !normalMapFilePath_.empty() ? normalMapFilePath_ : textureFilePath_;
-	dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-		10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
-	);
+		// ベースカラーSRV(root2)。空なら submesh[0] のテクスチャで埋める
+		const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
+		cmd->SetGraphicsRootDescriptorTable(
+			2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+		);
 
-	// ドローコール
-	PEPPER_COUNT("DrawCall");
-	dxCore->GetCommandList()->DrawIndexedInstanced(
-		indexCount_, 1, 0, 0, 0);
+		// 法線マップ(root10)。無い場合はベースで埋める（未バインド回避。PS は useNormalMap で判定）
+		const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
+		cmd->SetGraphicsRootDescriptorTable(
+			10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+		);
+
+		// 分割ドロー（StartIndexLocation = indexStart）
+		PEPPER_COUNT("DrawCall");
+		cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
+	}
 }
 
 void ModelInstance::DrawIdPass(DirectXCore* dxCore)
@@ -187,35 +208,36 @@ void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 
 void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 {
-	// マテリアル用のリソースを作る。
-	materialResource_ = dxCore->CreateBufferResource(sizeof(Material));
+	// submesh ごとに Material 定数バッファを作成し、既定値で初期化する
+	for (auto& sm : submeshes_) {
+		sm.materialResource = dxCore->CreateBufferResource(sizeof(Material));
+		sm.materialResource->Map(0, nullptr, reinterpret_cast<void**>(&sm.material));
 
-	// 書き込むためのアドレスを取得してmaterialDataに割り当てる
-	materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&material_));
+		Material* m = sm.material;
+		// 白で書き込む
+		m->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+		// Lightingを有効にする
+		m->enableLighting = true;
+		// UVTransformに単位行列を書き込む
+		m->uvTransform = MakeIdentity4x4();
+		// 光沢度の初期値。小さいほどぼんやり広く、大きいほどくっきり狭く
+		m->shininess = 50.0f;
+		// 環境マップの反映度合い。1.0だと映り込みすぎになる
+		m->environmentCoefficient = 1.0f;
+		// デフォルトで環境マップを使用しない
+		m->useEnvironmentMap = false;
+		// PBR パラメータの初期値（shadingModel=0=BlinnPhong。未初期化のゴミ値で誤って PBR に飛ばないよう明示）
+		m->metallic = 0.0f;
+		m->roughness = 0.5f;
+		m->shadingModel = 0;
+		m->useNormalMap = 0;
+	}
 
-	// 白で書き込む
-	material_->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-
-	// Lightingを有効にする
-	material_->enableLighting = true;
-
-	// UVTransformに単位行列を書き込む
-	material_->uvTransform = MakeIdentity4x4();
-
-	// 光沢度の初期値。小さいほどぼんやり広く、大きいほどくっきり狭く
-	material_->shininess = 50.0f;
-
-	// 環境マップの反映度合い。1.0だと映り込みすぎになる
-	material_->environmentCoefficient = 1.0f;
-
-	// デフォルトで環境マップを使用しない
-	material_->useEnvironmentMap = false;
-
-	// PBR パラメータの初期値（shadingModel=0=BlinnPhong。未初期化のゴミ値で誤って PBR に飛ばないよう明示）
-	material_->metallic = 0.0f;
-	material_->roughness = 0.5f;
-	material_->shadingModel = 0;
-	material_->useNormalMap = 0;
+	// 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）
+	if (!submeshes_.empty()) {
+		materialResource_ = submeshes_[0].materialResource;
+		material_ = submeshes_[0].material;
+	}
 }
 
 void ModelInstance::CreateIndexData(DirectXCore* dxCore)
@@ -397,20 +419,32 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 		         static_cast<size_t>(indexCount) * sizeof(uint32_t));
 	}
 
-	// submesh[0] のマテリアルパスを取得（マルチマテリアル未対応、最初の一つだけ使う）
+	// 全 submesh を読み、部位別マテリアルとして保持する
 	if (submeshCount > 0) {
 		h.Seek(submeshOffset);
-		uint32_t idxStart = 0, idxCount = 0;
-		h.Read(&idxStart, 4);
-		h.Read(&idxCount, 4);
-		char matPath[256]{};
-		h.Read(matPath, 256);
+		submeshes_.clear();
+		submeshes_.reserve(submeshCount);
+		for (uint32_t i = 0; i < submeshCount; ++i) {
+			uint32_t idxStart = 0, idxCount = 0;
+			h.Read(&idxStart, 4);
+			h.Read(&idxCount, 4);
+			char matPath[256]{};
+			h.Read(matPath, 256);
 
-		// .mat を開いて base_color_path / normal_map_path を取得
-		matFilePath_ = std::string(matPath);
-		std::string baseColor = ReadMatBaseColorPath(matFilePath_);
-		modelData_.materialData.textureFilePath = baseColor;
-		modelData_.materialData.normalMapFilePath = ReadMatNormalMapPath(matFilePath_);
+			RenderSubmesh sm;
+			sm.indexStart = idxStart;
+			sm.indexCount = idxCount;
+			sm.matFilePath = std::string(matPath);
+			// .mat を開いて base_color_path / normal_map_path を取得（GPU 前でも AssetLocator で読める）
+			sm.textureFilePath = ReadMatBaseColorPath(sm.matFilePath);
+			sm.normalMapFilePath = ReadMatNormalMapPath(sm.matFilePath);
+			submeshes_.push_back(std::move(sm));
+		}
+
+		// 後方互換: submesh[0] を既存メンバへ反映
+		matFilePath_ = submeshes_[0].matFilePath;
+		modelData_.materialData.textureFilePath = submeshes_[0].textureFilePath;
+		modelData_.materialData.normalMapFilePath = submeshes_[0].normalMapFilePath;
 	}
 }
 

@@ -10,6 +10,7 @@
 #include"MathUtility.h"
 #include "QuaternionTransform.h"
 #include <map>
+#include <vector>
 
 // assimp
 #include <assimp/Importer.hpp>
@@ -43,6 +44,20 @@ struct ModelData
 	std::map<std::string, JointWeightData> skinClusterData;
 };
 
+// 部位別マテリアル用のランタイム submesh。
+// 頂点/インデックスは 1 本のバッファに連結され、submesh は index 範囲でその部分を指す。
+struct RenderSubmesh
+{
+	uint32_t indexStart = 0;
+	uint32_t indexCount = 0;
+	std::string matFilePath;        // .mat パス（assimp 経路など無い場合は空）
+	std::string textureFilePath;    // base color DDS
+	std::string normalMapFilePath;  // 法線 DDS（空＝なし）
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
+	Material* material = nullptr;    // materialResource を Map したポインタ
+};
+
 class ModelInstance
 {
 	//==============================
@@ -56,9 +71,12 @@ class ModelInstance
 	//==============================
 	std::string textureFilePath_;  // テクスチャファイルパスを保持
 	std::string normalMapFilePath_;  // 法線マップ DDS パス（空＝なし）
-	std::string matFilePath_;        // submesh が参照する .mat パス（GPU material 反映用）
+	std::string matFilePath_;        // submesh[0] が参照する .mat パス（後方互換用）
 
 	ModelData modelData_;
+
+	// 部位別マテリアル。.mesh 経路は submesh 数ぶん、assimp 経路は 1 個（全 index）を保持
+	std::vector<RenderSubmesh> submeshes_;
 
 	ModelCore* modelCore_;
 
@@ -112,6 +130,7 @@ public:
 	void SetTextureFilePath(const std::string& filePath) {
 		textureFilePath_ = filePath;
 		modelData_.materialData.textureFilePath = filePath;
+		if (!submeshes_.empty()) submeshes_[0].textureFilePath = filePath;
 	}
 	const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
@@ -119,6 +138,7 @@ public:
 	void SetNormalMapFilePath(const std::string& filePath) {
 		normalMapFilePath_ = filePath;
 		modelData_.materialData.normalMapFilePath = filePath;
+		if (!submeshes_.empty()) submeshes_[0].normalMapFilePath = filePath;
 	}
 	const std::string& GetNormalMapFilePath() const { return normalMapFilePath_; }
 
