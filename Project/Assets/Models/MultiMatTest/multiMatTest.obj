@@ -1,0 +1,40 @@
+# 部位別マテリアルのテスト用キューブ
+# 前/右/上 = Material_A, 後/左/下 = Material_B
+mtllib multiMatTest.mtl
+
+v -1 -1 -1
+v  1 -1 -1
+v  1  1 -1
+v -1  1 -1
+v -1 -1  1
+v  1 -1  1
+v  1  1  1
+v -1  1  1
+
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+
+vn  0  0 -1
+vn  1  0  0
+vn  0  0  1
+vn -1  0  0
+vn  0  1  0
+vn  0 -1  0
+
+usemtl Material_A
+# Front (-z)
+f 1/1/1 2/2/1 3/3/1 4/4/1
+# Right (+x)
+f 2/1/2 6/2/2 7/3/2 3/4/2
+# Top (+y)
+f 4/1/5 3/2/5 7/3/5 8/4/5
+
+usemtl Material_B
+# Back (+z)
+f 6/1/3 5/2/3 8/3/3 7/4/3
+# Left (-x)
+f 5/1/4 1/2/4 4/3/4 8/4/4
+# Bottom (-y)
+f 5/1/6 6/2/6 2/3/6 1/4/6

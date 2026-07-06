@@ -228,13 +228,46 @@ def _parse_mtl_for_normal(mtl_path: Path) -> str | None:
     return None
 
 
+def _parse_mtl_all(mtl_path: Path) -> dict:
+    """.mtl の全 newmtl ブロックを解析し、マテリアル名 → {"map_Kd", "norm"} を返す。
+
+    norm は map_Bump / map_bump / bump / norm のいずれか（末尾トークンをファイル名とみなす）。
+    """
+    result: dict = {}
+    if not mtl_path.exists():
+        return result
+    norm_keys = ("map_Bump", "map_bump", "bump", "norm")
+    current: str | None = None
+    with mtl_path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            tokens = line.split()
+            if not tokens:
+                continue
+            kw = tokens[0]
+            if kw == "newmtl" and len(tokens) > 1:
+                current = tokens[1]
+                result[current] = {"map_Kd": None, "norm": None}
+            elif current is None:
+                continue
+            elif kw == "map_Kd" and len(tokens) > 1:
+                result[current]["map_Kd"] = tokens[1]
+            elif kw in norm_keys and len(tokens) >= 2:
+                result[current]["norm"] = tokens[-1]
+    return result
+
+
 def _parse_obj(obj_path: Path):
-    """OBJ を読み positions / normals / texcoords / 三角形面リスト / mtllib を返す"""
+    """OBJ を読み positions / normals / texcoords / 三角形面リスト / 面ごとの usemtl / mtllib を返す。
+
+    tri_materials は triangles と並列で、各三角形が属する usemtl 名（未指定は None）。
+    """
     positions: list[tuple[float, float, float]] = []
     normals: list[tuple[float, float, float]] = []
     texcoords: list[tuple[float, float]] = []
     triangles: list[tuple] = []  # 各要素は ((pi,ti,ni), (pi,ti,ni), (pi,ti,ni))
+    tri_materials: list[str | None] = []  # triangles と並列
     mtllib: str | None = None
+    current_mtl: str | None = None
 
     with obj_path.open("r", encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -259,9 +292,12 @@ def _parse_obj(obj_path: Path):
                 # 多角形は扇形三角形分割
                 for i in range(1, len(verts) - 1):
                     triangles.append((verts[0], verts[i], verts[i + 1]))
+                    tri_materials.append(current_mtl)
+            elif kw == "usemtl":
+                current_mtl = tokens[1] if len(tokens) > 1 else None
             elif kw == "mtllib":
                 mtllib = tokens[1]
-    return positions, normals, texcoords, triangles, mtllib
+    return positions, normals, texcoords, triangles, tri_materials, mtllib
 
 
 # ============================================================
@@ -278,6 +314,22 @@ def _resolve_resource_path(src_path: Path, new_suffix: str) -> str:
         return ""
     out = RESOURCES_DIR / rel.with_suffix(new_suffix)
     return out.as_posix()
+
+
+def _safe_name(name: str) -> str:
+    """マテリアル名などをファイル名に使える文字列に正規化する"""
+    return "".join(c if (c.isalnum() or c in "-_") else "_" for c in name).strip("_") or "mat"
+
+
+def _sibling_resource_path(base_resource_path: str, filename: str) -> str:
+    """Resources 相対パス（posix）の同一ディレクトリに filename を置いたパスを返す。
+
+    例: ("Resources/Models/X/x.mat", "x_body.mat") → "Resources/Models/X/x_body.mat"
+    """
+    if not base_resource_path:
+        return ""
+    parent = base_resource_path.rsplit("/", 1)[0] if "/" in base_resource_path else ""
+    return f"{parent}/{filename}" if parent else filename
 
 
 def _pad_string(s: str, length: int) -> bytes:
@@ -298,41 +350,55 @@ def _build_obj_mesh_buffers(obj_path: Path):
       - position.x と normal.x を反転
       - texcoord.y を 1 - y に反転
     """
-    positions, normals, texcoords, triangles, mtllib = _parse_obj(obj_path)
+    positions, normals, texcoords, triangles, tri_materials, mtllib = _parse_obj(obj_path)
 
     vertex_map: dict[tuple[int, int, int], int] = {}
     vertex_buffer: list[tuple] = []
     index_buffer: list[int] = []
 
-    for tri in triangles:
-        # winding 反転: (v0, v1, v2) → (v0, v2, v1)
-        for v_key in (tri[0], tri[2], tri[1]):
-            if v_key in vertex_map:
-                index_buffer.append(vertex_map[v_key])
-                continue
+    # マテリアルごとに三角形をグルーピング（出現順を保持）。usemtl 未指定は None キー
+    mat_order: list[str | None] = []
+    mat_to_tris: dict[str | None, list[tuple]] = {}
+    for tri, mat in zip(triangles, tri_materials):
+        if mat not in mat_to_tris:
+            mat_to_tris[mat] = []
+            mat_order.append(mat)
+        mat_to_tris[mat].append(tri)
 
-            pi, ti, ni = v_key
-            px, py, pz = positions[pi]
-            u = v = 0.0
-            if 0 <= ti < len(texcoords):
-                u, v = texcoords[ti]
-            nx, ny, nz = (0.0, 0.0, 0.0)
-            if 0 <= ni < len(normals):
-                nx, ny, nz = normals[ni]
+    # submeshes = [(matname_or_None, index_start, index_count)]
+    submeshes: list[tuple] = []
+    for mat in mat_order:
+        index_start = len(index_buffer)
+        for tri in mat_to_tris[mat]:
+            # winding 反転: (v0, v1, v2) → (v0, v2, v1)
+            for v_key in (tri[0], tri[2], tri[1]):
+                if v_key in vertex_map:
+                    index_buffer.append(vertex_map[v_key])
+                    continue
 
-            # RH → LH: x 反転, V 反転
-            px = -px
-            nx = -nx
-            v = 1.0 - v
+                pi, ti, ni = v_key
+                px, py, pz = positions[pi]
+                u = v = 0.0
+                if 0 <= ti < len(texcoords):
+                    u, v = texcoords[ti]
+                nx, ny, nz = (0.0, 0.0, 0.0)
+                if 0 <= ni < len(normals):
+                    nx, ny, nz = normals[ni]
 
-            new_index = len(vertex_buffer)
-            vertex_map[v_key] = new_index
-            vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
-            index_buffer.append(new_index)
+                # RH → LH: x 反転, V 反転
+                px = -px
+                nx = -nx
+                v = 1.0 - v
+
+                new_index = len(vertex_buffer)
+                vertex_map[v_key] = new_index
+                vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
+                index_buffer.append(new_index)
+        submeshes.append((mat, index_start, len(index_buffer) - index_start))
 
     # OBJ は tangent を持たないので UV+位置から計算（9要素→13要素）
     vertex_buffer = _compute_tangents(vertex_buffer, index_buffer)
-    return vertex_buffer, index_buffer, mtllib
+    return vertex_buffer, index_buffer, submeshes, mtllib
 
 
 def _write_mesh_v2(out_path: Path,
@@ -519,72 +585,101 @@ def _mirror_x_matrix4(m):
 # glTF → メッシュ抽出
 # ============================================================
 def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
-    """最初のメッシュ・最初のプリミティブから (vertex_buffer, index_buffer, skin_buffer) を構築
+    """全メッシュ・全プリミティブから (vertex_buffer, index_buffer, skin_buffer, submeshes) を構築。
+
+    primitive 1 個 = submesh 1 個としてマテリアルを分離する。頂点/インデックスは
+    1 本のバッファに連結し、submesh ごとに index 範囲とマテリアル index を記録する。
 
     joint_index_offset: 祖先ジョイントを .skel 先頭に追加した分、頂点の JOINTS_0
     に加算するオフセット
+
+    Returns:
+        (vertex_buffer, index_buffer, skin_buffer_or_None, submeshes)
+        submeshes = [(material_index_or_None, index_start, index_count)]
     """
     meshes = gltf.get("meshes", [])
     if not meshes:
         raise RuntimeError("no meshes in glTF")
-    primitives = meshes[0].get("primitives", [])
-    if not primitives:
-        raise RuntimeError("no primitives in first mesh")
-    prim = primitives[0]
-    attrs = prim.get("attributes", {})
 
-    if "POSITION" not in attrs:
-        raise RuntimeError("primitive has no POSITION attribute")
+    vertex_buffer: list[tuple] = []
+    index_buffer: list[int] = []
+    skin_buffer: list[tuple] = []
+    submeshes: list[tuple] = []
+    any_skinning = False
 
-    positions = _gltf_read_accessor(gltf, buffers, attrs["POSITION"])
-    normals = _gltf_read_accessor(gltf, buffers, attrs["NORMAL"]) if "NORMAL" in attrs else None
-    texcoords = _gltf_read_accessor(gltf, buffers, attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else None
-    joints_attr = _gltf_read_accessor(gltf, buffers, attrs["JOINTS_0"]) if "JOINTS_0" in attrs else None
-    weights_attr = _gltf_read_accessor(gltf, buffers, attrs["WEIGHTS_0"]) if "WEIGHTS_0" in attrs else None
-    tangents_attr = _gltf_read_accessor(gltf, buffers, attrs["TANGENT"]) if "TANGENT" in attrs else None
+    for mesh in meshes:
+        for prim in mesh.get("primitives", []):
+            attrs = prim.get("attributes", {})
+            if "POSITION" not in attrs:
+                continue
 
-    indices_idx = prim.get("indices")
-    if indices_idx is None:
-        raw_indices = list(range(len(positions)))
-    else:
-        raw_indices = _gltf_read_accessor(gltf, buffers, indices_idx)
+            positions = _gltf_read_accessor(gltf, buffers, attrs["POSITION"])
+            normals = _gltf_read_accessor(gltf, buffers, attrs["NORMAL"]) if "NORMAL" in attrs else None
+            texcoords = _gltf_read_accessor(gltf, buffers, attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else None
+            joints_attr = _gltf_read_accessor(gltf, buffers, attrs["JOINTS_0"]) if "JOINTS_0" in attrs else None
+            weights_attr = _gltf_read_accessor(gltf, buffers, attrs["WEIGHTS_0"]) if "WEIGHTS_0" in attrs else None
+            tangents_attr = _gltf_read_accessor(gltf, buffers, attrs["TANGENT"]) if "TANGENT" in attrs else None
 
-    has_skinning = joints_attr is not None and weights_attr is not None
+            indices_idx = prim.get("indices")
+            if indices_idx is None:
+                raw_indices = list(range(len(positions)))
+            else:
+                raw_indices = _gltf_read_accessor(gltf, buffers, indices_idx)
 
-    vertex_buffer = []
-    skin_buffer = []
-    for i in range(len(positions)):
-        px, py, pz = positions[i]
-        u, v = (texcoords[i] if texcoords else (0.0, 0.0))
-        nx, ny, nz = (normals[i] if normals else (0.0, 1.0, 0.0))
-        # RH → LH
-        px = -px
-        nx = -nx
-        v = 1.0 - v
-        if tangents_attr:
-            tgx, tgy, tgz, tgw = tangents_attr[i]
-            # RH→LH: tangent.x 反転、handedness(w) 反転
-            vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz, -tgx, tgy, tgz, -tgw))
-        else:
-            vertex_buffer.append((px, py, pz, 1.0, u, v, nx, ny, nz))
+            has_skinning = joints_attr is not None and weights_attr is not None
 
-        if has_skinning:
-            j = joints_attr[i]
-            w = weights_attr[i]
-            skin_buffer.append((tuple(int(x) + joint_index_offset for x in j),
-                                tuple(float(x) for x in w)))
+            # このプリミティブ分の頂点/スキンをローカルに構築（tangent 計算は 13 要素化のため先に済ませる）
+            local_vb: list[tuple] = []
+            local_skin: list[tuple] = []
+            for i in range(len(positions)):
+                px, py, pz = positions[i]
+                u, v = (texcoords[i] if texcoords else (0.0, 0.0))
+                nx, ny, nz = (normals[i] if normals else (0.0, 1.0, 0.0))
+                # RH → LH
+                px = -px
+                nx = -nx
+                v = 1.0 - v
+                if tangents_attr:
+                    tgx, tgy, tgz, tgw = tangents_attr[i]
+                    # RH→LH: tangent.x 反転、handedness(w) 反転
+                    local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz, -tgx, tgy, tgz, -tgw))
+                else:
+                    local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz))
 
-    # winding 反転 (a, b, c) → (a, c, b)
-    index_buffer = []
-    for i in range(0, len(raw_indices), 3):
-        a, b, c = raw_indices[i], raw_indices[i + 1], raw_indices[i + 2]
-        index_buffer.extend([a, c, b])
+                if has_skinning:
+                    j = joints_attr[i]
+                    w = weights_attr[i]
+                    local_skin.append((tuple(int(x) + joint_index_offset for x in j),
+                                       tuple(float(x) for x in w)))
+                else:
+                    # スキン混在時にバッファ長を頂点数に合わせるためのゼロ影響ダミー
+                    local_skin.append(((0, 0, 0, 0), (0.0, 0.0, 0.0, 0.0)))
 
-    # TANGENT 属性が無い glTF は UV+位置から計算（9要素→13要素）
-    if not tangents_attr:
-        vertex_buffer = _compute_tangents(vertex_buffer, index_buffer)
+            # winding 反転 (a, b, c) → (a, c, b)。インデックスはプリミティブ内ローカル基準
+            local_ib: list[int] = []
+            for i in range(0, len(raw_indices), 3):
+                a, b, c = raw_indices[i], raw_indices[i + 1], raw_indices[i + 2]
+                local_ib.extend([a, c, b])
 
-    return vertex_buffer, index_buffer, (skin_buffer if has_skinning else None)
+            # TANGENT 属性が無いなら UV+位置から計算（9要素→13要素）
+            if not tangents_attr:
+                local_vb = _compute_tangents(local_vb, local_ib)
+
+            # 連結: ローカルインデックスに base_vertex を足してグローバル化
+            base_vertex = len(vertex_buffer)
+            index_start = len(index_buffer)
+            index_buffer.extend(idx + base_vertex for idx in local_ib)
+            vertex_buffer.extend(local_vb)
+            skin_buffer.extend(local_skin)
+            if has_skinning:
+                any_skinning = True
+
+            submeshes.append((prim.get("material"), index_start, len(local_ib)))
+
+    if not submeshes:
+        raise RuntimeError("no primitives with POSITION in glTF")
+
+    return vertex_buffer, index_buffer, (skin_buffer if any_skinning else None), submeshes
 
 
 # ============================================================
@@ -742,23 +837,23 @@ def _gltf_extract_animations(gltf, buffers):
 # ============================================================
 # glTF → base_color テクスチャパス解決
 # ============================================================
-def _gltf_find_pbr_factors(gltf):
-    """最初のマテリアルから metallicFactor / roughnessFactor を返す（無ければ glTF 既定の 1.0）"""
+def _gltf_find_pbr_factors(gltf, mat_index: int = 0):
+    """指定マテリアルから metallicFactor / roughnessFactor を返す（無ければ glTF 既定の 1.0）"""
     materials = gltf.get("materials", [])
-    if not materials:
+    if not materials or mat_index < 0 or mat_index >= len(materials):
         return (MAT_DEFAULT_METALLIC, MAT_DEFAULT_ROUGHNESS)
-    pbr = materials[0].get("pbrMetallicRoughness", {})
+    pbr = materials[mat_index].get("pbrMetallicRoughness", {})
     metallic = float(pbr.get("metallicFactor", 1.0))
     roughness = float(pbr.get("roughnessFactor", 1.0))
     return (metallic, roughness)
 
 
-def _gltf_find_normal_map_path(gltf, gltf_path: Path) -> str:
-    """最初のマテリアルの normalTexture から Resources 相対の DDS パスを返す（無ければ空）"""
+def _gltf_find_normal_map_path(gltf, gltf_path: Path, mat_index: int = 0) -> str:
+    """指定マテリアルの normalTexture から Resources 相対の DDS パスを返す（無ければ空）"""
     materials = gltf.get("materials", [])
-    if not materials:
+    if not materials or mat_index < 0 or mat_index >= len(materials):
         return ""
-    nrm = materials[0].get("normalTexture", {})
+    nrm = materials[mat_index].get("normalTexture", {})
     if "index" not in nrm:
         return ""
     textures = gltf.get("textures", [])
@@ -778,11 +873,11 @@ def _gltf_find_normal_map_path(gltf, gltf_path: Path) -> str:
         return ""
 
 
-def _gltf_find_base_color_path(gltf, gltf_path: Path) -> str:
+def _gltf_find_base_color_path(gltf, gltf_path: Path, mat_index: int = 0) -> str:
     materials = gltf.get("materials", [])
-    if not materials:
+    if not materials or mat_index < 0 or mat_index >= len(materials):
         return ""
-    pbr = materials[0].get("pbrMetallicRoughness", {})
+    pbr = materials[mat_index].get("pbrMetallicRoughness", {})
     base = pbr.get("baseColorTexture", {})
     if "index" not in base:
         return ""
@@ -879,7 +974,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     skel, joint_offset = _gltf_extract_skeleton(gltf, buffers)
 
     try:
-        vb, ib, skin_buffer = _gltf_extract_mesh(gltf, buffers, joint_offset)
+        vb, ib, skin_buffer, raw_submeshes = _gltf_extract_mesh(gltf, buffers, joint_offset)
     except Exception as e:
         print(f"  [ERROR] mesh extraction failed: {e}")
         return False
@@ -891,25 +986,50 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     out_dir = task.dst.parent
     mesh_path = task.dst                       # *.mesh
     skel_path = out_dir / f"{stem}.skel"
-    mat_path = out_dir / f"{stem}.mat"
 
     # 参照用 (Resources 相対) パス
-    mat_resource_path = _resolve_resource_path(task.src, ".mat")
+    mat_resource_base = _resolve_resource_path(task.src, ".mat")  # 例: Resources/.../stem.mat
     skel_resource_path = _resolve_resource_path(task.src, ".skel") if has_skinning else ""
 
-    # .mat（glTF は PBR 形式なので metallic/roughness factor を読む。shading_model は既定の BlinnPhong）
-    base_color_path = _gltf_find_base_color_path(gltf, task.src)
-    metallic, roughness = _gltf_find_pbr_factors(gltf)
-    normal_map_path = _gltf_find_normal_map_path(gltf, task.src)
-    _write_mat_v2(mat_path, base_color_path, metallic=metallic, roughness=roughness,
-                  normal_map_path=normal_map_path)
+    materials = gltf.get("materials", [])
+    # このメッシュで実際に使われる material index（重複排除・出現順）
+    used_mat_indices = []
+    for (mat_idx, _s, _c) in raw_submeshes:
+        if mat_idx not in used_mat_indices:
+            used_mat_indices.append(mat_idx)
+    single_material = len(used_mat_indices) <= 1
+
+    # material index → 出力した .mat の Resources 相対パス
+    mat_path_cache: dict = {}
+    for mat_idx in used_mat_indices:
+        # .mat 値（glTF は PBR 形式。shading_model は既定の BlinnPhong）
+        real_idx = mat_idx if mat_idx is not None else 0
+        base_color_path = _gltf_find_base_color_path(gltf, task.src, real_idx)
+        metallic, roughness = _gltf_find_pbr_factors(gltf, real_idx)
+        normal_map_path = _gltf_find_normal_map_path(gltf, task.src, real_idx)
+
+        # 単一マテリアルは従来通り stem.mat（後方互換）。複数はマテリアル名/index でサフィックス
+        if single_material:
+            mat_filename = f"{stem}.mat"
+        else:
+            mat_name = ""
+            if 0 <= real_idx < len(materials):
+                mat_name = materials[real_idx].get("name", "")
+            suffix = _safe_name(mat_name) if mat_name else f"mat{real_idx}"
+            mat_filename = f"{stem}_{suffix}.mat"
+
+        _write_mat_v2(out_dir / mat_filename, base_color_path,
+                      metallic=metallic, roughness=roughness,
+                      normal_map_path=normal_map_path)
+        mat_path_cache[mat_idx] = _sibling_resource_path(mat_resource_base, mat_filename)
 
     # .skel
     if has_skinning:
         _write_skel_v1(skel_path, skel)
 
-    # .mesh
-    submeshes = [(0, len(ib), mat_resource_path)]
+    # .mesh（submesh ごとに index 範囲 + material_path）
+    submeshes = [(start, count, mat_path_cache[mat_idx])
+                 for (mat_idx, start, count) in raw_submeshes]
     _write_mesh_v2(mesh_path, vb, ib, submeshes,
                    skeleton_path=skel_resource_path,
                    skin_buffer=skin_buffer if has_skinning else None)
@@ -926,7 +1046,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
 
     print(f"  vc={len(vb)} ic={len(ib)} skin={has_skinning} "
           f"joints={len(skel) if skel else 0} anims={len(animations)} "
-          f"tex='{base_color_path}'")
+          f"submeshes={len(submeshes)} mats={len(mat_path_cache)}")
     return True
 
 
@@ -936,12 +1056,12 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
 def convert_obj_to_mesh(task: FileTask) -> bool:
     """OBJ を .mesh v2 + .mat に変換する。
 
-    OBJ → 単一 submesh（マルチマテリアル未対応）。
-    マテリアルは同じディレクトリの .mat に書き出し、.mesh の submesh から参照する。
+    usemtl ごとに submesh を分離し、マテリアル単位で .mat を出力する。
+    単一マテリアルは従来通り stem.mat（後方互換）、複数は stem_<matname>.mat。
     """
     assert task.dst is not None
     try:
-        vb, ib, mtllib = _build_obj_mesh_buffers(task.src)
+        vb, ib, raw_submeshes, mtllib = _build_obj_mesh_buffers(task.src)
     except Exception as e:
         print(f"  [ERROR] OBJ parse failed: {e}")
         return False
@@ -950,10 +1070,9 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
         print(f"  [ERROR] no vertices produced from {task.src}")
         return False
 
-    # ---- .mat の出力 ----
-    # .mat の出力先は .mesh と同じディレクトリ・同じステム名
-    mat_dst = task.dst.with_suffix(".mat")
-    mat_resource_path = _resolve_resource_path(task.src, ".mat")
+    stem = task.dst.stem
+    out_dir = task.dst.parent
+    mat_resource_base = _resolve_resource_path(task.src, ".mat")
 
     # .mtl のテクスチャ名 → Resources/.../{name}.dds に変換するヘルパー
     def _mtl_tex_to_resource(tex_name: str) -> str:
@@ -964,26 +1083,40 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
         except ValueError:
             return ""
 
-    # ベースカラーテクスチャ: .mtl の map_Kd を見て Resources/.../{stem}.dds に変換
-    base_color_path = ""
-    normal_map_path = ""
-    if mtllib:
-        tex_name = _parse_mtl_for_texture(task.src.parent / mtllib)
-        if tex_name:
-            base_color_path = _mtl_tex_to_resource(tex_name)
-        nrm_name = _parse_mtl_for_normal(task.src.parent / mtllib)
-        if nrm_name:
-            normal_map_path = _mtl_tex_to_resource(nrm_name)
+    # .mtl の全マテリアル情報（無い場合は空 dict）
+    mtl_all = _parse_mtl_all(task.src.parent / mtllib) if mtllib else {}
 
-    # OBJ/MTL は metallic/roughness を持たないのでデフォルト（BlinnPhong）。法線マップがあれば設定
-    _write_mat_v2(mat_dst, base_color_path, normal_map_path=normal_map_path)
+    # submesh で使われるマテリアル名（出現順・重複排除）
+    used_mats = []
+    for (mat_name, _s, _c) in raw_submeshes:
+        if mat_name not in used_mats:
+            used_mats.append(mat_name)
+    single_material = len(used_mats) <= 1
 
-    # ---- .mesh の出力 ----
-    submeshes = [(0, len(ib), mat_resource_path)]
+    # マテリアル名 → 出力した .mat の Resources 相対パス
+    mat_path_cache: dict = {}
+    for mat_name in used_mats:
+        info = mtl_all.get(mat_name, {}) if mat_name is not None else {}
+        base_color_path = _mtl_tex_to_resource(info["map_Kd"]) if info.get("map_Kd") else ""
+        normal_map_path = _mtl_tex_to_resource(info["norm"]) if info.get("norm") else ""
+
+        if single_material:
+            mat_filename = f"{stem}.mat"
+        else:
+            suffix = _safe_name(mat_name) if mat_name else f"mat{len(mat_path_cache)}"
+            mat_filename = f"{stem}_{suffix}.mat"
+
+        # OBJ/MTL は metallic/roughness を持たないのでデフォルト（BlinnPhong）
+        _write_mat_v2(out_dir / mat_filename, base_color_path, normal_map_path=normal_map_path)
+        mat_path_cache[mat_name] = _sibling_resource_path(mat_resource_base, mat_filename)
+
+    # ---- .mesh の出力（submesh ごとに index 範囲 + material_path）----
+    submeshes = [(start, count, mat_path_cache[mat_name])
+                 for (mat_name, start, count) in raw_submeshes]
     _write_mesh_v2(task.dst, vb, ib, submeshes, skeleton_path="", skin_buffer=None)
 
-    print(f"  vertices={len(vb)} indices={len(ib)} submeshes=1 "
-          f"texture='{base_color_path}' -> {task.dst.name} + {mat_dst.name}")
+    print(f"  vertices={len(vb)} indices={len(ib)} submeshes={len(submeshes)} "
+          f"mats={len(mat_path_cache)} -> {task.dst.name}")
     return True
 
 

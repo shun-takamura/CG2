@@ -1,0 +1,8 @@
+# 部位別マテリアルのテスト用マテリアル定義
+newmtl Material_A
+Kd 1 1 1
+map_Kd texA.png
+
+newmtl Material_B
+Kd 1 1 1
+map_Kd texB.png
