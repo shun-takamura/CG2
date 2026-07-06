@@ -73,6 +73,7 @@
       "PowerShell(cmd.exe /c \"py -3.13 --version\" 2>&1)",
       "PowerShell(cmd.exe /c \"py -3.13 -c \"\"print\\(1+1\\)\"\"\" 2>&1)",
       "Bash(findstr /I \".hdr\")"
+      "Bash(python -m py_compile sunday.py)"
     ]
   }
 }

@@ -487,88 +487,90 @@ def save_double_check(finding, ollama_analysis, check):
 
 def run_session(stop_event=None):
     """ゲームを1回起動し、終了/異常まで監視する。finding or None を返す。
-    stop_event.set() で起動待ち中・監視中いずれも速やかに畳んで None を返す。"""
+    stop_event.set() で起動待ち中・監視中いずれも速やかに畳んで None を返す。
+    途中のどの経路（正常終了/異常検知/例外）でも proc を必ず後始末する
+    （ここが手薄だと例外時にゲーム窓だけ残り、監視スレッドが無言で死んで
+    /sunday_stop が「稼働していません」を返す状態になる）。"""
     launch_ts = time.time()
     proc = subprocess.Popen([str(test_run.GAME_EXE)], cwd=str(test_run.PROJECT_DIR))
-
-    session_dir = find_session_dir(launch_ts)
-    if session_dir is None:
-        proc.terminate()
-        raise RuntimeError("セッションフォルダが見つかりません（Logs/ 生成を確認）")
-    print(f"[SUNDAY] session: {session_dir.name}")
-
-    sess = SundaySession(proc, session_dir)
-    driver = InputDriver()
-
-    # --- 起動待ち: state.log の frame が READY_FRAMES まで進む＝ゲームが本当に動き出すまで待つ ---
-    # Debugビルドの重い起動中は frame=0 のまま。ここで検知を始めると HANG/STUCK の誤判定になる。
-    deadline = time.time() + STARTUP_TIMEOUT
-    last_focus = 0.0
-    while True:
-        now = time.time()
-        sess.pump_logs()
-        if stop_event and stop_event.is_set():
-            proc.terminate()
-            return None
-        if proc.poll() is not None:
-            dmp = session_dir / "crash.dmp"
-            finding = sess._finding(
-                "CRASH", detail=f"exited during startup code={proc.returncode}",
-                dmp=str(dmp) if dmp.exists() else None)
-            report_anomaly(finding)
-            return finding
-        if sess.max_frame >= READY_FRAMES:
-            break
-        if now > deadline:
-            finding = sess._finding(
-                "STARTUP_TIMEOUT",
-                detail=f"frame {READY_FRAMES} に {STARTUP_TIMEOUT}s 以内に到達せず (max_frame={sess.max_frame})")
-            report_anomaly(finding)
-            return finding
-        if now - last_focus > 2.0:
-            focus_game()  # 起動直後に前面化（入力送出先を確保）
-            last_focus = now
-        time.sleep(0.05)
-
-    print(f"[SUNDAY] ready (frame={sess.max_frame})")
-    focus_game()
-    sess.last_state_wall = time.time()  # 稼働開始を基準に検知タイマーをリセット
-    start = time.time()
-    last_focus = start
-
     try:
+        session_dir = find_session_dir(launch_ts)
+        if session_dir is None:
+            raise RuntimeError("セッションフォルダが見つかりません（Logs/ 生成を確認）")
+        print(f"[SUNDAY] session: {session_dir.name}")
+
+        sess = SundaySession(proc, session_dir)
+        driver = InputDriver()
+
+        # --- 起動待ち: state.log の frame が READY_FRAMES まで進む＝ゲームが本当に動き出すまで待つ ---
+        # Debugビルドの重い起動中は frame=0 のまま。ここで検知を始めると HANG/STUCK の誤判定になる。
+        deadline = time.time() + STARTUP_TIMEOUT
+        last_focus = 0.0
         while True:
             now = time.time()
             sess.pump_logs()
-
             if stop_event and stop_event.is_set():
-                return None  # finally で driver 解放 + proc 終了
-
-            finding = sess.detect(driver)
-            if finding:
-                report_anomaly(finding)
-                # ハード異常はプロセスが死んでいる/不安定なのでセッション終了
-                if finding["type"] in ("CRASH", "HANG", "COORD_NAN", "COORD_OOR"):
-                    return finding
-                # ソフト異常(STUCK)は記録して継続観察
-
-            # 入力（前面維持は数秒おき）
-            if now - last_focus > 5.0:
-                focus_game()
-                last_focus = now
-            if sess.scene == "STAGEPLAY":
-                driver.tick_stageplay(now)
-            else:
-                driver.tick_nav(now)
-
-            # セッション上限：一旦閉じてリスタート（呼び出し側で再起動）
-            if now - start > SESSION_MAX_SEC:
-                print("[SUNDAY] セッション上限。リスタートします。")
                 return None
+            if proc.poll() is not None:
+                dmp = session_dir / "crash.dmp"
+                finding = sess._finding(
+                    "CRASH", detail=f"exited during startup code={proc.returncode}",
+                    dmp=str(dmp) if dmp.exists() else None)
+                report_anomaly(finding)
+                return finding
+            if sess.max_frame >= READY_FRAMES:
+                break
+            if now > deadline:
+                finding = sess._finding(
+                    "STARTUP_TIMEOUT",
+                    detail=f"frame {READY_FRAMES} に {STARTUP_TIMEOUT}s 以内に到達せず (max_frame={sess.max_frame})")
+                report_anomaly(finding)
+                return finding
+            if now - last_focus > 2.0:
+                focus_game()  # 起動直後に前面化（入力送出先を確保）
+                last_focus = now
+            time.sleep(0.05)
 
-            time.sleep(0.03)
+        print(f"[SUNDAY] ready (frame={sess.max_frame})")
+        focus_game()
+        sess.last_state_wall = time.time()  # 稼働開始を基準に検知タイマーをリセット
+        start = time.time()
+        last_focus = start
+
+        try:
+            while True:
+                now = time.time()
+                sess.pump_logs()
+
+                if stop_event and stop_event.is_set():
+                    return None  # finally で driver 解放 + proc 終了
+
+                finding = sess.detect(driver)
+                if finding:
+                    report_anomaly(finding)
+                    # ハード異常はプロセスが死んでいる/不安定なのでセッション終了
+                    if finding["type"] in ("CRASH", "HANG", "COORD_NAN", "COORD_OOR"):
+                        return finding
+                    # ソフト異常(STUCK)は記録して継続観察
+
+                # 入力（前面維持は数秒おき）
+                if now - last_focus > 5.0:
+                    focus_game()
+                    last_focus = now
+                if sess.scene == "STAGEPLAY":
+                    driver.tick_stageplay(now)
+                else:
+                    driver.tick_nav(now)
+
+                # セッション上限：一旦閉じてリスタート（呼び出し側で再起動）
+                if now - start > SESSION_MAX_SEC:
+                    print("[SUNDAY] セッション上限。リスタートします。")
+                    return None
+
+                time.sleep(0.03)
+        finally:
+            driver.release_all()
     finally:
-        driver.release_all()
         if proc.poll() is None:
             proc.terminate()
 
@@ -588,7 +590,14 @@ def run(stop_event=None, on_issue=None):
     Issue を起票/更新できたら on_issue(issue_no, finding) を呼ぶ（Discord通知用）。"""
     print("[SUNDAY] 起動。")
     while not (stop_event and stop_event.is_set()):
-        finding = run_session(stop_event)
+        try:
+            finding = run_session(stop_event)
+        except Exception as e:
+            # run_session 内で想定外の例外が起きても監視スレッド自体は生かし続ける。
+            # ここで握りつぶさないと /sunday_stop が「稼働していません」を返すのに
+            # ゲーム窓だけ残る（スレッドが無言で死ぬ）事態になる。
+            print(f"[SUNDAY] run_session で例外: {e!r}（セッションを打ち切って続行）")
+            finding = None
         # CRASH を検知したら、同じ記録を再生して再現性を判定する
         if finding and finding.get("type") == "CRASH":
             result = reproduce_crash(Path(finding["session_dir"]), stop_event)
