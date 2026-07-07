@@ -229,9 +229,10 @@ def _parse_mtl_for_normal(mtl_path: Path) -> str | None:
 
 
 def _parse_mtl_all(mtl_path: Path) -> dict:
-    """.mtl の全 newmtl ブロックを解析し、マテリアル名 → {"map_Kd", "norm"} を返す。
+    """.mtl の全 newmtl ブロックを解析し、マテリアル名 → {"map_Kd", "norm", "Kd"} を返す。
 
     norm は map_Bump / map_bump / bump / norm のいずれか（末尾トークンをファイル名とみなす）。
+    Kd は拡散色 RGBA タプル（無ければ None）。d/Tr のアルファは簡易のため未対応（a=1）。
     """
     result: dict = {}
     if not mtl_path.exists():
@@ -246,11 +247,13 @@ def _parse_mtl_all(mtl_path: Path) -> dict:
             kw = tokens[0]
             if kw == "newmtl" and len(tokens) > 1:
                 current = tokens[1]
-                result[current] = {"map_Kd": None, "norm": None}
+                result[current] = {"map_Kd": None, "norm": None, "Kd": None}
             elif current is None:
                 continue
             elif kw == "map_Kd" and len(tokens) > 1:
                 result[current]["map_Kd"] = tokens[1]
+            elif kw == "Kd" and len(tokens) >= 4:
+                result[current]["Kd"] = (float(tokens[1]), float(tokens[2]), float(tokens[3]), 1.0)
             elif kw in norm_keys and len(tokens) >= 2:
                 result[current]["norm"] = tokens[-1]
     return result
@@ -848,6 +851,19 @@ def _gltf_find_pbr_factors(gltf, mat_index: int = 0):
     return (metallic, roughness)
 
 
+def _gltf_find_base_color_factor(gltf, mat_index: int = 0):
+    """指定マテリアルの baseColorFactor(RGBA) を返す（無ければ白）。
+    テクスチャ無しマテリアルの色付けに使う（.mat の color に書き込む）。"""
+    materials = gltf.get("materials", [])
+    if not materials or mat_index < 0 or mat_index >= len(materials):
+        return MAT_DEFAULT_COLOR
+    pbr = materials[mat_index].get("pbrMetallicRoughness", {})
+    bcf = pbr.get("baseColorFactor")
+    if bcf and len(bcf) == 4:
+        return (float(bcf[0]), float(bcf[1]), float(bcf[2]), float(bcf[3]))
+    return MAT_DEFAULT_COLOR
+
+
 def _gltf_find_normal_map_path(gltf, gltf_path: Path, mat_index: int = 0) -> str:
     """指定マテリアルの normalTexture から Resources 相対の DDS パスを返す（無ければ空）"""
     materials = gltf.get("materials", [])
@@ -1007,6 +1023,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
         base_color_path = _gltf_find_base_color_path(gltf, task.src, real_idx)
         metallic, roughness = _gltf_find_pbr_factors(gltf, real_idx)
         normal_map_path = _gltf_find_normal_map_path(gltf, task.src, real_idx)
+        base_color_factor = _gltf_find_base_color_factor(gltf, real_idx)
 
         # 単一マテリアルは従来通り stem.mat（後方互換）。複数はマテリアル名/index でサフィックス
         if single_material:
@@ -1018,7 +1035,9 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
             suffix = _safe_name(mat_name) if mat_name else f"mat{real_idx}"
             mat_filename = f"{stem}_{suffix}.mat"
 
+        # baseColorFactor を color に反映（テクスチャ無しマテリアルの色付け。テクスチャ有りでも tint として乗る）
         _write_mat_v2(out_dir / mat_filename, base_color_path,
+                      color=base_color_factor,
                       metallic=metallic, roughness=roughness,
                       normal_map_path=normal_map_path)
         mat_path_cache[mat_idx] = _sibling_resource_path(mat_resource_base, mat_filename)
@@ -1099,6 +1118,7 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
         info = mtl_all.get(mat_name, {}) if mat_name is not None else {}
         base_color_path = _mtl_tex_to_resource(info["map_Kd"]) if info.get("map_Kd") else ""
         normal_map_path = _mtl_tex_to_resource(info["norm"]) if info.get("norm") else ""
+        kd_color = info.get("Kd") or MAT_DEFAULT_COLOR
 
         if single_material:
             mat_filename = f"{stem}.mat"
@@ -1106,8 +1126,9 @@ def convert_obj_to_mesh(task: FileTask) -> bool:
             suffix = _safe_name(mat_name) if mat_name else f"mat{len(mat_path_cache)}"
             mat_filename = f"{stem}_{suffix}.mat"
 
-        # OBJ/MTL は metallic/roughness を持たないのでデフォルト（BlinnPhong）
-        _write_mat_v2(out_dir / mat_filename, base_color_path, normal_map_path=normal_map_path)
+        # OBJ/MTL は metallic/roughness を持たないのでデフォルト（BlinnPhong）。Kd を color に反映
+        _write_mat_v2(out_dir / mat_filename, base_color_path,
+                      color=kd_color, normal_map_path=normal_map_path)
         mat_path_cache[mat_name] = _sibling_resource_path(mat_resource_base, mat_filename)
 
     # ---- .mesh の出力（submesh ごとに index 範囲 + material_path）----

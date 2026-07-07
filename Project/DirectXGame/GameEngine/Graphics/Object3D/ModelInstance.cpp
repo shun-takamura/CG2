@@ -5,6 +5,18 @@
 #include "DStorageManager.h"
 #include "PepperMacros.h"
 
+// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
+// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+static const std::string& EnsureFallbackWhiteTexture()
+{
+	static const std::string kWhite = "Resources/Textures/white1x1.dds";
+	auto* tm = TextureManager::GetInstance();
+	if (!tm->HasTexture(kWhite)) {
+		tm->CreateSolidColorTexture(kWhite, 255, 255, 255, 255);
+	}
+	return kWhite;
+}
+
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
 {
 	// CPU フェーズ → GPU フェーズの順で同期実行
@@ -57,7 +69,6 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 
 	// CPU パースが終わっていることを保証
 	assert(loadState_ == LoadState::CPUReady && "InitializeGPU called before LoadCPU");
-	assert(!textureFilePath_.empty() && "textureFilePath is empty!");
 
 	modelCore_ = modelCore;
 
@@ -75,10 +86,12 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 			LoadMatFile(sm.matFilePath, tmp, sm.material);
 		}
 
-		// ベースカラーテクスチャを TextureManager に登録（GPU リソース作成）
-		if (!sm.textureFilePath.empty()) {
-			TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
+		// テクスチャ無しマテリアル（色のみ PBR 等）は白テクスチャで代用し、material.color で色付けする
+		if (sm.textureFilePath.empty()) {
+			sm.textureFilePath = EnsureFallbackWhiteTexture();
 		}
+		// ベースカラーテクスチャを TextureManager に登録（GPU リソース作成）
+		TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
 
 		// 法線マップがあればロードして useNormalMap を立てる
 		if (!sm.normalMapFilePath.empty()) {
@@ -87,6 +100,12 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 		} else {
 			if (sm.material) sm.material->useNormalMap = 0;
 		}
+	}
+
+	// 後方互換: submesh[0] を既存メンバへ（フォールバック適用後の非空パス）
+	if (!submeshes_.empty()) {
+		textureFilePath_ = submeshes_[0].textureFilePath;
+		normalMapFilePath_ = submeshes_[0].normalMapFilePath;
 	}
 
 	loadState_ = LoadState::GPUReady;
