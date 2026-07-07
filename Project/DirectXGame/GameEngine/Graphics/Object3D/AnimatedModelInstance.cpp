@@ -6,6 +6,18 @@
 #include "DStorageManager.h"
 #include "PepperMacros.h"
 
+// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
+// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+static const std::string& EnsureFallbackWhiteTexture()
+{
+    static const std::string kWhite = "Resources/Textures/white1x1.dds";
+    auto* tm = TextureManager::GetInstance();
+    if (!tm->HasTexture(kWhite)) {
+        tm->CreateSolidColorTexture(kWhite, 255, 255, 255, 255);
+    }
+    return kWhite;
+}
+
 void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& directoryPath, const std::string& filename)
 {
     modelCore_ = modelCore;
@@ -49,9 +61,11 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
             LoadMatFile(sm.matFilePath, matTmp, sm.material);
         }
 
-        if (!sm.textureFilePath.empty()) {
-            TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
+        // テクスチャ無しマテリアル（色のみ PBR 等）は白テクスチャで代用し、material.color で色付けする
+        if (sm.textureFilePath.empty()) {
+            sm.textureFilePath = EnsureFallbackWhiteTexture();
         }
+        TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
 
         if (!sm.normalMapFilePath.empty()) {
             TextureManager::GetInstance()->LoadTexture(sm.normalMapFilePath);
@@ -61,7 +75,7 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
         }
     }
 
-    // 後方互換: submesh[0] を既存メンバへ反映
+    // 後方互換: submesh[0] を既存メンバへ反映（フォールバック適用後の非空パス）
     textureFilePath_ = submeshes_[0].textureFilePath;
     normalMapFilePath_ = submeshes_[0].normalMapFilePath;
     assert(!textureFilePath_.empty() && "textureFilePath is empty!");
