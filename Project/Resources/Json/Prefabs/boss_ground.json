@@ -1,0 +1,27 @@
+{
+  "kind": "Primitive",
+  "model": { "dir": "", "file": "", "animated": false },
+  "tag": "Terrain",
+  "defaults": {
+    "scale": [60.0, 60.0, 1.0],
+    "rotate": [-1.5707963, 0, 0]
+  },
+  "primitive": {
+    "primitiveType": 0,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [0.18, 0.2, 0.24, 1.0],
+    "blendMode": 0,
+    "depthWrite": true,
+    "alphaReference": 0,
+    "cullBackface": false,
+    "samplerMode": 0,
+    "uvAutoScroll": false,
+    "uvScrollSpeed": [0, 0],
+    "uvOffset": [0, 0],
+    "uvScale": [8, 8],
+    "uvFlipU": false,
+    "uvFlipV": false,
+    "billboardMode": "None",
+    "timeGroup": "World"
+  }
+}

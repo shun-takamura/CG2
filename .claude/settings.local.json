@@ -72,8 +72,16 @@
       "Bash(cmd.exe /c \"py -3.13 -c \\\\\"print\\(1+1\\)\\\\\"\")",
       "PowerShell(cmd.exe /c \"py -3.13 --version\" 2>&1)",
       "PowerShell(cmd.exe /c \"py -3.13 -c \"\"print\\(1+1\\)\"\"\" 2>&1)",
-      "Bash(findstr /I \".hdr\")"
-      "Bash(python -m py_compile sunday.py)"
+      "Bash(findstr /I \".hdr\")",
+      "Bash(python -m py_compile sunday.py)",
+      "Bash(findstr /r /S \"GetScreenX\\\\|GetClientX\\\\|GetScreenPosition\\\\|GetClientPosition\" Project\\\\DirectXGame --include=\"*.cpp\" --include=\"*.h\")",
+      "Bash(grep -r \"GetMousePos\\\\|MousePos\\\\|GetIO\\\\|ImGui::GetIO\" C:\\\\\\\\Users\\\\\\\\sleon\\\\\\\\source\\\\\\\\repos\\\\\\\\CG2_0_1\\\\\\\\Project\\\\\\\\DirectXGame\\\\\\\\ImGUIManager --include=\"*.cpp\" --include=\"*.h\")",
+      "Bash(python /tmp/kpi_test.py)",
+      "Bash(py /tmp/kpi_test.py)",
+      "mcp__visualize__show_widget",
+      "Bash(python test_retarget.py)",
+      "Bash(python test_retarget_real.py)",
+      "Bash(py -3.13 build_exe.py)"
     ]
   }
 }

@@ -179,6 +179,7 @@ public:
 	void TickElapsedSeconds(float delta) { elapsedSeconds_ += delta; }
 	virtual void Seek(float seconds) { SetElapsedSeconds(seconds); }
 	virtual float GetCameraProgressT() const { return -1.0f; }
+	virtual float GetSeekMaxSeconds() const { return -1.0f; } // -1 = 未対応シーン
 
 	//====================
 	// タイムスケール

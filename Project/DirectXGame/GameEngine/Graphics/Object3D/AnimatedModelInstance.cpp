@@ -61,18 +61,26 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
             LoadMatFile(sm.matFilePath, matTmp, sm.material);
         }
 
-        // テクスチャ無しマテリアル（色のみ PBR 等）は白テクスチャで代用し、material.color で色付けする
+        // テクスチャ無しマテリアル（色のみ PBR 等）や、参照先 DDS が見つからない場合は
+        // 白テクスチャで代用し material.color で色付けする（未登録 SRV バインドのクラッシュ回避）
+        auto* tm = TextureManager::GetInstance();
         if (sm.textureFilePath.empty()) {
             sm.textureFilePath = EnsureFallbackWhiteTexture();
         }
-        TextureManager::GetInstance()->LoadTexture(sm.textureFilePath);
-
-        if (!sm.normalMapFilePath.empty()) {
-            TextureManager::GetInstance()->LoadTexture(sm.normalMapFilePath);
-            if (sm.material) sm.material->useNormalMap = 1;
-        } else {
-            if (sm.material) sm.material->useNormalMap = 0;
+        tm->LoadTexture(sm.textureFilePath);
+        if (!tm->HasTexture(sm.textureFilePath)) {
+            sm.textureFilePath = EnsureFallbackWhiteTexture();
+            tm->LoadTexture(sm.textureFilePath);
         }
+
+        // 法線マップがあればロード。ロードに失敗したら法線マップ無し扱いにする（不正 SRV 回避）
+        if (!sm.normalMapFilePath.empty()) {
+            tm->LoadTexture(sm.normalMapFilePath);
+            if (!tm->HasTexture(sm.normalMapFilePath)) {
+                sm.normalMapFilePath.clear();
+            }
+        }
+        if (sm.material) sm.material->useNormalMap = sm.normalMapFilePath.empty() ? 0 : 1;
     }
 
     // 後方互換: submesh[0] を既存メンバへ反映（フォールバック適用後の非空パス）

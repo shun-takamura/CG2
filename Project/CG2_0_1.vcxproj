@@ -135,6 +135,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\RailStagePart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\BossStagePart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Config\KeyConfig.cpp" />
@@ -174,6 +176,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\RailStagePart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\BossStagePart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
     <ClInclude Include="DirectXGame\Game\Config\GameActions.h" />
@@ -201,6 +205,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\HoverStationCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\BossAttackCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h" />

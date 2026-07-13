@@ -24,6 +24,7 @@ import json
 import struct
 import subprocess
 import sys
+import urllib.parse
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -530,6 +531,8 @@ def _gltf_load(gltf_path: Path):
         if uri.startswith("data:"):
             raise RuntimeError("base64 buffer URIs not supported")
         if uri:
+            # uri は RFC3986 パーセントエンコードされ得るのでデコードして実ファイル名にする
+            uri = urllib.parse.unquote(uri)
             buffers.append((gltf_path.parent / uri).read_bytes())
         else:
             buffers.append(b"")
@@ -585,6 +588,70 @@ def _mirror_x_matrix4(m):
 
 
 # ============================================================
+# 4x4 行列ヘルパー（行優先・列ベクトル規約 v' = M·v）
+# 静的メッシュにノード階層の transform をベイクするために使う。
+# ============================================================
+_MAT_IDENTITY = ((1.0, 0.0, 0.0, 0.0),
+                 (0.0, 1.0, 0.0, 0.0),
+                 (0.0, 0.0, 1.0, 0.0),
+                 (0.0, 0.0, 0.0, 1.0))
+
+
+def _mat_mul(a, b):
+    """行優先 4x4 同士の積 a·b"""
+    return tuple(
+        tuple(sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4))
+        for i in range(4)
+    )
+
+
+def _mat_transform_point(m, p):
+    """点 (px,py,pz) を M で変換（w=1）"""
+    px, py, pz = p
+    return (m[0][0] * px + m[0][1] * py + m[0][2] * pz + m[0][3],
+            m[1][0] * px + m[1][1] * py + m[1][2] * pz + m[1][3],
+            m[2][0] * px + m[2][1] * py + m[2][2] * pz + m[2][3])
+
+
+def _mat_transform_dir(m, d):
+    """方向ベクトル (dx,dy,dz) を M の上 3x3 で変換（平行移動なし）"""
+    dx, dy, dz = d
+    return (m[0][0] * dx + m[0][1] * dy + m[0][2] * dz,
+            m[1][0] * dx + m[1][1] * dy + m[1][2] * dz,
+            m[2][0] * dx + m[2][1] * dy + m[2][2] * dz)
+
+
+def _mat_from_node(node):
+    """glTF ノードのローカル変換行列（行優先）を返す。
+    node.matrix があればそれ（列優先→行優先に転置）、無ければ T·R·S を合成。"""
+    if "matrix" in node:
+        m = node["matrix"]  # 列優先 flat 16
+        return tuple(tuple(m[j * 4 + i] for j in range(4)) for i in range(4))
+
+    tx, ty, tz = node.get("translation", (0.0, 0.0, 0.0))
+    x, y, z, w = node.get("rotation", (0.0, 0.0, 0.0, 1.0))
+    sx, sy, sz = node.get("scale", (1.0, 1.0, 1.0))
+
+    # 回転 3x3（列ベクトル規約）
+    xx, yy, zz = x * x, y * y, z * z
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+    r = (
+        (1 - 2 * (yy + zz), 2 * (xy - wz),     2 * (xz + wy)),
+        (2 * (xy + wz),     1 - 2 * (xx + zz), 2 * (yz - wx)),
+        (2 * (xz - wy),     2 * (yz + wx),     1 - 2 * (xx + yy)),
+    )
+    s = (sx, sy, sz)
+    # 上 3x3 = R·diag(S)（各列を scale 倍）+ 平行移動を最終列に
+    return (
+        (r[0][0] * s[0], r[0][1] * s[1], r[0][2] * s[2], tx),
+        (r[1][0] * s[0], r[1][1] * s[1], r[1][2] * s[2], ty),
+        (r[2][0] * s[0], r[2][1] * s[1], r[2][2] * s[2], tz),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+
+
+# ============================================================
 # glTF → メッシュ抽出
 # ============================================================
 def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
@@ -603,86 +670,131 @@ def _gltf_extract_mesh(gltf, buffers, joint_index_offset: int = 0):
     meshes = gltf.get("meshes", [])
     if not meshes:
         raise RuntimeError("no meshes in glTF")
+    nodes = gltf.get("nodes", [])
 
     vertex_buffer: list[tuple] = []
     index_buffer: list[int] = []
     skin_buffer: list[tuple] = []
     submeshes: list[tuple] = []
-    any_skinning = False
+    state = {"any_skinning": False}
 
-    for mesh in meshes:
-        for prim in mesh.get("primitives", []):
-            attrs = prim.get("attributes", {})
-            if "POSITION" not in attrs:
-                continue
+    def process_primitive(prim, world):
+        """1 プリミティブを world 行列（ノード階層のワールド変換）でベイクして連結する。
+        スキン付きは skin 行列が配置を担うので world は単位行列（呼び出し側で指定）。"""
+        attrs = prim.get("attributes", {})
+        if "POSITION" not in attrs:
+            return
 
-            positions = _gltf_read_accessor(gltf, buffers, attrs["POSITION"])
-            normals = _gltf_read_accessor(gltf, buffers, attrs["NORMAL"]) if "NORMAL" in attrs else None
-            texcoords = _gltf_read_accessor(gltf, buffers, attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else None
-            joints_attr = _gltf_read_accessor(gltf, buffers, attrs["JOINTS_0"]) if "JOINTS_0" in attrs else None
-            weights_attr = _gltf_read_accessor(gltf, buffers, attrs["WEIGHTS_0"]) if "WEIGHTS_0" in attrs else None
-            tangents_attr = _gltf_read_accessor(gltf, buffers, attrs["TANGENT"]) if "TANGENT" in attrs else None
+        positions = _gltf_read_accessor(gltf, buffers, attrs["POSITION"])
+        normals = _gltf_read_accessor(gltf, buffers, attrs["NORMAL"]) if "NORMAL" in attrs else None
+        texcoords = _gltf_read_accessor(gltf, buffers, attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else None
+        joints_attr = _gltf_read_accessor(gltf, buffers, attrs["JOINTS_0"]) if "JOINTS_0" in attrs else None
+        weights_attr = _gltf_read_accessor(gltf, buffers, attrs["WEIGHTS_0"]) if "WEIGHTS_0" in attrs else None
+        tangents_attr = _gltf_read_accessor(gltf, buffers, attrs["TANGENT"]) if "TANGENT" in attrs else None
 
-            indices_idx = prim.get("indices")
-            if indices_idx is None:
-                raw_indices = list(range(len(positions)))
+        indices_idx = prim.get("indices")
+        if indices_idx is None:
+            raw_indices = list(range(len(positions)))
+        else:
+            raw_indices = _gltf_read_accessor(gltf, buffers, indices_idx)
+
+        has_skinning = joints_attr is not None and weights_attr is not None
+        # スキン付きプリミティブはノード変換を無視（skin が配置を担う）
+        wm = _MAT_IDENTITY if has_skinning else world
+        identity_world = wm is _MAT_IDENTITY
+
+        local_vb: list[tuple] = []
+        local_skin: list[tuple] = []
+        for i in range(len(positions)):
+            px, py, pz = positions[i]
+            u, v = (texcoords[i] if texcoords else (0.0, 0.0))
+            nx, ny, nz = (normals[i] if normals else (0.0, 1.0, 0.0))
+
+            # ノード階層のワールド変換をベイク（glTF の RH 空間のまま）
+            if not identity_world:
+                px, py, pz = _mat_transform_point(wm, (px, py, pz))
+                nx, ny, nz = _mat_transform_dir(wm, (nx, ny, nz))
+                nlen = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if nlen > 1e-8:
+                    nx, ny, nz = nx / nlen, ny / nlen, nz / nlen
+
+            # RH → LH
+            px = -px
+            nx = -nx
+            v = 1.0 - v
+            if tangents_attr:
+                tgx, tgy, tgz, tgw = tangents_attr[i]
+                if not identity_world:
+                    tgx, tgy, tgz = _mat_transform_dir(wm, (tgx, tgy, tgz))
+                    tlen = (tgx * tgx + tgy * tgy + tgz * tgz) ** 0.5
+                    if tlen > 1e-8:
+                        tgx, tgy, tgz = tgx / tlen, tgy / tlen, tgz / tlen
+                # RH→LH: tangent.x 反転、handedness(w) 反転
+                local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz, -tgx, tgy, tgz, -tgw))
             else:
-                raw_indices = _gltf_read_accessor(gltf, buffers, indices_idx)
+                local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz))
 
-            has_skinning = joints_attr is not None and weights_attr is not None
-
-            # このプリミティブ分の頂点/スキンをローカルに構築（tangent 計算は 13 要素化のため先に済ませる）
-            local_vb: list[tuple] = []
-            local_skin: list[tuple] = []
-            for i in range(len(positions)):
-                px, py, pz = positions[i]
-                u, v = (texcoords[i] if texcoords else (0.0, 0.0))
-                nx, ny, nz = (normals[i] if normals else (0.0, 1.0, 0.0))
-                # RH → LH
-                px = -px
-                nx = -nx
-                v = 1.0 - v
-                if tangents_attr:
-                    tgx, tgy, tgz, tgw = tangents_attr[i]
-                    # RH→LH: tangent.x 反転、handedness(w) 反転
-                    local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz, -tgx, tgy, tgz, -tgw))
-                else:
-                    local_vb.append((px, py, pz, 1.0, u, v, nx, ny, nz))
-
-                if has_skinning:
-                    j = joints_attr[i]
-                    w = weights_attr[i]
-                    local_skin.append((tuple(int(x) + joint_index_offset for x in j),
-                                       tuple(float(x) for x in w)))
-                else:
-                    # スキン混在時にバッファ長を頂点数に合わせるためのゼロ影響ダミー
-                    local_skin.append(((0, 0, 0, 0), (0.0, 0.0, 0.0, 0.0)))
-
-            # winding 反転 (a, b, c) → (a, c, b)。インデックスはプリミティブ内ローカル基準
-            local_ib: list[int] = []
-            for i in range(0, len(raw_indices), 3):
-                a, b, c = raw_indices[i], raw_indices[i + 1], raw_indices[i + 2]
-                local_ib.extend([a, c, b])
-
-            # TANGENT 属性が無いなら UV+位置から計算（9要素→13要素）
-            if not tangents_attr:
-                local_vb = _compute_tangents(local_vb, local_ib)
-
-            # 連結: ローカルインデックスに base_vertex を足してグローバル化
-            base_vertex = len(vertex_buffer)
-            index_start = len(index_buffer)
-            index_buffer.extend(idx + base_vertex for idx in local_ib)
-            vertex_buffer.extend(local_vb)
-            skin_buffer.extend(local_skin)
             if has_skinning:
-                any_skinning = True
+                j = joints_attr[i]
+                w = weights_attr[i]
+                local_skin.append((tuple(int(x) + joint_index_offset for x in j),
+                                   tuple(float(x) for x in w)))
+            else:
+                # スキン混在時にバッファ長を頂点数に合わせるためのゼロ影響ダミー
+                local_skin.append(((0, 0, 0, 0), (0.0, 0.0, 0.0, 0.0)))
 
-            submeshes.append((prim.get("material"), index_start, len(local_ib)))
+        # winding 反転 (a, b, c) → (a, c, b)。インデックスはプリミティブ内ローカル基準
+        local_ib: list[int] = []
+        for i in range(0, len(raw_indices), 3):
+            a, b, c = raw_indices[i], raw_indices[i + 1], raw_indices[i + 2]
+            local_ib.extend([a, c, b])
+
+        # TANGENT 属性が無いなら UV+位置から計算（9要素→13要素）
+        if not tangents_attr:
+            local_vb = _compute_tangents(local_vb, local_ib)
+
+        # 連結: ローカルインデックスに base_vertex を足してグローバル化
+        base_vertex = len(vertex_buffer)
+        index_start = len(index_buffer)
+        index_buffer.extend(idx + base_vertex for idx in local_ib)
+        vertex_buffer.extend(local_vb)
+        skin_buffer.extend(local_skin)
+        if has_skinning:
+            state["any_skinning"] = True
+
+        submeshes.append((prim.get("material"), index_start, len(local_ib)))
+
+    # シーンのノードツリーを走査し、各 mesh ノードにワールド変換を適用して抽出
+    def walk(node_idx, parent_world):
+        if node_idx < 0 or node_idx >= len(nodes):
+            return
+        node = nodes[node_idx]
+        world = _mat_mul(parent_world, _mat_from_node(node))
+        mesh_idx = node.get("mesh")
+        if mesh_idx is not None and 0 <= mesh_idx < len(meshes):
+            for prim in meshes[mesh_idx].get("primitives", []):
+                process_primitive(prim, world)
+        for child in node.get("children", []):
+            walk(child, world)
+
+    scenes = gltf.get("scenes", [])
+    scene_idx = gltf.get("scene", 0)
+    root_nodes = []
+    if scenes and 0 <= scene_idx < len(scenes):
+        root_nodes = scenes[scene_idx].get("nodes", [])
+    for r in root_nodes:
+        walk(r, _MAT_IDENTITY)
+
+    # フォールバック: ノードから 1 つも mesh を辿れなかった場合は従来通りフラットに読む
+    if not submeshes:
+        for mesh in meshes:
+            for prim in mesh.get("primitives", []):
+                process_primitive(prim, _MAT_IDENTITY)
 
     if not submeshes:
         raise RuntimeError("no primitives with POSITION in glTF")
 
-    return vertex_buffer, index_buffer, (skin_buffer if any_skinning else None), submeshes
+    return vertex_buffer, index_buffer, (skin_buffer if state["any_skinning"] else None), submeshes
 
 
 # ============================================================
@@ -882,6 +994,8 @@ def _gltf_find_normal_map_path(gltf, gltf_path: Path, mat_index: int = 0) -> str
     uri = images[image_idx].get("uri", "")
     if not uri or uri.startswith("data:"):
         return ""
+    # glTF の uri は RFC3986 パーセントエンコード。ディスク上の実ファイル名に合わせてデコードする
+    uri = urllib.parse.unquote(uri)
     try:
         rel = gltf_path.relative_to(ASSETS_DIR)
         return (RESOURCES_DIR / (rel.parent / uri).with_suffix(".dds")).as_posix()
@@ -910,6 +1024,8 @@ def _gltf_find_base_color_path(gltf, gltf_path: Path, mat_index: int = 0) -> str
     uri = images[image_idx].get("uri", "")
     if not uri or uri.startswith("data:"):
         return ""
+    # glTF の uri は RFC3986 パーセントエンコード。ディスク上の実ファイル名に合わせてデコードする
+    uri = urllib.parse.unquote(uri)
     try:
         rel = gltf_path.relative_to(ASSETS_DIR)
         tex_in_assets = rel.parent / uri
