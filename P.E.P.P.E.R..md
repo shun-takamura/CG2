@@ -177,3 +177,34 @@ Profiler(シングルトン) … CPU=QueryPerformanceCounter / GPU=D3D12タイ�
 ### 新規チャットでの始め方
 1. このPCで master を最新化 → `Engine_PEPPER_00` を切る。
 2. ステップ1（SessionLogger に `Profile` カテゴリ）から着手。新規 `Profiler.{h,cpp}` 作成時は配置・命名を最終確認のうえ **`EngineCore.vcxproj`/`.filters`** 追記を報告（Project/CLAUDE.md ルール）。
+
+---
+
+## 10. Live/Net モード拡張（G.U.N.D.A.M. 連携・2026-07-14 確定）
+
+**背景**: G.U.N.D.A.M.（スマホ遠隔操作）の遅延計測を、別ツールにせず **P.E.P.P.E.R. の拡張**として実装する。既存の区間プロファイラ（CPU=QPC / GPU=D3D12 タイムスタンプ）に、**入力到達→表示までの input-to-photon 遅延**という新しい計測軸を足す。詳細設計は `G.U.N.D.A.M..md` を参照。
+
+### 10.1 位置づけ
+- 既存 P.E.P.P.E.R.（§1-9）= エンジン内の**区間別 CPU/GPU 時間**プロファイラ。純粋に「どの処理が重いか」。
+- 本拡張 = **1つの入力が受信されてから画面に出るまで**の遅延を分解。フレーム境界（受信 t2 / 表示 t3）にタイムスタンプを刻む。
+- 両者は同じ `Profiler` シングルトンと同じ GPU タイムスタンプ resolve を共有する（二重に GPU クエリを積まない）。
+
+### 10.2 計測項目
+- `engine_ms = t3 − t2`（受信→表示。**PC 単一 QPC**。クロック跨ぎ減算はしない ＝ `G.U.N.D.A.M..md §6`）。
+- そのフレームの `cpu_ms` / `gpu_ms`（既存の区間集計から流用）。
+- 配信負荷（fps / encode_ms / skipped_pct / bitrate）は **OBS WebSocket `GetStats` をサーバ側で取得**（エンジンでは測らない。`live_control.py` の `obsws_python` 統合を再利用）。
+
+### 10.3 エンジン側の追加
+- **`SessionLogger` に `Net` カテゴリ**を追加（`Profile` の隣）→ `net.log`。1行1レコードで `seq=.. t2_ns=.. t3_ns=.. cpu_ms=.. gpu_ms=..` を出力。
+  - profile.log / state.log / net.log が**同一セッションフォルダ**に並ぶので、「カクついた瞬間（profile.log の重い区間）と入力遅延（net.log）」を時刻で突合できる。SUNDAY の異常ログとも突合可能。
+- **t3 の確定点**: `Framework::Run` の Draw→Present 直後（`PEPPER_END_FRAME` 付近）。既存 GPU タイムスタンプの 1〜2 フレーム遅延リードバックに相乗りして gpu_ms を得る。
+- **ガード**: 遅延計測は G.U.N.D.A.M. の `USE_GUNDAM` 側に属する（Net 入力口とセット）。P.E.P.P.E.R. 本体の `USE_PEPPER` とは独立に切れる。GPU タイムスタンプ基盤だけを共有する。
+
+### 10.4 ImGui 表示（PepperWindow 拡張）
+- 既存の区間テーブル/フレームグラフに、**input-to-photon の折れ線（engine_ms）**タブを追加。
+- ライブ操作中に「今の入力遅延」が見える → net.log と合わせてオフライン解析。
+
+### 10.5 決定論との両立
+- §8 と同じ原則: 計測は乱数・dt・ゲーム状態に触れない。ただし **ライブ遠隔操作中は `ReplaySystem` の Record と排他**（ネットワーク入力を注入するため。G.U.N.D.A.M. 側で制御）。純粋な計測のみなら従来通り決定論を壊さない。
+
+関連: `G.U.N.D.A.M..md`（本拡張を使う側の全体設計）
