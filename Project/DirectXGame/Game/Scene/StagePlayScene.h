@@ -7,6 +7,9 @@
 #include "Effect/EffectManager.h"
 #include "Transform.h"
 #include "BoneSocket.h"
+#include "RailStagePart.h"
+#include "BossStagePart.h"
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,20 +20,20 @@
 class Camera;
 class Skybox;
 class SplineCurveActor;
-class RailCameraController;
-class CameraRotKey;
-class RailAimController;
 class AnimatedObject3DInstance;
 class Object3DInstance;
 class Reticle;
 class LightningRuntime;
+class RailStagePart;
+class BossStagePart;
 
 /// <summary>
 /// ステージプレイシーン
-/// 道中レールSTG(2-3分) → ボス戦3Dアクション(3-5分) をシームレスに繋ぐ
-/// 内部に Phase（Rail / Landing / Boss）を持つ予定
+/// 道中レールSTG(2-3分) → 着地遷移 → ボス戦3Dアクション(3-5分) をシームレスに繋ぐ。
+/// Rail 専用ロジック（レールカメラ駆動・Wave/敵スポーン・Seek再構築）は RailStagePart に切り出し、
+/// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
-class StagePlayScene : public GameScene {
+class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -50,6 +53,8 @@ public:
 	// シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する。
 	void Seek(float seconds) override;
 	float GetCameraProgressT() const override;
+	// Rail 終了（Landing 遷移）トリガー秒。ImGuiManager の Scene Timeline パネルの Seek Max 表示に使う。
+	float GetSeekMaxSeconds() const override;
 
 	Camera* GetCamera() override;
 
@@ -62,22 +67,71 @@ public:
 	bool LoadSceneFromJson(const std::string& filePath) override;
 
 private:
-	// カメラローカルオフセット（x=右/y=上/z=前方深度）⇔ ワールド座標の相互変換。
-	// ScreenHover/Static 敵の配置・出現に使う（現在のカメラポーズ基準）。
-	Vector3 CameraOffsetToWorld(const Vector3& off) const;
-	Vector3 WorldToCameraOffset(const Vector3& world) const;
-
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
 
-	// レールカメラ：位置スプライン（cameraPath_）＋向き回転キーフレーム列（cameraRotKeys_）
-	std::unique_ptr<SplineCurveActor> cameraPath_;
-	std::vector<std::unique_ptr<CameraRotKey>> cameraRotKeys_;
-	std::unique_ptr<RailCameraController> railCamera_;
-	std::unique_ptr<RailAimController> railAim_;   // 向きオーサリング用の見回しローテータ
-	bool aimAuthoring_ = false;       // ON 中はゲーム完全フリーズ＋カメラ見回しでキー作成
-	bool prevAimAuthoring_ = false;   // 立ち上がり/立ち下がり検出用
-	float prevTimeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f, 1.0f }; // Aim 中の TimeScale 退避
+	// STG（Rail）専用ロジック一式（レールカメラ駆動・Wave/敵スポーン・Seek再構築）。
+	// StagePlayScene は IRailStageHost 経由でのみこれを操作する。
+	std::unique_ptr<RailStagePart> railStage_;
+
+	// ----- IRailStageHost 実装（private override。外部からは呼べない。RailStagePart 経由のみ）-----
+	IImGuiEditable* SpawnEnemyOnSpline(const std::string& prefabName, SplineCurveActor* spline,
+		float speed, bool removeAtEnd, float initialT, int waveEntryIndex) override {
+		return GameScene::SpawnEnemyOnSpline(prefabName, spline, speed, removeAtEnd, initialT, waveEntryIndex);
+	}
+	IImGuiEditable* SpawnEnemyAt(const std::string& prefabName, const Vector3& pos) override {
+		return GameScene::SpawnEnemyAt(prefabName, pos);
+	}
+	// unique_ptr<EnemyController> の値渡し（デストラクタ実体化）に完全型が要るため定義は .cpp。
+	void RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) override;
+	void UpdateMovingEnemies(float dt) override { GameScene::UpdateMovingEnemies(dt); }
+	void UpdateEnemyControllers(float dt, IImGuiEditable* player, float stageTimeSec) override {
+		GameScene::UpdateEnemyControllers(dt, player, stageTimeSec);
+	}
+	void SweepDeadEntities() override { GameScene::SweepDeadEntities(); }
+	// ResetDodgeState() の override 宣言は下方の既存宣言（回避まわりのセクション）に付与済み。
+	// player_ は AnimatedObject3DInstance*（ヘッダでは前方宣言のみ＝IImGuiEditable への
+	// アップキャストができない）ため、定義は .cpp（完全型あり）に置く。
+	IImGuiEditable* GetPlayer() const override;
+	float GetTimeScale(TimeGroup g) const override { return Scene::GetTimeScale(g); }
+	void SetTimeScale(TimeGroup g, float scale) override { Scene::SetTimeScale(g, scale); }
+	void ForEachMovingEnemy(const std::function<void(IImGuiEditable*, int)>& fn) override {
+		for (auto& m : movingEnemies_) {
+			if (!m.entity) continue;
+			fn(m.entity, m.waveEntryIndex);
+		}
+	}
+	void RegisterStationaryMovingEnemy(IImGuiEditable* entity, int waveEntryIndex) override {
+		MovingEnemy me{};
+		me.entity         = entity;
+		me.spline         = nullptr;
+		me.t              = 0.0f;
+		me.speed          = 0.0f;
+		me.removeAtEnd    = false;
+		me.waveEntryIndex = waveEntryIndex;
+		movingEnemies_.push_back(me);
+	}
+	// EnemyController の完全型が必要なため定義は .cpp（Enemy/EnemyController.h を include 済み）。
+	void LinkEnemyController(IImGuiEditable* entity, EnemyController* ctrl) override;
+	void TriggerRetreatForWaveEntry(int waveEntryIndex) override;
+	SplineCurveActor* FindDynamicSplineByName(const std::string& name) override {
+		return GameScene::FindDynamicSplineByName(name);
+	}
+	const std::vector<std::unique_ptr<SplineCurveActor>>& GetDynamicSplines() const override {
+		return dynamicSplines_;
+	}
+	void ClearWaveRuntimeState() override;
+
+	// ----- IBossStageHost 実装（RegisterEnemyController/UpdateEnemyControllers/SweepDeadEntities/
+	//        GetPlayer は IRailStageHost と同一シグネチャのため上の override 1つで両方を満たす）-----
+	IImGuiEditable* SpawnPrefabAt(const std::string& prefabName, const Vector3& pos) override {
+		return GameScene::SpawnEnemyAt(prefabName, pos);
+	}
+	void ClearBossRuntimeState() override; // Enemy/Boss/Terrain タグ＋敵コントローラ掃除（定義は .cpp）
+
+	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
+	// StagePlayScene は IBossStageHost 経由でのみこれを操作する。
+	std::unique_ptr<BossStagePart> bossStage_;
 
 	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する
@@ -96,7 +150,6 @@ private:
 
 	// ----- ImGui で編集可能な調整値（Resources/Json/Tuning/StagePlay.json に自動同期） -----
 	Vector3 playerLocalOffset_{ 0.0f, -0.5f, 6.0f };  // カメラローカルの中心位置（無入力時）
-	float   railCameraSpeed_ = 1.0f / 120.0f;          // RailCamera の進行速度（t/秒）。120秒で踏破
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
 	Vector2 playerClipMargin_{ 0.1f, 0.1f };           // クリップ空間で許す画面外マージン（X/Y）
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い
@@ -124,27 +177,6 @@ private:
 	IImGuiEditable* lockedEnemy_ = nullptr;        // 現フレームのロックオン対象（ホーミング元・強）
 	IImGuiEditable* nearestEnemy_ = nullptr;       // 画面上で最近の敵（軽ホーミング先）
 	bool    aimInitialized_ = false;
-
-	// ----- スポーン -----
-	WaveDef currentWave_;
-	std::vector<bool>  spawnFired_;    // entries と同じサイズ。スポーン済みフラグ
-	std::vector<bool>  retreatFired_;  // entries と同じサイズ。退避発令済みフラグ
-	// entries と同じサイズ。そのエントリから生まれた敵が倒された時の t 値。
-	// 負数 = まだ倒されていない。Seek で「killAtT_ > currentT」なら未死亡扱いに戻す。
-	std::vector<float> killAtT_;
-	std::string        wavePath_ = "Resources/Json/Waves/stage1.json"; // ロード/セーブ先
-
-#ifdef _DEBUG
-	// ----- Wave Editor（インゲーム配置・Debug ビルドのみ） -----
-	bool   waveEditMode_      = false;  // ON 中はビューポートへのプレハブドロップでエントリ追加
-	int    waveSelectedEntry_ = -1;     // 一覧で選択中のエントリ index（-1=未選択）
-	float  waveDropDepth_     = 30.0f;  // 「現在 t で追加」時のカメラ前方配置深度
-	// Wave をディスクへ保存し、スポーン状態を再構築する。
-	void SaveWaveToDisk();
-	void RebuildWaveRuntimeState();
-	// Wave Editor の ImGui パネル（StagePlayTuning から呼ぶ）。
-	void DrawWaveEditorUI(bool& changed);
-#endif
 
 	// 入力で加算するオフセット / 慣性用速度（ランタイムのみ、JSON 非保存）
 	Vector2 playerInputOffset_{ 0.0f, 0.0f };
@@ -375,7 +407,8 @@ private:
 	void TriggerJustDodge(IImGuiEditable* attacker);
 	// 回避・ジャスト回避のランタイム状態を即時クリア（Seek / LoadScene で呼ぶ）。
 	// スロー・グレースケールが残るのを防ぐため TimeScale と PostEffect も元に戻す。
-	void ResetDodgeState();
+	// IRailStageHost::ResetDodgeState() の override（RailStagePart::Seek() から host_ 経由で呼ばれる）。
+	void ResetDodgeState() override;
 
 	void UpdateJustDodgeEffect(float dt);
 
@@ -388,6 +421,21 @@ public:
 private:
 
 	Phase phase_ = Phase::Rail;
+	Phase prevPhase_ = Phase::Rail; // フェーズ遷移エッジ検出用（Boss 突入で Enter、離脱で Reset）
+
+	// ----- Rail → Landing 自動遷移 -----
+	float seekMaxSec_ = 120.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存
+
+	// ----- Landing フェーズ（滞在時間・自動進行）-----
+	float landingDuration_ = 10.0f; // Landing 滞在秒（将来カメラ演出に置換予定）。JSON "phase.landingDurationSec"
+	float landingTimer_    = 0.0f;  // ランタイムのみ、JSON非保存
+
+	// ----- ボス戦プリロード（未実装。バックグラウンドロード完了フラグだけ先に持つ）-----
+	// 将来: Landing フェーズ中に別スレッドで ModelManager::PreloadCPU 等（CPU/GPU分割ロード。
+	// ModelManager::FlushGPUUpload と同じパターン、Scene::ProcessAsyncLoads で毎フレームGPU反映）を実行し、
+	// 完了したらこれを true にする。今はロード対象コンテンツが無いため常に true
+	// （Landing の滞在時間は landingDuration_ だけで決まる）。
+	bool bossPreloadReady_ = true;
 
 	void LoadTuningFromJson();
 	void SaveTuningToJson() const;

@@ -116,7 +116,7 @@
     "gaugeMaxGouman": 100,
     "gaugeMaxDisruptor": 120,
     "cooldown": 30,
-    "equipped": 1,
+    "equipped": 0,
     "disruptorCharge": 2.5,
     "disruptorSlash": 1.5,
     "disruptorCollapse": 4,
@@ -269,7 +269,7 @@
     "disruptorFragSatBoost": 1.6000000238418579,
     "disruptorFragSpin": 6,
     "disruptorFragMinScale": 0.75,
-    "disruptorFractureSeed": 3854922489,
+    "disruptorFractureSeed": 220533524,
     "disruptorFractureSeedLock": false,
     "disruptorCellCount": 512,
     "disruptorBreakFreeze": 0,
@@ -379,5 +379,9 @@
     "blurInnerRadius": 0.30000001192092896,
     "blurFalloff": 0.40000000596046448,
     "blurMaxPx": 10
+  },
+  "phase": {
+    "seekMaxSec": 120,
+    "landingDurationSec": 10
   }
 }
