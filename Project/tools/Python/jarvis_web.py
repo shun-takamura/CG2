@@ -33,6 +33,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse
+from dotenv import load_dotenv
+
+# .env（GITHUB_TOKEN / OBS_WS_* 等）を環境変数へ。jarvis_bot.py と条件を揃える。
+# ※ Claudeの認証は claude.exe 自身が持つ（.env とは無関係）。
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 import pepper_server           # GUNDAM relay（app を /gundam に mount して再利用）
 import git_pipeline            # AI編集→ビルド→push
