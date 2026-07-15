@@ -26,6 +26,7 @@ import asyncio
 import json
 import random
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -35,11 +36,82 @@ import uvicorn
 METRICS_HZ = 10          # metrics を push する頻度（毎秒）
 DEFAULT_PORT = 8000
 
-# 入力パス。S1では擬似固定。S3(vgamepad)/S5(UDP→エンジン)で実切替。
-#   "A" = ループバックUDPでエンジン直結（t2/t3計測可・本命）
-#   "B" = vgamepad 注入（エンジン無改修の安全網）
+# 入力パス。S1では擬似固定。S3(vgamepad)実装済。S5(UDP→エンジン)で "A" 追加。
+#   "A" = ループバックUDPでエンジン直結（t2/t3計測可・本命, 未実装）
+#   "B" = vgamepad 注入（エンジン無改修の安全網, S3実装済）
 #   "SIM" = 擬似テストモード（エンジン/OBS未接続。ゆらぎノイズを合成）
 MODE = "SIM"
+
+
+def _clamp(v, lo, hi):
+    return lo if v < lo else hi if v > hi else v
+
+
+# ---- Path B: vgamepad 注入（S3。sunday.py の InputDriver と同じ vgamepad/ViGEmBus 流儀） ----
+# 未導入環境（別PC等）でも import で落ちないよう、失敗したら None にして SIM にフォールバック。
+try:
+    import vgamepad as _vg
+except Exception:
+    _vg = None
+
+
+class GamepadInjector:
+    """WSで受けた入力状態を仮想Xboxコントローラへそのまま反映する（Path B）。
+
+    SUNDAY(sunday.py の InputDriver)はランダム生成だが、GUNDAM はスマホの生入力を
+    ミラーするだけ。VX360Gamepad を1つ持ち reset→press→update で毎パケット同期する。"""
+
+    def __init__(self):
+        self.pad = _vg.VX360Gamepad()
+        # cockpit.html のボタンビット(XInput標準値)→ XUSB_BUTTON の対応表
+        B = _vg.XUSB_BUTTON
+        self._map = [
+            (0x0001, B.XUSB_GAMEPAD_DPAD_UP),       (0x0002, B.XUSB_GAMEPAD_DPAD_DOWN),
+            (0x0004, B.XUSB_GAMEPAD_DPAD_LEFT),     (0x0008, B.XUSB_GAMEPAD_DPAD_RIGHT),
+            (0x0010, B.XUSB_GAMEPAD_START),         (0x0020, B.XUSB_GAMEPAD_BACK),
+            (0x0100, B.XUSB_GAMEPAD_LEFT_SHOULDER), (0x0200, B.XUSB_GAMEPAD_RIGHT_SHOULDER),
+            (0x1000, B.XUSB_GAMEPAD_A),             (0x2000, B.XUSB_GAMEPAD_B),
+            (0x4000, B.XUSB_GAMEPAD_X),             (0x8000, B.XUSB_GAMEPAD_Y),
+        ]
+
+    def apply(self, msg):
+        btn = int(msg.get("btn", 0))
+        lx = _clamp(float(msg.get("lx", 0.0)), -1.0, 1.0)
+        ly = _clamp(float(msg.get("ly", 0.0)), -1.0, 1.0)  # cockpit側で上が+1。XInput左スティックYと一致
+        lt = _clamp(float(msg.get("lt", 0.0)), 0.0, 1.0)
+        rt = _clamp(float(msg.get("rt", 0.0)), 0.0, 1.0)
+        self.pad.reset()
+        for bit, xbtn in self._map:
+            if btn & bit:
+                self.pad.press_button(button=xbtn)
+        self.pad.left_joystick_float(x_value_float=lx, y_value_float=ly)
+        self.pad.left_trigger_float(value_float=lt)
+        self.pad.right_trigger_float(value_float=rt)
+        self.pad.update()
+
+    def release(self):
+        self.pad.reset()
+        self.pad.update()
+
+
+# Path B 有効時のみ生成される注入器（単一操作者前提で全WS共有）
+_injector = None
+
+
+def _init_mode(requested):
+    """起動時にモードを確定。B指定でも vgamepad 未導入なら SIM に落として続行する。"""
+    global MODE, _injector
+    if requested == "B":
+        if _vg is None:
+            print("[GUNDAM] vgamepad 未導入のため SIM にフォールバック"
+                  "（本番Pythonに pip install vgamepad + ViGEmBus ドライバが必要）")
+            MODE = "SIM"
+        else:
+            _injector = GamepadInjector()
+            MODE = "B"
+            print("[GUNDAM] Path B 有効：スマホ入力を仮想Xboxコントローラへ注入します")
+    else:
+        MODE = "SIM"
 
 
 class Advisor:
@@ -115,10 +187,18 @@ app = FastAPI(title="G.U.N.D.A.M. cockpit relay")
 _last_seq = {"seq": 0}
 
 
+# S2: 本番コックピットは同ディレクトリの cockpit.html（1枚完結）を配信。
+# 毎回読むのでサーバ再起動なしにブラウザ再読込だけでUI変更が反映される（開発が楽）。
+_COCKPIT_PATH = Path(__file__).with_name("cockpit.html")
+
+
 @app.get("/")
 async def index():
-    """組み込みの最小テストページ。S2 で本番 index.html に差し替える。"""
-    return HTMLResponse(_TEST_PAGE)
+    """本番コックピット cockpit.html を返す。無ければ組込テストページにフォールバック。"""
+    try:
+        return HTMLResponse(_COCKPIT_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return HTMLResponse(_TEST_PAGE)
 
 
 @app.get("/healthz")
@@ -146,14 +226,22 @@ async def ws(websocket: WebSocket):
                     continue
                 if msg.get("t") == "in":
                     _last_seq["seq"] = msg.get("seq", _last_seq["seq"])
+                    # Path B: 受けた生入力を仮想パッドへミラー（SIM時は _injector=None で素通り）
+                    if _injector is not None:
+                        try:
+                            _injector.apply(msg)
+                        except Exception:
+                            pass  # 注入失敗は握りつぶす（echo/metricsは止めない）
                     # echo: スマホが t4 = performance.now() を確定して RTT_net を出すための即返し（§6）
                     await websocket.send_text(json.dumps({
                         "t": "echo", "seq": msg.get("seq"), "t1": msg.get("t1"),
                     }))
-                    # TODO(S3/S5): ここで msg を Path B(vgamepad) / Path A(UDP→エンジン) へ注入
+                    # TODO(S5): Path A(UDP→エンジン) 注入をここに追加（t2/t3計測）
         except WebSocketDisconnect:
             pass
         finally:
+            if _injector is not None:
+                _injector.release()  # 切断時に全ボタン/スティックを離す（暴走防止）
             stop.set()
 
     async def push_loop():
@@ -294,8 +382,11 @@ def main():
     ap.add_argument("--host", default="0.0.0.0",
                     help="バインドホスト（Tailscale内で使うなら0.0.0.0のまま）")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--mode", choices=["SIM", "B"], default="SIM",
+                    help="SIM=擬似のみ / B=vgamepad注入(要ViGEmBus)。A(エンジン直結)はS5で追加")
     args = ap.parse_args()
-    print(f"[GUNDAM] relay起動 http://{args.host}:{args.port}/  mode={MODE}（擬似テストモード）")
+    _init_mode(args.mode)
+    print(f"[GUNDAM] relay起動 http://{args.host}:{args.port}/  mode={MODE}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

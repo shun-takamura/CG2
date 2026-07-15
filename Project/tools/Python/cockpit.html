@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>G.U.N.D.A.M. ▸ COCKPIT</title>
+<!--
+  G.U.N.D.A.M. S2: 本番仮想コックピット（設計書 §8）
+  1枚完結（HTML/CSS/JS内包・外部CDN非依存＝Tailscale内オフラインでも動く）。
+  ・左  = 仮想パッド（アナログスティック / D-PAD / A・B・X・Y / 肩 LB・RB・LT・RT）
+  ・右  = RTTメーター（緑/黄/赤）/ FPSオーバーヘッド / アドバイザ（タイピング演出）/ 時系列チャート
+  ・送信 = 20Hzで {t:"in", seq, t1:performance.now(), btn, lx, ly, lt, rt}（§5）
+  ・echo = スマホ単一時計で RTT_net = t4 - t1（クロックドメインを跨がない §6）
+  S1のダミー値(SIM)のまま見た目を確定するステップ。実注入はS3(vgamepad)/S5(UDP→エンジン)。
+-->
+<style>
+  :root{
+    --bg:#070b13; --panel:#0e1728; --panel2:#0b1322; --edge:#1c2c47;
+    --fg:#cfe8ff; --dim:#7d93b3; --neon:#39a7ff; --neon2:#2de0ff;
+    --ok:#44dd88; --warn:#ffcc33; --crit:#ff5566;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;height:100%;overflow:hidden;}
+  body{
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    background:radial-gradient(1200px 700px at 70% -10%,#12233f 0%,var(--bg) 60%);
+    color:var(--fg);
+    display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* ===== ヘッダ（接続状態 / mode） ===== */
+  header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--edge);}
+  header .logo{font-size:14px;font-weight:700;letter-spacing:.25em;color:var(--neon);
+    text-shadow:0 0 12px rgba(57,167,255,.5);}
+  header .spacer{flex:1;}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
+    font-size:11px;font-weight:700;letter-spacing:.08em;}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+  .s-ok{background:rgba(68,221,136,.14);color:var(--ok);}
+  .s-crit{background:rgba(255,85,102,.16);color:var(--crit);}
+  .mode{font-size:11px;color:var(--dim);letter-spacing:.1em;}
+
+  /* ===== 本体：左パッド / 右メーター ===== */
+  main{flex:1;display:flex;gap:12px;padding:12px;min-height:0;}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;}
+  .left{flex:1.15;}
+  .right{flex:1;overflow:hidden;}
+  .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);
+    border:1px solid var(--edge);border-radius:14px;padding:12px;position:relative;}
+  .card h2{margin:0 0 8px;font-size:10px;letter-spacing:.22em;color:var(--dim);font-weight:700;}
+
+  /* ===== メーター ===== */
+  .meters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .meter{background:#0a1220;border:1px solid #14213a;border-radius:10px;padding:8px 9px;}
+  .meter .k{font-size:9px;letter-spacing:.12em;color:var(--dim);}
+  .meter .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:2px;}
+  .meter .u{font-size:11px;color:var(--dim);font-weight:400;}
+  .meter.big .v{font-size:30px;}
+  .v.g{color:var(--ok);} .v.y{color:var(--warn);} .v.r{color:var(--crit);}
+
+  /* ===== アドバイザ ===== */
+  .adv{display:flex;flex-direction:column;gap:6px;}
+  .adv .lvl{align-self:flex-start;}
+  .l-EXCELLENT,.l-OK{background:rgba(68,221,136,.14);color:var(--ok);}
+  .l-WARNING{background:rgba(255,204,51,.14);color:var(--warn);}
+  .l-CRITICAL{background:rgba(255,85,102,.16);color:var(--crit);}
+  .adv .msg{font-size:12.5px;line-height:1.55;min-height:3.4em;color:var(--fg);}
+  .adv .msg .cursor{display:inline-block;width:7px;background:var(--neon);
+    animation:blink 1s steps(1) infinite;margin-left:1px;}
+  @keyframes blink{50%{opacity:0;}}
+
+  /* ===== チャート ===== */
+  .chartwrap{flex:1;min-height:90px;}
+  canvas{width:100%;height:100%;display:block;}
+  .legend{display:flex;gap:14px;font-size:10px;color:var(--dim);margin-top:4px;}
+  .legend b{font-weight:700;}
+  .lg-rtt b{color:var(--neon2);} .lg-fps b{color:var(--warn);}
+
+  /* ===== 仮想パッド ===== */
+  .padgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;min-height:0;}
+  .stickzone,.btnzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
+
+  /* アナログスティック */
+  .stick{position:relative;width:150px;height:150px;border-radius:50%;
+    background:radial-gradient(circle at 50% 40%,#12203a,#0a1220);
+    border:1px solid #22375c;touch-action:none;}
+  .stick .ring{position:absolute;inset:14px;border-radius:50%;border:1px dashed #24406b;}
+  .stick .nub{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,var(--neon),#0b2b4d);
+    border:1px solid #57b4ff;box-shadow:0 0 18px rgba(57,167,255,.5);transition:transform .04s linear;}
+  .stick .axestxt{position:absolute;left:0;right:0;bottom:-18px;text-align:center;font-size:10px;color:var(--dim);
+    font-variant-numeric:tabular-nums;}
+
+  /* D-PAD */
+  .dpad{display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(3,34px);gap:3px;}
+  .dpad .b{background:#0f1c31;border:1px solid #24406b;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-size:13px;color:var(--dim);touch-action:none;}
+  .dpad .b.hit{background:var(--neon);color:#03121f;box-shadow:0 0 12px rgba(57,167,255,.6);}
+  .dpad .up{grid-area:1/2;} .dpad .left{grid-area:2/1;} .dpad .right{grid-area:2/3;} .dpad .down{grid-area:3/2;}
+  .dpad .c{grid-area:2/2;background:transparent;border:0;}
+
+  /* フェイスボタン A/B/X/Y（Xbox配置） */
+  .face{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px;}
+  .abtn{border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:20px;font-weight:800;touch-action:none;}
+  .btn-y{grid-area:1/2;} .btn-x{grid-area:2/1;} .btn-b{grid-area:2/3;} .btn-a{grid-area:3/2;}
+  .abtn{background:#0f1c31;border:1px solid #26405f;}
+  .abtn.a{color:#7CFC9A;} .abtn.b{color:#ff8a8a;} .abtn.x{color:#8ab4ff;} .abtn.y{color:#ffe08a;}
+  .abtn.hit{filter:brightness(1.9);box-shadow:0 0 16px currentColor;}
+
+  /* 肩ボタン LB/RB/LT/RT */
+  .shoulders{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .sh{padding:9px 13px;border-radius:9px;background:#0f1c31;border:1px solid #26405f;
+    font-size:12px;font-weight:700;color:var(--dim);letter-spacing:.06em;touch-action:none;}
+  .sh.hit{background:var(--neon);color:#03121f;box-shadow:0 0 12px rgba(57,167,255,.5);}
+
+  /* 縦画面（スマホ縦持ち）：左右→縦積み、パッドを下に */
+  @media (orientation:portrait){
+    main{flex-direction:column;}
+    .right{order:1;} .left{order:2;flex:1.4;}
+    .stick{width:130px;height:130px;}
+    .face{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <span class="logo">G.U.N.D.A.M.</span>
+    <span class="mode" id="mode">mode=--</span>
+    <span class="spacer"></span>
+    <span id="conn" class="pill s-crit"><span class="dot"></span>DISCONNECTED</span>
+  </header>
+
+  <main>
+    <!-- 右：計測（設計書では右だが縦画面では上に来る） -->
+    <div class="col right">
+      <div class="card">
+        <h2>TELEMETRY</h2>
+        <div class="meters">
+          <div class="meter big"><div class="k">RTT_NET</div><div class="v" id="m-rtt">--<span class="u"> ms</span></div></div>
+          <div class="meter"><div class="k">ENGINE</div><div class="v" id="m-eng">--<span class="u"> ms</span></div></div>
+          <div class="meter"><div class="k">FPS</div><div class="v" id="m-fps">--</div></div>
+          <div class="meter"><div class="k">ENCODE</div><div class="v" id="m-enc">--<span class="u"> ms</span></div></div>
+          <div class="meter"><div class="k">SKIPPED</div><div class="v" id="m-skp">--<span class="u"> %</span></div></div>
+          <div class="meter"><div class="k">BITRATE</div><div class="v" id="m-bit">--<span class="u"> M</span></div></div>
+        </div>
+      </div>
+
+      <div class="card adv">
+        <h2>ADVISOR</h2>
+        <span class="pill l-OK lvl" id="adv-lvl"><span class="dot"></span>--</span>
+        <div class="msg" id="adv-msg"></div>
+      </div>
+
+      <div class="card col" style="flex:1;">
+        <h2>RTT / FPS TIMELINE</h2>
+        <div class="chartwrap"><canvas id="chart"></canvas></div>
+        <div class="legend">
+          <span class="lg-rtt"><b>■</b> RTT_net(実測 echo)</span>
+          <span class="lg-fps"><b>■</b> FPS</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 左：仮想パッド -->
+    <div class="col left">
+      <div class="card" style="flex:1;">
+        <h2>COCKPIT INPUT</h2>
+        <div class="shoulders" id="shoulders">
+          <div class="sh" data-hold="LB">LB</div>
+          <div class="sh" data-hold="RB">RB</div>
+          <div class="sh" data-trig="lt">LT</div>
+          <div class="sh" data-trig="rt">RT</div>
+        </div>
+        <div class="padgrid" style="margin-top:12px;">
+          <div class="stickzone">
+            <div class="stick" id="stick">
+              <div class="ring"></div>
+              <div class="nub" id="nub"></div>
+              <div class="axestxt" id="axestxt">lx 0.00  ly 0.00</div>
+            </div>
+            <div class="dpad" id="dpad">
+              <div class="b up"    data-hold="UP">▲</div>
+              <div class="b left"  data-hold="LEFT">◀</div>
+              <div class="b c"></div>
+              <div class="b right" data-hold="RIGHT">▶</div>
+              <div class="b down"  data-hold="DOWN">▼</div>
+            </div>
+          </div>
+          <div class="btnzone">
+            <div class="face" id="face">
+              <div class="abtn y btn-y" data-hold="Y">Y</div>
+              <div class="abtn x btn-x" data-hold="X">X</div>
+              <div class="abtn b btn-b" data-hold="B">B</div>
+              <div class="abtn a btn-a" data-hold="A">A</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ===== XInput標準ボタンビット（S3でvgamepadへそのまま流せるよう本家値に合わせる §5） ===== */
+const BTN = {
+  UP:0x0001, DOWN:0x0002, LEFT:0x0004, RIGHT:0x0008,
+  START:0x0010, BACK:0x0020,
+  LB:0x0100, RB:0x0200,
+  A:0x1000, B:0x2000, X:0x4000, Y:0x8000,
+};
+
+/* ===== 送信する入力状態（20Hzでサーバへ） ===== */
+const input = { btn:0, lx:0, ly:0, lt:0, rt:0 };
+function setBit(mask, on){ input.btn = on ? (input.btn | mask) : (input.btn & ~mask); }
+
+/* ===== WebSocket（自動再接続：指数バックオフ §9） ===== */
+let ws=null, seq=0, backoff=250;
+function connect(){
+  ws = new WebSocket("ws://" + location.host + "/ws");
+  ws.onopen = () => {
+    backoff = 250;
+    $("conn").className = "pill s-ok"; $("conn").innerHTML = '<span class="dot"></span>CONNECTED';
+  };
+  ws.onclose = () => {
+    $("conn").className = "pill s-crit"; $("conn").innerHTML = '<span class="dot"></span>DISCONNECTED';
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 5000);   // 指数バックオフ（上限5s）
+  };
+  ws.onerror = () => { try{ ws.close(); }catch(e){} };
+  ws.onmessage = ev => {
+    let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(m.t === "metrics") onMetrics(m);
+    else if(m.t === "echo") onEcho(m);
+  };
+}
+
+/* ===== 20Hz送信ループ：常時送ってRTTも測る（アイドルでもheartbeat） ===== */
+setInterval(() => {
+  if(!ws || ws.readyState !== 1) return;
+  seq += 1;
+  ws.send(JSON.stringify({
+    t:"in", seq, t1: performance.now(),
+    btn: input.btn,
+    lx: +input.lx.toFixed(3), ly: +input.ly.toFixed(3),
+    lt: +input.lt.toFixed(3), rt: +input.rt.toFixed(3),
+  }));
+}, 50);
+
+/* ===== echo：スマホ単一時計で RTT_net = t4 - t1（跨ぎ減算しない §6）。EMAで平滑 ===== */
+let rttEma = null;
+function onEcho(m){
+  if(typeof m.t1 !== "number") return;
+  const rtt = performance.now() - m.t1;
+  rttEma = (rttEma === null) ? rtt : rttEma * 0.8 + rtt * 0.2;
+}
+
+/* ===== metrics：メーター更新＋チャート追記＋アドバイザ ===== */
+let lastFps = 0;
+function colorClass(v, y, r){ return v >= r ? "r" : v >= y ? "y" : "g"; }
+function onMetrics(m){
+  $("mode").textContent = "mode=" + (m.mode || "--");
+
+  // RTTは実測echo（無ければサーバのSIM値で代替）を主表示
+  const rttShown = (rttEma !== null) ? rttEma : m.rtt_net_ms;
+  const rttEl = $("m-rtt");
+  rttEl.className = "v " + colorClass(rttShown, 30, 100);
+  rttEl.innerHTML = rttShown.toFixed(1) + '<span class="u"> ms</span>';
+
+  $("m-eng").innerHTML = m.engine_ms + '<span class="u"> ms</span>';
+  $("m-fps").textContent = m.fps;
+  $("m-enc").innerHTML = m.encode_ms + '<span class="u"> ms</span>';
+  const skpEl = $("m-skp"); skpEl.className = "v " + colorClass(m.skipped_pct, 2, 5);
+  skpEl.innerHTML = m.skipped_pct + '<span class="u"> %</span>';
+  $("m-bit").innerHTML = m.bitrate_mbps + '<span class="u"> M</span>';
+  lastFps = m.fps;
+
+  advise(m.advice_level, m.advice);
+  pushChart(rttShown, m.fps);
+}
+
+/* ===== アドバイザ（レベルのピル＋メッセージのタイピング演出 §8/§10） ===== */
+let advText="", advTarget="", advTimer=null, advLevel="";
+function advise(level, msg){
+  if(level !== advLevel){
+    advLevel = level;
+    const el = $("adv-lvl");
+    el.className = "pill lvl l-" + level;
+    el.innerHTML = '<span class="dot"></span>' + level;
+  }
+  if(msg === advTarget) return;          // 同じ文面なら演出しない
+  advTarget = msg; advText = "";
+  clearInterval(advTimer);
+  advTimer = setInterval(() => {
+    if(advText.length >= advTarget.length){ clearInterval(advTimer); renderAdv(false); return; }
+    advText = advTarget.slice(0, advText.length + 1);
+    renderAdv(true);
+  }, 22);
+}
+function renderAdv(cursor){
+  $("adv-msg").innerHTML = advText + (cursor ? '<span class="cursor">&nbsp;</span>' : '');
+}
+
+/* ===== 時系列チャート（自前軽量Canvas。RTT=シアン / FPS=黄） ===== */
+const cv = $("chart"), ctx = cv.getContext("2d");
+const HIST = 140;
+const rttHist = [], fpsHist = [];
+function pushChart(rtt, fps){
+  rttHist.push(rtt); if(rttHist.length > HIST) rttHist.shift();
+  fpsHist.push(fps); if(fpsHist.length > HIST) fpsHist.shift();
+  drawChart();
+}
+function fitCanvas(){
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.floor(r.width * dpr));
+  cv.height = Math.max(1, Math.floor(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function line(data, max, color, w, h){
+  if(data.length < 2) return;
+  ctx.beginPath();
+  for(let i=0;i<data.length;i++){
+    const x = (i/(HIST-1)) * w;
+    const y = h - Math.min(1, data[i]/max) * (h-4) - 2;
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+}
+function drawChart(){
+  const w = cv.clientWidth, h = cv.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  // グリッド
+  ctx.strokeStyle = "rgba(40,64,107,.35)"; ctx.lineWidth = 1;
+  for(let g=1; g<4; g++){ const y=h*g/4; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  line(rttHist, 200, "#2de0ff", w, h);   // RTT: 0〜200msスケール
+  line(fpsHist, 165, "#ffcc33", w, h);   // FPS: 0〜165スケール
+}
+window.addEventListener("resize", () => { fitCanvas(); drawChart(); });
+
+/* ===== 仮想スティック（ポインタ＝タッチ/マウス両対応） ===== */
+(function stick(){
+  const el = $("stick"), nub = $("nub"), txt = $("axestxt");
+  const R = 47;                          // ノブ可動半径(px)
+  let active = false, id = null;
+  function set(cx, cy){
+    const r = el.getBoundingClientRect();
+    let dx = cx - (r.left + r.width/2);
+    let dy = cy - (r.top  + r.height/2);
+    const len = Math.hypot(dx, dy);
+    if(len > R){ dx = dx/len*R; dy = dy/len*R; }
+    nub.style.transform = `translate(${dx}px,${dy}px)`;
+    input.lx =  dx / R;                  // 右が +1
+    input.ly = -dy / R;                  // 上が +1（S3のvgamepad結線時に実機で符号確認）
+    txt.textContent = `lx ${input.lx.toFixed(2)}  ly ${input.ly.toFixed(2)}`;
+  }
+  function reset(){
+    nub.style.transform = "translate(0,0)";
+    input.lx = 0; input.ly = 0;
+    txt.textContent = "lx 0.00  ly 0.00";
+  }
+  el.addEventListener("pointerdown", e => { active=true; id=e.pointerId; el.setPointerCapture(id); set(e.clientX,e.clientY); });
+  el.addEventListener("pointermove", e => { if(active && e.pointerId===id) set(e.clientX,e.clientY); });
+  const up = e => { if(active && e.pointerId===id){ active=false; reset(); } };
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+})();
+
+/* ===== 押しっぱなしボタン（D-PAD / フェイス / 肩） ===== */
+function bindHold(el){
+  const name = el.dataset.hold, trig = el.dataset.trig;
+  const on = () => { el.classList.add("hit"); if(name) setBit(BTN[name], true); if(trig) input[trig] = 1; };
+  const off = () => { el.classList.remove("hit"); if(name) setBit(BTN[name], false); if(trig) input[trig] = 0; };
+  el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); on(); });
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointercancel", off);
+  el.addEventListener("pointerleave", off);
+}
+document.querySelectorAll("[data-hold],[data-trig]").forEach(bindHold);
+
+/* ===== 起動 ===== */
+fitCanvas(); drawChart(); connect();
+</script>
+</body>
+</html>

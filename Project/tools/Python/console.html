@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>J.A.R.V.I.S. ▸ WEB CONSOLE</title>
+<!--
+  J.A.R.V.I.S. Web Console（脱Discord統合UI・1枚完結・外部CDN非依存）
+  ・COCKPIT  : GUNDAM操作パッド＋テレメトリ＋（Phase Bで）WebRTC映像
+  ・CONTROL  : SUNDAY起動/停止・起票一覧 / devops(push・prompt・refactor) / 実行ログ
+  GUNDAM入力は /gundam/ws（pepper_server.app を jarvis_web が /gundam に mount）へ送る。
+-->
+<style>
+  :root{
+    --bg:#070b13; --panel:#0e1728; --panel2:#0b1322; --edge:#1c2c47;
+    --fg:#cfe8ff; --dim:#7d93b3; --neon:#39a7ff; --neon2:#2de0ff;
+    --ok:#44dd88; --warn:#ffcc33; --crit:#ff5566;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;height:100%;overflow:hidden;}
+  body{
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    background:radial-gradient(1200px 700px at 70% -10%,#12233f 0%,var(--bg) 60%);
+    color:var(--fg);display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--edge);}
+  header .logo{font-size:14px;font-weight:700;letter-spacing:.25em;color:var(--neon);text-shadow:0 0 12px rgba(57,167,255,.5);}
+  header .spacer{flex:1;}
+  .mode{font-size:11px;color:var(--dim);letter-spacing:.1em;}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.08em;}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+  .s-ok{background:rgba(68,221,136,.14);color:var(--ok);}
+  .s-crit{background:rgba(255,85,102,.16);color:var(--crit);}
+  .s-idle{background:rgba(125,147,179,.14);color:var(--dim);}
+
+  /* タブ */
+  .tabs{display:flex;gap:6px;padding:8px 12px 0;}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:10px 10px 0 0;background:#0b1322;border:1px solid var(--edge);
+    border-bottom:0;font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--dim);}
+  .tab.active{background:var(--panel);color:var(--neon);box-shadow:inset 0 -2px 0 var(--neon);}
+  main{flex:1;min-height:0;overflow:hidden;}
+  .page{height:100%;display:none;padding:12px;gap:12px;}
+  .page.active{display:flex;}
+
+  .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--edge);
+    border-radius:14px;padding:12px;position:relative;}
+  .card h2{margin:0 0 8px;font-size:10px;letter-spacing:.22em;color:var(--dim);font-weight:700;}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;}
+
+  /* ===== COCKPIT ===== */
+  .video{flex:1;min-height:120px;border-radius:12px;border:1px dashed #2a4066;display:flex;align-items:center;justify-content:center;
+    background:repeating-linear-gradient(45deg,#0a1220,#0a1220 12px,#0c1526 12px,#0c1526 24px);color:var(--dim);
+    font-size:12px;letter-spacing:.1em;text-align:center;}
+  .meters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .meter{background:#0a1220;border:1px solid #14213a;border-radius:10px;padding:8px 9px;}
+  .meter .k{font-size:9px;letter-spacing:.12em;color:var(--dim);}
+  .meter .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:2px;}
+  .meter .u{font-size:10px;color:var(--dim);font-weight:400;}
+  .v.g{color:var(--ok);} .v.y{color:var(--warn);} .v.r{color:var(--crit);}
+  canvas{width:100%;height:100%;display:block;}
+  .chartwrap{flex:1;min-height:70px;}
+  .adv .msg{font-size:12px;line-height:1.5;min-height:2.6em;margin-top:6px;}
+  .adv .cursor{display:inline-block;width:7px;background:var(--neon);animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .l-EXCELLENT,.l-OK{background:rgba(68,221,136,.14);color:var(--ok);}
+  .l-WARNING{background:rgba(255,204,51,.14);color:var(--warn);}
+  .l-CRITICAL{background:rgba(255,85,102,.16);color:var(--crit);}
+
+  /* パッド */
+  .padgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .stickzone,.btnzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+  .stick{position:relative;width:130px;height:130px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#12203a,#0a1220);border:1px solid #22375c;touch-action:none;}
+  .stick .nub{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,var(--neon),#0b2b4d);border:1px solid #57b4ff;box-shadow:0 0 18px rgba(57,167,255,.5);}
+  .stick .axestxt{position:absolute;left:0;right:0;bottom:-16px;text-align:center;font-size:9px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .dpad{display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:3px;}
+  .dpad .b{background:#0f1c31;border:1px solid #24406b;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--dim);touch-action:none;}
+  .dpad .b.hit{background:var(--neon);color:#03121f;}
+  .dpad .up{grid-area:1/2;} .dpad .left{grid-area:2/1;} .dpad .right{grid-area:2/3;} .dpad .down{grid-area:3/2;} .dpad .c{grid-area:2/2;background:transparent;border:0;}
+  .face{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px;}
+  .abtn{border-radius:50%;background:#0f1c31;border:1px solid #26405f;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;touch-action:none;}
+  .btn-y{grid-area:1/2;} .btn-x{grid-area:2/1;} .btn-b{grid-area:2/3;} .btn-a{grid-area:3/2;}
+  .abtn.a{color:#7CFC9A;} .abtn.b{color:#ff8a8a;} .abtn.x{color:#8ab4ff;} .abtn.y{color:#ffe08a;}
+  .abtn.hit{filter:brightness(1.9);box-shadow:0 0 16px currentColor;}
+  .shoulders{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .sh{padding:8px 12px;border-radius:9px;background:#0f1c31;border:1px solid #26405f;font-size:12px;font-weight:700;color:var(--dim);touch-action:none;}
+  .sh.hit{background:var(--neon);color:#03121f;}
+
+  /* ===== CONTROL ===== */
+  .ctl{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  button.act{border:0;border-radius:9px;padding:11px 14px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#03121f;background:var(--neon);}
+  button.act.stop{background:var(--crit);color:#fff;}
+  button.act.ghost{background:#16223a;color:var(--fg);border:1px solid var(--edge);}
+  button.act:disabled{opacity:.4;}
+  input.f,textarea.f{width:100%;background:#0a1220;border:1px solid #24406b;border-radius:8px;color:var(--fg);
+    font-family:inherit;font-size:13px;padding:9px;margin-top:6px;-webkit-user-select:text;user-select:text;}
+  textarea.f{min-height:56px;resize:vertical;}
+  .issues{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+  .issue{font-size:11.5px;background:#0a1220;border:1px solid #14213a;border-radius:8px;padding:7px 9px;}
+  .issue a{color:var(--neon2);text-decoration:none;}
+  .log{background:#060a11;border:1px solid #14213a;border-radius:10px;padding:10px;font-size:11.5px;line-height:1.5;
+    height:170px;overflow-y:auto;white-space:pre-wrap;-webkit-user-select:text;user-select:text;color:#a8c4e6;}
+  .log .t{color:var(--dim);} .log .ok{color:var(--ok);} .log .err{color:var(--crit);} .log .warn{color:var(--warn);}
+  .hint{font-size:10px;color:var(--dim);margin-top:4px;line-height:1.5;}
+
+  /* 縦画面：COCKPITを縦積み */
+  @media (orientation:portrait){ .page{flex-direction:column;} }
+</style>
+</head>
+<body>
+  <header>
+    <span class="logo">J.A.R.V.I.S.</span>
+    <span class="mode" id="mode">mode=--</span>
+    <span class="spacer"></span>
+    <span id="conn" class="pill s-crit"><span class="dot"></span>DISCONNECTED</span>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-page="cockpit">▸ COCKPIT</div>
+    <div class="tab" data-page="control">▸ MISSION CONTROL</div>
+  </div>
+
+  <main>
+    <!-- ===== COCKPIT ===== -->
+    <div class="page cockpit active">
+      <div class="col" style="flex:1;">
+        <div class="video" id="video">WebRTC VIDEO — Phase B で実装<br>（自宅PC画面をここに低遅延表示）</div>
+        <div class="card">
+          <h2>TELEMETRY</h2>
+          <div class="meters">
+            <div class="meter"><div class="k">RTT_NET</div><div class="v" id="m-rtt">--<span class="u"> ms</span></div></div>
+            <div class="meter"><div class="k">ENGINE</div><div class="v" id="m-eng">--<span class="u"> ms</span></div></div>
+            <div class="meter"><div class="k">FPS</div><div class="v" id="m-fps">--</div></div>
+            <div class="meter"><div class="k">ENCODE</div><div class="v" id="m-enc">--<span class="u"> ms</span></div></div>
+            <div class="meter"><div class="k">SKIPPED</div><div class="v" id="m-skp">--<span class="u"> %</span></div></div>
+            <div class="meter"><div class="k">BITRATE</div><div class="v" id="m-bit">--<span class="u"> M</span></div></div>
+          </div>
+          <div class="chartwrap" style="height:70px;margin-top:8px;"><canvas id="chart"></canvas></div>
+        </div>
+        <div class="card adv">
+          <h2>ADVISOR</h2>
+          <span class="pill l-OK" id="adv-lvl"><span class="dot"></span>--</span>
+          <div class="msg" id="adv-msg"></div>
+        </div>
+      </div>
+
+      <div class="col" style="flex:1;">
+        <div class="card" style="flex:1;">
+          <h2>COCKPIT INPUT</h2>
+          <div class="shoulders" id="shoulders">
+            <div class="sh" data-hold="LB">LB</div><div class="sh" data-hold="RB">RB</div>
+            <div class="sh" data-trig="lt">LT</div><div class="sh" data-trig="rt">RT</div>
+          </div>
+          <div class="padgrid" style="margin-top:12px;">
+            <div class="stickzone">
+              <div class="stick" id="stick"><div class="nub" id="nub"></div><div class="axestxt" id="axestxt">lx 0.00  ly 0.00</div></div>
+              <div class="dpad" id="dpad">
+                <div class="b up" data-hold="UP">▲</div><div class="b left" data-hold="LEFT">◀</div>
+                <div class="b c"></div><div class="b right" data-hold="RIGHT">▶</div><div class="b down" data-hold="DOWN">▼</div>
+              </div>
+            </div>
+            <div class="btnzone">
+              <div class="face" id="face">
+                <div class="abtn y btn-y" data-hold="Y">Y</div><div class="abtn x btn-x" data-hold="X">X</div>
+                <div class="abtn b btn-b" data-hold="B">B</div><div class="abtn a btn-a" data-hold="A">A</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MISSION CONTROL ===== -->
+    <div class="page control">
+      <div class="ctl col" style="flex:1;">
+        <div class="card">
+          <h2>S.U.N.D.A.Y. 無人自動検証</h2>
+          <div class="row">
+            <span class="pill s-idle" id="sun-state"><span class="dot"></span>停止中</span>
+            <span class="spacer"></span>
+            <button class="act" id="sun-start">▶ 開始</button>
+            <button class="act stop" id="sun-stop" disabled>■ 停止</button>
+          </div>
+          <div class="issues" id="issues"></div>
+          <div class="hint">クラッシュを検知→再現→原因究明→GitHub Issue起票まで無人で回る。起票はここに出る。</div>
+        </div>
+
+        <div class="card">
+          <h2>DEVOPS（自宅PCのコードを操作）</h2>
+          <div class="row"><button class="act ghost" id="do-push">⬆ たまった作業を push</button></div>
+
+          <div style="margin-top:10px;">
+            <input class="f" id="pf-target" placeholder="対象ファイル（Ollama時必須／Claudeは省略可）例: Project/DirectXGame/main.cpp">
+            <textarea class="f" id="pf-instr" placeholder="編集指示（先頭に [C] でClaude）例: [C] main.cppに起動ログを追記して"></textarea>
+            <div class="row" style="margin-top:6px;"><button class="act" id="do-prompt">✎ AI編集→ビルド→commit</button></div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <input class="f" id="rf-target" placeholder="リファクタ対象ファイル 例: Project/DirectXGame/main.cpp">
+            <div class="row" style="margin-top:6px;"><button class="act ghost" id="do-refactor">♻ 規約リファクタ→ビルド→commit</button></div>
+          </div>
+          <div class="hint">⚠ push / 編集 / リファクタはコードを実際に変更する。実行前に確認ダイアログを出す。</div>
+        </div>
+
+        <div class="card col" style="flex:1;">
+          <h2>実行ログ</h2>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ===== タブ ===== */
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.querySelector(".page." + t.dataset.page).classList.add("active");
+  if(t.dataset.page === "cockpit"){ fitCanvas(); drawChart(); }
+}));
+
+/* ===== ログ ===== */
+function log(msg, cls){
+  const el = $("log");
+  const t = new Date().toLocaleTimeString();
+  el.innerHTML += `<span class="t">[${t}]</span> <span class="${cls||''}">${msg}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ===== 制御API ===== */
+async function api(path, opts){
+  const r = await fetch(path, Object.assign({headers:{"Content-Type":"application/json"}}, opts));
+  let data = {}; try{ data = await r.json(); }catch(e){}
+  if(!r.ok || data.ok === false) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+
+/* SUNDAY */
+$("sun-start").addEventListener("click", async () => {
+  try{ await api("/api/sunday/start", {method:"POST"}); log("S.U.N.D.A.Y. 開始", "ok"); pollSunday(); }
+  catch(e){ log("開始失敗: " + e.message, "err"); }
+});
+$("sun-stop").addEventListener("click", async () => {
+  log("S.U.N.D.A.Y. 停止要求（解析中なら終了待ち）…");
+  try{ const d = await api("/api/sunday/stop", {method:"POST"});
+    log(d.pending ? "解析中のため終了待ち" : "停止しました", d.pending ? "warn" : "ok"); pollSunday(); }
+  catch(e){ log("停止失敗: " + e.message, "err"); }
+});
+async function pollSunday(){
+  try{
+    const d = await api("/api/sunday/status");
+    const st = $("sun-state");
+    st.className = "pill " + (d.running ? "s-ok" : "s-idle");
+    st.innerHTML = '<span class="dot"></span>' + (d.running ? "稼働中" : "停止中");
+    $("sun-start").disabled = d.running;
+    $("sun-stop").disabled = !d.running;
+    const box = $("issues");
+    box.innerHTML = d.events.map(e =>
+      `<div class="issue">🐛 <a href="${e.url}" target="_blank">Issue #${e.issue_no}</a> `
+      + `scene=<b>${e.scene||"?"}</b> seed=<b>${e.seed||"?"}</b></div>`).join("");
+  }catch(e){ /* 接続前などは黙って次回 */ }
+}
+setInterval(pollSunday, 3000);
+
+/* DEVOPS（破壊的なので confirm を必ず挟む） */
+$("do-push").addEventListener("click", async () => {
+  if(!confirm("たまった作業を GitHub へ push します。よろしいですか？")) return;
+  log("push 実行中…");
+  try{ const d = await api("/api/git/push", {method:"POST"}); log("push 完了 branch=" + d.branch, "ok"); }
+  catch(e){ log("push 失敗: " + e.message, "err"); }
+});
+$("do-prompt").addEventListener("click", async () => {
+  const instruction = $("pf-instr").value.trim();
+  const target_file = $("pf-target").value.trim();
+  if(!instruction){ log("編集指示が空です", "warn"); return; }
+  if(!confirm("AI編集→ビルド→commit を実行します（コードが変わります）。よろしいですか？")) return;
+  log("AI編集パイプライン実行中…（数分かかることがあります）");
+  try{ const d = await api("/api/prompt", {method:"POST", body:JSON.stringify({instruction, target_file})});
+    log(d.committed ? ("✅ commit済 branch=" + d.branch) : ("⚠ 変更なし " + (d.note||"")), d.committed ? "ok" : "warn"); }
+  catch(e){ log("prompt 失敗: " + e.message, "err"); }
+});
+$("do-refactor").addEventListener("click", async () => {
+  const target_file = $("rf-target").value.trim();
+  if(!target_file){ log("リファクタ対象ファイルが必要です", "warn"); return; }
+  if(!confirm("規約リファクタ→ビルド→commit を実行します（コードが変わります）。よろしいですか？")) return;
+  log("リファクタ実行中…（数分かかることがあります）");
+  try{ const d = await api("/api/refactor", {method:"POST", body:JSON.stringify({target_file})});
+    log(d.committed ? ("✅ commit済 branch=" + d.branch) : ("⚠ 変更なし " + (d.note||"")), d.committed ? "ok" : "warn"); }
+  catch(e){ log("refactor 失敗: " + e.message, "err"); }
+});
+
+/* ===== GUNDAM操作（/gundam/ws。cockpit.html と同じ流儀） ===== */
+const BTN = {UP:0x0001,DOWN:0x0002,LEFT:0x0004,RIGHT:0x0008,START:0x0010,BACK:0x0020,LB:0x0100,RB:0x0200,A:0x1000,B:0x2000,X:0x4000,Y:0x8000};
+const input = {btn:0, lx:0, ly:0, lt:0, rt:0};
+function setBit(mask, on){ input.btn = on ? (input.btn|mask) : (input.btn & ~mask); }
+
+let ws=null, seq=0, backoff=250;
+function connect(){
+  ws = new WebSocket("ws://" + location.host + "/gundam/ws");
+  ws.onopen = () => { backoff=250; $("conn").className="pill s-ok"; $("conn").innerHTML='<span class="dot"></span>CONNECTED'; };
+  ws.onclose = () => { $("conn").className="pill s-crit"; $("conn").innerHTML='<span class="dot"></span>DISCONNECTED'; setTimeout(connect, backoff); backoff=Math.min(backoff*2,5000); };
+  ws.onerror = () => { try{ ws.close(); }catch(e){} };
+  ws.onmessage = ev => { let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } if(m.t==="metrics") onMetrics(m); else if(m.t==="echo") onEcho(m); };
+}
+setInterval(() => {
+  if(!ws || ws.readyState!==1) return;
+  seq += 1;
+  ws.send(JSON.stringify({t:"in", seq, t1:performance.now(), btn:input.btn,
+    lx:+input.lx.toFixed(3), ly:+input.ly.toFixed(3), lt:+input.lt.toFixed(3), rt:+input.rt.toFixed(3)}));
+}, 50);
+
+let rttEma=null;
+function onEcho(m){ if(typeof m.t1!=="number") return; const rtt=performance.now()-m.t1; rttEma=(rttEma===null)?rtt:rttEma*0.8+rtt*0.2; }
+function cc(v,y,r){ return v>=r?"r":v>=y?"y":"g"; }
+function onMetrics(m){
+  $("mode").textContent = "mode=" + (m.mode||"--");
+  const rtt = (rttEma!==null)?rttEma:m.rtt_net_ms;
+  const e=$("m-rtt"); e.className="v "+cc(rtt,30,100); e.innerHTML=rtt.toFixed(1)+'<span class="u"> ms</span>';
+  $("m-eng").innerHTML=m.engine_ms+'<span class="u"> ms</span>';
+  $("m-fps").textContent=m.fps;
+  $("m-enc").innerHTML=m.encode_ms+'<span class="u"> ms</span>';
+  const s=$("m-skp"); s.className="v "+cc(m.skipped_pct,2,5); s.innerHTML=m.skipped_pct+'<span class="u"> %</span>';
+  $("m-bit").innerHTML=m.bitrate_mbps+'<span class="u"> M</span>';
+  advise(m.advice_level, m.advice);
+  pushChart(rtt, m.fps);
+}
+
+/* アドバイザ（タイピング演出） */
+let advTarget="", advText="", advTimer=null, advLevel="";
+function advise(level, msg){
+  if(level!==advLevel){ advLevel=level; const el=$("adv-lvl"); el.className="pill l-"+level; el.innerHTML='<span class="dot"></span>'+level; }
+  if(msg===advTarget) return;
+  advTarget=msg; advText=""; clearInterval(advTimer);
+  advTimer=setInterval(() => {
+    if(advText.length>=advTarget.length){ clearInterval(advTimer); $("adv-msg").textContent=advText; return; }
+    advText=advTarget.slice(0, advText.length+1);
+    $("adv-msg").innerHTML=advText+'<span class="cursor">&nbsp;</span>';
+  }, 22);
+}
+
+/* チャート */
+const cv=$("chart"), ctx=cv.getContext("2d"), HIST=140, rttHist=[], fpsHist=[];
+function pushChart(rtt,fps){ rttHist.push(rtt); if(rttHist.length>HIST) rttHist.shift(); fpsHist.push(fps); if(fpsHist.length>HIST) fpsHist.shift(); drawChart(); }
+function fitCanvas(){ const dpr=window.devicePixelRatio||1, r=cv.getBoundingClientRect(); cv.width=Math.max(1,Math.floor(r.width*dpr)); cv.height=Math.max(1,Math.floor(r.height*dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); }
+function ln(data,max,color,w,h){ if(data.length<2) return; ctx.beginPath(); for(let i=0;i<data.length;i++){ const x=(i/(HIST-1))*w, y=h-Math.min(1,data[i]/max)*(h-4)-2; i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.strokeStyle=color; ctx.lineWidth=1.6; ctx.stroke(); }
+function drawChart(){ const w=cv.clientWidth,h=cv.clientHeight; ctx.clearRect(0,0,w,h); ctx.strokeStyle="rgba(40,64,107,.35)"; ctx.lineWidth=1; for(let g=1;g<4;g++){ const y=h*g/4; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); } ln(rttHist,200,"#2de0ff",w,h); ln(fpsHist,165,"#ffcc33",w,h); }
+window.addEventListener("resize", () => { fitCanvas(); drawChart(); });
+
+/* スティック */
+(function(){
+  const el=$("stick"), nub=$("nub"), txt=$("axestxt"), R=42; let active=false, id=null;
+  function set(cx,cy){ const r=el.getBoundingClientRect(); let dx=cx-(r.left+r.width/2), dy=cy-(r.top+r.height/2); const len=Math.hypot(dx,dy); if(len>R){ dx=dx/len*R; dy=dy/len*R; } nub.style.transform=`translate(${dx}px,${dy}px)`; input.lx=dx/R; input.ly=-dy/R; txt.textContent=`lx ${input.lx.toFixed(2)}  ly ${input.ly.toFixed(2)}`; }
+  function reset(){ nub.style.transform="translate(0,0)"; input.lx=0; input.ly=0; txt.textContent="lx 0.00  ly 0.00"; }
+  el.addEventListener("pointerdown", e=>{ active=true; id=e.pointerId; el.setPointerCapture(id); set(e.clientX,e.clientY); });
+  el.addEventListener("pointermove", e=>{ if(active&&e.pointerId===id) set(e.clientX,e.clientY); });
+  const up=e=>{ if(active&&e.pointerId===id){ active=false; reset(); } };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+})();
+
+/* ボタン */
+function bindHold(el){
+  const name=el.dataset.hold, trig=el.dataset.trig;
+  const on=()=>{ el.classList.add("hit"); if(name) setBit(BTN[name],true); if(trig) input[trig]=1; };
+  const off=()=>{ el.classList.remove("hit"); if(name) setBit(BTN[name],false); if(trig) input[trig]=0; };
+  el.addEventListener("pointerdown", e=>{ el.setPointerCapture(e.pointerId); on(); });
+  el.addEventListener("pointerup", off); el.addEventListener("pointercancel", off); el.addEventListener("pointerleave", off);
+}
+document.querySelectorAll("[data-hold],[data-trig]").forEach(bindHold);
+
+/* 起動 */
+fitCanvas(); drawChart(); connect(); pollSunday();
+</script>
+</body>
+</html>
