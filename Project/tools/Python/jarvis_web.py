@@ -26,6 +26,7 @@ Discord(jarvis_bot.py)がやっていた devops / SUNDAY制御 / 配信を、サ
 
 import argparse
 import asyncio
+import concurrent.futures
 import threading
 import time
 from pathlib import Path
@@ -180,6 +181,83 @@ async def api_sunday_status():
 async def api_status():
     running = bool(_sunday_thread and _sunday_thread.is_alive())
     return {"ok": True, "gundam_mode": pepper_server.MODE, "sunday_running": running}
+
+
+# ===== Phase B: WebRTC 画面配信（aiortc）。未導入でもPhase Aを守るため遅延import =====
+try:
+    from aiortc import RTCPeerConnection, RTCSessionDescription
+    from aiortc.mediastreams import VideoStreamTrack
+    import av
+    import mss
+    import numpy as np
+    _RTC_OK = True
+except Exception as _e:                    # aiortc/av/mss/numpy いずれか欠損
+    _RTC_OK = False
+    _RTC_ERR = str(_e)
+
+if _RTC_OK:
+    # 画面キャプチャは専用の単一スレッドで行う（mssインスタンスはスレッドに固定して使い回す）
+    _capture_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    _cap_local = threading.local()
+
+    def _grab_frame():
+        sct = getattr(_cap_local, "sct", None)
+        if sct is None:
+            sct = mss.mss()
+            _cap_local.sct = sct
+        mon = sct.monitors[1]              # プライマリモニタ全体
+        raw = sct.grab(mon)
+        img = np.frombuffer(raw.bgra, dtype=np.uint8).reshape(raw.height, raw.width, 4)
+        # BGRA→BGR。av は連続メモリを要求するので ascontiguousarray で詰め直す
+        return av.VideoFrame.from_ndarray(np.ascontiguousarray(img[:, :, :3]), format="bgr24")
+
+    class ScreenTrack(VideoStreamTrack):
+        """自宅PCの画面を毎フレームキャプチャして WebRTC で送る映像トラック。
+
+        next_timestamp() が VIDEO_PTIME(=1/30s)ぶん待ってくれるので実質30fps。
+        重いキャプチャはイベントループを塞がないよう executor へ逃がす。"""
+
+        async def recv(self):
+            pts, time_base = await self.next_timestamp()
+            loop = asyncio.get_event_loop()
+            frame = await loop.run_in_executor(_capture_executor, _grab_frame)
+            frame.pts = pts
+            frame.time_base = time_base
+            return frame
+
+    _pcs = set()                           # 生存中の PeerConnection
+
+    @app.post("/api/rtc/offer")
+    async def rtc_offer(req: Request):
+        """ブラウザの SDP offer を受けて画面トラックを載せた answer を返す。"""
+        params = await req.json()
+        offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        pc = RTCPeerConnection()
+        _pcs.add(pc)
+
+        @pc.on("connectionstatechange")
+        async def _on_state():
+            if pc.connectionState in ("failed", "closed", "disconnected"):
+                await pc.close()
+                _pcs.discard(pc)
+
+        pc.addTrack(ScreenTrack())
+        await pc.setRemoteDescription(offer)
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+
+    @app.on_event("shutdown")
+    async def _rtc_shutdown():
+        for pc in list(_pcs):
+            await pc.close()
+        _pcs.clear()
+
+else:
+    @app.post("/api/rtc/offer")
+    async def rtc_offer_unavailable():
+        return JSONResponse(
+            {"ok": False, "error": "WebRTC依存が未導入: " + _RTC_ERR}, status_code=503)
 
 
 def main():
