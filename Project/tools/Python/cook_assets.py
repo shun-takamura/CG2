@@ -1267,7 +1267,8 @@ def convert_png_to_dds(task: FileTask) -> bool:
     task.dst.parent.mkdir(parents=True, exist_ok=True)
 
     # マスク等は線形保持、それ以外は SRGB
-    is_linear = any(hint in task.src.parts for hint in LINEAR_TEXTURE_HINTS)
+    # ヒントはパス要素の「部分一致」で判定する（例: フォルダ名 "NormalMapTexture" も拾う）
+    is_linear = any(hint in part for part in task.src.parts for hint in LINEAR_TEXTURE_HINTS)
     fmt = "BC7_UNORM" if is_linear else "BC7_UNORM_SRGB"
 
     cmd = [

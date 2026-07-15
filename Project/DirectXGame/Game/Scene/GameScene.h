@@ -59,7 +59,9 @@ public:
 	virtual void SpawnPlayerMelee(IImGuiEditable* owner,
 		const Vector3& right, const Vector3& up, const Vector3& forward,
 		const std::string& prefabName,
-		int attackPower);
+		int attackPower,
+		const Vector3& extraWorldOffset = { 0.0f, 0.0f, 0.0f }, // 生成位置へ加算するワールドオフセット（体の中心へ持ち上げ等）
+		float sizeScale = 1.0f);                                // 判定＋見た目のサイズ倍率（STG=1.0 / ボス戦=小さめ 等）
 
 	//====================
 	// 敵 / 敵弾 / 敵コントローラ

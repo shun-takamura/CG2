@@ -393,6 +393,19 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.precisionHomingAdd = static_cast<float>(prJ["homingAdd"].AsDouble(out.precisionHomingAdd));
 	}
 
+	// Weapon（プレイヤープレハブ用のソケット追従武器）
+	const JsonValue& weJ = root["weapon"];
+	if (weJ.IsObject()) {
+		out.hasWeapon     = true;
+		out.weaponEnabled = weJ["enabled"].AsBool(out.weaponEnabled);
+		if (weJ["modelDir"].IsString())  out.weaponModelDir  = weJ["modelDir"].AsString();
+		if (weJ["modelFile"].IsString()) out.weaponModelFile = weJ["modelFile"].AsString();
+		if (weJ["bone"].IsString())      out.weaponBone      = weJ["bone"].AsString();
+		out.weaponOffsetTranslate = JsonToVec3(weJ["translate"], out.weaponOffsetTranslate);
+		out.weaponOffsetRotate    = JsonToVec3(weJ["rotate"],    out.weaponOffsetRotate);
+		out.weaponOffsetScale     = JsonToVec3(weJ["scale"],     out.weaponOffsetScale);
+	}
+
 	// エフェクトスロット（スロット名 → エフェクト名）
 	const JsonValue& efJ = root["effects"];
 	if (efJ.IsObject()) {
@@ -556,6 +569,18 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		prObj["speedAdd"]  = static_cast<double>(def.precisionSpeedAdd);
 		prObj["homingAdd"] = static_cast<double>(def.precisionHomingAdd);
 		root["precision"] = std::move(prObj);
+	}
+
+	if (def.hasWeapon) {
+		JsonValue weObj = JsonValue::MakeObject();
+		weObj["enabled"]   = def.weaponEnabled;
+		weObj["modelDir"]  = def.weaponModelDir;
+		weObj["modelFile"] = def.weaponModelFile;
+		weObj["bone"]      = def.weaponBone;
+		weObj["translate"] = Vec3ToJson(def.weaponOffsetTranslate);
+		weObj["rotate"]    = Vec3ToJson(def.weaponOffsetRotate);
+		weObj["scale"]     = Vec3ToJson(def.weaponOffsetScale);
+		root["weapon"] = std::move(weObj);
 	}
 
 	// エフェクトスロット

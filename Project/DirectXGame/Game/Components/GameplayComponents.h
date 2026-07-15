@@ -12,6 +12,7 @@
 #include "MovementParams.h"
 #include "ChargeParams.h"
 #include "PrecisionParams.h"
+#include "WeaponParams.h"
 
 /// <summary>
 /// エンティティ（IImGuiEditable）に紐づくゲームプレイ用コンポーネント群。
@@ -59,6 +60,10 @@ struct GameplayComponents {
 	const PrecisionParams& GetPrecisionParams() const { return precisionParams; }
 	PrecisionParams& GetPrecisionParams() { return precisionParams; }
 
+	//==================== WeaponParams ====================
+	const WeaponParams& GetWeaponParams() const { return weaponParams; }
+	WeaponParams& GetWeaponParams() { return weaponParams; }
+
 	//==================== AttackPower ====================
 	bool  HasAttackPower() const { return hasAttackPower; }
 	void  SetHasAttackPower(bool v) { hasAttackPower = v; }
@@ -98,6 +103,7 @@ struct GameplayComponents {
 	MovementParams movementParams{};
 	ChargeParams chargeParams{};
 	PrecisionParams precisionParams{};
+	WeaponParams weaponParams{};
 	bool hasAttackPower = false;
 	int  attackPower = 0;
 	int  scoreValue = 10; // 撃破スコア（Enemy/Boss プレハブで使用、Prefab から上書き）

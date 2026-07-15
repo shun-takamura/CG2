@@ -665,6 +665,9 @@
     <ClInclude Include="DirectXGame\Game\Components\PrecisionParams.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Components\WeaponParams.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

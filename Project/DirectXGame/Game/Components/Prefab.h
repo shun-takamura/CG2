@@ -152,6 +152,16 @@ struct PrefabDef {
 	float         precisionSpeedAdd    = 0.0f; // [units/sec] 全弾の弾速に加算
 	float         precisionHomingAdd   = 0.0f; // [/sec] 強ホーミング強度に加算（ロック弾のみ）
 
+	// ----- Weapon（プレイヤープレハブ用：ソケット追従武器のモデル/ボーン/オフセット） -----
+	bool          hasWeapon     = false;
+	bool          weaponEnabled = true;
+	std::string   weaponModelDir;   // 例: "Resources/Models/Player/Bullet"
+	std::string   weaponModelFile;  // 例: "playerBullet.mesh"
+	std::string   weaponBone;       // 追従ボーン名 例: "mixamorig:RightHand"
+	Vector3       weaponOffsetTranslate{ 0.0f, 0.0f, 0.0f };
+	Vector3       weaponOffsetRotate{ 0.0f, 0.0f, 0.0f };
+	Vector3       weaponOffsetScale{ 1.0f, 1.0f, 1.0f };
+
 	// ----- エフェクトスロット -----
 	// スロット名 → EffectManager 登録名（charge1 / charge2 / hit / death など）。
 	// 空文字列はそのスロットに未割当を表す。Inspector の DnD で編集する。

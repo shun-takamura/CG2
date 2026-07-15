@@ -90,13 +90,14 @@ void InspectorWindow::OnDraw() {
     const bool showMovement      = isEnemy;                         // 登場/移動の方法と速度（敵のみ）
     const bool showCharge        = isPlayer;
     const bool showPrecision     = isPlayer;
+    const bool showWeapon        = isPlayer;                        // 武器（ボーンソケット追従）
     const bool showBulletSlots   = isPlayer;
     const bool showScore         = isEnemy || isBoss;
     const bool showEffects       = isPlayer || isPlayerBullet || isPlayerMelee
                                  || isEnemy || isEnemyAttack || isBoss;
     const bool showBattle = showHP || showAttackPower || showRawDamage || showAtkMultiplier
                          || showBullet || showMelee || showCarrier || showMovement || showCharge || showPrecision
-                         || showBulletSlots || showScore;
+                         || showWeapon || showBulletSlots || showScore;
 
     // ----- コライダー（タグが衝突可能、かつ 3D エンティティの場合のみ表示） -----
     {
@@ -325,6 +326,37 @@ void InspectorWindow::OnDraw() {
                         ImGui::SetTooltip("精密モード中、強ホーミング（ロック弾）の強さに加算");
                     }
                 }
+            }
+
+            // WeaponParams（Player：ボーンソケット追従武器）
+            if (showWeapon) {
+                sep();
+                WeaponParams& wp = Gameplay::Of(selected).GetWeaponParams();
+                ImGui::Checkbox("Weapon Enabled", &wp.enabled);
+                // 追従先ボーン：選択中がスケルトン持ち（AnimatedObject3D）ならジョイント名を列挙、なければテキスト入力。
+                auto* anim = dynamic_cast<AnimatedObject3DInstance*>(selected);
+                if (anim && anim->HasSkeleton()) {
+                    const Skeleton& sk = anim->GetSkeleton();
+                    if (ImGui::BeginCombo("Bone", wp.bone.c_str())) {
+                        for (const auto& kv : sk.jointMap) {
+                            const bool bsel = (kv.first == wp.bone);
+                            if (ImGui::Selectable(kv.first.c_str(), bsel)) wp.bone = kv.first;
+                            if (bsel) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                } else {
+                    char boneBuf[128];
+                    std::snprintf(boneBuf, sizeof(boneBuf), "%s", wp.bone.c_str());
+                    if (ImGui::InputText("Bone", boneBuf, sizeof(boneBuf))) wp.bone = boneBuf;
+                }
+                ImGui::DragFloat3("Grip Translate", &wp.offsetTranslate.x, 0.01f);
+                ImGui::DragFloat3("Grip Rotate",    &wp.offsetRotate.x, 0.01f);
+                ImGui::DragFloat3("Grip Scale",     &wp.offsetScale.x, 0.01f, 0.0f, 10.0f);
+                ImGui::TextDisabled("Model: %s / %s",
+                    wp.modelDir.empty() ? "(none)" : wp.modelDir.c_str(),
+                    wp.modelFile.empty() ? "(none)" : wp.modelFile.c_str());
+                ImGui::TextDisabled("(下の Save as Prefab で player.json に保存)");
             }
 
             // 弾プレハブスロット（Player）：normal / charge1 / charge2
@@ -604,6 +636,17 @@ void InspectorWindow::OnDraw() {
                         def.hasPrecision       = true;
                         def.precisionSpeedAdd  = prp.speedAdd;
                         def.precisionHomingAdd = prp.homingAdd;
+                    }
+                    const WeaponParams& wpS = Gameplay::Of(selected).GetWeaponParams();
+                    if (showWeapon) {
+                        def.hasWeapon             = true;
+                        def.weaponEnabled         = wpS.enabled;
+                        def.weaponBone            = wpS.bone;
+                        def.weaponOffsetTranslate = wpS.offsetTranslate;
+                        def.weaponOffsetRotate    = wpS.offsetRotate;
+                        def.weaponOffsetScale     = wpS.offsetScale;
+                        def.weaponModelDir        = wpS.modelDir;
+                        def.weaponModelFile       = wpS.modelFile;
                     }
                     // ScoreValue（Enemy/Boss のみ反映）
                     if (showScore) def.scoreValue = Gameplay::Of(selected).GetScoreValue();

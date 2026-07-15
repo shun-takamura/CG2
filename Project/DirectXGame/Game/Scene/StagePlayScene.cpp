@@ -174,6 +174,13 @@ void StagePlayScene::LoadTuningFromJson() {
 		dodgeImpulse_.y      = static_cast<float>(dodge["impulseY"].AsDouble(dodgeImpulse_.y));
 	}
 
+	// ----- melee（近接：生成高さ・サイズ倍率）-----
+	const JsonValue& melee = root["melee"];
+	if (melee.IsObject()) {
+		meleeOriginHeight_  = static_cast<float>(melee["originHeight"].AsDouble(meleeOriginHeight_));
+		meleeBossSizeScale_ = static_cast<float>(melee["bossSizeScale"].AsDouble(meleeBossSizeScale_));
+	}
+
 	// ----- justDodge（ジャスト回避スロー）-----
 	const JsonValue& jd = root["justDodge"];
 	if (jd.IsObject()) {
@@ -631,6 +638,11 @@ void StagePlayScene::SaveTuningToJson() const {
 	dodgeObj["impulseX"]       = static_cast<double>(dodgeImpulse_.x);
 	dodgeObj["impulseY"]       = static_cast<double>(dodgeImpulse_.y);
 	root["dodge"] = std::move(dodgeObj);
+
+	JsonValue meleeObj = JsonValue::MakeObject();
+	meleeObj["originHeight"]  = static_cast<double>(meleeOriginHeight_);
+	meleeObj["bossSizeScale"] = static_cast<double>(meleeBossSizeScale_);
+	root["melee"] = std::move(meleeObj);
 
 	JsonValue jdObj = JsonValue::MakeObject();
 	jdObj["slowWorld"]     = static_cast<double>(justDodgeSlowWorld_);
@@ -1603,7 +1615,11 @@ void StagePlayScene::SpawnPendingMelee()
 	Vector3 right, up, forward;
 	ComputeAimBasis(right, up, forward);
 	const int atk = Gameplay::Of(player_).HasAttackPower() ? Gameplay::Of(player_).GetAttackPower() : 0;
-	SpawnPlayerMelee(player_, right, up, forward, meleePendingPrefab_, atk);
+	// プレイヤー原点は足元なので、判定を world-up に meleeOriginHeight_ 持ち上げて体の中心から出す。
+	// サイズは STG=プレハブ基準(1.0)、ボス戦は当てやすすぎるので meleeBossSizeScale_ で縮小。
+	const float meleeSize = (phase_ == Phase::Boss) ? meleeBossSizeScale_ : 1.0f;
+	SpawnPlayerMelee(player_, right, up, forward, meleePendingPrefab_, atk,
+		{ 0.0f, meleeOriginHeight_, 0.0f }, meleeSize);
 }
 
 void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
@@ -1850,25 +1866,17 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat3("Paused Facing (rad)", &fixedPlayerFacing_.x, 0.01f);
 	}
 
-	if (ImGui::CollapsingHeader("Weapon (Socket)")) {
-		ImGui::Checkbox("Enabled", &weaponEnabled_);
-		// 追従先ボーン：プレイヤーのスケルトンからジョイント名を列挙して選ぶ
-		if (player_ && player_->HasSkeleton()) {
-			const Skeleton& sk = player_->GetSkeleton();
-			if (ImGui::BeginCombo("Bone", weaponSocket_.jointName.c_str())) {
-				for (const auto& kv : sk.jointMap) {
-					const bool sel = (kv.first == weaponSocket_.jointName);
-					if (ImGui::Selectable(kv.first.c_str(), sel)) weaponSocket_.jointName = kv.first;
-					if (sel) ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			}
-		} else {
-			ImGui::TextDisabled("Bone: %s (skeleton not ready)", weaponSocket_.jointName.c_str());
-		}
-		ImGui::DragFloat3("Grip Translate", &weaponSocket_.offset.translate.x, 0.01f);
-		ImGui::DragFloat3("Grip Rotate",    &weaponSocket_.offset.rotate.x, 0.01f);
-		ImGui::DragFloat3("Grip Scale",     &weaponSocket_.offset.scale.x, 0.01f, 0.0f, 10.0f);
+	// 武器（ソケット追従）の設定は Hierarchy でプレイヤーを選択 → Inspector の "Weapon" セクションへ移設。
+	// 編集後は Inspector の "Save as Prefab" で player.json に保存する。
+
+	if (ImGui::CollapsingHeader("Melee")) {
+		// 近接判定をプレイヤー足元原点から world-up に持ち上げる高さ（地上戦のめり込み対策）。
+		ImGui::DragFloat("Origin Height (up)", &meleeOriginHeight_, 0.02f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		// ボス戦での判定＋見た目サイズ倍率（STG=1.0固定。ボスは当てやすすぎるので縮小）。
+		ImGui::DragFloat("Boss Size Scale", &meleeBossSizeScale_, 0.01f, 0.05f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("STG=1.0 固定 / Boss=この倍率（判定と見た目の両方）");
 	}
 
 	if (ImGui::CollapsingHeader("Stage Phase", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -2434,19 +2442,25 @@ void StagePlayScene::Initialize() {
 		}
 	}
 
-	// 武器（ソケット追従）：剣モデルが無いので playerBullet を仮の武器として読み込む。
-	// 細長くスケールして「刃」に見立て、後で剣モデルへ差し替えるだけにする。
-	weapon_ = std::make_unique<Object3DInstance>();
-	weapon_->Initialize(object3DManager_, dxCore_,
-		"Resources/Models/Player/Bullet", "playerBullet.mesh", "Weapon");
-	weapon_->SetCamera(camera_.get());
-	weaponSocket_.jointName = "mixamorig:RightHand";
-	// 仮：手から突き出す細長い刃。playerBullet は 0.5 角の立方体なので
-	// scale.z=6 で約 3 units の刃になり、確実に視認できる。向き・位置は ImGui で調整。
-	// 剣モデルを握り原点で作れば offset は単位に近づく。
-	weaponSocket_.offset.scale     = { 0.3f, 0.3f, 6.0f };
-	weaponSocket_.offset.rotate    = { 0.0f, 0.0f, 0.0f };
-	weaponSocket_.offset.translate = { 0.0f, 0.0f, 1.5f };
+	// 武器（ボーンソケット追従）：構成は player の WeaponParams コンポーネント（プレハブ由来）から読む。
+	// プレハブに weapon ブロックが無ければ既定値をコンポーネントへ seed し、Inspector で編集→
+	// プレイヤーの "Save as Prefab" で player.json に永続化できるようにする（リロードで初期化されない）。
+	if (player_) {
+		WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
+		if (wp.modelFile.empty()) {
+			wp.enabled         = true;
+			wp.bone            = "mixamorig:RightHand";
+			// 仮：手から突き出す細長い刃（playerBullet=0.5角の立方体を scale.z=6 で約3units の刃に）。
+			wp.offsetScale     = { 0.3f, 0.3f, 6.0f };
+			wp.offsetRotate    = { 0.0f, 0.0f, 0.0f };
+			wp.offsetTranslate = { 0.0f, 0.0f, 1.5f };
+			wp.modelDir        = "Resources/Models/Player/Bullet";
+			wp.modelFile       = "playerBullet.mesh";
+		}
+		weapon_ = std::make_unique<Object3DInstance>();
+		weapon_->Initialize(object3DManager_, dxCore_, wp.modelDir, wp.modelFile, "Weapon");
+		weapon_->SetCamera(camera_.get());
+	}
 
 	// UI 初期化（auto-load した場合は LoadSceneFromJson 内で建て直し済みなので二重生成しない）
 	if (!sceneLoaded) {
@@ -2930,8 +2944,14 @@ void StagePlayScene::Update() {
 	// 武器をプレイヤーの手ボーンへ追従させる。
 	// UpdateDynamicAnimated でプレイヤーのスケルトンが更新済みなのでここで行列を引く。
 	// grip（握りの微調整）× hand（ボーンのワールド）が武器の最終ワールド行列。
-	if (weapon_ && weaponEnabled_ && player_) {
-		weaponSocket_.target = player_;  // プレイヤー再生成（シーン再構築）に毎フレ追従
+	if (weapon_ && player_ && Gameplay::Of(player_).GetWeaponParams().enabled) {
+		// ソケットの追従先/オフセットは player の WeaponParams（Inspector 編集）から毎フレ同期。
+		const WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
+		weaponSocket_.target           = player_;  // プレイヤー再生成（シーン再構築）に毎フレ追従
+		weaponSocket_.jointName        = wp.bone;
+		weaponSocket_.offset.translate = wp.offsetTranslate;
+		weaponSocket_.offset.rotate    = wp.offsetRotate;
+		weaponSocket_.offset.scale     = wp.offsetScale;
 		const Matrix4x4 world = weaponSocket_.World();
 		weapon_->SetWorldMatrixOverride(world);
 		// ギズモ/Inspector でも追従を確認できるよう、平行移動成分を transform_ にも反映する
@@ -3463,7 +3483,7 @@ void StagePlayScene::Draw() {
 	// Scene の動的エンティティ描画
 	DrawDynamicObjects();
 	// 武器（ソケット追従）：静的モデルなので Object3D PSO のこの位置で描画する
-	if (weapon_ && weaponEnabled_) {
+	if (weapon_ && player_ && Gameplay::Of(player_).GetWeaponParams().enabled) {
 		weapon_->Draw(dxCore_);
 	}
 	DrawDynamicAnimated();

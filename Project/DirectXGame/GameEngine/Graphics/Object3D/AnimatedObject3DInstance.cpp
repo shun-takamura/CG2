@@ -576,7 +576,8 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                                 animatedModelInstance_->SetTextureFilePath(data.textureFilePath);
                             }
                             if (!data.normalMapFilePath.empty()) {
-                                TextureManager::GetInstance()->LoadTexture(data.normalMapFilePath);
+                                // 法線マップは線形データなので Linear で読む
+                                TextureManager::GetInstance()->LoadTextureLinear(data.normalMapFilePath);
                             }
                             animatedModelInstance_->SetNormalMapFilePath(data.normalMapFilePath);
                         }

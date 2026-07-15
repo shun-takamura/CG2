@@ -190,6 +190,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Components\MovementParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\ChargeParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\PrecisionParams.h" />
+    <ClInclude Include="DirectXGame\Game\Components\WeaponParams.h" />
     <ClInclude Include="DirectXGame\Game\Components\SphereCollider.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionMatrix.h" />
     <ClInclude Include="DirectXGame\Game\Components\CollisionManager.h" />

@@ -13,8 +13,8 @@
       1
     ],
     "rotate": [
-      0.23134562373161316,
-      -0.15505784749984741,
+      0,
+      0,
       0
     ]
   },
@@ -34,6 +34,9 @@
     "capsuleRadius": 0.40000000596046448,
     "capsuleHeight": 1
   },
+  "hp": {
+    "maxHP": 100
+  },
   "attackPower": {
     "value": 10
   },
@@ -45,6 +48,27 @@
   "precision": {
     "speedAdd": 200,
     "homingAdd": 2
+  },
+  "weapon": {
+    "enabled": true,
+    "modelDir": "Resources/Models/Player/Bullet",
+    "modelFile": "playerBullet.mesh",
+    "bone": "mixamorig:RightHand",
+    "translate": [
+      0,
+      0.30000001192092896,
+      0
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      0.30000001192092896,
+      2,
+      0.30000001192092896
+    ]
   },
   "bulletPrefabs": {
     "normal": "TemporaryPlayerBullet",

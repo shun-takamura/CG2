@@ -169,6 +169,16 @@ void GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& 
 			pp.speedAdd  = def->precisionSpeedAdd;
 			pp.homingAdd = def->precisionHomingAdd;
 		}
+		if (def->hasWeapon) {
+			WeaponParams& wp = Gameplay::Of(e).GetWeaponParams();
+			wp.enabled         = def->weaponEnabled;
+			wp.bone            = def->weaponBone;
+			wp.offsetTranslate = def->weaponOffsetTranslate;
+			wp.offsetRotate    = def->weaponOffsetRotate;
+			wp.offsetScale     = def->weaponOffsetScale;
+			wp.modelDir        = def->weaponModelDir;
+			wp.modelFile       = def->weaponModelFile;
+		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
 			Gameplay::Of(e).GetEffects() = def->effects;
@@ -702,14 +712,19 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	const Vector3& right, const Vector3& up, const Vector3& forward,
 	const std::string& prefabName,
-	int attackPower) {
+	int attackPower,
+	const Vector3& extraWorldOffset,
+	float sizeScale) {
 	// 近接パラメータをプレハブから読む（無ければデフォルトで動かす）
 	float activeDuration = 0.20f;
 	Vector3 offset{ 0.0f, 0.0f, 2.0f };
 	float cleanWindow = 0.08f;
 	float cleanMul = 1.5f;
 	float lateMul = 0.7f;
-	if (const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefabName); mdef && mdef->hasMelee) {
+	Vector3 baseScale{ 1.0f, 1.0f, 1.0f };
+	const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefabName);
+	if (mdef) baseScale = mdef->defaultScale;
+	if (mdef && mdef->hasMelee) {
 		activeDuration = mdef->meleeActiveDuration;
 		offset         = mdef->meleeOffset;
 		cleanWindow    = mdef->meleeCleanWindow;
@@ -724,11 +739,19 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 		right.z * offset.x + up.z * offset.y + forward.z * offset.z,
 	};
 
-	// 初期配置位置 = owner 位置 + worldOffset
-	Vector3 spawnPos = worldOffset;
+	// owner 相対の総オフセット = aim 基底展開 + extraWorldOffset（体の中心への持ち上げ等）。
+	// UpdateMelees の毎フレーム追従も同じ値を使う必要があるため、これを MeleeRuntime に保存する。
+	const Vector3 followOffset{
+		worldOffset.x + extraWorldOffset.x,
+		worldOffset.y + extraWorldOffset.y,
+		worldOffset.z + extraWorldOffset.z,
+	};
+
+	// 初期配置位置 = owner 位置 + followOffset
+	Vector3 spawnPos = followOffset;
 	if (owner) {
 		if (const Vector3* op = owner->GetEditableTranslate()) {
-			spawnPos = { op->x + worldOffset.x, op->y + worldOffset.y, op->z + worldOffset.z };
+			spawnPos = { op->x + followOffset.x, op->y + followOffset.y, op->z + followOffset.z };
 		}
 	}
 
@@ -743,6 +766,18 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 
 	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
 	if (!spawned) return;
+
+	// サイズ倍率（STG=1.0 / ボス戦=小さめ 等）を見た目とコライダー両方に適用。
+	if (sizeScale != 1.0f) {
+		spawned->SetScale({ baseScale.x * sizeScale, baseScale.y * sizeScale, baseScale.z * sizeScale });
+		Collider& mc = Gameplay::Of(spawned).GetCollider();
+		mc.radius        *= sizeScale;
+		mc.halfExtents.x *= sizeScale;
+		mc.halfExtents.y *= sizeScale;
+		mc.halfExtents.z *= sizeScale;
+		mc.capsuleRadius *= sizeScale;
+		mc.capsuleHeight *= sizeScale;
+	}
 
 	// OBB / Capsule 判定が前方を向くよう、進行（aim）方向に合わせて回転
 	spawned->SetRotate(DirectionToEuler(forward));
@@ -793,7 +828,7 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	MeleeRuntime mr{};
 	mr.primitive = spawned;
 	mr.owner = owner;
-	mr.worldOffset = worldOffset;
+	mr.worldOffset = followOffset; // 追従にも持ち上げ分を含める（足元へ戻らないように）
 	mr.remainingLifetime = activeDuration;
 	mr.elapsed = 0.0f;
 	mr.cleanWindow = cleanWindow;

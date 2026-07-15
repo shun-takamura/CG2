@@ -75,7 +75,8 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
 
         // 法線マップがあればロード。ロードに失敗したら法線マップ無し扱いにする（不正 SRV 回避）
         if (!sm.normalMapFilePath.empty()) {
-            tm->LoadTexture(sm.normalMapFilePath);
+            // 法線マップは線形データ。sRGB としてデガンマされると法線がずれるので Linear で読む
+            tm->LoadTextureLinear(sm.normalMapFilePath);
             if (!tm->HasTexture(sm.normalMapFilePath)) {
                 sm.normalMapFilePath.clear();
             }
