@@ -291,7 +291,8 @@ void Object3DInstance::OnImGuiInspector()
                             }
                             // 法線マップも反映（mat->useNormalMap は LoadMatFile が設定済み）
                             if (!data.normalMapFilePath.empty()) {
-                                TextureManager::GetInstance()->LoadTexture(data.normalMapFilePath);
+                                // 法線マップは線形データなので Linear で読む
+                                TextureManager::GetInstance()->LoadTextureLinear(data.normalMapFilePath);
                             }
                             modelInstance_->SetNormalMapFilePath(data.normalMapFilePath);
                         }

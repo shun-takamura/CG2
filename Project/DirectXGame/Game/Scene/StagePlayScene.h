@@ -140,8 +140,9 @@ private:
 	// 武器（ソケット追従）：プレイヤーの手ボーンに毎フレ追従させる。
 	// dynamicAnimated_ には入れず、順序制御のため明示的に Update/Draw する。
 	std::unique_ptr<Object3DInstance> weapon_;
-	BoneSocket weaponSocket_;          // 追従先ボーン名＋マウントオフセット（ImGui調整）
-	bool       weaponEnabled_ = true;  // ON で追従・描画
+	// 武器のランタイム追従ヘルパ。追従先ボーン/オフセット/enabled は毎フレ
+	// player の WeaponParams コンポーネント（Inspector 編集・プレハブ保存）から同期する。
+	BoneSocket weaponSocket_;
 
 	// シーン停止中（エディタ Pause = SceneTimeScale==0）だけレティクル照準追従を止め、
 	// この向きで固定する。武器ソケットの確認・編集をしやすくする。再生中は通常照準。
@@ -241,6 +242,12 @@ private:
 	bool  meleePending_          = false; // 発生待ちの攻撃があるか
 	std::string meleePendingPrefab_;      // 発生時に spawn する近接プレハブ
 	static constexpr int kMeleeWeakComboMax_ = 4;
+	// 近接判定の生成をプレイヤー原点（足元）から world-up にこの高さ持ち上げる（体の中心へ）。
+	// 足元原点のままだと地上戦で攻撃が地面にめり込むため。StagePlay.json "melee" に保存。
+	float meleeOriginHeight_ = 1.0f;
+	// 近接判定＋見た目のサイズ倍率。STG は当てづらいのでプレハブ基準(=1.0)、ボス戦は当てやすすぎるので縮小。
+	// SpawnPendingMelee が phase_ で使い分ける。StagePlay.json "melee" に保存。
+	float meleeBossSizeScale_ = 0.5f;
 
 	void UpdateMeleeCombo(class InputActionMap* actions, float dt);
 	void SpawnPendingMelee();             // 発生待ちの近接判定を実際に spawn する
