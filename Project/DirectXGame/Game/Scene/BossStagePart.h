@@ -43,12 +43,18 @@ public:
 	void Update(float worldDt);
 	// Rail の camera-local 配置の代わりに、カメラ相対の地上XZ平面をワールド空間で移動させる。
 	void UpdatePlayerGroundMovement(IImGuiEditable* player, float dt, const Vector2& moveDelta);
-	// ロックオン追従カメラ（ボスとプレイヤーを画面に収める）。
-	void UpdateCamera();
+	// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力（右スティック -1..1／マウス相対カウント）を受け、
+	// 感度・反転は内部で適用する。reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
+	void UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy);
+	// ターゲットカメラ：一瞬ボス方向へスナップ（短押し）。ボスが無ければ無視。
+	void RequestTargetSnap();
+	// カメラモード切替（Free ⇔ LockOn。長押し）。
+	void ToggleCamMode();
 	// Boss 離脱・シーン再入時のクリア（スポーン物・状態を破棄）。
 	void Reset();
 
 	bool IsBossAlive() const { return boss_ != nullptr; }
+	bool IsLockOn() const { return camMode_ == BossCamMode::LockOn; }
 	void OnImGuiTuning(bool& changed);
 
 private:
@@ -72,11 +78,25 @@ private:
 	float   bossHeight_  = 2.0f;   // ボス中心の接地高さ（≒コライダー半径）
 	float   bossForward_ = 12.0f;  // アリーナ中心から +Z にこの距離
 
-	// ロックオン追従カメラ
-	float   camDistance_ = 18.0f;  // プレイヤー背後（ボス逆方向）へ引く距離
-	float   camHeight_   = 8.0f;   // 持ち上げ高さ
-	float   camLookLerp_ = 0.15f;  // 注視点追従の平滑（0=即時,1=固まる方向へ）
-	Vector3 camLookCur_{ 0.0f, 0.0f, 0.0f }; // 平滑済み注視点
+	// ----- カメラ（プレイヤー周回・yaw/pitch 駆動の3モード）-----
+	enum class BossCamMode { Free, LockOn };
+	BossCamMode camMode_ = BossCamMode::Free;
+	float camYaw_   = 0.0f;   // 周回方位角（rad）。カメラ forward の水平向き
+	float camPitch_ = 0.15f;  // 俯角（rad）。下向き＋
+	// 一瞬スナップ（ターゲットカメラ）
+	float snapTimer_    = -1.0f; // >=0 で進行中
+	float snapDuration_ = 0.25f;
+	float snapFromYaw_ = 0.0f, snapFromPitch_ = 0.0f, snapToYaw_ = 0.0f, snapToPitch_ = 0.0f;
+	// チューニング
+	float lookSensStick_ = 2.5f;    // 右スティック全倒し時 rad/s
+	float lookSensMouse_ = 0.0028f; // マウス1カウントあたり rad
+	float pitchMin_ = -0.4f, pitchMax_ = 1.1f; // 俯角クランプ
+	float camDistance_    = 16.0f;  // プレイヤー背後距離（周回半径）
+	float camFocusHeight_ = 2.5f;   // 注視点（プレイヤー上方）高さ＝体の中心
+	float lockSpringGain_ = 2.5f;   // ロックオンのボス方向への引き（小さいほどラグ/低精度）
+
+	// ボス方向の yaw/pitch を算出（プレイヤー focus からボス中心へ）。boss_ が無ければ現状維持。
+	bool ComputeBossYawPitch(float& outYaw, float& outPitch) const;
 
 	std::string bossPrefab_   = "boss";
 	std::string groundPrefab_ = "boss_ground";

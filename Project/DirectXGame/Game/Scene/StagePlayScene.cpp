@@ -2610,7 +2610,7 @@ void StagePlayScene::Update() {
 			playerVelocity_ = { 0.0f, 0.0f };
 		}
 
-		// ===== ボス戦：地上ワールド移動＋ロックオン追従カメラ（Rail の camera-local 配置とは分岐）=====
+		// ===== ボス戦：地上ワールド移動＋フリールック/ロックオン/ターゲットの3モードカメラ =====
 		if (phase_ == Phase::Boss && bossStage_) {
 			// ジャスト回避のタイミング窓/無敵は UpdateDodge に委ねる（弾に対するジャスト回避検証のため）。
 			// ※ダッシュのインパルスは playerVelocity_（camera-local 2D）に入るため地上移動には反映されない
@@ -2620,8 +2620,49 @@ void StagePlayScene::Update() {
 			const Vector3 bWorldPos = player_->GetTranslate();
 			// 分身プレビュー等の本体追従（ジャスト回避演出用）。
 			UpdateJustDodgeClones(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
+
+			// --- カメラ look 入力（右スティック + マウス相対）。reticle は中央固定なので発射＝カメラ前方 ---
+			float camStickX = 0.0f, camStickY = 0.0f;
+			if (auto* pad = input_->GetController(); pad && pad->IsConnected()) {
+				const auto& rs = pad->GetRightStick();
+				camStickX = rs.x * rs.magnitude;
+				camStickY = rs.y * rs.magnitude;
+			}
+			float camMouseDx = 0.0f, camMouseDy = 0.0f;
+			bool  mouseActive = false;
+#ifdef _DEBUG
+			if (auto* vp = ImGuiManager::Instance().GetViewportWindow(); vp && vp->IsHovered()) mouseActive = true;
+#else
+			mouseActive = true; // Release はスワップチェーン直描画＝常にゲーム画面
+#endif
+			if (mouseActive && !GetUseDebugCamera()) {
+				if (auto* m = input_->GetMouse()) {
+					camMouseDx = static_cast<float>(m->GetDeltaX());
+					camMouseDy = static_cast<float>(m->GetDeltaY());
+				}
+			}
+
+			// --- L1 / マウス中ボタン：短押し=ターゲットスナップ / 長押し=Free⇔LockOn トグル ---
+			bool camBtn = actions->IsPressed(static_cast<int>(Action::LockCamButton));
+			if (auto* m = input_->GetMouse(); m && m->IsButtonPressed(MouseInput::Button::Middle)) camBtn = true;
+			const float uiDt = GetScaledDeltaTime(TimeGroup::UI);
+			if (camBtn) {
+				if (bossCamBtnHold_ < 0.0f) { bossCamBtnHold_ = 0.0f; bossCamBtnLongFired_ = false; }
+				else                        { bossCamBtnHold_ += uiDt; }
+				if (!bossCamBtnLongFired_ && bossCamBtnHold_ >= bossCamLongPressSec_) {
+					bossStage_->ToggleCamMode();     // 長押し確定
+					bossCamBtnLongFired_ = true;
+				}
+			} else {
+				if (bossCamBtnHold_ >= 0.0f && !bossCamBtnLongFired_) {
+					bossStage_->RequestTargetSnap(); // 短押し確定（離した瞬間）
+				}
+				bossCamBtnHold_ = -1.0f;
+				bossCamBtnLongFired_ = false;
+			}
+
 			if (!GetUseDebugCamera()) {
-				bossStage_->UpdateCamera();       // ベース＝ロックオン追従カメラ
+				bossStage_->UpdateCamera(dt, camStickX, camStickY, camMouseDx, camMouseDy); // ベースカメラ
 				ApplyPrecisionCamera(bWorldPos);  // 以降は各 state が立っている時だけ上書き
 				ApplyJustDodgeCamera(bWorldPos);
 				ApplyJustDodgeMeleeCamera(bWorldPos);
@@ -2978,6 +3019,14 @@ void StagePlayScene::Update() {
 	// HP 回復（ジャスト回避ストックを消費）
 	UpdateHeal(actions);
 
+	// ボス戦は reticle を画面中央固定（右スティック/マウスはカメラ操作へ回している）。
+	// これで発射方向＝カメラ forward になり、狙いはカメラを向けて中央に捉える方式になる。
+	// ResetToCenter で位置を中央にした上で Update(入力なし) を呼ぶ＝スプライトの描画位置/サイズ/色を反映。
+	// （Update を呼ばないと position_ は中央でもスプライト側が STG 最終位置のまま残る）
+	if (reticle_ && phase_ == Phase::Boss) {
+		reticle_->ResetToCenter();
+		reticle_->Update(false, Vector2{ 0.0f, 0.0f }, false, nullptr, GetScaledDeltaTime(TimeGroup::Player));
+	} else
 	// レティクル：Viewport 内でマウスが動いたときだけワープ（ImGui 操作と衝突させない）
 	if (reticle_) {
 		bool mouseHovered = false;
@@ -3063,7 +3112,13 @@ void StagePlayScene::Update() {
 		const float clientH = static_cast<float>(WindowsApplication::kClientHeight);
 
 		auto checkEnemy = [&](IImGuiEditable* e, const Vector3& pos) {
-			if (!e || Gameplay::Of(e).GetTag() != EntityTag::Enemy) return;
+			if (!e) return;
+			const EntityTag etag = Gameplay::Of(e).GetTag();
+			const bool isEnemy = (etag == EntityTag::Enemy);
+			const bool isBoss  = (etag == EntityTag::Boss);
+			// ボスはレティクルの視覚フィードバック（色/サイズ/近接レンジ）だけ対象にする。
+			// 照準吸着(desiredTarget)やホーミング(locked/nearest)は付けない＝手動狙いのまま。
+			if (!isEnemy && !isBoss) return;
 			const auto& col = Gameplay::Of(e).GetCollider();
 			if (!col.enabled || col.shape != ColliderShape::Sphere) return;
 			const Vector3 center{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
@@ -3089,19 +3144,24 @@ void StagePlayScene::Update() {
 			// 許容範囲：見かけ半径 × アシスト倍率
 			const float assistThreshold = pixelRadius * aimAssistPixelScale_;
 
-			// 画面上最近の敵を更新（軽ホーミング先候補）
-			if (dPx < nearestPx) {
+			// 画面上最近の敵を更新（軽ホーミング先候補）。ボスは対象外（手動狙い）。
+			if (isEnemy && dPx < nearestPx) {
 				nearestPx = dPx;
 				nearestLocal = e;
 			}
 
 			if (dPx <= assistThreshold && dist < bestT) {
 				bestT = dist;
-				// ロックオン時は敵中心へ吸い込み（パルテナ式）
-				desiredTarget = center;
 				hitEnemyRadius = col.radius;
 				hitEnemy = true;
-				lockedLocal = e;
+				if (isEnemy) {
+					// ロックオン時は敵中心へ吸い込み（パルテナ式）＋強ホーミング。ボスには付けない。
+					desiredTarget = center;
+					lockedLocal = e;
+				} else {
+					// ボス：近接レンジ判定用にターゲット中心だけ渡す（射撃方向は下で camera-forward に戻す）。
+					desiredTarget = center;
+				}
 			}
 		};
 
@@ -3117,6 +3177,15 @@ void StagePlayScene::Update() {
 
 		// 弾発射用は Lerp 前の即時 target（ロックオン直後でも遅れずに敵へ向かう）
 		firingTarget_ = desiredTarget;
+		// ボス戦は照準吸着なし＝発射方向は常にカメラ前方（中央 reticle の ray）。
+		// checkEnemy がボス中心へ desiredTarget を寄せても、射撃は手動狙いのままにする。
+		if (phase_ == Phase::Boss) {
+			firingTarget_ = {
+				camPos.x + rayDir.x * aimPlaneDistance_,
+				camPos.y + rayDir.y * aimPlaneDistance_,
+				camPos.z + rayDir.z * aimPlaneDistance_,
+			};
+		}
 
 		// プレイヤー回転用は Lerp でぬるっと追従
 		if (!aimInitialized_) {

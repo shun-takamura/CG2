@@ -52,8 +52,14 @@ void BossStagePart::Enter() {
 	}
 
 	groundVelocity_ = { 0.0f, 0.0f };
-	camLookCur_     = arenaCenter_;
 	bossSpawned_    = true;
+
+	// カメラ初期姿勢：プレイヤーからボス方向を向いて開始（フリーモード）。
+	camMode_   = BossCamMode::Free;
+	snapTimer_ = -1.0f;
+	float y, p;
+	if (ComputeBossYawPitch(y, p)) { camYaw_ = y; camPitch_ = p; }
+	else { camYaw_ = 0.0f; camPitch_ = 0.15f; }
 }
 
 void BossStagePart::Update(float worldDt) {
@@ -110,45 +116,95 @@ void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt,
 	*tp = pos;
 }
 
-void BossStagePart::UpdateCamera() {
+bool BossStagePart::ComputeBossYawPitch(float& outYaw, float& outPitch) const {
+	if (!boss_ || !host_) return false;
+	Vector3 pPos{ 0.0f, 0.0f, 0.0f };
+	if (IImGuiEditable* pl = host_->GetPlayer()) {
+		if (const Vector3* pp = pl->GetEditableTranslate()) pPos = *pp;
+	}
+	Vector3 bPos{ 0.0f, 0.0f, 0.0f };
+	if (const Vector3* bp = boss_->GetEditableTranslate()) bPos = *bp; else return false;
+	// 注視基準（プレイヤー体の中心）からボス中心への方向。
+	const Vector3 focus{ pPos.x, pPos.y + camFocusHeight_, pPos.z };
+	Vector3 d{ bPos.x - focus.x, bPos.y - focus.y, bPos.z - focus.z };
+	const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+	if (len < 1e-4f) return false;
+	d.x /= len; d.y /= len; d.z /= len;
+	outYaw   = std::atan2(d.x, d.z);
+	outPitch = -std::asin(std::clamp(d.y, -1.0f, 1.0f));
+	return true;
+}
+
+void BossStagePart::RequestTargetSnap() {
+	float y, p;
+	if (!ComputeBossYawPitch(y, p)) return; // ボスが無ければ無視
+	snapFromYaw_   = camYaw_;
+	snapFromPitch_ = camPitch_;
+	// yaw は最短経路になるよう from を基準に補正
+	float dy = y - snapFromYaw_;
+	while (dy >  3.14159265f) dy -= 6.28318531f;
+	while (dy < -3.14159265f) dy += 6.28318531f;
+	snapToYaw_   = snapFromYaw_ + dy;
+	snapToPitch_ = p;
+	snapTimer_   = 0.0f;
+}
+
+void BossStagePart::ToggleCamMode() {
+	camMode_ = (camMode_ == BossCamMode::Free) ? BossCamMode::LockOn : BossCamMode::Free;
+}
+
+void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy) {
 	if (!camera_ || !host_) return;
+
+	// 生入力→回転量（感度・反転を内部で適用）。スティックは dt スケール、マウスは相対カウント。
+	// pitch は俯角（+で下向き）。マウス上移動(GetDeltaY<0)で camPitch を下げる＝上を向く（+mouseDy）。
+	const float lookYawDelta   = stickX * lookSensStick_ * dt + mouseDx * lookSensMouse_;
+	const float lookPitchDelta = -stickY * lookSensStick_ * dt + mouseDy * lookSensMouse_;
+
+	// 1) 手動ナッジ（フリー/ロックオン共通。ロックオン中もカメラ操作を効かせる）。
+	camYaw_  += lookYawDelta;
+	camPitch_ = std::clamp(camPitch_ + lookPitchDelta, pitchMin_, pitchMax_);
+
+	// 2) ロックオン：ボス方向へ弱いバネで緩く追従（低ゲイン＝ラグ/低精度）。手動ナッジが上に乗る。
+	if (camMode_ == BossCamMode::LockOn) {
+		float y, p;
+		if (ComputeBossYawPitch(y, p)) {
+			float dy = y - camYaw_;
+			while (dy >  3.14159265f) dy -= 6.28318531f;
+			while (dy < -3.14159265f) dy += 6.28318531f;
+			const float k = std::clamp(lockSpringGain_ * dt, 0.0f, 1.0f);
+			camYaw_   += dy * k;
+			camPitch_  = std::clamp(camPitch_ + (p - camPitch_) * k, pitchMin_, pitchMax_);
+		}
+	}
+
+	// 3) 一瞬スナップ（ターゲットカメラ）。進行中は yaw/pitch を上書き。
+	if (snapTimer_ >= 0.0f) {
+		snapTimer_ += dt;
+		float u = (snapDuration_ > 1e-4f) ? (snapTimer_ / snapDuration_) : 1.0f;
+		if (u >= 1.0f) { u = 1.0f; }
+		const float s = u * u * (3.0f - 2.0f * u); // smoothstep
+		camYaw_   = snapFromYaw_   + (snapToYaw_   - snapFromYaw_)   * s;
+		camPitch_ = std::clamp(snapFromPitch_ + (snapToPitch_ - snapFromPitch_) * s, pitchMin_, pitchMax_);
+		if (u >= 1.0f) snapTimer_ = -1.0f; // 完了：以降はフリー/ロックの現在値として継続
+	}
+
+	// 4) カメラ姿勢：yaw/pitch から forward を作り、プレイヤー focus の背後 camDistance_ に eye を置く。
+	const float cp = std::cos(camPitch_);
+	const Vector3 forward{ std::sin(camYaw_) * cp, -std::sin(camPitch_), std::cos(camYaw_) * cp };
 
 	Vector3 pPos{ 0.0f, 0.0f, 0.0f };
 	if (IImGuiEditable* pl = host_->GetPlayer()) {
 		if (const Vector3* pp = pl->GetEditableTranslate()) pPos = *pp;
 	}
-	Vector3 bPos = arenaCenter_;
-	if (boss_) {
-		if (const Vector3* bp = boss_->GetEditableTranslate()) bPos = *bp;
-	}
-
-	// 注視点＝プレイヤーとボスの中点（平滑追従）。
-	const Vector3 lookTarget{
-		(pPos.x + bPos.x) * 0.5f, (pPos.y + bPos.y) * 0.5f, (pPos.z + bPos.z) * 0.5f };
-	camLookCur_.x += (lookTarget.x - camLookCur_.x) * camLookLerp_;
-	camLookCur_.y += (lookTarget.y - camLookCur_.y) * camLookLerp_;
-	camLookCur_.z += (lookTarget.z - camLookCur_.z) * camLookLerp_;
-
-	// プレイヤー→ボス方向（XZ）。カメラはその逆方向へ引く＝プレイヤー背後からボスを見る。
-	Vector3 dirPB{ bPos.x - pPos.x, 0.0f, bPos.z - pPos.z };
-	float plen = std::sqrt(dirPB.x * dirPB.x + dirPB.z * dirPB.z);
-	if (plen < 1e-4f) { dirPB = { 0.0f, 0.0f, 1.0f }; plen = 1.0f; }
-	dirPB.x /= plen; dirPB.z /= plen;
-
+	const Vector3 focus{ pPos.x, pPos.y + camFocusHeight_, pPos.z };
 	const Vector3 eye{
-		pPos.x - dirPB.x * camDistance_,
-		pPos.y + camHeight_,
-		pPos.z - dirPB.z * camDistance_ };
-
-	Vector3 dir{ camLookCur_.x - eye.x, camLookCur_.y - eye.y, camLookCur_.z - eye.z };
-	const float dlen = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-	if (dlen < 1e-4f) return;
-	dir.x /= dlen; dir.y /= dlen; dir.z /= dlen;
-	const float yaw   = std::atan2(dir.x, dir.z);
-	const float pitch = -std::asin(std::clamp(dir.y, -1.0f, 1.0f));
+		focus.x - forward.x * camDistance_,
+		focus.y - forward.y * camDistance_,
+		focus.z - forward.z * camDistance_ };
 
 	camera_->SetTranslate(eye);
-	camera_->SetRotate({ pitch, yaw, 0.0f });
+	camera_->SetRotate({ camPitch_, camYaw_, 0.0f });
 	camera_->Update();
 }
 
@@ -170,12 +226,23 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Player Smooth (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::SeparatorText("Lock-on Camera");
+
+		ImGui::SeparatorText("Camera");
+		ImGui::Text("Mode: %s", (camMode_ == BossCamMode::LockOn) ? "LockOn" : "Free");
+		ImGui::TextDisabled("L1/中ボタン 短押し=ターゲット / 長押し=Free⇔LockOn");
+		ImGui::DragFloat("Look Sens (Stick)", &lookSensStick_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Look Sens (Mouse)", &lookSensMouse_, 0.0002f, 0.0f, 0.05f, "%.4f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat2("Pitch Clamp (min/max)", &pitchMin_, 0.01f, -1.5f, 1.5f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Cam Distance", &camDistance_, 0.2f, 1.0f, 80.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam Height", &camHeight_, 0.2f, 0.0f, 60.0f, "%.1f");
+		ImGui::DragFloat("Focus Height", &camFocusHeight_, 0.1f, 0.0f, 20.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Cam Look Lerp", &camLookLerp_, 0.01f, 0.01f, 1.0f, "%.2f");
+		ImGui::DragFloat("Lock Spring Gain", &lockSpringGain_, 0.05f, 0.1f, 20.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Snap Duration (s)", &snapDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	}
 #else
