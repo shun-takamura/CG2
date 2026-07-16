@@ -63,6 +63,10 @@
     "impulseX": 10,
     "impulseY": 6
   },
+  "melee": {
+    "originHeight": 1,
+    "bossSizeScale": 0.5
+  },
   "justDodge": {
     "slowWorld": 0.20000000298023224,
     "receiptWindow": 2,
@@ -382,6 +386,6 @@
   },
   "phase": {
     "seekMaxSec": 120,
-    "landingDurationSec": 10
+    "landingDurationSec": 5
   }
 }

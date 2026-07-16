@@ -430,6 +430,11 @@ private:
 	Phase phase_ = Phase::Rail;
 	Phase prevPhase_ = Phase::Rail; // フェーズ遷移エッジ検出用（Boss 突入で Enter、離脱で Reset）
 
+	// ボス戦カメラ操作ボタン（L1/マウス中ボタン）の短押し/長押し判定用ホールドタイマー。
+	float bossCamBtnHold_ = -1.0f;      // >=0 で押下中の経過秒（-1=非押下）
+	bool  bossCamBtnLongFired_ = false; // このホールドで長押し（トグル）を発火済みか
+	float bossCamLongPressSec_ = 0.5f;  // 長押し閾値（秒）
+
 	// ----- Rail → Landing 自動遷移 -----
 	float seekMaxSec_ = 120.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存
 
