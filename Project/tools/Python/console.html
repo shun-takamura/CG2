@@ -44,7 +44,7 @@
   .page.active{display:flex;}
 
   .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--edge);
-    border-radius:14px;padding:12px;position:relative;}
+    border-radius:14px;padding:12px;position:relative;overflow:hidden;}
   .card h2{margin:0 0 8px;font-size:10px;letter-spacing:.22em;color:var(--dim);font-weight:700;}
   .col{display:flex;flex-direction:column;gap:12px;min-height:0;}
 
@@ -56,6 +56,8 @@
   .video.live{border-style:solid;}
   .video.live video{display:block;}
   .video.live #rtc-start{display:none;}
+  #rtc-stop{display:none;position:absolute;top:8px;right:8px;padding:8px 12px;font-size:12px;z-index:2;}
+  .video.live #rtc-stop{display:block;}
   .meters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
   .meter{background:#0a1220;border:1px solid #14213a;border-radius:10px;padding:8px 9px;}
   .meter .k{font-size:9px;letter-spacing:.12em;color:var(--dim);}
@@ -63,7 +65,7 @@
   .meter .u{font-size:10px;color:var(--dim);font-weight:400;}
   .v.g{color:var(--ok);} .v.y{color:var(--warn);} .v.r{color:var(--crit);}
   canvas{width:100%;height:100%;display:block;}
-  .chartwrap{flex:1;min-height:70px;}
+  .chartwrap{height:64px;flex:none;}
   .adv .msg{font-size:12px;line-height:1.5;min-height:2.6em;margin-top:6px;}
   .adv .cursor{display:inline-block;width:7px;background:var(--neon);animation:blink 1s steps(1) infinite;}
   @keyframes blink{50%{opacity:0;}}
@@ -133,6 +135,7 @@
         <div class="video" id="video">
           <video id="rtc-video" autoplay playsinline muted></video>
           <button class="act" id="rtc-start">▶ 画面配信を開始</button>
+          <button class="act stop" id="rtc-stop">■ 配信を停止</button>
         </div>
         <div class="card">
           <h2>TELEMETRY</h2>
@@ -144,7 +147,7 @@
             <div class="meter"><div class="k">SKIPPED</div><div class="v" id="m-skp">--<span class="u"> %</span></div></div>
             <div class="meter"><div class="k">BITRATE</div><div class="v" id="m-bit">--<span class="u"> M</span></div></div>
           </div>
-          <div class="chartwrap" style="height:70px;margin-top:8px;"><canvas id="chart"></canvas></div>
+          <div class="chartwrap" style="margin-top:8px;"><canvas id="chart"></canvas></div>
         </div>
         <div class="card adv">
           <h2>ADVISOR</h2>
@@ -402,6 +405,12 @@ $("rtc-start").addEventListener("click", async () => {
     await pc.setRemoteDescription(await r.json());
   }catch(e){ log("配信開始失敗: " + e.message, "err"); alert("配信開始失敗: " + e.message); if(pc){ try{ pc.close(); }catch(x){} pc=null; } }
 });
+function stopVideo(){
+  if(pc){ try{ pc.close(); }catch(e){} pc=null; }
+  $("rtc-video").srcObject = null;
+  $("video").classList.remove("live");
+}
+$("rtc-stop").addEventListener("click", () => { stopVideo(); log("画面配信を停止しました"); });
 
 /* 起動 */
 fitCanvas(); drawChart(); connect(); pollSunday();
