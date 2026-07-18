@@ -1,0 +1,121 @@
+{
+  "scene": "StagePlayScene",
+  "objects": [
+    {
+      "type": "Object3D",
+      "name": "E2ETerrain",
+      "tag": "Terrain",
+      "dir": "Resources/Models/E2ETerrain",
+      "file": "E2ETerrain.mesh",
+      "transform": {
+        "scale": [
+          1.0000000293071531,
+          1.0,
+          1.0000000293071531
+        ],
+        "rotate": [
+          0.0,
+          -0.5235988850311946,
+          0.0
+        ],
+        "translate": [
+          -3.0,
+          0.0,
+          4.0
+        ]
+      }
+    },
+    {
+      "type": "Object3D",
+      "name": "Rock0",
+      "tag": "Terrain",
+      "dir": "Resources/Models/Stage",
+      "file": "stage.mesh",
+      "transform": {
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotate": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "translate": [
+          -1.0,
+          0.0,
+          -1.0
+        ]
+      }
+    },
+    {
+      "type": "Object3D",
+      "name": "Rock1",
+      "tag": "Terrain",
+      "dir": "Resources/Models/Stage",
+      "file": "stage.mesh",
+      "transform": {
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotate": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "translate": [
+          -6.0,
+          0.0,
+          -2.0
+        ]
+      }
+    },
+    {
+      "type": "Prefab",
+      "name": "Drone1",
+      "prefab": "drone",
+      "transform": {
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotate": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "translate": [
+          0.0,
+          2.0,
+          -10.0
+        ]
+      }
+    },
+    {
+      "type": "Spline",
+      "name": "CamPath",
+      "tag": "CameraPathSpline",
+      "points": [
+        [
+          -1.0,
+          0.0,
+          -0.0
+        ],
+        [
+          -6.0,
+          0.0,
+          -0.0
+        ],
+        [
+          -6.0,
+          3.0,
+          -0.0
+        ]
+      ]
+    }
+  ]
+}

@@ -62,9 +62,15 @@ public:
 	// 戻り値 true でドロップを消費（通常の InstantiatePrefab を抑止）。Debug ビルドのみ機能。
 	bool OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY) override;
 
-	// シーン配置（プレハブ・スプライン等）の保存/復元
-	bool SaveSceneToJson(const std::string& filePath) override;
-	bool LoadSceneFromJson(const std::string& filePath) override;
+protected:
+	// シーン配置（プレハブ・スプライン等）の保存/復元。
+	// 本体は GameScene 側に集約済みで、ここは StagePlay 固有の差分だけを差し込む。
+	// 呼ぶのは基底なので public にはしない（シーンの公開APIを増やさない流儀）。
+	std::string GetSceneJsonName() const override;
+	bool ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag tag) const override;
+	bool ShouldSkipOnLoad(const SceneEntityDesc& desc) const override;
+	void OnBeforeSceneLoad() override;
+	void OnAfterSceneLoad() override;
 
 private:
 	std::unique_ptr<Camera> camera_;
@@ -120,6 +126,7 @@ private:
 	const std::vector<std::unique_ptr<SplineCurveActor>>& GetDynamicSplines() const override {
 		return dynamicSplines_;
 	}
+	SplineCurveActor* EnsureCameraPathSpline(const std::vector<Vector3>& defaultPoints) override;
 	void ClearWaveRuntimeState() override;
 
 	// ----- IBossStageHost 実装（RegisterEnemyController/UpdateEnemyControllers/SweepDeadEntities/

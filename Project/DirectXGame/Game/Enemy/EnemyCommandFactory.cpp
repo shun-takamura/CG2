@@ -20,9 +20,14 @@ namespace EnemyCommandFactory {
 				cmds.push_back(std::make_unique<HoverStationCommand>());
 				cmds.push_back(std::make_unique<RetreatCommand>());
 				return cmds;
+			case MovementType::Static:
+				// 固定砲台: 置かれた場所（SpawnEnemyAt の座標）から動かず撃ち続ける。
+				// 移動コマンドを積まないので位置は不変、退避もしない（撃破されるまで居座る）。
+				// Blender でワールド座標に配置する地上設置物を想定。
+				cmds.push_back(std::make_unique<ShootAtPlayerCommand>());
+				return cmds;
 			case MovementType::SplineFollow:
 			case MovementType::Drift:
-			case MovementType::Static:
 			default:
 				// 以下の enemyType ベースのフォールバックへ
 				break;

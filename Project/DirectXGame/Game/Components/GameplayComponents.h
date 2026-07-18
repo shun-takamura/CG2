@@ -24,6 +24,13 @@ struct GameplayComponents {
 	EntityTag GetTag() const { return tag; }
 	void SetTag(EntityTag t) { tag = t; }
 
+	//==================== プレハブ由来か ====================
+	// InstantiatePrefab で生成された場合にプレハブ名が入る。
+	// シーン保存時にこれを見て "Prefab" エントリとして書き出し、
+	// ロードでプレハブから作り直すことで HP/弾パラメータ等を往復で失わないようにする。
+	const std::string& GetPrefabName() const { return prefabName; }
+	void SetPrefabName(const std::string& n) { prefabName = n; }
+
 	//==================== コライダー ====================
 	const SphereCollider& GetCollider() const { return collider; }
 	SphereCollider& GetCollider() { return collider; }
@@ -94,6 +101,7 @@ struct GameplayComponents {
 
 	//==================== 実データ ====================
 	EntityTag tag = EntityTag::None;
+	std::string prefabName;   // 空 = プレハブ由来でない（手置きの Object3D/Animated/Primitive）
 	SphereCollider collider{};
 	HP hp{};
 	DamageDealer damageDealer{};
