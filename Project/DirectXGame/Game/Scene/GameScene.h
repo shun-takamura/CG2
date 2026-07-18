@@ -1,5 +1,6 @@
 #pragma once
 #include "Scene.h"
+#include "SceneSerializer.h"   // SceneData / SceneEntityDesc（保存・読込のフックで使う）
 
 #include <memory>
 #include <string>
@@ -28,7 +29,7 @@ public:
 	/// <summary>
 	/// プレハブ名でシーンに動的配置（PrefabManager から PrefabDef を引いて生成）。
 	/// </summary>
-	void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) override;
+	IImGuiEditable* InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) override;
 
 	//====================
 	// スプライン動的管理（Scene の no-op を override）
@@ -101,7 +102,51 @@ public:
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
 
+	//====================
+	// シーンの保存 / 読込
+	// 実処理はここに一本化してある（JSON の形は SceneSerializer が持つ）。
+	// 派生シーンは下の protected フックだけを override して固有の差分を差し込む。
+	//====================
+	bool SaveSceneToJson(const std::string& filePath) override;
+	bool LoadSceneFromJson(const std::string& filePath) override;
+
+	/// <summary>
+	/// 現在のシーン内容を JSON 文字列にする（ファイルには書かない）。
+	/// エディタ側が「前フレームから変わったか」を検出する差分ハッシュ源に使う。
+	/// ShouldSkipOnSave で除外される一時オブジェクト（弾・敵・UI）は含まれないので、
+	/// プレイ中の動きでは変化せず、ユーザーが保存対象を編集したときだけ変わる。
+	/// </summary>
+	std::string SerializeSceneToString() const override;
+
 protected:
+	//====================
+	// 保存 / 読込のシーン固有フック（既定は何もしない）
+	//====================
+
+	/// <summary>JSON の "scene" に書く名前。</summary>
+	virtual std::string GetSceneJsonName() const { return "Scene"; }
+
+	/// <summary>true を返したエンティティは保存しない（一時オブジェクト等）。</summary>
+	virtual bool ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag tag) const;
+
+	/// <summary>true を返したエントリは復元しない（古い save の混入除け等）。</summary>
+	virtual bool ShouldSkipOnLoad(const SceneEntityDesc& desc) const;
+
+	/// <summary>動的エンティティを消した直後・復元の前。参照メンバのリセット用。</summary>
+	virtual void OnBeforeSceneLoad() {}
+
+	/// <summary>復元が終わった後。player_ の貼り直しや UI 再構築用。</summary>
+	virtual void OnAfterSceneLoad() {}
+
+	/// <summary>全コンテナ → SceneData。ShouldSkipOnSave で除外できる。</summary>
+	void CollectSceneData(SceneData& out) const;
+
+	/// <summary>SceneData → 全コンテナ。ShouldSkipOnLoad で除外できる。</summary>
+	void ApplySceneData(const SceneData& data);
+
+	/// <summary>動的エンティティを全て deferredDeletes_ へ退避してコンテナを空にする。</summary>
+	void ClearDynamicEntities();
+
 	//====================
 	// 弾 / 近接 / 敵の更新（派生シーンの Update から呼ぶ）
 	//====================

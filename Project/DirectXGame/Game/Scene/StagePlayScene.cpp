@@ -3700,6 +3700,27 @@ void StagePlayScene::RegisterEnemyController(std::unique_ptr<EnemyController> ct
 	GameScene::RegisterEnemyController(std::move(ctrl));
 }
 
+// IRailStageHost::EnsureCameraPathSpline() の実装。
+// レールカメラの走行スプラインをシーンの持ち物にすることで、シーン JSON に載せて
+// エンジン内エディタ / Blender の両方から編集できるようにする。
+SplineCurveActor* StagePlayScene::EnsureCameraPathSpline(const std::vector<Vector3>& defaultPoints) {
+	// 既にシーンにあるならそれを使う（JSON からロードされたものが最優先）
+	for (const auto& sp : dynamicSplines_) {
+		if (sp && Gameplay::Of(sp).GetTag() == EntityTag::CameraPathSpline) {
+			return sp.get();
+		}
+	}
+
+	// 無ければ既定値を種にして作る。こうしておくと初回起動で Hierarchy に現れ、
+	// Save Scene すれば JSON 化されて以後は完全にデータとして扱える（自動移行）。
+	AddDynamicSpline(static_cast<int>(EntityTag::CameraPathSpline));
+	if (dynamicSplines_.empty()) return nullptr;
+	auto& back = dynamicSplines_.back();
+	back->SetName("CameraPath");
+	back->MutablePoints() = defaultPoints;
+	return back.get();
+}
+
 void StagePlayScene::ClearWaveRuntimeState() {
 	enemyControllers_.clear();
 	pendingEnemyControllers_.clear();
@@ -3806,163 +3827,40 @@ float StagePlayScene::GetSeekMaxSeconds() const {
 }
 
 // =====================================================================
-// シーン保存 / 読込（DemoScene の実装を流用）
 // =====================================================================
-namespace {
-	JsonValue Vec3ToJson(const Vector3& v) {
-		JsonValue arr = JsonValue::MakeArray();
-		arr.Push(JsonValue(static_cast<double>(v.x)));
-		arr.Push(JsonValue(static_cast<double>(v.y)));
-		arr.Push(JsonValue(static_cast<double>(v.z)));
-		return arr;
-	}
-	Vector3 JsonToVec3(const JsonValue& v, const Vector3& fallback = {}) {
-		if (!v.IsArray() || v.Size() < 3) return fallback;
-		return {
-			static_cast<float>(v[0].AsDouble(fallback.x)),
-			static_cast<float>(v[1].AsDouble(fallback.y)),
-			static_cast<float>(v[2].AsDouble(fallback.z))
-		};
-	}
-	JsonValue TransformToJson(const Vector3& s, const Vector3& r, const Vector3& t) {
-		JsonValue obj = JsonValue::MakeObject();
-		obj["scale"] = Vec3ToJson(s);
-		obj["rotate"] = Vec3ToJson(r);
-		obj["translate"] = Vec3ToJson(t);
-		return obj;
-	}
+// シーン保存 / 読込
+//   本体は GameScene に集約済み（JSON の形は SceneSerializer が持つ）。
+//   ここには StagePlay 固有の差分だけを置く。
+// =====================================================================
+
+std::string StagePlayScene::GetSceneJsonName() const {
+	return "StagePlayScene";
 }
 
-bool StagePlayScene::SaveSceneToJson(const std::string& filePath) {
-	JsonValue root = JsonValue::MakeObject();
-	root["scene"] = "StagePlayScene";
-
-	JsonValue arr = JsonValue::MakeArray();
-
-	for (const auto& o : object3DInstances_) {
-		if (!o) continue;
-		JsonValue e = JsonValue::MakeObject();
-		e["type"] = "Object3D";
-		e["name"] = o->GetName();
-		e["tag"] = std::string(GetTagName(Gameplay::Of(o).GetTag()));
-		e["dir"] = o->GetDirectoryPath();
-		e["file"] = o->GetModelFileName();
-		e["transform"] = TransformToJson(o->GetScale(), o->GetRotate(), o->GetTranslate());
-		arr.Push(std::move(e));
-	}
-	for (const auto& a : dynamicAnimated_) {
-		if (!a) continue;
-		// プレイヤーは常にプレハブから復元するので保存しない（collider 等のプレハブ属性を確実に反映するため）
-		if (Gameplay::Of(a).GetTag() == EntityTag::Player) continue;
-		JsonValue e = JsonValue::MakeObject();
-		e["type"] = "AnimatedObject3D";
-		e["name"] = a->GetName();
-		e["tag"] = std::string(GetTagName(Gameplay::Of(a).GetTag()));
-		e["dir"] = a->GetDirectoryPath();
-		e["file"] = a->GetModelFileName();
-		e["transform"] = TransformToJson(a->GetScale(), a->GetRotate(), a->GetTranslate());
-		arr.Push(std::move(e));
-	}
-	for (const auto& p : dynamicPrimitives_) {
-		if (!p) continue;
-		// 弾は一時オブジェクトなのでシーン保存に含めない
-		const EntityTag t = Gameplay::Of(p).GetTag();
-		if (t == EntityTag::PlayerBullet || t == EntityTag::EnemyAttack) continue;
-		JsonValue e = JsonValue::MakeObject();
-		e["type"] = "Primitive";
-		e["name"] = p->GetName();
-		e["tag"] = std::string(GetTagName(t));
-		e["primitiveType"] = static_cast<int64_t>(p->GetPrimitiveType());
-		const Transform& tr = p->GetMesh().GetTransform();
-		e["transform"] = TransformToJson(tr.scale, tr.rotate, tr.translate);
-		if (!p->GetTextureFilePath().empty()) {
-			e["texture"] = p->GetTextureFilePath();
-		}
-		arr.Push(std::move(e));
-	}
-	for (const auto& s : dynamicSprites_) {
-		if (!s) continue;
-		// ランタイム UI（HP バー / 必殺ゲージ）は一時オブジェクト扱いで保存しない（弾と同様）
-		if (s.get() == hpBarBackground_   || s.get() == hpBarForeground_ ||
-			s.get() == gaugeBarBackground_ || s.get() == gaugeBarForeground_) continue;
-		JsonValue e = JsonValue::MakeObject();
-		e["type"] = "Sprite";
-		e["name"] = s->GetName();
-		e["tag"] = std::string(GetTagName(Gameplay::Of(s).GetTag()));
-		e["texture"] = s->GetTextureFilePath();
-		const Vector2& pos = s->GetPosition();
-		JsonValue p = JsonValue::MakeArray();
-		p.Push(JsonValue(static_cast<double>(pos.x)));
-		p.Push(JsonValue(static_cast<double>(pos.y)));
-		e["pos"] = std::move(p);
-		arr.Push(std::move(e));
-	}
-	for (const auto& sp : dynamicSplines_) {
-		if (!sp) continue;
-		JsonValue e = JsonValue::MakeObject();
-		e["type"] = "Spline";
-		e["name"] = sp->GetName();
-		e["tag"] = std::string(GetTagName(Gameplay::Of(sp).GetTag()));
-		JsonValue ptsArr = JsonValue::MakeArray();
-		for (const auto& pt : sp->GetPoints()) {
-			ptsArr.Push(Vec3ToJson(pt));
-		}
-		e["points"] = std::move(ptsArr);
-		arr.Push(std::move(e));
-	}
-
-	root["objects"] = std::move(arr);
-
-	std::filesystem::path path(filePath);
-	if (path.has_parent_path()) {
-		std::error_code ec;
-		std::filesystem::create_directories(path.parent_path(), ec);
-	}
-
-	bool ok = JsonWriter::WriteFile(filePath, root, { true, 2 });
-	LogBuffer::Instance().Add(
-		ok ? ("Scene saved: " + filePath)
-		   : ("Scene save FAILED: " + filePath),
-		ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
-	return ok;
+bool StagePlayScene::ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag tag) const {
+	// プレイヤーは常にプレハブから復元する（collider 等のプレハブ属性を確実に反映するため）
+	if (tag == EntityTag::Player) return true;
+	// 弾・攻撃判定は一時オブジェクト
+	if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyAttack) return true;
+	// ランタイム UI（HP バー / 必殺ゲージ）は毎回建て直すので保存しない
+	if (entity == hpBarBackground_ || entity == hpBarForeground_ ||
+		entity == gaugeBarBackground_ || entity == gaugeBarForeground_) return true;
+	return false;
 }
 
-bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
-	auto result = JsonParser::ParseFile(filePath);
-	if (!result.success) {
-		LogBuffer::Instance().Add(
-			"Scene load FAILED: " + filePath + " (" + result.errorMessage + ")",
-			LogBuffer::Level::Error);
-		return false;
+bool StagePlayScene::ShouldSkipOnLoad(const SceneEntityDesc& desc) const {
+	// 過去の汚れた save 対策：一時オブジェクトが混ざっていても復元しない
+	if (desc.tag == EntityTag::PlayerBullet || desc.tag == EntityTag::EnemyAttack) return true;
+	if (desc.kind == SceneEntityDesc::Kind::Sprite &&
+		(desc.name == "HPBarBackground" || desc.name == "HPBarForeground" ||
+		 desc.name == "SpecialGaugeBackground" || desc.name == "SpecialGaugeForeground")) {
+		return true;
 	}
+	return false;
+}
 
-	// 既存の動的オブジェクトを全削除
-	for (auto& o : object3DInstances_) {
-		if (o) deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(o.release()));
-	}
-	object3DInstances_.clear();
-	for (auto& a : dynamicAnimated_) {
-		if (a) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
-	}
-	dynamicAnimated_.clear();
-	for (auto& m : dynamicAnimatedModels_) {
-		if (m) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedModelInstance>(m.release()));
-	}
-	dynamicAnimatedModels_.clear();
-	for (auto& s : dynamicSprites_) {
-		if (s) deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(s.release()));
-	}
-	dynamicSprites_.clear();
-	for (auto& p : dynamicPrimitives_) {
-		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
-	}
-	dynamicPrimitives_.clear();
-	for (auto& sp : dynamicSplines_) {
-		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
-	}
-	dynamicSplines_.clear();
-
-	// LoadScene で全エンティティが消えたので参照ポインタもリセット
+void StagePlayScene::OnBeforeSceneLoad() {
+	// 全エンティティが消えるので、それを指す参照とゲーム状態を落とす
 	player_ = nullptr;
 	movingEnemies_.clear();
 	// enemyControllers_ は entity_ がダングリングになるので必ずクリアする（Seek リセットと同様）
@@ -3971,84 +3869,18 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 	bullets_.clear();
 	melees_.clear();
 	ResetDodgeState();
+}
 
-	const JsonValue& objs = result.value["objects"];
-	const bool hasObjs = objs.IsArray();
-
-	for (size_t i = 0; hasObjs && i < objs.Size(); ++i) {
-		const JsonValue& e = objs[i];
-		std::string type = e["type"].AsString();
-		std::string name = e["name"].AsString();
-		EntityTag tag = TagFromName(e["tag"].AsString());
-		Vector3 sc = JsonToVec3(e["transform"]["scale"], { 1,1,1 });
-		Vector3 ro = JsonToVec3(e["transform"]["rotate"], { 0,0,0 });
-		Vector3 tr = JsonToVec3(e["transform"]["translate"], { 0,0,0 });
-
-		if (type == "Object3D") {
-			AddDynamicObject(e["dir"].AsString(), e["file"].AsString(), tr);
-			if (!object3DInstances_.empty()) {
-				auto& back = object3DInstances_.back();
-				back->SetName(name);
-				Gameplay::Of(back).SetTag(tag);
-				back->SetScale(sc);
-				back->SetRotate(ro);
-			}
-		} else if (type == "AnimatedObject3D") {
-			AddDynamicAnimated(e["dir"].AsString(), e["file"].AsString(), tr);
-			if (!dynamicAnimated_.empty()) {
-				auto& back = dynamicAnimated_.back();
-				back->SetName(name);
-				Gameplay::Of(back).SetTag(tag);
-				back->SetScale(sc);
-				back->SetRotate(ro);
-				if (tag == EntityTag::Player) player_ = back.get();
-			}
-		} else if (type == "Primitive") {
-			// 弾は一時オブジェクトなのでロードでも無視（過去の汚れた save 対策）
-			if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyAttack) {
-				continue;
-			}
-			int primType = static_cast<int>(e["primitiveType"].AsInt());
-			AddDynamicPrimitive(primType, tr);
-			if (!dynamicPrimitives_.empty()) {
-				auto& back = dynamicPrimitives_.back();
-				back->SetName(name);
-				Gameplay::Of(back).SetTag(tag);
-				back->SetScale(sc);
-				back->SetRotate(ro);
-				std::string tex = e["texture"].AsString();
-				if (!tex.empty()) back->SetTexture(tex);
-			}
-		} else if (type == "Sprite") {
-			float cx = static_cast<float>(e["pos"][0].AsDouble(0.0));
-			float cy = static_cast<float>(e["pos"][1].AsDouble(0.0));
-			if (name == "HPBarBackground" || name == "HPBarForeground" ||
-					name == "SpecialGaugeBackground" || name == "SpecialGaugeForeground") {
-					continue; // ランタイム UI は別途建て直すので古い save の混入を無視
-				}
-				AddDynamicSprite(e["texture"].AsString(), cx, cy);
-			if (!dynamicSprites_.empty()) {
-				auto& back = dynamicSprites_.back();
-				back->SetName(name);
-				Gameplay::Of(back).SetTag(tag);
-			}
-		} else if (type == "Spline") {
-			AddDynamicSpline(static_cast<int>(tag));
-			if (!dynamicSplines_.empty()) {
-				auto& back = dynamicSplines_.back();
-				back->SetName(name);
-				back->MutablePoints().clear();
-				const JsonValue& pts = e["points"];
-				if (pts.IsArray()) {
-					for (size_t pi = 0; pi < pts.Size(); ++pi) {
-						back->AddPoint(JsonToVec3(pts[pi]));
-					}
-				}
-			}
+void StagePlayScene::OnAfterSceneLoad() {
+	// 復元されたエンティティから player_ を貼り直す
+	for (const auto& a : dynamicAnimated_) {
+		if (a && Gameplay::Of(a).GetTag() == EntityTag::Player) {
+			player_ = a.get();
+			break;
 		}
 	}
 
-	// Player はセーブに含めないため、ロード後に存在しなければプレハブから再生成する
+	// Player はセーブに含めないため、存在しなければプレハブから再生成する
 	if (!player_) {
 		InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
 		if (!dynamicAnimated_.empty()) {
@@ -4057,15 +3889,16 @@ bool StagePlayScene::LoadSceneFromJson(const std::string& filePath) {
 		}
 	}
 
+	// dynamicSplines_ を作り直したので、レールカメラの走行スプラインを取り直す。
+	// これを忘れると解放済みのスプラインを指したまま走る（Auto Reload で毎回踏む）。
+	if (railStage_) railStage_->RebindCameraPath();
+
 	// dynamicSprites_ を全削除したので UI スプライトを建て直す（生ポインタの dangling 回避）
 	InitializeHPBarUI();
 	InitializeSpecialGaugeUI();
 	if (player_) {
 		Gameplay::Of(player_).GetHP().enabled = true;
 	}
-
-	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
-	return true;
 }
 
 void StagePlayScene::InitializeHPBarUI() {

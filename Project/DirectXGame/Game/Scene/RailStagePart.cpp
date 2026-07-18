@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <vector>
 
 #ifdef _DEBUG
 #include "ImGuiManager.h"
@@ -35,11 +36,12 @@ void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 	host_ = host;
 	camera_ = camera;
 
-	// レールカメラ用スプライン（位置）
-	cameraPath_ = std::make_unique<SplineCurveActor>();
-	cameraPath_->SetName("CameraPath");
-	Gameplay::Of(cameraPath_).SetTag(EntityTag::CameraPathSpline);
-	cameraPath_->MutablePoints() = {
+	// レールカメラ用スプライン（位置）。
+	// 実体はシーンの dynamicSplines_ 側に置く＝シーン JSON に載るので、
+	// エンジン内エディタでも Blender でも編集できる（従来はここに直書きで、
+	// カメラを動かすたびに C++ の編集とリビルドが必要だった）。
+	// ここの値はシーンにまだ CameraPathSpline が無いときの種。
+	defaultCameraPoints_ = {
 		{   0.0f, 5.0f,   0.0f },
 		{  10.0f, 5.0f,  20.0f },
 		{  20.0f, 8.0f,  40.0f },
@@ -50,7 +52,7 @@ void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 	// レールカメラコントローラ（向きは回転キーフレーム列 cameraRotKeys_。初期は空）
 	railCamera_ = std::make_unique<RailCameraController>();
 	railCamera_->Initialize(camera_);
-	railCamera_->SetCameraPath(cameraPath_.get());
+	RebindCameraPath();
 	railCamera_->SetRotKeys(&cameraRotKeys_);
 	railCamera_->SetSpeed(railCameraSpeed_);
 	// ラップ/スナップバック防止：SeekMax 到達後の凍結を尊重するため loop しない
@@ -60,6 +62,7 @@ void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 	// 向きオーサリング用の見回しローテータ（入力配線・UI は Tuning 側で）
 	railAim_ = std::make_unique<RailAimController>();
 
+
 	// ウェーブ定義ロード（存在しなければ空のまま=何も湧かない）
 	if (std::filesystem::exists(wavePath_)) {
 		if (WaveDefIO::LoadFromFile(wavePath_, currentWave_)) {
@@ -68,6 +71,14 @@ void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 			killAtT_.assign(currentWave_.entries.size(), -1.0f);
 		}
 	}
+}
+
+void RailStagePart::RebindCameraPath() {
+	if (!host_) return;
+	// シーンのロードで dynamicSplines_ は作り直されるため、以前のポインタは解放済み。
+	// ここで取り直す（無ければ既定値を種にシーン側が作る）。
+	cameraPath_ = host_->EnsureCameraPathSpline(defaultCameraPoints_);
+	if (railCamera_) railCamera_->SetCameraPath(cameraPath_);
 }
 
 bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, float seekMaxSec) {
@@ -107,10 +118,8 @@ bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, 
 		}
 	}
 
-#ifdef _DEBUG
-	// スプライン可視化（Hierarchy の Debug 表示 ON 時のみ描かれる）
-	if (cameraPath_) cameraPath_->DrawDebug();
-#endif
+	// スプライン可視化は不要（走行スプラインはシーンの dynamicSplines_ が持つので
+	// GameScene::Draw 側が他のスプラインと同じように DrawDebug する）
 
 	// レール走行（Aim オーサリング中はレール位置に固定し、見回し入力で向きを上書き）
 	if (railCamera_) {
@@ -180,14 +189,25 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 						(pdef->movementType == MovementType::ScreenHover ||
 						 pdef->movementType == MovementType::Static));
 
-				IImGuiEditable* spawned = nullptr;
-				if (cameraRelative) {
+				// このトリガーで湧いた敵を集める（positions[] 指定時は複数体になりうる）
+				std::vector<IImGuiEditable*> spawnedList;
+
+				if (!we.positions.empty() && !cameraRelative) {
+					// ワールド固定敵（Blender 配置の固定砲台・地上設置物など）。
+					// 各座標に 1 体ずつ置き、位置はコントローラが固定する（spline=null/speed=0）。
+					for (const auto& wp : we.positions) {
+						if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, wp)) {
+							host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
+							spawnedList.push_back(s);
+						}
+					}
+				} else if (cameraRelative) {
 					const Vector3 wpos = CameraOffsetToWorld(we.cameraOffset);
-					spawned = host_->SpawnEnemyAt(we.prefab, wpos);
-					if (spawned) {
+					if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, wpos)) {
 						// 撃破検知・コントローラ紐付け・Seek 掃除を共通化するため
 						// movingEnemies_ にも登録（spline=null/speed=0 なので位置はコントローラが制御）。
-						host_->RegisterStationaryMovingEnemy(spawned, static_cast<int>(i));
+						host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
+						spawnedList.push_back(s);
 					}
 				} else if (!we.splineId.empty()) {
 					SplineCurveActor* sp = host_->FindDynamicSplineByName(we.splineId);
@@ -197,8 +217,10 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 						// traverse_sec [秒] → スプライン速度 [spline_t/sec]。速度 = 1 / 踏破秒。
 						const float enemySpeed = (we.traverseSec > 1e-4f)
 							? (1.0f / we.traverseSec) : 0.0f;
-						spawned = host_->SpawnEnemyOnSpline(we.prefab, sp, enemySpeed,
-							removeAtEnd, 0.0f, static_cast<int>(i));
+						if (IImGuiEditable* s = host_->SpawnEnemyOnSpline(we.prefab, sp, enemySpeed,
+							removeAtEnd, 0.0f, static_cast<int>(i))) {
+							spawnedList.push_back(s);
+						}
 					} else {
 						LogBuffer::Instance().Add(
 							std::string("Wave: spline not found: ") + we.splineId,
@@ -206,8 +228,8 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 					}
 				}
 
-				// EnemyController を生成してコマンドを設定
-				if (spawned) {
+				// 湧いた敵ごとに EnemyController を生成してコマンドを設定
+				for (IImGuiEditable* spawned : spawnedList) {
 					auto ctrl = std::make_unique<EnemyController>();
 					ctrl->entity_           = spawned;
 					ctrl->waveEntryIndex_   = static_cast<int>(i);
@@ -317,13 +339,21 @@ void RailStagePart::Seek(float seconds) {
 				(pdef->movementType == MovementType::ScreenHover ||
 				 pdef->movementType == MovementType::Static));
 
-		IImGuiEditable* spawned = nullptr;
-		if (cameraRelative) {
+		std::vector<IImGuiEditable*> spawnedList;
+		if (!we.positions.empty() && !cameraRelative) {
+			// ワールド固定敵は seek で動かないのでそのまま各座標へ復元
+			for (const auto& wp : we.positions) {
+				if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, wp)) {
+					host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
+					spawnedList.push_back(s);
+				}
+			}
+		} else if (cameraRelative) {
 			// カメラ相対敵は seek した瞬間のカメラ基準で再配置（停止状態から再開）。
 			// Seek は開発ツールなので hover の経過時間までは厳密復元しない。
-			spawned = host_->SpawnEnemyAt(we.prefab, CameraOffsetToWorld(we.cameraOffset));
-			if (spawned) {
-				host_->RegisterStationaryMovingEnemy(spawned, static_cast<int>(i));
+			if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, CameraOffsetToWorld(we.cameraOffset))) {
+				host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
+				spawnedList.push_back(s);
 			}
 		} else {
 			if (we.splineId.empty()) continue;
@@ -336,31 +366,34 @@ void RailStagePart::Seek(float seconds) {
 			if (!sp) continue;
 			const bool removeAtEnd = (we.enemyType != "Rusher");
 			const float enemySpeed = 1.0f / we.traverseSec;
-			spawned = host_->SpawnEnemyOnSpline(
-				we.prefab, sp, enemySpeed, removeAtEnd, tOnSpline, static_cast<int>(i));
+			if (IImGuiEditable* s = host_->SpawnEnemyOnSpline(
+				we.prefab, sp, enemySpeed, removeAtEnd, tOnSpline, static_cast<int>(i))) {
+				spawnedList.push_back(s);
+			}
 		}
-		if (!spawned) continue;
 
 		// Seek 復元された敵にも EnemyController を作って AI を再開させる
-		auto ctrl = std::make_unique<EnemyController>();
-		ctrl->entity_           = spawned;
-		ctrl->waveEntryIndex_   = static_cast<int>(i);
-		ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
-		ctrl->triggerSec_       = we.triggerSec;
-		ctrl->shootIntervalSec_ = we.shootIntervalSec;
-		ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
-		ctrl->spawnLimit_       = we.spawnLimit;
-		ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
-		ctrl->childSplineId_    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
-		ctrl->hoverOffset_      = we.cameraOffset;
-		if (pdef && pdef->hasMovement) {
-			ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
-			ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
-		}
-		ctrl->Init(EnemyCommandFactory::Create(we, pdef));
+		for (IImGuiEditable* spawned : spawnedList) {
+			auto ctrl = std::make_unique<EnemyController>();
+			ctrl->entity_           = spawned;
+			ctrl->waveEntryIndex_   = static_cast<int>(i);
+			ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
+			ctrl->triggerSec_       = we.triggerSec;
+			ctrl->shootIntervalSec_ = we.shootIntervalSec;
+			ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
+			ctrl->spawnLimit_       = we.spawnLimit;
+			ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
+			ctrl->childSplineId_    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
+			ctrl->hoverOffset_      = we.cameraOffset;
+			if (pdef && pdef->hasMovement) {
+				ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
+				ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
+			}
+			ctrl->Init(EnemyCommandFactory::Create(we, pdef));
 
-		host_->LinkEnemyController(spawned, ctrl.get());
-		host_->RegisterEnemyController(std::move(ctrl));
+			host_->LinkEnemyController(spawned, ctrl.get());
+			host_->RegisterEnemyController(std::move(ctrl));
+		}
 	}
 }
 

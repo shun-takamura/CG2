@@ -1,0 +1,29 @@
+{
+  "scene": "StagePlayScene",
+  "objects": [
+    {
+      "type": "Object3D",
+      "name": "NormalMapTest",
+      "tag": "Terrain",
+      "dir": "Resources/Models/NormalMapTest",
+      "file": "NormalMapTest.mesh",
+      "transform": {
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotate": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "translate": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ]
+}

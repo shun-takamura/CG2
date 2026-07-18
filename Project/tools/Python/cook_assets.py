@@ -1134,12 +1134,19 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     # material index → 出力した .mat の Resources 相対パス
     mat_path_cache: dict = {}
     for mat_idx in used_mat_indices:
-        # .mat 値（glTF は PBR 形式。shading_model は既定の BlinnPhong）
+        # .mat 値（glTF は PBR 形式）
         real_idx = mat_idx if mat_idx is not None else 0
         base_color_path = _gltf_find_base_color_path(gltf, task.src, real_idx)
         metallic, roughness = _gltf_find_pbr_factors(gltf, real_idx)
         normal_map_path = _gltf_find_normal_map_path(gltf, task.src, real_idx)
         base_color_factor = _gltf_find_base_color_factor(gltf, real_idx)
+
+        # 法線マップの有無だけを PBR 切替のトリガーにする。
+        # metallic/roughness の有無は使えない: _gltf_find_pbr_factors は未指定時に
+        # glTF 既定の 1.0/1.0 を返し、かつ既存のアニメモデル(walk/sneakWalk/BrainStem)は
+        # いずれも metallicFactor を明示済みなので、それを条件にすると軒並み PBR へ倒れて
+        # 既存の見た目が壊れる。normalTexture を持つのは新規に作る素材だけ。
+        shading_model = 1 if normal_map_path else MAT_DEFAULT_SHADING_MODEL
 
         # 単一マテリアルは従来通り stem.mat（後方互換）。複数はマテリアル名/index でサフィックス
         if single_material:
@@ -1155,6 +1162,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
         _write_mat_v2(out_dir / mat_filename, base_color_path,
                       color=base_color_factor,
                       metallic=metallic, roughness=roughness,
+                      shading_model=shading_model,
                       normal_map_path=normal_map_path)
         mat_path_cache[mat_idx] = _sibling_resource_path(mat_resource_base, mat_filename)
 

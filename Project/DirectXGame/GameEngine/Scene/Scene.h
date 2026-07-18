@@ -107,8 +107,9 @@ public:
 
 	/// <summary>
 	/// プレハブ名でシーンに動的配置する。実体はゲーム側（GameScene）が override する。基底は no-op。
+	/// 戻り値は生成したエンティティ（生成できなければ nullptr）。所有権はシーン側が持つ。
 	/// </summary>
-	virtual void InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) {}
+	virtual IImGuiEditable* InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos = {}) { return nullptr; }
 
 	/// <summary>
 	/// 動的エンティティ（Primitive / Object3D / Animated）を遅延破棄キューへ移送する。
@@ -146,6 +147,9 @@ public:
 	//====================
 	virtual bool SaveSceneToJson(const std::string& filePath);
 	virtual bool LoadSceneFromJson(const std::string& filePath);
+
+	/// <summary>現在のシーン内容を JSON 文字列にする（差分検出用）。保存非対応シーンは空文字。</summary>
+	virtual std::string SerializeSceneToString() const { return {}; }
 
 #ifdef USE_IMGUI
 	/// <summary>

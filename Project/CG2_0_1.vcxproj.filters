@@ -237,6 +237,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\RailStagePart.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\SceneSerializer.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\BossStagePart.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -774,6 +777,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\RailStagePart.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\SceneSerializer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\BossStagePart.h">

@@ -136,6 +136,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\RailStagePart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\SceneSerializer.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\BossStagePart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
@@ -177,6 +178,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\RailStagePart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\SceneSerializer.h" />
     <ClInclude Include="DirectXGame\Game\Scene\BossStagePart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />

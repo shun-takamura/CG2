@@ -58,9 +58,10 @@ public:
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
 
-	// シーン保存/読込（GameScene の動的エンティティ群を JSON へ）
-	bool SaveSceneToJson(const std::string& filePath) override;
-	bool LoadSceneFromJson(const std::string& filePath) override;
+protected:
+	// シーン保存/読込の本体は GameScene 側に集約済み。
+	// DemoScene は固有の除外・後処理が無いので、JSON に書く名前だけ返す。
+	std::string GetSceneJsonName() const override;
 
 private:
 

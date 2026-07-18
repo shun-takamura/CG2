@@ -15,6 +15,7 @@
 #include <cctype>
 #include <cstring>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <vector>
 #include <string>
@@ -116,6 +117,35 @@ SceneEditorWindow::~SceneEditorWindow() {
 
 void SceneEditorWindow::WorkerFunc() {
     // バックグラウンドスレッドでの例外はプロセス全体を落とすため try-catch で保護する
+    try {
+        ScanModelsAndTextures();
+        if (stopRequested_) return;
+        scanDone_ = true;
+
+        // ============================================
+        // Phase 2: .obj だけ Assimp で CPU 先読み
+        //   （一覧表示には不要な先読み最適化なので初回スキャン時のみ実施。
+        //     後から追加されたモデルは初回ドロップ時にロードされる）
+        // ============================================
+        std::vector<ModelEntry> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(discoveredMutex_);
+            snapshot = discoveredModels_;
+        }
+        for (const auto& entry : snapshot) {
+            if (stopRequested_) return;
+            try {
+                ModelManager::GetInstance()->PreloadCPU(entry.dirPath, entry.filename);
+            } catch (...) {
+                // 1つの失敗で他を止めない
+            }
+        }
+    } catch (...) {
+        // スキャン全体での例外は無視
+    }
+}
+
+void SceneEditorWindow::ScanModelsAndTextures() {
     try {
         namespace fs = std::filesystem;
 
@@ -227,24 +257,6 @@ void SceneEditorWindow::WorkerFunc() {
             discoveredMaterials_ = std::move(foundMaterials);
             discoveredAnims_ = std::move(foundAnims);
         }
-        scanDone_ = true;
-
-        // ============================================
-        // Phase 2: .obj だけ Assimp で CPU 先読み
-        // ============================================
-        std::vector<ModelEntry> snapshot;
-        {
-            std::lock_guard<std::mutex> lock(discoveredMutex_);
-            snapshot = discoveredModels_;
-        }
-        for (const auto& entry : snapshot) {
-            if (stopRequested_) return;
-            try {
-                ModelManager::GetInstance()->PreloadCPU(entry.dirPath, entry.filename);
-            } catch (...) {
-                // 1つの失敗で他を止めない
-            }
-        }
     } catch (...) {
         // スキャン全体での例外は無視
     }
@@ -288,11 +300,130 @@ void SceneEditorWindow::RefreshEffectsIfChanged() {
         [](const EffectEntry& a, const EffectEntry& b) { return a.displayName < b.displayName; });
 }
 
+void SceneEditorWindow::RefreshModelsIfChanged() {
+    namespace fs = std::filesystem;
+
+    // 初回スキャンの完了前は何もしない（ワーカーと二重にスキャンしても無駄なため）
+    if (!scanDone_) return;
+
+    const fs::path modelsDir = fs::path("Resources") / "Models";
+    const fs::path texturesDir = fs::path("Resources") / "Textures";
+
+    std::error_code ec;
+    auto modelsTime = fs::last_write_time(modelsDir, ec);
+    if (ec) return;
+    auto texturesTime = fs::last_write_time(texturesDir, ec);
+    if (ec) texturesTime = {};  // Textures が無くても Models だけで監視は続ける
+
+    if (!modelsWatchInitialized_) {
+        modelsLastWriteTime_ = modelsTime;
+        texturesLastWriteTime_ = texturesTime;
+        modelsWatchInitialized_ = true;
+        return;
+    }
+
+    if (modelsTime == modelsLastWriteTime_ && texturesTime == texturesLastWriteTime_) {
+        return;  // 変化なし
+    }
+    modelsLastWriteTime_ = modelsTime;
+    texturesLastWriteTime_ = texturesTime;
+
+    // 変化時だけ再列挙（ファイル列挙のみなので同期実行で問題ない）
+    ScanModelsAndTextures();
+}
+
+void SceneEditorWindow::MarkSceneFileSynced() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    auto t = fs::last_write_time(scenePathBuf_, ec);
+    if (ec) return;
+    sceneLastWriteTime_ = t;
+    sceneWatchInitialized_ = true;
+}
+
+void SceneEditorWindow::RefreshSceneIfChanged() {
+    if (!autoReloadScene_) return;
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    auto t = fs::last_write_time(scenePathBuf_, ec);
+    if (ec) return;  // ファイルがまだ無い等
+
+    if (!sceneWatchInitialized_) {
+        sceneLastWriteTime_ = t;
+        sceneWatchInitialized_ = true;
+        return;
+    }
+    if (t == sceneLastWriteTime_) return;
+
+    // 読み込みの成否に関わらず記録を進める。失敗時に毎フレ再試行してログを埋めないため。
+    // 書き込み途中の中途半端な JSON を掴んでも、LoadSceneFromJson はパースに失敗した時点で
+    // 何も壊さずに false を返すだけ。書き込み完了で時刻が再び動くので次のフレームで拾い直せる。
+    sceneLastWriteTime_ = t;
+    if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+        scene->LoadSceneFromJson(scenePathBuf_);
+        // 読込直後は「その内容が最新」なので自動保存の基準を合わせる。
+        // これをしないと、読み込んだばかりの内容を「編集された」と誤検出して
+        // 書き戻し→相手が再読込→…の反響が起きる。
+        ResetSceneContentBaseline();
+    }
+}
+
+void SceneEditorWindow::ResetSceneContentBaseline() {
+    auto* scene = SceneManager::GetInstance()->GetCurrentScene();
+    if (!scene) return;
+    const std::string s = scene->SerializeSceneToString();
+    sceneContentHash_ = std::hash<std::string>{}(s);
+    sceneHashInitialized_ = true;
+    sceneDirtyDebounce_ = -1.0f;   // 進行中のデバウンスも打ち切る
+}
+
+void SceneEditorWindow::AutoSaveSceneIfDirty(float dt) {
+    if (!autoSaveScene_) return;
+
+    auto* scene = SceneManager::GetInstance()->GetCurrentScene();
+    if (!scene) return;
+
+    const std::string s = scene->SerializeSceneToString();
+    if (s.empty()) return;   // 保存非対応シーン（Title/Hub 等）
+
+    const size_t h = std::hash<std::string>{}(s);
+
+    if (!sceneHashInitialized_) {
+        sceneContentHash_ = h;
+        sceneHashInitialized_ = true;
+        return;
+    }
+
+    if (h != sceneContentHash_) {
+        // 内容が変わった。ドラッグ中は毎フレhere に来るのでデバウンスを張り直し、
+        // 手が止まって 0.3 秒経ってから 1 回だけ保存する。
+        sceneContentHash_ = h;
+        sceneDirtyDebounce_ = 0.3f;
+        return;
+    }
+
+    if (sceneDirtyDebounce_ > 0.0f) {
+        sceneDirtyDebounce_ -= dt;
+        if (sceneDirtyDebounce_ <= 0.0f) {
+            sceneDirtyDebounce_ = -1.0f;
+            scene->SaveSceneToJson(scenePathBuf_);
+            MarkSceneFileSynced();   // 自分の保存で自動再読込を誘発しない（反響防止）
+        }
+    }
+}
+
 void SceneEditorWindow::OnDraw() {
 #ifdef _DEBUG
 
     // エフェクト一覧をホットリロード（ディレクトリ変更検出時のみ実行されるので軽い）
     RefreshEffectsIfChanged();
+    // モデル / テクスチャ一覧も同様にホットリロード（クックしたてを再起動なしで拾う）
+    RefreshModelsIfChanged();
+    // シーン JSON も監視（Blender の Export を手動操作なしで反映する）
+    RefreshSceneIfChanged();
+    // エディタで動かしたら自動で JSON へ書き戻す（Blender 側自動同期と対で双方向）
+    AutoSaveSceneIfDirty(ImGui::GetIO().DeltaTime);
 
     // ============================================
     // ヘッダー: スキャン状況
@@ -300,11 +431,19 @@ void SceneEditorWindow::OnDraw() {
     if (!scanDone_) {
         ImGui::Text("Scanning Resources ...");
     } else {
-        std::lock_guard<std::mutex> lock(discoveredMutex_);
-        ImGui::Text("Models: %d   Textures: %d   Animated: %d",
-            static_cast<int>(discoveredModels_.size()),
-            static_cast<int>(discoveredTextures_.size()),
-            static_cast<int>(discoveredAnimated_.size()));
+        {
+            std::lock_guard<std::mutex> lock(discoveredMutex_);
+            ImGui::Text("Models: %d   Textures: %d   Animated: %d",
+                static_cast<int>(discoveredModels_.size()),
+                static_cast<int>(discoveredTextures_.size()),
+                static_cast<int>(discoveredAnimated_.size()));
+        }
+        // 新規追加はディレクトリ監視が自動で拾うが、同名ファイルの上書きは
+        // ディレクトリの書込時刻が動かず拾えないので手動更新の口を用意する
+        ImGui::SameLine();
+        if (ImGui::Button("Rescan Models")) {
+            ScanModelsAndTextures();
+        }
     }
 
     ImGui::Separator();
@@ -313,18 +452,34 @@ void SceneEditorWindow::OnDraw() {
     // シーン保存 / 読込
     // ============================================
     {
-        static char scenePathBuf[256] = "Resources/Json/Scenes/StagePlay.json";
-        ImGui::InputText("Scene File", scenePathBuf, sizeof(scenePathBuf));
+        if (ImGui::InputText("Scene File", scenePathBuf_, sizeof(scenePathBuf_))) {
+            sceneWatchInitialized_ = false;  // 監視対象が変わったので張り直す
+        }
         if (ImGui::Button("Save Scene")) {
             if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
-                scene->SaveSceneToJson(scenePathBuf);
+                scene->SaveSceneToJson(scenePathBuf_);
+                MarkSceneFileSynced();          // 自分の保存で自動リロードを誘発しない
+                ResetSceneContentBaseline();    // 自動保存も直後に再発火させない
             }
         }
         ImGui::SameLine();
         if (ImGui::Button("Load Scene")) {
             if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
-                scene->LoadSceneFromJson(scenePathBuf);
+                scene->LoadSceneFromJson(scenePathBuf_);
+                MarkSceneFileSynced();
+                ResetSceneContentBaseline();
             }
+        }
+        ImGui::Checkbox("Auto Reload", &autoReloadScene_);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("シーンファイルが書き換わったら自動で読み直す\n"
+                              "（Blender 側の変更をリアルタイムに反映する用）");
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto Save", &autoSaveScene_);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("エディタで動かしたら少し待って JSON へ自動保存する\n"
+                              "（Blender 側と対で双方向リアルタイム編集になる）");
         }
     }
     ImGui::Separator();

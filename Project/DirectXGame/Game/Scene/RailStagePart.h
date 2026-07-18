@@ -56,6 +56,10 @@ public:
 	virtual SplineCurveActor* FindDynamicSplineByName(const std::string& name) = 0;
 	// Wave Editor のスプライン選択コンボ用。
 	virtual const std::vector<std::unique_ptr<SplineCurveActor>>& GetDynamicSplines() const = 0;
+	// レールカメラの走行スプラインをシーンから取得する。CameraPathSpline タグのものが
+	// 無ければ defaultPoints を種にして新規作成する（＝シーン JSON に載り、保存すると
+	// Blender からも編集できるようになる）。所有はシーン側、戻り値は参照のみ。
+	virtual SplineCurveActor* EnsureCameraPathSpline(const std::vector<Vector3>& defaultPoints) = 0;
 
 	// Seek() 用：既存 STG エンティティ（弾/近接判定/敵/コントローラ）を一括破棄する。
 	// 中身は StagePlayScene が実装（現行 Seek() の該当コンテナクリア処理をそのまま移す）。
@@ -73,6 +77,13 @@ public:
 	~RailStagePart();
 
 	void Initialize(IRailStageHost* host, Camera* camera);
+
+	/// <summary>
+	/// レールカメラの走行スプラインをシーンから取り直す。
+	/// dynamicSplines_ はシーンのロードで丸ごと作り直されるため、参照を持ち越すと
+	/// 解放済みを指す。**LoadSceneFromJson の最後で必ず呼ぶこと**。
+	/// </summary>
+	void RebindCameraPath();
 
 	// true を返した = SeekMax 到達。呼び出し側はこのフレーム内で phase_ を Landing に進めること。
 	// （このフレームは内部で railCamera_->Update() を呼んでいない＝カメラは直前ポーズで凍結）
@@ -96,7 +107,12 @@ public:
 private:
 	IRailStageHost* host_ = nullptr;
 	Camera* camera_ = nullptr;
-	std::unique_ptr<SplineCurveActor> cameraPath_;
+	// 走行スプライン。所有はシーン（dynamicSplines_）側で、ここは参照のみ。
+	// シーンのロードで作り直されるので RebindCameraPath() で貼り直す。
+	SplineCurveActor* cameraPath_ = nullptr;
+	// シーンに CameraPathSpline がまだ無いときの種。従来の直書き値と同じなので、
+	// シーン JSON が無くても以前と同じ挙動になる。
+	std::vector<Vector3> defaultCameraPoints_;
 	std::vector<std::unique_ptr<CameraRotKey>> cameraRotKeys_;
 	std::unique_ptr<RailCameraController> railCamera_;
 	std::unique_ptr<RailAimController> railAim_;
