@@ -117,7 +117,8 @@ public:
 		}
 
 		// 射撃（徘徊と並行）: shoot_interval_sec [秒] で発射
-		if (ctx.player && ctx.shootIntervalSec > 0.0f) {
+		// 画面外から撃たれると理不尽なので、画面内にいる時だけ発射する
+		if (ctx.player && ctx.shootIntervalSec > 0.0f && ctx.CanAttackFrom(*pos)) {
 			const float secSinceSpawn = ctx.stageTimeSec - ctx.triggerSec;
 			if (secSinceSpawn >= 0.0f) {
 				const int shotIdx = static_cast<int>(secSinceSpawn / ctx.shootIntervalSec);

@@ -175,7 +175,20 @@
       "Bash(cp __TRACKED_VAR__/stage1_orig2.json Resources/Json/Waves/stage1.json)",
       "Bash(rm -f Assets/Scenes/_ClaudeSyncMatch_layout.*)",
       "Bash(python -c \"import json;print\\(' ',len\\(json.load\\(open\\('Resources/Json/Waves/stage1.json',encoding='utf-8'\\)\\)['spawn_entries']\\),'体'\\)\")",
-      "Bash([ -f \"$SP/stage1_orig2.json\" ])"
+      "Bash([ -f \"$SP/stage1_orig2.json\" ])",
+      "Bash(cd /c/Users/sleon/source/repos/CG2_0_1/Project)",
+      "Bash([ -f \"$SP/stage1_orig3.json\" ])",
+      "Bash(cp __TRACKED_VAR__/stage1_orig3.json Resources/Json/Waves/stage1.json)",
+      "Bash(rm -f Resources/Json/Waves/stage1.json.bak)",
+      "Bash(rm -f Resources/Json/Scenes/_ClaudeEnemySep.json Resources/Json/Scenes/_ClaudeEnemySep.json.bak)",
+      "Bash([ -f \"$SP/stage1_orig4.json\" ])",
+      "Bash(cp __TRACKED_VAR__/stage1_orig4.json Resources/Json/Waves/stage1.json)",
+      "Bash(cd /c/Users/sleon/source/repos/CG2_0_1/Project *)",
+      "Bash(grep -n \"Math\\\\\\\\\\\\\\\\MathUtility\" CG2_0_1.vcxproj CG2_0_1.vcxproj.filters)",
+      "Bash(grep -n \"MathUtility\\\\|Math\\\\\\\\\\\\\\\\\" EngineCore/EngineCore.vcxproj)",
+      "Bash(grep -n \"Math\\\\\\\\\\\\\\\\MathUtility.h\" -A 2 EngineCore/EngineCore.vcxproj.filters)",
+      "Bash(grep -n \"Math\\\\\\\\\\\\\\\\MathUtility.h\" EngineCore/EngineCore.vcxproj)",
+      "Bash(cp __TRACKED_VAR__/stage1_orig5.json Resources/Json/Waves/stage1.json)"
     ]
   }
 }

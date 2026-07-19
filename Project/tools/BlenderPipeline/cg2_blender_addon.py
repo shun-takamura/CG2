@@ -54,7 +54,7 @@ import sys
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, StringProperty
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 # EntityTag.h と手で同期させる。滅多に増えないので列挙で持つ。
 _ENGINE_TAGS = [
@@ -105,6 +105,47 @@ def _list_prefabs(context) -> list:
     return sorted(os.path.splitext(f)[0] for f in os.listdir(d) if f.endswith(".json"))
 
 
+def _prefab_json(root: str, name: str) -> dict:
+    """プレハブ JSON を dict で返す（無ければ空）。"""
+    if not root or not name:
+        return {}
+    p = os.path.join(root, "Resources", "Json", "Prefabs", name + ".json")
+    if not os.path.isfile(p):
+        return {}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _apply_collider_display(obj, root: str) -> None:
+    """エンプティを、プレハブのコライダー形状/サイズのワイヤーで表示する。
+
+    empty_display_type / empty_display_size は**表示専用**でオブジェクトの
+    transform（同期される scale）には影響しない。敵のサイズ感を掴むためだけ。
+    """
+    if obj.type != 'EMPTY':
+        return
+    col = _prefab_json(root, obj.cg2.prefab).get("collider", {}) if obj.cg2.prefab else {}
+    shape = col.get("shape", "Sphere" if "radius" in col else "")
+
+    if shape == "Sphere" or (not shape and "radius" in col):
+        obj.empty_display_type = 'SPHERE'
+        obj.empty_display_size = max(float(col.get("radius", 1.0)), 0.05)
+    elif shape == "OBB":
+        he = col.get("halfExtents", [0.5, 0.5, 0.5])
+        obj.empty_display_type = 'CUBE'
+        obj.empty_display_size = max(float(max(he)), 0.05)
+    elif shape == "Capsule":
+        obj.empty_display_type = 'SPHERE'
+        obj.empty_display_size = max(float(col.get("capsuleRadius", 0.5)), 0.05)
+    else:
+        # コライダー情報が無い（モデルプロキシ等）は控えめな十字のまま
+        obj.empty_display_type = 'PLAIN_AXES'
+        obj.empty_display_size = 1.0
+
+
 # ============================================================
 # オブジェクトごとの設定(カスタムプロパティとして保存される)
 # ============================================================
@@ -143,8 +184,13 @@ class CG2ObjectProps(bpy.types.PropertyGroup):
     )
     trigger_sec: FloatProperty(
         name="出現秒", description="ステージ開始から何秒で出現するか", default=5.0, min=0.0)
-    retreat_sec: FloatProperty(
-        name="退避秒", description="-1 なら退避しない（撃破まで居座る）", default=-1.0)
+    # エンジンの WaveEntry.retreatSec は「ステージ開始からの絶対秒」だが、
+    # オーサリングは「出てきてから何秒で退避するか」の方が扱いやすいので
+    # Blender 側は滞在時間で持ち、書き出す時に trigger + これ に変換する。
+    retreat_after_sec: FloatProperty(
+        name="滞在秒",
+        description="出現してから何秒で退避するか。-1 なら退避しない（撃破まで居座る）",
+        default=-1.0)
     shoot_interval_sec: FloatProperty(
         name="射撃間隔秒", description="0 で射撃なし", default=5.0, min=0.0)
     enemy_type: StringProperty(
@@ -346,11 +392,15 @@ def _collect_turrets(context) -> list:
     for obj in context.scene.objects:
         if obj.type == 'EMPTY' and obj.cg2.is_turret and obj.cg2.prefab:
             g = _blender_to_gltf_point(obj.matrix_world.translation)
+            # 滞在秒（相対）→ エンジンが期待する絶対秒へ。
+            # -1（退避しない）はそのまま -1 で渡す。
+            after = obj.cg2.retreat_after_sec
+            retreat_abs = -1.0 if after < 0.0 else obj.cg2.trigger_sec + after
             turrets.append({
                 "prefab": obj.cg2.prefab,
                 "enemy_type": obj.cg2.enemy_type or "Drone",
                 "trigger_sec": obj.cg2.trigger_sec,
-                "retreat_sec": obj.cg2.retreat_sec,
+                "retreat_sec": retreat_abs,
                 "shoot_interval_sec": obj.cg2.shoot_interval_sec,
                 "world": [-g[0], g[1], g[2]],
             })
@@ -616,12 +666,69 @@ def _apply_scene_to_bpy(context, data: dict) -> tuple[int, int]:
         obj.matrix_world = mw
         if etype == "Prefab":
             obj.cg2.prefab = entry.get("prefab", "")
+            _apply_collider_display(obj, _project_root(context))  # コライダーのワイヤーでサイズを見せる
         else:
             obj.cg2.tag = entry.get("tag", "None")
             obj.cg2.model_dir = entry.get("dir", "")
             obj.cg2.model_file = entry.get("file", "")
 
     return updated, created
+
+
+def _import_turrets_from_wave(context, root: str) -> tuple[int, int]:
+    """Wave JSON の固定砲台（positions を持つエントリ）を Blender へ取り込む。
+
+    敵は時刻が来ないとエンジンに出ないので、Blender では**時刻に関係なく全部**並べて
+    位置を調整できるようにする。時間は各エンプティの出現秒/滞在秒が持つ。
+
+    スプライン敵・ホバー敵は取り込まない（positions を持たない＝エンジン側の管轄。
+    ホバーはカメラ相対でワールド位置が一意に決まらないため Blender では扱えない）。
+
+    自動同期からは呼ばない（敵の確定は Export のみ、という住み分けを保つ）。
+    """
+    wave_path = os.path.join(root, "Resources", "Json", "Waves", "stage1.json")
+    if not os.path.isfile(wave_path):
+        return (0, 0)
+    try:
+        with open(wave_path, "r", encoding="utf-8") as f:
+            wave = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return (0, 0)
+
+    coll = context.scene.collection
+    updated = created = 0
+    idx = 0
+    for e in wave.get("spawn_entries", []):
+        pos = e.get("positions") or []
+        if not pos:
+            continue  # スプライン敵・ホバー敵はエンジン管轄
+        prefab = e.get("prefab", "")
+        # "Enemy_<プレハブ>_w<番号>"。Enemy_ 接頭辞で名前順に敵がまとまり、
+        # 末尾の番号は Wave 上の並び順から決まるので再取り込みしても重複しない。
+        name = f"Enemy_{prefab}_w{idx}"
+        idx += 1
+
+        obj = context.scene.objects.get(name)
+        if obj is None or obj.type != 'EMPTY':
+            obj = bpy.data.objects.new(name, None)
+            coll.objects.link(obj)
+            created += 1
+        else:
+            updated += 1
+
+        obj.location = _engine_point_to_blender(pos[0])
+        p = obj.cg2
+        p.is_turret = True
+        p.prefab = prefab
+        p.enemy_type = e.get("enemy_type", "Drone")
+        p.trigger_sec = float(e.get("trigger_sec", 5.0))
+        p.shoot_interval_sec = float(e.get("shoot_interval_sec", 5.0))
+        # Wave は絶対秒。Blender は「出現してから何秒で退避」なので差に戻す
+        r = float(e.get("retreat_sec", -1.0))
+        p.retreat_after_sec = -1.0 if r < 0.0 else max(r - p.trigger_sec, 0.0)
+        _apply_collider_display(obj, root)
+
+    return (updated, created)
 
 
 class CG2_OT_import_scene(bpy.types.Operator):
@@ -649,7 +756,11 @@ class CG2_OT_import_scene(bpy.types.Operator):
             return {'CANCELLED'}
 
         updated, created = _apply_scene_to_bpy(context, data)
-        self.report({'INFO'}, f"取り込み完了: 更新 {updated} 件 / 新規 {created} 件")
+        # 敵（固定砲台）も Wave JSON から取り込む。時刻に関係なく全部並べて位置を見るため。
+        # 自動同期には入れない＝敵の確定は Export のみ、という住み分けは維持する。
+        tu, tc = _import_turrets_from_wave(context, root)
+        self.report({'INFO'},
+                    f"取り込み完了: 配置 更新{updated}/新規{created} ・ 敵 更新{tu}/新規{tc}")
         return {'FINISHED'}
 
 
@@ -666,7 +777,9 @@ class CG2_OT_import_scene(bpy.types.Operator):
 # 片方が書けば相手のハッシュが一致して読まないので、書き合いが起きない。
 # 同時に両方が変わった時だけ「その tick で先に判定された側」が勝つ（1 手だけ相手が負ける）。
 
-_sync_state = {"scene_hash": None, "turret_hash": None}
+# 自動同期はシーン JSON（地形/プロップ/カメラ/スプライン）だけを対象にする。
+# 敵の配置（Wave JSON）はプレイ中の敵に影響するので、都度同期せず Export & Cook の時だけ書く。
+_sync_state = {"scene_hash": None}
 
 
 def _atomic_write_json(path: str, data: dict) -> None:
@@ -706,24 +819,20 @@ def _sync_tick():
         return 1.0
 
     try:
+        # 敵(砲台)は同期対象に含めない。プレイ中の敵に影響するので Export & Cook の時だけ書く。
         scene_data = _scene_data_from_bpy(ctx, root)
-        turrets = _collect_turrets(ctx)
         scene_h = _normalized_hash(scene_data)
-        turret_h = hash(json.dumps(turrets, sort_keys=True))
         scene_path = os.path.join(root, "Resources", "Json", "Scenes", scene_data["scene"] + ".json")
 
         # 初回：現状を基準にするだけ（無駄な書き/読みをしない）
         if _sync_state["scene_hash"] is None:
             _sync_state["scene_hash"] = scene_h
-            _sync_state["turret_hash"] = turret_h
             return 0.3
 
-        # 方向1: Blender が変わった → 書き出し
-        if scene_h != _sync_state["scene_hash"] or turret_h != _sync_state["turret_hash"]:
+        # 方向1: Blender が変わった → 書き出し（シーン JSON のみ）
+        if scene_h != _sync_state["scene_hash"]:
             _atomic_write_json(scene_path, scene_data)
-            _merge_wave_json(root, turrets)
             _sync_state["scene_hash"] = scene_h
-            _sync_state["turret_hash"] = turret_h
             return 0.3
 
         # 方向2: エンジンがファイルを変えた → Import
@@ -747,7 +856,6 @@ def _sync_tick():
 def _set_auto_sync(enable: bool) -> None:
     if enable:
         _sync_state["scene_hash"] = None   # 有効化直後は現状を基準に取り直す
-        _sync_state["turret_hash"] = None
         if not bpy.app.timers.is_registered(_sync_tick):
             bpy.app.timers.register(_sync_tick, first_interval=0.3)
     else:
@@ -757,6 +865,115 @@ def _set_auto_sync(enable: bool) -> None:
 
 def _on_auto_sync_toggled(self, context):
     _set_auto_sync(self.cg2_auto_sync)
+
+
+# ============================================================
+# 追加オペレータ（敵・スプラインをメニューから足す）
+# ============================================================
+
+def _list_enemy_prefabs(context) -> list:
+    """tag が Enemy のプレハブだけを返す（敵追加のプルダウン用）。
+    プレイヤー・弾・地形などが並ぶと選び間違えるので絞る。"""
+    root = _project_root(context)
+    if not root:
+        return []
+    return [n for n in _list_prefabs(context)
+            if _prefab_json(root, n).get("tag") == "Enemy"]
+
+
+def _prefab_enum_items(self, context):
+    items = [(n, n, "") for n in _list_enemy_prefabs(context)]
+    return items if items else [("", "(敵プレハブ無し)", "")]
+
+
+def _spline_new_enum_items(self, context):
+    return [(t, t, "") for t in _SPLINE_TAGS]
+
+
+class CG2_OT_add_turret(bpy.types.Operator):
+    bl_idname = "cg2.add_turret"
+    bl_label = "敵を追加"
+    bl_description = "選んだプレハブの固定砲台を (0,0,0) に追加する（Wave JSON 行き）"
+
+    def execute(self, context):
+        prefab = context.scene.cg2_add_prefab
+        if not prefab:
+            self.report({'ERROR'}, "追加するプレハブがありません")
+            return {'CANCELLED'}
+        # "Enemy_<プレハブ>" で名前順に敵がまとまる。重複は Blender が .001 と自動連番
+        e = bpy.data.objects.new(f"Enemy_{prefab}", None)
+        context.scene.collection.objects.link(e)
+        e.location = (0.0, 0.0, 0.0)
+        e.cg2.is_turret = True
+        e.cg2.prefab = prefab
+        _apply_collider_display(e, _project_root(context))
+        # 追加した敵を選択状態に（すぐ動かせるように）
+        for o in context.selected_objects:
+            o.select_set(False)
+        e.select_set(True)
+        context.view_layer.objects.active = e
+        self.report({'INFO'}, f"{e.name} を (0,0,0) に追加")
+        return {'FINISHED'}
+
+
+class CG2_OT_new_spline(bpy.types.Operator):
+    bl_idname = "cg2.new_spline"
+    bl_label = "スプライン追加"
+    bl_description = "選んだ種別のスプラインを (0,0,0) 付近に新規作成する"
+
+    def execute(self, context):
+        tag = context.scene.cg2_add_spline_tag
+        cd = bpy.data.curves.new(tag, type='CURVE')
+        cd.dimensions = '3D'
+        sp = cd.splines.new('BEZIER')
+        sp.bezier_points.add(2)  # 3 点の初期カーブ
+        for i, x in enumerate((0.0, 5.0, 10.0)):
+            bp = sp.bezier_points[i]
+            bp.co = (x, 0.0, 0.0)
+            bp.handle_left_type = 'AUTO'
+            bp.handle_right_type = 'AUTO'
+        obj = bpy.data.objects.new(tag, cd)
+        context.scene.collection.objects.link(obj)
+        obj.cg2.spline_tag = tag
+        for o in context.selected_objects:
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        self.report({'INFO'}, f"{obj.name} を追加")
+        return {'FINISHED'}
+
+
+class CG2_OT_add_spline_point(bpy.types.Operator):
+    bl_idname = "cg2.add_spline_point"
+    bl_label = "制御点を追加"
+    bl_description = "アクティブなスプラインの末尾に制御点を1つ足す（前の点の延長線上）"
+
+    def execute(self, context):
+        obj = context.active_object
+        if not obj or obj.type != 'CURVE' or not obj.data.splines:
+            self.report({'ERROR'}, "スプライン（カーブ）を選択してください")
+            return {'CANCELLED'}
+        sp = obj.data.splines[0]
+        if sp.type != 'BEZIER':
+            self.report({'ERROR'}, "ベジェスプラインのみ対応")
+            return {'CANCELLED'}
+        pts = sp.bezier_points
+        n = len(pts)
+        # 末尾2点の差分を延長して新しい点を置く（無ければ +X 方向）
+        if n >= 2:
+            a, b = pts[n - 2].co, pts[n - 1].co
+            nxt = b + (b - a)
+        elif n == 1:
+            nxt = pts[0].co + Vector((5.0, 0.0, 0.0))
+        else:
+            nxt = Vector((0.0, 0.0, 0.0))
+        pts.add(1)
+        bp = pts[len(pts) - 1]
+        bp.co = nxt
+        bp.handle_left_type = 'AUTO'
+        bp.handle_right_type = 'AUTO'
+        self.report({'INFO'}, f"制御点を追加（計 {len(pts)} 点）")
+        return {'FINISHED'}
 
 
 # ============================================================
@@ -782,8 +999,21 @@ class CG2_PT_panel(bpy.types.Panel):
         row.operator("cg2.import_scene", icon='IMPORT')
         layout.prop(context.scene, "cg2_auto_sync")
         if context.scene.cg2_auto_sync:
-            layout.label(text="双方向で自動同期中（配置のみ）", icon='CHECKMARK')
-            layout.label(text="※ジオメトリを作り直した時は Export & Cook", icon='INFO')
+            layout.label(text="双方向で自動同期中（地形/プロップ/カメラ）", icon='CHECKMARK')
+            layout.label(text="※敵の配置とジオメトリは Export & Cook で確定", icon='INFO')
+        layout.separator()
+
+        # ---- 追加メニュー（敵・スプラインを足す）----
+        addbox = layout.box()
+        addbox.label(text="追加", icon='ADD')
+        row = addbox.row(align=True)
+        row.prop(context.scene, "cg2_add_prefab", text="")
+        row.operator("cg2.add_turret", text="敵を追加", icon='PLUS')
+        row = addbox.row(align=True)
+        row.prop(context.scene, "cg2_add_spline_tag", text="")
+        row.operator("cg2.new_spline", text="スプライン追加", icon='PLUS')
+        if context.active_object and context.active_object.type == 'CURVE':
+            addbox.operator("cg2.add_spline_point", icon='PLUS')
         layout.separator()
 
         obj = context.active_object
@@ -830,8 +1060,25 @@ class CG2_PT_panel(bpy.types.Panel):
                     col.label(text="砲台プレハブ名が必要（例: turret）", icon='ERROR')
                 col.prop(p, "enemy_type")
                 col.prop(p, "trigger_sec")
-                col.prop(p, "retreat_sec")
+                col.prop(p, "retreat_after_sec")
                 col.prop(p, "shoot_interval_sec")
+
+                # 滞在秒の意味を出しておく（0 だと出た瞬間に退避＝消える）
+                if p.retreat_after_sec < 0.0:
+                    col.label(text="退避しない（撃破まで居座る）", icon='PINNED')
+                elif p.retreat_after_sec == 0.0:
+                    col.label(text="滞在0秒＝出た瞬間に消えます", icon='ERROR')
+                else:
+                    col.label(text=f"{p.trigger_sec:.1f}秒に出現 → {p.retreat_after_sec:.1f}秒後に退避",
+                              icon='TIME')
+
+                # movement が Static でないプレハブは「撃って退避する敵」になる
+                mv = _prefab_json(_project_root(context), p.prefab).get("movement", {})
+                if p.prefab and mv.get("type") != "Static":
+                    info = box.column(align=True)
+                    info.label(text="このプレハブは Static ではありません", icon='INFO')
+                    info.label(text="turret を使うか movement.type を Static に", icon='BLANK1')
+
                 col.label(text="→ Wave JSON へ（ワールド座標で出現）", icon='CHECKMARK')
                 col.label(text="画面追従のホバー敵はエンジンのWave Editorで", icon='INFO')
                 return
@@ -855,7 +1102,10 @@ class CG2_PT_panel(bpy.types.Panel):
                     col.label(text="プレハブ名 か モデル指定 のどちらかが必要", icon='ERROR')
 
 
-_classes = (CG2Preferences, CG2ObjectProps, CG2_OT_export_and_cook, CG2_OT_import_scene, CG2_PT_panel)
+_classes = (CG2Preferences, CG2ObjectProps,
+            CG2_OT_export_and_cook, CG2_OT_import_scene,
+            CG2_OT_add_turret, CG2_OT_new_spline, CG2_OT_add_spline_point,
+            CG2_PT_panel)
 
 
 def register():
@@ -872,10 +1122,16 @@ def register():
         description="配置の変更を Blender↔エンジンで自動同期する（クックはしない）。"
                     "どちらで動かしても相手に即反映。ジオメトリ作成時のみ Export & Cook",
         default=False, update=_on_auto_sync_toggled)
+    bpy.types.Scene.cg2_add_prefab = EnumProperty(
+        name="敵プレハブ", description="追加する敵（固定砲台）のプレハブ", items=_prefab_enum_items)
+    bpy.types.Scene.cg2_add_spline_tag = EnumProperty(
+        name="スプライン種別", description="追加するスプラインの用途", items=_spline_new_enum_items)
 
 
 def unregister():
     _set_auto_sync(False)   # タイマーを止めてから解除
+    del bpy.types.Scene.cg2_add_spline_tag
+    del bpy.types.Scene.cg2_add_prefab
     del bpy.types.Scene.cg2_auto_sync
     del bpy.types.Scene.cg2_scene_name
     del bpy.types.Object.cg2

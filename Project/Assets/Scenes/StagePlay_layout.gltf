@@ -7,16 +7,32 @@
 	"scenes":[
 		{
 			"extras":{
-				"cg2_scene_name":"StagePlay"
+				"cg2_auto_sync":1,
+				"cg2_add_prefab":2
 			},
 			"name":"Scene",
 			"nodes":[
 				0,
-				1
+				1,
+				2,
+				3
 			]
 		}
 	],
 	"nodes":[
+		{
+			"extras":{
+				"cg2":{
+					"tag":7,
+					"model_dir":"Resources/Models/NormalMapTest",
+					"model_file":"NormalMapTest.mesh"
+				},
+				"engine_tag":"Terrain",
+				"engine_model_dir":"Resources/Models/NormalMapTest",
+				"engine_model_file":"NormalMapTest.mesh"
+			},
+			"name":"NormalMapTest"
+		},
 		{
 			"extras":{
 				"cg2":{
@@ -30,145 +46,26 @@
 		{
 			"extras":{
 				"cg2":{
-					"export_asset":1,
-					"tag":7,
-					"model_dir":"Resources/Models/NormalMapTest",
-					"model_file":"NormalMapTest.mesh"
+					"spline_tag":4
 				},
-				"engine_tag":"Terrain",
-				"engine_model_dir":"Resources/Models/NormalMapTest",
-				"engine_model_file":"NormalMapTest.mesh"
+				"engine_spline_tag":"CameraPathSpline",
+				"engine_spline_points":"[[0.0, 5.0, -0.0], [-8.461569786071777, 5.0, 20.0], [-18.03261375427246, 7.915744781494141, 33.42041778564453], [-30.0, 5.0, 60.0], [-40.0, 5.0, 80.0]]"
 			},
-			"mesh":0,
-			"name":"NormalMapTest"
-		}
-	],
-	"materials":[
+			"name":"CameraPath"
+		},
 		{
-			"doubleSided":true,
-			"name":"RockyDirt",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicFactor":0,
-				"roughnessFactor":0.75
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"\u5e73\u9762",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2
-					},
-					"indices":3,
-					"material":0
+			"extras":{
+				"cg2":{
+					"is_turret":1,
+					"prefab":"drone"
 				}
+			},
+			"name":"Enemy_drone",
+			"translation":[
+				-10.806653022766113,
+				6.008376121520996,
+				35.175331115722656
 			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"RockyDirt_NormalMap",
-			"uri":"RockyDirt_NormalMap.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"RockyDirt_BaseColor",
-			"uri":"RockyDirt_BaseColor.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":4,
-			"max":[
-				30,
-				0,
-				30
-			],
-			"min":[
-				-30,
-				0,
-				-30
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":4,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":4,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5123,
-			"count":6,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":48,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":48,
-			"byteOffset":48,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":32,
-			"byteOffset":96,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":12,
-			"byteOffset":128,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":140,
-			"uri":"StagePlay_layout.bin"
 		}
 	]
 }

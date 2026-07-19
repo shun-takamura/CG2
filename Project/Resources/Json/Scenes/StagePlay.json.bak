@@ -2,6 +2,30 @@
   "scene": "StagePlayScene",
   "objects": [
     {
+      "type": "Object3D",
+      "name": "NormalMapTest",
+      "tag": "Terrain",
+      "dir": "Resources/Models/NormalMapTest",
+      "file": "NormalMapTest.mesh",
+      "transform": {
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotate": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "translate": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
       "type": "Spline",
       "name": "EnemyPath_01",
       "tag": "EnemyPathSpline",
@@ -30,6 +54,38 @@
           60.24365234375,
           28.258235931396484,
           101.43388366699219
+        ]
+      ]
+    },
+    {
+      "type": "Spline",
+      "name": "CameraPath",
+      "tag": "CameraPathSpline",
+      "points": [
+        [
+          -0.0,
+          5.0,
+          -0.0
+        ],
+        [
+          8.461569786071777,
+          5.0,
+          20.0
+        ],
+        [
+          18.03261375427246,
+          7.915744781494141,
+          33.42041778564453
+        ],
+        [
+          30.0,
+          5.0,
+          60.0
+        ],
+        [
+          40.0,
+          5.0,
+          80.0
         ]
       ]
     }

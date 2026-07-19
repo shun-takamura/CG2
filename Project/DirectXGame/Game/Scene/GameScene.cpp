@@ -3,6 +3,7 @@
 #include "Enemy/EnemyController.h"
 #include "Enemy/EnemyContext.h"
 #include "Effect/EffectManager.h"
+#include "Camera.h"          // 視錐台の構築に ViewProjection が要る
 #include "Object3DInstance.h"
 #include "AnimatedObject3DInstance.h"
 // 保存/読込で全コンテナを触るため、deferredDeletes_ への退避に完全型が要る
@@ -349,6 +350,15 @@ void GameScene::UpdateMovingEnemies(float deltaTime) {
 }
 
 void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float stageTimeSec) {
+	// 視錐台は毎フレーム1回だけ構築して全コントローラで使い回す（敵ごとに作り直さない）。
+	// 将来フラスタムカリングを入れる時も「1回構築→多数判定」の同じ形になる。
+	Frustum viewFrustum{};
+	bool hasFrustum = false;
+	if (Camera* cam = GetCamera()) {
+		viewFrustum = Frustum::FromViewProjection(cam->GetViewProjectionMatrix());
+		hasFrustum = true;
+	}
+
 	for (auto& ctrl : enemyControllers_) {
 		if (!ctrl || !ctrl->entity_) continue;
 
@@ -369,6 +379,8 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		ctx.hoverOffset         = ctrl->hoverOffset_;
 		ctx.hoverApproachSpeed  = ctrl->hoverApproachSpeed_;
 		ctx.hoverHoldDuration   = ctrl->hoverHoldDuration_;
+		ctx.viewFrustum         = viewFrustum;
+		ctx.hasViewFrustum      = hasFrustum;
 
 		ctrl->Update(deltaTime, ctx);
 

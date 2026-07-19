@@ -63,7 +63,9 @@ public:
 			holdElapsed_ += dt;
 
 			// 射撃（ShootAtPlayerCommand と同様に shoot_interval_sec [秒] 周期）
-			if (ctx.player && ctx.shootIntervalSec > 0.0f) {
+			// 停止位置はカメラ相対なので基本は画面内だが、hoverOffset を大きく取ると
+			// 画面外に居座ることがあるので同じゲートを通す。
+			if (ctx.player && ctx.shootIntervalSec > 0.0f && ctx.CanAttackFrom(*pos)) {
 				const float secSinceSpawn = ctx.stageTimeSec - ctx.triggerSec;
 				if (secSinceSpawn >= 0.0f) {
 					const int shotIdx = static_cast<int>(secSinceSpawn / ctx.shootIntervalSec);

@@ -81,6 +81,52 @@ void RailStagePart::RebindCameraPath() {
 	if (railCamera_) railCamera_->SetCameraPath(cameraPath_);
 }
 
+void RailStagePart::MarkWaveFileSynced() {
+	std::error_code ec;
+	auto t = std::filesystem::last_write_time(wavePath_, ec);
+	if (ec) return;
+	waveLastWriteTime_ = t;
+	waveWatchInitialized_ = true;
+}
+
+void RailStagePart::RefreshWaveIfChanged() {
+	if (!autoReloadWave_) return;
+
+	std::error_code ec;
+	auto t = std::filesystem::last_write_time(wavePath_, ec);
+	if (ec) return;  // ファイルがまだ無い等
+
+	if (!waveWatchInitialized_) {
+		waveLastWriteTime_ = t;
+		waveWatchInitialized_ = true;
+		return;
+	}
+	if (t == waveLastWriteTime_) return;
+
+	// 読み込みの成否に関わらず記録を進める（失敗時に毎フレ再試行しない）。
+	// 書き込み途中の JSON を掴んだ場合は false が返るだけで currentWave_ は壊れない。
+	// 書き込み完了で時刻が再び動くので、次のフレームで拾い直せる。
+	waveLastWriteTime_ = t;
+	ReloadWaveNow();
+}
+
+void RailStagePart::ReloadWaveNow() {
+	WaveDef loaded;
+	if (!WaveDefIO::LoadFromFile(wavePath_, loaded)) return;
+	currentWave_ = std::move(loaded);
+
+	// 配置を確認したいので撃破済みの記録は捨てて全部出し直す。
+	// （Seek が時刻からスポーン/退避フラグを再計算するので、ここでは初期化だけ）
+	spawnFired_.assign(currentWave_.entries.size(), false);
+	retreatFired_.assign(currentWave_.entries.size(), false);
+	killAtT_.assign(currentWave_.entries.size(), -1.0f);
+
+	// 現在時刻で組み直す（既存の敵を掃除し、今いるべき敵を新しい定義で復元）
+	Seek(GetStageSeconds());
+	MarkWaveFileSynced();  // 読み直した内容が最新＝直後に再検出しない
+	LogBuffer::Instance().Add("Wave reloaded: " + wavePath_, LogBuffer::Level::Info);
+}
+
 bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, float seekMaxSec) {
 	(void)actions;
 	if (!host_) return false;
@@ -151,6 +197,10 @@ bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, 
 
 void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 	if (!host_) return;
+
+	// Blender から敵配置を Export したらその場で反映する（変化時だけ走るので軽い）
+	RefreshWaveIfChanged();
+
 	const bool gameFrozen = worldDt <= 0.0001f;
 
 	if (!gameFrozen) {
@@ -625,6 +675,7 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 #ifdef _DEBUG
 void RailStagePart::SaveWaveToDisk() {
 	if (WaveDefIO::SaveToFile(wavePath_, currentWave_)) {
+		MarkWaveFileSynced();  // 自分の保存で再読込を誘発しない（反響防止）
 		LogBuffer::Instance().Add("Wave saved: " + wavePath_, LogBuffer::Level::Info);
 	} else {
 		LogBuffer::Instance().Add("Wave save FAILED: " + wavePath_, LogBuffer::Level::Warning);
@@ -647,6 +698,17 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 
 	ImGui::Checkbox("Wave Edit Mode", &waveEditMode_);
 	ImGui::TextDisabled("ON中: ビューポートへプレハブをドロップ＝現在tでエントリ追加");
+
+	ImGui::Checkbox("Auto Reload Wave", &autoReloadWave_);
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Wave JSON が書き換わったら読み直して現在時刻で組み直す\n"
+		                  "（Blender から敵配置を Export したら再起動なしで反映される）\n"
+		                  "※読み直すと撃破済みの敵も出し直される");
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Reload Wave")) {
+		ReloadWaveNow();  // 監視OFFでも手動で読み直せる
+	}
 	ImGui::DragFloat("Drop Depth (前方)", &waveDropDepth_, 0.5f, 1.0f, 300.0f, "%.1f");
 
 	// エントリの時間系は全て秒(s)。レールカメラは進行度 t なので、UI 上のレール時刻だけ
