@@ -103,6 +103,27 @@
         -0.2607339918613434,
         29.387866973876953
       ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "drone",
+      "trigger_sec": 5.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 5.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          10.806653022766113,
+          6.008376121520996,
+          35.175331115722656
+        ]
+      ]
     }
   ]
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "Vector3.h"
+#include "Frustum.h"
 
 class IImGuiEditable;
 class GameScene;
@@ -21,6 +22,14 @@ struct EnemyContext {
 	std::string     childPrefab;            // 運び屋が生成する子プレハブ名
 	std::string     childSplineId;          // 子スポーン先スプライン名
 
+	// 画面内判定用の視錐台。毎フレーム1回だけ構築して全コントローラで使い回す。
+	// 画面外の敵に撃たせないためのゲートに使う（ボスは対象外＝BossAttackCommand は見ない）。
+	// 将来のフラスタムカリングも同じ Frustum を流用できる。
+	Frustum         viewFrustum;
+	bool            hasViewFrustum = false;  // カメラが無い等で作れなかった場合は判定しない
+	// 画面際で急に撃たなくなるのを防ぐ許容（敵の見かけ半径として扱う）
+	float           onScreenMargin = 2.0f;
+
 	// ScreenHover（画面内停止型）用
 	Vector3         hoverOffset{ 0.0f, 0.0f, 30.0f }; // カメラローカルの停止オフセット（右/上/前）
 	float           hoverApproachSpeed = 30.0f;       // 飛来速度 [units/sec]
@@ -34,4 +43,14 @@ struct EnemyContext {
 	// 突進など「攻撃判定を持つ接触」中のみ true（ただの移動接触はダメージ対象外にするため）。
 	// EnemyController が毎フレーム false にリセットし、コマンドがそのフレームだけ true を立てる。
 	bool    contactDamageActive = false;
+
+	/// <summary>
+	/// この位置の敵が攻撃してよいか（画面内にいるか）。
+	/// 画面外から撃たれると理不尽なので、ボス以外の攻撃はこれを通す。
+	/// 視錐台が作れていない場合は true（＝従来どおり撃つ）にして安全側に倒す。
+	/// </summary>
+	bool CanAttackFrom(const Vector3& worldPos) const {
+		if (!hasViewFrustum) return true;
+		return viewFrustum.IntersectsSphere(worldPos, onScreenMargin);
+	}
 };

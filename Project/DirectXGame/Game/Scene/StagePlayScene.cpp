@@ -3842,6 +3842,9 @@ bool StagePlayScene::ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag ta
 	if (tag == EntityTag::Player) return true;
 	// 弾・攻撃判定は一時オブジェクト
 	if (tag == EntityTag::PlayerBullet || tag == EntityTag::EnemyAttack) return true;
+	// 敵・ボスは Wave JSON からスポーンするランタイム実体。**シーン JSON には絶対に保存しない**
+	// （プレイ中に自動保存が走ると、湧いた敵がマップオブジェクトとして焼き込まれてしまうため）。
+	if (tag == EntityTag::Enemy || tag == EntityTag::Boss) return true;
 	// ランタイム UI（HP バー / 必殺ゲージ）は毎回建て直すので保存しない
 	if (entity == hpBarBackground_ || entity == hpBarForeground_ ||
 		entity == gaugeBarBackground_ || entity == gaugeBarForeground_) return true;
@@ -3849,8 +3852,9 @@ bool StagePlayScene::ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag ta
 }
 
 bool StagePlayScene::ShouldSkipOnLoad(const SceneEntityDesc& desc) const {
-	// 過去の汚れた save 対策：一時オブジェクトが混ざっていても復元しない
+	// 過去の汚れた save 対策：一時オブジェクト・ランタイム敵が混ざっていても復元しない
 	if (desc.tag == EntityTag::PlayerBullet || desc.tag == EntityTag::EnemyAttack) return true;
+	if (desc.tag == EntityTag::Enemy || desc.tag == EntityTag::Boss) return true;
 	if (desc.kind == SceneEntityDesc::Kind::Sprite &&
 		(desc.name == "HPBarBackground" || desc.name == "HPBarForeground" ||
 		 desc.name == "SpecialGaugeBackground" || desc.name == "SpecialGaugeForeground")) {

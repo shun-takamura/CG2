@@ -21,6 +21,12 @@ public:
 		const int shotIdx = static_cast<int>(secSinceSpawn / ctx.shootIntervalSec);
 		if (shotIdx > lastShotIdx_) {
 			lastShotIdx_ = shotIdx;
+			// 画面外から撃たれると理不尽なので、画面内にいる時だけ発射する。
+			// 発射をスキップしても shotIdx は進めるので、画面内に入った瞬間に
+			// 溜まっていた分を連射することはない。
+			if (const Vector3* pos = entity->GetEditableTranslate()) {
+				if (!ctx.CanAttackFrom(*pos)) return;
+			}
 			Fire(entity, ctx);
 		}
 	}

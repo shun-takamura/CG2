@@ -89,6 +89,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\RenderTexture.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Math\MathUtility.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Frustum.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Scene\Scene.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Easing.cpp" />
@@ -233,6 +234,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxVertexData.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Skybox\SkyboxMaterial.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Interpolator.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Frustum.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\QuaternionTransform.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\CameraCapture.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\CameraPreviewSprite.h" />

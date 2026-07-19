@@ -3,6 +3,7 @@
 #include "Wave/WaveDef.h"
 #include "TimeGroup.h"
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -85,6 +86,19 @@ public:
 	/// </summary>
 	void RebindCameraPath();
 
+	/// <summary>
+	/// Wave JSON が書き換わっていたら読み直して、現在時刻の状態に組み直す。
+	/// Blender から敵配置を Export した時に、再起動せずその場で反映するためのもの。
+	/// 自前で保存した直後は MarkWaveFileSynced() で記録を進め、自己トリガを防ぐ。
+	/// </summary>
+	void RefreshWaveIfChanged();
+
+	/// <summary>現在の Wave ファイルの更新時刻を「既知」として記録する（自己トリガ抑止）。</summary>
+	void MarkWaveFileSynced();
+
+	/// <summary>Wave JSON を今すぐ読み直して現在時刻で組み直す（監視OFFでも使える手動リロード）。</summary>
+	void ReloadWaveNow();
+
 	// true を返した = SeekMax 到達。呼び出し側はこのフレーム内で phase_ を Landing に進めること。
 	// （このフレームは内部で railCamera_->Update() を呼んでいない＝カメラは直前ポーズで凍結）
 	bool UpdateCamera(class InputActionMap* actions, float scaledDt, float seekMaxSec);
@@ -127,6 +141,10 @@ private:
 
 #ifdef _DEBUG
 	bool waveEditMode_ = false; int waveSelectedEntry_ = -1; float waveDropDepth_ = 30.0f;
+	// Wave JSON のホットリロード監視（Blender の Export をその場で反映する）
+	std::filesystem::file_time_type waveLastWriteTime_{};
+	bool waveWatchInitialized_ = false;
+	bool autoReloadWave_ = true;
 	void SaveWaveToDisk();
 	void RebuildWaveRuntimeState();
 	void DrawWaveEditorUI(bool& changed);
