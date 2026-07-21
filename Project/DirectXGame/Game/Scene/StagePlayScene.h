@@ -403,6 +403,12 @@ private:
 	float   jdDodgeReturnDuration_ = 0.35f;    // 戻し時間
 	Vector2 jdDodgeReturnFromOffset_{ 0.0f, 0.0f }; // 戻し開始時の playerInputOffset_（押し戻し補間用）
 
+	// ボス戦：プレイヤーの向き。通常時は移動入力方向、ジャスト回避中は攻撃元（ボス）方向へ向く。
+	// STG はレティクル追従のまま（この値は使わない）。yaw のみ（pitch=0＝地上を走る通常キャラ）。
+	float bossFacingYaw_ = 0.0f;            // 現在の向き（rad）。無入力時は保持
+	bool  bossFacingInit_ = false;          // 初回サンプリング済みフラグ
+	float bossFacingTurnSmoothTime_ = 0.10f; // 旋回の指数減衰時定数（小さいほど機敏）
+
 	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
 	void ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos);
 	void UpdateJustDodgeCounterAction(float dt);

@@ -75,19 +75,26 @@ void BossStagePart::Update(float worldDt) {
 	host_->SweepDeadEntities();
 }
 
+void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const {
+	// カメラ前方を XZ 平面へ射影して移動基底を作る（forward=奥, right=右）。
+	Vector3 fwd{ 0.0f, 0.0f, 1.0f };
+	if (camera_) fwd = camera_->GetForward();
+	fwd.y = 0.0f;
+	float flen = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
+	fwd.x /= flen; fwd.z /= flen;
+	outForward = fwd;
+	// right = cross(up, forward), up=(0,1,0)
+	outRight = { fwd.z, 0.0f, -fwd.x };
+}
+
 void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt, const Vector2& moveDelta) {
 	if (!player || !camera_) return;
 	Vector3* tp = player->GetEditableTranslate();
 	if (!tp) return;
 
-	// カメラ前方を XZ 平面へ射影して移動基底を作る（forward=奥, right=右）。
-	Vector3 fwd = camera_->GetForward();
-	fwd.y = 0.0f;
-	float flen = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
-	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
-	fwd.x /= flen; fwd.z /= flen;
-	// right = cross(up, forward), up=(0,1,0)
-	const Vector3 right{ fwd.z, 0.0f, -fwd.x };
+	Vector3 fwd, right;
+	ComputeGroundBasis(fwd, right);
 
 	// 目標速度（ワールドXZ）＝入力を基底で合成 × 最大速度。指数減衰で慣性。
 	const float tvx = (right.x * moveDelta.x + fwd.x * moveDelta.y) * playerMoveSpeed_;
