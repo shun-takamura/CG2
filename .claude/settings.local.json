@@ -191,7 +191,12 @@
       "Bash(cp __TRACKED_VAR__/stage1_orig5.json Resources/Json/Waves/stage1.json)",
       "Bash(awk 'NR>=2960 && NR<=3266 && /^void StagePlayScene::|^[A-Za-z].*StagePlayScene::/ {print NR\": \"$0}' Project/DirectXGame/Game/Scene/StagePlayScene.cpp)",
       "Bash(awk -F: '$1<=3245')",
-      "Bash(awk -F: '$1>=2995 && $1<=3266')"
+      "Bash(awk -F: '$1>=2995 && $1<=3266')",
+      "Bash(\"/c/Program Files/Blender Foundation/Blender 4.4/blender.exe\" --background --python \"/c/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/26b9e2b0-130b-4314-a6dc-eaa3ecdfa5c7/scratchpad/blender_reduce_op_repro.py\")",
+      "Bash(\"/c/Program Files/Blender Foundation/Blender 4.4/blender.exe\" --background --python \"/c/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/26b9e2b0-130b-4314-a6dc-eaa3ecdfa5c7/scratchpad/blender_union_check.py\")",
+      "Bash(py tools/Python/cook_assets.py)",
+      "Bash(py -c ' *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

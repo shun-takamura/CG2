@@ -46,6 +46,9 @@ public:
 	// カメラ前方をXZ平面へ射影した地上基底（forward=奥, right=右）。地上移動・プレイヤー向き・
 	// ジャスト回避分身リングの配置など、地面と平行な方向計算をすべてここに一本化する。
 	void ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const;
+	// STG の回避ダッシュ相当：移動入力方向へ地上速度の初速（dodgeDashSpeed_）を上乗せする。
+	// 入力なし（moveDelta≈0）はその場回避。ボス戦の回避は playerVelocity_ ではなくこちらへ入れる。
+	void ApplyDashImpulse(const Vector2& moveDelta);
 	// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力（右スティック -1..1／マウス相対カウント）を受け、
 	// 感度・反転は内部で適用する。reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
 	void UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy);
@@ -76,6 +79,7 @@ private:
 	float   playerMoveSpeed_ = 12.0f;
 	float   playerSmoothTime_ = 0.12f;
 	float   playerStartBack_  = 6.0f;      // ボス手前（-Z側）にこの距離だけ離して開始
+	float   dodgeDashSpeed_   = 40.0f;     // 回避ダッシュの初速（units/sec。groundVelocity_ に加算し慣性で減衰）
 
 	// ボス配置
 	float   bossHeight_  = 2.0f;   // ボス中心の接地高さ（≒コライダー半径）

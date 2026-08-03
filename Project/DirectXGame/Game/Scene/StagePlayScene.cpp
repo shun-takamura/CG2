@@ -1203,10 +1203,10 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		AddHighlight(player_); // ジャスト回避演出のグレースケール除外対象に戻す
 	}
 
-	// ボス戦：今回は「選択UIを閉じるだけ」に留める（配置＝分身リング表示までが今回のスコープ）。
-	// 各派生の実効果（近接ワールド詰め寄り／追加回避ダッシュ）は camera-local 前提のため
-	// 地上文脈向けの実装は次イテレーション。ここで switch 本体を実行すると誰も
-	// EndJustDodgeCounterAction を呼ばずワールド停止で固まるため、方向だけ記録して即終了する。
+	// ボス戦（地上文脈）の派生。今回は Left（回復）と Down（追加回避）を実装する。
+	// Up/Right（近接詰め寄り）は camera-local 前提のワールド補間が必要なため次イテレーション＝UIを閉じるだけ。
+	// いずれも switch 本体を進行させず（誰も EndJustDodgeCounterAction を呼ばずワールド停止で固まるのを防ぐ）、
+	// 実効果をその場で適用して即 EndJustDodgeCounterAction する。
 	if (phase_ == Phase::Boss) {
 		jdChosen_               = dir;
 		jdSelecting_            = false;
@@ -1215,12 +1215,35 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		jdActionPhase_          = JdActionPhase::None;
 		jdActionPhaseTimer_     = 0.0f;
 		jdMeleeCameraActive_    = false;
-		const char* bname =
-			dir == CounterDir::Up    ? "Up(近接強)" :
-			dir == CounterDir::Right ? "Right(近接弱)" :
-			dir == CounterDir::Down  ? "Down(追加回避)" : "Left(回復)";
-		LogBuffer::Instance().Add(
-			std::string("JustDodge derive (Boss, UI only): ") + bname, LogBuffer::Level::Info);
+
+		switch (dir) {
+			case CounterDir::Left: {
+				// 回復（小回復・無制限）。HP 操作は座標系に依存しないので STG と同一。
+				if (player_) Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
+				LogBuffer::Instance().Add("JustDodge derive (Boss): Left(回復)", LogBuffer::Level::Info);
+			} break;
+			case CounterDir::Down: {
+				// 追加回避：地上ダッシュ＋無敵窓＋射撃禁止＋必殺技ゲージ。
+				// ダッシュ初速は groundVelocity_ に入り、justDodgeActive_ 中は移動入力がゼロ化される
+				// ため、以降の指数減衰でダッシュだけが乗って自然停止する（通常回避と同じ手触り）。
+				dodgeActive_          = true;
+				dodgeTimer_           = 0.0f;
+				dodgeCooldownTimer_   = dodgeCooldown_;
+				dodgeActionLockTimer_ = dodgeActionLock_;
+				if (bossStage_) bossStage_->ApplyDashImpulse(moveDelta);
+				shootLockoutTimer_ = (std::max)(shootLockoutTimer_, dodgeIFrameDuration_);
+				specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + dodgeSpecialGaugeGain_);
+				LogBuffer::Instance().Add("JustDodge derive (Boss): Down(追加回避)", LogBuffer::Level::Info);
+			} break;
+			case CounterDir::Up:
+			case CounterDir::Right:
+			default: {
+				// 近接派生は地上文脈向けの実装が次イテレーション。今はUIを閉じるだけ。
+				const char* bname = (dir == CounterDir::Up) ? "Up(近接強)" : "Right(近接弱)";
+				LogBuffer::Instance().Add(
+					std::string("JustDodge derive (Boss, UI only): ") + bname, LogBuffer::Level::Info);
+			} break;
+		}
 		EndJustDodgeCounterAction();
 		return;
 	}
@@ -1538,12 +1561,18 @@ void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDel
 		dodgeCooldownTimer_   = dodgeCooldown_;
 		dodgeActionLockTimer_ = dodgeActionLock_;
 
-		// 移動入力方向へダッシュ（入力なしはその場）。playerVelocity_ に初速インパルスを足すだけなので
-		// 以降の移動クリップ（isInsideClip）がそのまま効いて画面外には出ない。
-		const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
-		if (mlen > 1e-3f) {
-			playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
-			playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+		// 移動入力方向へダッシュ（入力なしはその場）。
+		// ボス戦は地上速度（BossStagePart::groundVelocity_）へダッシュ初速を入れる
+		// ＝camera-local の playerVelocity_ は地上移動に反映されないため。
+		// STG は playerVelocity_ に初速インパルスを足す（以降の移動クリップで画面外に出ない）。
+		if (phase_ == Phase::Boss && bossStage_) {
+			bossStage_->ApplyDashImpulse(moveDelta);
+		} else {
+			const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+			if (mlen > 1e-3f) {
+				playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
+				playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+			}
 		}
 	}
 }

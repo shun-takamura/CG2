@@ -88,6 +88,19 @@ void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) c
 	outRight = { fwd.z, 0.0f, -fwd.x };
 }
 
+void BossStagePart::ApplyDashImpulse(const Vector2& moveDelta) {
+	// 移動入力方向へ地上速度の初速を上乗せ（入力なしはその場）。以降は UpdatePlayerGroundMovement の
+	// 指数減衰で自然に walk 速度へ落ちる＝STG のダッシュ→減速と同じ手触りになる。
+	const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+	if (mlen < 1e-3f) return;
+	Vector3 fwd, right;
+	ComputeGroundBasis(fwd, right);
+	const float nx = moveDelta.x / mlen;
+	const float ny = moveDelta.y / mlen;
+	groundVelocity_.x += (right.x * nx + fwd.x * ny) * dodgeDashSpeed_;
+	groundVelocity_.y += (right.z * nx + fwd.z * ny) * dodgeDashSpeed_;
+}
+
 void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt, const Vector2& moveDelta) {
 	if (!player || !camera_) return;
 	Vector3* tp = player->GetEditableTranslate();
@@ -232,6 +245,8 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		ImGui::DragFloat("Player Move Speed", &playerMoveSpeed_, 0.2f, 0.0f, 60.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Player Smooth (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Dodge Dash Speed", &dodgeDashSpeed_, 0.5f, 0.0f, 120.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::SeparatorText("Camera");
