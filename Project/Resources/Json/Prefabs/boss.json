@@ -33,7 +33,7 @@
     "capsuleHeight": 2.0
   },
   "hp": {
-    "maxHP": 2000
+    "maxHP": 1500
   },
   "effects": {
     "death": "",

@@ -126,6 +126,9 @@
     <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\BossRetryState.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -231,6 +234,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageSelectScene.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -244,6 +250,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\GameOverScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp">
@@ -620,6 +629,9 @@
     <ClInclude Include="DirectXGame\Game\Score\ScoreManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\BossRetryState.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\GameEngine\Graphics\Particle\GPUParticleManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -773,6 +785,9 @@
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageSelectScene.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -786,6 +801,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\GameOverScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h">

@@ -220,6 +220,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 				killAtT_[waveEntryIndex] = currentT;
 				// 撃破で加点（プレハブ側で設定された scoreValue を使う）
 				ScoreManager::GetInstance()->AddScore(Gameplay::Of(entity).GetScoreValue());
+				ScoreManager::GetInstance()->AddKill();
 			}
 		});
 

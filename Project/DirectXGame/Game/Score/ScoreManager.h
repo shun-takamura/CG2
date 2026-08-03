@@ -8,9 +8,12 @@ class ScoreManager {
 public:
 	static ScoreManager* GetInstance();
 
-	void Reset() { score_ = 0; }
+	void Reset() { score_ = 0; killCount_ = 0; }
 	void AddScore(int amount) { score_ += amount; if (score_ < 0) score_ = 0; }
 	int  GetScore() const { return score_; }
+
+	void AddKill(int count = 1) { killCount_ += count; }
+	int  GetKillCount() const { return killCount_; }
 
 	// ImGui タブから呼ぶ
 	void OnImGui();
@@ -22,4 +25,5 @@ private:
 	ScoreManager& operator=(const ScoreManager&) = delete;
 
 	int score_ = 0;
+	int killCount_ = 0;
 };

@@ -134,11 +134,13 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Spline\RailAimController.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StageSelectScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\RailStagePart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneSerializer.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\BossStagePart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOverScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Config\KeyConfig.cpp" />
     <ClCompile Include="DirectXGame\Game\Components\CollisionManager.cpp" />
@@ -167,6 +169,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Game.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\BossRetryState.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectXGame\Game\Wave\WaveDef.h" />
@@ -176,11 +179,13 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Spline\RailAimController.h" />
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StageSelectScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\RailStagePart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneSerializer.h" />
     <ClInclude Include="DirectXGame\Game\Scene\BossStagePart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOverScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
     <ClInclude Include="DirectXGame\Game\Config\GameActions.h" />
     <ClInclude Include="DirectXGame\Game\Components\EntityTag.h" />
@@ -234,6 +239,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\ImGUIManager\LogWindow.h" />
     <ClInclude Include="DirectXGame\Game\Game.h" />
     <ClInclude Include="DirectXGame\Game\Score\ScoreManager.h" />
+    <ClInclude Include="DirectXGame\Game\Score\BossRetryState.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\PostEffect\Common\CopyImage.PS.hlsl">

@@ -66,7 +66,10 @@ void BossStagePart::Update(float worldDt) {
 	if (!bossSpawned_ || !host_) return;
 
 	// 撃破検出：HP が尽きたら参照を切る（この後の SweepDeadEntities が実体を破棄＋death エフェクト）。
+	// 参照を切る前にスコア値をキャプチャしておく（切った後は Gameplay::Of(boss_) が参照できない）。
 	if (boss_ && Gameplay::Of(boss_).GetHP().IsDead()) {
+		bossDefeatedScoreValue_ = Gameplay::Of(boss_).GetScoreValue();
+		bossJustDefeated_ = true;
 		boss_ = nullptr;
 	}
 
@@ -226,6 +229,12 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 	camera_->SetTranslate(eye);
 	camera_->SetRotate({ camPitch_, camYaw_, 0.0f });
 	camera_->Update();
+}
+
+bool BossStagePart::ConsumeBossDefeated() {
+	if (!bossJustDefeated_) return false;
+	bossJustDefeated_ = false;
+	return true;
 }
 
 void BossStagePart::Reset() {

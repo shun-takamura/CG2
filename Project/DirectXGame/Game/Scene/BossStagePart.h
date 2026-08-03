@@ -63,6 +63,11 @@ public:
 	bool IsLockOn() const { return camMode_ == BossCamMode::LockOn; }
 	void OnImGuiTuning(bool& changed);
 
+	// 撃破イベントを一度だけ通知する（検出直後の1回だけ true。呼ぶたびに消費される）。
+	bool ConsumeBossDefeated();
+	// 直近の撃破で得たスコア値（撃破検出時点の Gameplay ScoreValue をキャプチャ）。
+	int GetLastBossScoreValue() const { return bossDefeatedScoreValue_; }
+
 private:
 	IBossStageHost* host_   = nullptr;
 	Camera*         camera_ = nullptr;
@@ -70,6 +75,10 @@ private:
 	IImGuiEditable* boss_   = nullptr; // スポーンしたボス本体（撃破で null 化）
 	IImGuiEditable* ground_ = nullptr;
 	bool  bossSpawned_ = false;
+
+	// 撃破イベント（ConsumeBossDefeated で一度だけ読み出される）
+	bool bossJustDefeated_ = false;
+	int  bossDefeatedScoreValue_ = 0;
 
 	// アリーナ / プレイヤー地上移動
 	Vector3 arenaCenter_{ 0.0f, 0.0f, 0.0f };
