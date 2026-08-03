@@ -199,6 +199,7 @@ void StagePlayScene::LoadTuningFromJson() {
 		jdMeleeReturnDuration_   = static_cast<float>(jd["meleeReturnDuration"].AsDouble(jdMeleeReturnDuration_));
 		jdMeleeApproachDist_     = static_cast<float>(jd["meleeApproachDist"].AsDouble(jdMeleeApproachDist_));
 		jdDodgeReturnDuration_   = static_cast<float>(jd["dodgeReturnDuration"].AsDouble(jdDodgeReturnDuration_));
+		bossFacingTurnSmoothTime_ = static_cast<float>(jd["bossFacingTurnSmooth"].AsDouble(bossFacingTurnSmoothTime_));
 		{
 			const JsonValue& em = jd["dodgeExpandedMargin"];
 			if (em.IsArray() && em.Size() >= 2) {
@@ -660,6 +661,7 @@ void StagePlayScene::SaveTuningToJson() const {
 	jdObj["meleeReturnDuration"]   = static_cast<double>(jdMeleeReturnDuration_);
 	jdObj["meleeApproachDist"]     = static_cast<double>(jdMeleeApproachDist_);
 	jdObj["dodgeReturnDuration"]   = static_cast<double>(jdDodgeReturnDuration_);
+	jdObj["bossFacingTurnSmooth"]  = static_cast<double>(bossFacingTurnSmoothTime_);
 	{
 		JsonValue arr = JsonValue::MakeArray();
 		arr.Push(JsonValue(static_cast<double>(jdDodgeExpandedMargin_.x)));
@@ -1024,15 +1026,13 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 	jdChosen_               = CounterDir::None;
 	justDodgeCounterActive_ = false; // 派生が確定するまでは false（無入力なら受付期限で自然終了）
 	jdMerging_              = false;
-	// 分身カウンター派生（近接詰め寄り/追加回避）は camera-local 配置前提のレール文脈専用。
-	// ボス戦（地上移動）では未対応のためプレビューを出さず、ジャスト回避の核（スロー＋スコア）のみ与える。
-	// （これを出すと近接派生が進行・終了せずワールド停止/グレースケール/カメラが固まる）
-	if (phase_ == Phase::Boss) {
-		jdSelecting_ = false;
-	} else {
-		jdSelecting_ = true;
-		SpawnJustDodgeClones();
-	}
+	// 分身プレビューは STG／ボス戦どちらでも出す。
+	// ボス戦では配置基底を地上（XZ射影）に切り替え（UpdateJustDodgeClones 内で phase 分岐）、
+	// 各派生の「実効果」（近接詰め寄り／追加回避ダッシュ）は次イテレーションで実装する。
+	// 現状ボス戦での選択確定は TriggerCloneCounterAction 側で「UIを閉じるだけ」に留める
+	// （実効果を進行させると誰も EndJustDodgeCounterAction を呼ばずワールド停止で固まるため）。
+	jdSelecting_ = true;
+	SpawnJustDodgeClones();
 }
 
 void StagePlayScene::ApplyJustDodgeCamera(const Vector3& playerWorldPos)
@@ -1201,6 +1201,51 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 	if (player_) {
 		player_->SetVisible(true);
 		AddHighlight(player_); // ジャスト回避演出のグレースケール除外対象に戻す
+	}
+
+	// ボス戦（地上文脈）の派生。今回は Left（回復）と Down（追加回避）を実装する。
+	// Up/Right（近接詰め寄り）は camera-local 前提のワールド補間が必要なため次イテレーション＝UIを閉じるだけ。
+	// いずれも switch 本体を進行させず（誰も EndJustDodgeCounterAction を呼ばずワールド停止で固まるのを防ぐ）、
+	// 実効果をその場で適用して即 EndJustDodgeCounterAction する。
+	if (phase_ == Phase::Boss) {
+		jdChosen_               = dir;
+		jdSelecting_            = false;
+		jdMerging_              = false;
+		justDodgeCounterActive_ = false;
+		jdActionPhase_          = JdActionPhase::None;
+		jdActionPhaseTimer_     = 0.0f;
+		jdMeleeCameraActive_    = false;
+
+		switch (dir) {
+			case CounterDir::Left: {
+				// 回復（小回復・無制限）。HP 操作は座標系に依存しないので STG と同一。
+				if (player_) Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
+				LogBuffer::Instance().Add("JustDodge derive (Boss): Left(回復)", LogBuffer::Level::Info);
+			} break;
+			case CounterDir::Down: {
+				// 追加回避：地上ダッシュ＋無敵窓＋射撃禁止＋必殺技ゲージ。
+				// ダッシュ初速は groundVelocity_ に入り、justDodgeActive_ 中は移動入力がゼロ化される
+				// ため、以降の指数減衰でダッシュだけが乗って自然停止する（通常回避と同じ手触り）。
+				dodgeActive_          = true;
+				dodgeTimer_           = 0.0f;
+				dodgeCooldownTimer_   = dodgeCooldown_;
+				dodgeActionLockTimer_ = dodgeActionLock_;
+				if (bossStage_) bossStage_->ApplyDashImpulse(moveDelta);
+				shootLockoutTimer_ = (std::max)(shootLockoutTimer_, dodgeIFrameDuration_);
+				specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + dodgeSpecialGaugeGain_);
+				LogBuffer::Instance().Add("JustDodge derive (Boss): Down(追加回避)", LogBuffer::Level::Info);
+			} break;
+			case CounterDir::Up:
+			case CounterDir::Right:
+			default: {
+				// 近接派生は地上文脈向けの実装が次イテレーション。今はUIを閉じるだけ。
+				const char* bname = (dir == CounterDir::Up) ? "Up(近接強)" : "Right(近接弱)";
+				LogBuffer::Instance().Add(
+					std::string("JustDodge derive (Boss, UI only): ") + bname, LogBuffer::Level::Info);
+			} break;
+		}
+		EndJustDodgeCounterAction();
+		return;
 	}
 
 	// 復帰用に「派生開始時の playerInputOffset_」を保存（近接派生の元位置復帰で使う）。
@@ -1448,17 +1493,29 @@ void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector
 		spread = 1.0f - (1.0f - st) * (1.0f - st) * (1.0f - st); // EaseOutCubic 0→1
 	}
 
-	// 分身位置 = 本体位置 ± カメラ右/上 × オフセット × spread（ダッシュ滑り中も本体に追従）
+	// 分身位置 = 本体位置 ± 基底 × オフセット × spread（ダッシュ滑り中も本体に追従）。
+	// STG：カメラ視点平面（right/up）でダイヤモンド配置。
+	// ボス戦：地上（XZ射影）基底で地面と平行なリング配置＝奥=Up/手前=Down/右=Right/左=Left。
+	//         ピッチを振っても傾かず床にめり込まない（ヨーのみ追従）。
 	const Vector3 ppos = player_->GetTranslate();
-	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
-	const Vector3 right = { rot.m[0][0], rot.m[0][1], rot.m[0][2] };
-	const Vector3 up    = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
+	Vector3 axisH; // Up/Down に使う軸（STG=カメラ上, ボス=地上forward）
+	Vector3 axisV; // Right/Left に使う軸（STG=カメラ右, ボス=地上right）
+	if (phase_ == Phase::Boss && bossStage_) {
+		Vector3 gfwd, gright;
+		bossStage_->ComputeGroundBasis(gfwd, gright);
+		axisH = gfwd;
+		axisV = gright;
+	} else {
+		const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+		axisV = { rot.m[0][0], rot.m[0][1], rot.m[0][2] }; // カメラ右
+		axisH = { rot.m[1][0], rot.m[1][1], rot.m[1][2] }; // カメラ上
+	}
 	const float o = jdCloneOffset_ * spread;
 	const Vector3 dirOff[4] = {
-		{  up.x * o,    up.y * o,    up.z * o    }, // Up
-		{  right.x * o, right.y * o, right.z * o }, // Right
-		{ -up.x * o,   -up.y * o,   -up.z * o    }, // Down
-		{ -right.x * o,-right.y * o,-right.z * o }, // Left
+		{  axisH.x * o,  axisH.y * o,  axisH.z * o }, // Up   （奥／カメラ上）
+		{  axisV.x * o,  axisV.y * o,  axisV.z * o }, // Right（右）
+		{ -axisH.x * o, -axisH.y * o, -axisH.z * o }, // Down （手前／カメラ下）
+		{ -axisV.x * o, -axisV.y * o, -axisV.z * o }, // Left （左）
 	};
 	for (int i = 0; i < static_cast<int>(jdClones_.size()) && i < 4; ++i) {
 		if (!jdClones_[i]) continue;
@@ -1504,12 +1561,18 @@ void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDel
 		dodgeCooldownTimer_   = dodgeCooldown_;
 		dodgeActionLockTimer_ = dodgeActionLock_;
 
-		// 移動入力方向へダッシュ（入力なしはその場）。playerVelocity_ に初速インパルスを足すだけなので
-		// 以降の移動クリップ（isInsideClip）がそのまま効いて画面外には出ない。
-		const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
-		if (mlen > 1e-3f) {
-			playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
-			playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+		// 移動入力方向へダッシュ（入力なしはその場）。
+		// ボス戦は地上速度（BossStagePart::groundVelocity_）へダッシュ初速を入れる
+		// ＝camera-local の playerVelocity_ は地上移動に反映されないため。
+		// STG は playerVelocity_ に初速インパルスを足す（以降の移動クリップで画面外に出ない）。
+		if (phase_ == Phase::Boss && bossStage_) {
+			bossStage_->ApplyDashImpulse(moveDelta);
+		} else {
+			const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+			if (mlen > 1e-3f) {
+				playerVelocity_.x += (moveDelta.x / mlen) * dodgeImpulse_.x;
+				playerVelocity_.y += (moveDelta.y / mlen) * dodgeImpulse_.y;
+			}
 		}
 	}
 }
@@ -1995,6 +2058,12 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::DragFloat("Boss Facing Turn Smooth (s)", &bossFacingTurnSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("ボス戦のプレイヤー旋回の指数減衰時定数（秒）。\n小さいほど機敏に移動方向/ボス方向を向く。");
+		}
 
 		ImGui::Separator();
 		ImGui::TextDisabled("Reticle Outer Particle");
@@ -2556,6 +2625,7 @@ void StagePlayScene::Update() {
 	if (phase_ != prevPhase_) {
 		if (phase_ == Phase::Boss) {
 			bossBattleActive_ = true;            // 既存スカイボックスクロスフェードを自動発火
+			bossFacingInit_   = false;           // ボス戦開始時に向きを取り直す（初回フレームで再サンプル）
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
 		} else if (prevPhase_ == Phase::Boss) {
 			bossBattleActive_ = false;           // 空を平常時へ戻す
@@ -2616,8 +2686,45 @@ void StagePlayScene::Update() {
 			// ※ダッシュのインパルスは playerVelocity_（camera-local 2D）に入るため地上移動には反映されない
 			//   （縦スライスの割り切り。地上ダッシュは次ステップ）。
 			UpdateDodge(actions, moveDelta, GetScaledDeltaTime(TimeGroup::World));
-			bossStage_->UpdatePlayerGroundMovement(player_, dt, moveDelta);
+			// ジャスト回避スロー受付中は地上の自由移動を禁止（残存速度は慣性で減速し停止）。
+			// STG と同方針。ボス戦では分身カウンター派生が無効＝移動を伴う派生が無いため丸ごとゼロで良い。
+			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : moveDelta;
+			bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
 			const Vector3 bWorldPos = player_->GetTranslate();
+
+			// プレイヤーの向き（yaw のみ）を更新。実際の SetRotate は後段の reticle 向きブロックで適用する。
+			// ・ジャスト回避スロー中：攻撃元（ボス）方向へ向く。
+			// ・通常時：移動入力方向を向く（入力が無ければ直前の向きを保持）。
+			{
+				float targetYaw = bossFacingYaw_;
+				bool  hasTarget  = false;
+				if (justDodgeActive_ && jdCounterTarget_) {
+					if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) {
+						const float dx = tp->x - bWorldPos.x;
+						const float dz = tp->z - bWorldPos.z;
+						if (dx * dx + dz * dz > 1e-6f) { targetYaw = std::atan2(dx, dz); hasTarget = true; }
+					}
+				} else {
+					const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+					if (mlen > 1e-3f) {
+						Vector3 gfwd, gright;
+						bossStage_->ComputeGroundBasis(gfwd, gright);
+						const float wx = gright.x * moveDelta.x + gfwd.x * moveDelta.y;
+						const float wz = gright.z * moveDelta.x + gfwd.z * moveDelta.y;
+						if (wx * wx + wz * wz > 1e-6f) { targetYaw = std::atan2(wx, wz); hasTarget = true; }
+					}
+				}
+				if (!bossFacingInit_) { bossFacingYaw_ = targetYaw; bossFacingInit_ = true; }
+				else if (hasTarget) {
+					float d = targetYaw - bossFacingYaw_;
+					while (d >  3.14159265f) d -= 6.28318531f;
+					while (d < -3.14159265f) d += 6.28318531f;
+					const float a = (bossFacingTurnSmoothTime_ > 1e-4f)
+						? (1.0f - std::exp(-dt / bossFacingTurnSmoothTime_)) : 1.0f;
+					bossFacingYaw_ += d * a;
+				}
+			}
+
 			// 分身プレビュー等の本体追従（ジャスト回避演出用）。
 			UpdateJustDodgeClones(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
 
@@ -2678,6 +2785,12 @@ void StagePlayScene::Update() {
 			moveDelta.x * playerMoveSpeed_.x,
 			moveDelta.y * playerMoveSpeed_.y,
 		};
+		// ジャスト回避スローの受付中は自由移動を禁止する（残存速度は慣性で減速し停止）。
+		// 追加回避（下派生）のダッシュは playerVelocity_ へのインパルス、近接派生（上/右）は
+		// worldPos 直接上書きで別経路のため、ここでの targetVel ゼロ化は影響しない。
+		if (justDodgeActive_) {
+			targetVel = { 0.0f, 0.0f };
+		}
 		float alpha = (playerSmoothTime_ > 1e-4f)
 			? (1.0f - std::exp(-dt / playerSmoothTime_))
 			: 1.0f;
@@ -3218,6 +3331,10 @@ void StagePlayScene::Update() {
 			// 必殺技中はレティクル追従を止め、正面（+Z）でどっしり構える。
 			// （きょろきょろ防止＋発射時に向きが崩れるのを防ぐ。大技を構えて撃つ演出）
 			player_->SetRotate(specialFirmFacing_);
+		} else if (phase_ == Phase::Boss) {
+			// ボス戦：レティクル追従ではなく移動入力方向／ジャスト回避中は攻撃元方向を向く。
+			// yaw は移動ブランチで bossFacingYaw_ に更新済み（pitch/roll は 0＝地上を走る通常キャラ）。
+			player_->SetRotate({ 0.0f, bossFacingYaw_, 0.0f });
 		} else if (horiz > 1e-4f || std::abs(toAim.y) > 1e-4f) {
 			const float yaw = std::atan2(toAim.x, toAim.z);
 			const float pitch = -std::atan2(toAim.y, horiz);
@@ -3552,7 +3669,7 @@ void StagePlayScene::Draw() {
 	// Scene の動的エンティティ描画
 	DrawDynamicObjects();
 	// 武器（ソケット追従）：静的モデルなので Object3D PSO のこの位置で描画する
-	if (weapon_ && player_ && Gameplay::Of(player_).GetWeaponParams().enabled) {
+	if (weapon_ && player_ && player_->GetVisible() && Gameplay::Of(player_).GetWeaponParams().enabled) {
 		weapon_->Draw(dxCore_);
 	}
 	DrawDynamicAnimated();

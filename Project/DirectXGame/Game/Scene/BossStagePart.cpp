@@ -75,19 +75,39 @@ void BossStagePart::Update(float worldDt) {
 	host_->SweepDeadEntities();
 }
 
+void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const {
+	// カメラ前方を XZ 平面へ射影して移動基底を作る（forward=奥, right=右）。
+	Vector3 fwd{ 0.0f, 0.0f, 1.0f };
+	if (camera_) fwd = camera_->GetForward();
+	fwd.y = 0.0f;
+	float flen = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
+	fwd.x /= flen; fwd.z /= flen;
+	outForward = fwd;
+	// right = cross(up, forward), up=(0,1,0)
+	outRight = { fwd.z, 0.0f, -fwd.x };
+}
+
+void BossStagePart::ApplyDashImpulse(const Vector2& moveDelta) {
+	// 移動入力方向へ地上速度の初速を上乗せ（入力なしはその場）。以降は UpdatePlayerGroundMovement の
+	// 指数減衰で自然に walk 速度へ落ちる＝STG のダッシュ→減速と同じ手触りになる。
+	const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+	if (mlen < 1e-3f) return;
+	Vector3 fwd, right;
+	ComputeGroundBasis(fwd, right);
+	const float nx = moveDelta.x / mlen;
+	const float ny = moveDelta.y / mlen;
+	groundVelocity_.x += (right.x * nx + fwd.x * ny) * dodgeDashSpeed_;
+	groundVelocity_.y += (right.z * nx + fwd.z * ny) * dodgeDashSpeed_;
+}
+
 void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt, const Vector2& moveDelta) {
 	if (!player || !camera_) return;
 	Vector3* tp = player->GetEditableTranslate();
 	if (!tp) return;
 
-	// カメラ前方を XZ 平面へ射影して移動基底を作る（forward=奥, right=右）。
-	Vector3 fwd = camera_->GetForward();
-	fwd.y = 0.0f;
-	float flen = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
-	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
-	fwd.x /= flen; fwd.z /= flen;
-	// right = cross(up, forward), up=(0,1,0)
-	const Vector3 right{ fwd.z, 0.0f, -fwd.x };
+	Vector3 fwd, right;
+	ComputeGroundBasis(fwd, right);
 
 	// 目標速度（ワールドXZ）＝入力を基底で合成 × 最大速度。指数減衰で慣性。
 	const float tvx = (right.x * moveDelta.x + fwd.x * moveDelta.y) * playerMoveSpeed_;
@@ -225,6 +245,8 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		ImGui::DragFloat("Player Move Speed", &playerMoveSpeed_, 0.2f, 0.0f, 60.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Player Smooth (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Dodge Dash Speed", &dodgeDashSpeed_, 0.5f, 0.0f, 120.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::SeparatorText("Camera");

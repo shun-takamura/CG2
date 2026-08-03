@@ -81,15 +81,20 @@ void RailStagePart::RebindCameraPath() {
 	if (railCamera_) railCamera_->SetCameraPath(cameraPath_);
 }
 
+// Wave JSON の監視は Blender からの Export をその場で確認するための開発用機能。
+// 監視用のメンバごと _DEBUG 限定なので、非 Debug では何もしない。
 void RailStagePart::MarkWaveFileSynced() {
+#ifdef _DEBUG
 	std::error_code ec;
 	auto t = std::filesystem::last_write_time(wavePath_, ec);
 	if (ec) return;
 	waveLastWriteTime_ = t;
 	waveWatchInitialized_ = true;
+#endif
 }
 
 void RailStagePart::RefreshWaveIfChanged() {
+#ifdef _DEBUG
 	if (!autoReloadWave_) return;
 
 	std::error_code ec;
@@ -108,6 +113,7 @@ void RailStagePart::RefreshWaveIfChanged() {
 	// 書き込み完了で時刻が再び動くので、次のフレームで拾い直せる。
 	waveLastWriteTime_ = t;
 	ReloadWaveNow();
+#endif
 }
 
 void RailStagePart::ReloadWaveNow() {

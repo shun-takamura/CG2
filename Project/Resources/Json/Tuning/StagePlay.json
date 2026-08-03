@@ -83,6 +83,7 @@
     "meleeReturnDuration": 0.25,
     "meleeApproachDist": 4,
     "dodgeReturnDuration": 0.34999999403953552,
+    "bossFacingTurnSmooth": 0.10000000149011612,
     "dodgeExpandedMargin": [
       0.80000001192092896,
       0.80000001192092896
@@ -273,7 +274,7 @@
     "disruptorFragSatBoost": 1.6000000238418579,
     "disruptorFragSpin": 6,
     "disruptorFragMinScale": 0.75,
-    "disruptorFractureSeed": 220533524,
+    "disruptorFractureSeed": 4059466881,
     "disruptorFractureSeedLock": false,
     "disruptorCellCount": 512,
     "disruptorBreakFreeze": 0,
