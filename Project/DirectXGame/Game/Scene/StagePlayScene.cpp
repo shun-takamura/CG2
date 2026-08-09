@@ -200,6 +200,8 @@ void StagePlayScene::LoadTuningFromJson() {
 		jdMeleeApproachDist_     = static_cast<float>(jd["meleeApproachDist"].AsDouble(jdMeleeApproachDist_));
 		jdDodgeReturnDuration_   = static_cast<float>(jd["dodgeReturnDuration"].AsDouble(jdDodgeReturnDuration_));
 		bossFacingTurnSmoothTime_ = static_cast<float>(jd["bossFacingTurnSmooth"].AsDouble(bossFacingTurnSmoothTime_));
+		jdBossWarpDelay_        = static_cast<float>(jd["bossWarpDelay"].AsDouble(jdBossWarpDelay_));
+		jdBossCamSwingDuration_ = static_cast<float>(jd["bossCamSwingDuration"].AsDouble(jdBossCamSwingDuration_));
 		{
 			const JsonValue& em = jd["dodgeExpandedMargin"];
 			if (em.IsArray() && em.Size() >= 2) {
@@ -662,6 +664,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	jdObj["meleeApproachDist"]     = static_cast<double>(jdMeleeApproachDist_);
 	jdObj["dodgeReturnDuration"]   = static_cast<double>(jdDodgeReturnDuration_);
 	jdObj["bossFacingTurnSmooth"]  = static_cast<double>(bossFacingTurnSmoothTime_);
+	jdObj["bossWarpDelay"]         = static_cast<double>(jdBossWarpDelay_);
+	jdObj["bossCamSwingDuration"]  = static_cast<double>(jdBossCamSwingDuration_);
 	{
 		JsonValue arr = JsonValue::MakeArray();
 		arr.Push(JsonValue(static_cast<double>(jdDodgeExpandedMargin_.x)));
@@ -1056,9 +1060,32 @@ void StagePlayScene::ApplyJustDodgeCamera(const Vector3& playerWorldPos)
 	camera_->Update();
 }
 
+void StagePlayScene::ToSphericalAroundPivot(const Vector3& p, const Vector3& pivot, float& outYaw, float& outPitch, float& outRadius) const
+{
+	Vector3 d{ p.x - pivot.x, p.y - pivot.y, p.z - pivot.z };
+	outRadius = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+	if (outRadius < 1e-4f) { outYaw = 0.0f; outPitch = 0.0f; return; }
+	outYaw   = std::atan2(d.x, d.z);
+	outPitch = std::asin(std::clamp(d.y / outRadius, -1.0f, 1.0f));
+}
+
+Vector3 StagePlayScene::FromSphericalAroundPivot(const Vector3& pivot, float yaw, float pitch, float radius) const
+{
+	const float cp = std::cos(pitch);
+	return {
+		pivot.x + radius * std::sin(yaw) * cp,
+		pivot.y + radius * std::sin(pitch),
+		pivot.z + radius * std::cos(yaw) * cp,
+	};
+}
+
 void StagePlayScene::ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos)
 {
 	if (!camera_ || !jdMeleeCameraActive_) return;
+	// ボス戦：ワープ前（詰め寄り待機中）はまだ通常の自由/ロックオンカメラに任せる。
+	// ワープした瞬間から jdBossMeleeCamActive_ が true になり、以降はこの関数が乗っ取る。
+	if (phase_ == Phase::Boss && !jdBossMeleeCamActive_) return;
+
 	// プレイヤー→対象敵を forward に取って、その基底（right/up/forward）で
 	// jdMeleeCameraOffset_ ぶんプレイヤーから離れた位置にカメラを置く。
 	// 注視点は (player+target)/2 + jdMeleeCameraLookOffset_。
@@ -1093,6 +1120,27 @@ void StagePlayScene::ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos)
 		playerWorldPos.y + rgt.y * off.x + up.y * off.y + fwd.y * off.z,
 		playerWorldPos.z + rgt.z * off.x + up.z * off.y + fwd.z * off.z,
 	};
+
+	// ボス戦：ワープ直後は対象（ボス）中心の球面座標で最短ヨーを通しながら最終フレーミングへ寄せる。
+	// プレイヤーはワープ済みで player→target 方向（fwd）はもう最終値に固定されているため、
+	// ここで補間するのは eye の位置だけでよい（look は下で mid ベースに計算し直され、常に対象へ収束する）。
+	if (phase_ == Phase::Boss && jdBossCamSwingDuration_ > 1e-4f) {
+		float targetYaw, targetPitch, targetRadius;
+		ToSphericalAroundPivot(eye, target, targetYaw, targetPitch, targetRadius);
+
+		float t = jdBossCamSwingTimer_ / jdBossCamSwingDuration_;
+		if (t < 1.0f) {
+			const float e = t * t * (3.0f - 2.0f * t); // smoothstep
+			float dyaw = targetYaw - jdBossCamSwingStartYaw_;
+			while (dyaw >  3.14159265f) dyaw -= 6.28318531f;
+			while (dyaw < -3.14159265f) dyaw += 6.28318531f;
+			const float yawB    = jdBossCamSwingStartYaw_    + dyaw * e;
+			const float pitchB  = jdBossCamSwingStartPitch_  + (targetPitch  - jdBossCamSwingStartPitch_)  * e;
+			const float radiusB = jdBossCamSwingStartRadius_ + (targetRadius - jdBossCamSwingStartRadius_) * e;
+			eye = FromSphericalAroundPivot(target, yawB, pitchB, radiusB);
+		}
+	}
+
 	// 注視点 = 中点 + lookOffset（基底空間で）
 	Vector3 mid{
 		(playerWorldPos.x + target.x) * 0.5f,
@@ -1203,27 +1251,25 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		AddHighlight(player_); // ジャスト回避演出のグレースケール除外対象に戻す
 	}
 
-	// ボス戦（地上文脈）の派生。今回は Left（回復）と Down（追加回避）を実装する。
-	// Up/Right（近接詰め寄り）は camera-local 前提のワールド補間が必要なため次イテレーション＝UIを閉じるだけ。
-	// いずれも switch 本体を進行させず（誰も EndJustDodgeCounterAction を呼ばずワールド停止で固まるのを防ぐ）、
-	// 実効果をその場で適用して即 EndJustDodgeCounterAction する。
+	// ボス戦（地上文脈）の派生。
 	if (phase_ == Phase::Boss) {
-		jdChosen_               = dir;
-		jdSelecting_            = false;
-		jdMerging_              = false;
-		justDodgeCounterActive_ = false;
-		jdActionPhase_          = JdActionPhase::None;
-		jdActionPhaseTimer_     = 0.0f;
-		jdMeleeCameraActive_    = false;
+		jdChosen_            = dir;
+		jdSelecting_         = false;
+		jdMerging_           = false;
+		jdActionPhase_       = JdActionPhase::None;
+		jdActionPhaseTimer_  = 0.0f;
+		jdMeleeCameraActive_ = false;
 
 		switch (dir) {
 			case CounterDir::Left: {
-				// 回復（小回復・無制限）。HP 操作は座標系に依存しないので STG と同一。
+				// 回復（小回復・無制限）。HP 操作は座標系に依存しないので STG と同一。即終了。
 				if (player_) Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
 				LogBuffer::Instance().Add("JustDodge derive (Boss): Left(回復)", LogBuffer::Level::Info);
+				justDodgeCounterActive_ = false;
+				EndJustDodgeCounterAction();
 			} break;
 			case CounterDir::Down: {
-				// 追加回避：地上ダッシュ＋無敵窓＋射撃禁止＋必殺技ゲージ。
+				// 追加回避：地上ダッシュ＋無敵窓＋射撃禁止＋必殺技ゲージ。即終了。
 				// ダッシュ初速は groundVelocity_ に入り、justDodgeActive_ 中は移動入力がゼロ化される
 				// ため、以降の指数減衰でダッシュだけが乗って自然停止する（通常回避と同じ手触り）。
 				dodgeActive_          = true;
@@ -1234,17 +1280,53 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 				shootLockoutTimer_ = (std::max)(shootLockoutTimer_, dodgeIFrameDuration_);
 				specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + dodgeSpecialGaugeGain_);
 				LogBuffer::Instance().Add("JustDodge derive (Boss): Down(追加回避)", LogBuffer::Level::Info);
+				justDodgeCounterActive_ = false;
+				EndJustDodgeCounterAction();
 			} break;
 			case CounterDir::Up:
-			case CounterDir::Right:
-			default: {
-				// 近接派生は地上文脈向けの実装が次イテレーション。今はUIを閉じるだけ。
-				const char* bname = (dir == CounterDir::Up) ? "Up(近接強)" : "Right(近接弱)";
+			case CounterDir::Right: {
+				// 近接（強=Up / 弱=Right）：ボスの背後へワープして攻撃し、戻らない。
+				// 詰め寄り終点＝ボス中心から「ボス→プレイヤー方向の逆符号」に jdMeleeApproachDist_ 離した点
+				// （STGは同符号＝手前に接近。符号を反転するだけで背後になる）。
+				if (player_) {
+					jdApproachWorldStart_ = player_->GetTranslate();
+				}
+				jdApproachWorldGoal_ = jdApproachWorldStart_;
+				if (jdCounterTarget_) {
+					if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) {
+						Vector3 epos = *tp;
+						Vector3 d{ jdApproachWorldStart_.x - epos.x,
+						           jdApproachWorldStart_.y - epos.y,
+						           jdApproachWorldStart_.z - epos.z };
+						float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+						if (dl > 1e-3f) {
+							d.x /= dl; d.y /= dl; d.z /= dl;
+							jdApproachWorldGoal_ = {
+								epos.x - d.x * jdMeleeApproachDist_,
+								epos.y - d.y * jdMeleeApproachDist_,
+								epos.z - d.z * jdMeleeApproachDist_,
+							};
+						}
+					}
+				}
+				// Approach はここでは「ワープ待ち」の意味で流用（jdBossWarpDelay_ 経過で
+				// UpdateJustDodgeCounterAction が実際のワープ＋攻撃発生を行う）。
+				jdActionPhase_       = JdActionPhase::Approach;
+				jdActionPhaseTimer_  = 0.0f;
+				jdMeleeCameraActive_ = true;
+				if (bossStage_) bossStage_->StopGroundVelocity(); // 残留速度が派生後に持ち越されないように
+				SetTimeScale(TimeGroup::World, 0.0f);
+				meleeComboIndex_ = (dir == CounterDir::Up) ? 0 : 1;
+				justDodgeCounterActive_ = true; // UpdateJustDodgeCounterAction に進行を委ねる
 				LogBuffer::Instance().Add(
-					std::string("JustDodge derive (Boss, UI only): ") + bname, LogBuffer::Level::Info);
+					std::string("JustDodge derive (Boss): ") + ((dir == CounterDir::Up) ? "Up(近接強)" : "Right(近接弱)"),
+					LogBuffer::Level::Info);
+			} break;
+			default: {
+				justDodgeCounterActive_ = false;
+				EndJustDodgeCounterAction();
 			} break;
 		}
-		EndJustDodgeCounterAction();
 		return;
 	}
 
@@ -1373,12 +1455,15 @@ void StagePlayScene::EndJustDodgeCounterAction()
 	jdActionPhase_          = JdActionPhase::None;
 	jdActionPhaseTimer_     = 0.0f;
 	jdMeleeCameraActive_    = false;
+	jdBossMeleeCamActive_   = false;
+	jdBossCamSwingTimer_    = 0.0f;
 }
 
 void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 {
 	if (!justDodgeCounterActive_) return;
 	jdActionPhaseTimer_ += dt;
+	if (phase_ == Phase::Boss && jdBossMeleeCamActive_) jdBossCamSwingTimer_ += dt;
 
 	switch (jdChosen_) {
 		case CounterDir::Up:
@@ -1423,7 +1508,24 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 			};
 
 			if (jdActionPhase_ == JdActionPhase::Approach) {
-				if (jdActionPhaseTimer_ >= jdMeleeApproachDuration_) {
+				// ボスはここを「ワープ待ち」として使う（詰め寄りダッシュの移動補間はしない）。
+				const float waitDur = (phase_ == Phase::Boss) ? jdBossWarpDelay_ : jdMeleeApproachDuration_;
+				if (jdActionPhaseTimer_ >= waitDur) {
+					if (phase_ == Phase::Boss && player_) {
+						// ワープ実行：位置は瞬間移動、カメラはここから最短経路で寄せ始める
+						// （直前のカメラ実位置をスイング開始状態として採取）。
+						Vector3 targetPos{ 0.0f, 0.0f, 0.0f };
+						if (jdCounterTarget_) {
+							if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) targetPos = *tp;
+						}
+						if (camera_) {
+							ToSphericalAroundPivot(camera_->GetTranslate(), targetPos,
+								jdBossCamSwingStartYaw_, jdBossCamSwingStartPitch_, jdBossCamSwingStartRadius_);
+						}
+						jdBossCamSwingTimer_  = 0.0f;
+						jdBossMeleeCamActive_ = true;
+						player_->SetTranslate(jdApproachWorldGoal_);
+					}
 					jdAutoComboStage_   = 1;
 					spawnMeleeStage(jdAutoComboStage_);
 					jdActionPhase_      = JdActionPhase::Active;
@@ -1437,12 +1539,17 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 						++jdAutoComboStage_;
 						spawnMeleeStage(jdAutoComboStage_);
 						jdActionPhaseTimer_ = 0.0f; // Active 継続
+					} else if (phase_ == Phase::Boss) {
+						// 戻らない：攻撃した場所（ボス背後）にそのまま留まる。
+						meleeComboIndex_ = 0;
+						EndJustDodgeCounterAction();
 					} else {
 						jdActionPhase_      = JdActionPhase::Return;
 						jdActionPhaseTimer_ = 0.0f;
 					}
 				}
 			} else if (jdActionPhase_ == JdActionPhase::Return) {
+				// STG専用（Bossはこのフェーズに来ない＝戻らない設計）。
 				if (jdActionPhaseTimer_ >= jdMeleeReturnDuration_) {
 					playerInputOffset_ = jdReturnOffset_;
 					playerVelocity_    = { 0.0f, 0.0f };
@@ -1596,6 +1703,8 @@ void StagePlayScene::ResetDodgeState()
 	jdActionPhase_     = JdActionPhase::None;
 	jdActionPhaseTimer_ = 0.0f;
 	jdMeleeCameraActive_ = false;
+	jdBossMeleeCamActive_ = false;
+	jdBossCamSwingTimer_  = 0.0f;
 	jdDodgeMarginActive_ = false;
 	jdDodgeReturning_    = false;
 	jdDodgeMarginTimer_  = 0.0f;
@@ -2063,6 +2172,16 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("ボス戦のプレイヤー旋回の指数減衰時定数（秒）。\n小さいほど機敏に移動方向/ボス方向を向く。");
+		}
+		ImGui::DragFloat("Boss Melee Warp Delay (s)", &jdBossWarpDelay_, 0.005f, 0.0f, 1.0f, "%.3f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("ボス戦の近接派生（Up/Right）：トリガーからボス背後へワープするまでの待機秒数。");
+		}
+		ImGui::DragFloat("Boss Melee Cam Swing (s)", &jdBossCamSwingDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("ワープ直後、カメラが最短ヨーでボス周りを回り込んで最終フレーミングへ寄りきるまでの秒数。");
 		}
 
 		ImGui::Separator();
@@ -2626,6 +2745,17 @@ void StagePlayScene::Update() {
 		if (phase_ == Phase::Boss) {
 			bossBattleActive_ = true;            // 既存スカイボックスクロスフェードを自動発火
 			bossFacingInit_   = false;           // ボス戦開始時に向きを取り直す（初回フレームで再サンプル）
+			// Rail側の残留敵を掃除してからボスへ突入する。SeekMax到達/F4/Seek直後の自動遷移では
+			// Rail の Enemy が生き残ったまま（enemyControllers_ も含め）Boss へ持ち越されており、
+			// ①EnemyControllerがボス戦中も動き続ける、②nearestEnemy_/lockedEnemy_ がその残留敵を
+			// 指したままジャスト回避対象(jdCounterTarget_)に渡り、変な位置を向いて回転→敵が破棄
+			// された時にダングリング参照でクラッシュ、という不具合の根本原因だった。
+			ClearBossRuntimeState();
+			// 上の掃除で破棄される実体を指している可能性がある生ポインタも合わせてクリア
+			// （Enemy タグはボス戦中一度も再更新されないため、放置すると即ダングリングのまま残り続ける）。
+			nearestEnemy_    = nullptr;
+			lockedEnemy_     = nullptr;
+			jdCounterTarget_ = nullptr;
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
 		} else if (prevPhase_ == Phase::Boss) {
 			bossBattleActive_ = false;           // 空を平常時へ戻す
@@ -2683,13 +2813,19 @@ void StagePlayScene::Update() {
 		// ===== ボス戦：地上ワールド移動＋フリールック/ロックオン/ターゲットの3モードカメラ =====
 		if (phase_ == Phase::Boss && bossStage_) {
 			// ジャスト回避のタイミング窓/無敵は UpdateDodge に委ねる（弾に対するジャスト回避検証のため）。
-			// ※ダッシュのインパルスは playerVelocity_（camera-local 2D）に入るため地上移動には反映されない
-			//   （縦スライスの割り切り。地上ダッシュは次ステップ）。
+			// ※追加回避（Down派生）のダッシュは bossStage_->ApplyDashImpulse 経由で groundVelocity_ に入る
+			//   （TriggerCloneCounterAction 側で呼ぶ。通常回避 Dodge の playerVelocity_ とは別経路）。
 			UpdateDodge(actions, moveDelta, GetScaledDeltaTime(TimeGroup::World));
 			// ジャスト回避スロー受付中は地上の自由移動を禁止（残存速度は慣性で減速し停止）。
-			// STG と同方針。ボス戦では分身カウンター派生が無効＝移動を伴う派生が無いため丸ごとゼロで良い。
+			// STG と同方針。近接派生中（jdMeleeCameraActive_）はワープ/攻撃で位置を直接管理するため
+			// 地上移動そのものを止める（UpdatePlayerGroundMovement を呼ばない）。
 			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : moveDelta;
-			bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
+			if (!jdMeleeCameraActive_) {
+				bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
+			}
+			// 分身カウンター派生の進行（近接のワープ/攻撃発生、地上文脈向け）。ワープで player_ の
+			// ワールド座標を直接書き換えるので、以降のカメラ・向き計算より前に呼ぶ。
+			UpdateJustDodgeCounterAction(GetScaledDeltaTime(TimeGroup::UI));
 			const Vector3 bWorldPos = player_->GetTranslate();
 
 			// プレイヤーの向き（yaw のみ）を更新。実際の SetRotate は後段の reticle 向きブロックで適用する。
@@ -4121,7 +4257,10 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				incomingDamage = Gameplay::Of(b.primitive).GetDamageDealer().damage;
 				if (incomingDamage <= 0) incomingDamage = 10;
 				hitBulletIndex = static_cast<int>(i);
-				attacker = nearestEnemy_; // 弾の発射元は不明なので画面上最近の敵を演出対象に
+				// 弾の発射元は不明なので画面上最近の敵を演出対象にする。ただしボスは Enemy タグ
+				// ではないため nearestEnemy_ が更新されず、STG時代の破棄済みポインタが残ったまま
+				// になりうる（ダングリング参照でクラッシュする）。ボス戦はボス本体を直接使う。
+				attacker = (phase_ == Phase::Boss && bossStage_) ? bossStage_->GetBossEntity() : nearestEnemy_;
 				hitFound = true;
 				break;
 			}
