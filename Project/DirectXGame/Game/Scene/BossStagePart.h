@@ -49,6 +49,9 @@ public:
 	// STG の回避ダッシュ相当：移動入力方向へ地上速度の初速（dodgeDashSpeed_）を上乗せする。
 	// 入力なし（moveDelta≈0）はその場回避。ボス戦の回避は playerVelocity_ ではなくこちらへ入れる。
 	void ApplyDashImpulse(const Vector2& moveDelta);
+	// 地上速度をゼロ化。近接派生でワープ／攻撃中は地上移動を止めるため、開始時に呼んで
+	// 残留速度が派生終了後に持ち越されない（勝手に滑り出さない）ようにする。
+	void StopGroundVelocity() { groundVelocity_ = { 0.0f, 0.0f }; }
 	// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力（右スティック -1..1／マウス相対カウント）を受け、
 	// 感度・反転は内部で適用する。reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
 	void UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy);
@@ -60,6 +63,9 @@ public:
 	void Reset();
 
 	bool IsBossAlive() const { return boss_ != nullptr; }
+	// ボス本体への参照（撃破で nullptr）。ボスは Enemy タグではないため nearestEnemy_ 等の
+	// 照準トラッカーに乗らない＝ジャスト回避の攻撃元(attacker)はこちらを使う必要がある。
+	IImGuiEditable* GetBossEntity() const { return boss_; }
 	bool IsLockOn() const { return camMode_ == BossCamMode::LockOn; }
 	void OnImGuiTuning(bool& changed);
 

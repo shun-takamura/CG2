@@ -395,6 +395,21 @@ private:
 	Vector3 jdMeleeCameraLookOffset_{ 0.0f, 1.0f, 0.0f };
 	bool    jdMeleeCameraActive_ = false; // 近接派生中は ApplyJustDodgeMeleeCamera で上書きする
 
+	// ----- ボス戦：近接派生はワープ（瞬間移動）＋カメラは最短経路で回り込む -----
+	// プレイヤーは即座にワープするが、カメラは古い位置から新フレーミングへ「最短ヨー」で寄せる
+	// （対象を挟んで反対側へ移動するため、素の値だと yaw が反転して不自然になる。wrap 補正で短い方を通す）。
+	float jdBossWarpDelay_        = 0.12f;   // トリガーからワープ実行までの待機（STGの詰め寄りダッシュ時間とは別概念）
+	float jdBossCamSwingDuration_ = 0.35f;   // ワープ直後、カメラが最終フレーミングへ寄りきるまでの時間
+	float jdBossCamSwingTimer_    = 0.0f;
+	bool  jdBossMeleeCamActive_   = false;   // ワープ実行後～派生終了まで true（ワープ前の待機中は既存の自由/ロックオンカメラのまま）
+	float jdBossCamSwingStartYaw_    = 0.0f; // ワープ実行の瞬間に採取したカメラの実位置（対象中心の球面座標）
+	float jdBossCamSwingStartPitch_  = 0.0f;
+	float jdBossCamSwingStartRadius_ = 0.0f;
+
+	// 対象（ボス）中心の球面座標⇔ワールド座標の変換（近接カメラの最短経路回り込みで使用）。
+	void ToSphericalAroundPivot(const Vector3& p, const Vector3& pivot, float& outYaw, float& outPitch, float& outRadius) const;
+	Vector3 FromSphericalAroundPivot(const Vector3& pivot, float yaw, float pitch, float radius) const;
+
 	// 追加回避（Down）派生：許容枠を一時拡張＋戻し補間＋射撃禁止
 	bool    jdDodgeMarginActive_   = false;    // 拡張クリップ枠が有効か（戻し中も true）
 	float   jdDodgeMarginTimer_    = 0.0f;     // 戻し補間タイマー（0..jdDodgeReturnDuration_）
