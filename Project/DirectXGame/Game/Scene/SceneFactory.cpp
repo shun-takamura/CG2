@@ -1,8 +1,10 @@
 #include "SceneFactory.h"
 #include "TitleScene.h"
 #include "HubScene.h"
+#include "StageSelectScene.h"
 #include "StagePlayScene.h"
 #include "ResultScene.h"
+#include "GameOverScene.h"
 #include "DemoScene.h"
 
 std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
@@ -13,11 +15,17 @@ std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "HUB") {
         return std::make_unique<HubScene>();
     }
+    else if (sceneName == "STAGESELECT") {
+        return std::make_unique<StageSelectScene>();
+    }
     else if (sceneName == "STAGEPLAY") {
         return std::make_unique<StagePlayScene>();
     }
     else if (sceneName == "RESULT") {
         return std::make_unique<ResultScene>();
+    }
+    else if (sceneName == "GAMEOVER") {
+        return std::make_unique<GameOverScene>();
     }
     else if (sceneName == "DEMO") {
         // 技術開発用：絶対に削除しない

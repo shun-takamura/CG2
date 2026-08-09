@@ -40,6 +40,7 @@
 #include "Enemy/EnemyCommandFactory.h"
 #include "Enemy/EnemyContext.h"
 #include "Score/ScoreManager.h"
+#include "Score/BossRetryState.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
@@ -2568,6 +2569,15 @@ void StagePlayScene::Initialize() {
 	// スコアをリセット（再ロード時の累積防止）
 	ScoreManager::GetInstance()->Reset();
 
+	// ゲームオーバー画面の「ボス戦からリトライ」要求とスナップショットを読み出す。
+	// このアタリで再取得されるまではチェックポイントを無効化しておく
+	// （ボス到達前に力尽きた新しいアタリへ前回の値が漏れないように）。
+	const bool bossRetryRequested = BossRetryState::GetInstance()->ConsumeBossRetryRequest();
+	const bool haveBossCheckpoint = BossRetryState::GetInstance()->HasCheckpoint();
+	const int  ckPlayerHP         = BossRetryState::GetInstance()->GetCheckpointPlayerHP();
+	const float ckSpecialGauge    = BossRetryState::GetInstance()->GetCheckpointSpecialGauge();
+	BossRetryState::GetInstance()->ClearCheckpoint();
+
 	// RailStagePart を先に construct（LoadTuningFromJson が内部で railStage_->LoadFromJson を呼ぶため）。
 	railStage_ = std::make_unique<RailStagePart>();
 
@@ -2658,6 +2668,16 @@ void StagePlayScene::Initialize() {
 	// プレイヤーの HP を有効化（auto-load 時は UI 建て直しが Player 生成前に走るためここで明示する）
 	if (player_) {
 		Gameplay::Of(player_).GetHP().enabled = true;
+	}
+
+	// 「ボス戦からリトライ」：Rail/Landing を飛ばしてボス戦開始時点のHP・必殺技ゲージへ復元する。
+	// prevPhase_ は Phase::Rail のまま（上で設定済み）なので、Update() 初回のフェーズ遷移エッジ検出で
+	// bossStage_->Enter() が自動的に走る。
+	if (bossRetryRequested && haveBossCheckpoint && player_) {
+		phase_ = Phase::Boss;
+		HP& hp = Gameplay::Of(player_).GetHP();
+		hp.currentHP = std::clamp(ckPlayerHP, 0, hp.maxHP);
+		specialGauge_ = std::clamp(ckSpecialGauge, 0.0f, specialGaugeMax_);
 	}
 }
 
@@ -2757,6 +2777,12 @@ void StagePlayScene::Update() {
 			lockedEnemy_     = nullptr;
 			jdCounterTarget_ = nullptr;
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
+			// ボス戦開始時点のHP・必殺技ゲージをスナップショット（「ボス戦からリトライ」用）。
+			// F4デバッグショートカットでの手動突入やリトライ再突入時も同様に保存し直される。
+			if (player_) {
+				BossRetryState::GetInstance()->SaveCheckpoint(
+					Gameplay::Of(player_).GetHP().currentHP, specialGauge_);
+			}
 		} else if (prevPhase_ == Phase::Boss) {
 			bossBattleActive_ = false;           // 空を平常時へ戻す
 			if (bossStage_) bossStage_->Reset(); // ボス・地面・コントローラを破棄
@@ -2767,6 +2793,13 @@ void StagePlayScene::Update() {
 	// ボス戦 tick（ボスAI更新＋撃破掃除）。Enter 済みのこのフレームから駆動される。
 	if (phase_ == Phase::Boss && bossStage_) {
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
+
+		// ボス撃破検出：スコア加点・撃破数カウントの上でリザルトへ。
+		if (bossStage_->ConsumeBossDefeated()) {
+			ScoreManager::GetInstance()->AddScore(bossStage_->GetLastBossScoreValue());
+			ScoreManager::GetInstance()->AddKill();
+			SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Fade);
+		}
 	}
 
 	// 精密射撃モード（FOV ズーム・感度・演出）。FOV を camera_->Update() の前に反映する
@@ -4309,12 +4342,12 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 
 	UpdateHPBarUI();
 
-	// HP=0 でゲームオーバー（リトライ：シーン再ロード）
+	// HP=0 でゲームオーバー画面へ（リトライ方法はGameOverSceneで選択）
 	if (Gameplay::Of(player_).GetHP().IsDead() && !gameOverTriggered_) {
 		gameOverTriggered_ = true;
 		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
-		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("GAMEOVER", TransitionType::Fade);
 	}
 }
 
@@ -5005,6 +5038,7 @@ void StagePlayScene::ExecuteDisruptorKills() {
 				hp.TakeDamage(hp.currentHP);
 			} else {
 				ScoreManager::GetInstance()->AddScore(Gameplay::Of(e).GetScoreValue());
+				ScoreManager::GetInstance()->AddKill();
 				DestroyDynamicEntity(e);
 			}
 		}

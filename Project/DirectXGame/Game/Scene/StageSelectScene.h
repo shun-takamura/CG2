@@ -5,13 +5,13 @@
 class Camera;
 
 /// <summary>
-/// リザルトシーン
-/// ScoreManager からスコア・撃破数を取得して表示し、ENTERでステージセレクトへ戻る。
+/// ステージセレクトシーン
+/// まだステージ1しかないため、"Stage1" とだけ表示してENTERキーで直接開始する。
 /// </summary>
-class ResultScene : public GameScene {
+class StageSelectScene : public GameScene {
 public:
-	ResultScene();
-	~ResultScene() override;
+	StageSelectScene();
+	~StageSelectScene() override;
 
 	void Initialize() override;
 	void Finalize() override;
@@ -22,7 +22,4 @@ public:
 
 private:
 	std::unique_ptr<Camera> camera_;
-
-	int score_ = 0;
-	int killCount_ = 0;
 };

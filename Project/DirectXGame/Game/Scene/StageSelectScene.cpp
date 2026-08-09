@@ -1,4 +1,4 @@
-#include "TitleScene.h"
+#include "StageSelectScene.h"
 
 #include "Camera.h"
 #include "Object3DManager.h"
@@ -6,60 +6,54 @@
 #include "TransitionManager.h"
 #include "InputManager.h"
 #include "InputAction.h"
+#include "Config/GameActions.h"
 #include "Game.h"
 #include "DirectXCore.h"
 #include "TextRenderer.h"
 
-TitleScene::TitleScene() = default;
-TitleScene::~TitleScene() = default;
+StageSelectScene::StageSelectScene() = default;
+StageSelectScene::~StageSelectScene() = default;
 
-void TitleScene::Initialize() {
+void StageSelectScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
 
 	camera_ = std::make_unique<Camera>();
 	camera_->SetTranslate({ 0.0f, 0.0f, -10.0f });
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
-
-	idleSeconds_ = 0.0f;
 }
 
-void TitleScene::Finalize() {}
+void StageSelectScene::Finalize() {}
 
-void TitleScene::Update() {
+void StageSelectScene::Update() {
 	if (SceneManager::GetInstance()->IsTransitioning()) {
 		return;
 	}
 
-	// Press Any Button: 何らかの物理入力があれば Hub へ
-	auto* actionMap = input_->GetActionMap();
-	if (actionMap && actionMap->AnyInputTriggered()) {
-		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
+	auto* actions = input_->GetActionMap();
+	if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
+		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
 		return;
 	}
-
-	// 無操作カウンタ更新（後でデモ動画再生のトリガーに使う）
-	idleSeconds_ += GetScaledDeltaTime();
-	(void)kDemoTriggerSeconds; // 警告抑制。動画再生実装時に使用
 
 	camera_->Update();
 }
 
-void TitleScene::Draw() {
+void StageSelectScene::Draw() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const char* label = "Title";
-	const float scale = 3.0f;
+	const char* label = "Stage1";
+	const float scale = 2.0f;
 	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
 	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
 	const float labelW = tr->MeasureWidth(label, scale);
 
-	tr->DrawText(label, { (screenW - labelW) * 0.5f, screenH * 0.35f }, scale,
+	tr->DrawText(label, { (screenW - labelW) * 0.5f, screenH * 0.45f }, scale,
 		{ 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 	tr->Flush();
 }
 
-Camera* TitleScene::GetCamera() {
+Camera* StageSelectScene::GetCamera() {
 	return camera_.get();
 }

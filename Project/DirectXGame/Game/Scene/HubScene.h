@@ -6,16 +6,13 @@ class Camera;
 
 /// <summary>
 /// ハブシーン（メインメニュー）
-/// タブUIで「ステージセレクト / スキルショップ / スキル装備 / タイトル / 終了」を切り替える
-/// シーン遷移を挟まずタブ切替でビューを切り替える設計。
+/// 「StageSelect / ゲーム終了」の2択を上下キー+決定で選ぶ。
+/// スキルショップ等の追加タブは将来ここに拡張する想定。
 /// </summary>
 class HubScene : public GameScene {
 public:
 	enum class Tab {
 		StageSelect,
-		SkillShop,
-		SkillEquip,
-		BackToTitle,
 		Quit,
 	};
 
