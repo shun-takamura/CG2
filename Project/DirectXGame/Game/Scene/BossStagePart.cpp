@@ -10,7 +10,7 @@
 #include "Components/Gameplay.h"
 #include "Enemy/EnemyController.h"
 #include "Enemy/IEnemyCommand.h"
-#include "Enemy/Commands/BossAttackCommand.h"
+#include "Enemy/Boss/BossBrainCommand.h"
 
 #ifdef _DEBUG
 #include "imgui.h"
@@ -39,7 +39,7 @@ void BossStagePart::Enter() {
 		ctrl->entity_            = boss_;
 		ctrl->billboardToPlayer_ = true;
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
-		cmds.push_back(std::make_unique<BossAttackCommand>());
+		cmds.push_back(std::make_unique<BossBrainCommand>());
 		ctrl->Init(std::move(cmds));
 		host_->RegisterEnemyController(std::move(ctrl));
 	}
@@ -174,6 +174,13 @@ void BossStagePart::RequestTargetSnap() {
 
 void BossStagePart::ToggleCamMode() {
 	camMode_ = (camMode_ == BossCamMode::Free) ? BossCamMode::LockOn : BossCamMode::Free;
+}
+
+void BossStagePart::SyncYawPitchFromCamera() {
+	if (!camera_) return;
+	const Vector3& rot = camera_->GetRotate(); // {pitch, yaw, roll}
+	camPitch_ = std::clamp(rot.x, pitchMin_, pitchMax_);
+	camYaw_   = rot.y;
 }
 
 void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy) {

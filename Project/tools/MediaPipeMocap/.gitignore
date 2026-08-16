@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+models/*.task
+build/
+dist/
+*.spec
+settings.json
+frozen_test_result.txt
+blender_addon/mediapipemocap/vendor/
+blender_addon/mediapipemocap/mocap_core/
+blender_addon/mediapipemocap/models/
+MediaPipeMocap-blender-addon.zip
