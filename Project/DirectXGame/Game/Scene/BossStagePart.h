@@ -59,6 +59,9 @@ public:
 	void RequestTargetSnap();
 	// カメラモード切替（Free ⇔ LockOn。長押し）。
 	void ToggleCamMode();
+	// camYaw_/camPitch_ を現在のカメラ実姿勢に合わせて上書きする。近接派生カメラ（乗っ取り）から
+	// 通常カメラへ制御を返す瞬間に呼ぶことで、古い角度への瞬間戻りを防ぐ（距離は camDistance_ に即切替）。
+	void SyncYawPitchFromCamera();
 	// Boss 離脱・シーン再入時のクリア（スポーン物・状態を破棄）。
 	void Reset();
 

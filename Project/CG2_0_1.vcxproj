@@ -148,6 +148,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Components\PrefabManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyController.cpp" />
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyCommandFactory.cpp" />
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossActionManager.cpp" />
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneFactory.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\SceneManager.cpp" />
@@ -217,6 +219,12 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\SpawnDroneCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\IBossAction.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossActionManager.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossBrainCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackRanged.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveApproach.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />

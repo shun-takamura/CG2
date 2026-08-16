@@ -196,7 +196,13 @@
       "Bash(\"/c/Program Files/Blender Foundation/Blender 4.4/blender.exe\" --background --python \"/c/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/26b9e2b0-130b-4314-a6dc-eaa3ecdfa5c7/scratchpad/blender_union_check.py\")",
       "Bash(py tools/Python/cook_assets.py)",
       "Bash(py -c ' *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(MP=\"/c/Users/sleon/デスクトップ/MediaPipeMocap\"; ls -a \"$MP\" 2>/dev/null || echo \"NOT FOUND at $MP\")",
+      "Bash(git -C /c/Users/sleon/デスクトップ/MediaPipeMocap remote -v)",
+      "Bash(git -C /c/Users/sleon/デスクトップ/MediaPipeMocap ls-files)",
+      "Bash(xargs -0 du -ck)",
+      "Bash(grep -n \"]\\(\\\\.\\\\./\\\\|]\\(\\\\.\\\\./\\\\.\\\\./\" README.md)",
+      "Bash(echo \"--- exit $? \\(1=残りなし\\) ---\")"
     ]
   }
 }

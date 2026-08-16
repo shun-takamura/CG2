@@ -1542,7 +1542,10 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 						jdActionPhaseTimer_ = 0.0f; // Active 継続
 					} else if (phase_ == Phase::Boss) {
 						// 戻らない：攻撃した場所（ボス背後）にそのまま留まる。
+						// 通常カメラ（BossStagePart::UpdateCamera）へ制御を戻す前に、乗っ取っていた
+						// 近接カメラの最終角度を camYaw_/camPitch_ へ同期しておく（古い角度への瞬間戻り防止）。
 						meleeComboIndex_ = 0;
+						if (bossStage_) bossStage_->SyncYawPitchFromCamera();
 						EndJustDodgeCounterAction();
 					} else {
 						jdActionPhase_      = JdActionPhase::Return;
