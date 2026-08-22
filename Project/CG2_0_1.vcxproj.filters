@@ -1079,6 +1079,12 @@
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveApproach.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveJumpOver.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackMelee.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\Shaders\Object3D\Object3d.VS.hlsl" />
