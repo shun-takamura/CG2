@@ -1,0 +1,3 @@
+# setup_mergiraf.bat が zip から展開する実行ファイル（75MB）。
+# リポジトリには zip（約6.9MB）のみをコミットする。
+mergiraf.exe

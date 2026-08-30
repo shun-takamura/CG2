@@ -61,3 +61,39 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# mergiraf : 構文を理解した自動マージ
+#
+# 行単位の比較しかしない素の Git では、二人が同じクラスに別々の関数を
+# 追加しただけでもコンフリクトになる。mergiraf は C++ を構文木として
+# 解析するため、この種の衝突を自動で解決できる。
+#
+#   セットアップ: Project/tools/mergiraf/setup_mergiraf.bat をダブルクリック
+#                 （クローン後に一度だけ。詳細は同フォルダの README.md）
+#
+# 未セットアップの人がいても通常の Git マージに戻るだけで、壊れることはない。
+# 外部ライブラリ(Project/externals)は対象外にするためパスを限定している。
+###############################################################################
+Project/DirectXGame/**/*.cpp merge=mergiraf
+Project/DirectXGame/**/*.h   merge=mergiraf
+
+###############################################################################
+# 排他ロック (git-lfs の lockable)
+#
+# 新規ソースをプロジェクトに追加すると .vcxproj / .filters の同じ箇所を
+# 全員が書き換えるため衝突しやすい。編集前にロックを取ることで、
+# 他の人が同じファイルを push できないようにする。
+#
+#   事前に一度だけ:  git lfs install
+#   編集する前に:    git lfs lock   Project/CG2_0_1.vcxproj
+#   push した後に:   git lfs unlock Project/CG2_0_1.vcxproj
+#   誰が何をロック中か: git lfs locks
+#
+# ロックしたら push 後に必ず解除する（放置すると他の人が作業できない）。
+# externals 配下の .vcxproj は対象外にするため個別にパス指定している。
+###############################################################################
+Project/CG2_0_1.vcxproj                       lockable
+Project/CG2_0_1.vcxproj.filters               lockable
+Project/EngineCore/EngineCore.vcxproj         lockable
+Project/EngineCore/EngineCore.vcxproj.filters lockable
