@@ -97,6 +97,11 @@ void StagePlayScene::LoadTuningFromJson() {
 	}
 	// レールカメラのチューニング（speed/rotKeys）は RailStagePart 側で読む（キー名は不変）。
 	if (railStage_) railStage_->LoadFromJson(root);
+	// 環境セクション（root["sections"]）は StageEnvironment 側で読む。
+	if (stageEnv_) stageEnv_->LoadFromJson(root);
+	// クリップ面（RailStagePart と同じ root["camera"] に相乗り。キーは別なので競合しない）
+	cameraNearClip_ = static_cast<float>(root["camera"]["nearClip"].AsDouble(cameraNearClip_));
+	cameraFarClip_  = static_cast<float>(root["camera"]["farClip"].AsDouble(cameraFarClip_));
 
 	playerSmoothTime_ = static_cast<float>(
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
@@ -590,6 +595,10 @@ void StagePlayScene::SaveTuningToJson() const {
 
 	// レールカメラのチューニング（speed/rotKeys）は RailStagePart 側で書く（キー名は不変）。
 	if (railStage_) railStage_->SaveToJson(root);
+	// RailStagePart::SaveToJson は root["camera"] を丸ごと差し替えるので、必ずその後に書く。
+	root["camera"]["nearClip"] = static_cast<double>(cameraNearClip_);
+	root["camera"]["farClip"]  = static_cast<double>(cameraFarClip_);
+	if (stageEnv_) stageEnv_->SaveToJson(root);
 
 	JsonValue skyObj = JsonValue::MakeObject();
 	{
@@ -2069,6 +2078,21 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (ImGui::DragFloat("Landing Duration (s)", &landingDuration_, 0.5f, 0.0f, 120.0f, "%.1f")) {}
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::SeparatorText("クリップ面");
+		ImGui::TextDisabled("Camera の既定は near=0.1 / far=100（=100m先が描画されない）。");
+		if (ImGui::DragFloat("Near Clip", &cameraNearClip_, 0.05f, 0.01f, 10.0f, "%.2f")) {
+			if (camera_) camera_->SetNearClip(cameraNearClip_);
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		if (ImGui::DragFloat("Far Clip", &cameraFarClip_, 25.0f, 10.0f, 50000.0f, "%.0f")) {
+			if (camera_) camera_->SetFarClip(cameraFarClip_);
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	}
+	if (stageEnv_) {
+		// "Jump" は Rail タイムラインのシーク。Seek() 側で環境も即時適用される。
+		stageEnv_->OnImGuiTuning(changed, [this](float sec) { Seek(sec); });
 	}
 	if (railStage_) railStage_->OnImGuiTuning(changed); // 既存の Rail Camera / Wave Editor セクション
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
@@ -2583,6 +2607,9 @@ void StagePlayScene::Initialize() {
 
 	// RailStagePart を先に construct（LoadTuningFromJson が内部で railStage_->LoadFromJson を呼ぶため）。
 	railStage_ = std::make_unique<RailStagePart>();
+	// StageEnvironment も同様（LoadTuningFromJson で root["sections"] を読む）。
+	// Skybox の紐付けは実体が出来てから Initialize() で行う。
+	stageEnv_ = std::make_unique<StageEnvironment>();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	LoadTuningFromJson();
@@ -2590,6 +2617,9 @@ void StagePlayScene::Initialize() {
 	camera_ = std::make_unique<Camera>();
 	camera_->SetTranslate({ 0.0f, 0.0f, -20.0f });
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
+	// Camera の既定は near=0.1 / far=100。100m 先までしか描画されないので明示的に広げる。
+	camera_->SetNearClip(cameraNearClip_);
+	camera_->SetFarClip(cameraFarClip_);
 	object3DManager_->SetDefaultCamera(camera_.get());
 	baseFovY_ = camera_->GetFovY();   // 精密射撃モードのズーム基準（通常時 FovY）
 
@@ -2603,6 +2633,12 @@ void StagePlayScene::Initialize() {
 	skybox_->Initialize(skyboxManager_, dxCore_, defaultSkyboxPath_);
 	skybox_->SetColor(skyboxTint_);  // 保存済みの常時着色を適用
 	object3DManager_->SetEnvironmentTexture(defaultSkyboxPath_);
+
+	// 道中の環境セクション。Cubemap が切り替わったら環境マップも追従させる。
+	stageEnv_->Initialize(skybox_.get(), object3DManager_, [this](const std::string& path) {
+		if (object3DManager_) object3DManager_->SetEnvironmentTexture(path);
+	});
+	stageEnv_->Reset(0.0f);   // ステージ先頭のセクションを即時適用（セクション0件なら無効果）
 
 	// STG（Rail）専用ロジック一式の初期化（レールカメラ用スプライン・向きキー・Wave定義ロード）。
 	// LoadTuningFromJson() で読み込み済みの speed/rotKeys を使ってセットアップする。
@@ -2691,6 +2727,9 @@ void StagePlayScene::Finalize() {
 	if (dxCore_) {
 		dxCore_->WaitForGpu();
 	}
+	// Object3DManager はシーンをまたいで生きているので、フォグを必ず切って返す
+	// （切らないと DemoScene 等に StagePlay の霧が残る）。
+	if (object3DManager_) object3DManager_->DisableFog();
 	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
 		if (auto* em = EffectManager::GetInstance()) em->Stop(specialBarrierEffectHandle_);
 		specialBarrierEffectHandle_ = kInvalidEffectHandle;
@@ -3238,6 +3277,13 @@ void StagePlayScene::Update() {
 		} // end else（Rail/Landing の camera-local 配置）
 	}
 
+	// 道中の環境セクション（空/平行光源/フォグ）を経過秒で駆動する。
+	// Skybox の演出トリガー（下）より前に呼ぶことで、必殺技の暗転がこのフレームの
+	// セクション着色を上書きできる（暗転優先）。必殺技中は着色だけスキップする。
+	if (stageEnv_ && phase_ == Phase::Rail && railStage_) {
+		stageEnv_->Update(railStage_->GetStageSeconds(), !specialActive_);
+	}
+
 	// カメラが確定した後に Skybox を更新する（VP 焼き込みのため、回り込みを背景にも反映）。
 	if (skybox_) {
 		// --- Skybox 演出トリガー（フラグの立ち上がり/立ち下がりを見て呼ぶ）---
@@ -3245,7 +3291,10 @@ void StagePlayScene::Update() {
 		if (specialActive_ && !prevSpecialActive_) {
 			skybox_->FadeColor(specialSkyboxDarkColor_, specialSkyboxFadeIn_); // 暗転
 		} else if (!specialActive_ && prevSpecialActive_) {
-			skybox_->FadeColor(skyboxTint_, specialSkyboxFadeOut_);            // 復帰
+			// 復帰先はセクションが有効ならその着色。無ければ従来どおり常時着色。
+			const Vector4& restore =
+				(stageEnv_ && stageEnv_->HasSections()) ? stageEnv_->GetCurrentTint() : skyboxTint_;
+			skybox_->FadeColor(restore, specialSkyboxFadeOut_);                // 復帰
 		}
 		prevSpecialActive_ = specialActive_;
 
@@ -3973,6 +4022,8 @@ void StagePlayScene::Seek(float seconds) {
 	}
 	Scene::Seek(seconds);
 	if (railStage_) railStage_->Seek(seconds);
+	// 環境セクションはクロスフェードを挟まず即時適用する（巻き戻しで色を確認するため）。
+	if (stageEnv_) stageEnv_->Reset(seconds);
 }
 
 // IRailStageHost::ClearWaveRuntimeState() の実装。RailStagePart::Seek() から host_ 経由で呼ばれる。

@@ -30,7 +30,7 @@ void Camera::OnImGui()
     ImGui::DragFloat3("Scale", &transform_.scale.x, 0.01f);
     ImGui::DragFloat("FovY", &horizontalFovY_, 0.01f, 0.01f, 3.14f);
     ImGui::DragFloat("NearClip", &nearClip_, 0.01f, 0.001f, 10.0f);
-    ImGui::DragFloat("FarClip", &farClip_, 1.0f, 1.0f, 1000.0f);
+    ImGui::DragFloat("FarClip", &farClip_, 25.0f, 1.0f, 50000.0f);
 #endif
 }
 

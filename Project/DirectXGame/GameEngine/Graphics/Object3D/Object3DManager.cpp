@@ -31,6 +31,11 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
     blendMode_ = kBlendModeNormal;
     currentBlendMode_ = static_cast<int>(blendMode_);
 
+    // 距離フォグ用の定数バッファ（b6）。既定は enabled=0 なので設定しないシーンは無影響。
+    fogResource_ = dxCore_->CreateBufferResource(sizeof(FogParams));
+    fogResource_->Map(0, nullptr, reinterpret_cast<void**>(&fogData_));
+    *fogData_ = FogParams{};
+
     // ID Pass 用 PSO / RootSignature を1回だけ作成
     CreateIdPassObjects();
 }
@@ -74,6 +79,8 @@ void Object3DManager::DrawSetting()
         dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
     }
 
+    // 距離フォグ（b6 = rootParameter[11]）。全オブジェクト共通なのでここで1回だけ。
+    BindFog(dxCore_->GetCommandList());
 }
 
 void Object3DManager::SetBlendMode(BlendMode blendMode)
@@ -133,7 +140,7 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeNormalMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeNormalMap[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[11] = {};
+    D3D12_ROOT_PARAMETER rootParameters[12] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -201,6 +208,11 @@ void Object3DManager::CreateRootSignature()
     rootParameters[10].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[10].DescriptorTable.pDescriptorRanges = descriptorRangeNormalMap;
     rootParameters[10].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeNormalMap);
+
+    // rootParameters[11] = 距離フォグ（b6）。既存インデックスを動かさないよう末尾に足す。
+    rootParameters[11].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[11].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[11].Descriptor.ShaderRegister = 6;  // b6
 
     // ============================================
     // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み)

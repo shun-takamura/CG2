@@ -202,7 +202,17 @@
       "Bash(git -C /c/Users/sleon/デスクトップ/MediaPipeMocap ls-files)",
       "Bash(xargs -0 du -ck)",
       "Bash(grep -n \"]\\(\\\\.\\\\./\\\\|]\\(\\\\.\\\\./\\\\.\\\\./\" README.md)",
-      "Bash(echo \"--- exit $? \\(1=残りなし\\) ---\")"
+      "Bash(echo \"--- exit $? \\(1=残りなし\\) ---\")",
+      "PowerShell(Get-ChildItem 'C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1' -Force | ForEach-Object { if \\($_.PSIsContainer\\) { $s = \\(Get-ChildItem $_.FullName -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum } else { $s = $_.Length }; [PSCustomObject]@{ Name = $_.Name; Type = if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}; MB = [math]::Round\\($s/1MB,1\\) } } | Sort-Object MB -Descending | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem 'C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\Project' -Force | ForEach-Object { if \\($_.PSIsContainer\\) { $s = \\(Get-ChildItem $_.FullName -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum } else { $s = $_.Length }; [PSCustomObject]@{ Name = $_.Name; Type = if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}; MB = [math]::Round\\($s/1MB,1\\) } } | Sort-Object MB -Descending | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem 'C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\Generated' -Force -Recurse -Depth 1 -ErrorAction SilentlyContinue | Where-Object {$_.PSIsContainer} | ForEach-Object { $s=\\(Get-ChildItem $_.FullName -Recurse -Force -File -EA SilentlyContinue | Measure-Object Length -Sum\\).Sum; [PSCustomObject]@{ Path=$_.FullName.Replace\\('C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\',''\\); MB=[math]::Round\\($s/1MB,1\\) } } | Sort-Object MB -Descending | Select-Object -First 20 | Format-Table -AutoSize)",
+      "Bash(cd \"C:/Users/sleon/source/repos/CG2_0_1/Project\" && ls Resources/Textures/Terrain && echo \"=== envmap ===\" && find Resources Assets -iname \"*rostock*\" -o -iname \"*cube*\" -o -iname \"*sky*\" -o -iname \"*env*\" | head -20 && echo \"=== gen_terrain ===\" && ls ../Project/../tools 2>/dev/null; ls tools 2>/dev/null)",
+      "Bash(grep -c \"//\" Resources/Json/Tuning/StagePlay.json)",
+      "Read(//c/Users/sleon/.claude/projects/C--Users-sleon-source-repos-CG2-0-1/memory/**)",
+      "Bash(printf '%s\\\\n' \"- [STG画面リッチ化計画]\\(stg_visual_overhaul.md\\) — 3分・3セクション化。Phase A-1\\(環境セクション基盤\\)実装済み。**レール速度0.75m/s＆スプライン等分の罠**は必読。\")",
+      "Bash(python tools/Python/gen_rail_path.py --dry-run)",
+      "Bash(python tools/Python/gen_rail_path.py)",
+      "Bash(cp Resources/Json/Scenes/StagePlay.json.bak Resources/Json/Scenes/StagePlay.json)"
     ]
   }
 }

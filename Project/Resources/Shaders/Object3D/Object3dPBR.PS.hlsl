@@ -1,4 +1,4 @@
-#include "Object3d.hlsli"
+﻿#include "Object3d.hlsli"
 
 // PBR（Cook-Torrance, メタリック/ラフネス方式）。環境マップ反射は入れない（IBL はフェーズ3）。
 // 影は平行光源の直接光のみに掛ける（Object3d.PS と同じ取り決め）。
@@ -118,6 +118,7 @@ SamplerState gSampler : register(s0);
 
 // ===== Shadow (CSM + PCSS) =====
 #include "Shadow.hlsli"
+#include "Fog.hlsli"
 
 // ===== Cook-Torrance BRDF =====
 
@@ -282,6 +283,10 @@ PixelShaderOutput main(VertexShaderOutput input)
     {
         discard;
     }
+
+    // 距離フォグ（最後に乗せる＝ライティング/IBL/シャドウの結果すべてに効かせる）。
+    // アルファは触らない（ApplyFog 内で rgb のみ扱う）。
+    output.color.rgb = ApplyFog(output.color.rgb, input.worldPosition, gCamera.worldPosition);
 
     return output;
 }

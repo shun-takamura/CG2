@@ -1,4 +1,4 @@
-#include "Object3d.hlsli"
+﻿#include "Object3d.hlsli"
 
 // 最大ライト数（C++側と合わせる）
 #define MAX_POINT_LIGHTS 8
@@ -107,6 +107,7 @@ SamplerState gSampler : register(s0);
 
 // ===== Shadow (CSM + PCSS) =====
 #include "Shadow.hlsli"
+#include "Fog.hlsli"
 
 
 PixelShaderOutput main(VertexShaderOutput input)
@@ -230,5 +231,10 @@ PixelShaderOutput main(VertexShaderOutput input)
         discard;
     }
     
+
+    // 距離フォグ（最後に乗せる＝ライティング/IBL/シャドウの結果すべてに効かせる）。
+    // アルファは触らない（ApplyFog 内で rgb のみ扱う）。
+    output.color.rgb = ApplyFog(output.color.rgb, input.worldPosition, gCamera.worldPosition);
+
     return output;
 }
