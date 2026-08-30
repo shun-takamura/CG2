@@ -8,12 +8,26 @@
 #include <cassert>
 #include"Camera.h"
 #include "TextureManager.h"
-#include <string>  
+#include "Vector4.h"
+#include <string>
 
 
 
 class Object3DManager{
 public:
+    /// <summary>
+    /// 距離フォグ（PS の b6）。全 Object3D PSO 共通で、毎フレーム1回だけバインドする。
+    /// HLSL 側の FogBuffer と 1:1（float4 + float×3 + int = 32byte）。
+    /// enabled=0 の間はシェーダ側で完全にスキップされるので、設定しないシーンは無影響。
+    /// </summary>
+    struct FogParams {
+        Vector4 color{ 0.5f, 0.6f, 0.7f, 1.0f };
+        float   nearDist = 50.0f;
+        float   farDist = 800.0f;
+        float   density = 1.0f;
+        int     enabled = 0;
+    };
+
     // シェーダー種別
     enum ShaderType {
         kShaderEnvironmentMap,     // 環境マップあり
@@ -81,6 +95,10 @@ private:
     D3D12_GPU_VIRTUAL_ADDRESS   shadowConstantsAddr_ = 0;       // b5 = ShadowConstants
     D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle_{};             // t3 = シャドウマップ SRV
 
+    // 距離フォグ（b6）。Initialize で確保し、DrawSetting で毎フレームバインドする。
+    Microsoft::WRL::ComPtr<ID3D12Resource> fogResource_;
+    FogParams* fogData_ = nullptr;
+
 public:
   
 	void Initialize(DirectXCore* dxCore);
@@ -117,6 +135,29 @@ public:
     // 環境マップを設定（シーン全体で使用するCubemapファイルパス）
     void SetEnvironmentTexture(const std::string& filePath) {
         environmentTexturePath_ = filePath;
+    }
+
+    /// <summary>
+    /// 距離フォグを設定する。シーンをまたいで残るので、使い終わったシーンは
+    /// enabled=0 の FogParams を渡して必ず戻すこと。
+    /// </summary>
+    void SetFogParams(const FogParams& params) {
+        if (fogData_) *fogData_ = params;
+    }
+    void DisableFog() {
+        if (fogData_) fogData_->enabled = 0;
+    }
+
+    /// <summary>
+    /// フォグ CB（b6 = rootParameter[11]）をバインドする。
+    /// **ルートシグネチャを貼り直した直後は必ず呼ぶこと**。グラフィックスルートシグネチャを
+    /// セットし直すと全ルート引数が無効化されるため（AnimatedObject3DInstance が
+    /// スキニング CS のあとで貼り直している）、呼ばないと b6 が未バインドのまま描画される。
+    /// </summary>
+    void BindFog(ID3D12GraphicsCommandList* commandList) const {
+        if (fogResource_) {
+            commandList->SetGraphicsRootConstantBufferView(11, fogResource_->GetGPUVirtualAddress());
+        }
     }
 
     // シャドウ受光リソースを設定（毎フレーム、シャドウパス後に Framework から呼ぶ）。

@@ -308,6 +308,9 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
                 7, TextureManager::GetInstance()->GetSrvHandleGPU(envPath)
             );
         }
+        // 上でルートシグネチャを貼り直している＝Object3DManager::DrawSetting のバインドは
+        // 全部無効化されているので、フォグ(b6)はここで貼り直す必要がある。
+        object3DManager_->BindFog(dxCore->GetCommandList());
     }
 
     // Skinning済みVBVで描画

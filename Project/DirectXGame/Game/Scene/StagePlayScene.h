@@ -9,6 +9,7 @@
 #include "BoneSocket.h"
 #include "RailStagePart.h"
 #include "BossStagePart.h"
+#include "StageEnvironment.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -79,6 +80,10 @@ private:
 	// STG（Rail）専用ロジック一式（レールカメラ駆動・Wave/敵スポーン・Seek再構築）。
 	// StagePlayScene は IRailStageHost 経由でのみこれを操作する。
 	std::unique_ptr<RailStagePart> railStage_;
+
+	// 道中の環境演出（セクションごとの空・平行光源・フォグ）を経過秒で駆動する。
+	// Rail フェーズ中だけ Update される。セクション0件なら何もしない＝従来動作。
+	std::unique_ptr<StageEnvironment> stageEnv_;
 
 	// ----- IRailStageHost 実装（private override。外部からは呼べない。RailStagePart 経由のみ）-----
 	IImGuiEditable* SpawnEnemyOnSpline(const std::string& prefabName, SplineCurveActor* spline,
@@ -216,6 +221,13 @@ private:
 	// ランタイム
 	float precisionBlend_ = 0.0f;              // 0=通常, 1=精密モード全開（補間値）
 	float baseFovY_ = 0.45f;                   // 通常時 FovY（Initialize でカメラから取得）
+
+	// ----- クリップ面（JSON "camera.nearClip" / "camera.farClip"）-----
+	// Camera の既定は near=0.1 / far=100 で、SetFarClip はプロジェクト内で一度も呼ばれていなかった
+	// ＝100m より遠くが一切描画されていなかった。遠景・フォグ・広いレールには全く足りないので
+	// StagePlay 側で明示的に設定する。near を上げているのは far を伸ばした分の深度精度確保のため。
+	float cameraNearClip_ = 0.5f;
+	float cameraFarClip_  = 5000.0f;
 	float reticleBaseStickSpeed_ = 1200.0f;    // 通常時レティクル感度（Initialize で取得）
 
 	void UpdatePrecisionAim(class InputActionMap* actions, float dt);
@@ -464,7 +476,7 @@ private:
 	float bossCamLongPressSec_ = 0.5f;  // 長押し閾値（秒）
 
 	// ----- Rail → Landing 自動遷移 -----
-	float seekMaxSec_ = 120.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存
+	float seekMaxSec_ = 180.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存（3分＝3セクション×1分）
 
 	// ----- Landing フェーズ（滞在時間・自動進行）-----
 	float landingDuration_ = 10.0f; // Landing 滞在秒（将来カメラ演出に置換予定）。JSON "phase.landingDurationSec"
