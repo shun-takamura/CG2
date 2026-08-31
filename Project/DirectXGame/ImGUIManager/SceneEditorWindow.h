@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "IImGuiWindow.h"
-#include "EditorDropPayload.h"  // SPRITE_DROP / EFFECT_COMP_DROP（エンジン共有ペイロード）
+#include "EditorDropPayload.h"  // D&D ペイロード定義一式（エンジン所有）
 #include <string>
 #include <vector>
 #include <thread>
@@ -10,56 +10,6 @@
 
 // 前方宣言
 class ImGuiManager;
-
-// ============================================
-// ドラッグ&ドロップで運ぶペイロード（ゲーム専用ぶん）
-// SceneEditorWindow（source）→ ViewportWindow（target）
-// SPRITE_DROP / EFFECT_COMP_DROP はエンジン側も使うため EditorDropPayload.h に分離済み。
-// ============================================
-#define MODEL_DROP_PAYLOAD_TYPE     "MODEL_DROP"
-#define ANIMATED_DROP_PAYLOAD_TYPE  "ANIMATED_DROP"
-#define PRIMITIVE_DROP_PAYLOAD_TYPE "PRIMITIVE_DROP"
-#define MATERIAL_DROP_PAYLOAD_TYPE  "MATERIAL_DROP"
-#define PREFAB_DROP_PAYLOAD_TYPE    "PREFAB_DROP"
-#define ANIM_DROP_PAYLOAD_TYPE      "ANIM_DROP"
-// SceneEditor のエフェクト一覧から運ぶリソース名
-#define EFFECT_RES_DROP_PAYLOAD_TYPE "EFFECT_RES_DROP"
-
-struct ModelDropPayload {
-    char dirPath[256];
-    char filename[128];
-};
-
-// アニメーションモデル（dirPath + filename + 拡張子）
-struct AnimatedDropPayload {
-    char dirPath[256];
-    char filename[128];
-};
-
-// プリミティブ（PrimitiveInstance::PrimitiveType を int で運ぶ）
-struct PrimitiveDropPayload {
-    int primitiveType;
-};
-
-// マテリアル（.mat ファイルパス）
-struct MaterialDropPayload {
-    char materialPath[384];
-};
-
-// アニメーション（.anim ファイルパス）
-struct AnimDropPayload {
-    char animPath[384];
-};
-
-// プリファブ名
-struct PrefabDropPayload {
-    char prefabName[128];
-};
-
-// エフェクト名（EffectManager に登録されたエフェクトの name）
-struct EffectResDropPayload {
-    char effectName[128];
-};
 
 /// <summary>
 /// シーンエディタウィンドウ

@@ -3,8 +3,8 @@
 #include "SRVManager.h"
 #include "imgui.h"
 
-#include "SceneEditorWindow.h"  // ModelDropPayload / SpriteDropPayload / AnimatedDropPayload
-#include "SceneManager.h"
+#include "EditorDropPayload.h"  // ModelDropPayload / SpriteDropPayload / AnimatedDropPayload 等
+#include "ImGuiManager.h"       // アクティブシーンはホストフック経由で取る
 #include "Scene.h"
 #include "WindowsApplication.h"  // kClientWidth / kClientHeight
 #include "Camera.h"
@@ -73,7 +73,7 @@ void ViewportWindow::OnDraw() {
 
     // --- 再生/停止コントロール（現在シーンの sceneTimeScale を 0/1 に切り替え） ---
     {
-        Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
+        Scene* scene = ImGuiManager::Instance().GetActiveScene();
         const bool isPaused = scene && scene->GetSceneTimeScale() == 0.0f;
         if (ImGui::Button(isPaused ? "Play" : "Pause")) {
             if (scene) scene->SetSceneTimeScale(isPaused ? 1.0f : 0.0f);
@@ -117,7 +117,7 @@ void ViewportWindow::OnDraw() {
 
     // ----- SceneEditor からのドロップ受付 -----
     if (ImGui::BeginDragDropTarget()) {
-        Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
+        Scene* scene = ImGuiManager::Instance().GetActiveScene();
 
         // マウス位置 → ビューポート画像相対座標 (0..1) → ワールド座標 (Y=0平面)
         Vector3 worldPos{ 0.0f, 0.0f, 0.0f };

@@ -3,7 +3,7 @@
 #include "ModelInstance.h"
 #include "Material.h"
 #include "TextureManager.h"
-#include "SceneEditorWindow.h"  // MATERIAL_DROP / MODEL_DROP 等ゲーム側ペイロード（SPRITE は transitive）
+#include "EditorDropPayload.h"  // MATERIAL_DROP / SPRITE_DROP 等の D&D ペイロード
 
 void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore,
     const std::string& directorPath, const std::string& filename,

@@ -4,8 +4,8 @@ class IImGuiEditable;
 
 /// <summary>
 /// エディタの「選択中オブジェクト」を抽象化するインターフェース（依存性の逆転）。
-/// ImGuiManager（Game 側）が実装し、EngineCore 側のエディタ（EffectEditorWindow 等）に
-/// 注入する。これによりエンジン側のエディタが ImGuiManager の具象型を知らずに済む。
+/// ImGuiManager が実装し、各エディタウィンドウ（EffectEditorWindow 等）へ注入する。
+/// これにより個々のエディタが ImGuiManager の具象型を知らずに済む。
 /// </summary>
 class IEditorSelection {
 public:

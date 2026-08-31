@@ -13,6 +13,11 @@
 #include "SRVManager.h"
 #include "InputManager.h"
 #include "ImGuiManager.h"
+#include "IImGuiWindow.h"
+#include "HierarchyWindow.h"
+#include "InspectorWindow.h"
+#include "SceneEditorWindow.h"
+#include "StagePlayScene.h"
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "SceneFactory.h"
@@ -51,6 +56,42 @@ ISceneRunner* Game::GetSceneRunner() {
 	return SceneManager::GetInstance();
 }
 
+#ifdef _DEBUG
+void Game::RegisterGameEditorWindows() {
+	auto& imgui = ImGuiManager::Instance();
+
+	// ゲームのエンティティ／コンポーネントを直接扱うウィンドウ群
+	imgui.AddWindow(std::make_unique<HierarchyWindow>(&imgui));
+	imgui.AddWindow(std::make_unique<InspectorWindow>(&imgui));
+	imgui.AddWindow(std::make_unique<SceneEditorWindow>(&imgui));
+
+	imgui.AddCallbackWindow("Transition",
+		[]() { TransitionManager::GetInstance()->OnImGui(); });
+
+	imgui.AddCallbackWindow("StagePlay Tuning",
+		[]() {
+			auto* sm = SceneManager::GetInstance();
+			auto* scene = sm ? sm->GetCurrentScene() : nullptr;
+			if (auto* stage = dynamic_cast<StagePlayScene*>(scene)) {
+				stage->OnImGuiTuning();
+			} else {
+				ImGui::TextDisabled("Active only in StagePlay scene.");
+			}
+		});
+
+	imgui.AddCallbackWindow("Collision",
+		[]() {
+			auto* cm = CollisionManager::GetInstance();
+			bool drawDebug = cm->IsDrawDebugEnabled();
+			if (ImGui::Checkbox("Draw Colliders", &drawDebug)) {
+				cm->SetDrawDebugEnabled(drawDebug);
+			}
+			ImGui::TextDisabled("- Tag-colored when not colliding");
+			ImGui::TextDisabled("- Red when colliding this frame");
+		});
+}
+#endif // _DEBUG
+
 void Game::Initialize() {
 	// エンティティ生成/破棄フックを配線（依存性の逆転）。
 	// 以降に生成される全 IImGuiEditable はここで登録した処理を通る。
@@ -66,8 +107,31 @@ void Game::Initialize() {
 			Gameplay::Remove(e);
 		});
 
+	// エディタ核（エンジン）がゲームの実体へ触るためのフックを配線（依存性の逆転）。
+	// これによりエンジン側は SceneManager / Game を名指ししない。
+	{
+		EditorHostHooks hooks{};
+		hooks.getActiveScene = []() -> Scene* {
+			auto* sm = SceneManager::GetInstance();
+			return sm ? sm->GetCurrentScene() : nullptr;
+		};
+		hooks.getActiveSceneName = []() -> const char* {
+			auto* sm = SceneManager::GetInstance();
+			return sm ? sm->GetCurrentSceneName().c_str() : nullptr;
+		};
+		hooks.getPostEffect = []() -> PostEffect* { return Game::GetPostEffect(); };
+		hooks.getFramework = []() -> Framework* { return Game::GetInstance(); };
+		ImGuiManager::SetHostHooks(hooks);
+	}
+
 	// 基底クラスの初期化処理
 	Framework::Initialize();
+
+#ifdef _DEBUG
+	// エンジン標準パネルの生成後に、ゲーム対応のウィンドウ／パネルを追加登録する。
+	// （エンジンから見えないゲーム型に触るものはすべてここに集約する）
+	RegisterGameEditorWindows();
+#endif
 
 	// 初期シーンと PostEffect のロードを DStorage バッチで囲む。
 	// (シーン内の全テクスチャ/メッシュ Enqueue を蓄積 → 末尾で 1 回だけ Wait)

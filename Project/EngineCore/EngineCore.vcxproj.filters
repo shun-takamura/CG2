@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="ソース ファイル">
@@ -235,7 +235,19 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\ImGUIManager\EffectPaletteWindow.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>    <ClCompile Include="..\DirectXGame\ImGUIManager\ImGuiManager.cpp">
+      <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\ImGUIManager\ViewportWindow.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\ImGUIManager\Gizmo.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\ImGUIManager\SpriteGizmo.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\EffectComponentEditable.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -331,7 +343,13 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\VerletSolver.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>    <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\CollisionGeometry.cpp">
+      <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\CollisionSystem.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -546,7 +564,31 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\ImGUIManager\IEditorSelection.h">
       <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>    <ClInclude Include="..\DirectXGame\ImGUIManager\ImGuiManager.h">
+      <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\ViewportWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\Gizmo.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\SpriteGizmo.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\FPSWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\LogWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\ImGUIManager\PepperWindow.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Easing.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -780,7 +822,16 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\VerletSolver.h">
       <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\Collider.h">
+      <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\CollisionGeometry.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\CollisionSystem.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
