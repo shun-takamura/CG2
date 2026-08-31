@@ -495,6 +495,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <None Include="tools\Python\convert_hdr_to_dds.py" />
     <None Include="tools\Python\cook_assets.py" />
     <None Include="tools\Python\pack_assets.py" />
+    <None Include="tools\Python\package_release.py" />
+    <None Include="tools\Python\package_project.py" />
+    <None Include="tools\Batch\package_project.bat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

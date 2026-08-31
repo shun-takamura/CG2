@@ -2,7 +2,7 @@
   "player": {
     "localOffset": [
       0,
-      -0.800000011920929,
+      -0.80000001192092896,
       12
     ],
     "moveSpeed": [
@@ -16,11 +16,145 @@
     "smoothTime": 0.25
   },
   "camera": {
-    "speed": 0.005555555555555556,
+    "speed": 0.0055555556900799274,
     "rotKeys": [],
     "nearClip": 0.5,
-    "farClip": 5000.0
+    "farClip": 5000
   },
+  "sections": [
+    {
+      "name": "SkyAboveClouds",
+      "startSec": 0,
+      "blendSec": 4,
+      "skyboxPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
+      "skyboxTint": [
+        1,
+        1,
+        1.0499999523162842,
+        1
+      ],
+      "lightDir": [
+        0.30000001192092896,
+        -0.80000001192092896,
+        0.5
+      ],
+      "lightColor": [
+        1,
+        0.97000002861022949,
+        0.89999997615814209,
+        1
+      ],
+      "lightIntensity": 1,
+      "fogColor": [
+        0.62000000476837158,
+        0.72000002861022949,
+        0.87999999523162842,
+        1
+      ],
+      "fogNear": 800,
+      "fogFar": 5000,
+      "fogDensity": 0.34999999403953552
+    },
+    {
+      "name": "CloudLayer",
+      "startSec": 54,
+      "blendSec": 6,
+      "skyboxPath": "Resources/Cubemaps/passendorf_snow_8k.dds",
+      "skyboxTint": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "lightDir": [
+        0.05000000074505806,
+        -1,
+        0.10000000149011612
+      ],
+      "lightColor": [
+        1,
+        0.99000000953674316,
+        0.97000002861022949,
+        1
+      ],
+      "lightIntensity": 1.3999999761581421,
+      "fogColor": [
+        0.89999997615814209,
+        0.92000001668930054,
+        0.94999998807907104,
+        1
+      ],
+      "fogNear": 20,
+      "fogFar": 220,
+      "fogDensity": 2
+    },
+    {
+      "name": "LowAltitude",
+      "startSec": 66,
+      "blendSec": 6,
+      "skyboxPath": "",
+      "skyboxTint": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "lightDir": [
+        0.34999999403953552,
+        -0.85000002384185791,
+        0.40000000596046448
+      ],
+      "lightColor": [
+        1,
+        0.98000001907348633,
+        0.93999999761581421,
+        1
+      ],
+      "lightIntensity": 0.89999997615814209,
+      "fogColor": [
+        0.69999998807907104,
+        0.77999997138977051,
+        0.89999997615814209,
+        1
+      ],
+      "fogNear": 150,
+      "fogFar": 2500,
+      "fogDensity": 0.80000001192092896
+    },
+    {
+      "name": "Canyon",
+      "startSec": 120,
+      "blendSec": 6,
+      "skyboxPath": "Resources/Cubemaps/rogland_clear_night_4k.dds",
+      "skyboxTint": [
+        0.81999999284744263,
+        0.86000001430511475,
+        1,
+        1
+      ],
+      "lightDir": [
+        0.44999998807907104,
+        -0.69999998807907104,
+        0.55000001192092896
+      ],
+      "lightColor": [
+        0.86000001430511475,
+        0.89999997615814209,
+        1,
+        1
+      ],
+      "lightIntensity": 0.5,
+      "fogColor": [
+        0.30000001192092896,
+        0.36000001430511475,
+        0.51999998092651367,
+        1
+      ],
+      "fogNear": 60,
+      "fogFar": 900,
+      "fogDensity": 1.2999999523162842
+    }
+  ],
   "skybox": {
     "tint": [
       1,
@@ -29,21 +163,21 @@
       1
     ],
     "specialDarkColor": [
-      0.3019607961177826,
-      0.3019607961177826,
-      0.4000000059604645,
+      0.30196079611778259,
+      0.30196079611778259,
+      0.40000000596046448,
       1
     ],
-    "specialFadeIn": 0.4000000059604645,
-    "specialFadeOut": 0.6000000238418579,
+    "specialFadeIn": 0.40000000596046448,
+    "specialFadeOut": 0.60000002384185791,
     "bossBlendDuration": 5,
     "defaultPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
     "bossPath": "Resources/Cubemaps/passendorf_snow_8k.dds"
   },
   "aim": {
     "planeDistance": 200,
-    "smoothTime": 0.07999999821186066,
-    "assistPixelScale": 1.399999976158142,
+    "smoothTime": 0.079999998211860657,
+    "assistPixelScale": 1.3999999761581421,
     "reticleOuterMinPx": 16,
     "reticleOuterMaxPx": 32,
     "reticleOuterSizeMinPx": 32,
@@ -59,8 +193,8 @@
   },
   "dodge": {
     "justWindow": 0.15000000596046448,
-    "iframeDuration": 0.4000000059604645,
-    "cooldown": 0.6000000238418579,
+    "iframeDuration": 0.40000000596046448,
+    "cooldown": 0.60000002384185791,
     "actionLock": 0.25,
     "impulseX": 10,
     "impulseY": 6
@@ -84,13 +218,13 @@
     "meleeApproachDuration": 0.18000000715255737,
     "meleeReturnDuration": 0.25,
     "meleeApproachDist": 4,
-    "dodgeReturnDuration": 0.3499999940395355,
+    "dodgeReturnDuration": 0.34999999403953552,
     "bossFacingTurnSmooth": 0.10000000149011612,
     "bossWarpDelay": 0.11999999731779099,
-    "bossCamSwingDuration": 0.3499999940395355,
+    "bossCamSwingDuration": 0.34999999403953552,
     "dodgeExpandedMargin": [
-      0.800000011920929,
-      0.800000011920929
+      0.80000001192092896,
+      0.80000001192092896
     ],
     "meleeCamOffset": [
       -3,
@@ -109,8 +243,8 @@
       "Resources/Models/Animated/Walk/walk.mesh"
     ],
     "cloneColor": [
-      0.4000000059604645,
-      0.800000011920929,
+      0.40000000596046448,
+      0.80000001192092896,
       1,
       0.44999998807907104
     ]
@@ -125,7 +259,7 @@
     "gaugeMaxGouman": 100,
     "gaugeMaxDisruptor": 120,
     "cooldown": 30,
-    "equipped": 1,
+    "equipped": 0,
     "disruptorCharge": 2.5,
     "disruptorSlash": 1.5,
     "disruptorCollapse": 4,
@@ -136,7 +270,7 @@
     "disruptorPivotRadius": 14,
     "disruptorCamPullback": 8,
     "disruptorCamUpAdd": 1.5,
-    "disruptorCamFovAdd": 0.05999999865889549,
+    "disruptorCamFovAdd": 0.059999998658895493,
     "disruptorCamEaseTime": 0.25,
     "disruptorCamFireSide": 6,
     "disruptorCamFireFront": 5,
@@ -167,13 +301,13 @@
         1,
         0.8399999737739563,
         0.15000000596046448,
-        0.8999999761581421
+        0.89999997615814209
       ],
       "pink": [
         1,
-        0.3499999940395355,
-        0.800000011920929,
-        0.8999999761581421
+        0.34999999403953552,
+        0.80000001192092896,
+        0.89999997615814209
       ]
     },
     "barrierParticle": {
@@ -183,16 +317,16 @@
       "life": 0.5,
       "radiusScale": 1,
       "scaleMin": [
-        0.05999999865889549,
-        0.05999999865889549
+        0.059999998658895493,
+        0.059999998658895493
       ],
       "scaleMax": [
-        0.1599999964237213,
-        0.1599999964237213
+        0.15999999642372131,
+        0.15999999642372131
       ],
       "color0": [
         0.5,
-        0.8500000238418579,
+        0.85000002384185791,
         1,
         1
       ],
@@ -206,15 +340,15 @@
     "wing": {
       "on": true,
       "armCount": 4,
-      "angleOffset": 0.7853981852531433,
+      "angleOffset": 0.78539818525314331,
       "speed": 6,
-      "life": 0.4000000059604645,
+      "life": 0.40000000596046448,
       "burstCount": 6,
       "jitter": 1,
       "emitRadius": 0.10000000149011612,
       "scaleMin": [
-        0.03999999910593033,
-        0.03999999910593033
+        0.039999999105930328,
+        0.039999999105930328
       ],
       "scaleMax": [
         0.10000000149011612,
@@ -222,25 +356,25 @@
       ],
       "colorInner": [
         1,
-        0.8500000238418579,
+        0.85000002384185791,
         0.20000000298023224,
         1
       ],
       "colorOuter": [
         1,
-        0.4000000059604645,
-        0.8500000238418579,
+        0.40000000596046448,
+        0.85000002384185791,
         0
       ]
     },
     "barrierColor": [
       1,
-      0.800000011920929,
+      0.80000001192092896,
       0.30000001192092896,
       0.10000000149011612
     ],
     "camPullback": 8,
-    "camFovAdd": 0.05999999865889549,
+    "camFovAdd": 0.059999998658895493,
     "camUpAdd": 1.5,
     "chargeBoltCount": 6,
     "chargeRegenInterval": 0.15000000596046448,
@@ -253,16 +387,16 @@
     "fireTickInterval": 0.10000000149011612,
     "fireTickDamage": 10,
     "fireLaunchInterval": 0.10000000149011612,
-    "fireGrowTime": 0.07999999821186066,
+    "fireGrowTime": 0.079999998211860657,
     "fireMaxOffsetRatio": 0.10000000149011612,
-    "fireBranchProb": 0.009999999776482582,
+    "fireBranchProb": 0.0099999997764825821,
     "fireStartWidth": 0.10000000149011612,
     "fireEndWidth": 0.05000000074505806,
-    "fireBoltLifetime": 0.07999999821186066,
+    "fireBoltLifetime": 0.079999998211860657,
     "endDuration": 1,
     "fireColor": [
       0.5,
-      0.800000011920929,
+      0.80000001192092896,
       1,
       1
     ],
@@ -272,13 +406,13 @@
     "disruptorRiftRevealTime": 0.44999998807907104,
     "disruptorRevealIntensity": 1,
     "disruptorRevealStartDelay": 0.44999998807907104,
-    "disruptorCollapseEndAt": 0.8999999761581421,
+    "disruptorCollapseEndAt": 0.89999997615814209,
     "disruptorInvertDelay": 0.10000000149011612,
     "disruptorFragAlpha": 1,
-    "disruptorFragSatBoost": 1.600000023841858,
+    "disruptorFragSatBoost": 1.6000000238418579,
     "disruptorFragSpin": 6,
     "disruptorFragMinScale": 0.75,
-    "disruptorFractureSeed": 338766952,
+    "disruptorFractureSeed": 2248631235,
     "disruptorFractureSeedLock": false,
     "disruptorCellCount": 512,
     "disruptorBreakFreeze": 0,
@@ -293,8 +427,8 @@
       1
     ],
     "disruptorRiftColor": [
-      0.6000000238418579,
-      0.4000000059604645,
+      0.60000002384185791,
+      0.40000000596046448,
       1,
       1
     ],
@@ -307,17 +441,17 @@
         0.10000000149011612,
         0.10000000149011612,
         0.20000000298023224,
-        0.800000011920929
+        0.80000001192092896
       ],
       "fgColor": [
-        0.550000011920929,
+        0.55000001192092896,
         0.75,
         1,
         1
       ],
       "fullColor": [
         1,
-        0.8500000238418579,
+        0.85000002384185791,
         0.30000001192092896,
         1
       ]
@@ -377,154 +511,20 @@
   "precision": {
     "fovY": 0.30000001192092896,
     "camOffset": [
-      0.550000011920929,
+      0.55000001192092896,
       1,
       -5
     ],
     "fadeSpeed": 6,
-    "stickScale": 0.4000000059604645,
+    "stickScale": 0.40000000596046448,
     "vignette": 0.5,
     "blurIntensity": 1,
     "blurInnerRadius": 0.30000001192092896,
-    "blurFalloff": 0.4000000059604645,
+    "blurFalloff": 0.40000000596046448,
     "blurMaxPx": 10
   },
   "phase": {
     "seekMaxSec": 180,
     "landingDurationSec": 5
-  },
-  "sections": [
-    {
-      "name": "SkyAboveClouds",
-      "startSec": 0.0,
-      "blendSec": 4.0,
-      "skyboxPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
-      "skyboxTint": [
-        1.0,
-        1.0,
-        1.05,
-        1.0
-      ],
-      "lightDir": [
-        0.3,
-        -0.8,
-        0.5
-      ],
-      "lightColor": [
-        1.0,
-        0.97,
-        0.9,
-        1.0
-      ],
-      "lightIntensity": 1.0,
-      "fogColor": [
-        0.62,
-        0.72,
-        0.88,
-        1.0
-      ],
-      "fogNear": 800.0,
-      "fogFar": 5000.0,
-      "fogDensity": 0.35
-    },
-    {
-      "name": "CloudLayer",
-      "startSec": 54.0,
-      "blendSec": 6.0,
-      "skyboxPath": "Resources/Cubemaps/passendorf_snow_8k.dds",
-      "skyboxTint": [
-        1.0,
-        1.0,
-        1.0,
-        1.0
-      ],
-      "lightDir": [
-        0.05,
-        -1.0,
-        0.1
-      ],
-      "lightColor": [
-        1.0,
-        0.99,
-        0.97,
-        1.0
-      ],
-      "lightIntensity": 1.4,
-      "fogColor": [
-        0.9,
-        0.92,
-        0.95,
-        1.0
-      ],
-      "fogNear": 20.0,
-      "fogFar": 220.0,
-      "fogDensity": 2.0
-    },
-    {
-      "name": "LowAltitude",
-      "startSec": 66.0,
-      "blendSec": 6.0,
-      "skyboxPath": "",
-      "skyboxTint": [
-        1.0,
-        1.0,
-        1.0,
-        1.0
-      ],
-      "lightDir": [
-        0.35,
-        -0.85,
-        0.4
-      ],
-      "lightColor": [
-        1.0,
-        0.98,
-        0.94,
-        1.0
-      ],
-      "lightIntensity": 0.9,
-      "fogColor": [
-        0.7,
-        0.78,
-        0.9,
-        1.0
-      ],
-      "fogNear": 150.0,
-      "fogFar": 2500.0,
-      "fogDensity": 0.8
-    },
-    {
-      "name": "Canyon",
-      "startSec": 120.0,
-      "blendSec": 6.0,
-      "skyboxPath": "Resources/Cubemaps/rogland_clear_night_4k.dds",
-      "skyboxTint": [
-        0.82,
-        0.86,
-        1.0,
-        1.0
-      ],
-      "lightDir": [
-        0.45,
-        -0.7,
-        0.55
-      ],
-      "lightColor": [
-        0.86,
-        0.9,
-        1.0,
-        1.0
-      ],
-      "lightIntensity": 0.5,
-      "fogColor": [
-        0.3,
-        0.36,
-        0.52,
-        1.0
-      ],
-      "fogNear": 60.0,
-      "fogFar": 900.0,
-      "fogDensity": 1.3
-    }
-  ]
+  }
 }

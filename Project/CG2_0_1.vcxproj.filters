@@ -1140,5 +1140,8 @@
     <None Include="tools\Python\convert_hdr_to_dds.py" />
     <None Include="tools\Python\cook_assets.py" />
     <None Include="tools\Python\pack_assets.py" />
+    <None Include="tools\Python\package_release.py" />
+    <None Include="tools\Python\package_project.py" />
+    <None Include="tools\Batch\package_project.bat" />
   </ItemGroup>
 </Project>
