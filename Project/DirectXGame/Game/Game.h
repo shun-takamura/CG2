@@ -74,6 +74,12 @@ private:
 	KeyConfig::Options keyConfigOptions_;
 
 #ifdef _DEBUG
+	/// <summary>
+	/// ゲーム型に触るエディタウィンドウ／パネルを ImGuiManager へ追加登録する。
+	/// エンジン側はゲームを名指しできないため、配線はこちらから行う（依存性の逆転）。
+	/// </summary>
+	void RegisterGameEditorWindows();
+
 	// Debug ビルド専用: ImGui ViewportWindow に表示する PostEffect 適用後の最終出力
 	std::unique_ptr<RenderTexture> viewportRenderTexture_;
 #endif

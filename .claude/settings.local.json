@@ -224,7 +224,26 @@
       "Bash(echo.)",
       "Bash(cmd //c setup_mergiraf.bat)",
       "PowerShell(cmd /c \"cd /d C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\Project\\\\tools\\\\mergiraf && setup_mergiraf.bat < nul\")",
-      "PowerShell(& cmd.exe /c \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\Project\\\\tools\\\\mergiraf\\\\setup_mergiraf.bat\")"
+      "PowerShell(& cmd.exe /c \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\\\\Project\\\\tools\\\\mergiraf\\\\setup_mergiraf.bat\")",
+      "Bash(awk -F'/' '{print $1\"/\"$2}')",
+      "Bash(tr '\\\\\\\\' '/')",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/dep.py\")",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/dep2.py\")",
+      "Bash(grep -v '^\\\\s*$')",
+      "Bash(grep -viE '//|///')",
+      "Bash(awk -F'\"' '{print $2}')",
+      "Bash(awk -F'#include ' '{print $2}')",
+      "Bash(grep -n 'ImGUIManager\\\\\\\\\\\\\\\\ImGuiManager' CG2_0_1.vcxproj.filters)",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/move.py\")",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/props.py\")",
+      "Bash(:)",
+      "Bash(echo \"--- Math\\\\\\\\CollisionManager ---\")",
+      "Bash(grep -n 'Math\\\\\\\\CollisionManager' EngineCore/EngineCore.vcxproj CG2_0_1.vcxproj EngineCore/EngineCore.vcxproj.filters CG2_0_1.vcxproj.filters)",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/stale.py\")",
+      "Bash(cd \"C:/Users/sleon/source/repos/CG2_0_1/Project/DirectXGame/GameEngine\" && echo \"=== Math/Physics ===\"; ls Math/Physics 2>/dev/null || echo \"\\(空 or 無し\\)\"; echo; echo \"=== Entity / Entity/Components ===\"; ls Entity 2>/dev/null; ls Entity/Components 2>/dev/null; echo; echo \"=== vcxproj 登録の Physics/Entity ===\"; grep -n 'Physics\\\\|GameEngine\\\\\\\\\\\\\\\\Entity' ../../EngineCore/EngineCore.vcxproj)",
+      "Bash(python - __TRACKED_VAR__/CollisionManager.cpp)",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/addfiles.py\")",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/cleanup.py\")"
     ]
   }
 }

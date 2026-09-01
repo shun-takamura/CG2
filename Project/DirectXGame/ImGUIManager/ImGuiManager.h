@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <string>
+#include <functional>
 #include <d3d12.h>
 #include <wrl.h>
 
@@ -15,16 +17,32 @@ class DirectXCore;
 class SRVManager;
 class FPSWindow;
 class LogWindow;
-class HierarchyWindow;
-class InspectorWindow;
 class ViewportWindow;
-class SceneEditorWindow;
 class EffectEditorWindow;
 class RenderTexture;
 class Camera;
 class GPUParticleManager;
+class Scene;
+class PostEffect;
+class Framework;
 struct HWND__;
 typedef HWND__* HWND;
+
+/// <summary>
+/// エディタ核（エンジン）がホストアプリの実体へ触るための注入フック（依存性の逆転）。
+/// エンジンは SceneManager / Game といった具象を名指しせず、ホスト側が起動時に配線する。
+/// 未配線のものは nullptr のままでよく、その場合はパネルが「無効」表示になるだけ。
+/// </summary>
+struct EditorHostHooks {
+    /// 現在アクティブなシーン（無ければ nullptr）
+    Scene* (*getActiveScene)() = nullptr;
+    /// 現在アクティブなシーンの表示名（無ければ nullptr）
+    const char* (*getActiveSceneName)() = nullptr;
+    /// ホストが保持する PostEffect（無ければ nullptr）
+    PostEffect* (*getPostEffect)() = nullptr;
+    /// ホストの Framework 実体（ShadowMap 等のエンジン機能へ辿るため）
+    Framework* (*getFramework)() = nullptr;
+};
 
 /// <summary>
 /// ImGui管理クラス（シングルトン）
@@ -35,6 +53,34 @@ public:
     /// シングルトンインスタンスの取得
     /// </summary>
     static ImGuiManager& Instance();
+
+    /// <summary>
+    /// ホストフックを配線する。Initialize より前でも後でもよい（Draw 時にしか参照しない）。
+    /// </summary>
+    static void SetHostHooks(const EditorHostHooks& hooks);
+
+    /// <summary>アクティブシーン取得（フック未配線なら nullptr）。</summary>
+    Scene* GetActiveScene() const;
+
+    /// <summary>アクティブシーン名取得（フック未配線なら nullptr）。</summary>
+    const char* GetActiveSceneName() const;
+
+    /// <summary>ホストの PostEffect 取得（フック未配線なら nullptr）。</summary>
+    PostEffect* GetHostPostEffect() const;
+
+    /// <summary>ホストの Framework 取得（フック未配線なら nullptr）。</summary>
+    Framework* GetHostFramework() const;
+
+    /// <summary>
+    /// ホスト側のウィンドウを追加登録する。Initialize 後に呼ぶこと。
+    /// 所有権は ImGuiManager が持つ。
+    /// </summary>
+    void AddWindow(std::unique_ptr<IImGuiWindow> window);
+
+    /// <summary>
+    /// 描画コールバックだけのウィンドウを追加登録する（AddWindow の簡易版）。
+    /// </summary>
+    void AddCallbackWindow(const std::string& name, std::function<void()> draw);
 
     /// <summary>
     /// 初期化
@@ -158,6 +204,9 @@ private:
 
     // シーン保有のGPUParticleManagerへの参照（非所有）
     GPUParticleManager* gpuParticleManager_ = nullptr;
+
+    // ホスト（ゲーム/エディタアプリ）から注入されたフック
+    static EditorHostHooks hostHooks_;
 
     bool isInitialized_ = false;
 };

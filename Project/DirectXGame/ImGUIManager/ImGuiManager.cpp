@@ -5,18 +5,16 @@
 #include "FPSWindow.h"
 #include "PepperWindow.h"
 #include "LogWindow.h"
-#include "HierarchyWindow.h"
-#include "InspectorWindow.h"
 #include "ViewportWindow.h"
-#include "SceneEditorWindow.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "RenderTexture.h"
 #include "Camera.h"
 #include "WindowsApplication.h"
 
-// CallbackWindow 経由で呼ぶデバッグUI群
-#include "Game.h"
+// CallbackWindow 経由で呼ぶデバッグUI群（すべてエンジン機能。
+// ゲーム固有のパネルはホスト側が AddCallbackWindow で足す）
+#include "Framework.h"
 #include "LightManager.h"
 #include "PostEffect.h"
 #include "GPUParticleManager.h"
@@ -24,18 +22,12 @@
 #include "Effect/EffectEditorWindow.h"
 #include "EffectHierarchyWindow.h"
 #include "EffectPaletteWindow.h"
-#include "TransitionManager.h"
 #include "DebugCamera.h"
 #include "Vector3.h"
 #include "MathUtility.h"
-#include "SceneManager.h"
 #include "Scene.h"
-#include "StagePlayScene.h"
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
-#include "SceneManager.h"
-#include "Scene.h"
-#include "Components/CollisionManager.h"
 #include "TimeGroup.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
@@ -46,9 +38,47 @@
 
 #include <algorithm>
 
+EditorHostHooks ImGuiManager::hostHooks_{};
+
 ImGuiManager& ImGuiManager::Instance() {
     static ImGuiManager instance;
     return instance;
+}
+
+void ImGuiManager::SetHostHooks(const EditorHostHooks& hooks) {
+    hostHooks_ = hooks;
+}
+
+Scene* ImGuiManager::GetActiveScene() const {
+    return hostHooks_.getActiveScene ? hostHooks_.getActiveScene() : nullptr;
+}
+
+const char* ImGuiManager::GetActiveSceneName() const {
+    return hostHooks_.getActiveSceneName ? hostHooks_.getActiveSceneName() : nullptr;
+}
+
+PostEffect* ImGuiManager::GetHostPostEffect() const {
+    return hostHooks_.getPostEffect ? hostHooks_.getPostEffect() : nullptr;
+}
+
+Framework* ImGuiManager::GetHostFramework() const {
+    return hostHooks_.getFramework ? hostHooks_.getFramework() : nullptr;
+}
+
+void ImGuiManager::AddWindow(std::unique_ptr<IImGuiWindow> window) {
+#ifdef _DEBUG
+    if (window) windows_.push_back(std::move(window));
+#else
+    (void)window;
+#endif
+}
+
+void ImGuiManager::AddCallbackWindow(const std::string& name, std::function<void()> draw) {
+#ifdef _DEBUG
+    windows_.push_back(std::make_unique<CallbackWindow>(name, std::move(draw)));
+#else
+    (void)name; (void)draw;
+#endif
 }
 
 
@@ -109,18 +139,21 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
     // 各ウィンドウを生成
-    windows_.push_back(std::make_unique<ViewportWindow>(srvManager_));
+    // ViewportWindow は EndFrame のギズモ描画で直接参照するのでポインタを控えておく
+    {
+        auto viewport = std::make_unique<ViewportWindow>(srvManager_);
+        viewportWindow_ = viewport.get();
+        windows_.push_back(std::move(viewport));
+    }
     windows_.push_back(std::make_unique<FPSWindow>());
     windows_.push_back(std::make_unique<PepperWindow>());
     windows_.push_back(std::make_unique<LogWindow>());
-    windows_.push_back(std::make_unique<HierarchyWindow>(this));
-    windows_.push_back(std::make_unique<InspectorWindow>(this));
 
     // デバッグUI群を CallbackWindow 経由で登録
     windows_.push_back(std::make_unique<CallbackWindow>("Camera",
         [this]() {
             // ===== Debug Camera toggle =====
-            Scene* scene = SceneManager::GetInstance() ? SceneManager::GetInstance()->GetCurrentScene() : nullptr;
+            Scene* scene = GetActiveScene();
             if (scene) {
                 bool useDebug = scene->GetUseDebugCamera();
                 if (ImGui::Checkbox("Use Debug Camera", &useDebug)) {
@@ -154,17 +187,17 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             if (camera_) camera_->OnImGui();
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("Light",
-        []() {
+        [this]() {
             LightManager::GetInstance()->OnImGui();
             // シャドウ（CSM）調整 UI を同じ Light パネルに差し込む
-            if (Game* g = Game::GetInstance()) {
-                if (ShadowMap* sm = g->GetShadowMap()) {
+            if (Framework* fw = GetHostFramework()) {
+                if (ShadowMap* sm = fw->GetShadowMap()) {
                     sm->OnImGui();
                 }
             }
         }));
     windows_.push_back(std::make_unique<CallbackWindow>("PostEffect",
-        []() { if (auto* p = Game::GetPostEffect()) p->ShowImGui(); }));
+        [this]() { if (auto* p = GetHostPostEffect()) p->ShowImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("Particle",
         [this]() {
             if (gpuParticleManager_) {
@@ -173,18 +206,15 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                 ImGui::TextDisabled("GPUParticleManager is not active in the current scene.");
             }
         }));
-    windows_.push_back(std::make_unique<CallbackWindow>("Transition",
-        []() { TransitionManager::GetInstance()->OnImGui(); }));
     windows_.push_back(std::make_unique<CallbackWindow>("Highlights",
         [this]() {
-            auto* sm = SceneManager::GetInstance();
-            Scene* scene = sm ? sm->GetCurrentScene() : nullptr;
+            Scene* scene = GetActiveScene();
             if (!scene) {
                 ImGui::TextDisabled("No active scene.");
                 return;
             }
             // PostEffect トグル
-            if (auto* pe = Game::GetPostEffect(); pe && pe->maskedGrayscale) {
+            if (auto* pe = GetHostPostEffect(); pe && pe->maskedGrayscale) {
                 bool en = pe->maskedGrayscale->IsEnabled();
                 if (ImGui::Checkbox("Enable MaskedGrayscale", &en)) {
                     pe->maskedGrayscale->SetEnabled(en);
@@ -221,17 +251,6 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                     e->GetName().c_str());
             }
         }));
-    windows_.push_back(std::make_unique<CallbackWindow>("StagePlay Tuning",
-        []() {
-            auto* sm = SceneManager::GetInstance();
-            auto* scene = sm ? sm->GetCurrentScene() : nullptr;
-            if (auto* stage = dynamic_cast<StagePlayScene*>(scene)) {
-                stage->OnImGuiTuning();
-            } else {
-                ImGui::TextDisabled("Active only in StagePlay scene.");
-            }
-        }));
-
     // Effect Editor（プレビューRT付き）
     auto effectEditor = std::make_unique<EffectEditorWindow>(dxCore_, srvManager_, this);
     effectEditor->Initialize();
@@ -242,27 +261,16 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<EffectHierarchyWindow>(this, effectEditorWindow_));
     // Effect Components パレット（コンポーネント追加用の独立した D&D ソースウィンドウ）
     windows_.push_back(std::make_unique<EffectPaletteWindow>());
-    windows_.push_back(std::make_unique<CallbackWindow>("Collision",
-        []() {
-            auto* cm = CollisionManager::GetInstance();
-            bool drawDebug = cm->IsDrawDebugEnabled();
-            if (ImGui::Checkbox("Draw Colliders", &drawDebug)) {
-                cm->SetDrawDebugEnabled(drawDebug);
-            }
-            ImGui::TextDisabled("- Tag-colored when not colliding");
-            ImGui::TextDisabled("- Red when colliding this frame");
-        }));
     windows_.push_back(std::make_unique<CallbackWindow>("TimeControler",
         [this]() {
-            auto* sm = SceneManager::GetInstance();
-            Scene* scene = sm ? sm->GetCurrentScene() : nullptr;
-            const std::string& name = sm ? sm->GetCurrentSceneName() : std::string{};
+            Scene* scene = GetActiveScene();
+            const char* name = GetActiveSceneName();
 
             // ===== シーン情報 =====
             ImGui::Text("Current Scene:");
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s",
-                name.empty() ? "(none)" : name.c_str());
+                (name && *name) ? name : "(none)");
 
             ImGui::Separator();
 
@@ -381,11 +389,9 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<CallbackWindow>("QR Code",
         []() { QRCodeReader::GetInstance()->OnImGui(); }));
 
-    // シーンエディタ（モデル一覧の非同期スキャン + 動的オブジェクト追加・削除）
-    windows_.push_back(std::make_unique<SceneEditorWindow>(this));
-
-    // ViewportWindowをメンバに保存（後で参照するため）
-    viewportWindow_ = dynamic_cast<ViewportWindow*>(windows_[0].get());
+    // ここまでがエンジン標準のパネル。
+    // Hierarchy / Inspector / SceneEditor とゲーム固有パネルは
+    // ホスト側が Initialize 後に AddWindow / AddCallbackWindow で足す。
 
     isInitialized_ = true;
 
@@ -399,6 +405,8 @@ void ImGuiManager::Shutdown() {
     windows_.clear();
     editables_.clear();
     selectedObject_ = nullptr;
+    viewportWindow_ = nullptr;
+    effectEditorWindow_ = nullptr;
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();

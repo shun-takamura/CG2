@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -163,6 +163,10 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\CurveEditorWidget.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\EffectHierarchyWindow.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\EffectPaletteWindow.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\ImGuiManager.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\ViewportWindow.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\Gizmo.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\SpriteGizmo.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Sound\SoundManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\MouseInput.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
@@ -178,7 +182,6 @@
     <ClCompile Include="..\externals\quirc\quirc.c" />
     <ClCompile Include="..\externals\quirc\version_db.c" />
     <ClCompile Include="..\DirectXGame\GameEngine\QRCodeReader.cpp" />
-    <ClCompile Include="..\DirectXGame\GameEngine\GameData.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.cpp" />
@@ -196,6 +199,8 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Skeleton.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\SpringBone.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\VerletSolver.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\CollisionGeometry.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Math\Physics\CollisionSystem.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.cpp" />
@@ -269,6 +274,14 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IEditorSelection.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\ImGuiManager.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\ViewportWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\Gizmo.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\SpriteGizmo.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\FPSWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\LogWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\PepperWindow.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Easing.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Particle\EmitParam.h" />
     <ClInclude Include="..\externals\ImGUI\imconfig.h" />
@@ -328,7 +341,6 @@
     <ClInclude Include="..\externals\quirc\quirc.h" />
     <ClInclude Include="..\externals\quirc\quirc_internal.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\QRCodeReader.h" />
-    <ClInclude Include="..\DirectXGame\GameEngine\GameData.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.h" />
@@ -347,6 +359,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Skeleton.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\SpringBone.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\VerletSolver.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\Collider.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\CollisionGeometry.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Math\Physics\CollisionSystem.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\LineRenderer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Primitive\DebugDraw.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\SkinCluster.h" />
