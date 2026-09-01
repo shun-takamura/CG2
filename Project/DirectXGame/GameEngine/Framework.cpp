@@ -42,7 +42,13 @@
 #include "PrimitivePipeline.h"
 #include "LineRenderer.h"
 #include "SkinningComputeManager.h"
+#include "AbstractSceneFactory.h"
 #include "PepperMacros.h"
+
+// メンバの unique_ptr が指す型（AbstractSceneFactory 等）の完全型がここで揃うので、
+// コンストラクタ / デストラクタの実体はこの翻訳単位に置く。ヘッダ側は宣言のみ。
+Framework::Framework() = default;
+Framework::~Framework() = default;
 
 void Framework::Run() {
 	// KPI: 計測起点 (Run の入り口 = 実質プロセス開始直後)

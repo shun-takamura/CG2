@@ -253,7 +253,18 @@
       "Bash(cp CG2_0_1/Project/ArcanaEngine/ArcanaEngine.vcxproj CG2_0_1/Project/ArcanaEngine/ArcanaEngine.vcxproj.filters ArcanaEngine/Project/ArcanaEngine/)",
       "Bash(sed -n \"/void Scene::DrawDynamicPrimitives/,/^}/p\" GameEngine/Scene/Scene.cpp)",
       "Bash(sed -n \"/^void PrimitiveInstance::Draw\\(\\)/,/^}/p\" GameEngine/Graphics/Primitive/PrimitiveInstance.cpp)",
-      "Read(//c/Users/sleon/source/repos/ArcanaEngine/**)"
+      "Read(//c/Users/sleon/source/repos/ArcanaEngine/**)",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/genfilters.py\")",
+      "Bash(cp CG2_0_1/Project/DirectXGame/GameEngine/Framework.h CG2_0_1/Project/DirectXGame/GameEngine/Framework.cpp ArcanaEngine/Project/DirectXGame/GameEngine/)",
+      "Bash(grep -nE 'CollapsingHeader|SeparatorText|^\\\\s*//\\\\s*=+|ImGui::Text\\\\\\(\"' InspectorWindow.cpp)",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/sync.py\")",
+      "Bash(grep -oE 'Include=\"[^\"]*[\\\\\\\\]HierarchyWindow\\\\.\\(cpp|h\\)\"' ArcanaEngine/ArcanaEngine.vcxproj)",
+      "Bash(grep -oE 'Include=\"[^\"]*[\\\\\\\\]HierarchyWindow\\\\.\\(cpp|h\\)\"' ArcanaEngine/ArcanaEngine.vcxproj.filters)",
+      "Bash(awk '{print $6, $7}')",
+      "Bash(mkdir -p Game/Editor)",
+      "Bash(sed -i \"s|EngineCore/EngineCore.vcxproj|ArcanaEngine/ArcanaEngine.vcxproj|\" dep.py)",
+      "Bash(python dep.py)",
+      "Bash(python sync.py)"
     ]
   }
 }

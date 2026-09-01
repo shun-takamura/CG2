@@ -92,6 +92,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Frustum.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Scene\Scene.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\InspectorWindow.cpp" />
+    <ClCompile Include="..\DirectXGame\ImGUIManager\SceneEditorWindow.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Easing.cpp" />
     <ClCompile Include="..\externals\ImGui_Docking\imgui.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
@@ -273,6 +276,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\ISceneRunner.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\HierarchyWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\InspectorWindow.h" />
+    <ClInclude Include="..\DirectXGame\ImGUIManager\SceneEditorWindow.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IEditorSelection.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\ImGuiManager.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\ViewportWindow.h" />
