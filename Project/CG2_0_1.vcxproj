@@ -60,7 +60,7 @@
   <PropertyGroup Label="UserMacros" />
   <!--
     ゲーム専用のインクルードパス。
-    Common.props（EngineCore と共有）には置かない。EngineCore がゲームのヘッダを
+    Common.props（ArcanaEngine と共有）には置かない。ArcanaEngine がゲームのヘッダを
     引けない状態を保つことで、エンジン単体切り出しの前提を機械的に担保する。
   -->
   <ItemDefinitionGroup>
@@ -473,7 +473,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <Text Include="externals\ImGUI\LICENSE.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="EngineCore\EngineCore.vcxproj">
+    <ProjectReference Include="ArcanaEngine\ArcanaEngine.vcxproj">
       <Project>{e662ea4f-4173-4e9c-92cc-4e4f11809a7f}</Project>
     </ProjectReference>
     <ProjectReference Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">

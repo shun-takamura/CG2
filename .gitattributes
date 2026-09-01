@@ -95,5 +95,5 @@ Project/DirectXGame/**/*.h   merge=mergiraf
 ###############################################################################
 Project/CG2_0_1.vcxproj                       lockable
 Project/CG2_0_1.vcxproj.filters               lockable
-Project/EngineCore/EngineCore.vcxproj         lockable
-Project/EngineCore/EngineCore.vcxproj.filters lockable
+Project/ArcanaEngine/ArcanaEngine.vcxproj         lockable
+Project/ArcanaEngine/ArcanaEngine.vcxproj.filters lockable

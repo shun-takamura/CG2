@@ -97,7 +97,7 @@ EXCLUDE_RELATIVE = {
 MSBUILD_NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
 VCXPROJ_FILES = [
     PROJECT_ROOT / "CG2_0_1.vcxproj",
-    PROJECT_ROOT / "EngineCore" / "EngineCore.vcxproj",
+    PROJECT_ROOT / "ArcanaEngine" / "ArcanaEngine.vcxproj",
 ]
 SOURCE_ROOT = PROJECT_ROOT / "DirectXGame"
 SOURCE_SUFFIXES = {".cpp", ".h", ".hpp"}
@@ -121,7 +121,7 @@ def collect_registered_sources() -> dict[str, Path]:
             print(f"[WARN] vcxproj が見つかりません: {proj}", file=sys.stderr)
             continue
 
-        # Include のパスは vcxproj 自身の位置からの相対（EngineCore は ..\DirectXGame\... 形式）
+        # Include のパスは vcxproj 自身の位置からの相対（ArcanaEngine は ..\DirectXGame\... 形式）
         base = proj.parent
         tree = ET.parse(proj)
 

@@ -243,7 +243,17 @@
       "Bash(cd \"C:/Users/sleon/source/repos/CG2_0_1/Project/DirectXGame/GameEngine\" && echo \"=== Math/Physics ===\"; ls Math/Physics 2>/dev/null || echo \"\\(空 or 無し\\)\"; echo; echo \"=== Entity / Entity/Components ===\"; ls Entity 2>/dev/null; ls Entity/Components 2>/dev/null; echo; echo \"=== vcxproj 登録の Physics/Entity ===\"; grep -n 'Physics\\\\|GameEngine\\\\\\\\\\\\\\\\Entity' ../../EngineCore/EngineCore.vcxproj)",
       "Bash(python - __TRACKED_VAR__/CollisionManager.cpp)",
       "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/addfiles.py\")",
-      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/cleanup.py\")"
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/cleanup.py\")",
+      "Bash(gh auth *)",
+      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { Write-Output \"gh found: $\\($g.Source\\)\"; gh auth status } else { Write-Output \"gh: not installed \\(PATH上に無し\\)\" }; Write-Output \"--- CG2 リポジトリの公開設定 ---\"; try { $r = Invoke-RestMethod -Uri \"https://api.github.com/repos/VRFANZA/CG2\" -Headers @{ \"User-Agent\" = \"check\" } -ErrorAction Stop; Write-Output \"private = $\\($r.private\\)  /  visibility = $\\($r.visibility\\)\" } catch { Write-Output \"API応答なし（404 = Private の可能性大）: $\\($_.Exception.Message\\)\" })",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/stage.py\")",
+      "Bash(awk '{print $5, $9}')",
+      "Read(//c/Users/sleon/source/repos/**)",
+      "Bash(mkdir -p ArcanaEngine/Project/ArcanaEngine)",
+      "Bash(cp CG2_0_1/Project/ArcanaEngine/ArcanaEngine.vcxproj CG2_0_1/Project/ArcanaEngine/ArcanaEngine.vcxproj.filters ArcanaEngine/Project/ArcanaEngine/)",
+      "Bash(sed -n \"/void Scene::DrawDynamicPrimitives/,/^}/p\" GameEngine/Scene/Scene.cpp)",
+      "Bash(sed -n \"/^void PrimitiveInstance::Draw\\(\\)/,/^}/p\" GameEngine/Graphics/Primitive/PrimitiveInstance.cpp)",
+      "Read(//c/Users/sleon/source/repos/ArcanaEngine/**)"
     ]
   }
 }
