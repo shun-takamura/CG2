@@ -32,14 +32,20 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <!--
+      LTCG(/GL + /LTCG) は無効。エンジンのシンボルが増減するたびに
+      インクリメンタルなコード生成が前回結果と食い違い、PDB の型レコードが壊れて
+      LNK4020 になるため（TreatLinkerWarningAsErrors でビルドが止まる）。
+      ビルド時間も大幅に短縮される。実行速度の差は数%程度。
+    -->
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -171,7 +177,6 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\Transition\TransitionManager.cpp" />
     <ClCompile Include="DirectXGame\main.cpp">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Development|x64'">MaxSpeed</Optimization>
-      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</WholeProgramOptimization>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Game.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp" />
@@ -503,10 +508,30 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
   </PropertyGroup>
   <Target Name="CookAssets">
     <Message Importance="high" Text="Cooking assets..." />
+    <!--
+      pack_assets が呼ぶ gdeflate_compress.exe は dstorage の DLL を要求するが、
+      それを配置する PostBuildEvent はこの後に走る。出力フォルダが新しい構成
+      （初回の Development / Release）では DLL 不在で 0xC0000135 になるため、
+      cook の前に先回りしてコピーしておく。
+    -->
+    <Copy SourceFiles="$(ProjectDir)externals\DirectStorage\bin\x64\dstorage.dll;$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
     <Exec Command="py tools\Python\convert_hdr_to_dds.py --silent" WorkingDirectory="$(ProjectDir)" />
     <Exec Command="py tools\Python\cook_assets.py" WorkingDirectory="$(ProjectDir)" />
     <!-- gdeflate_compress.exe は同一ソリューション内のサブプロジェクトが先にビルド済みの想定。
          同じ $(Configuration) の出力フォルダから拾う。 -->
     <Exec Command="py tools\Python\pack_assets.py --gdeflate-exe ..\Generated\Output\$(Configuration)\gdeflate_compress.exe" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+  <!--
+    シェーダの事前コンパイル。Debug は .hlsl を実行時コンパイルするので不要。
+    Release / Development だけ Resources/CompiledShaders/*.cso を作る。
+  -->
+  <PropertyGroup>
+    <BuildDependsOn>CompileShaders;$(BuildDependsOn)</BuildDependsOn>
+  </PropertyGroup>
+  <Target Name="CompileShaders" Condition="'$(Configuration)' != 'Debug'">
+    <Message Importance="high" Text="Compiling shaders (.hlsl -&gt; .cso)..." />
+    <Exec Command="py tools\Python\compile_shaders.py" WorkingDirectory="$(ProjectDir)" />
   </Target>
 </Project>

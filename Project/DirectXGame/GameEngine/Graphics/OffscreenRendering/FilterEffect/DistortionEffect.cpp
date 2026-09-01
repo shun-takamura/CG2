@@ -1,4 +1,4 @@
-#include "DistortionEffect.h"
+﻿#include "DistortionEffect.h"
 #include "DirectXCore.h"
 #include "RenderTexture.h"
 #include <cassert>
@@ -16,7 +16,7 @@ void DistortionEffect::InitializeMasked(
 {
     distortionRT_ = distortionRT;
 
-    IDxcBlob* psBlob = dxCore->CompileShader(
+    IDxcBlob* psBlob = dxCore->LoadShaderBlob(
         L"Resources/Shaders/PostEffect/Filters/Distortion.PS.hlsl",
         L"ps_6_0");
     assert(psBlob);

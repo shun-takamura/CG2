@@ -13,7 +13,7 @@ zip の中身はラッパーフォルダ無しのフラット構成:
     dxil.dll
     dstorage.dll / dstoragecore.dll
     Generated/Assets.pack          ← 全アセット集約
-    Resources/Shaders/             ← .hlsl のみ（DXC が実行時に読む）
+    Resources/CompiledShaders/     ← 事前コンパイル済み .cso（.hlsl は同梱しない）
 
 Windows の「すべて展開」は zip ファイル名と同じ名前のフォルダを自動で作って
 そこに中身を展開する。zip をリネームすれば展開後フォルダ名もそれに追従する。
@@ -36,7 +36,8 @@ OUTPUT_DIR = RELEASE_DIR / "Distribution"          # Release内の専用サブ�
 # pack に入っていない (= 実行時に FS から直接読む) ディレクトリ群。
 # zip にはここを Resources/... の形でそのまま入れる。
 FS_INCLUDE_DIRS = [
-    RESOURCES_DIR / "Shaders",  # .hlsl 実行時コンパイル
+    # 事前コンパイル済みシェーダ。.hlsl（Resources/Shaders）は配布物に含めない
+    RESOURCES_DIR / "CompiledShaders",
     RESOURCES_DIR / "Json",     # シーン/プリファブ/チューニング/キーコンフィグ等
     RESOURCES_DIR / "Sounds",   # MediaFoundation が URL で直接読む .wav
 ]

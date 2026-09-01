@@ -1,4 +1,4 @@
-#include "VignetteEffect.h"
+﻿#include "VignetteEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
 #include <cstring>
@@ -15,7 +15,7 @@ void VignetteEffect::Initialize(
     const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 ) {
     // シェーダーコンパイル
-    IDxcBlob* psBlob = dxCore->CompileShader(
+    IDxcBlob* psBlob = dxCore->LoadShaderBlob(
         L"Resources/Shaders/PostEffect/Filters/Vignette.PS.hlsl",
         L"ps_6_0"
     );

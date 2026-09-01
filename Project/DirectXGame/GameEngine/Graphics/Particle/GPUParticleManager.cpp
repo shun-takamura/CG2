@@ -1,4 +1,4 @@
-#include "GPUParticleManager.h"
+﻿#include "GPUParticleManager.h"
 #include "Camera.h"
 #include "TextureManager.h"
 #include "MathUtility.h"
@@ -839,7 +839,7 @@ void GPUParticleManager::CreateInitializePipeline()
         IID_PPV_ARGS(&initRootSig_));
     assert(SUCCEEDED(hr));
 
-    IDxcBlob* cs = dxCore_->CompileShader(
+    IDxcBlob* cs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Particle/InitializeParticle.CS.hlsl",
         L"cs_6_0"
     );
@@ -909,7 +909,7 @@ void GPUParticleManager::CreateEmitPipeline()
         IID_PPV_ARGS(&emitRootSig_));
     assert(SUCCEEDED(hr));
 
-    IDxcBlob* cs = dxCore_->CompileShader(
+    IDxcBlob* cs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Particle/EmitParticle.CS.hlsl",
         L"cs_6_0"
     );
@@ -982,7 +982,7 @@ void GPUParticleManager::CreateUpdatePipeline()
         IID_PPV_ARGS(&updateRootSig_));
     assert(SUCCEEDED(hr));
 
-    IDxcBlob* cs = dxCore_->CompileShader(
+    IDxcBlob* cs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Particle/UpdateParticle.CS.hlsl",
         L"cs_6_0"
     );
@@ -1073,8 +1073,8 @@ void GPUParticleManager::CreateDrawPipeline()
         IID_PPV_ARGS(&drawRootSig_));
     assert(SUCCEEDED(hr));
 
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Particle/GPUParticle.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Particle/GPUParticle.PS.hlsl", L"ps_6_0");
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Particle/GPUParticle.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Particle/GPUParticle.PS.hlsl", L"ps_6_0");
 
     D3D12_INPUT_ELEMENT_DESC inputElements[3] = {};
     inputElements[0].SemanticName = "POSITION";

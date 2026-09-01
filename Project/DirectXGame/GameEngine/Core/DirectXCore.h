@@ -194,6 +194,22 @@ public:
 	// 完了済みフェンス値以下に登録された callback を全て実行する（毎フレーム末に呼ぶ）
 	void TickPendingCallbacks();
 
+	/// <summary>
+	/// シェーダのバイナリを得る。エンジン内のシェーダ取得はすべてこれを通す。
+	///
+	///   Debug             : .hlsl を実行時コンパイル（書き換えて即試せるようにするため）
+	///   Release / Development : Resources/CompiledShaders/ の .cso を読む
+	///                           （無ければ .hlsl の実行時コンパイルにフォールバック）
+	///
+	/// 引数は常に .hlsl のパスを渡すこと。.cso のパスは内部で導出する。
+	/// </summary>
+	/// <param name="hlslPath">Resources/Shaders/... の .hlsl パス</param>
+	/// <param name="profile">vs_6_0 / ps_6_0 / cs_6_0 など</param>
+	IDxcBlob* LoadShaderBlob(const std::wstring& hlslPath, const wchar_t* profile);
+
+	/// <summary>
+	/// .hlsl をその場で DXC コンパイルする。通常は LoadShaderBlob を使うこと。
+	/// </summary>
 	IDxcBlob* CompileShader(const std::wstring& filePath, const wchar_t* profile);
 
 	// 最大テクスチャ枚数

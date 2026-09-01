@@ -1,4 +1,4 @@
-#include "Object3DManager.h"
+﻿#include "Object3DManager.h"
 
 void Object3DManager::Initialize(DirectXCore* dxCore)
 {
@@ -292,12 +292,12 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     }
 
     // ===== シェーダーコンパイル =====
-    IDxcBlob* vs = dxCore_->CompileShader(
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Object3D/Object3d.VS.hlsl",
         L"vs_6_0"
     );
 
-    IDxcBlob* ps = dxCore_->CompileShader(
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(
         psFilePath,
         L"ps_6_0"
     );
@@ -451,8 +451,8 @@ void Object3DManager::CreateIdPassObjects()
     assert(SUCCEEDED(hr));
 
     // ----- PSO -----
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Object3D/Object3d.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Object3D/WriteID.PS.hlsl", L"ps_6_0");
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/Object3d.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/WriteID.PS.hlsl", L"ps_6_0");
     assert(vs && ps);
 
     // Object3d.VS が TANGENT0 を要求するため、ID パスの入力レイアウトにも含める

@@ -256,7 +256,8 @@ def collect_entries(resources_root: Path,
     # プロジェクトルートからの相対パス（"Resources/..." 形式）に統一
     # AssetLocator::Open の引数と一致させる
     project_root = resources_root.parent
-    shaders_dir = resources_root / "Shaders"
+    # シェーダは pack に含めない。.hlsl も .cso も DirectXCore が FS から個別に読むため
+    skip_dirs = [resources_root / "Shaders", resources_root / "CompiledShaders"]
 
     DDS_HEADER_SIZE = 148  # DDS magic(4) + DDS_HEADER(124) + DDS_HEADER_DXT10(20)
 
@@ -264,12 +265,9 @@ def collect_entries(resources_root: Path,
     for f in sorted(resources_root.rglob("*")):
         if not f.is_file():
             continue
-        # Resources/Shaders/ 配下は pack に含めない
-        try:
-            f.relative_to(shaders_dir)
-            continue  # Shaders/ 配下なのでスキップ
-        except ValueError:
-            pass
+        # Resources/Shaders/ と Resources/CompiledShaders/ 配下は pack に含めない
+        if any(f.is_relative_to(d) for d in skip_dirs):
+            continue
         rel = f.relative_to(project_root).as_posix()
         data = f.read_bytes()
         asset_type = asset_type_from_path(rel)

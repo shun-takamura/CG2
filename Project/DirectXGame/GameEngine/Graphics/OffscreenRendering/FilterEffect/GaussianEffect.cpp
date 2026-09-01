@@ -1,4 +1,4 @@
-#include "GaussianEffect.h"
+﻿#include "GaussianEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
 #include <cstring>
@@ -19,7 +19,7 @@ void GaussianEffect::Initialize(
 )
 {
 	// シェーダーコンパイル
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/GaussianFilter.PS.hlsl",
 		L"ps_6_0"
 	);

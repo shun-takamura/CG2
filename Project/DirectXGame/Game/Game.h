@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Framework.h"
 #include "PostEffect.h"
@@ -17,6 +17,9 @@ public:
 	/// <summary>
 	/// Framework にシーン駆動の実体（SceneManager）を渡す（依存性の逆転）。
 	/// </summary>
+	/// <summary>ウィンドウのタイトルバーに出す文字列。</summary>
+	const wchar_t* GetWindowTitle() const override { return L"QR"; }
+
 	ISceneRunner* GetSceneRunner() override;
 
 	/// <summary>

@@ -55,6 +55,18 @@ public:
 	virtual ~Framework();
 
 	/// <summary>
+	/// ウィンドウのタイトルバーに出す文字列。
+	/// アプリ側で override して自分のゲーム名を返す。
+	/// </summary>
+	virtual const wchar_t* GetWindowTitle() const { return L"ArcanaEngine"; }
+
+	/// <summary>
+	/// exe に埋め込んだ ICON リソースの ID。0 なら Windows の既定アイコン。
+	/// アプリが .rc でアイコンを持つ場合に override する（Documents/13_AppIcon.md）。
+	/// </summary>
+	virtual int GetWindowIconResourceId() const { return 0; }
+
+	/// <summary>
 	/// シーン駆動の委譲先を返す（依存性の逆転）。
 	/// 既定は nullptr。ゲーム側（Game）が自身の SceneManager を返すよう override する。
 	/// Framework はこの IF だけを通してシーンを Initialize/Update/Finalize する。

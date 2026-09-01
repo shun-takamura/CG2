@@ -1,4 +1,4 @@
-#include "PrimitivePipeline.h"
+﻿#include "PrimitivePipeline.h"
 #include "Log.h"
 #include <cassert>
 
@@ -138,11 +138,11 @@ void PrimitivePipeline::CreateRootSignature() {
 
 void PrimitivePipeline::CreateGraphicsPipelineState(BlendMode blendMode, bool depthWrite, bool cullBackface) {
     // シェーダーコンパイル
-    IDxcBlob* vs = dxCore_->CompileShader(
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Primitive/Primitive.VS.hlsl",
         L"vs_6_0"
     );
-    IDxcBlob* ps = dxCore_->CompileShader(
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Primitive/Primitive.PS.hlsl",
         L"ps_6_0"
     );
@@ -285,8 +285,8 @@ void PrimitivePipeline::CreateIdPassObjects() {
     assert(SUCCEEDED(hr));
 
     // ----- PSO -----
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Object3D/WriteID.PS.hlsl", L"ps_6_0");
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/WriteID.PS.hlsl", L"ps_6_0");
     assert(vs && ps);
 
     // Primitive と同じ InputLayout
@@ -352,8 +352,8 @@ void PrimitivePipeline::CreateDistortionPassObjects() {
     //   sampler s0/s1/s2 = 既存のものを利用（distortion はタイリング前提なので s0=WrapAll が主）
 
     // VS / PS のコンパイル
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
-    IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Primitive/DistortionMesh.PS.hlsl", L"ps_6_0");
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Primitive/DistortionMesh.PS.hlsl", L"ps_6_0");
     assert(vs && ps);
 
     // 入力レイアウト（通常パスと同じ）

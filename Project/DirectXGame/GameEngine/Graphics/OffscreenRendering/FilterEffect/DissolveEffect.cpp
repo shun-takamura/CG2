@@ -16,7 +16,7 @@ void DissolveEffect::InitializeMasked(
 {
 	dxCore_ = dxCore;
 
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/Dissolve.PS.hlsl",
 		L"ps_6_0"
 	);

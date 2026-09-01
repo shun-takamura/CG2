@@ -1,4 +1,4 @@
-#include "SepiaEffect.h"
+﻿#include "SepiaEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
 #include <cstring>
@@ -11,7 +11,7 @@
 void SepiaEffect::Initialize(DirectXCore* dxCore, ID3D12RootSignature* copyRootSignature, ID3D12RootSignature* effectRootSignature, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc)
 {
     // シェーダーコンパイル
-    IDxcBlob* psBlob = dxCore->CompileShader(
+    IDxcBlob* psBlob = dxCore->LoadShaderBlob(
         L"Resources/Shaders/PostEffect/Filters/Sepia.PS.hlsl",
         L"ps_6_0"
     );

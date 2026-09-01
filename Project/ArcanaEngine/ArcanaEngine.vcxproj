@@ -32,14 +32,20 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <!--
+      LTCG(/GL + /LTCG) は無効。エンジンのシンボルが増減するたびに
+      インクリメンタルなコード生成が前回結果と食い違い、PDB の型レコードが壊れて
+      LNK4020 になるため（TreatLinkerWarningAsErrors でビルドが止まる）。
+      ビルド時間も大幅に短縮される。実行速度の差は数%程度。
+    -->
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -131,9 +137,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceObject.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\PathManager.cpp" />
-    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\WindowsApplication.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.cpp" />
@@ -301,14 +305,12 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Material.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Matrix3x3.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Matrix4x4.h" />
-    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceObject.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Transform.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\TransformationMatrix.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector3.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector4.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\VertexData.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Core\PathManager.h" />
-    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceManager.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Core\WindowsApplication.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Sprite\SpriteInstance.h" />

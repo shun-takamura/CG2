@@ -2,6 +2,7 @@
 #include "StripeTransition.h"
 #include "FadeTransition.h"
 #include "TextureManager.h"
+#include "WindowsApplication.h"
 #include <random>
 #include <cassert>
 #include <cstdio>
@@ -16,6 +17,17 @@ void TransitionManager::Initialize(SpriteManager* spriteManager, DirectXCore* dx
 	float screenWidth, float screenHeight) {
 	spriteManager_ = spriteManager;
 	dxCore_ = dxCore;
+
+	// 0 以下なら実際のクライアントサイズを使う。
+	// 以前は 1280x720 が既定値だったため、1600x900 のウィンドウでは
+	// 画面の右下がフェードで覆われないバグになっていた。
+	if (screenWidth <= 0.0f) {
+		screenWidth = static_cast<float>(WindowsApplication::kClientWidth);
+	}
+	if (screenHeight <= 0.0f) {
+		screenHeight = static_cast<float>(WindowsApplication::kClientHeight);
+	}
+
 	screenWidth_ = screenWidth;
 	screenHeight_ = screenHeight;
 

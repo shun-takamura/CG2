@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "BaseTransition.h"
 #include "SpriteInstance.h"
 #include <vector>
@@ -15,7 +15,7 @@ public:
 	~StripeTransition() override = default;
 
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth = 1280.0f, float screenHeight = 720.0f) override;
+		float screenWidth, float screenHeight) override;
 	void Finalize() override;
 	void Update() override;
 	void Draw() override;

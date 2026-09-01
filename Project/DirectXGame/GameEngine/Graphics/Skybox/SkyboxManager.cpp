@@ -1,4 +1,4 @@
-#include "SkyboxManager.h"
+﻿#include "SkyboxManager.h"
 
 void SkyboxManager::Initialize(DirectXCore* dxCore)
 {
@@ -105,12 +105,12 @@ void SkyboxManager::CreateRootSignature()
 void SkyboxManager::CreateGraphicsPipelineState()
 {
     // ===== シェーダーコンパイル =====
-    IDxcBlob* vs = dxCore_->CompileShader(
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Skybox/Skybox.VS.hlsl",
         L"vs_6_0"
     );
 
-    IDxcBlob* ps = dxCore_->CompileShader(
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Skybox/Skybox.PS.hlsl",
         L"ps_6_0"
     );

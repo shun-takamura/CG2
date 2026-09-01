@@ -1,4 +1,4 @@
-#include "Framework.h"
+﻿#include "Framework.h"
 
 #include "DirectXTex.h"
 #include "d3dx12.h"
@@ -155,8 +155,8 @@ void Framework::Initialize() {
 	//========================
 	// ウィンドウの初期化
 	//========================
-	// 初期化（タイトル）
-	winApp_->Initialize(L"QR");
+	// タイトルとアイコンはアプリ側が override して決める
+	winApp_->Initialize(GetWindowTitle(), GetWindowIconResourceId());
 
 	// アセットローダー初期化
 	// 優先順位: CLI 引数 > 環境変数 > Release ビルドのデフォルト pack > 個別ファイル直読み
@@ -548,6 +548,9 @@ void Framework::Update() {
 }
 
 void Framework::Finalize() {
+	// 初期化が途中で失敗した場合もここを通る。
+	// 未生成のメンバを触って二次クラッシュすると本当の原因が隠れるので、
+	// すべて null チェックしてから解放する。
 	// 出力ウィンドウへの文字出力
 	Log("DirectX12isNotUseful\n");
 
@@ -563,7 +566,7 @@ void Framework::Finalize() {
 	if (auto* runner = GetSceneRunner()) runner->Finalize();
 
 	// 入力を解放
-	input_->Finalize();
+	if (input_) input_->Finalize();
 
 	// 終了時（SoundManagerのFinalize前に呼ぶ）
 	CameraCapture::GetInstance()->Finalize();
@@ -593,10 +596,12 @@ void Framework::Finalize() {
 	// ImGui終了処理
 	ImGuiManager::Instance().Shutdown();
 
-	dxCore_->Finalize();
+	if (dxCore_) dxCore_->Finalize();
 
-	CloseWindow(winApp_->GetHwnd());
-	winApp_->Finalize();
+	if (winApp_) {
+		CloseWindow(winApp_->GetHwnd());
+		winApp_->Finalize();
+	}
 
 	// 未出力のプロファイルウィンドウを書き出す（ログを閉じる前に）
 	PEPPER_FLUSH();

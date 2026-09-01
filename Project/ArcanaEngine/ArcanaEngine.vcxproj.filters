@@ -237,13 +237,7 @@
     <ClCompile Include="..\externals\ImGui_Docking\imgui_widgets.cpp">
       <Filter>externals\ImGui_Docking</Filter>
     </ClCompile>
-    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceObject.cpp">
-      <Filter>DirectXGame\GameEngine\Core</Filter>
-    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Core\PathManager.cpp">
-      <Filter>DirectXGame\GameEngine\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="..\DirectXGame\GameEngine\Core\ResourceManager.cpp">
       <Filter>DirectXGame\GameEngine\Core</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.cpp">
@@ -734,9 +728,6 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Matrix4x4.h">
       <Filter>DirectXGame\GameEngine\Math</Filter>
     </ClInclude>
-    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceObject.h">
-      <Filter>DirectXGame\GameEngine\Core</Filter>
-    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Transform.h">
       <Filter>DirectXGame\GameEngine\Math</Filter>
     </ClInclude>
@@ -753,9 +744,6 @@
       <Filter>DirectXGame\GameEngine\Graphics</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Core\PathManager.h">
-      <Filter>DirectXGame\GameEngine\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXGame\GameEngine\Core\ResourceManager.h">
       <Filter>DirectXGame\GameEngine\Core</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\KeyboardInput.h">

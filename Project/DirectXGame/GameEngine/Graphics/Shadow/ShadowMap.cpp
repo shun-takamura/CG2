@@ -1,4 +1,4 @@
-#include "ShadowMap.h"
+﻿#include "ShadowMap.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "Camera.h"
@@ -135,7 +135,7 @@ void ShadowMap::CreatePipeline()
     assert(SUCCEEDED(hr));
 
     // ---- PSO（VS のみ・深度書き込み専用）----
-    IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Shadow/ShadowDepth.VS.hlsl", L"vs_6_0");
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Shadow/ShadowDepth.VS.hlsl", L"vs_6_0");
     assert(vs);
 
     // Object3D と同じ入力レイアウト（POSITION / TEXCOORD / NORMAL）

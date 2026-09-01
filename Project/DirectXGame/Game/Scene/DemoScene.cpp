@@ -1,4 +1,4 @@
-#include "DemoScene.h"
+﻿#include "DemoScene.h"
 #include "Components/Gameplay.h"
 #include "SceneManager.h"
 #include <algorithm>
@@ -450,7 +450,7 @@ void DemoScene::Update() {
 		// スペースキーを押した瞬間
 	}
 
-	if (input_->GetKeyboard()->PuhsKey(DIK_W)) {
+	if (input_->GetKeyboard()->PushKey(DIK_W)) {
 		// Wキーを押している間
 	}
 

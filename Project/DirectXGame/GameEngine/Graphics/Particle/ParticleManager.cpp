@@ -1,4 +1,4 @@
-#include "ParticleManager.h"
+﻿#include "ParticleManager.h"
 #include "TextureManager.h"
 #include "Camera.h"
 #include "MathUtility.h"
@@ -584,12 +584,12 @@ void ParticleManager::CreateRootSignature()
 void ParticleManager::CreateGraphicsPipelineState(BlendMode blendMode)
 {
     // シェーダーコンパイル
-    IDxcBlob* vs = dxCore_->CompileShader(
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Particle/Particle.VS.hlsl",
         L"vs_6_0"
     );
 
-    IDxcBlob* ps = dxCore_->CompileShader(
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Particle/Particle.PS.hlsl",
         L"ps_6_0"
     );

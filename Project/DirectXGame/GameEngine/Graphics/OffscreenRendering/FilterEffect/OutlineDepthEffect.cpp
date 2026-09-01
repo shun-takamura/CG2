@@ -1,4 +1,4 @@
-#include "OutlineDepthEffect.h"
+﻿#include "OutlineDepthEffect.h"
 #include "DirectXCore.h"
 #include "MathUtility.h"
 #include <cassert>
@@ -15,7 +15,7 @@ void OutlineDepthEffect::InitializeOutline(
 	const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 )
 {
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/OutlineDepth.PS.hlsl",
 		L"ps_6_0"
 	);
