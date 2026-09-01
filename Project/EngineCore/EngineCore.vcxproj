@@ -182,7 +182,6 @@
     <ClCompile Include="..\externals\quirc\quirc.c" />
     <ClCompile Include="..\externals\quirc\version_db.c" />
     <ClCompile Include="..\DirectXGame\GameEngine\QRCodeReader.cpp" />
-    <ClCompile Include="..\DirectXGame\GameEngine\GameData.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.cpp" />
@@ -342,7 +341,6 @@
     <ClInclude Include="..\externals\quirc\quirc.h" />
     <ClInclude Include="..\externals\quirc\quirc_internal.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\QRCodeReader.h" />
-    <ClInclude Include="..\DirectXGame\GameEngine\GameData.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SepiaEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\VignetteEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\SmoothingEffect.h" />

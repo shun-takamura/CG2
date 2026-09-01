@@ -242,7 +242,8 @@
       "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/stale.py\")",
       "Bash(cd \"C:/Users/sleon/source/repos/CG2_0_1/Project/DirectXGame/GameEngine\" && echo \"=== Math/Physics ===\"; ls Math/Physics 2>/dev/null || echo \"\\(空 or 無し\\)\"; echo; echo \"=== Entity / Entity/Components ===\"; ls Entity 2>/dev/null; ls Entity/Components 2>/dev/null; echo; echo \"=== vcxproj 登録の Physics/Entity ===\"; grep -n 'Physics\\\\|GameEngine\\\\\\\\\\\\\\\\Entity' ../../EngineCore/EngineCore.vcxproj)",
       "Bash(python - __TRACKED_VAR__/CollisionManager.cpp)",
-      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/addfiles.py\")"
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/addfiles.py\")",
+      "Bash(python \"C:/Users/sleon/AppData/Local/Temp/claude/C--Users-sleon-source-repos-CG2-0-1/bd529b8e-bdb3-4668-9db9-c400819c9fef/scratchpad/cleanup.py\")"
     ]
   }
 }
