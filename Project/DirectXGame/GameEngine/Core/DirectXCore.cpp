@@ -1,11 +1,20 @@
-#include "DirectXCore.h"
+﻿#include "DirectXCore.h"
 #include "SRVManager.h"
 #include "PepperMacros.h"
+#include "SessionLogger.h"
+#include "ConvertString.h"
+
 #include <cassert>
 #include <algorithm>
 #include <cstring>
+#include <cstdlib>
 #include <dxgidebug.h>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <format>
+#include <system_error>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -442,6 +451,123 @@ void DirectXCore::TickPendingCallbacks()
     }
 }
 
+namespace {
+    /// <summary>
+    /// シェーダ関連の復帰不能な失敗。原因が追える形で記録してから終了する。
+    ///
+    /// 一番ありがちなのが「カレントディレクトリが Project/ になっていない」ケースで、
+    /// その場合は相対パスの Resources/ が丸ごと見つからない。判断材料として cwd も残す。
+    /// </summary>
+    [[noreturn]] void FatalShaderError(const wchar_t* what, const std::wstring& path, HRESULT hr) {
+        std::error_code ec;
+        const std::wstring cwd = std::filesystem::current_path(ec).wstring();
+
+        const std::wstring detail =
+            std::wstring(what) + L"\n"
+            L"path : " + path + L"\n"
+            L"cwd  : " + cwd + L"\n"
+            L"hr   : 0x" + std::format(L"{:08X}", static_cast<unsigned>(hr)) + L"\n\n"
+            L"Resources/ からの相対パスで探しています。"
+            L"exe を直接起動した場合は、作業ディレクトリを Project/ にするか、"
+            L"配布用 zip を展開したフォルダから実行してください。";
+
+        // error.log と session.log の両方に Error で残す（Release でも出る）
+        const std::string utf8 = ConvertString(detail);
+        SessionLogger::Instance().Write(
+            SessionLogger::Category::Error, SessionLogger::Level::Error, utf8);
+        SessionLogger::Instance().Write(
+            SessionLogger::Category::Session, SessionLogger::Level::Error, utf8);
+        // Write は毎回 flush するので、この時点でディスクに載っている
+
+        OutputDebugStringW(detail.c_str());
+        MessageBoxW(nullptr, detail.c_str(), L"ArcanaEngine - Shader Error", MB_OK | MB_ICONERROR);
+
+        assert(false);   // Debug ならここでブレークして現場を見られる
+        std::exit(1);
+    }
+
+    /// Resources/Shaders/**/X.hlsl → Resources/CompiledShaders/**/X.cso
+    /// 対応付けが取れない（Shaders 配下でない）場合は空文字を返す。
+    std::wstring ToCompiledShaderPath(const std::wstring& hlslPath) {
+        static const std::wstring kSrcDir = L"Resources/Shaders/";
+        static const std::wstring kDstDir = L"Resources/CompiledShaders/";
+
+        std::wstring p = hlslPath;
+        for (wchar_t& c : p) {
+            if (c == L'\\') c = L'/';   // 区切りを正規化してから探す
+        }
+
+        const size_t pos = p.find(kSrcDir);
+        if (pos == std::wstring::npos) return {};
+        p.replace(pos, kSrcDir.size(), kDstDir);
+
+        static const std::wstring kExt = L".hlsl";
+        if (p.size() > kExt.size() &&
+            p.compare(p.size() - kExt.size(), kExt.size(), kExt) == 0) {
+            p.replace(p.size() - kExt.size(), kExt.size(), L".cso");
+        }
+        return p;
+    }
+}
+
+IDxcBlob* DirectXCore::LoadShaderBlob(const std::wstring& hlslPath, const wchar_t* profile)
+{
+    // 事前コンパイル済み .cso を読む。無ければ空の blob を返す
+    auto tryLoadCso = [this](const std::wstring& hlsl) -> IDxcBlob* {
+        const std::wstring csoPath = ToCompiledShaderPath(hlsl);
+        if (csoPath.empty()) return nullptr;
+
+        std::ifstream ifs(csoPath, std::ios::binary | std::ios::ate);
+        if (!ifs) return nullptr;
+
+        const std::streamsize size = ifs.tellg();
+        if (size <= 0) return nullptr;
+        ifs.seekg(0, std::ios::beg);
+
+        std::vector<char> data(static_cast<size_t>(size));
+        if (!ifs.read(data.data(), size)) return nullptr;
+
+        // DXC のブロブとして包むことで、呼び出し側は .hlsl 経路と同じ扱いができる
+        IDxcBlobEncoding* blob = nullptr;
+        HRESULT hr = dxcUtils_->CreateBlob(
+            data.data(), static_cast<UINT32>(data.size()), DXC_CP_ACP, &blob);
+        return SUCCEEDED(hr) ? blob : nullptr;
+    };
+
+    const bool hasHlsl = std::filesystem::exists(hlslPath);
+
+#ifdef _DEBUG
+    // Debug は .hlsl があればそれを実行時コンパイルする。
+    // 書き換えて再実行するだけで試せるようにするため。
+    if (hasHlsl) {
+        return CompileShader(hlslPath, profile);
+    }
+    // .hlsl が無い＝シェーダソースを含まない配布物を使っている。.cso で動かす
+    if (IDxcBlob* blob = tryLoadCso(hlslPath)) {
+        return blob;
+    }
+#else
+    // Release / Development は .cso を優先する（起動時のコンパイル待ちを無くす）
+    if (IDxcBlob* blob = tryLoadCso(hlslPath)) {
+        return blob;
+    }
+    // .cso が用意されていない構成でも、ソースがあれば動くようフォールバックする。
+    // 配布ビルドでここに来るのは異常事態（クック漏れ or 作業ディレクトリ違い）なので
+    // Error で残す。Release の既定ログレベルでも確実に記録される。
+    if (hasHlsl) {
+        const std::string msg = ConvertString(std::format(
+            L"[Shader] .cso が見つからないため実行時コンパイルにフォールバックします: hlsl={}",
+            hlslPath));
+        SessionLogger::Instance().Write(
+            SessionLogger::Category::Error, SessionLogger::Level::Error, msg);
+        return CompileShader(hlslPath, profile);
+    }
+#endif
+
+    // .hlsl も .cso も無い。作業ディレクトリ違いか、配布物の作りが不完全
+    FatalShaderError(L"シェーダが見つかりません（.hlsl も .cso も無い）", hlslPath, E_FAIL);
+}
+
 IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t* profile)
 {
     //=========================
@@ -454,8 +580,13 @@ IDxcBlob* DirectXCore::CompileShader(const std::wstring& filePath, const wchar_t
     IDxcBlobEncoding* shaderSource = nullptr;
     HRESULT hr = dxcUtils_->LoadFile(filePath.c_str(), nullptr, &shaderSource);
 
-    // 読めなかったら止める
-    assert(SUCCEEDED(hr));
+    // 読めなかったら止める。
+    // assert は Release で消えるため、そこに頼ると shaderSource が nullptr のまま
+    // 進んでアクセス違反になり「原因不明のクラッシュ」にしかならない。
+    // どの構成でもパスを添えて記録してから落とす。
+    if (FAILED(hr) || shaderSource == nullptr) {
+        FatalShaderError(L"シェーダファイルを読み込めませんでした", filePath, hr);
+    }
 
     // 読み込んだファイルの内容を設定する
     DxcBuffer shaderSourceBuffer;

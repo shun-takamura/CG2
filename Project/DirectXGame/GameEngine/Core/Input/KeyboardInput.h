@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "WindowsApplication.h"
 #include <cassert>
 
@@ -44,7 +44,7 @@ public:
 	// リプレイ再生用：記録した押下状態を注入（前フレ保存→keys_ を上書き）。
 	void ApplyReplay(const BYTE keys[256]);
 
-	bool PuhsKey(BYTE keyNum);
+	bool PushKey(BYTE keyNum);
 
 	bool TriggerKey(BYTE keyNum);
 };

@@ -13,6 +13,11 @@ void StripeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxC
 	screenWidth_ = screenWidth;
 	screenHeight_ = screenHeight;
 
+	// 帯のサイズも 1600x900 で目視調整した値だったので、比率で画面に追従させる。
+	// ImGui から手動調整もできるので、ここは初期値の算出だけ。
+	debugStripeWidth_  = screenWidth_  * (210.0f / 1600.0f);
+	debugStripeHeight_ = screenHeight_ * (920.0f / 900.0f);
+
 	CreateStripes();
 }
 
@@ -166,6 +171,22 @@ void StripeTransition::UpdateStripePositions() {
 
 	float spacing = screenWidth_ / static_cast<float>(stripes_.size());
 
+	// 斜めに掃く量。もとは 1600x900 で目視調整した固定値だったので、
+	// その比率のまま画面サイズに追従させる（1600x900 では従来と同じ見た目になる）。
+	const float kSweepXRatio  = 450.0f / 1600.0f;  // 開始 X のオフセット
+	const float kTravelXRatio = 500.0f / 1600.0f;  // はけるときの X 移動量
+	const float kTravelYRatio = 870.0f / 900.0f;   // はけるときの Y 移動量
+	const float kEnterXRatio  =  50.0f / 1600.0f;  // 入りの X 立ち上がり
+	const float kEnterYRatio  = 200.0f / 900.0f;   // 入りの Y 助走
+	const float kBaseY        = -50.0f / 900.0f;   // 覆っている状態の Y
+
+	const float sweepX  = screenWidth_  * kSweepXRatio;
+	const float travelX = screenWidth_  * kTravelXRatio;
+	const float travelY = screenHeight_ * kTravelYRatio;
+	const float enterX  = screenWidth_  * kEnterXRatio;
+	const float enterY  = screenHeight_ * kEnterYRatio;
+	const float baseY   = screenHeight_ * kBaseY;
+
 	for (size_t i = 0; i < stripes_.size(); ++i) {
 		float progress = stripeProgress_[i];
 
@@ -178,20 +199,20 @@ void StripeTransition::UpdateStripePositions() {
 		if (state_ == TransitionState::FadeOut ||
 			(state_ == TransitionState::None && !isTransitioning_)) {
 			// はけ：覆っている状態から左下へ
-			float startX = (spacing + spacingOffset_) * i - 450.0f;
-			float startY = -50.0f;
-			float endX = startX - 500.0f;
-			float endY = startY + 870.0f;
+			float startX = (spacing + spacingOffset_) * i - sweepX;
+			float startY = baseY;
+			float endX = startX - travelX;
+			float endY = startY + travelY;
 
 			float outProgress = 1.0f - progress;
 			x = startX + (endX - startX) * outProgress;
 			y = startY + (endY - startY) * outProgress;
 		} else {
 			// 入り：右上から左下へ
-			float startX = (spacing + spacingOffset_) * i + 50.0f;
-			float startY = -screenHeight_ - 200.0f;
-			float endX = (spacing + spacingOffset_) * i - 450.0f;
-			float endY = -50.0f;
+			float startX = (spacing + spacingOffset_) * i + enterX;
+			float startY = -screenHeight_ - enterY;
+			float endX = (spacing + spacingOffset_) * i - sweepX;
+			float endY = baseY;
 
 			x = startX + (endX - startX) * progress;
 			y = startY + (endY - startY) * progress;

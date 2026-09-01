@@ -1,4 +1,4 @@
-#include "InputAction.h"
+﻿#include "InputAction.h"
 
 #include "KeyboardInput.h"
 #include "MouseInput.h"
@@ -118,7 +118,7 @@ bool InputActionMap::IsBindingPressed(const PhysicalBinding& b) const {
 	if (b.IsEmpty()) return false;
 	switch (b.device) {
 	case InputDevice::Keyboard:
-		return keyboard_ && keyboard_->PuhsKey(static_cast<BYTE>(b.code));
+		return keyboard_ && keyboard_->PushKey(static_cast<BYTE>(b.code));
 	case InputDevice::Mouse: {
 		if (!mouse_) return false;
 		return mouse_->IsButtonPressed(static_cast<MouseInput::Button>(b.code));

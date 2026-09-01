@@ -1,4 +1,4 @@
-#include "TextRenderer.h"
+﻿#include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
@@ -122,8 +122,8 @@ void TextRenderer::CreateRootSignature()
 
 void TextRenderer::CreatePipelineState()
 {
-	IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Text/Text.VS.hlsl", L"vs_6_0");
-	IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Text/Text.PS.hlsl", L"ps_6_0");
+	IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Text/Text.VS.hlsl", L"vs_6_0");
+	IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Text/Text.PS.hlsl", L"ps_6_0");
 	assert(vs && ps);
 
 	// 入力レイアウトは不要（SV_VertexID で頂点を生成）

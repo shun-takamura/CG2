@@ -1,4 +1,4 @@
-#include "RadialBlurEffect.h"
+﻿#include "RadialBlurEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
 #include <cstring>
@@ -14,7 +14,7 @@ void RadialBlurEffect::Initialize(
 	const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 )
 {
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/RadialBlur.PS.hlsl",
 		L"ps_6_0"
 	);

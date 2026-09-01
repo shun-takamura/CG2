@@ -47,11 +47,27 @@ LRESULT WindowsApplication::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARA
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-void WindowsApplication::Initialize(const wchar_t* title){
+void WindowsApplication::Initialize(const wchar_t* title, int iconResourceId){
     wc_.lpfnWndProc = WindowProc;
-    wc_.lpszClassName = L"CG2WindowClass";
+    wc_.lpszClassName = L"ArcanaEngineWindowClass";
     wc_.hInstance = GetModuleHandle(nullptr);
     wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
+
+    // アプリが ICON リソースを持っていれば Alt+Tab / タスクバーに反映する。
+    // 未指定（0）や読み込み失敗時は nullptr のままで、Windows の既定アイコンになる。
+    // WNDCLASS には小さいアイコン用のフィールドが無いので、
+    // タイトルバー用はウィンドウ生成後に WM_SETICON で送る。
+    HICON iconSmall = nullptr;
+    if (iconResourceId != 0) {
+        const auto res = MAKEINTRESOURCEW(iconResourceId);
+        wc_.hIcon = static_cast<HICON>(LoadImageW(
+            wc_.hInstance, res, IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR));
+        iconSmall = static_cast<HICON>(LoadImageW(
+            wc_.hInstance, res, IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
+    }
+
     RegisterClass(&wc_);
 
     DWORD windowStyle = WS_OVERLAPPEDWINDOW;
@@ -68,6 +84,11 @@ void WindowsApplication::Initialize(const wchar_t* title){
         nullptr, nullptr, wc_.hInstance, nullptr
     );
     assert(hwnd_);
+
+    // タイトルバーの小さいアイコン。大きいほうはウィンドウクラス側で設定済み
+    if (iconSmall) {
+        SendMessageW(hwnd_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(iconSmall));
+    }
 
     // WindowProc から this を引けるよう紐づけ
     SetWindowLongPtr(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));

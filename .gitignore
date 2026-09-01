@@ -349,3 +349,5 @@ Project/tools/Python/jarvis_marker.txt
 Project/tools/Python/ollama_sample.cpp
 .claude/worktrees/
 .env
+# シェーダの事前コンパイル出力（compile_shaders.py が Resources/Shaders から生成する）
+Project/Resources/CompiledShaders/

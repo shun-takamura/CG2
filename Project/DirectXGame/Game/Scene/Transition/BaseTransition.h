@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <functional>
 #include <string>
 
@@ -38,8 +38,10 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
+	/// <param name="screenWidth">画面幅。呼び出し側が実ウィンドウサイズを渡すこと</param>
+	/// <param name="screenHeight">画面高さ</param>
 	virtual void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth = 1280.0f, float screenHeight = 720.0f) = 0;
+		float screenWidth, float screenHeight) = 0;
 
 	/// <summary>
 	/// 終了処理
@@ -103,7 +105,7 @@ protected:
 	SpriteManager* spriteManager_ = nullptr;
 	DirectXCore* dxCore_ = nullptr;
 
-	// 画面サイズ
-	float screenWidth_ = 1280.0f;
-	float screenHeight_ = 720.0f;
+	// 画面サイズ（Initialize で実ウィンドウサイズを受け取る）
+	float screenWidth_ = 0.0f;
+	float screenHeight_ = 0.0f;
 };

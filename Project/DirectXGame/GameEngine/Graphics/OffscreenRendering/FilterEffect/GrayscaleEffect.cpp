@@ -1,4 +1,4 @@
-#include "GrayscaleEffect.h"
+﻿#include "GrayscaleEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
 #include <cstring>
@@ -16,7 +16,7 @@ void GrayscaleEffect::Initialize(
 )
 {
 	// シェーダーコンパイル
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/Grayscale.PS.hlsl",
 		L"ps_6_0"
 	);

@@ -1,4 +1,4 @@
-#include "MaskedGrayscaleEffect.h"
+﻿#include "MaskedGrayscaleEffect.h"
 #include "DirectXCore.h"
 #include "RenderTexture.h"
 #include <cassert>
@@ -17,7 +17,7 @@ void MaskedGrayscaleEffect::InitializeMasked(
 {
 	idMaskRT_ = idMaskRT;
 
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/MaskedGrayscale.PS.hlsl",
 		L"ps_6_0");
 	assert(psBlob);

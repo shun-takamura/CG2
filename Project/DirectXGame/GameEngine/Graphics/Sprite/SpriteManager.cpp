@@ -1,4 +1,4 @@
-#include "SpriteManager.h"
+﻿#include "SpriteManager.h"
 #include "Log.h"
 #include "ConvertString.h"
 #include <cassert>
@@ -105,12 +105,12 @@ void SpriteManager::CreateGraphicsPipelineState(BlendMode blendMode)
 {
     // ===== シェーダーコンパイル =====
     // Sprite専用シェーダーを使用
-    IDxcBlob* vs = dxCore_->CompileShader(
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Sprite/Sprite.VS.hlsl",
         L"vs_6_0"
     );
 
-    IDxcBlob* ps = dxCore_->CompileShader(
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Sprite/Sprite.PS.hlsl",
         L"ps_6_0"
     );

@@ -1,4 +1,4 @@
-#include "OutlineNormalEffect.h"
+﻿#include "OutlineNormalEffect.h"
 #include "DirectXCore.h"
 #include "MathUtility.h"
 #include <cassert>
@@ -15,7 +15,7 @@ void OutlineNormalEffect::InitializeOutline(
 	const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 )
 {
-	IDxcBlob* psBlob = dxCore->CompileShader(
+	IDxcBlob* psBlob = dxCore->LoadShaderBlob(
 		L"Resources/Shaders/PostEffect/Filters/OutlineNormal.PS.hlsl",
 		L"ps_6_0"
 	);

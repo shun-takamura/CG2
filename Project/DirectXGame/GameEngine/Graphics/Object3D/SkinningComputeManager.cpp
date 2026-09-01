@@ -1,4 +1,4 @@
-#include "SkinningComputeManager.h"
+﻿#include "SkinningComputeManager.h"
 
 void SkinningComputeManager::Initialize(DirectXCore* dxCore)
 {
@@ -109,7 +109,7 @@ void SkinningComputeManager::CreateRootSignature()
 void SkinningComputeManager::CreateComputePipelineState()
 {
     // CSコンパイル
-    IDxcBlob* cs = dxCore_->CompileShader(
+    IDxcBlob* cs = dxCore_->LoadShaderBlob(
         L"Resources/Shaders/Skinning/Skinning.CS.hlsl",
         L"cs_6_0"
     );

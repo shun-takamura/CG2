@@ -1,4 +1,4 @@
-#include "KeyboardInput.h"
+﻿#include "KeyboardInput.h"
 
 void KeyboardInput::Initialize(WindowsApplication* winApp, IDirectInput8* directInput) {
 	assert(winApp);
@@ -46,7 +46,7 @@ void KeyboardInput::ApplyReplay(const BYTE keys[256]) {
 	memcpy(keys_, keys, sizeof(keys_));
 }
 
-bool KeyboardInput::PuhsKey(BYTE keyNum)
+bool KeyboardInput::PushKey(BYTE keyNum)
 {
 	// 指定キーを押していればtrueを返す
 	if (keys_[keyNum]) {

@@ -1,4 +1,4 @@
-#include "StagePlayScene.h"
+﻿#include "StagePlayScene.h"
 #include "Components/Gameplay.h"
 
 #include "Camera.h"
@@ -2867,10 +2867,10 @@ void StagePlayScene::Update() {
 		// ----- 入力で moveDelta (-1..1) を作る -----
 		Vector2 moveDelta{ 0.0f, 0.0f };
 		auto* kb = input_->GetKeyboard();
-		if (kb->PuhsKey(DIK_A)) moveDelta.x -= 1.0f;
-		if (kb->PuhsKey(DIK_D)) moveDelta.x += 1.0f;
-		if (kb->PuhsKey(DIK_W)) moveDelta.y += 1.0f;
-		if (kb->PuhsKey(DIK_S)) moveDelta.y -= 1.0f;
+		if (kb->PushKey(DIK_A)) moveDelta.x -= 1.0f;
+		if (kb->PushKey(DIK_D)) moveDelta.x += 1.0f;
+		if (kb->PushKey(DIK_W)) moveDelta.y += 1.0f;
+		if (kb->PushKey(DIK_S)) moveDelta.y -= 1.0f;
 		if (auto* pad = input_->GetController(); pad && pad->IsConnected()) {
 			const auto& ls = pad->GetLeftStick();
 			moveDelta.x += ls.x * ls.magnitude;

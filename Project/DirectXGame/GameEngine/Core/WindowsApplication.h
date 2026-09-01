@@ -13,8 +13,18 @@ public:
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-    // 初期化
-    void Initialize(const wchar_t* title);
+    /// <summary>
+    /// 初期化
+    /// </summary>
+    /// <param name="title">タイトルバーに出す文字列</param>
+    /// <param name="iconResourceId">
+    /// exe に埋め込んだ ICON リソースの ID。0 なら Windows の既定アイコンを使う。
+    /// タイトルバーと Alt+Tab の表示に反映される。
+    /// （エクスプローラーやタスクバーに出る exe 自体のアイコンは、
+    ///   .rc に ICON を書いてビルドした時点で Windows が自動的に拾うので、
+    ///   こちらの指定とは独立している）
+    /// </param>
+    void Initialize(const wchar_t* title, int iconResourceId = 0);
 
     // メッセージ処理
     bool ProcessMessage();

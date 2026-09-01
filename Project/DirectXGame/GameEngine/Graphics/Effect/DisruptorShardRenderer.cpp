@@ -1,4 +1,4 @@
-#include "DisruptorShardRenderer.h"
+﻿#include "DisruptorShardRenderer.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "MathUtility.h"
@@ -79,8 +79,8 @@ void DisruptorShardRenderer::CreateRootSignature() {
 }
 
 void DisruptorShardRenderer::CreatePipelineState() {
-	IDxcBlob* vs = dxCore_->CompileShader(L"Resources/Shaders/Disruptor/DisruptorShard.VS.hlsl", L"vs_6_0");
-	IDxcBlob* ps = dxCore_->CompileShader(L"Resources/Shaders/Disruptor/DisruptorShard.PS.hlsl", L"ps_6_0");
+	IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Disruptor/DisruptorShard.VS.hlsl", L"vs_6_0");
+	IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Disruptor/DisruptorShard.PS.hlsl", L"ps_6_0");
 	assert(vs && ps);
 
 	D3D12_INPUT_ELEMENT_DESC elems[2] = {};

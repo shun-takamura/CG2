@@ -90,11 +90,13 @@ void SessionLogger::Initialize() {
         return;
     }
 
-    // デフォルトの最低レベル: Debugビルドは全開(Trace)、Releaseは深刻なものだけ(Critical)
+    // デフォルトの最低レベル: Debugビルドは全開(Trace)、Releaseはエラー以上(Error)。
+    // Critical だけに絞ると「なぜ落ちたのか」がログに残らず原因究明ができないため、
+    // 頻度の低い Error までは配布ビルドでも記録する。
 #ifdef _DEBUG
     const Level defaultLevel = Level::Trace;
 #else
-    const Level defaultLevel = Level::Critical;
+    const Level defaultLevel = Level::Error;
 #endif
     minLevels_.fill(defaultLevel);
 

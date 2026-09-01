@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -32,8 +32,10 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
+	/// <param name="screenWidth">画面幅。0 なら WindowsApplication の実クライアントサイズを使う</param>
+	/// <param name="screenHeight">画面高さ。同上</param>
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth = 1280.0f, float screenHeight = 720.0f);
+		float screenWidth = 0.0f, float screenHeight = 0.0f);
 
 	/// <summary>
 	/// 終了処理
@@ -146,6 +148,7 @@ private:
 	// マネージャーへのポインタ
 	SpriteManager* spriteManager_ = nullptr;
 	DirectXCore* dxCore_ = nullptr;
-	float screenWidth_ = 1280.0f;
-	float screenHeight_ = 720.0f;
+	// Initialize で実クライアントサイズを受け取る
+	float screenWidth_ = 0.0f;
+	float screenHeight_ = 0.0f;
 };
