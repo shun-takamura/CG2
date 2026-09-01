@@ -54,6 +54,14 @@ public:
 	void ClearDepthBuffer();
 
 	/// <summary>
+	/// 現在のバックバッファを指定色でクリアし、深度バッファもクリアして DSV をバインドする。
+	/// BeginDraw() はクリアも DSV バインドも行わない（PostEffect 経由で描く構成が既定のため）ので、
+	/// スワップチェーンへ直接描く場合はこれを BeginDraw() の直後に呼ぶ。
+	/// </summary>
+	/// <param name="clearColor">RGBA 各 0..1 の 4 要素</param>
+	void ClearRenderTarget(const float clearColor[4]);
+
+	/// <summary>
 	/// 描画コマンドの終了と Present。
 	/// </summary>
 	void EndDraw();

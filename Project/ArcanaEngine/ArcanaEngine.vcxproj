@@ -18,7 +18,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{e662ea4f-4173-4e9c-92cc-4e4f11809a7f}</ProjectGuid>
-    <RootNamespace>EngineCore</RootNamespace>
+    <RootNamespace>ArcanaEngine</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />

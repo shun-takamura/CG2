@@ -1,14 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
-    EngineCore.lib と Game.exe(CG2_0_1) が共有するコンパイル設定。
+    ArcanaEngine.lib と Game.exe(CG2_0_1) が共有するコンパイル設定。
     設定の二重化・乖離を防ぐため両 vcxproj がこれを import する。
     インクルードパスは $(SolutionDir) 基準（= Project\）なので vcxproj の置き場所に依存しない。
     静的lib + exe を同じ RuntimeLibrary で揃えるためにも、ここで一元管理する。
 
     ここに列挙してよいのは「エンジンと外部ライブラリ」のパスだけ。
     DirectXGame\Game\** はゲーム専用なので CG2_0_1.vcxproj 側に置く。
-    EngineCore がゲームのヘッダを引けない状態を保つことが、エンジン単体切り出しの前提。
+    ArcanaEngine がゲームのヘッダを引けない状態を保つことが、エンジン単体切り出しの前提。
   -->
   <ItemDefinitionGroup>
     <ClCompile>

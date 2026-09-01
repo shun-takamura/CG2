@@ -111,6 +111,22 @@ void DirectXCore::ClearDepthBuffer()
     commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 }
 
+void DirectXCore::ClearRenderTarget(const float clearColor[4])
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle =
+        rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += frameIndex_ * rtvDescriptorSize_;
+
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
+        dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+
+    // BeginDraw は DSV を外した状態でバインドするので、深度を使うならここで張り直す
+    commandList_->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
+
+    commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+}
+
 void DirectXCore::EndDraw() {
     HRESULT hr;
 
