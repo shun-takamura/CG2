@@ -5,6 +5,9 @@
 #include "FPSWindow.h"
 #include "PepperWindow.h"
 #include "LogWindow.h"
+#include "HierarchyWindow.h"
+#include "InspectorWindow.h"
+#include "SceneEditorWindow.h"
 #include "ViewportWindow.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
@@ -29,6 +32,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "TimeGroup.h"
+#include "Physics/CollisionSystem.h"
 
 #include <dxgi.h>  // DXGI_FORMAT用
 
@@ -63,6 +67,61 @@ PostEffect* ImGuiManager::GetHostPostEffect() const {
 
 Framework* ImGuiManager::GetHostFramework() const {
     return hostHooks_.getFramework ? hostHooks_.getFramework() : nullptr;
+}
+
+int ImGuiManager::GetEntityGroupCount() const {
+    if (!hostHooks_.getEntityGroupCount) return 1;
+    const int n = hostHooks_.getEntityGroupCount();
+    return (n > 0) ? n : 1;
+}
+
+int ImGuiManager::GetEntityGroup(IImGuiEditable* e) const {
+    if (!hostHooks_.getEntityGroup || !e) return 0;
+    const int g = hostHooks_.getEntityGroup(e);
+    return (g >= 0 && g < GetEntityGroupCount()) ? g : 0;
+}
+
+const char* ImGuiManager::GetEntityGroupName(int group) const {
+    if (!hostHooks_.getEntityGroupName) return "All";
+    const char* n = hostHooks_.getEntityGroupName(group);
+    return (n && *n) ? n : "(unnamed)";
+}
+
+void ImGuiManager::GetEntityGroupColor(int group, float& r, float& g, float& b, float& a) const {
+    if (hostHooks_.getEntityGroupColor) {
+        hostHooks_.getEntityGroupColor(group, r, g, b, a);
+        return;
+    }
+    r = 0.55f; g = 0.55f; b = 0.60f; a = 1.0f;
+}
+
+void ImGuiManager::SetEntityGroup(IImGuiEditable* e, int group) {
+    if (hostHooks_.setEntityGroup && e) hostHooks_.setEntityGroup(e, group);
+}
+
+Collider* ImGuiManager::GetEntityCollider(IImGuiEditable* e) const {
+    if (!e) return nullptr;
+    if (hostHooks_.getCollider) return hostHooks_.getCollider(e);
+    return &CollisionSystem::GetInstance()->ColliderOf(e);
+}
+
+void ImGuiManager::AddInspectorSection(const std::string& name,
+    std::function<void(IImGuiEditable*)> draw)
+{
+#ifdef _DEBUG
+    if (draw) inspectorSections_.push_back({ name, std::move(draw) });
+#else
+    (void)name; (void)draw;
+#endif
+}
+
+void ImGuiManager::AddAssetBrowserSection(const std::string& name, std::function<void()> draw)
+{
+#ifdef _DEBUG
+    if (draw) assetBrowserSections_.push_back({ name, std::move(draw) });
+#else
+    (void)name; (void)draw;
+#endif
 }
 
 void ImGuiManager::AddWindow(std::unique_ptr<IImGuiWindow> window) {
@@ -148,6 +207,8 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<FPSWindow>());
     windows_.push_back(std::make_unique<PepperWindow>());
     windows_.push_back(std::make_unique<LogWindow>());
+    windows_.push_back(std::make_unique<HierarchyWindow>(this));
+    windows_.push_back(std::make_unique<InspectorWindow>(this));
 
     // デバッグUI群を CallbackWindow 経由で登録
     windows_.push_back(std::make_unique<CallbackWindow>("Camera",
@@ -282,22 +343,22 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                     float elapsed = scene->GetElapsedSeconds();
                     float camT    = scene->GetCameraProgressT();
 
-                    // 経過秒 + 仮想ステージ t（120 秒前提）+ 実レールカメラ t
-                    ImGui::Text("Elapsed: %.2f sec  /  Stage t (120s): %.3f",
-                        elapsed, elapsed / 120.0f);
+                    ImGui::Text("Elapsed: %.2f sec", elapsed);
+
+                    // カメラ進行度。使うかどうかは Scene::GetCameraProgressT の override 次第
                     if (camT >= 0.0f) {
-                        ImGui::Text("RailCamera t: %.3f", camT);
-                    } else {
-                        ImGui::TextDisabled("RailCamera t: (not used)");
+                        ImGui::Text("Camera Progress t: %.3f", camT);
                     }
 
-                    float seekMax = scene->GetSeekMaxSeconds();
-                    if (seekMax < 0.0f) seekMax = 120.0f; // GetSeekMaxSeconds 未対応シーン用フォールバック
-                    ImGui::Text("Seek Max: %.0f s (StagePlay Tuning で編集)", seekMax);
-
-                    float seekValue = elapsed;
-                    if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
-                        scene->Seek(seekValue);
+                    // シークはシーンが総尺を申告している場合だけ有効
+                    const float seekMax = scene->GetSeekMaxSeconds();
+                    if (seekMax > 0.0f) {
+                        float seekValue = elapsed;
+                        if (ImGui::SliderFloat("Seek", &seekValue, 0.0f, seekMax, "%.2f sec")) {
+                            scene->Seek(seekValue);
+                        }
+                    } else {
+                        ImGui::TextDisabled("Seek: Scene::GetSeekMaxSeconds() を override すると有効になります");
                     }
 
                     if (ImGui::Button("-1s")) { scene->Seek(elapsed - 1.0f); }
@@ -357,21 +418,11 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                             scene->SetTimeScale(static_cast<TimeGroup>(i), 1.0f);
                     }
                     ImGui::SameLine();
-                    if (ImGui::Button("HitStop")) {
-                        scene->SetTimeScale(TimeGroup::World,  0.05f);
-                        scene->SetTimeScale(TimeGroup::Player, 0.05f);
-                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
-                    }
-                    if (ImGui::Button("Just Dodge")) {
-                        scene->SetTimeScale(TimeGroup::World,  0.3f);
-                        scene->SetTimeScale(TimeGroup::Player, 1.0f);
-                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button("BotW Rush")) {
-                        scene->SetTimeScale(TimeGroup::World,  0.2f);
-                        scene->SetTimeScale(TimeGroup::Player, 1.5f);
-                        scene->SetTimeScale(TimeGroup::UI,     1.0f);
+                    if (ImGui::Button("UI Only")) {
+                        // World/Player/Effect を止めて UI だけ動かす（ポーズ表現の雛形）
+                        for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i)
+                            scene->SetTimeScale(static_cast<TimeGroup>(i), 0.0f);
+                        scene->SetTimeScale(TimeGroup::UI, 1.0f);
                     }
 
                     ImGui::Spacing();
@@ -389,9 +440,12 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     windows_.push_back(std::make_unique<CallbackWindow>("QR Code",
         []() { QRCodeReader::GetInstance()->OnImGui(); }));
 
+    // シーンエディタ（アセット一覧の非同期スキャン + 動的オブジェクト追加・削除）
+    windows_.push_back(std::make_unique<SceneEditorWindow>(this));
+
     // ここまでがエンジン標準のパネル。
-    // Hierarchy / Inspector / SceneEditor とゲーム固有パネルは
-    // ホスト側が Initialize 後に AddWindow / AddCallbackWindow で足す。
+    // ゲーム固有パネルはホスト側が Initialize 後に
+    // AddWindow / AddCallbackWindow / AddInspectorSection / AddAssetBrowserSection で足す。
 
     isInitialized_ = true;
 
@@ -404,6 +458,8 @@ void ImGuiManager::Shutdown() {
 
     windows_.clear();
     editables_.clear();
+    inspectorSections_.clear();
+    assetBrowserSections_.clear();
     selectedObject_ = nullptr;
     viewportWindow_ = nullptr;
     effectEditorWindow_ = nullptr;

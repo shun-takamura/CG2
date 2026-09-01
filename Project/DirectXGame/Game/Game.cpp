@@ -14,9 +14,8 @@
 #include "InputManager.h"
 #include "ImGuiManager.h"
 #include "IImGuiWindow.h"
-#include "HierarchyWindow.h"
-#include "InspectorWindow.h"
-#include "SceneEditorWindow.h"
+#include "Editor/GameInspectorSections.h"
+#include "Editor/GameAssetBrowserSections.h"
 #include "StagePlayScene.h"
 #include "KeyboardInput.h"
 #include "SceneManager.h"
@@ -60,10 +59,10 @@ ISceneRunner* Game::GetSceneRunner() {
 void Game::RegisterGameEditorWindows() {
 	auto& imgui = ImGuiManager::Instance();
 
-	// ゲームのエンティティ／コンポーネントを直接扱うウィンドウ群
-	imgui.AddWindow(std::make_unique<HierarchyWindow>(&imgui));
-	imgui.AddWindow(std::make_unique<InspectorWindow>(&imgui));
-	imgui.AddWindow(std::make_unique<SceneEditorWindow>(&imgui));
+	// Hierarchy / Inspector / SceneEditor はフック経由でエンジン側に移設済み。
+	// ゲーム固有の欄だけをセクションとして差し込む。
+	GameInspectorSections::Register();      // Inspector: HP / ダメージ / 弾 / 近接 / プレハブ保存
+	GameAssetBrowserSections::Register();   // SceneEditor: プレハブ一覧 / スプライン追加
 
 	imgui.AddCallbackWindow("Transition",
 		[]() { TransitionManager::GetInstance()->OnImGui(); });
@@ -121,6 +120,29 @@ void Game::Initialize() {
 		};
 		hooks.getPostEffect = []() -> PostEffect* { return Game::GetPostEffect(); };
 		hooks.getFramework = []() -> Framework* { return Game::GetInstance(); };
+
+		// Hierarchy のグルーピング / Inspector のグループ切替に EntityTag を使う。
+		// エンジンはこれを「ただの整数」としてしか見ない。
+		hooks.getEntityGroupCount = []() { return static_cast<int>(EntityTag::Count); };
+		hooks.getEntityGroup = [](IImGuiEditable* e) {
+			return static_cast<int>(Gameplay::Of(e).GetTag());
+		};
+		hooks.getEntityGroupName = [](int group) -> const char* {
+			// GetTagName は string_view を返すが、実体は静的な文字列リテラルなので寿命は安全
+			return GetTagName(static_cast<EntityTag>(group)).data();
+		};
+		hooks.getEntityGroupColor = [](int group, float& r, float& g, float& b, float& a) {
+			GetTagColor(static_cast<EntityTag>(group), r, g, b, a);
+		};
+		hooks.setEntityGroup = [](IImGuiEditable* e, int group) {
+			Gameplay::Of(e).SetTag(static_cast<EntityTag>(group));
+		};
+
+		// コライダーの実体はゲームの Gameplay サイドテーブルにある
+		hooks.getCollider = [](IImGuiEditable* e) -> Collider* {
+			return &Gameplay::Of(e).GetCollider();
+		};
+
 		ImGuiManager::SetHostHooks(hooks);
 	}
 

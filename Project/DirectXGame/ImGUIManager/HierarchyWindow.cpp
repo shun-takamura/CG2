@@ -1,11 +1,7 @@
 #include "HierarchyWindow.h"
-#include "Components/Gameplay.h"
 #include "ImGuiManager.h"
-#include "SceneManager.h"
 #include "Scene.h"
-#include "Components/EntityTag.h"
 
-#include <array>
 #include <vector>
 #include <cstdio>
 
@@ -14,7 +10,7 @@ void HierarchyWindow::OnDraw() {
 
     const auto& editables = manager_->GetEditables();
     IImGuiEditable* selected = manager_->GetSelected();
-    Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
+    Scene* scene = manager_->GetActiveScene();
 
     // 検索フィルター
     static char searchBuffer[256] = "";
@@ -24,15 +20,14 @@ void HierarchyWindow::OnDraw() {
     ImGui::Text("Objects: %d", static_cast<int>(editables.size()));
     ImGui::Separator();
 
-    // ===== タグごとにグルーピング =====
-    constexpr int kTagCount = static_cast<int>(EntityTag::Count);
-    std::array<std::vector<IImGuiEditable*>, kTagCount> grouped{};
+    // ===== グループごとにまとめる =====
+    // グループの意味づけはホスト側（ゲームのタグ等）が決める。
+    // フック未配線なら全部グループ 0 に入るだけで、一覧としては問題なく機能する。
+    const int groupCount = manager_->GetEntityGroupCount();
+    std::vector<std::vector<IImGuiEditable*>> grouped(groupCount);
     for (IImGuiEditable* e : editables) {
         if (!e) continue;
-        const int idx = static_cast<int>(Gameplay::Of(e).GetTag());
-        if (idx >= 0 && idx < kTagCount) {
-            grouped[idx].push_back(e);
-        }
+        grouped[manager_->GetEntityGroup(e)].push_back(e);
     }
 
     const float kRowButtonWidth = ImGui::GetFrameHeight();
@@ -95,18 +90,16 @@ void HierarchyWindow::OnDraw() {
         ImGui::PopID();
     };
 
-    // タグ順に CollapsingHeader を描画
-    for (int i = 0; i < kTagCount; ++i) {
+    for (int i = 0; i < groupCount; ++i) {
         const auto& list = grouped[i];
         if (list.empty()) continue;
 
-        EntityTag tag = static_cast<EntityTag>(i);
         float r, g, b, a;
-        GetTagColor(tag, r, g, b, a);
+        manager_->GetEntityGroupColor(i, r, g, b, a);
 
         char header[128];
-        std::snprintf(header, sizeof(header), "%s (%d)##tag_%d",
-            std::string(GetTagName(tag)).c_str(),
+        std::snprintf(header, sizeof(header), "%s (%d)##group_%d",
+            manager_->GetEntityGroupName(i),
             static_cast<int>(list.size()),
             i);
 
@@ -114,9 +107,9 @@ void HierarchyWindow::OnDraw() {
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(r * 0.55f, g * 0.55f, b * 0.55f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(r * 0.70f, g * 0.70f, b * 0.70f, 1.0f));
 
-        // None 以外はデフォルトで開く
-        bool defaultOpen = (tag != EntityTag::None);
-        ImGui::SetNextItemOpen(defaultOpen, ImGuiCond_FirstUseEver);
+        // グループ 0 は「未分類」の想定なので畳んでおく。
+        // ただしグループ分けをしていない（フック未配線）場合は全件がそこに入るので必ず開く。
+        ImGui::SetNextItemOpen(groupCount == 1 || i != 0, ImGuiCond_FirstUseEver);
         const bool opened = ImGui::CollapsingHeader(header);
         ImGui::PopStyleColor(3);
 

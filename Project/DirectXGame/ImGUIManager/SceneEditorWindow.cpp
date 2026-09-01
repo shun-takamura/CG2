@@ -3,11 +3,7 @@
 #include "ModelManager.h"
 #include "PrimitiveInstance.h"
 #include "AssetLocator.h"
-#include "SceneManager.h"
 #include "Scene.h"
-#include "Components/EntityTag.h"
-#include "Components/PrefabManager.h"
-#include "Components/Prefab.h"
 #include "Effect/EffectManager.h"
 
 #include <filesystem>
@@ -360,7 +356,7 @@ void SceneEditorWindow::RefreshSceneIfChanged() {
     // 書き込み途中の中途半端な JSON を掴んでも、LoadSceneFromJson はパースに失敗した時点で
     // 何も壊さずに false を返すだけ。書き込み完了で時刻が再び動くので次のフレームで拾い直せる。
     sceneLastWriteTime_ = t;
-    if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+    if (auto* scene = manager_->GetActiveScene()) {
         scene->LoadSceneFromJson(scenePathBuf_);
         // 読込直後は「その内容が最新」なので自動保存の基準を合わせる。
         // これをしないと、読み込んだばかりの内容を「編集された」と誤検出して
@@ -370,7 +366,7 @@ void SceneEditorWindow::RefreshSceneIfChanged() {
 }
 
 void SceneEditorWindow::ResetSceneContentBaseline() {
-    auto* scene = SceneManager::GetInstance()->GetCurrentScene();
+    auto* scene = manager_->GetActiveScene();
     if (!scene) return;
     const std::string s = scene->SerializeSceneToString();
     sceneContentHash_ = std::hash<std::string>{}(s);
@@ -381,7 +377,7 @@ void SceneEditorWindow::ResetSceneContentBaseline() {
 void SceneEditorWindow::AutoSaveSceneIfDirty(float dt) {
     if (!autoSaveScene_) return;
 
-    auto* scene = SceneManager::GetInstance()->GetCurrentScene();
+    auto* scene = manager_->GetActiveScene();
     if (!scene) return;
 
     const std::string s = scene->SerializeSceneToString();
@@ -456,7 +452,7 @@ void SceneEditorWindow::OnDraw() {
             sceneWatchInitialized_ = false;  // 監視対象が変わったので張り直す
         }
         if (ImGui::Button("Save Scene")) {
-            if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+            if (auto* scene = manager_->GetActiveScene()) {
                 scene->SaveSceneToJson(scenePathBuf_);
                 MarkSceneFileSynced();          // 自分の保存で自動リロードを誘発しない
                 ResetSceneContentBaseline();    // 自動保存も直後に再発火させない
@@ -464,7 +460,7 @@ void SceneEditorWindow::OnDraw() {
         }
         ImGui::SameLine();
         if (ImGui::Button("Load Scene")) {
-            if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+            if (auto* scene = manager_->GetActiveScene()) {
                 scene->LoadSceneFromJson(scenePathBuf_);
                 MarkSceneFileSynced();
                 ResetSceneContentBaseline();
@@ -485,96 +481,15 @@ void SceneEditorWindow::OnDraw() {
     ImGui::Separator();
 
     // ============================================
-    // プリファブ一覧（ボタンをドラッグ元として使う）
+    // ホストが登録したセクション（プレハブ一覧・ゲーム固有の配置ボタン等）
     // ============================================
-    {
-        // 初回だけ自動スキャン
-        static bool prefabScanned = false;
-        if (!prefabScanned) {
-            PrefabManager::GetInstance()->Rescan();
-            prefabScanned = true;
-        }
-        ImGui::TextUnformatted("Prefabs:");
-        ImGui::SameLine();
-        if (ImGui::Button("Rescan##prefabs")) {
-            PrefabManager::GetInstance()->Rescan();
-        }
-        const auto& prefabs = PrefabManager::GetInstance()->GetAll();
-        if (prefabs.empty()) {
-            ImGui::TextDisabled("(none in %s)", PrefabManager::GetPrefabDir());
-        } else {
-            // 削除確認ポップアップ対象（ループ中に Rescan() すると参照が無効化されるため遅延処理する）
-            static std::string prefabToDelete;
-            for (const auto& p : prefabs) {
-                ImGui::PushID(p.name.c_str());
-                ImGui::Button(p.name.c_str());
-                if (ImGui::BeginDragDropSource()) {
-                    PrefabDropPayload pld{};
-                    SafeCopy(pld.prefabName, sizeof(pld.prefabName), p.name);
-                    ImGui::SetDragDropPayload(PREFAB_DROP_PAYLOAD_TYPE, &pld, sizeof(pld));
-                    ImGui::Text("Prefab: %s", p.name.c_str());
-                    ImGui::TextDisabled("[%s] %s/%s",
-                        std::string(GetTagName(p.tag)).c_str(),
-                        p.modelDir.c_str(), p.modelFile.c_str());
-                    ImGui::EndDragDropSource();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("x")) {
-                    prefabToDelete = p.name;
-                    ImGui::OpenPopup("Delete Prefab?");
-                }
-                if (ImGui::BeginPopupModal("Delete Prefab?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    ImGui::Text("Delete prefab \"%s\" ?", prefabToDelete.c_str());
-                    ImGui::TextDisabled("This deletes the .json file and cannot be undone.");
-                    ImGui::Separator();
-                    if (ImGui::Button("Delete", ImVec2(120, 0))) {
-                        if (PrefabManager::Delete(prefabToDelete)) {
-                            PrefabManager::GetInstance()->Rescan();
-                        }
-                        prefabToDelete.clear();
-                        ImGui::CloseCurrentPopup();
-                        ImGui::EndPopup();
-                        ImGui::PopID();
-                        break; // prefabs 参照が無効化されたのでループを抜ける
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-                        prefabToDelete.clear();
-                        ImGui::CloseCurrentPopup();
-                    }
-                    ImGui::EndPopup();
-                }
-                ImGui::PopID();
-            }
+    for (const auto& section : manager_->GetAssetBrowserSections()) {
+        if (section.draw) {
+            section.draw();
+            ImGui::Separator();
         }
     }
-    ImGui::Separator();
 
-    // ============================================
-    // スプライン追加（役割タグごとに4ボタン）
-    // ============================================
-    {
-        ImGui::TextUnformatted("Add Spline:");
-        struct SplineKind {
-            const char* label;
-            EntityTag tag;
-        };
-        const SplineKind kinds[] = {
-            { "PlayerRail",   EntityTag::PlayerRailSpline },
-            { "EnemyPath",    EntityTag::EnemyPathSpline },
-            { "FloatingPath", EntityTag::FloatingPathSpline },
-            { "CameraPath",   EntityTag::CameraPathSpline },
-        };
-        for (size_t i = 0; i < std::size(kinds); ++i) {
-            if (i > 0) ImGui::SameLine();
-            if (ImGui::Button(kinds[i].label)) {
-                if (auto* scene = SceneManager::GetInstance()->GetCurrentScene()) {
-                    scene->AddDynamicSpline(static_cast<int>(kinds[i].tag));
-                }
-            }
-        }
-    }
-    ImGui::Separator();
 
     // 検索フィルタ
     ImGui::InputText("Search", searchBuf_, sizeof(searchBuf_));

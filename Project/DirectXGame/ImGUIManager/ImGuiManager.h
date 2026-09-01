@@ -42,6 +42,30 @@ struct EditorHostHooks {
     PostEffect* (*getPostEffect)() = nullptr;
     /// ホストの Framework 実体（ShadowMap 等のエンジン機能へ辿るため）
     Framework* (*getFramework)() = nullptr;
+
+    //====================
+    // エンティティのグループ（Hierarchy のグルーピングと Inspector の切替に使う）
+    //
+    // エンジンは「0 以上の整数」としてしか扱わない。ゲームのタグ enum を
+    // int にキャストして渡すのが典型。未配線なら「1 グループのみ」として動く。
+    //====================
+    /// グループの総数
+    int (*getEntityGroupCount)() = nullptr;
+    /// エンティティが属するグループ番号
+    int (*getEntityGroup)(IImGuiEditable* e) = nullptr;
+    /// グループの表示名
+    const char* (*getEntityGroupName)(int group) = nullptr;
+    /// グループの色（Hierarchy のヘッダ着色）
+    void (*getEntityGroupColor)(int group, float& r, float& g, float& b, float& a) = nullptr;
+    /// エンティティのグループを変更する（Inspector のコンボから呼ばれる）
+    void (*setEntityGroup)(IImGuiEditable* e, int group) = nullptr;
+
+    /// <summary>
+    /// Inspector で編集するコライダーの実体。
+    /// ホストが独自のコンポーネント表にコライダーを持つ場合に配線する。
+    /// 未配線なら CollisionSystem のサイドテーブルを編集する。
+    /// </summary>
+    struct Collider* (*getCollider)(IImGuiEditable* e) = nullptr;
 };
 
 /// <summary>
@@ -70,6 +94,54 @@ public:
 
     /// <summary>ホストの Framework 取得（フック未配線なら nullptr）。</summary>
     Framework* GetHostFramework() const;
+
+    //====================
+    // エンティティのグループ（未配線時は「グループ 0 のみ・名前 "All"・灰色」で動く）
+    //====================
+    int GetEntityGroupCount() const;
+    int GetEntityGroup(IImGuiEditable* e) const;
+    const char* GetEntityGroupName(int group) const;
+    void GetEntityGroupColor(int group, float& r, float& g, float& b, float& a) const;
+    void SetEntityGroup(IImGuiEditable* e, int group);
+
+    /// <summary>
+    /// Inspector が編集するコライダー。フック未配線なら CollisionSystem のものを返す。
+    /// </summary>
+    struct Collider* GetEntityCollider(IImGuiEditable* e) const;
+
+    /// <summary>
+    /// Inspector にホスト固有のセクションを追加する。
+    /// エンジンは共通部（名前 / 型 / グループ / 表示 / コライダー）だけを持ち、
+    /// ゲーム固有のコンポーネント欄はここから差し込む。
+    ///
+    /// 描画関数は選択中エンティティを受け取り、登録順に呼ばれる。
+    /// CollapsingHeader などの見出しは登録側が自前で出すこと（エンジンは包まない）。
+    /// </summary>
+    void AddInspectorSection(const std::string& name,
+        std::function<void(IImGuiEditable*)> draw);
+
+    /// <summary>登録済み Inspector セクション（InspectorWindow が描画に使う）。</summary>
+    struct InspectorSection {
+        std::string name;
+        std::function<void(IImGuiEditable*)> draw;
+    };
+    const std::vector<InspectorSection>& GetInspectorSections() const { return inspectorSections_; }
+
+    /// <summary>
+    /// アセットブラウザ（SceneEditor）にホスト固有のセクションを追加する。
+    /// エンジンは Resources/ を走査して並べる汎用ブラウザだけを持ち、
+    /// プレハブ一覧やゲーム固有の配置ボタンはここから差し込む。
+    /// アセット一覧より前、シーン保存/読込の直後に、登録順で呼ばれる。
+    /// 見出しは登録側が自前で出すこと。
+    /// </summary>
+    void AddAssetBrowserSection(const std::string& name, std::function<void()> draw);
+
+    /// <summary>登録済みアセットブラウザセクション（SceneEditorWindow が描画に使う）。</summary>
+    struct AssetBrowserSection {
+        std::string name;
+        std::function<void()> draw;
+    };
+    const std::vector<AssetBrowserSection>& GetAssetBrowserSections() const { return assetBrowserSections_; }
 
     /// <summary>
     /// ホスト側のウィンドウを追加登録する。Initialize 後に呼ぶこと。
@@ -207,6 +279,10 @@ private:
 
     // ホスト（ゲーム/エディタアプリ）から注入されたフック
     static EditorHostHooks hostHooks_;
+
+    // ホストが追加した Inspector / アセットブラウザのセクション
+    std::vector<InspectorSection> inspectorSections_;
+    std::vector<AssetBrowserSection> assetBrowserSections_;
 
     bool isInitialized_ = false;
 };

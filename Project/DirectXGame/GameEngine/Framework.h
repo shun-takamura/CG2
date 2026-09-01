@@ -43,9 +43,16 @@ class ISceneRunner;
 class Framework {
 public:
 	/// <summary>
-	/// 仮想デストラクタ
+	/// コンストラクタ / 仮想デストラクタ。
+	///
+	/// どちらも実装は .cpp 側に置く。メンバの unique_ptr が前方宣言のみの型
+	/// （AbstractSceneFactory 等）を指しているため、ヘッダで = default にすると
+	/// Framework を「構築する」または「破棄する」翻訳単位すべてで完全型が要求される。
+	/// コンストラクタ側も対象なのは、メンバ構築が例外を投げたときの巻き戻しコードが
+	/// unique_ptr の破棄を必要とするため。
 	/// </summary>
-	virtual ~Framework() = default;
+	Framework();
+	virtual ~Framework();
 
 	/// <summary>
 	/// シーン駆動の委譲先を返す（依存性の逆転）。
