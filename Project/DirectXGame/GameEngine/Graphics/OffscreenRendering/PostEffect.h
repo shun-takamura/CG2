@@ -19,6 +19,7 @@
 #include "OutlineDepthEffect.h"
 #include "OutlineNormalEffect.h"
 #include "MaskedGrayscaleEffect.h"
+#include "MaskedOutlineEffect.h"
 #include "ColorInvertEffect.h"
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
@@ -38,7 +39,10 @@ public:
 	/// <summary>
 	/// 初期化
 	/// </summary>
-	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t width, uint32_t height);
+	/// <param name="sceneClearColor">シーン RT のクリア色（RGBA 4要素）。nullptr なら (0,0,0,0)。
+	/// アプリの背景色をここに渡すと、何も描かれていない領域がその色で埋まる。</param>
+	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t width, uint32_t height,
+		const float sceneClearColor[4] = nullptr);
 
 	/// <summary>
 	/// シーン描画の開始
@@ -148,6 +152,7 @@ public:
 	OutlineDepthEffect* outlineDepth = nullptr;
 	OutlineNormalEffect* outlineNormal = nullptr;
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
+	MaskedOutlineEffect* maskedOutline = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;
 	DistortionEffect* distortion = nullptr;
@@ -186,6 +191,9 @@ private:
 	// distortionRootSignature: color SRV(t0) + distortion SRV(t1) + depth SRV(t2) + cbuffer(b0) + linear(s0) + point(s1)
 	// distortion 合成パス専用。outlineRootSignature と分けることで他フィルタに影響しない。
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> distortionRootSignature_;
+	// maskedOutlineRootSignature: color SRV(t0) + depth SRV(t1) + idMask SRV(t2) + cbuffer(b0) + linear(s0) + point(s1)
+	// MaskedOutline 専用（深度とマスクの両方を要るため outlineRootSignature では足りない）。
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> maskedOutlineRootSignature_;
 
 	// コピー用パイプライン
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> copyPipelineState_;

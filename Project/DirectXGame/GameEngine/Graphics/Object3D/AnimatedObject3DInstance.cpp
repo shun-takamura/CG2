@@ -309,8 +309,9 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
             );
         }
         // 上でルートシグネチャを貼り直している＝Object3DManager::DrawSetting のバインドは
-        // 全部無効化されているので、フォグ(b6)はここで貼り直す必要がある。
+        // 全部無効化されているので、フォグ(b6)とシャドウ(b5/t3)はここで貼り直す必要がある。
         object3DManager_->BindFog(dxCore->GetCommandList());
+        object3DManager_->BindShadow(dxCore->GetCommandList());
     }
 
     // Skinning済みVBVで描画

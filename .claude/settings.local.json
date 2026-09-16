@@ -307,7 +307,13 @@
       "Bash(awk -F/ '{if\\($1==\"Project\"\\) print $1\"/\"$2; else print $1}')",
       "Bash(git -c user.name=\"shun_takamura\" -c user.email=\"s.leonhart151110@gmail.com\" commit -q -F -)",
       "Bash(git branch *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(ls \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\\" && echo --- && ls \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\CG2_0_1\")",
+      "Bash(ls \"C:\\\\Users\\\\sleon\\\\source\\\\repos\\\\ArcanaEngine\" 2>&1 | head -50)",
+      "Bash(cp /c/Users/sleon/source/repos/ArcanaEngine/Project/DirectXGame/GameEngine/Graphics/OffscreenRendering/FilterEffect/MaskedOutlineEffect.h /c/Users/sleon/source/repos/CG2_0_1/Project/DirectXGame/GameEngine/Graphics/OffscreenRendering/FilterEffect/MaskedOutlineEffect.h)",
+      "Bash(cp /c/Users/sleon/source/repos/ArcanaEngine/Project/DirectXGame/GameEngine/Graphics/OffscreenRendering/FilterEffect/MaskedOutlineEffect.cpp /c/Users/sleon/source/repos/CG2_0_1/Project/DirectXGame/GameEngine/Graphics/OffscreenRendering/FilterEffect/MaskedOutlineEffect.cpp)",
+      "Bash(cp /c/Users/sleon/source/repos/ArcanaEngine/Project/Resources/Shaders/PostEffect/Filters/MaskedOutlineNormal.PS.hlsl /c/Users/sleon/source/repos/CG2_0_1/Project/Resources/Shaders/PostEffect/Filters/MaskedOutlineNormal.PS.hlsl)",
+      "Bash(cp /c/Users/sleon/source/repos/ArcanaEngine/Project/Resources/Shaders/Object3D/Object3dInstanced.VS.hlsl /c/Users/sleon/source/repos/CG2_0_1/Project/Resources/Shaders/Object3D/Object3dInstanced.VS.hlsl)"
     ]
   }
 }

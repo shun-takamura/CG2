@@ -160,11 +160,25 @@ public:
         }
     }
 
-    // シャドウ受光リソースを設定（毎フレーム、シャドウパス後に Framework から呼ぶ）。
-    // DrawSetting で b5(ShadowConstants)/t3(シャドウマップ) をバインドする。
+    // シャドウ受光リソースを設定（Framework の初期化で ShadowMap を1回配線する。
+    // ShadowMap の CB / SRV は寿命中アドレス不変で、影未使用シーンでも enabled=0 で安全）。
+    // DrawSetting / BindShadow で b5(ShadowConstants)/t3(シャドウマップ) をバインドする。
     void SetShadowBindings(D3D12_GPU_VIRTUAL_ADDRESS constantsAddr, D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
         shadowConstantsAddr_ = constantsAddr;
         shadowSrvHandle_ = srvHandle;
+    }
+
+    /// <summary>
+    /// シャドウ受光の b5(ShadowConstants = rootParameter[8]) と t3(シャドウマップ = rootParameter[9])
+    /// をバインドする。**ルートシグネチャを貼り直した直後は BindFog と一緒に必ず呼ぶこと**。
+    /// PS は Shadow.hlsli 経由で b5/t3 を無条件参照するため、未バインドだと
+    /// GPU ベース検証 #935(ROOT_ARGUMENT_UNINITIALIZED) で落ちる。
+    /// </summary>
+    void BindShadow(ID3D12GraphicsCommandList* commandList) const {
+        if (shadowConstantsAddr_ != 0) {
+            commandList->SetGraphicsRootConstantBufferView(8, shadowConstantsAddr_);
+            commandList->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
+        }
     }
 
 	// ゲッターロボ

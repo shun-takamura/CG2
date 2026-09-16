@@ -73,11 +73,10 @@ void Object3DManager::DrawSetting()
         );
     }
 
-    // シャドウ受光リソースをバインド（b5=ShadowConstants / t3=シャドウマップ）
-    if (shadowConstantsAddr_ != 0) {
-        dxCore_->GetCommandList()->SetGraphicsRootConstantBufferView(8, shadowConstantsAddr_);
-        dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
-    }
+    // シャドウ受光リソースをバインド（b5=ShadowConstants / t3=シャドウマップ）。
+    // Framework が ShadowMap を配線済みなので影未使用シーンでも必ずバインドされる
+    // （未バインドだと PS の b5/t3 参照で GPU ベース検証 #935 が落ちる）。
+    BindShadow(dxCore_->GetCommandList());
 
     // 距離フォグ（b6 = rootParameter[11]）。全オブジェクト共通なのでここで1回だけ。
     BindFog(dxCore_->GetCommandList());

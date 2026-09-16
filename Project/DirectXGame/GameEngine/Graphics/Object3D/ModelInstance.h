@@ -123,6 +123,12 @@ public:
 
 	const ModelData& GetModelData() const { return modelData_; }
 
+	// ---- インスタンシング描画（外部の専用レンダラが VBV/IBV とサブメッシュ情報を借りる）----
+	// 頂点/インデックスバッファはモデル全体で 1 本。サブメッシュは index 範囲でその部分を指す。
+	const std::vector<RenderSubmesh>& GetSubmeshes() const { return submeshes_; }
+	const D3D12_VERTEX_BUFFER_VIEW&   GetVertexBufferView() const { return vertexBufferView_; }
+	const D3D12_INDEX_BUFFER_VIEW&    GetIndexBufferView() const  { return indexBufferView_; }
+
 	// ImGui/PSO切り替えから Material にアクセスするためのGetter
 	Material* GetMaterialPointer() const { return material_; }
 

@@ -4,6 +4,7 @@
 #include "AssetLocator.h"
 #include "DStorageManager.h"
 #include "PepperMacros.h"
+#include "Log.h"
 
 // テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
 // 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
@@ -72,6 +73,16 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 
 	modelCore_ = modelCore;
 
+	// .mesh が見つからない/壊れている等で CPU ロードが空だった場合は、GPU リソースを
+	// 一切作らずに GPUReady へ進める（0 バイトバッファ生成の assert でクラッシュしていた不具合の対策）。
+	// 以降 Draw / DrawIdPass / DrawShadowPass は indexResource_==nullptr で早期 return するので、
+	// 「読み込みに失敗したモデル＝画面に何も出ない」という安全側の挙動になる。
+	if (vertexCount_ == 0 || indexCount_ == 0) {
+		Log("[ModelInstance] 空のモデル（ファイル無し/破損の可能性）。描画をスキップします。\n");
+		loadState_ = LoadState::GPUReady;
+		return;
+	}
+
 	// 頂点 / インデックス / マテリアル GPU リソースの作成
 	CreateVertexData(dxCore);
 	CreateIndexData(dxCore);
@@ -120,13 +131,8 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 
 void ModelInstance::Draw(DirectXCore* dxCore)
 {
-	// デバッグ: ファイルパスが空でないか確認
-	assert(!textureFilePath_.empty() && "textureFilePath is empty in Draw!");
-
-	// 追加：インデックスバッファが有効か確認
-	assert(indexResource_ != nullptr && "indexResource is nullptr!");
-	assert(indexBufferView_.BufferLocation != 0 && "indexBufferView is not set!");
-	assert(indexCount_ > 0 && "indexCount is 0 in Draw!");
+	// 読み込みに失敗した/空のモデルは何も描かない（以前は assert でクラッシュしていた）。
+	if (!indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
 
 	auto* cmd = dxCore->GetCommandList();
 

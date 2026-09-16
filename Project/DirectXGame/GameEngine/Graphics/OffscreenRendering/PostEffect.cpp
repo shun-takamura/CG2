@@ -12,15 +12,24 @@
 // 初期化
 // ===================================================================
 
-void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t width, uint32_t height)
+void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t width, uint32_t height,
+	const float sceneClearColor[4])
 {
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
 	width_ = width;
 	height_ = height;
 
-	// ピンポンRenderTexture作成
+	// ピンポンRenderTexture作成。
+	// シーン RT（A/B）と captureRT_ は、指定があればアプリの背景色でクリアする
+	// （未指定なら従来どおり透明黒）。intermediate の B も同じ値にしておく。
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	if (sceneClearColor) {
+		clearColor[0] = sceneClearColor[0];
+		clearColor[1] = sceneClearColor[1];
+		clearColor[2] = sceneClearColor[2];
+		clearColor[3] = sceneClearColor[3];
+	}
 
 	renderTextureA_ = std::make_unique<RenderTexture>();
 	renderTextureA_->Initialize(dxCore_, srvManager_, width, height,
@@ -292,6 +301,78 @@ void PostEffect::CreateRootSignatures()
 			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&distortionRootSignature_));
 		assert(SUCCEEDED(hr));
 	}
+
+	// ----- maskedOutlineRootSignature（color t0 + depth t1 + idMask t2 + cbuffer b0 + linear/point sampler） -----
+	{
+		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
+		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].NumDescriptors = 1;
+		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
+		depthRange[0].BaseShaderRegister = 1;
+		depthRange[0].NumDescriptors = 1;
+		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_DESCRIPTOR_RANGE maskRange[1] = {};
+		maskRange[0].BaseShaderRegister = 2;
+		maskRange[0].NumDescriptors = 1;
+		maskRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		maskRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER rootParameters[4] = {};
+		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+
+		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[1].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+
+		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[2].DescriptorTable.pDescriptorRanges = maskRange;
+		rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+
+		rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[3].Descriptor.ShaderRegister = 0;
+		rootParameters[3].Descriptor.RegisterSpace = 0;
+
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
+		for (int i = 0; i < 2; ++i) {
+			staticSamplers[i].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			staticSamplers[i].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+			staticSamplers[i].MaxLOD = D3D12_FLOAT32_MAX;
+			staticSamplers[i].ShaderRegister = i;
+			staticSamplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		}
+		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		staticSamplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+
+		D3D12_ROOT_SIGNATURE_DESC desc{};
+		desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+		desc.pParameters = rootParameters;
+		desc.NumParameters = _countof(rootParameters);
+		desc.pStaticSamplers = staticSamplers;
+		desc.NumStaticSamplers = _countof(staticSamplers);
+
+		Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob, errorBlob;
+		hr = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
+		if (FAILED(hr)) {
+			if (errorBlob) OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+			assert(false);
+		}
+		hr = dxCore_->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(),
+			signatureBlob->GetBufferSize(), IID_PPV_ARGS(&maskedOutlineRootSignature_));
+		assert(SUCCEEDED(hr));
+	}
 }
 
 // ===================================================================
@@ -411,6 +492,15 @@ void PostEffect::InitializeEffects()
 		maskedGrayscale = mg.get();
 		effectOrder_.push_back(maskedGrayscale);
 		effectOwners_.push_back(std::move(mg));
+	}
+
+	// ----- MaskedOutline（scene depth を t1、idMaskRT_ を t2 に参照、専用 RS）-----
+	{
+		auto mo = std::make_unique<MaskedOutlineEffect>();
+		mo->InitializeMaskedOutline(dxCore_, maskedOutlineRootSignature_.Get(), basePsoDesc_, idMaskRT_.get());
+		maskedOutline = mo.get();
+		effectOrder_.push_back(maskedOutline);
+		effectOwners_.push_back(std::move(mo));
 	}
 
 	// ----- Distortion（distortionRT_ を t1 に、scene depth を t2 に参照）-----
@@ -660,6 +750,15 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 		srvManager_->SetGraphicsRootDescriptorTable(2, dxCore_->GetDepthSRVIndex());
 		commandList->SetGraphicsRootConstantBufferView(3, effect->GetConstantBufferGPUAddress());
 	}
+	else if (effect == maskedOutline) {
+		// MaskedOutline: color t0, scene depth t1, idMask t2, cbuffer b0（専用 RS）
+		commandList->SetGraphicsRootSignature(maskedOutlineRootSignature_.Get());
+		commandList->SetPipelineState(effect->GetPipelineState());
+		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(1, dxCore_->GetDepthSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(2, effect->GetMaskTextureSRVIndex());
+		commandList->SetGraphicsRootConstantBufferView(3, effect->GetConstantBufferGPUAddress());
+	}
 	else if (effect->NeedsDepth() || effect->NeedsMaskTexture()) {
 		// Outline系/Dissolve系: color t0, aux t1, cbuffer b0
 		uint32_t auxSrvIndex = effect->NeedsDepth()
@@ -851,6 +950,7 @@ void PostEffect::Finalize()
 	effectRootSignature_.Reset();
 	outlineRootSignature_.Reset();
 	distortionRootSignature_.Reset();
+	maskedOutlineRootSignature_.Reset();
 	copyPipelineState_.Reset();
 
 	if (renderTextureA_) renderTextureA_->Finalize();

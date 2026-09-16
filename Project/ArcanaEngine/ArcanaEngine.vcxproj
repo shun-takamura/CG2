@@ -72,6 +72,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp" />
@@ -225,6 +226,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GaussianEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h" />
