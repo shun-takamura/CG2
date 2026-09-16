@@ -280,19 +280,10 @@ void Framework::Initialize() {
 		srvManager_.get()
 	);
 
-	//========================================
-	// ここにデバッグレイヤー デバックの時だけ出る
-	//========================================
-#ifdef _DEBUG
-	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-		// デバッグレイヤーを有効化する
-		debugController->EnableDebugLayer();
-
-		// GPU側でもチェックを行うようにする
-		debugController->SetEnableGPUBasedValidation(TRUE);
-	}
-#endif // DEBUG
+	// デバッグレイヤー / GPU ベース検証の有効化は DirectXCore::CreateDevice() で行う
+	// （EnableDebugLayer / SetEnableGPUBasedValidation はデバイス生成より前に呼ぶ必要があり、
+	//   ここ（デバイス生成後）で呼んでも D3D12 に無視されるため以前のコードは実質無効だった）。
+	// GBV を使いたいときは実行時引数 --gpu-validation を付ける。
 
 	//=========================
 	// エラー、警告が出たら即停止
@@ -359,6 +350,12 @@ void Framework::Initialize() {
 	// CSM シャドウマップの初期化（平行光源1個・全シーン共有）
 	shadowMap_ = std::make_unique<ShadowMap>();
 	shadowMap_->Initialize(dxCore_.get(), srvManager_.get());
+
+	// Object3D 受光パスに ShadowMap を配線する。CB / SRV のアドレスは ShadowMap の
+	// 寿命中不変なので1回でよい（影未使用シーンでも enabled=0 の CB が入るので安全。
+	// 配線しないと Object3D の PS が b5/t3 未バインドで GPU ベース検証 #935 で落ちる）。
+	object3DManager_->SetShadowBindings(
+		shadowMap_->GetConstantsGpuAddress(), shadowMap_->GetSrvGpuHandle());
 
 	// ComputeShader版Skinningの共通部分の初期化
 	skinningComputeManager_ = std::make_unique<SkinningComputeManager>();

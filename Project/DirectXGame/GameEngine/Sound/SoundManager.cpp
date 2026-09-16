@@ -175,6 +175,34 @@ void SoundManager::Play2DSound(const std::string& name)
     sourceVoices2D_[name] = pSourceVoice;
 }
 
+void SoundManager::Play2DSoundLooped(const std::string& name)
+{
+    auto it = soundDatas_.find(name);
+    if (it == soundDatas_.end()) { return; }
+
+    Stop2DSound(name);
+
+    SoundData& soundData = it->second;
+
+    IXAudio2SourceVoice* pSourceVoice = nullptr;
+    HRESULT result = xAudio2_->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
+    assert(SUCCEEDED(result));
+
+    XAUDIO2_BUFFER buf{};
+    buf.pAudioData = soundData.buffer.data();
+    buf.AudioBytes = static_cast<UINT32>(soundData.buffer.size());
+    buf.Flags = XAUDIO2_END_OF_STREAM;
+    // LoopBegin=0 / LoopLength=0 でバッファ全体を対象にし、無限ループさせる。
+    buf.LoopBegin = 0;
+    buf.LoopLength = 0;
+    buf.LoopCount = XAUDIO2_LOOP_INFINITE;
+
+    pSourceVoice->SubmitSourceBuffer(&buf);
+    pSourceVoice->Start();
+
+    sourceVoices2D_[name] = pSourceVoice;
+}
+
 void SoundManager::Stop2DSound(const std::string& name)
 {
     auto it = sourceVoices2D_.find(name);

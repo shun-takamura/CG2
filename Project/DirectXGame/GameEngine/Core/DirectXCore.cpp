@@ -682,7 +682,21 @@ void DirectXCore::CreateDevice() {
     ComPtr<ID3D12Debug1> debugController;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
         debugController->EnableDebugLayer();
-        debugController->SetEnableGPUBasedValidation(TRUE);
+
+        // GPU ベース検証(GBV)は既定で OFF。
+        // GBV はシェーダー/PSO を「初回描画時」にその場で計装するため、複雑な PS を持つ
+        // パイプライン(Object3D 等)を初めて使った瞬間に数秒級のストール(フリーズ)を起こす。
+        // このコストは Framework::Draw を計測区間の外で発生させるため P.E.P.P.E.R. にも映らない。
+        // ルート引数の未初期化アクセスなど GPU 側でしか捕まえられないバグを追うときだけ、
+        //   GJ1_L3_3026.exe --gpu-validation
+        // で明示的に有効化する(通常の Debug プレイでは使わない)。
+        const std::wstring cmdLine = ::GetCommandLineW();
+        const bool enableGpuValidation =
+            cmdLine.find(L"--gpu-validation") != std::wstring::npos;
+        debugController->SetEnableGPUBasedValidation(enableGpuValidation ? TRUE : FALSE);
+        Log(enableGpuValidation
+            ? "[D3D12] Debug layer ON, GPU-based validation ON (--gpu-validation)\n"
+            : "[D3D12] Debug layer ON, GPU-based validation OFF\n");
     }
 #endif
 

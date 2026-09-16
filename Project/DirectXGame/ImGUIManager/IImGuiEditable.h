@@ -56,6 +56,13 @@ public:
     //====================
     uint8_t GetObjectId() const { return objectId_; }
 
+    /// <summary>
+    /// ObjectID を明示的に上書きする（0 は「マスク対象外」の予約値）。
+    /// 自動採番されたインスタンス固有 ID ではなく、状態異常アウトライン等で
+    /// 「炎=1 / 氷=2」のような意味値を毎フレーム流し込む用途に使う。
+    /// </summary>
+    void SetObjectId(uint8_t id) { objectId_ = id; }
+
     /// <summary>Inspectorでの編集UIを描画</summary>
     virtual void OnImGuiInspector() = 0;
 

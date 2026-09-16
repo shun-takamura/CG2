@@ -51,6 +51,9 @@ public:
 
     // 2D再生（BGM用）
     void Play2DSound(const std::string& name);
+    // 2Dループ再生（BGM用）。バッファ全体を無限ループする。
+    // 止めるときは Stop2DSound(name)。同じ name で呼び直すと前の再生を止めて鳴らし直す。
+    void Play2DSoundLooped(const std::string& name);
     void Stop2DSound(const std::string& name);
 
     // 3D再生（SE用）※ ハンドルを返す、0は無効
