@@ -374,6 +374,18 @@
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackMelee.h">
       <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackSpread.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackRadialBurst.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackCharge.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackSlam.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\GameScene.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>

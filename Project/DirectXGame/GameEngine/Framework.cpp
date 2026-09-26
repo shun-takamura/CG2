@@ -538,6 +538,13 @@ void Framework::Update() {
 	// シーンランナー（ゲームの SceneManager）の更新
 	if (auto* runner = GetSceneRunner()) runner->Update();
 
+	// サウンド：リスナーを現在のカメラへ追従させ、再生の終わったボイスを回収する。
+	// シーン側に置くとポーズ等で Update を早期 return した間にボイスが溜まるので、ここで毎フレーム必ず回す。
+	if (Camera* listenerCamera = object3DManager_ ? object3DManager_->GetDefaultCamera() : nullptr) {
+		SoundManager::GetInstance()->UpdateListener(listenerCamera);
+	}
+	SoundManager::GetInstance()->Update();
+
 	// リプレイ記録：このフレームが実際に使った dt と入力を input.log へ。
 	// 入力・シーン更新の後（dt 確定済み、UpdateFixFPS は Draw 後なので今フレームの値）に記録する。
 	// （RecordFrame は Record モードのときだけ書き込む）

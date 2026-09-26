@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include "Vector3.h"
 #include "IImGuiEditable.h"
@@ -26,6 +27,40 @@ struct IBossAction {
 	virtual bool IsFinished() const = 0;
 	virtual ~IBossAction() = default;
 };
+
+/// <summary>
+/// 弾幕系攻撃の共通照準。ボス→プレイヤーの水平方位(yaw)と、プレイヤーの胸の高さへ届く仰角(pitch)。
+/// ボス中心は地面より高いので、水平に撃つと地上のプレイヤーの頭上を抜ける。pitch を全弾に掛けて揃える。
+/// </summary>
+struct BossAimInfo {
+	Vector3 origin{ 0.0f, 0.0f, 0.0f };
+	float yaw = 0.0f;
+	float pitch = 0.0f;
+	float distXZ = 0.0f;
+	bool valid = false;
+};
+
+inline BossAimInfo ComputeBossAim(const BossActionContext& ctx, float targetHeight = 1.0f) {
+	BossAimInfo info;
+	if (!ctx.boss || !ctx.player) return info;
+	const Vector3* bp = ctx.boss->GetEditableTranslate();
+	const Vector3* pp = ctx.player->GetEditableTranslate();
+	if (!bp || !pp) return info;
+	const float dx = pp->x - bp->x;
+	const float dz = pp->z - bp->z;
+	info.origin = *bp;
+	info.distXZ = std::sqrt(dx * dx + dz * dz);
+	info.yaw = std::atan2(dx, dz);
+	info.pitch = std::atan2((pp->y + targetHeight) - bp->y, (std::max)(info.distXZ, 1.0f));
+	info.valid = true;
+	return info;
+}
+
+// yaw（+Z 基準・右回り）と pitch（上向き正）から単位方向ベクトル
+inline Vector3 BossDirFromYawPitch(float yaw, float pitch) {
+	const float cp = std::cos(pitch);
+	return { cp * std::sin(yaw), std::sin(pitch), cp * std::cos(yaw) };
+}
 
 /// <summary>
 /// ボスの攻撃判定などが使う基準点（アンカー）。現在はボス root 位置＋「ボス→プレイヤー方向」を

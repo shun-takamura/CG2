@@ -241,6 +241,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveApproach.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveJumpOver.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackMelee.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackSpread.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackRadialBurst.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackCharge.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackSlam.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneFactory.h" />
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h" />
