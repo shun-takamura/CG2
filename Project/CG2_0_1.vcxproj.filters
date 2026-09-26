@@ -108,6 +108,9 @@
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
@@ -222,6 +225,9 @@
       <Filter>DirectXGame\Game\Spline</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h">

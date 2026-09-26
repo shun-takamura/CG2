@@ -11,7 +11,13 @@
 #include "DirectXCore.h"
 #include "TextRenderer.h"
 #include "Vector4.h"
-#include <string>
+
+namespace {
+	enum HubItem : int {
+		kHubStage1 = 0,
+		kHubBackToTitle,
+	};
+}
 
 HubScene::HubScene() = default;
 HubScene::~HubScene() = default;
@@ -24,7 +30,7 @@ void HubScene::Initialize() {
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
 	object3DManager_->SetDefaultCamera(camera_.get());
 
-	currentTab_ = Tab::StageSelect;
+	menu_.SetItems({ "Stage1", "タイトルに戻る" });
 }
 
 void HubScene::Finalize() {}
@@ -37,24 +43,18 @@ void HubScene::Update() {
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
 
-	// 上下で選択切替
-	if (actions->IsTriggered(static_cast<int>(Action::MenuDown))) {
-		int next = (static_cast<int>(currentTab_) + 1) % 2;
-		currentTab_ = static_cast<Tab>(next);
+	const VerticalMenu::Result result = menu_.Update(actions);
+	if (result == VerticalMenu::Result::Canceled) {
+		SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+		return;
 	}
-	if (actions->IsTriggered(static_cast<int>(Action::MenuUp))) {
-		int next = (static_cast<int>(currentTab_) + 1) % 2; // 2択のため up/down は同じ挙動
-		currentTab_ = static_cast<Tab>(next);
-	}
-
-	// 決定で現在選択の動作を実行
-	if (actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
-		switch (currentTab_) {
-		case Tab::StageSelect:
-			SceneManager::GetInstance()->ChangeScene("STAGESELECT", TransitionType::Fade);
+	if (result == VerticalMenu::Result::Confirmed) {
+		switch (menu_.GetSelectedIndex()) {
+		case kHubStage1:
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
 			return;
-		case Tab::Quit:
-			PostQuitMessage(0);
+		case kHubBackToTitle:
+			SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
 			return;
 		}
 	}
@@ -62,39 +62,20 @@ void HubScene::Update() {
 	camera_->Update();
 }
 
-namespace {
-	const char* HubTabLabel(HubScene::Tab tab) {
-		switch (tab) {
-		case HubScene::Tab::StageSelect: return "StageSelect";
-		case HubScene::Tab::Quit:        return "ゲーム終了";
-		}
-		return "";
-	}
-}
-
 void HubScene::Draw() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const float scale = 1.5f;
-	const float lineHeight = 60.0f;
 	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
 	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
 
-	const Tab tabs[2] = { Tab::StageSelect, Tab::Quit };
-	const float totalHeight = lineHeight * 2.0f;
-	float y = (screenH - totalHeight) * 0.5f;
+	const char* heading = "STAGE SELECT";
+	const float headingScale = 2.0f;
+	const float headingW = tr->MeasureWidth(heading, headingScale);
+	tr->DrawText(heading, { (screenW - headingW) * 0.5f, screenH * 0.25f }, headingScale,
+		{ 1.0f, 1.0f, 1.0f, 1.0f }, 3.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 
-	for (int i = 0; i < 2; ++i) {
-		const bool selected = (tabs[i] == currentTab_);
-		const Vector4 color = selected
-			? Vector4{ 1.0f, 0.85f, 0.2f, 1.0f }
-			: Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
-		std::string label = (selected ? "> " : "  ") + std::string(HubTabLabel(tabs[i]));
-		const float w = tr->MeasureWidth(label, scale);
-		tr->DrawText(label, { (screenW - w) * 0.5f, y + lineHeight * static_cast<float>(i) }, scale,
-			color, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
-	}
+	menu_.Draw({ screenW * 0.5f, screenH * 0.55f });
 	tr->Flush();
 }
 

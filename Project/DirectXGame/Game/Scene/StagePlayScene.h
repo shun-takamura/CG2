@@ -10,6 +10,7 @@
 #include "RailStagePart.h"
 #include "BossStagePart.h"
 #include "StageEnvironment.h"
+#include "VerticalMenu.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -24,6 +25,7 @@ class SplineCurveActor;
 class AnimatedObject3DInstance;
 class Object3DInstance;
 class Reticle;
+class SpriteInstance;
 class LightningRuntime;
 class RailStagePart;
 class BossStagePart;
@@ -178,6 +180,8 @@ private:
 	float aimPlaneDistance_ = 80.0f;
 	float aimSmoothTime_   = 0.08f;   // Lerp 時定数（プレイヤー回転用、0.0=即時）
 	float aimAssistPixelScale_ = 1.4f; // 見かけ半径×倍率＝スクリーン上のロックオン許容ピクセル
+	float aimReticleOverlapRate_ = 0.5f; // レティクル半径×率をロックオン許容ピクセルに加算（輪が敵に掛かればロック）
+	float aimConvergePx_ = 160.0f;        // 非ロック時、画面上この距離内の敵がいれば弾の収束点をその敵の深さに合わせる（視差で外れるのを防ぐ）
 	// レティクル外側パーツの中心からのオフセット範囲（pixel）
 	float reticleOuterMinPx_ = 32.0f;
 	float reticleOuterMaxPx_ = 128.0f;
@@ -497,8 +501,18 @@ public:
 	void OnImGuiTuning();
 private:
 
-	// ポーズ状態（後でメニュー実装）
+	// ----- ポーズメニュー -----
+	// ポーズ中は Update を早期 return してゲーム全体（エフェクト含む）を凍結し、メニューだけ動かす
+	enum class PauseView { Main, ConfirmTitle };
 	bool paused_ = false;
+	PauseView pauseView_ = PauseView::Main;
+	VerticalMenu pauseMenu_;
+	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため dynamicSprites_ 外で所有）
+	void OpenPauseMenu();
+	void ClosePauseMenu();
+	void SetPauseView(PauseView view);
+	void UpdatePauseMenu(class InputActionMap* actions);
+	void DrawPauseMenu();
 
 	// ----- プレイヤー被弾・無敵関連 -----
 	float playerInvincibilityTimer_ = -2.0f;    // 被弾無敵残り時間（<=0 で通常）

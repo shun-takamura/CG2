@@ -43,5 +43,9 @@
     "moveSpeed": 0,
     "hoverApproachSpeed": 0,
     "hoverHoldDuration": 0
+  },
+  "effects": {
+    "hurt": "Hit_Small",
+    "death": "Death_Drone"
   }
 }

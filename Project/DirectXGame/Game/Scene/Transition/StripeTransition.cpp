@@ -15,8 +15,8 @@ void StripeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxC
 
 	// 帯のサイズも 1600x900 で目視調整した値だったので、比率で画面に追従させる。
 	// ImGui から手動調整もできるので、ここは初期値の算出だけ。
-	debugStripeWidth_  = screenWidth_  * (210.0f / 1600.0f);
-	debugStripeHeight_ = screenHeight_ * (920.0f / 900.0f);
+	debugStripeWidth_  = screenWidth_  * (890.0f / 1600.0f);
+	debugStripeHeight_ = screenHeight_ * (1000.0f / 900.0f);
 
 	CreateStripes();
 }
@@ -173,7 +173,7 @@ void StripeTransition::UpdateStripePositions() {
 
 	// 斜めに掃く量。もとは 1600x900 で目視調整した固定値だったので、
 	// その比率のまま画面サイズに追従させる（1600x900 では従来と同じ見た目になる）。
-	const float kSweepXRatio  = 450.0f / 1600.0f;  // 開始 X のオフセット
+	const float kSweepXRatio  = 600.0f / 1600.0f;  // 開始 X のオフセット
 	const float kTravelXRatio = 500.0f / 1600.0f;  // はけるときの X 移動量
 	const float kTravelYRatio = 870.0f / 900.0f;   // はけるときの Y 移動量
 	const float kEnterXRatio  =  50.0f / 1600.0f;  // 入りの X 立ち上がり
@@ -276,7 +276,7 @@ void StripeTransition::OnImGui() {
 		ImGui::Separator();
 		ImGui::Text("=== Size Settings ===");
 
-		changed |= ImGui::SliderFloat("Stripe Width", &debugStripeWidth_, 50.0f, 500.0f);
+		changed |= ImGui::SliderFloat("Stripe Width", &debugStripeWidth_, 50.0f, 1500.0f);
 		changed |= ImGui::SliderFloat("Stripe Height", &debugStripeHeight_, 100.0f, 2000.0f);
 
 		if (changed && debugForceShow_) {

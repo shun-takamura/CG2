@@ -70,6 +70,13 @@
 
 namespace {
 	constexpr const char* kStagePlayTuningPath = "Resources/Json/Tuning/StagePlay.json";
+
+	// カメラのワールド行列（Camera::Update → MakeAffineMatrix）と同じ Rx·Ry·Rz 順の回転行列。
+	// MakeRotateMatrix(Vector3) は Rz·Ry·Rx なので、ピッチとヨーが同時に掛かる姿勢（降下中など）で
+	// 描画上のカメラ基底（右/上/前）とずれる。カメラ基底が欲しいときは必ずこちらを使う。
+	Matrix4x4 MakeCameraRotateMatrix(const Vector3& rotate) {
+		return Multiply(MakeRotateXMatrix(rotate), Multiply(MakeRotateYMatrix(rotate), MakeRotateZMatrix(rotate)));
+	}
 }
 
 #ifdef _DEBUG
@@ -152,6 +159,8 @@ void StagePlayScene::LoadTuningFromJson() {
 		aimPlaneDistance_     = static_cast<float>(aim["planeDistance"].AsDouble(aimPlaneDistance_));
 		aimSmoothTime_        = static_cast<float>(aim["smoothTime"].AsDouble(aimSmoothTime_));
 		aimAssistPixelScale_  = static_cast<float>(aim["assistPixelScale"].AsDouble(aimAssistPixelScale_));
+		aimReticleOverlapRate_ = static_cast<float>(aim["reticleOverlapRate"].AsDouble(aimReticleOverlapRate_));
+		aimConvergePx_        = static_cast<float>(aim["convergePx"].AsDouble(aimConvergePx_));
 		reticleOuterMinPx_    = static_cast<float>(aim["reticleOuterMinPx"].AsDouble(reticleOuterMinPx_));
 		reticleOuterMaxPx_    = static_cast<float>(aim["reticleOuterMaxPx"].AsDouble(reticleOuterMaxPx_));
 		reticleOuterSizeMinPx_ = static_cast<float>(aim["reticleOuterSizeMinPx"].AsDouble(reticleOuterSizeMinPx_));
@@ -628,6 +637,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	aimObj["planeDistance"]      = static_cast<double>(aimPlaneDistance_);
 	aimObj["smoothTime"]         = static_cast<double>(aimSmoothTime_);
 	aimObj["assistPixelScale"]   = static_cast<double>(aimAssistPixelScale_);
+	aimObj["reticleOverlapRate"] = static_cast<double>(aimReticleOverlapRate_);
+	aimObj["convergePx"]         = static_cast<double>(aimConvergePx_);
 	aimObj["reticleOuterMinPx"]  = static_cast<double>(reticle_ ? reticle_->GetLockOnMinPxOutside() : reticleOuterMinPx_);
 	aimObj["reticleOuterMaxPx"]  = static_cast<double>(reticle_ ? reticle_->GetLockOnMaxPxOutside() : reticleOuterMaxPx_);
 	aimObj["reticleOuterSizeMinPx"] = static_cast<double>(reticle_ ? reticle_->GetOuterSizeMin() : reticleOuterSizeMinPx_);
@@ -1059,7 +1070,7 @@ void StagePlayScene::ApplyJustDodgeCamera(const Vector3& playerWorldPos)
 	// 精密カメラ適用後の現在 eye を基準に、forward 逆方向へ引く（後退＝視野が広がる）。
 	// clip 判定は引き前の通常カメラで済んでいるので、本体の可動範囲は変わらない（端固まり防止）。
 	const Vector3 eye = camera_->GetTranslate();
-	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 rot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
 	camera_->SetTranslate({
 		eye.x - forward.x * jdCamPullback_ * b,
@@ -1626,7 +1637,7 @@ void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector
 		axisH = gfwd;
 		axisV = gright;
 	} else {
-		const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+		const Matrix4x4 rot = MakeCameraRotateMatrix(camera_->GetRotate());
 		axisV = { rot.m[0][0], rot.m[0][1], rot.m[0][2] }; // カメラ右
 		axisH = { rot.m[1][0], rot.m[1][1], rot.m[1][2] }; // カメラ上
 	}
@@ -2006,7 +2017,7 @@ void StagePlayScene::ApplyPrecisionCamera(const Vector3& playerWorldPos)
 
 	// 基準（レール）カメラの状態。ここに来る時点で camera_ はレール位置・通常 FovY
 	const Vector3 baseEye = camera_->GetTranslate();
-	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 rot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 right   = { rot.m[0][0], rot.m[0][1], rot.m[0][2] };
 	const Vector3 up      = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
 	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
@@ -2194,6 +2205,10 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Smooth Time (s)", &aimSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Assist Pixel Scale", &aimAssistPixelScale_, 0.05f, 0.5f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Reticle Overlap Rate", &aimReticleOverlapRate_, 0.05f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Aim Converge Px", &aimConvergePx_, 1.0f, 0.0f, 800.0f, "%.0f px");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::DragFloat("Boss Facing Turn Smooth (s)", &bossFacingTurnSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
@@ -2652,6 +2667,15 @@ void StagePlayScene::Initialize() {
 	prevPhase_ = Phase::Rail;
 	landingTimer_ = 0.0f;
 	paused_ = false;
+	if (spriteManager_) {
+		pauseDimSprite_ = std::make_unique<SpriteInstance>();
+		pauseDimSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "PauseDim");
+		pauseDimSprite_->SetPosition({ 0.0f, 0.0f });
+		pauseDimSprite_->SetSize({ static_cast<float>(WindowsApplication::kClientWidth),
+			static_cast<float>(WindowsApplication::kClientHeight) });
+		pauseDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
+		pauseDimSprite_->Update();
+	}
 
 	// レティクル
 	reticle_ = std::make_unique<Reticle>();
@@ -2749,6 +2773,90 @@ void StagePlayScene::Finalize() {
 	specialFireProcessed_.clear();
 }
 
+void StagePlayScene::OpenPauseMenu() {
+	paused_ = true;
+	SetPauseView(PauseView::Main);
+	if (pauseDimSprite_) pauseDimSprite_->Update();
+}
+
+void StagePlayScene::ClosePauseMenu() {
+	paused_ = false;
+	pauseView_ = PauseView::Main;
+}
+
+void StagePlayScene::SetPauseView(PauseView view) {
+	pauseView_ = view;
+	if (view == PauseView::Main) {
+		pauseMenu_.SetItems({ "再開", "リトライ", "タイトルに戻る" });
+	} else {
+		// 誤操作でタイトルへ飛ばないよう「いいえ」を既定にする
+		pauseMenu_.SetItems({ "いいえ", "はい" });
+	}
+}
+
+void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
+	const VerticalMenu::Result result = pauseMenu_.Update(actions);
+	const int index = pauseMenu_.GetSelectedIndex();
+
+	if (pauseView_ == PauseView::Main) {
+		if (result == VerticalMenu::Result::Canceled) {
+			ClosePauseMenu();
+			return;
+		}
+		if (result != VerticalMenu::Result::Confirmed) return;
+		switch (index) {
+		case 0: // 再開
+			ClosePauseMenu();
+			break;
+		case 1: // リトライ
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
+			break;
+		case 2: // タイトルに戻る（確認を挟む）
+			SetPauseView(PauseView::ConfirmTitle);
+			break;
+		}
+		return;
+	}
+
+	// ConfirmTitle
+	if (result == VerticalMenu::Result::Canceled
+		|| (result == VerticalMenu::Result::Confirmed && index == 0)) {
+		SetPauseView(PauseView::Main);
+		pauseMenu_.SetSelectedIndex(2);
+		return;
+	}
+	if (result == VerticalMenu::Result::Confirmed && index == 1) {
+		SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+	}
+}
+
+void StagePlayScene::DrawPauseMenu() {
+	if (pauseDimSprite_) pauseDimSprite_->Draw();
+
+	TextRenderer* tr = TextRenderer::GetInstance();
+	if (!tr->IsInitialized()) return;
+
+	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
+	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	const Vector4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+	const Vector4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+	const char* heading = (pauseView_ == PauseView::Main) ? "PAUSE" : "タイトルに戻りますか？";
+	const float headingScale = (pauseView_ == PauseView::Main) ? 2.5f : 1.6f;
+	const float headingW = tr->MeasureWidth(heading, headingScale);
+	tr->DrawText(heading, { (screenW - headingW) * 0.5f, screenH * 0.28f }, headingScale, white, 3.0f, black);
+
+	if (pauseView_ == PauseView::ConfirmTitle) {
+		const char* note = "現在の進行状況は失われます";
+		const float noteScale = 0.9f;
+		const float noteW = tr->MeasureWidth(note, noteScale);
+		tr->DrawText(note, { (screenW - noteW) * 0.5f, screenH * 0.28f + 70.0f }, noteScale,
+			{ 0.85f, 0.85f, 0.85f, 1.0f }, 2.0f, black);
+	}
+
+	pauseMenu_.Draw({ screenW * 0.5f, screenH * 0.58f });
+}
+
 void StagePlayScene::Update() {
 	if (SceneManager::GetInstance()->IsTransitioning()) {
 		return;
@@ -2757,11 +2865,15 @@ void StagePlayScene::Update() {
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
 
-	// Pause アクションでポーズトグル（メニュー実装は後で）
+	// Pause アクションでポーズトグル。トグルしたフレームはメニュー入力を読まない
+	// （同じキーが MenuCancel 等に割り当てられていても二重に反応させないため）
 	if (actions->IsTriggered(static_cast<int>(Action::Pause))) {
-		paused_ = !paused_;
+		if (paused_) ClosePauseMenu();
+		else         OpenPauseMenu();
+		return;
 	}
 	if (paused_) {
+		UpdatePauseMenu(actions);
 		return;
 	}
 
@@ -2769,11 +2881,11 @@ void StagePlayScene::Update() {
 	// DEBUG専用ショートカット（StagePlayScene完成時に削除）
 	auto* kb = input_->GetKeyboard();
 	if (kb->TriggerKey(DIK_F2)) {
-		SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Stripe);
 		return;
 	}
 	if (kb->TriggerKey(DIK_F3)) {
-		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Stripe);
 		return;
 	}
 	if (kb->TriggerKey(DIK_F4)) {
@@ -2840,7 +2952,7 @@ void StagePlayScene::Update() {
 		if (bossStage_->ConsumeBossDefeated()) {
 			ScoreManager::GetInstance()->AddScore(bossStage_->GetLastBossScoreValue());
 			ScoreManager::GetInstance()->AddKill();
-			SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Fade);
+			SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Stripe);
 		}
 	}
 
@@ -3033,7 +3145,7 @@ void StagePlayScene::Update() {
 				camWorld);
 
 			// プレイヤーの回転＝カメラ回転前提でコライダーの軸を構築
-			Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+			Matrix4x4 rot = MakeCameraRotateMatrix(camera_->GetRotate());
 			Vector3 axes[3] = {
 				{ rot.m[0][0], rot.m[0][1], rot.m[0][2] },
 				{ rot.m[1][0], rot.m[1][1], rot.m[1][2] },
@@ -3157,7 +3269,7 @@ void StagePlayScene::Update() {
 			Vector3 worldPosN = TransformCoordinate(
 				{ playerLocalOffset_.x + playerInputOffset_.x,
 				  playerLocalOffset_.y + playerInputOffset_.y, playerLocalOffset_.z }, camWorld);
-			Matrix4x4 rotN = MakeRotateMatrix(camera_->GetRotate());
+			Matrix4x4 rotN = MakeCameraRotateMatrix(camera_->GetRotate());
 			Vector3 axesN[3] = {
 				{ rotN.m[0][0], rotN.m[0][1], rotN.m[0][2] },
 				{ rotN.m[1][0], rotN.m[1][1], rotN.m[1][2] },
@@ -3418,6 +3530,7 @@ void StagePlayScene::Update() {
 		// 軽ホーミング用：レティクル中心から最近の敵を画面距離で追跡
 		IImGuiEditable* nearestLocal = nullptr;
 		float nearestPx = (std::numeric_limits<float>::max)();
+		float nearestDist = 0.0f; // nearestLocal までのカメラ距離（非ロック射撃の収束深度）
 		// ロックオン対象（強ホーミング用）
 		IImGuiEditable* lockedLocal = nullptr;
 		Vector3 desiredTarget{
@@ -3475,13 +3588,17 @@ void StagePlayScene::Update() {
 			const float dy = enemyPx.y - rp.y;
 			const float dPx = std::sqrt(dx * dx + dy * dy);
 
-			// 許容範囲：見かけ半径 × アシスト倍率
-			const float assistThreshold = pixelRadius * aimAssistPixelScale_;
+			// 許容範囲：見かけ半径 × アシスト倍率 ＋ レティクル自身の半径 × 重なり率。
+			// レティクル中心だけで判定すると、遠くの小さな敵は輪が重なっていてもロックされず、
+			// 視差で弾が敵の横を抜けてしまうため、レティクルの大きさも許容に含める。
+			const float reticleRadiusPx = reticle_->GetSize() * 0.5f * aimReticleOverlapRate_;
+			const float assistThreshold = pixelRadius * aimAssistPixelScale_ + reticleRadiusPx;
 
 			// 画面上最近の敵を更新（軽ホーミング先候補）。ボスは対象外（手動狙い）。
 			if (isEnemy && dPx < nearestPx) {
 				nearestPx = dPx;
 				nearestLocal = e;
+				nearestDist = dist;
 			}
 
 			if (dPx <= assistThreshold && dist < bestT) {
@@ -3511,6 +3628,15 @@ void StagePlayScene::Update() {
 
 		// 弾発射用は Lerp 前の即時 target（ロックオン直後でも遅れずに敵へ向かう）
 		firingTarget_ = desiredTarget;
+		// 非ロック時は aim plane（遠方）へ撃つため、自機とカメラの位置差による視差で手前の敵の横を抜ける。
+		// レティクル付近に敵がいれば、レティクルの ray 上でその敵と同じ深さの点を狙って収束させる。
+		if (!lockedLocal && nearestLocal && nearestPx <= aimConvergePx_ && nearestDist > 1e-3f) {
+			firingTarget_ = {
+				camPos.x + rayDir.x * nearestDist,
+				camPos.y + rayDir.y * nearestDist,
+				camPos.z + rayDir.z * nearestDist,
+			};
+		}
 		// ボス戦は照準吸着なし＝発射方向は常にカメラ前方（中央 reticle の ray）。
 		// checkEnemy がボス中心へ desiredTarget を寄せても、射撃は手動狙いのままにする。
 		if (phase_ == Phase::Boss) {
@@ -3952,6 +4078,9 @@ void StagePlayScene::Draw() {
 	spriteManager_->DrawSetting();
 	DrawDynamicSprites();
 	if (reticle_) reticle_->Draw();
+
+	// ポーズメニュー（文字は下のスコア表示と同じ Flush でまとめて描く）
+	if (paused_) DrawPauseMenu();
 
 	// スコア表示（右上、控えめサイズ）
 	{
@@ -4401,7 +4530,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		gameOverTriggered_ = true;
 		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
-		SceneManager::GetInstance()->ChangeScene("GAMEOVER", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("GAMEOVER", TransitionType::Stripe);
 	}
 }
 
@@ -4906,7 +5035,7 @@ void StagePlayScene::ExecuteDisruptorSlash() {
 
 	// ワールド線焼き付け用：ヒットした敵のカメラ前方距離(depth)を平均する
 	const Vector3 camPos = camera_->GetTranslate();
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 camFwd{ camRot.m[2][0], camRot.m[2][1], camRot.m[2][2] };
 	float depthSum = 0.0f;
 	int   depthCount = 0;
@@ -5164,7 +5293,7 @@ void StagePlayScene::BuildDisruptorCellMeshesAndUpload() {
 
 	const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
 	const Vector3 camPos = camera_->GetTranslate();
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 camFwd{ camRot.m[2][0], camRot.m[2][1], camRot.m[2][2] };
 	const float depth = disruptorCutDepth_;
 	auto uvToWorld = [&](const Vector2& uv) -> Vector3 {
@@ -5709,7 +5838,7 @@ void StagePlayScene::UpdateSpecialWings() {
 	const float kPi = 3.14159265358979323846f;
 	const Vector3 center = SpecialPlayerCenter();
 	// X字方向はカメラ平面（画面）基準。camRight/camUp で画面内の角度を作る。
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
 	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
 	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 
@@ -5921,7 +6050,7 @@ void StagePlayScene::UpdateLockonTargetVisuals(SpecialLockonTarget& t, float loc
 	const float patternOffset = (t.patternIndex == 1) ? kPi : 0.0f; // パターンBは180°回転
 
 	// カメラ基底（線・リングの向き計算用）
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
 	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
 	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 
@@ -6095,7 +6224,7 @@ void StagePlayScene::UpdateSpecialPhaseLockon(float realDt) {
 		if (ellipseB < 0.01f) ellipseB = 1.0f;
 
 		// カメラ基底
-		const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+		const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
 		const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
 		const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 
@@ -6242,7 +6371,7 @@ Vector3 StagePlayScene::SpecialPlayerCenter() const {
 	if (off <= 0.0f) off = Gameplay::Of(player_).GetCollider().offset.y; // プレハブの足元→カプセル中心
 	if (off == 0.0f) return base;
 	// カメラ平面ベースの演出（楕円射影/放射）と整合するよう up はカメラ up を使う
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
 	const Vector3 camUp = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 	return { base.x + camUp.x * off, base.y + camUp.y * off, base.z + camUp.z * off };
 }
@@ -6262,7 +6391,7 @@ Vector3 StagePlayScene::SpecialBoltStart(const Vector3& playerPos, const Vector3
 	if (ellipseA < 0.01f) ellipseA = 0.5f;
 	if (ellipseB < 0.01f) ellipseB = 1.0f;
 
-	const Matrix4x4 camRot = MakeRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_ ? camera_->GetRotate() : Vector3{ 0.0f, 0.0f, 0.0f });
 	const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
 	const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 	// dir をカメラ平面に投影した成分から角度を求める
@@ -6547,7 +6676,7 @@ void StagePlayScene::ApplySpecialCamera(const Vector3& playerWorldPos) {
 
 	// 既存のカメラ位置を基準に forward 逆方向 + up 方向に引く（FovY も加算）
 	const Vector3 eye = camera_->GetTranslate();
-	const Matrix4x4 rot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 rot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 forward = { rot.m[2][0], rot.m[2][1], rot.m[2][2] };
 	const Vector3 up      = { rot.m[1][0], rot.m[1][1], rot.m[1][2] };
 
@@ -6566,7 +6695,7 @@ void StagePlayScene::ApplyDisruptorCamera() {
 	// 基準姿勢＝この時点の camera_（レール/通常追従が毎フレ書き込んだ値）。
 	// Charge〜Collapse は World 停止で基準が静止し、Recover で再開してレールが動き出す。
 	const Vector3   baseEye = camera_->GetTranslate();
-	const Matrix4x4 baseRot = MakeRotateMatrix(camera_->GetRotate());
+	const Matrix4x4 baseRot = MakeCameraRotateMatrix(camera_->GetRotate());
 	const Vector3 fwd   = { baseRot.m[2][0], baseRot.m[2][1], baseRot.m[2][2] }; // 画面奥
 	const Vector3 right = { baseRot.m[0][0], baseRot.m[0][1], baseRot.m[0][2] }; // 画面右
 	const Vector3 up    = { baseRot.m[1][0], baseRot.m[1][1], baseRot.m[1][2] }; // 画面上

@@ -56,13 +56,13 @@ void GameOverScene::Update() {
 		switch (options_[selectedIndex_]) {
 		case Option::BossRetry:
 			BossRetryState::GetInstance()->RequestBossRetry();
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
 			return;
 		case Option::RailRetry:
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
 			return;
 		case Option::BackToStageSelect:
-			SceneManager::GetInstance()->ChangeScene("STAGESELECT", TransitionType::Fade);
+			SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Stripe);
 			return;
 		}
 	}
@@ -75,7 +75,7 @@ namespace {
 		switch (opt) {
 		case GameOverScene::Option::BossRetry:          return "ボス戦からリトライ";
 		case GameOverScene::Option::RailRetry:          return "シューティングからリトライ";
-		case GameOverScene::Option::BackToStageSelect:  return "ステージセレクトに戻る";
+		case GameOverScene::Option::BackToStageSelect:  return "ステージ選択に戻る";
 		}
 		return "";
 	}

@@ -73,9 +73,9 @@
   "bulletPrefabs": {
     "normal": "TemporaryPlayerBullet",
     "melee_w1": "TemporaryPlayerMelee",
-    "charge1": "",
+    "charge1": "ChargeBullet1",
     "melee_w2": "TemporaryPlayerMelee",
-    "charge2": "",
+    "charge2": "ChargeBullet2",
     "melee_w3": "TemporaryPlayerMelee",
     "melee_w4": "TemporaryPlayerMelee",
     "melee_strong": "PlayerMeleeStrong"
