@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "Vector3.h"
+#include "Vector4.h"
 #include "IImGuiEditable.h"
 
 class GameScene;
@@ -15,7 +16,34 @@ struct BossActionContext {
 	IImGuiEditable* player = nullptr;
 	GameScene*      scene  = nullptr;
 	bool billboardToPlayer = true; // out: プレイヤー方向を向くか（ビルボード制御）
+
+	// out: ボス本体に重ねる色（rgb）と重み（a、0 で元の色）。予兆の点滅に使う。毎フレーム 0 から始まる
+	Vector4 tint{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+	// アリーナ（突進/跳躍の着地点をこの円内へ収める）。radius <= 0 なら制限なし
+	Vector3 arenaCenter{ 0.0f, 0.0f, 0.0f };
+	float   arenaRadius = 0.0f;
 };
+
+// 予兆の点滅色。溜めの終わりに近づくほど濃く・速く点滅させ、「もうすぐ来る」を伝える
+inline void SetBossTelegraphTint(BossActionContext& ctx, const Vector3& color, float timer, float duration) {
+	const float t = (duration > 1e-4f) ? (std::min)(timer / duration, 1.0f) : 1.0f;
+	const float freqHz = 5.0f + 9.0f * t;
+	const float blink = 0.5f + 0.5f * std::cos(6.2831853f * freqHz * timer);
+	ctx.tint = { color.x, color.y, color.z, (0.35f + 0.65f * t) * blink };
+}
+
+// 着地点などをアリーナ円（margin だけ内側）に収める。Y は触らない
+inline void ClampToBossArena(const BossActionContext& ctx, Vector3& p, float margin = 2.0f) {
+	if (ctx.arenaRadius <= 0.0f) return;
+	const float r = (std::max)(ctx.arenaRadius - margin, 0.0f);
+	const float dx = p.x - ctx.arenaCenter.x;
+	const float dz = p.z - ctx.arenaCenter.z;
+	const float d = std::sqrt(dx * dx + dz * dz);
+	if (d <= r || d < 1e-4f) return;
+	p.x = ctx.arenaCenter.x + dx / d * r;
+	p.z = ctx.arenaCenter.z + dz / d * r;
+}
 
 /// <summary>
 /// ボス行動の共通インターフェース。BossActionManager が1つだけ保持して駆動する。

@@ -10,6 +10,44 @@
 #include "Enemy/Boss/Action/BossAttackCharge.h"
 #include "Enemy/Boss/Action/BossAttackSlam.h"
 #include "Components/Gameplay.h"
+#include "Effect/EffectManager.h"
+#include "Camera.h"
+#include "Scene/GameScene.h"
+
+namespace {
+	// 発狂移行の咆哮：攻撃はせず、画面を揺らし爆発エフェクトと白の激しい点滅で「ここから本気」を見せる。
+	// 行動の切れ目（manager が空いた時）にだけ差し込むので、空中や突進の途中で中断されることはない。
+	class BossRageRoar : public IBossAction {
+	public:
+		void OnEnter(BossActionContext& ctx) override {
+			timer_ = 0.0f;
+			ctx.billboardToPlayer = true;
+			if (ctx.scene) {
+				if (Camera* cam = ctx.scene->GetCamera()) cam->Shake(shakeIntensity_, duration_ * 0.7f);
+			}
+			if (ctx.boss) {
+				if (const Vector3* bp = ctx.boss->GetEditableTranslate()) {
+					if (auto* em = EffectManager::GetInstance()) em->Play("Explosion_00", *bp);
+				}
+			}
+		}
+
+		void Update(float dt, BossActionContext& ctx) override {
+			timer_ += dt;
+			ctx.billboardToPlayer = true;
+			const float fade = 1.0f - 0.5f * (std::min)(timer_ / duration_, 1.0f);
+			const float blink = 0.5f + 0.5f * std::cos(6.2831853f * 8.0f * timer_);
+			ctx.tint = { 1.0f, 1.0f, 1.0f, blink * fade };
+		}
+
+		bool IsFinished() const override { return timer_ >= duration_; }
+
+	private:
+		float timer_ = 0.0f;
+		float duration_ = 1.5f;
+		float shakeIntensity_ = 0.35f;
+	};
+}
 #include "IImGuiEditable.h"
 
 void BossStateMachine::Update(float dt, BossActionContext& ctx) {
@@ -25,6 +63,12 @@ void BossStateMachine::SelectNext(BossActionContext& ctx) {
 	std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
 	const bool rage = IsRage(ctx);
+	if (rage && !rageEntered_) {
+		rageEntered_ = true;
+		manager_.Start(std::make_unique<BossRageRoar>(), ctx);
+		attackCooldown_ = 0.3f; // 咆哮明けはすぐ攻撃に移れるように
+		return;
+	}
 	if (canAttack && dist(rng_) < (rage ? rageAttackChance_ : attackChance_)) {
 		StartAttack(ctx, rage);
 		attackCooldown_ = rage ? rageAttackCooldown_ : attackCooldownBase_;

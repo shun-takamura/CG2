@@ -25,6 +25,7 @@ public:
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
+			SetBossTelegraphTint(ctx, { 1.0f, 0.9f, 0.2f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			if (timer_ >= telegraphTime_) {
 				phase_ = Phase::Firing;
 				timer_ = volleyInterval_; // 1斉射目を即発射

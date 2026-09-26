@@ -30,6 +30,7 @@ public:
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
+			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			// 予兆（判定なし）。将来ここで振りかぶりエフェクト/アニメを鳴らす。
 			if (timer_ >= telegraphTime_) {
 				SpawnHitVolume(ctx);

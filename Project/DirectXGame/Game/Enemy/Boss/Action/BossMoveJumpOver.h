@@ -38,6 +38,7 @@ public:
 			baselineY_,
 			pp->z + d.z * landDistance_,
 		};
+		ClampToBossArena(ctx, goalPos_);
 		valid_ = true;
 	}
 

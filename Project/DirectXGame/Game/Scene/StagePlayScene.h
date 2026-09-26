@@ -521,6 +521,23 @@ private:
 	void UpdatePauseMenu(class InputActionMap* actions);
 	void DrawPauseMenu();
 
+	// ----- ボス HP バー（ボス戦中のみ画面上部中央）-----
+	// 下地 → 遅延ゲージ（減った分を遅れて追う白）→ 現在HP → 発狂ライン目盛り、の順に重ねる
+	std::unique_ptr<SpriteInstance> bossHpBarBack_;
+	std::unique_ptr<SpriteInstance> bossHpBarDelay_;
+	std::unique_ptr<SpriteInstance> bossHpBarFill_;
+	std::unique_ptr<SpriteInstance> bossHpBarRageMark_;
+	bool  bossHpBarVisible_ = false;
+	float bossHpRatio_ = 1.0f;
+	float bossHpDelayRatio_ = 1.0f;
+	float bossHpBarWidth_ = 800.0f;
+	float bossHpBarHeight_ = 16.0f;
+	float bossHpBarPosY_ = 58.0f;
+	float bossHpDelaySpeed_ = 0.35f;   // 遅延ゲージが追う速さ（比率/秒）
+	void CreateBossHpBarUI();
+	void UpdateBossHpBarUI(float dt);
+	void DrawBossHpBarUI();
+
 	// ----- プレイヤー被弾・無敵関連 -----
 	float playerInvincibilityTimer_ = -2.0f;    // 被弾無敵残り時間（<=0 で通常）
 	float playerInvincibilityDuration_ = 1.0f;  // 無敵継続秒数（ImGui調整可）

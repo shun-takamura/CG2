@@ -39,7 +39,7 @@ void BossStagePart::Enter() {
 		ctrl->entity_            = boss_;
 		ctrl->billboardToPlayer_ = true;
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
-		cmds.push_back(std::make_unique<BossBrainCommand>());
+		cmds.push_back(std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_));
 		ctrl->Init(std::move(cmds));
 		host_->RegisterEnemyController(std::move(ctrl));
 	}

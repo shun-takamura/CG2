@@ -24,6 +24,7 @@ public:
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
+			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			ctx.billboardToPlayer = true;
 			if (timer_ >= telegraphTime_) {
 				if (!BeginDash(ctx)) { phase_ = Phase::Done; return; }
@@ -74,6 +75,7 @@ private:
 			startPos_.y,
 			startPos_.z + std::cos(aim.yaw) * len,
 		};
+		ClampToBossArena(ctx, goalPos_);
 		hitVolume_ = ctx.scene->SpawnEnemyAt("BossMeleeHit", ResolveBossHitAnchor(ctx, hitLocalOffset_));
 		if (hitVolume_) hitVolume_->SetRotate({ 0.0f, aim.yaw, 0.0f });
 		return true;

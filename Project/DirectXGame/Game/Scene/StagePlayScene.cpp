@@ -2713,6 +2713,7 @@ void StagePlayScene::Initialize() {
 		pauseDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
 		pauseDimSprite_->Update();
 	}
+	CreateBossHpBarUI();
 
 	// レティクル
 	reticle_ = std::make_unique<Reticle>();
@@ -2832,6 +2833,77 @@ void StagePlayScene::ApplyCameraIdleSway(float dt) {
 		pos.y + camRot.m[1][1] * lift,
 		pos.z + camRot.m[1][2] * lift,
 	});
+}
+
+namespace {
+	// 発狂ライン（BossStateMachine::rageHpRatio_ と合わせる）
+	constexpr float kBossRageMarkRatio = 0.5f;
+}
+
+void StagePlayScene::CreateBossHpBarUI() {
+	if (!spriteManager_) return;
+	auto make = [&](const char* name, const Vector4& color) {
+		auto s = std::make_unique<SpriteInstance>();
+		s->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", name);
+		s->SetColor(color);
+		return s;
+	};
+	bossHpBarBack_     = make("BossHpBarBack",  { 0.05f, 0.05f, 0.08f, 0.85f });
+	bossHpBarDelay_    = make("BossHpBarDelay", { 1.0f, 0.95f, 0.85f, 1.0f });
+	bossHpBarFill_     = make("BossHpBarFill",  { 0.95f, 0.25f, 0.2f, 1.0f });
+	bossHpBarRageMark_ = make("BossHpBarRage",  { 1.0f, 1.0f, 1.0f, 0.9f });
+}
+
+void StagePlayScene::UpdateBossHpBarUI(float dt) {
+	bossHpBarVisible_ = false;
+	if (phase_ != Phase::Boss || !bossStage_ || !bossHpBarFill_) return;
+	IImGuiEditable* boss = bossStage_->GetBossEntity();
+	if (!boss) return;
+	const HP& hp = Gameplay::Of(boss).GetHP();
+	if (!hp.enabled || hp.maxHP <= 0) return;
+	bossHpBarVisible_ = true;
+
+	bossHpRatio_ = (std::clamp)(static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP), 0.0f, 1.0f);
+	// 遅延ゲージは減った分だけ遅れて追う（回復方向は即時）
+	if (bossHpDelayRatio_ < bossHpRatio_) bossHpDelayRatio_ = bossHpRatio_;
+	else bossHpDelayRatio_ = (std::max)(bossHpRatio_, bossHpDelayRatio_ - bossHpDelaySpeed_ * dt);
+
+	const float w = bossHpBarWidth_;
+	const float h = bossHpBarHeight_;
+	const float left = (static_cast<float>(WindowsApplication::kClientWidth) - w) * 0.5f;
+	const float top = bossHpBarPosY_;
+	constexpr float kFrame = 3.0f;
+
+	bossHpBarBack_->SetPosition({ left - kFrame, top - kFrame });
+	bossHpBarBack_->SetSize({ w + kFrame * 2.0f, h + kFrame * 2.0f });
+	bossHpBarDelay_->SetPosition({ left, top });
+	bossHpBarDelay_->SetSize({ w * bossHpDelayRatio_, h });
+	bossHpBarFill_->SetPosition({ left, top });
+	bossHpBarFill_->SetSize({ w * bossHpRatio_, h });
+	// 発狂後はゲージ色を変えて「本気モード」を示す
+	const bool rage = bossHpRatio_ <= kBossRageMarkRatio;
+	bossHpBarFill_->SetColor(rage ? Vector4{ 0.9f, 0.1f, 0.6f, 1.0f } : Vector4{ 0.95f, 0.25f, 0.2f, 1.0f });
+	bossHpBarRageMark_->SetPosition({ left + w * kBossRageMarkRatio - 1.0f, top - kFrame });
+	bossHpBarRageMark_->SetSize({ 2.0f, h + kFrame * 2.0f });
+
+	bossHpBarBack_->Update();
+	bossHpBarDelay_->Update();
+	bossHpBarFill_->Update();
+	bossHpBarRageMark_->Update();
+}
+
+void StagePlayScene::DrawBossHpBarUI() {
+	if (!bossHpBarVisible_ || phase_ != Phase::Boss) return;
+	bossHpBarBack_->Draw();
+	bossHpBarDelay_->Draw();
+	bossHpBarFill_->Draw();
+	bossHpBarRageMark_->Draw();
+
+	// ラベルは下のスコア表示と同じ Flush でまとめて描く
+	TextRenderer* tr = TextRenderer::GetInstance();
+	if (!tr->IsInitialized()) return;
+	const float left = (static_cast<float>(WindowsApplication::kClientWidth) - bossHpBarWidth_) * 0.5f;
+	tr->DrawText("BOSS", { left, bossHpBarPosY_ - 34.0f }, 0.9f, { 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 }
 
 void StagePlayScene::OpenPauseMenu() {
@@ -2995,6 +3067,8 @@ void StagePlayScene::Update() {
 			lockedEnemy_     = nullptr;
 			jdCounterTarget_ = nullptr;
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
+			bossHpRatio_ = 1.0f;
+			bossHpDelayRatio_ = 1.0f;
 			// ボス戦開始時点のHP・必殺技ゲージをスナップショット（「ボス戦からリトライ」用）。
 			// F4デバッグショートカットでの手動突入やリトライ再突入時も同様に保存し直される。
 			if (player_) {
@@ -3011,6 +3085,7 @@ void StagePlayScene::Update() {
 	// ボス戦 tick（ボスAI更新＋撃破掃除）。Enter 済みのこのフレームから駆動される。
 	if (phase_ == Phase::Boss && bossStage_) {
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
+		UpdateBossHpBarUI(GetScaledDeltaTime(TimeGroup::UI));
 
 		// ボス撃破検出：スコア加点・撃破数カウントの上でリザルトへ。
 		if (bossStage_->ConsumeBossDefeated()) {
@@ -4142,6 +4217,8 @@ void StagePlayScene::Draw() {
 	spriteManager_->DrawSetting();
 	DrawDynamicSprites();
 	if (reticle_) reticle_->Draw();
+
+	DrawBossHpBarUI();
 
 	// ポーズメニュー（文字は下のスコア表示と同じ Flush でまとめて描く）
 	if (paused_) DrawPauseMenu();
