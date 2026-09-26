@@ -902,6 +902,58 @@ void GameScene::SweepDeadEntities() {
 	}
 }
 
+float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const {
+	const Vector3 d{ to.x - from.x, to.y - from.y, to.z - from.z };
+	const float a = d.x * d.x + d.y * d.y + d.z * d.z;
+	if (a < 1e-10f) return -1.0f;
+
+	// 接触判定より少し内側（半径和の 90%）で交差を取る。
+	// 敵の更新は弾の後に走り、同フレームで最大 ~1m 動くので、止める位置は「入った点」ではなく
+	// 「線分が敵中心に最も近づく点」にして、敵が動いても重なりが外れないようにする。
+	constexpr float kInsideRate = 0.9f;
+	float bestEntry = -1.0f;
+	float bestStop = -1.0f;
+
+	auto test = [&](IImGuiEditable* e, const Vector3& pos) {
+		if (!e) return;
+		const EntityTag tag = Gameplay::Of(e).GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		const Collider& col = Gameplay::Of(e).GetCollider();
+		if (!col.enabled || col.shape != ColliderShape::Sphere) return;
+
+		const Vector3 c{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
+		const float r = (col.radius + bulletRadius) * kInsideRate;
+		const Vector3 f{ from.x - c.x, from.y - c.y, from.z - c.z };
+		const float cq = f.x * f.x + f.y * f.y + f.z * f.z - r * r;
+		if (cq <= 0.0f) {
+			// 始点で既に重なっている（通常判定に任せる）
+			bestEntry = 0.0f;
+			bestStop = 0.0f;
+			return;
+		}
+		const float bq = 2.0f * (f.x * d.x + f.y * d.y + f.z * d.z);
+		const float disc = bq * bq - 4.0f * a * cq;
+		if (disc < 0.0f) return;
+		const float entry = (-bq - std::sqrt(disc)) / (2.0f * a);
+		if (entry < 0.0f || entry > 1.0f) return;
+		if (bestEntry >= 0.0f && entry >= bestEntry) return;
+		const float closest = -bq / (2.0f * a);
+		bestEntry = entry;
+		bestStop = (std::clamp)(closest, entry, 1.0f);
+	};
+
+	for (const auto& p : dynamicPrimitives_) {
+		if (p) if (const Vector3* pos = p->GetEditableTranslate()) test(p.get(), *pos);
+	}
+	for (const auto& o : object3DInstances_) {
+		if (o) if (const Vector3* pos = o->GetEditableTranslate()) test(o.get(), *pos);
+	}
+	for (const auto& an : dynamicAnimated_) {
+		if (an) test(an.get(), an->GetTranslate());
+	}
+	return bestStop;
+}
+
 void GameScene::UpdateBullets(float deltaTime) {
 	if (bullets_.empty()) return;
 
@@ -953,10 +1005,23 @@ void GameScene::UpdateBullets(float deltaTime) {
 			}
 		}
 
-		// 移動
-		t->x += b.velocity.x * deltaTime;
-		t->y += b.velocity.y * deltaTime;
-		t->z += b.velocity.z * deltaTime;
+		// 移動。プレイヤー弾は高速（650m/s ≒ 11m/フレーム）で、毎フレームの球重なり判定だけだと
+		// 敵をすり抜ける。今フレームの移動線分と敵の球の交差を先に調べ、最初の接触点で止める。
+		// 止めた位置は球の内側なので、直後の CollisionManager が重なりを検出して通常のヒット処理が走る。
+		// 貫通弾は止めない（多段ヒットはクールタイム制御のため、通過中に重なるフレームがあれば十分）。
+		const Vector3 from = *t;
+		Vector3 to{
+			from.x + b.velocity.x * deltaTime,
+			from.y + b.velocity.y * deltaTime,
+			from.z + b.velocity.z * deltaTime,
+		};
+		if (!b.penetrate && Gameplay::Of(b.primitive).GetTag() == EntityTag::PlayerBullet) {
+			const float s = FindFirstEnemyHitOnSegment(from, to, Gameplay::Of(b.primitive).GetCollider().radius);
+			if (s >= 0.0f) {
+				to = { from.x + (to.x - from.x) * s, from.y + (to.y - from.y) * s, from.z + (to.z - from.z) * s };
+			}
+		}
+		*t = to;
 
 		// 進行方向に弾とエフェクトの向きを合わせる（ホーミングで方向が変わるため毎フレーム更新）
 		if (b.speed > 1e-4f) {

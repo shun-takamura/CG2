@@ -34,10 +34,18 @@
     "capsuleRadius": 0.5,
     "capsuleHeight": 1
   },
+  "hp": {
+    "maxHP": 30
+  },
+  "scoreValue": 20,
   "movement": {
     "type": "ScreenHover",
     "moveSpeed": 10,
     "hoverApproachSpeed": 30,
     "hoverHoldDuration": 10.5
+  },
+  "effects": {
+    "hurt": "Hit_Small",
+    "death": "Death_Drone"
   }
 }

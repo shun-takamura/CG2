@@ -32,7 +32,7 @@ void StageSelectScene::Update() {
 
 	auto* actions = input_->GetActionMap();
 	if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
-		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
 		return;
 	}
 

@@ -34,5 +34,9 @@
   },
   "hp": {
     "maxHP": 80
+  },
+  "effects": {
+    "hurt": "Hit_Small",
+    "death": "Death_Drone"
   }
 }

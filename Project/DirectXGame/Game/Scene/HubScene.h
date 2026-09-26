@@ -1,21 +1,17 @@
 #pragma once
 #include "GameScene.h"
+#include "VerticalMenu.h"
 #include <memory>
 
 class Camera;
 
 /// <summary>
-/// ハブシーン（メインメニュー）
-/// 「StageSelect / ゲーム終了」の2択を上下キー+決定で選ぶ。
-/// スキルショップ等の追加タブは将来ここに拡張する想定。
+/// ハブシーン（ステージ選択を兼ねる）
+/// 「Stage1 / タイトルに戻る」を上下キー+決定で選ぶ。ステージが増えたら項目を足す。
+/// ゲーム終了はタイトルの責務に一本化している。
 /// </summary>
 class HubScene : public GameScene {
 public:
-	enum class Tab {
-		StageSelect,
-		Quit,
-	};
-
 	HubScene();
 	~HubScene() override;
 
@@ -28,5 +24,5 @@ public:
 
 private:
 	std::unique_ptr<Camera> camera_;
-	Tab currentTab_ = Tab::StageSelect;
+	VerticalMenu menu_;
 };

@@ -151,6 +151,8 @@ protected:
 	// 弾 / 近接 / 敵の更新（派生シーンの Update から呼ぶ）
 	//====================
 	void UpdateBullets(float deltaTime);
+	// 線分 from→to が Enemy/Boss の球コライダー（弾半径ぶん膨らませる）に最初に入る位置を 0..1 で返す。無ければ -1
+	float FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const;
 	void SweepDeadEntities();
 	void UpdateMelees(float deltaTime);
 	void UpdateMovingEnemies(float deltaTime);
