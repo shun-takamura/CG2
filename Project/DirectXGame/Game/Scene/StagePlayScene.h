@@ -181,6 +181,13 @@ private:
 	float aimSmoothTime_   = 0.08f;   // Lerp 時定数（プレイヤー回転用、0.0=即時）
 	float aimAssistPixelScale_ = 1.4f; // 見かけ半径×倍率＝スクリーン上のロックオン許容ピクセル
 	float aimReticleOverlapRate_ = 0.5f; // レティクル半径×率をロックオン許容ピクセルに加算（輪が敵に掛かればロック）
+	// ----- カメラ idle sway（Rail 中、止まって見えないよう微小に揺らす）-----
+	bool    idleSwayEnabled_ = true;
+	Vector3 idleSwayRotAmp_ = { 0.0052f, 0.0070f, 0.0122f }; // pitch/yaw/roll 振幅 [rad]（≒0.3°/0.4°/0.7°）
+	float   idleSwayPosAmp_ = 0.12f;                          // カメラ上方向の上下振幅 [m]
+	float   idleSwaySpeed_ = 1.0f;                            // 揺れの速さ倍率
+	float   idleSwayTime_ = 0.0f;
+	void ApplyCameraIdleSway(float dt);
 	float aimConvergePx_ = 160.0f;        // 非ロック時、画面上この距離内の敵がいれば弾の収束点をその敵の深さに合わせる（視差で外れるのを防ぐ）
 	// レティクル外側パーツの中心からのオフセット範囲（pixel）
 	float reticleOuterMinPx_ = 32.0f;

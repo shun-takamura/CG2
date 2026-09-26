@@ -167,6 +167,22 @@ void StagePlayScene::LoadTuningFromJson() {
 		reticleOuterSizeMaxPx_ = static_cast<float>(aim["reticleOuterSizeMaxPx"].AsDouble(reticleOuterSizeMaxPx_));
 	}
 
+	// ----- camera idle sway -----
+	const JsonValue& sway = root["idleSway"];
+	if (sway.IsObject()) {
+		idleSwayEnabled_ = sway["enabled"].AsBool(idleSwayEnabled_);
+		const JsonValue& ra = sway["rotAmp"];
+		if (ra.IsArray() && ra.Size() >= 3) {
+			idleSwayRotAmp_ = {
+				static_cast<float>(ra[0].AsDouble(idleSwayRotAmp_.x)),
+				static_cast<float>(ra[1].AsDouble(idleSwayRotAmp_.y)),
+				static_cast<float>(ra[2].AsDouble(idleSwayRotAmp_.z)),
+			};
+		}
+		idleSwayPosAmp_ = static_cast<float>(sway["posAmp"].AsDouble(idleSwayPosAmp_));
+		idleSwaySpeed_  = static_cast<float>(sway["speed"].AsDouble(idleSwaySpeed_));
+	}
+
 	// ----- damage / invincibility -----
 	const JsonValue& dmg = root["damage"];
 	if (dmg.IsObject()) {
@@ -644,6 +660,17 @@ void StagePlayScene::SaveTuningToJson() const {
 	aimObj["reticleOuterSizeMinPx"] = static_cast<double>(reticle_ ? reticle_->GetOuterSizeMin() : reticleOuterSizeMinPx_);
 	aimObj["reticleOuterSizeMaxPx"] = static_cast<double>(reticle_ ? reticle_->GetOuterSizeMax() : reticleOuterSizeMaxPx_);
 	root["aim"] = std::move(aimObj);
+
+	JsonValue swayObj = JsonValue::MakeObject();
+	swayObj["enabled"] = idleSwayEnabled_;
+	JsonValue swayRot = JsonValue::MakeArray();
+	swayRot.Push(JsonValue(static_cast<double>(idleSwayRotAmp_.x)));
+	swayRot.Push(JsonValue(static_cast<double>(idleSwayRotAmp_.y)));
+	swayRot.Push(JsonValue(static_cast<double>(idleSwayRotAmp_.z)));
+	swayObj["rotAmp"] = std::move(swayRot);
+	swayObj["posAmp"] = static_cast<double>(idleSwayPosAmp_);
+	swayObj["speed"]  = static_cast<double>(idleSwaySpeed_);
+	root["idleSway"] = std::move(swayObj);
 
 	JsonValue dmgObj = JsonValue::MakeObject();
 	dmgObj["invincibilityDuration"] = static_cast<double>(playerInvincibilityDuration_);
@@ -2162,6 +2189,16 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::TextDisabled("  ON で boss空へ / OFF で平常時の空へクロスフェード");
 	}
 
+	if (ImGui::CollapsingHeader("Camera Idle Sway")) {
+		if (ImGui::Checkbox("Enabled##idleSway", &idleSwayEnabled_)) changed = true;
+		ImGui::DragFloat3("Rot Amp (rad)", &idleSwayRotAmp_.x, 0.0005f, 0.0f, 0.1f, "%.4f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Pos Amp (m)", &idleSwayPosAmp_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Speed", &idleSwaySpeed_, 0.05f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+	}
+
 	if (ImGui::CollapsingHeader("Shooting")) {
 		ImGui::TextDisabled("弾パラメータ（速度/寿命/collider拡大/ホーミング/貫通）は\n弾プレハブの BulletParams で設定する。");
 		ImGui::TextDisabled("連射間隔(Fire Rate)はプレイヤープレハブの ChargeParams で設定する。");
@@ -2773,6 +2810,30 @@ void StagePlayScene::Finalize() {
 	specialFireProcessed_.clear();
 }
 
+void StagePlayScene::ApplyCameraIdleSway(float dt) {
+	// World 停止中（ポーズ / Aim オーサリング等）は揺らさない。オーサリング値に揺れが混ざるのを防ぐ
+	if (!camera_ || !idleSwayEnabled_ || dt <= 0.0f) return;
+	idleSwayTime_ += dt * idleSwaySpeed_;
+	const float t = idleSwayTime_;
+
+	// 軸ごとに周期と位相をずらした sin を重ね、規則的に見えないうねりにする
+	const Vector3 rot = camera_->GetRotate();
+	camera_->SetRotate({
+		rot.x + idleSwayRotAmp_.x * std::sin(t * 0.83f),
+		rot.y + idleSwayRotAmp_.y * std::sin(t * 0.61f + 1.3f),
+		rot.z + idleSwayRotAmp_.z * std::sin(t * 0.47f + 2.1f),
+	});
+
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_->GetRotate());
+	const float lift = idleSwayPosAmp_ * std::sin(t * 1.07f + 0.7f);
+	const Vector3 pos = camera_->GetTranslate();
+	camera_->SetTranslate({
+		pos.x + camRot.m[1][0] * lift,
+		pos.y + camRot.m[1][1] * lift,
+		pos.z + camRot.m[1][2] * lift,
+	});
+}
+
 void StagePlayScene::OpenPauseMenu() {
 	paused_ = true;
 	SetPauseView(PauseView::Main);
@@ -2903,6 +2964,9 @@ void StagePlayScene::Update() {
 		if (railStage_->UpdateCamera(actions, GetScaledDeltaTime(), seekMaxSec_)) {
 			phase_ = Phase::Landing;
 			landingTimer_ = 0.0f;
+		} else {
+			// レールカメラが毎フレーム姿勢を上書きした直後に揺れを足す（積算しない）
+			ApplyCameraIdleSway(GetScaledDeltaTime(TimeGroup::World));
 		}
 	} else if (phase_ == Phase::Landing) {
 		// 着地遷移（演出は後日実装）。滞在時間が経過したら自動的に Boss へ。

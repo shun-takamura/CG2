@@ -118,6 +118,11 @@ private:
 	float pitchMin_ = -0.4f, pitchMax_ = 1.1f; // 俯角クランプ
 	float camDistance_    = 16.0f;  // プレイヤー背後距離（周回半径）
 	float camFocusHeight_ = 2.5f;   // 注視点（プレイヤー上方）高さ＝体の中心
+	// 地面めり込み回避：見上げてカメラが地面下に入る角度では、プレイヤーへ寄せて地面の上に留める
+	float camGroundClearance_ = 0.5f;  // 地面からカメラまでの最低余白 [m]
+	float camMinDistance_     = 2.0f;  // 寄せるときの最短距離 [m]（これでも潜るなら高さを持ち上げる）
+	float camDistanceReturnTime_ = 0.1f; // 寄せた距離を元へ戻すときの時定数 [s]
+	float camEffectiveDistance_ = -1.0f; // 実際に使っている距離（<0 は未初期化）
 	float lockSpringGain_ = 2.5f;   // ロックオンのボス方向への引き（小さいほどラグ/低精度）
 
 	// ボス方向の yaw/pitch を算出（プレイヤー focus からボス中心へ）。boss_ が無ければ現状維持。

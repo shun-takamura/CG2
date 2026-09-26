@@ -651,10 +651,7 @@ void DemoScene::Update() {
 	//	sprite_->Update();
 	//}
 
-	// リスナー（カメラ）の位置をSoundManagerに反映
-	SoundManager::GetInstance()->UpdateListener(camera_.get());
-	// 3Dサウンドの更新・終了検知
-	SoundManager::GetInstance()->Update();
+	// SoundManager の UpdateListener / Update は Framework が毎フレーム呼ぶ（ここでは呼ばない）
 
 	// カメラの更新は必ずオブジェクトの更新前にやる
 	camera_->Update();

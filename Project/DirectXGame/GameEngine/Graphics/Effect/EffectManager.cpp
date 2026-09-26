@@ -2,6 +2,7 @@
 #include "GPUParticleManager.h"
 #include "Camera.h"
 #include "Log.h"
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -123,6 +124,7 @@ std::vector<std::string> EffectManager::ListDefNames() const {
     std::vector<std::string> names;
     names.reserve(defs_.size());
     for (const auto& pair : defs_) names.push_back(pair.first);
+    std::sort(names.begin(), names.end());
     return names;
 }
 

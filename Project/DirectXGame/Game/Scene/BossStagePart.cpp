@@ -228,10 +228,29 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 		if (const Vector3* pp = pl->GetEditableTranslate()) pPos = *pp;
 	}
 	const Vector3 focus{ pPos.x, pPos.y + camFocusHeight_, pPos.z };
-	const Vector3 eye{
-		focus.x - forward.x * camDistance_,
-		focus.y - forward.y * camDistance_,
-		focus.z - forward.z * camDistance_ };
+
+	// 5) 地面めり込み回避。見上げる（forward.y > 0）と eye は focus より下がるので、
+	//    eye が「地面＋余白」を下回る角度ではプレイヤー側へ寄せる。寄せは即時（地面の裏を1フレームも見せない）、
+	//    戻しは時定数でなめらかに。
+	const float minEyeY = groundY_ + camGroundClearance_;
+	float targetDist = camDistance_;
+	if (forward.y > 1e-4f) {
+		const float fitDist = (focus.y - minEyeY) / forward.y;
+		if (fitDist < targetDist) targetDist = (std::max)(fitDist, camMinDistance_);
+	}
+	if (camEffectiveDistance_ < 0.0f || targetDist < camEffectiveDistance_) {
+		camEffectiveDistance_ = targetDist;
+	} else {
+		const float a = (camDistanceReturnTime_ > 1e-4f) ? (1.0f - std::exp(-dt / camDistanceReturnTime_)) : 1.0f;
+		camEffectiveDistance_ += (targetDist - camEffectiveDistance_) * a;
+	}
+
+	Vector3 eye{
+		focus.x - forward.x * camEffectiveDistance_,
+		focus.y - forward.y * camEffectiveDistance_,
+		focus.z - forward.z * camEffectiveDistance_ };
+	// 最短距離まで寄せても潜る極端な見上げでは高さを持ち上げる
+	if (eye.y < minEyeY) eye.y = minEyeY;
 
 	camera_->SetTranslate(eye);
 	camera_->SetRotate({ camPitch_, camYaw_, 0.0f });
@@ -278,6 +297,13 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Focus Height", &camFocusHeight_, 0.1f, 0.0f, 20.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Ground Clearance", &camGroundClearance_, 0.05f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Min Distance", &camMinDistance_, 0.1f, 0.5f, 20.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Distance Return (s)", &camDistanceReturnTime_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("Effective Distance: %.2f", camEffectiveDistance_);
 		ImGui::DragFloat("Lock Spring Gain", &lockSpringGain_, 0.05f, 0.1f, 20.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Snap Duration (s)", &snapDuration_, 0.01f, 0.0f, 2.0f, "%.2f");
