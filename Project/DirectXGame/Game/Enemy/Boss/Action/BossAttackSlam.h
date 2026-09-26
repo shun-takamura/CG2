@@ -30,6 +30,7 @@ public:
 		if (!bp) { phase_ = Phase::Done; return; }
 
 		if (phase_ == Phase::Crouch) {
+			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, crouchTime_); // 弾幕系=黄 / 近接系=白
 			float t = (crouchTime_ > 1e-4f) ? (timer_ / crouchTime_) : 1.0f;
 			if (t > 1.0f) t = 1.0f;
 			bp->y = baselineY_ - crouchDepth_ * std::sin(3.14159265f * 0.5f * t);
@@ -77,6 +78,7 @@ private:
 			baselineY_,
 			startPos_.z + std::cos(aim.yaw) * len,
 		};
+		ClampToBossArena(ctx, goalPos_);
 		// 衝撃波はプレイヤーの胸の高さを水平に走らせる（地面すれすれ＝地上のプレイヤーに当たる高さ）
 		const Vector3* pp = ctx.player ? ctx.player->GetEditableTranslate() : nullptr;
 		shockwaveY_ = pp ? pp->y + shockwaveHeight_ : baselineY_;

@@ -26,6 +26,7 @@ public:
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
+			SetBossTelegraphTint(ctx, { 1.0f, 0.9f, 0.2f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			// 予兆（攻撃なし）。将来ここで telegraph エフェクトを鳴らす。
 			if (timer_ >= telegraphTime_) {
 				FireAtPlayer(ctx);

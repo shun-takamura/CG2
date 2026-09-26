@@ -28,6 +28,7 @@ private:
 	float rageAttackCooldown_    = 0.9f;
 	float rageAttackChance_      = 0.7f;
 	float rageTelegraphScale_    = 0.8f;
+	bool  rageEntered_           = false; // 発狂移行演出（咆哮）を一度だけ出すためのフラグ
 
 	float meleeRange_       = 9.0f; // このXZ距離以内なら近接攻撃を選択肢に入れる
 
