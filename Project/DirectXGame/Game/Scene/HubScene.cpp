@@ -10,6 +10,7 @@
 #include "Game.h"
 #include "DirectXCore.h"
 #include "TextRenderer.h"
+#include "SoundManager.h"
 #include "Vector4.h"
 
 namespace {
@@ -31,9 +32,12 @@ void HubScene::Initialize() {
 	object3DManager_->SetDefaultCamera(camera_.get());
 
 	menu_.SetItems({ "Stage1", "タイトルに戻る" });
+	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
 }
 
-void HubScene::Finalize() {}
+void HubScene::Finalize() {
+	SoundManager::GetInstance()->Stop2DSound("bgm_title");
+}
 
 void HubScene::Update() {
 	if (SceneManager::GetInstance()->IsTransitioning()) {

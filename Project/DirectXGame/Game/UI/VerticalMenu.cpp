@@ -3,6 +3,7 @@
 #include "InputAction.h"
 #include "Config/GameActions.h"
 #include "TextRenderer.h"
+#include "SoundManager.h"
 
 void VerticalMenu::SetItems(std::vector<std::string> items, int initialIndex) {
 	items_ = std::move(items);
@@ -22,15 +23,24 @@ VerticalMenu::Result VerticalMenu::Update(InputActionMap* actions) {
 	const int count = static_cast<int>(items_.size());
 	if (!actions || count == 0) return Result::None;
 
+	auto* sm = SoundManager::GetInstance();
 	if (actions->IsTriggered(static_cast<int>(Action::MenuDown))) {
 		selectedIndex_ = (selectedIndex_ + 1) % count;
+		sm->Play2DSound("se_ui_cursor");
 	}
 	if (actions->IsTriggered(static_cast<int>(Action::MenuUp))) {
 		selectedIndex_ = (selectedIndex_ + count - 1) % count;
+		sm->Play2DSound("se_ui_cursor");
 	}
 
-	if (actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) return Result::Confirmed;
-	if (actions->IsTriggered(static_cast<int>(Action::MenuCancel)))  return Result::Canceled;
+	if (actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
+		sm->Play2DSound("se_ui_decide");
+		return Result::Confirmed;
+	}
+	if (actions->IsTriggered(static_cast<int>(Action::MenuCancel))) {
+		sm->Play2DSound("se_ui_cancel");
+		return Result::Canceled;
+	}
 	return Result::None;
 }
 

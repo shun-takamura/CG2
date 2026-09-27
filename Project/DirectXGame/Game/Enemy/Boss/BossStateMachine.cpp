@@ -12,6 +12,7 @@
 #include "Components/Gameplay.h"
 #include "Effect/EffectManager.h"
 #include "Camera.h"
+#include "SoundManager.h"
 #include "Scene/GameScene.h"
 
 namespace {
@@ -25,6 +26,7 @@ namespace {
 			if (ctx.scene) {
 				if (Camera* cam = ctx.scene->GetCamera()) cam->Shake(shakeIntensity_, duration_ * 0.7f);
 			}
+			SoundManager::GetInstance()->Play2DSound("se_shockwave");
 			if (ctx.boss) {
 				if (const Vector3* bp = ctx.boss->GetEditableTranslate()) {
 					if (auto* em = EffectManager::GetInstance()) em->Play("Explosion_00", *bp);
@@ -102,6 +104,7 @@ void BossStateMachine::StartAttack(BossActionContext& ctx, bool rage) {
 	}
 
 	const float tele = rage ? rageTelegraphScale_ : 1.0f;
+	SoundManager::GetInstance()->Play2DSound("se_boss_telegraph");
 	switch (kind) {
 	case kMelee:  manager_.Start(std::make_unique<BossAttackMelee>(0.6f * tele), ctx); break;
 	case kSlam:   manager_.Start(std::make_unique<BossAttackSlam>(rage ? 32 : 24, 0.5f * tele), ctx); break;

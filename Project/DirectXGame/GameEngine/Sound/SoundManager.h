@@ -50,10 +50,11 @@ public:
     void Unload(const std::string& name);
 
     // 2D再生（BGM用）
-    void Play2DSound(const std::string& name);
+    // volume はこの再生だけに掛かる倍率（1.0 = 素材のまま）
+    void Play2DSound(const std::string& name, float volume = 1.0f);
     // 2Dループ再生（BGM用）。バッファ全体を無限ループする。
     // 止めるときは Stop2DSound(name)。同じ name で呼び直すと前の再生を止めて鳴らし直す。
-    void Play2DSoundLooped(const std::string& name);
+    void Play2DSoundLooped(const std::string& name, float volume = 1.0f);
     void Stop2DSound(const std::string& name);
 
     // 3D再生（SE用）※ ハンドルを返す、0は無効

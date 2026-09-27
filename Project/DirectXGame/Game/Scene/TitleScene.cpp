@@ -16,6 +16,8 @@
 #include "VignetteEffect.h"
 #include "RadialBlurEffect.h"
 #include "TextRenderer.h"
+#include "SoundManager.h"
+#include "MathUtility.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -80,6 +82,7 @@ void TitleScene::Initialize() {
 	}
 
 	menu_.SetItems({ "スタート", "ゲーム終了" });
+	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
 	menuOpen_ = false;
 	elapsed_ = 0.0f;
 	idleSeconds_ = 0.0f;
@@ -87,6 +90,7 @@ void TitleScene::Initialize() {
 
 void TitleScene::Finalize() {
 	Game::GetPostEffect()->ResetEffects();
+	SoundManager::GetInstance()->Stop2DSound("bgm_title");
 }
 
 void TitleScene::Update() {
@@ -119,6 +123,7 @@ void TitleScene::UpdateInput() {
 		if (actionMap->AnyInputTriggered()) {
 			// 押したフレームはメニュー入力を読まない（同じキーで即決定されるのを防ぐ）
 			menuOpen_ = true;
+			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
 			menu_.SetSelectedIndex(kTitleStart);
 			idleSeconds_ = 0.0f;
 			return;
@@ -161,16 +166,25 @@ void TitleScene::UpdateCameraAndLogo(float dt) {
 	const Vector3 up = camera_->GetUp();
 	const float bob = std::sin(elapsed_ * logoBobSpeed_) * logoBobAmplitude_;
 	const float lift = logoHeight_ + bob;
-	logo_->SetTranslate({
-		camPos.x + fwd.x * logoDistance_ + up.x * lift,
-		camPos.y + fwd.y * logoDistance_ + up.y * lift,
-		camPos.z + fwd.z * logoDistance_ + up.z * lift });
 
 	const float sway = std::sin(elapsed_ * logoSwaySpeed_) * logoSwayAmplitude_;
-	logo_->SetRotate({ logoBaseRotate_.x + camRot.x, logoBaseRotate_.y + camRot.y + sway, logoBaseRotate_.z });
-
+	const Vector3 rot{ logoBaseRotate_.x + camRot.x, logoBaseRotate_.y + camRot.y + sway, logoBaseRotate_.z };
 	const float t = (introDuration_ > 0.0f) ? std::clamp(elapsed_ / introDuration_, 0.0f, 1.0f) : 1.0f;
 	const float s = logoScale_ * EaseOutBack(t);
+
+	// メッシュの中心（logoPivot_）が狙った位置に来るよう、回転・拡大後の中心ずれを差し引く。
+	// Object3D と同じ MakeAffineMatrix（Rx·Ry·Rz）で変換するので回転順のずれは出ない。
+	Transform pivotXf;
+	pivotXf.scale = { s, s, s };
+	pivotXf.rotate = rot;
+	pivotXf.translate = { 0.0f, 0.0f, 0.0f };
+	const Vector3 pivotWorld = TransformCoordinate(logoPivot_, MakeAffineMatrix(pivotXf));
+
+	logo_->SetTranslate({
+		camPos.x + fwd.x * logoDistance_ + up.x * lift - pivotWorld.x,
+		camPos.y + fwd.y * logoDistance_ + up.y * lift - pivotWorld.y,
+		camPos.z + fwd.z * logoDistance_ + up.z * lift - pivotWorld.z });
+	logo_->SetRotate(rot);
 	logo_->SetScale({ s, s, s });
 	logo_->Update();
 }
@@ -238,6 +252,7 @@ void TitleScene::OnImGuiTuning() {
 		ImGui::DragFloat("Logo Height", &logoHeight_, 0.05f, -10.0f, 10.0f);
 		ImGui::DragFloat("Logo Scale", &logoScale_, 0.05f, 0.1f, 20.0f);
 		ImGui::DragFloat3("Logo Base Rotate", &logoBaseRotate_.x, 0.01f);
+		ImGui::DragFloat3("Logo Pivot (model)", &logoPivot_.x, 0.005f);
 		ImGui::DragFloat("Bob Amplitude", &logoBobAmplitude_, 0.01f, 0.0f, 2.0f);
 		ImGui::DragFloat("Bob Speed", &logoBobSpeed_, 0.05f, 0.0f, 10.0f);
 		ImGui::DragFloat("Sway Amplitude", &logoSwayAmplitude_, 0.01f, 0.0f, 1.0f);

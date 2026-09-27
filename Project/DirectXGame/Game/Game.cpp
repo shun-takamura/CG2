@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "SoundManager.h"
+#include <filesystem>
 
 #include "DirectXTex.h"
 #include "d3dx12.h"
@@ -41,6 +43,34 @@
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
 std::unique_ptr<GPUParticleManager> Game::gpuParticleManager_ = nullptr;
 Game* Game::instance_ = nullptr;
+
+namespace {
+	// SoundManager::LoadFile はファイルが無いと assert で落ちるので、存在するものだけ読む
+	// （BGM を配置する前でも起動できる。鳴らす側は未ロード名なら何もしない）。
+	void LoadGameSounds() {
+		auto* sm = SoundManager::GetInstance();
+		static const char* const kSE[] = {
+			"se_shot", "se_charge_shot", "se_hit", "se_explode", "se_player_damage",
+			"se_dodge", "se_just_dodge", "se_melee", "se_boss_telegraph", "se_shockwave",
+			"se_special", "se_ui_cursor", "se_ui_decide", "se_ui_cancel",
+		};
+		for (const char* name : kSE) {
+			const std::string path = std::string("Resources/Sounds/SE/") + name + ".wav";
+			if (std::filesystem::exists(path)) sm->LoadFile(name, path);
+		}
+		// 魔王魂は二次配布時にファイル名へ maoudamashii を含める決まり（クレジットは Documents/Readme.md）
+		struct Bgm { const char* name; const char* file; };
+		static const Bgm kBGM[] = {
+			{ "bgm_title", "maoudamashii-title.mp3" },
+			{ "bgm_stage", "maoudamashii-stage.mp3" },
+			{ "bgm_boss",  "maoudamashii-boss.mp3" },
+		};
+		for (const Bgm& b : kBGM) {
+			const std::string path = std::string("Resources/Sounds/BGM/") + b.file;
+			if (std::filesystem::exists(path)) sm->LoadFile(b.name, path);
+		}
+	}
+}
 
 Game::Game() {
 	instance_ = this;
@@ -166,6 +196,9 @@ void Game::Initialize() {
 	if (auto* actionMap = input_->GetActionMap()) {
 		KeyConfig::LoadAndApply(*actionMap, keyConfigOptions_);
 	}
+
+	// サウンドを起動時に一括ロード（SE は自作合成 / BGM は魔王魂）
+	LoadGameSounds();
 
 	//===================================
 	// 全シーン共通の GPU パーティクル + EffectManager を先に初期化。

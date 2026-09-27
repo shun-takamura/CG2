@@ -151,7 +151,7 @@ void SoundManager::Unload(const std::string& name)
     if (it != soundDatas_.end()) { soundDatas_.erase(it); }
 }
 
-void SoundManager::Play2DSound(const std::string& name)
+void SoundManager::Play2DSound(const std::string& name, float volume)
 {
     auto it = soundDatas_.find(name);
     if (it == soundDatas_.end()) { return; }
@@ -169,13 +169,14 @@ void SoundManager::Play2DSound(const std::string& name)
     buf.AudioBytes = static_cast<UINT32>(soundData.buffer.size());
     buf.Flags = XAUDIO2_END_OF_STREAM;
 
+    pSourceVoice->SetVolume(volume);
     pSourceVoice->SubmitSourceBuffer(&buf);
     pSourceVoice->Start();
 
     sourceVoices2D_[name] = pSourceVoice;
 }
 
-void SoundManager::Play2DSoundLooped(const std::string& name)
+void SoundManager::Play2DSoundLooped(const std::string& name, float volume)
 {
     auto it = soundDatas_.find(name);
     if (it == soundDatas_.end()) { return; }
@@ -197,6 +198,7 @@ void SoundManager::Play2DSoundLooped(const std::string& name)
     buf.LoopLength = 0;
     buf.LoopCount = XAUDIO2_LOOP_INFINITE;
 
+    pSourceVoice->SetVolume(volume);
     pSourceVoice->SubmitSourceBuffer(&buf);
     pSourceVoice->Start();
 
