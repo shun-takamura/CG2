@@ -341,6 +341,23 @@ void GPUParticleManager::UpdateGroupSim(GPUParticleGroup& g, float dt)
 {
     g.elapsedTime += dt;
 
+    // 周回中心の移動量。SetGroupOrbit は毎フレーム center を上書きするだけなので、ここで前回との差を渡す。
+    // 再生し直し等で遠くへ飛んだ（大きすぎる）場合は既存粒子を引きずらない。
+    if (g.orbitData) {
+        ParticleOrbit& o = *g.orbitData;
+        o.centerDelta = { 0.0f, 0.0f, 0.0f };
+        if (o.enabled > 0.5f) {
+            if (g.hasLastOrbitCenter) {
+                const Vector3 d{ o.center.x - g.lastOrbitCenter.x, o.center.y - g.lastOrbitCenter.y, o.center.z - g.lastOrbitCenter.z };
+                if (d.x * d.x + d.y * d.y + d.z * d.z < 50.0f * 50.0f) o.centerDelta = d;
+            }
+            g.lastOrbitCenter = o.center;
+            g.hasLastOrbitCenter = true;
+        } else {
+            g.hasLastOrbitCenter = false;
+        }
+    }
+
     // PerFrame
     if (g.perFrameData) {
         g.perFrameData->time = g.elapsedTime;
