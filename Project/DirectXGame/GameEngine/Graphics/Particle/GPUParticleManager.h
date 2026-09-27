@@ -256,7 +256,9 @@ private:
         float   pad3 = 0.0f;
         // 収束（移動をカーブで制御：spawn位置→convergeCenter）。enable で velocity/orbit より優先。
         float   convergeEnable = 0.0f; // 0/1
-        float   pad4 = 0.0f, pad5 = 0.0f, pad6 = 0.0f;
+        // 周回中心が前回の Update から動いた量。旧 pad4..6 の位置（CB レイアウト不変）。
+        // 粒子を中心と一緒に平行移動させ、エミッタが動いてもリングが崩れないようにする。
+        Vector3 centerDelta = { 0.0f, 0.0f, 0.0f };
         Vector3 convergeCenter = { 0.0f, 0.0f, 0.0f };
         float   pad7 = 0.0f;
         Vector4 convergeLUT[8] = {}; // 32サンプル（convergeCurve を焼いた 0..1。4成分=4サンプル）
@@ -309,6 +311,8 @@ private:
         // Orbit CB（Update CS b2。周回運動）
         Microsoft::WRL::ComPtr<ID3D12Resource> orbitResource;
         ParticleOrbit* orbitData = nullptr;
+        Vector3 lastOrbitCenter = { 0.0f, 0.0f, 0.0f }; // centerDelta 算出用（前回 Update 時の center）
+        bool    hasLastOrbitCenter = false;
 
         // PerFrame CB（TimeGroup によって dt が異なるため per-group）
         Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource;

@@ -65,7 +65,7 @@ struct ParticleOrbit
     float pad3;
     // 収束（移動をカーブで制御：spawn位置→convergeCenter）。enable で velocity/orbit より優先。
     float convergeEnable;
-    float3 pad4;
+    float3 centerDelta;  // 周回中心が前回 Update から動いた量（粒子を一緒に平行移動させる）
     float3 convergeCenter;
     float pad7;
     float4 convergeLUT[8]; // 32サンプル（convergeCurve を焼いた 0..1。4成分=連続4サンプル）
@@ -148,8 +148,12 @@ void main(uint3 DTid : SV_DispatchThreadID)
             }
             else if (gOrbit.enabled > 0.5f)
             {
+                // 中心の移動に追従（剛体として平行移動）。今フレームに Emit された粒子（currentTime==0）は
+                // すでに新しい中心で生まれているので足さない。
+                float3 p = gParticles[particleIndex].translate;
+                if (gParticles[particleIndex].currentTime > 0.0f) p += gOrbit.centerDelta;
                 // 2軸の剛体回転。半径一定＝外に出ない。
-                float3 rel = gParticles[particleIndex].translate - gOrbit.center;
+                float3 rel = p - gOrbit.center;
                 // tumble：帯自体を回す（別軸）
                 rel = RotateAxis(rel, gOrbit.tumbleAxis, gOrbit.tumbleSpeed * gPerFrame.deltaTime);
                 // spin：帯上を流れる（現在のリング法線まわり）
