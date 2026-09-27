@@ -1,5 +1,6 @@
 #include "GameScene.h"
 #include "Components/Gameplay.h"
+#include "SoundManager.h"
 #include "Enemy/EnemyController.h"
 #include "Enemy/EnemyContext.h"
 #include "Effect/EffectManager.h"
@@ -904,6 +905,10 @@ void GameScene::PlayHitEffects(IImGuiEditable* attacker, IImGuiEditable* target,
 	}
 	// 被弾側プレハブの被弾エフェクト（"hurt" スロット）
 	if (target) {
+		const EntityTag targetTag = Gameplay::Of(target).GetTag();
+		if (targetTag == EntityTag::Enemy || targetTag == EntityTag::Boss) {
+			SoundManager::GetInstance()->Play2DSound("se_hit");
+		}
 		const std::string hurt = Gameplay::Of(target).FindEffect("hurt");
 		if (!hurt.empty()) em->Play(hurt, pos);
 	}
@@ -925,6 +930,10 @@ void GameScene::SweepDeadEntities() {
 	// DestroyDynamicEntity が movingEnemies_ / bullets_.homingTarget も
 	// 安全にクリアしてくれるので、こちらを経由して破棄する。
 	for (IImGuiEditable* e : dead) {
+		const EntityTag deadTag = Gameplay::Of(e).GetTag();
+		if (deadTag == EntityTag::Enemy || deadTag == EntityTag::Boss) {
+			SoundManager::GetInstance()->Play2DSound("se_explode");
+		}
 		// 死亡エフェクト（"death" スロット）を破棄直前の位置で再生
 		if (auto* em = EffectManager::GetInstance()) {
 			const std::string death = Gameplay::Of(e).FindEffect("death");

@@ -46,9 +46,12 @@ private:
 	float cameraYawSpeed_ = 0.04f;           // 背景の旋回速度 [rad/s]
 	float cameraPitch_ = -0.05f;
 	float logoDistance_ = 8.0f;              // カメラ前方の距離
-	float logoHeight_ = 0.9f;                // 画面中央からの持ち上げ量（カメラ上方向）
+	float logoHeight_ = 0.4f;                // 画面中央からの持ち上げ量（カメラ上方向）
 	float logoScale_ = 3.0f;
-	Vector3 logoBaseRotate_ = { -1.5707963f, 0.0f, 0.0f }; // 横倒しの立体文字を正面へ起こす
+	// 横倒しの立体文字を正面へ起こす。X=+90°（-90°だと上下も反転）＋ Y=180°（書き出しで左右反転しているため裏側から見せる）
+	Vector3 logoBaseRotate_ = { 1.5707963f, 3.1415927f, 0.0f };
+	// メッシュの見た目の中心（モデル空間）。title.mesh は原点が中心から外れているので、配置時にこの分を打ち消す
+	Vector3 logoPivot_ = { 0.064f, 0.0f, -0.276f };
 	float logoBobAmplitude_ = 0.12f;         // 上下の浮遊幅
 	float logoBobSpeed_ = 1.4f;
 	float logoSwayAmplitude_ = 0.12f;        // 左右の首振り幅 [rad]

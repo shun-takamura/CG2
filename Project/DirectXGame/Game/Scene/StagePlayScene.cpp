@@ -1,5 +1,6 @@
 ﻿#include "StagePlayScene.h"
 #include "Components/Gameplay.h"
+#include "SoundManager.h"
 #include "Physics/CollisionGeometry.h"
 
 #include "Camera.h"
@@ -1081,6 +1082,7 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 {
 	// 演出：プレイヤー＋攻撃元をハイライトしてグレースケール。受付期間ぶん保持する。
 	PlayJustDodgeEffect(attacker, justDodgeReceiptWindow_);
+	SoundManager::GetInstance()->Play2DSound("se_just_dodge");
 	// World だけスロー（Player/UI は等速）。終了は UpdateJustDodgeEffect が元に戻す。
 	SetTimeScale(TimeGroup::World, justDodgeSlowWorld_);
 	// （ストック制廃止：左派生＝小回復・無制限、デフォルトHeal＝大回復・固定回数制に再設計）
@@ -1466,6 +1468,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 
 		case CounterDir::Down: {
 			// 追加回避：moveDelta(WASD/スティック)方向へダッシュ＋無敵窓開始＋許容枠拡張＋射撃禁止
+			SoundManager::GetInstance()->Play2DSound("se_dodge");
 			dodgeActive_          = true;
 			dodgeTimer_           = 0.0f;
 			dodgeCooldownTimer_   = dodgeCooldown_;
@@ -1729,6 +1732,7 @@ void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDel
 	// 入力で回避開始（行動ロック中・CD中・ジャスト回避演出中は不可）
 	if (actions && actions->IsTriggered(static_cast<int>(Action::Dodge))
 		&& !IsActionLocked() && dodgeCooldownTimer_ <= 0.0f && !justDodgeActive_) {
+		SoundManager::GetInstance()->Play2DSound("se_dodge");
 		dodgeActive_          = true;
 		dodgeTimer_           = 0.0f;
 		dodgeCooldownTimer_   = dodgeCooldown_;
@@ -1850,6 +1854,7 @@ void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forwa
 void StagePlayScene::SpawnPendingMelee()
 {
 	if (!player_) return;
+	SoundManager::GetInstance()->Play2DSound("se_melee");
 	Vector3 right, up, forward;
 	ComputeAimBasis(right, up, forward);
 	const int atk = Gameplay::Of(player_).HasAttackPower() ? Gameplay::Of(player_).GetAttackPower() : 0;
@@ -2729,6 +2734,7 @@ void StagePlayScene::Initialize() {
 	prevPhase_ = Phase::Rail;
 	landingTimer_ = 0.0f;
 	paused_ = false;
+	SoundManager::GetInstance()->Play2DSoundLooped("bgm_stage", 0.5f);
 	if (spriteManager_) {
 		pauseDimSprite_ = std::make_unique<SpriteInstance>();
 		pauseDimSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "PauseDim");
@@ -2817,6 +2823,8 @@ void StagePlayScene::Finalize() {
 	// Object3DManager はシーンをまたいで生きているので、フォグを必ず切って返す
 	// （切らないと DemoScene 等に StagePlay の霧が残る）。
 	if (object3DManager_) object3DManager_->DisableFog();
+	SoundManager::GetInstance()->Stop2DSound("bgm_stage");
+	SoundManager::GetInstance()->Stop2DSound("bgm_boss");
 	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
 		if (auto* em = EffectManager::GetInstance()) em->Stop(specialBarrierEffectHandle_);
 		specialBarrierEffectHandle_ = kInvalidEffectHandle;
@@ -3098,6 +3106,8 @@ void StagePlayScene::Update() {
 			lockedEnemy_     = nullptr;
 			jdCounterTarget_ = nullptr;
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
+			SoundManager::GetInstance()->Stop2DSound("bgm_stage");
+			SoundManager::GetInstance()->Play2DSoundLooped("bgm_boss", 0.5f);
 			bossHpRatio_ = 1.0f;
 			bossHpDelayRatio_ = 1.0f;
 			// ボス戦開始時点のHP・必殺技ゲージをスナップショット（「ボス戦からリトライ」用）。
@@ -4055,6 +4065,7 @@ void StagePlayScene::Update() {
 				SpawnPlayerBullet(origin, dir, speed, lifetime,
 					colliderGrowth, homeTarget, homeStrength,
 					aimPlaneDistance_, bulletPrefab, atk);
+				SoundManager::GetInstance()->Play2DSound(playerChargeLevel_ >= 1.0f ? "se_charge_shot" : "se_shot");
 
 				// 連射間隔はプレイヤープレハブの ChargeParams.fireRate から
 				const float fr = Gameplay::Of(player_).GetChargeParams().fireRate;
@@ -4751,6 +4762,7 @@ void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 	if (!player_) return;
 
 	Gameplay::Of(player_).GetHP().TakeDamage(damageAmount);
+	SoundManager::GetInstance()->Play2DSound("se_player_damage");
 
 	playerInvincibilityTimer_ = playerInvincibilityDuration_;
 	shootLockoutTimer_ = shootLockoutDuration_;
@@ -4945,6 +4957,7 @@ void StagePlayScene::TriggerSpecialMove(SpecialKind k) {
 	SetEquippedSpecial(k);
 
 	specialActive_      = true;
+	SoundManager::GetInstance()->Play2DSound("se_special");
 	specialTimer_       = 0.0f;
 	specialPhaseTimer_  = 0.0f;
 	specialGauge_       = 0.0f;

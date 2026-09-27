@@ -1,6 +1,7 @@
 #pragma once
 #include "Enemy/Boss/IBossAction.h"
 #include "Scene/GameScene.h"
+#include "SoundManager.h"
 
 /// <summary>
 /// 叩きつけ：沈み込み（予兆）→プレイヤーの手前へ高く跳ぶ→着地の瞬間に地面すれすれの衝撃波リング（N 発）→硬直。
@@ -87,6 +88,7 @@ private:
 
 	void FireShockwave(BossActionContext& ctx, const Vector3& landPos) {
 		if (!ctx.scene || waveBulletCount_ <= 0) return;
+		SoundManager::GetInstance()->Play2DSound("se_shockwave");
 		constexpr float kTwoPi = 6.2831853f;
 		const Vector3 origin{ landPos.x, shockwaveY_, landPos.z };
 		const float step = kTwoPi / static_cast<float>(waveBulletCount_);
