@@ -165,6 +165,9 @@ protected:
 	/// </summary>
 	void PlayHitEffects(IImGuiEditable* attacker, IImGuiEditable* target, const Vector3& pos);
 
+	/// <summary>プレイヤー近接が敵/ボスに当たった直後に呼ばれる（必殺技ゲージ加算など派生シーン側の処理用）。</summary>
+	virtual void OnPlayerMeleeHit(IImGuiEditable* /*target*/, const std::string& /*prefabName*/, bool /*clean*/) {}
+
 	/// <summary>動的スプラインの DebugDraw キュー積み。</summary>
 	void DrawDynamicSplinesDebug();
 
@@ -198,6 +201,7 @@ protected:
 		int   cleanDamage = 0;
 		int   lateDamage = 0;
 		uint64_t    swingEffectHandle = 0;
+		std::string prefabName;  // どの近接（弱/強）かを派生シーンが見分けるため
 		std::unordered_set<IImGuiEditable*> hitTargets;
 	};
 	std::vector<MeleeRuntime> melees_;
@@ -215,6 +219,12 @@ protected:
 	std::vector<MovingEnemy> movingEnemies_;
 
 	std::vector<std::unique_ptr<EnemyController>> enemyControllers_;
+
+	// 敵弾の偏差射撃（UpdateEnemyControllers が毎フレームのカメラ/プレイヤー位置差から速度を出す）
+	float   enemyShotLeadRate_ = 0.35f;
+	Vector3 prevAimPlayerPos_{ 0.0f, 0.0f, 0.0f };
+	Vector3 prevAimCameraPos_{ 0.0f, 0.0f, 0.0f };
+	bool    hasPrevAimSample_ = false;
 	// イテレータ無効化防止：UpdateEnemyControllers 中の RegisterEnemyController はここに溜まり、
 	// ループ終了後に enemyControllers_ にマージされる。
 	std::vector<std::unique_ptr<EnemyController>> pendingEnemyControllers_;

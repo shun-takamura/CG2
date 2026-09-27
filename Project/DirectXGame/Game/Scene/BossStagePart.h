@@ -52,6 +52,9 @@ public:
 	// 地上速度をゼロ化。近接派生でワープ／攻撃中は地上移動を止めるため、開始時に呼んで
 	// 残留速度が派生終了後に持ち越されない（勝手に滑り出さない）ようにする。
 	void StopGroundVelocity() { groundVelocity_ = { 0.0f, 0.0f }; }
+	// 被弾ノックバック。attackerPos から離れる水平方向へ飛ばし、一定時間は移動入力を無視する。
+	// heavy=true は近接系（大きく）、false は弾（小さく）。
+	void ApplyKnockback(const Vector3& attackerPos, bool heavy);
 	// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力（右スティック -1..1／マウス相対カウント）を受け、
 	// 感度・反転は内部で適用する。reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
 	void UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy);
@@ -98,6 +101,17 @@ private:
 	float   playerSmoothTime_ = 0.12f;
 	float   playerStartBack_  = 6.0f;      // ボス手前（-Z側）にこの距離だけ離して開始
 	float   dodgeDashSpeed_   = 40.0f;     // 回避ダッシュの初速（units/sec。groundVelocity_ に加算し慣性で減衰）
+	// 被弾ノックバック
+	float   knockbackTimer_     = 0.0f;    // >0 の間は移動入力を無視して減速だけさせる
+	float   knockLightSpeed_    = 16.0f;   // 弾：初速 [m/s]
+	float   knockLightTime_     = 0.2f;    // 弾：入力無効時間 [s]
+	float   knockLightHop_      = 0.3f;    // 弾：跳ね上げ高さ [m]
+	float   knockHeavySpeed_    = 40.0f;   // 近接：初速 [m/s]
+	float   knockHeavyTime_     = 0.6f;    // 近接：入力無効時間 [s]
+	float   knockHeavyHop_      = 1.2f;    // 近接：跳ね上げ高さ [m]
+	float   knockbackDecayTime_ = 0.35f;   // ノックバック中の減速の時定数 [s]（通常移動より長く滑らせる）
+	float   knockbackDuration_  = 0.0f;    // 今回のノックバックの全長（跳ね上げの進行度に使う）
+	float   knockbackHop_       = 0.0f;    // 今回の跳ね上げ高さ
 
 	// ボス配置
 	float   bossHeight_  = 2.0f;   // ボス中心の接地高さ（≒コライダー半径）

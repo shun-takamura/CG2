@@ -67,14 +67,17 @@ void CollisionManager::Update() {
 				// CollisionMatrix::ShouldCollide で既にフレンドリーファイア等は除外されている前提。
 				// DamageDealer 側の damage を HP 側に適用する。両方向に成立しうる（突進敵がプレイヤーに突っ込み、
 				// 同時にプレイヤーが近接でカウンターしているケース等）。
+				// ただしプレイヤーは受け手にしない。ここは重なっている間「毎フレーム」ダメージを入れるため、
+				// 被弾無敵・ジャスト回避を無視して一瞬で HP が溶ける（ボスの近接判定で即死していた）。
+				// プレイヤーの被弾はシーン側（StagePlayScene::UpdatePlayerDamageAndUI）に一本化している。
 				{
 					DamageDealer& dda = Gameplay::Of(a).GetDamageDealer();
 					HP&           hpb = Gameplay::Of(b).GetHP();
-					if (dda.enabled && hpb.enabled) hpb.TakeDamage(dda.damage);
+					if (dda.enabled && hpb.enabled && tb != EntityTag::Player) hpb.TakeDamage(dda.damage);
 
 					DamageDealer& ddb = Gameplay::Of(b).GetDamageDealer();
 					HP&           hpa = Gameplay::Of(a).GetHP();
-					if (ddb.enabled && hpa.enabled) hpa.TakeDamage(ddb.damage);
+					if (ddb.enabled && hpa.enabled && ta != EntityTag::Player) hpa.TakeDamage(ddb.damage);
 				}
 
 				if (ca.onCollision) ca.onCollision(b);

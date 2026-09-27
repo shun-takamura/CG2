@@ -165,6 +165,9 @@ private:
 
 	// ----- ImGui で編集可能な調整値（Resources/Json/Tuning/StagePlay.json に自動同期） -----
 	Vector3 playerLocalOffset_{ 0.0f, -0.5f, 6.0f };  // カメラローカルの中心位置（無入力時）
+	// 攻撃中（射撃/チャージ/近接）の移動速度倍率。STG・ボス戦共通。撃ちながらだと避けにくくする
+	float   attackMoveSpeedScale_ = 0.6f;
+	bool    IsPlayerAttacking(class InputActionMap* actions) const;
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
 	Vector2 playerClipMargin_{ 0.1f, 0.1f };           // クリップ空間で許す画面外マージン（X/Y）
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い
@@ -342,6 +345,11 @@ private:
 	float specialGaugeMaxGouman_    = 100.0f; // 傲慢サンダーのゲージ上限
 	float specialGaugeMaxDisruptor_ = 120.0f; // ディスラプターのゲージ上限
 	float dodgeSpecialGaugeGain_ = 8.0f;  // 追加回避1回ぶんの加算量
+	// 近接ヒットでの加算。弱コンボ（4段）の方が総量で貯まりやすいよう、1ヒットは弱>強
+	float meleeWeakGaugeGain_   = 3.0f;
+	float meleeStrongGaugeGain_ = 2.0f;
+	float meleeLateGaugeRate_   = 0.5f;  // 持続あて（出だし以外）の倍率
+	void OnPlayerMeleeHit(IImGuiEditable* target, const std::string& prefabName, bool clean) override;
 
 	// クールタイム（両必殺技共通）。発動終了でタイマー開始、>0 の間は再発動不可。
 	float specialCooldown_      = 30.0f;  // クールタイム長（秒）

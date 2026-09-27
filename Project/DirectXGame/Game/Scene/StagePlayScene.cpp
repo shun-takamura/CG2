@@ -1,5 +1,6 @@
 ﻿#include "StagePlayScene.h"
 #include "Components/Gameplay.h"
+#include "Physics/CollisionGeometry.h"
 
 #include "Camera.h"
 #include "Object3DManager.h"
@@ -112,6 +113,10 @@ void StagePlayScene::LoadTuningFromJson() {
 
 	playerSmoothTime_ = static_cast<float>(
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
+	attackMoveSpeedScale_ = static_cast<float>(
+		root["player"]["attackMoveSpeedScale"].AsDouble(attackMoveSpeedScale_));
+	enemyShotLeadRate_ = static_cast<float>(
+		root["enemyShot"]["leadRate"].AsDouble(enemyShotLeadRate_));
 
 	// ----- skybox -----
 	const JsonValue& sky = root["skybox"];
@@ -350,6 +355,9 @@ void StagePlayScene::LoadTuningFromJson() {
 			loadColor("disruptorRiftColor",  disruptorRiftColor_);
 		}
 		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
+		meleeWeakGaugeGain_    = static_cast<float>(sg["meleeWeakGain"].AsDouble(meleeWeakGaugeGain_));
+		meleeStrongGaugeGain_  = static_cast<float>(sg["meleeStrongGain"].AsDouble(meleeStrongGaugeGain_));
+		meleeLateGaugeRate_    = static_cast<float>(sg["meleeLateRate"].AsDouble(meleeLateGaugeRate_));
 		specialDuration_       = static_cast<float>(sg["duration"].AsDouble(specialDuration_));
 		// Phase 1
 		specialBarrierRadius_   = static_cast<float>(sg["barrierRadius"].AsDouble(specialBarrierRadius_));
@@ -616,7 +624,11 @@ void StagePlayScene::SaveTuningToJson() const {
 	playerObj["moveSpeed"]   = std::move(spdArr);
 	playerObj["clipMargin"]  = std::move(marArr);
 	playerObj["smoothTime"]  = static_cast<double>(playerSmoothTime_);
+	playerObj["attackMoveSpeedScale"] = static_cast<double>(attackMoveSpeedScale_);
 	root["player"] = std::move(playerObj);
+	JsonValue enemyShotObj = JsonValue::MakeObject();
+	enemyShotObj["leadRate"] = static_cast<double>(enemyShotLeadRate_);
+	root["enemyShot"] = std::move(enemyShotObj);
 
 	// レールカメラのチューニング（speed/rotKeys）は RailStagePart 側で書く（キー名は不変）。
 	if (railStage_) railStage_->SaveToJson(root);
@@ -782,6 +794,9 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["disruptorCamCollapseUpAdd"]    = static_cast<double>(disruptorCamCollapseUpAdd_);
 	sgObj["disruptorCutDepth"]        = static_cast<double>(disruptorCutDepth_);
 	sgObj["dodgeGain"] = static_cast<double>(dodgeSpecialGaugeGain_);
+	sgObj["meleeWeakGain"]   = static_cast<double>(meleeWeakGaugeGain_);
+	sgObj["meleeStrongGain"] = static_cast<double>(meleeStrongGaugeGain_);
+	sgObj["meleeLateRate"]   = static_cast<double>(meleeLateGaugeRate_);
 	sgObj["duration"]  = static_cast<double>(specialDuration_);
 	sgObj["barrierRadius"]   = static_cast<double>(specialBarrierRadius_);
 	sgObj["barrierDuration"] = static_cast<double>(specialBarrierDuration_);
@@ -2081,6 +2096,10 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Smooth Time (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Attack Move Scale", &attackMoveSpeedScale_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Enemy Shot Lead Rate", &enemyShotLeadRate_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::Text("InputOffset: (%.2f, %.2f)  Vel: (%.2f, %.2f)",
 			playerInputOffset_.x, playerInputOffset_.y,
 			playerVelocity_.x, playerVelocity_.y);
@@ -2317,6 +2336,12 @@ void StagePlayScene::OnImGuiTuning() {
 			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "Cooldown: Ready");
 		}
 		ImGui::DragFloat("Dodge Gauge Gain",    &dodgeSpecialGaugeGain_,0.1f, 0.0f, 100.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Melee Weak Gain",     &meleeWeakGaugeGain_,   0.1f, 0.0f, 100.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Melee Strong Gain",   &meleeStrongGaugeGain_, 0.1f, 0.0f, 100.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Melee Late Rate",     &meleeLateGaugeRate_,   0.05f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Active Duration",     &specialDuration_,      0.05f, 0.1f, 30.0f, "%.2f sec");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
@@ -2811,6 +2836,12 @@ void StagePlayScene::Finalize() {
 	specialFireProcessed_.clear();
 }
 
+bool StagePlayScene::IsPlayerAttacking(InputActionMap* actions) const {
+	// 射撃ボタン保持（連射/チャージ）・連射間隔中・チャージ中・近接の発生〜後隙中を「攻撃中」とみなす
+	if (actions && actions->IsPressed(static_cast<int>(Action::Fire))) return true;
+	return fireTimer_ > 0.0f || playerChargeLevel_ >= 0.0f || meleeActionLockTimer_ > 0.0f;
+}
+
 void StagePlayScene::ApplyCameraIdleSway(float dt) {
 	// World 停止中（ポーズ / Aim オーサリング等）は揺らさない。オーサリング値に揺れが混ざるのを防ぐ
 	if (!camera_ || !idleSwayEnabled_ || dt <= 0.0f) return;
@@ -3145,7 +3176,8 @@ void StagePlayScene::Update() {
 			// ジャスト回避スロー受付中は地上の自由移動を禁止（残存速度は慣性で減速し停止）。
 			// STG と同方針。近接派生中（jdMeleeCameraActive_）はワープ/攻撃で位置を直接管理するため
 			// 地上移動そのものを止める（UpdatePlayerGroundMovement を呼ばない）。
-			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : moveDelta;
+			const float moveScale = IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f;
+			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : Vector2{ moveDelta.x * moveScale, moveDelta.y * moveScale };
 			if (!jdMeleeCameraActive_) {
 				bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
 			}
@@ -3243,9 +3275,10 @@ void StagePlayScene::Update() {
 		// 下=追加回避を選んだ瞬間の WASD を回避方向に使うため、ここでは zero 化しない。
 
 		// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
+		const float moveScale = IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f;
 		Vector2 targetVel = {
-			moveDelta.x * playerMoveSpeed_.x,
-			moveDelta.y * playerMoveSpeed_.y,
+			moveDelta.x * playerMoveSpeed_.x * moveScale,
+			moveDelta.y * playerMoveSpeed_.y * moveScale,
 		};
 		// ジャスト回避スローの受付中は自由移動を禁止する（残存速度は慣性で減速し停止）。
 		// 追加回避（下派生）のダッシュは playerVelocity_ へのインパルス、近接派生（上/右）は
@@ -4599,6 +4632,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		int             incomingDamage = 0;
 		int             hitBulletIndex = -1;
 		IImGuiEditable* attacker = nullptr; // ジャスト演出のハイライト対象
+		bool            heavyHit = false;   // 近接系の判定ボリューム（ボス戦のノックバックを大きくする）
+		Vector3         hitSourcePos = playerPos; // ノックバックの押し出し元
 
 		// 敵弾
 		for (size_t i = 0; i < bullets_.size(); ++i) {
@@ -4618,6 +4653,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				// ではないため nearestEnemy_ が更新されず、STG時代の破棄済みポインタが残ったまま
 				// になりうる（ダングリング参照でクラッシュする）。ボス戦はボス本体を直接使う。
 				attacker = (phase_ == Phase::Boss && bossStage_) ? bossStage_->GetBossEntity() : nearestEnemy_;
+				hitSourcePos = *bp;
 				hitFound = true;
 				break;
 			}
@@ -4637,6 +4673,38 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 					incomingDamage = Gameplay::Of(e).GetDamageDealer().damage;
 					if (incomingDamage <= 0) incomingDamage = 10;
 					attacker = e;
+					hitSourcePos = *ep;
+					hitFound = true;
+					break;
+				}
+			}
+		}
+
+		// 弾以外の敵攻撃判定（ボスの近接/突進の BossMeleeHit 等）。OBB もあるので CollisionManager と同じ判定を使う。
+		// 以前は CollisionManager の自動ダメージ（毎フレーム・無敵無視）だけで処理されていて即死の原因だった。
+		if (!hitFound) {
+			const Collider& pc = Gameplay::Of(player_).GetCollider();
+			CollisionGeometry::WorldData pw;
+			if (pc.enabled && CollisionGeometry::TryGetWorldData(player_, pc, pw)) {
+				for (auto& p : dynamicPrimitives_) {
+					if (!p || Gameplay::Of(p.get()).GetTag() != EntityTag::EnemyAttack) continue;
+					const bool isBullet = std::any_of(bullets_.begin(), bullets_.end(),
+						[&](const BulletRuntime& b) { return b.primitive == p.get(); });
+					if (isBullet) continue;
+					const Collider& vc = Gameplay::Of(p.get()).GetCollider();
+					if (!vc.enabled) continue;
+					CollisionGeometry::WorldData vw;
+					if (!CollisionGeometry::TryGetWorldData(p.get(), vc, vw)) continue;
+					if (!CollisionGeometry::TestPair(pc, pw, vc, vw)) continue;
+
+					incomingDamage = Gameplay::Of(p.get()).GetDamageDealer().damage;
+					if (incomingDamage <= 0) incomingDamage = 10;
+					// 判定ボリュームは攻撃後すぐ破棄されるので、演出対象・押し出し元はボス本体にする
+					IImGuiEditable* boss = (phase_ == Phase::Boss && bossStage_) ? bossStage_->GetBossEntity() : nullptr;
+					attacker = boss;
+					const Vector3* src = boss ? boss->GetEditableTranslate() : p->GetEditableTranslate();
+					if (src) hitSourcePos = *src;
+					heavyHit = true;
 					hitFound = true;
 					break;
 				}
@@ -4654,6 +4722,10 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			} else {
 				// 通常被弾
 				OnPlayerTakeDamage(incomingDamage);
+				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）
+				if (phase_ == Phase::Boss && bossStage_) {
+					bossStage_->ApplyKnockback(hitSourcePos, heavyHit);
+				}
 				// 被弾エフェクト：攻撃側（敵弾）の "hit" ＋ プレイヤーの "hurt" を再生
 				IImGuiEditable* atkPrefab = (hitBulletIndex >= 0)
 					? static_cast<IImGuiEditable*>(bullets_[hitBulletIndex].primitive)
@@ -4744,6 +4816,14 @@ void StagePlayScene::InitializeSpecialGaugeUI() {
 	fg->SetColor(gaugeBarFgColor_);
 	gaugeBarForeground_ = fg.get();
 	dynamicSprites_.push_back(std::move(fg));
+}
+
+void StagePlayScene::OnPlayerMeleeHit(IImGuiEditable* /*target*/, const std::string& prefabName, bool clean) {
+	if (!player_ || specialActive_) return;
+	const bool strong = (prefabName == Gameplay::Of(player_).FindBulletPrefab("melee_strong"));
+	float gain = strong ? meleeStrongGaugeGain_ : meleeWeakGaugeGain_;
+	if (!clean) gain *= meleeLateGaugeRate_;
+	specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + gain);
 }
 
 void StagePlayScene::UpdateSpecialGaugeUI() {
