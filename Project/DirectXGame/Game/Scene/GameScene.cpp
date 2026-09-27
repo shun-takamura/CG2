@@ -359,6 +359,35 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		hasFrustum = true;
 	}
 
+	// 偏差射撃用：プレイヤーのワールド速度を「カメラ（レール）の移動」と「プレイヤー自身の移動」に分ける
+	Vector3 railVel{ 0.0f, 0.0f, 0.0f };
+	Vector3 ownVel{ 0.0f, 0.0f, 0.0f };
+	{
+		Camera* cam = GetCamera();
+		const Vector3* pp = player ? player->GetEditableTranslate() : nullptr;
+		if (cam && pp && deltaTime > 1e-5f) {
+			const Vector3 cp = cam->GetTranslate();
+			if (hasPrevAimSample_) {
+				const float inv = 1.0f / deltaTime;
+				railVel = { (cp.x - prevAimCameraPos_.x) * inv, (cp.y - prevAimCameraPos_.y) * inv, (cp.z - prevAimCameraPos_.z) * inv };
+				ownVel = {
+					(pp->x - prevAimPlayerPos_.x) * inv - railVel.x,
+					(pp->y - prevAimPlayerPos_.y) * inv - railVel.y,
+					(pp->z - prevAimPlayerPos_.z) * inv - railVel.z };
+				// Seek やシーン切替のワープで異常値になったフレームは先読みしない
+				const float railSq = railVel.x * railVel.x + railVel.y * railVel.y + railVel.z * railVel.z;
+				const float ownSq = ownVel.x * ownVel.x + ownVel.y * ownVel.y + ownVel.z * ownVel.z;
+				if (railSq > 150.0f * 150.0f || ownSq > 60.0f * 60.0f) {
+					railVel = { 0.0f, 0.0f, 0.0f };
+					ownVel = { 0.0f, 0.0f, 0.0f };
+				}
+			}
+			prevAimCameraPos_ = cp;
+			prevAimPlayerPos_ = *pp;
+			hasPrevAimSample_ = true;
+		}
+	}
+
 	for (auto& ctrl : enemyControllers_) {
 		if (!ctrl || !ctrl->entity_) continue;
 
@@ -381,6 +410,9 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		ctx.hoverHoldDuration   = ctrl->hoverHoldDuration_;
 		ctx.viewFrustum         = viewFrustum;
 		ctx.hasViewFrustum      = hasFrustum;
+		ctx.playerRailVelocity  = railVel;
+		ctx.playerOwnVelocity   = ownVel;
+		ctx.shotLeadRate        = enemyShotLeadRate_;
 
 		ctrl->Update(deltaTime, ctx);
 
@@ -833,10 +865,12 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 			if (m.hitTargets.count(other)) return; // この判定では既に当てた敵
 			m.hitTargets.insert(other);
 
+			const bool clean = (m.elapsed <= m.cleanWindow);
 			if (Gameplay::Of(other).GetHP().enabled) {
-				const int dmg = (m.elapsed <= m.cleanWindow) ? m.cleanDamage : m.lateDamage;
+				const int dmg = clean ? m.cleanDamage : m.lateDamage;
 				Gameplay::Of(other).GetHP().TakeDamage(dmg);
 			}
+			OnPlayerMeleeHit(other, m.prefabName, clean);
 			// ヒット表現：攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を判定位置で両方再生
 			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
 			if (const Vector3* t = spawned->GetEditableTranslate()) hitPos = *t;
@@ -856,6 +890,7 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	mr.cleanDamage = cleanDamage;
 	mr.lateDamage = lateDamage;
 	mr.swingEffectHandle = swingHandle;
+	mr.prefabName = prefabName;
 	melees_.push_back(std::move(mr));
 }
 

@@ -30,6 +30,12 @@ struct EnemyContext {
 	// 画面際で急に撃たなくなるのを防ぐ許容（敵の見かけ半径として扱う）
 	float           onScreenMargin = 2.0f;
 
+	// 偏差射撃用のプレイヤー速度（ワールド）。レールの前進分と、プレイヤー自身の移動分に分けて持つ。
+	// レール分を先読みしないと弾が必ず後ろを通り過ぎる（弾速40m/s に対しレールは24〜70m/s）。
+	Vector3         playerRailVelocity{ 0.0f, 0.0f, 0.0f };
+	Vector3         playerOwnVelocity { 0.0f, 0.0f, 0.0f };
+	float           shotLeadRate = 0.35f; // プレイヤー自身の移動をどれだけ先読みするか（0=今の位置 / 1=完全予測）
+
 	// ScreenHover（画面内停止型）用
 	Vector3         hoverOffset{ 0.0f, 0.0f, 30.0f }; // カメラローカルの停止オフセット（右/上/前）
 	float           hoverApproachSpeed = 30.0f;       // 飛来速度 [units/sec]

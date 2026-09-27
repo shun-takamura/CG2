@@ -113,16 +113,30 @@ void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt,
 	ComputeGroundBasis(fwd, right);
 
 	// 目標速度（ワールドXZ）＝入力を基底で合成 × 最大速度。指数減衰で慣性。
-	const float tvx = (right.x * moveDelta.x + fwd.x * moveDelta.y) * playerMoveSpeed_;
-	const float tvz = (right.z * moveDelta.x + fwd.z * moveDelta.y) * playerMoveSpeed_;
-	const float alpha = (playerSmoothTime_ > 1e-4f) ? (1.0f - std::exp(-dt / playerSmoothTime_)) : 1.0f;
+	float tvx = (right.x * moveDelta.x + fwd.x * moveDelta.y) * playerMoveSpeed_;
+	float tvz = (right.z * moveDelta.x + fwd.z * moveDelta.y) * playerMoveSpeed_;
+	float smooth = playerSmoothTime_;
+	// ノックバック中は入力を無視し、吹き飛ばされた速度を長めの時定数で減速させる
+	float hop = 0.0f;
+	if (knockbackTimer_ > 0.0f) {
+		// 吹き飛びの間だけ放物線で浮かせる（着地で 0 に戻る）
+		if (knockbackDuration_ > 1e-4f) {
+			const float u = 1.0f - (std::max)(knockbackTimer_, 0.0f) / knockbackDuration_;
+			hop = knockbackHop_ * std::sin(3.14159265f * u);
+		}
+		knockbackTimer_ -= dt;
+		tvx = 0.0f;
+		tvz = 0.0f;
+		smooth = knockbackDecayTime_;
+	}
+	const float alpha = (smooth > 1e-4f) ? (1.0f - std::exp(-dt / smooth)) : 1.0f;
 	groundVelocity_.x += (tvx - groundVelocity_.x) * alpha;
 	groundVelocity_.y += (tvz - groundVelocity_.y) * alpha;
 
 	Vector3 pos = *tp;
 	pos.x += groundVelocity_.x * dt;
 	pos.z += groundVelocity_.y * dt;
-	pos.y  = groundY_;
+	pos.y  = groundY_ + hop;
 
 	// アリーナ円内にクランプ（端で外向き慣性をゼロ化）。
 	const float dx = pos.x - arenaCenter_.x;
@@ -137,6 +151,30 @@ void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt,
 	}
 
 	*tp = pos;
+}
+
+void BossStagePart::ApplyKnockback(const Vector3& attackerPos, bool heavy) {
+	if (!host_) return;
+	IImGuiEditable* pl = host_->GetPlayer();
+	const Vector3* pp = pl ? pl->GetEditableTranslate() : nullptr;
+	if (!pp) return;
+
+	float dx = pp->x - attackerPos.x;
+	float dz = pp->z - attackerPos.z;
+	float len = std::sqrt(dx * dx + dz * dz);
+	if (len < 1e-3f) {
+		// 真上から等で方向が取れないときはカメラの後ろ向きへ
+		Vector3 fwd, right;
+		ComputeGroundBasis(fwd, right);
+		dx = -fwd.x; dz = -fwd.z;
+		len = std::sqrt(dx * dx + dz * dz);
+		if (len < 1e-3f) return;
+	}
+	const float speed = heavy ? knockHeavySpeed_ : knockLightSpeed_;
+	groundVelocity_ = { dx / len * speed, dz / len * speed };
+	knockbackTimer_ = heavy ? knockHeavyTime_ : knockLightTime_;
+	knockbackDuration_ = knockbackTimer_;
+	knockbackHop_ = heavy ? knockHeavyHop_ : knockLightHop_;
 }
 
 bool BossStagePart::ComputeBossYawPitch(float& outYaw, float& outPitch) const {
@@ -269,6 +307,7 @@ void BossStagePart::Reset() {
 	ground_      = nullptr;
 	bossSpawned_ = false;
 	groundVelocity_ = { 0.0f, 0.0f };
+	knockbackTimer_ = 0.0f;
 }
 
 void BossStagePart::OnImGuiTuning(bool& changed) {
@@ -282,6 +321,22 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		ImGui::DragFloat("Player Smooth (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Dodge Dash Speed", &dodgeDashSpeed_, 0.5f, 0.0f, 120.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::SeparatorText("Knockback");
+		ImGui::DragFloat("Light Speed (bullet)", &knockLightSpeed_, 0.5f, 0.0f, 80.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Light Time (bullet)", &knockLightTime_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Light Hop (bullet)", &knockLightHop_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Heavy Speed (melee)", &knockHeavySpeed_, 0.5f, 0.0f, 80.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Heavy Time (melee)", &knockHeavyTime_, 0.01f, 0.0f, 2.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Heavy Hop (melee)", &knockHeavyHop_, 0.05f, 0.0f, 10.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Decay Time", &knockbackDecayTime_, 0.01f, 0.01f, 2.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
 		ImGui::SeparatorText("Camera");
