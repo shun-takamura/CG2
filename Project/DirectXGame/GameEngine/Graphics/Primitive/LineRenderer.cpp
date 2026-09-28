@@ -32,7 +32,14 @@ void LineRenderer::Finalize() {
 
 void LineRenderer::AddLine(const Vector3& start, const Vector3& end, const Vector4& color, Pass pass) {
     PassState& s = passes_[static_cast<int>(pass)];
-    if (s.lineCount >= kMaxLineCount) return;
+    if (s.lineCount >= kMaxLineCount) {
+        if (!s.overflowWarned) {
+            s.overflowWarned = true;
+            Log("[LineRenderer] line count exceeded kMaxLineCount (" + std::to_string(kMaxLineCount) +
+                "); further lines this frame are dropped\n");
+        }
+        return;
+    }
     s.vertexData[s.lineCount * 2 + 0].position = start;
     s.vertexData[s.lineCount * 2 + 0].color = color;
     s.vertexData[s.lineCount * 2 + 1].position = end;

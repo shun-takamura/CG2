@@ -227,6 +227,19 @@ void DirectXCore::WaitForGpu() {
     }
 }
 
+void DirectXCore::FlushCommandList() {
+    if (!commandList_ || !commandQueue_ || !commandAllocator_) return;
+    HRESULT hr = commandList_->Close();
+    assert(SUCCEEDED(hr));
+    ID3D12CommandList* commandLists[] = { commandList_.Get() };
+    commandQueue_->ExecuteCommandLists(1, commandLists);
+    WaitForGpu();
+    hr = commandAllocator_->Reset();
+    assert(SUCCEEDED(hr));
+    hr = commandList_->Reset(commandAllocator_.Get(), nullptr);
+    assert(SUCCEEDED(hr));
+}
+
 void DirectXCore::Resize(int32_t width, int32_t height) {
     if (width <= 0 || height <= 0) return;
     if (width == swapChainWidth_ && height == swapChainHeight_) return;

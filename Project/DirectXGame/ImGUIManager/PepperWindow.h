@@ -3,6 +3,7 @@
 
 #ifdef USE_PEPPER
 #include "Profiler.h"
+#include "LoadProfiler.h"
 #include <cstdio>
 #endif
 
@@ -58,6 +59,9 @@ protected:
             ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f),
                 "OK (%.2f ms / %.1f fps)", frameMs, fps);
         }
+
+        // ロード計測（フレーム集計とは別系統。起動直後から表示できるよう Collecting の前に置く）
+        DrawLoadSection();
 
         if (p.GetLiveWindowFrames() == 0) {
             ImGui::Separator();
@@ -169,6 +173,57 @@ private:
     // 60Hzモニタが VSync で張り付く 16.6ms で点滅しないよう、警告は 50fps(20ms) に置く。
     static constexpr double kComfortFps_ = 60.0;
     static constexpr double kWarnFps_    = 50.0;
+
+    // 起動フェーズ / シーンロード / テクスチャ計測の結果（LoadProfiler）を表示する。
+    // Debug の値は参考値（正式な比較は Development/Release で tools/Python/run_load_bench.py）。
+    static void DrawLoadSection() {
+        const LoadProfiler* lp = LoadProfiler::GetInstance();
+        const auto& phases = lp->GetPhases();
+        const auto& bench = lp->GetBenchResults();
+        if (phases.empty() && bench.empty()) return;
+        if (!ImGui::CollapsingHeader("Load (startup / scene / texture bench)")) return;
+        ImGui::TextDisabled("build: %s  (Debug values are for reference only)", LoadProfiler::BuildConfigName());
+
+        if (!phases.empty() && ImGui::BeginTable("pepper_load_phases", 4,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Phase", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("wall ms", ImGuiTableColumnFlags_WidthFixed, 80);
+            ImGui::TableSetupColumn("cpu ms", ImGuiTableColumnFlags_WidthFixed, 80);
+            ImGui::TableSetupColumn("cycles(M)", ImGuiTableColumnFlags_WidthFixed, 80);
+            ImGui::TableHeadersRow();
+            for (const auto& ph : phases) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(ph.name.c_str());
+                ImGui::TableSetColumnIndex(1); ImGui::Text("%.1f", ph.wallMs);
+                ImGui::TableSetColumnIndex(2); ImGui::Text("%.1f", ph.cpuMs);
+                ImGui::TableSetColumnIndex(3); ImGui::Text("%.1f", static_cast<double>(ph.cpuCycles) / 1.0e6);
+            }
+            ImGui::EndTable();
+        }
+
+        if (!bench.empty() && ImGui::BeginTable("pepper_load_bench", 6,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Texture bench", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("tex", ImGuiTableColumnFlags_WidthFixed, 40);
+            ImGui::TableSetupColumn("disk MB", ImGuiTableColumnFlags_WidthFixed, 70);
+            ImGui::TableSetupColumn("wall ms", ImGuiTableColumnFlags_WidthFixed, 70);
+            ImGui::TableSetupColumn("cycles(M)", ImGuiTableColumnFlags_WidthFixed, 80);
+            ImGui::TableSetupColumn("MB/s", ImGuiTableColumnFlags_WidthFixed, 60);
+            ImGui::TableHeadersRow();
+            for (const auto& r : bench) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(r.mode.c_str());
+                ImGui::TableSetColumnIndex(1); ImGui::Text("%d", r.textureCount);
+                ImGui::TableSetColumnIndex(2); ImGui::Text("%.1f", static_cast<double>(r.diskBytes) / (1024.0 * 1024.0));
+                ImGui::TableSetColumnIndex(3); ImGui::Text("%.1f", r.wallMs);
+                ImGui::TableSetColumnIndex(4); ImGui::Text("%.1f", static_cast<double>(r.cpuCycles) / 1.0e6);
+                ImGui::TableSetColumnIndex(5); ImGui::Text("%.0f", r.ThroughputMBps());
+            }
+            ImGui::EndTable();
+        } else if (bench.empty()) {
+            ImGui::TextDisabled("texture bench: not run (launch with --bench-textures)");
+        }
+    }
 
     // CPU ms を負荷に応じて色分け表示する。
     static void DrawColoredMs(double ms) {

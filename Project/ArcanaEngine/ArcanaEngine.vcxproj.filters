@@ -366,6 +366,12 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\Profiler.cpp">
       <Filter>DirectXGame\GameEngine\Profiling</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Profiling\LoadProfiler.cpp">
+      <Filter>DirectXGame\GameEngine\Profiling</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Profiling\TextureLoadBenchmark.cpp">
+      <Filter>DirectXGame\GameEngine\Profiling</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\GpuProfiler.cpp">
       <Filter>DirectXGame\GameEngine\Profiling</Filter>
     </ClCompile>
@@ -846,6 +852,12 @@
       <Filter>DirectXGame\GameEngine</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\Profiler.h">
+      <Filter>DirectXGame\GameEngine\Profiling</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Profiling\LoadProfiler.h">
+      <Filter>DirectXGame\GameEngine\Profiling</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Profiling\TextureLoadBenchmark.h">
       <Filter>DirectXGame\GameEngine\Profiling</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\PepperMacros.h">
