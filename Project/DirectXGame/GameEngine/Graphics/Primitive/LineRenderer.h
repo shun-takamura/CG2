@@ -40,7 +40,9 @@ private:
     void CreateRootSignature();
     void CreatePipelineState();
 
-    static const uint32_t kMaxLineCount = 4096;
+    // 1 パス・1 フレームあたりの上限。スプライン（1 区間 24 分割）を数十本出すと 4096 では足りず、
+    // 後から積んだデバッグ線（ボロノイのセル境界など）が黙って捨てられていたため引き上げた。
+    static const uint32_t kMaxLineCount = 16384;
     static const uint32_t kMaxVertexCount = kMaxLineCount * 2;
 
     struct LineVertex {
@@ -50,6 +52,7 @@ private:
 
     // パスごとに独立した頂点バッファ + ViewProjection CB + カメラ + 蓄積数
     struct PassState {
+        bool overflowWarned = false; // 上限超過の警告は 1 回だけ出す
         Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
         Microsoft::WRL::ComPtr<ID3D12Resource> viewProjectionResource;
         LineVertex* vertexData = nullptr;

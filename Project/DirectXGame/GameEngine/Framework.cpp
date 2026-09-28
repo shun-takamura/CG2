@@ -44,6 +44,8 @@
 #include "SkinningComputeManager.h"
 #include "AbstractSceneFactory.h"
 #include "PepperMacros.h"
+#include "Profiling/LoadProfiler.h"
+#include "Profiling/TextureLoadBenchmark.h"
 
 // メンバの unique_ptr が指す型（AbstractSceneFactory 等）の完全型がここで揃うので、
 // コンストラクタ / デストラクタの実体はこの翻訳単位に置く。ヘッダ側は宣言のみ。
@@ -63,8 +65,17 @@ void Framework::Run() {
 		}
 	}
 
+	// 起動フェーズ計測：エンジン基盤（ウィンドウ/D3D12/DStorage/pack/テクスチャ管理）の初期化まで
+	LoadProfiler::GetInstance()->BeginPhase("EngineInit");
+
 	// ゲームの初期化
 	Initialize();
+
+	// --exit-after-bench：計測だけしてフレームループに入らずに終わる
+	if (IsEndRequest()) {
+		Finalize();
+		return;
+	}
 
 	while (true) { // ゲームループ
 		// 毎フレーム更新
@@ -173,6 +184,8 @@ void Framework::Initialize() {
 				if (std::wcscmp(argv[i], L"--use-pack") == 0) usePack = true;
 				else if (std::wcscmp(argv[i], L"--use-fs") == 0) usePack = false;
 				else if (std::wcscmp(argv[i], L"--no-dstorage") == 0) noDStorage_ = true;
+				else if (std::wcscmp(argv[i], L"--bench-textures") == 0) benchTextures_ = true;
+				else if (std::wcscmp(argv[i], L"--exit-after-bench") == 0) exitAfterBench_ = true;
 			}
 			::LocalFree(argv);
 		}
@@ -339,6 +352,22 @@ void Framework::Initialize() {
 
 	// テクスチャマネージャの初期化
 	TextureManager::GetInstance()->Initialize(spriteManager_.get(), dxCore_.get(), srvManager_.get());
+	LoadProfiler::GetInstance()->EndPhase("EngineInit");
+
+	// テクスチャロード計測（--bench-textures）。シーン/トランジション等がテクスチャを読む前に行い、
+	// 全 .dds を未ロードの状態から測る。読み込んだテクスチャはそのまま残り、以降のシーンで再利用される。
+	if (benchTextures_) {
+		auto* lp = LoadProfiler::GetInstance();
+		lp->SetMeasurementMode(true);
+		const std::vector<std::string> paths =
+			TextureLoadBenchmark::LoadOrCreateList(TextureLoadBenchmark::kDefaultListPath);
+		lp->AddBenchResult(TextureLoadBenchmark::Run(dxCore_.get(), paths));
+		lp->AppendBenchCsv("Logs/load_bench.csv");
+		if (exitAfterBench_) {
+			lp->LogSummary();
+			endRequest_ = true;
+		}
+	}
 
 	// モデルマネージャーの初期化
 	ModelManager::GetInstance()->Initialize(dxCore_.get());
@@ -501,6 +530,9 @@ void Framework::Update() {
 			"[KPI] mode={} loadTime={:.1f}ms vram={:.1f}MB "
 			"ram={:.1f}MB(WS)/{:.1f}MB(Priv) cpuTime={:.1f}ms({:.0f}%) pack={:.1f}MB\n",
 			modeStr, loadMs, vramMB, wsMB, privMB, cpuMs, cpuPct, packMB));
+
+		// 区間ごとの内訳（EngineInit / SceneLoad:* / テクスチャ計測）
+		LoadProfiler::GetInstance()->LogSummary();
 
 		kpiLogged_ = true;
 	}

@@ -149,6 +149,11 @@ public:
 	// GPU 完了待機（リソース解放前など、外部からも呼ぶ用）
 	void WaitForGpu();
 
+	// 記録済みのコマンド（テクスチャ転送など）を今すぐ実行し、GPU 完了まで待ってからリストを開き直す。
+	// フレームループの外（起動時のロード計測など）で「GPU で使える状態」まで確定させたいとき用。
+	// フレームの途中で呼ぶと、それまでに積んだコマンドがその場で実行される点に注意。
+	void FlushCommandList();
+
 	// タイムスケール適用済みデルタタイム
 	float GetScaledDeltaTime() const { return deltaTime_ * timeScale_; }
 

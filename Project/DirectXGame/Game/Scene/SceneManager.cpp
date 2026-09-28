@@ -7,6 +7,8 @@
 #include "Components/CollisionManager.h"
 #include "SessionLogger.h"
 #include "PepperMacros.h"
+#include "DirectXCore.h"
+#include "Profiling/LoadProfiler.h"
 #include <cassert>
 
 #ifdef _DEBUG
@@ -63,10 +65,15 @@ void SceneManager::Update() {
 		}
 		currentScene_ = std::move(nextScene_);
 		SetupScene(currentScene_.get());
-		// シーン読み込みは DStorage バッチで囲む
-		DStorageManager::GetInstance()->BeginBatch();
-		currentScene_->Initialize();
-		DStorageManager::GetInstance()->EndBatchAndWait();
+		// シーン読み込みは DStorage バッチで囲む（ロード時間を SceneLoad:<名前> として計測）
+		{
+			LOAD_PHASE("SceneLoad:" + currentSceneName_);
+			DStorageManager::GetInstance()->BeginBatch();
+			currentScene_->Initialize();
+			DStorageManager::GetInstance()->EndBatchAndWait();
+			// 計測中だけ GPU 転送の完了まで区間に含める（FS も DStorage と同条件で比べるため）
+			if (dxCore_ && LoadProfiler::GetInstance()->IsMeasurementMode()) dxCore_->FlushCommandList();
+		}
 #ifdef _DEBUG
 		ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
 #endif
@@ -166,10 +173,15 @@ void SceneManager::ExecuteSceneChange() {
 	currentSceneName_ = pendingSceneName_;
 
 	SetupScene(currentScene_.get());
-	// シーン読み込みは DStorage バッチで囲む
-	DStorageManager::GetInstance()->BeginBatch();
-	currentScene_->Initialize();
-	DStorageManager::GetInstance()->EndBatchAndWait();
+	// シーン読み込みは DStorage バッチで囲む（ロード時間を SceneLoad:<名前> として計測）
+	{
+		LOAD_PHASE("SceneLoad:" + currentSceneName_);
+		DStorageManager::GetInstance()->BeginBatch();
+		currentScene_->Initialize();
+		DStorageManager::GetInstance()->EndBatchAndWait();
+		// 計測中だけ GPU 転送の完了まで区間に含める（FS も DStorage と同条件で比べるため）
+		if (dxCore_ && LoadProfiler::GetInstance()->IsMeasurementMode()) dxCore_->FlushCommandList();
+	}
 #ifdef _DEBUG
 	ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
 #endif

@@ -180,6 +180,8 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\InputManager.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Framework.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\Profiler.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Profiling\LoadProfiler.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Profiling\TextureLoadBenchmark.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\GpuProfiler.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Profiling\MemoryProbe.cpp" />
     <ClCompile Include="..\externals\quirc\decode.c" />
@@ -345,6 +347,8 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\InputManager.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Framework.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\Profiler.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Profiling\LoadProfiler.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Profiling\TextureLoadBenchmark.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\PepperMacros.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\GpuProfiler.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Profiling\MemoryProbe.h" />
