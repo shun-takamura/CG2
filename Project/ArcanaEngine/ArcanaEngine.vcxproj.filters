@@ -49,6 +49,9 @@
     <Filter Include="DirectXGame\GameEngine\Graphics\Shadow">
       <UniqueIdentifier>{6adcc478-68ea-543e-b6db-1c501e0f82f0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\GameEngine\Graphics\Water">
+      <UniqueIdentifier>{3f1c7a52-9d4e-4b8a-a6c1-5e2d7b90c4f3}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\GameEngine\Graphics\Skybox">
       <UniqueIdentifier>{f89efbdf-2d1f-5d47-b14c-735152d6b644}</UniqueIdentifier>
     </Filter>
@@ -188,6 +191,12 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Shadow\ShadowMap.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Shadow</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\WaterReflection.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\WaterSurface.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering</Filter>
@@ -625,6 +634,12 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Shadow\ShadowMap.h">
       <Filter>DirectXGame\GameEngine\Graphics\Shadow</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\WaterReflection.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\WaterSurface.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\PointLight.h">
       <Filter>DirectXGame\GameEngine\Graphics\Light</Filter>

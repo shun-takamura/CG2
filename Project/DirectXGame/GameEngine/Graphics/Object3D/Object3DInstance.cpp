@@ -138,6 +138,34 @@ void Object3DInstance::DrawShadowPass(DirectXCore* dxCore)
     modelInstance_->DrawShadowPass(dxCore);
 }
 
+void Object3DInstance::DrawReflection(DirectXCore* dxCore,
+    D3D12_GPU_VIRTUAL_ADDRESS reflectionViewProjAddress,
+    D3D12_GPU_VIRTUAL_ADDRESS reflectionCameraAddress)
+{
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!modelInstance_) return;
+
+    auto* cmd = dxCore->GetCommandList();
+
+    Object3DManager::ShaderType shaderType = Object3DManager::kShaderNoEnvironmentMap;
+    if (Material* mat = modelInstance_->GetMaterialPointer()) {
+        if (mat->shadingModel == 1) {
+            shaderType = Object3DManager::kShaderPBR;
+        } else if (mat->useEnvironmentMap) {
+            shaderType = Object3DManager::kShaderEnvironmentMap;
+        }
+    }
+    cmd->SetPipelineState(object3DManager_->GetReflectionPipelineState(shaderType));
+
+    cmd->SetGraphicsRootConstantBufferView(1, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(4, reflectionCameraAddress);
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootReflectionCamera, reflectionViewProjAddress);
+
+    modelInstance_->Draw(dxCore);
+}
+
 void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     // サイズを設定

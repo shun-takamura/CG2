@@ -18,6 +18,8 @@
 #include "TextRenderer.h"
 #include "SoundManager.h"
 #include "MathUtility.h"
+#include "Water/WaterReflection.h"
+#include "Water/WaterSurface.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -29,6 +31,13 @@
 namespace {
 	// 背景は STG 冒頭セクションと同じ空を流用する（タイトル専用アセットを作らない）
 	constexpr const char* kTitleSkyboxPath = "Resources/Cubemaps/rogland_clear_night_8k.dds";
+
+	// 水底の床（仮素材。石畳の素材ができたら差し替える）
+	constexpr const char* kWaterFloorTexturePath = "Resources/Textures/Terrain/_TestRock_BaseColor.dds";
+	constexpr float kWaterHeight = 0.0f;
+	constexpr float kWaterDepth = 0.1f;
+	constexpr float kCameraFarClip = 1000.0f;
+	constexpr float kWaterSize = 1500.0f; // 半径 750m < ファークリップ
 
 	enum TitleMenuItem : int {
 		kTitleStart = 0,
@@ -51,8 +60,10 @@ void TitleScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
 
 	camera_ = std::make_unique<Camera>();
-	camera_->SetTranslate({ 0.0f, 0.0f, 0.0f });
-	camera_->SetRotate({ cameraPitch_, 0.0f, 0.0f });
+	// 位置と向きは UpdateCameraAndLogo で周回中心から決める。
+	// 既定の 100m だと水面が途中で切れて地平線の手前に空が覗くので、水面の端より遠くまで取る
+	camera_->SetFarClip(kCameraFarClip);
+	orbitAngle_ = 0.0f;
 	object3DManager_->SetDefaultCamera(camera_.get());
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
@@ -61,6 +72,17 @@ void TitleScene::Initialize() {
 
 	logo_ = std::make_unique<Object3DInstance>();
 	logo_->Initialize(object3DManager_, dxCore_, "Resources/Models/Title", "title.mesh", "TitleLogo");
+
+	waterReflection_ = std::make_unique<WaterReflection>();
+	waterReflection_->Initialize(dxCore_, srvManager_, object3DManager_, 1.0f);
+	waterReflection_->SetWaterHeight(kWaterHeight);
+	waterReflection_->AddTarget(logo_.get());
+
+	water_ = std::make_unique<WaterSurface>();
+	water_->Initialize(dxCore_, object3DManager_, kWaterFloorTexturePath);
+	water_->SetWaterHeight(kWaterHeight);
+	water_->GetParams().depth = kWaterDepth;
+	water_->SetSize(kWaterSize);
 
 	// 平行光源の既定 intensity は 0 なので、ロゴを照らす光をここで必ず設定する
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
@@ -99,6 +121,16 @@ void TitleScene::Update() {
 
 	// 遷移中も背景とロゴは動かし続ける（止まった画面を見せない）
 	UpdateCameraAndLogo(dt);
+	gameViewProjection_ = camera_->GetViewProjectionMatrix();
+	gameEyePosition_ = camera_->GetTranslate();
+
+	// デバッグカメラ ON ならここでカメラ行列が差し替わる。
+	// Skybox / ロゴはその時点の VP を CB に焼くので、差し替えの後で Update する
+	UpdateDebugCameraIfActive();
+	skybox_->Update(dt);
+	logo_->Update();
+	if (water_) water_->Update(dt);
+
 	UpdateIntroPostEffect();
 
 #ifdef _DEBUG
@@ -152,23 +184,26 @@ void TitleScene::UpdateInput() {
 }
 
 void TitleScene::UpdateCameraAndLogo(float dt) {
-	// 背景：カメラをその場でゆっくり旋回させて空を流す
-	Vector3 camRot = camera_->GetRotate();
-	camRot.x = cameraPitch_;
-	camRot.y += cameraYawSpeed_ * dt;
-	camera_->SetRotate(camRot);
+	const float waterHeight = water_ ? water_->GetParams().waterHeight : kWaterHeight;
+	if (waterReflection_) waterReflection_->SetWaterHeight(waterHeight);
+
+	// カメラ：周回中心の周りを回り、中心の aimHeight_ を見る。
+	// Yaw=θ のときの前方は (sinθ, 0, cosθ) なので、中心からその逆向きに orbitRadius_ 離れた所に置く
+	orbitAngle_ += orbitSpeed_ * dt;
+	const float pitch = std::atan2(cameraHeight_ - aimHeight_, orbitRadius_); // 正で見下ろす
+	camera_->SetRotate({ pitch, orbitAngle_, 0.0f });
+	camera_->SetTranslate({
+		orbitCenter_.x - std::sin(orbitAngle_) * orbitRadius_,
+		waterHeight + cameraHeight_,
+		orbitCenter_.z - std::cos(orbitAngle_) * orbitRadius_ });
 	camera_->Update();
-	skybox_->Update(dt);
 
-	// ロゴ：カメラ前方に置き、カメラの向きに合わせて正面を保つ
-	const Vector3 camPos = camera_->GetTranslate();
-	const Vector3 fwd = camera_->GetForward();
-	const Vector3 up = camera_->GetUp();
+	if (water_) water_->SetRippleCenter(orbitCenter_);
+
+	// ロゴ：周回中心の真上に固定し、常にカメラの方を向ける
 	const float bob = std::sin(elapsed_ * logoBobSpeed_) * logoBobAmplitude_;
-	const float lift = logoHeight_ + bob;
-
 	const float sway = std::sin(elapsed_ * logoSwaySpeed_) * logoSwayAmplitude_;
-	const Vector3 rot{ logoBaseRotate_.x + camRot.x, logoBaseRotate_.y + camRot.y + sway, logoBaseRotate_.z };
+	const Vector3 rot{ logoBaseRotate_.x + pitch, logoBaseRotate_.y + orbitAngle_ + sway, logoBaseRotate_.z };
 	const float t = (introDuration_ > 0.0f) ? std::clamp(elapsed_ / introDuration_, 0.0f, 1.0f) : 1.0f;
 	const float s = logoScale_ * EaseOutBack(t);
 
@@ -181,12 +216,11 @@ void TitleScene::UpdateCameraAndLogo(float dt) {
 	const Vector3 pivotWorld = TransformCoordinate(logoPivot_, MakeAffineMatrix(pivotXf));
 
 	logo_->SetTranslate({
-		camPos.x + fwd.x * logoDistance_ + up.x * lift - pivotWorld.x,
-		camPos.y + fwd.y * logoDistance_ + up.y * lift - pivotWorld.y,
-		camPos.z + fwd.z * logoDistance_ + up.z * lift - pivotWorld.z });
+		orbitCenter_.x - pivotWorld.x,
+		waterHeight + logoHeight_ + bob - pivotWorld.y,
+		orbitCenter_.z - pivotWorld.z });
 	logo_->SetRotate(rot);
 	logo_->SetScale({ s, s, s });
-	logo_->Update();
 }
 
 void TitleScene::UpdateIntroPostEffect() {
@@ -204,8 +238,24 @@ void TitleScene::UpdateIntroPostEffect() {
 }
 
 void TitleScene::Draw() {
-	// Skybox を最初に描画（深度書き込みなしの ReadOnly DSV）
 	auto* commandList = dxCore_->GetCommandList();
+
+	// 水面に映す物を反射 RT へ（RT を切り替えるので、シーン RT のバインドより前に行う）
+	// 通常はゲームカメラ基準。デバッグカメラ中もゲーム画面での映り込みが水面に焼き付くので、
+	// 回り込んで確認できる（Debug で切り替えればデバッグカメラ基準の正しい反射になる）
+	if (waterReflection_) {
+		bool fromDebugCamera = false;
+#ifdef _DEBUG
+		fromDebugCamera = GetUseDebugCamera() && reflectFromDebugCamera_;
+#endif
+		if (fromDebugCamera) {
+			waterReflection_->Render(*camera_);
+		} else {
+			waterReflection_->Render(gameViewProjection_, gameEyePosition_);
+		}
+	}
+
+	// Skybox を最初に描画（深度書き込みなしの ReadOnly DSV）
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
 	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
@@ -219,6 +269,9 @@ void TitleScene::Draw() {
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
 	if (logo_) logo_->Draw(dxCore_);
+
+	// 水面は不透明物の後（ロゴとの前後は深度で決まる）
+	if (water_) water_->Draw(*camera_, kTitleSkyboxPath, waterReflection_.get());
 
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
@@ -245,10 +298,13 @@ void TitleScene::Draw() {
 void TitleScene::OnImGuiTuning() {
 #ifdef _DEBUG
 	if (ImGui::Begin("Title Tuning")) {
-		ImGui::DragFloat("Camera Yaw Speed", &cameraYawSpeed_, 0.005f, -1.0f, 1.0f);
-		ImGui::DragFloat("Camera Pitch", &cameraPitch_, 0.01f, -1.5f, 1.5f);
+		ImGui::DragFloat3("Orbit Center", &orbitCenter_.x, 0.1f);
+		ImGui::DragFloat("Orbit Speed", &orbitSpeed_, 0.005f, -1.0f, 1.0f);
+		ImGui::DragFloat("Orbit Angle", &orbitAngle_, 0.01f);
+		ImGui::DragFloat("Orbit Radius", &orbitRadius_, 0.1f, 1.0f, 100.0f);
+		ImGui::DragFloat("Camera Height", &cameraHeight_, 0.05f, 0.05f, 50.0f);
+		ImGui::DragFloat("Aim Height", &aimHeight_, 0.05f, -10.0f, 20.0f);
 		ImGui::Separator();
-		ImGui::DragFloat("Logo Distance", &logoDistance_, 0.1f, 1.0f, 50.0f);
 		ImGui::DragFloat("Logo Height", &logoHeight_, 0.05f, -10.0f, 10.0f);
 		ImGui::DragFloat("Logo Scale", &logoScale_, 0.05f, 0.1f, 20.0f);
 		ImGui::DragFloat3("Logo Base Rotate", &logoBaseRotate_.x, 0.01f);
@@ -266,6 +322,17 @@ void TitleScene::OnImGuiTuning() {
 			menuOpen_ = false;
 			if (auto* pe = Game::GetPostEffect(); pe && pe->radialBlur) pe->radialBlur->SetEnabled(true);
 		}
+		if (ImGui::CollapsingHeader("Water", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (GetUseDebugCamera()) {
+				int source = reflectFromDebugCamera_ ? 1 : 0;
+				const char* sources[] = { "Game Camera", "Debug Camera" };
+				if (ImGui::Combo("Reflection Source", &source, sources, IM_ARRAYSIZE(sources))) {
+					reflectFromDebugCamera_ = (source == 1);
+				}
+			}
+			if (water_) water_->OnImGui();
+			if (waterReflection_) waterReflection_->OnImGui();
+		}
 	}
 	ImGui::End();
 #endif
@@ -273,4 +340,9 @@ void TitleScene::OnImGuiTuning() {
 
 Camera* TitleScene::GetCamera() {
 	return camera_.get();
+}
+
+void TitleScene::DrawShadowCasters() {
+	GameScene::DrawShadowCasters();
+	if (logo_) logo_->DrawShadowPass(dxCore_);
 }
