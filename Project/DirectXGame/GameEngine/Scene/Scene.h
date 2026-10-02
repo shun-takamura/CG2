@@ -132,8 +132,11 @@ public:
 	const std::vector<IImGuiEditable*>& GetHighlights() const { return highlightedEntities_; }
 	void RunIdPass(struct ID3D12GraphicsCommandList* commandList);
 
-	/// <summary>動的 Object3D をシャドウパスへ描画する。</summary>
-	void DrawShadowCasters();
+	/// <summary>
+	/// 動的 Object3D をシャドウパスへ描画する。
+	/// シーンがメンバで直接持つ物（タイトルのロゴ等）も影を落とす場合は override して基底も呼ぶ。
+	/// </summary>
+	virtual void DrawShadowCasters();
 	/// <summary>動的 AnimatedObject3D のスキニングを Dispatch する。</summary>
 	void DispatchDynamicAnimatedSkinning();
 

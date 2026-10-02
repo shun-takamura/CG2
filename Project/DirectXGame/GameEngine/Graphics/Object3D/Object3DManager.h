@@ -36,6 +36,10 @@ public:
         kCountOfShaderType
     };
 
+    // 平面リフレクション用の鏡側 CB（VS b1）のルートパラメータ番号。
+    // 既存インデックスを動かさないよう末尾に足してある。通常描画のシェーダは参照しない。
+    static constexpr UINT kRootReflectionCamera = 12;
+
 private:
 
     Camera* defaultCamera_ = nullptr;
@@ -83,8 +87,12 @@ private:
 	// ルートシグネチャの作成
 	void CreateRootSignature();
 
-    // グラフィックパイプラインの生成（引数追加）
-    void CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode);
+    // 平面リフレクション用 PSO（ShaderType ごと、Normal ブレンドのみ）。
+    // VS を反射用に差し替え、鏡像で三角形の向きが反転するのでカリングも反転する。
+    std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kCountOfShaderType> reflectionPipelineStates_;
+
+    // グラフィックパイプラインの生成。forReflection=true なら reflectionPipelineStates_ に作る
+    void CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode, bool forReflection = false);
 
     // ID Pass 用：Object3d.VS + WriteID.PS、出力 R8_UINT、深度テストあり書き込み無し
     Microsoft::WRL::ComPtr<ID3D12RootSignature> idRootSignature_;
@@ -114,6 +122,11 @@ public:
         return pipelineStates2D_[shaderType][currentBlendMode_].Get();
     }
 
+    // 平面リフレクション用のPSOを取得
+    ID3D12PipelineState* GetReflectionPipelineState(ShaderType shaderType) const {
+        return reflectionPipelineStates_[shaderType].Get();
+    }
+
     // Releaseメソッド
     void Release() {
         rootSignature_.Reset();
@@ -122,6 +135,9 @@ public:
             for (auto& pipelineState : pipelineStateArray) {
                 pipelineState.Reset();
             }
+        }
+        for (auto& pipelineState : reflectionPipelineStates_) {
+            pipelineState.Reset();
         }
     }
 
@@ -179,6 +195,13 @@ public:
             commandList->SetGraphicsRootConstantBufferView(8, shadowConstantsAddr_);
             commandList->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
         }
+    }
+
+    // 別ルートシグネチャ（水面など）から同じシャドウ／フォグを参照するための取得口
+    D3D12_GPU_VIRTUAL_ADDRESS GetShadowConstantsAddress() const { return shadowConstantsAddr_; }
+    D3D12_GPU_DESCRIPTOR_HANDLE GetShadowSrvHandle() const { return shadowSrvHandle_; }
+    D3D12_GPU_VIRTUAL_ADDRESS GetFogAddress() const {
+        return fogResource_ ? fogResource_->GetGPUVirtualAddress() : 0;
     }
 
 	// ゲッターロボ

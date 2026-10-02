@@ -90,6 +90,13 @@ public:
     // （PSO/RootSig/カスケード行列はパス側で設定済みの前提）
     void DrawShadowPass(class DirectXCore* dxCore);
 
+    // 平面リフレクション用：鏡側が持つ CB（VS b1 = 鏡像 ViewProj / PS b2 = 鏡像カメラ位置）で描く。
+    // 自身の transform CB は World だけ使うので、反射のために CB を増やさない。
+    // （RootSig/ライト/シャドウは Object3DManager::DrawSetting 済みの前提）
+    void DrawReflection(class DirectXCore* dxCore,
+        D3D12_GPU_VIRTUAL_ADDRESS reflectionViewProjAddress,
+        D3D12_GPU_VIRTUAL_ADDRESS reflectionCameraAddress);
+
     //==============================
     // セッター
     //==============================

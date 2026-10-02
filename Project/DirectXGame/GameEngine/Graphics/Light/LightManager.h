@@ -92,6 +92,10 @@ public:
 
     // ===== ゲッター =====
     DirectionalLight* GetDirectionalLightData() { return directionalLightData_; }
+    // 別ルートシグネチャ（水面など）で平行光源 CB をバインドするための取得口
+    D3D12_GPU_VIRTUAL_ADDRESS GetDirectionalLightGpuAddress() const {
+        return directionalLightResource_ ? directionalLightResource_->GetGPUVirtualAddress() : 0;
+    }
     PointLightGroup* GetPointLightGroupData() { return pointLightGroupData_; }
     SpotLightGroup* GetSpotLightGroupData() { return spotLightGroupData_; }
     PointLight* GetPointLight(uint32_t index);

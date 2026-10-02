@@ -26,6 +26,7 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
                 static_cast<BlendMode>(bm)
             );
         }
+        CreateGraphicsPipelineState(static_cast<ShaderType>(st), kBlendModeNormal, true);
     }
 
     blendMode_ = kBlendModeNormal;
@@ -139,7 +140,7 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeNormalMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeNormalMap[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[12] = {};
+    D3D12_ROOT_PARAMETER rootParameters[13] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -213,6 +214,12 @@ void Object3DManager::CreateRootSignature()
     rootParameters[11].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[11].Descriptor.ShaderRegister = 6;  // b6
 
+    // rootParameters[12] = 平面リフレクションの鏡側 CB（VS b1 = 鏡像 ViewProj ＋ クリップ平面）。
+    // 反射用 VS だけが参照する。映る物側に CB を増やさず、鏡1枚につき CB 1個で済ませるため。
+    rootParameters[kRootReflectionCamera].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootReflectionCamera].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kRootReflectionCamera].Descriptor.ShaderRegister = 1;  // b1
+
     // ============================================
     // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み)
     // ============================================
@@ -272,7 +279,7 @@ void Object3DManager::CreateRootSignature()
     assert(SUCCEEDED(hr));
 }
 
-void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode)
+void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMode blendMode, bool forReflection)
 {
     // ShaderTypeに応じてPSファイルを切り替え
     const wchar_t* psFilePath = nullptr;
@@ -292,7 +299,8 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
 
     // ===== シェーダーコンパイル =====
     IDxcBlob* vs = dxCore_->LoadShaderBlob(
-        L"Resources/Shaders/Object3D/Object3d.VS.hlsl",
+        forReflection ? L"Resources/Shaders/Object3D/Object3dReflection.VS.hlsl"
+                      : L"Resources/Shaders/Object3D/Object3d.VS.hlsl",
         L"vs_6_0"
     );
 
@@ -333,7 +341,8 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
 
     // Rasterizer - 3Dオブジェクトなのでバックフェースカリング
     D3D12_RASTERIZER_DESC rasterizer{};
-    rasterizer.CullMode = D3D12_CULL_MODE_BACK;  // 裏面をカリング
+    // 反射は鏡像行列（行列式が負）で三角形の巻きが反転するので、表面側を落とす
+    rasterizer.CullMode = forReflection ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_BACK;
     rasterizer.FillMode = D3D12_FILL_MODE_SOLID; // 三角形の中を塗りつぶす
 
     // BlendStateの設定
@@ -411,9 +420,11 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
     desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     desc.SampleDesc.Count = 1;
 
+    auto& target = forReflection ? reflectionPipelineStates_[shaderType]
+                                 : pipelineStates2D_[shaderType][blendMode];
     HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(
         &desc,
-        IID_PPV_ARGS(&pipelineStates2D_[shaderType][blendMode])
+        IID_PPV_ARGS(&target)
     ); assert(SUCCEEDED(hr));
 }
 
