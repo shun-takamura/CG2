@@ -186,6 +186,7 @@ void Framework::Initialize() {
 				else if (std::wcscmp(argv[i], L"--no-dstorage") == 0) noDStorage_ = true;
 				else if (std::wcscmp(argv[i], L"--bench-textures") == 0) benchTextures_ = true;
 				else if (std::wcscmp(argv[i], L"--exit-after-bench") == 0) exitAfterBench_ = true;
+				else if (std::wcscmp(argv[i], L"--exit-after") == 0 && i + 1 < argc) exitAfterSeconds_ = std::wcstod(argv[++i], nullptr);
 			}
 			::LocalFree(argv);
 		}
@@ -535,6 +536,19 @@ void Framework::Update() {
 		LoadProfiler::GetInstance()->LogSummary();
 
 		kpiLogged_ = true;
+	}
+
+	// --exit-after：最初のフレームから数えて指定秒で終了（tools/Python/run_cloud_bench.py 等の計測用）。
+	// 通常の終了経路を通るので profile.log も最後まで書き出される
+	if (exitAfterSeconds_ > 0.0) {
+		const auto now = std::chrono::steady_clock::now();
+		if (!exitAfterStarted_) {
+			exitAfterStart_ = now;
+			exitAfterStarted_ = true;
+		} else if (std::chrono::duration<double>(now - exitAfterStart_).count() >= exitAfterSeconds_) {
+			endRequest_ = true;
+			return;
+		}
 	}
 
 	// ウィンドウメッセージ処理

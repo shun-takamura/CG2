@@ -123,6 +123,11 @@ void TitleScene::Initialize() {
 	cloudLayer_ = std::make_unique<CloudLayer>();
 	cloudLayer_->Initialize(dxCore_, kCloudNoisePath);
 	cloudLayer_->SetSunDirection({ -kSunLightDirection.x, -kSunLightDirection.y, -kSunLightDirection.z });
+	// --no-clouds：雲なしで起動（tools/Python/run_cloud_bench.py で雲あり/なしの GPU 時間を比べる用）。
+	// enabled=0 ならシェーダは先頭で抜けるので、差がそのまま雲のコストになる
+	if (std::wstring(::GetCommandLineW()).find(L"--no-clouds") != std::wstring::npos) {
+		cloudLayer_->GetParams().enabled = false;
+	}
 	skybox_->SetCloudLayer(cloudLayer_.get());
 	// PBR の鏡面反射（金の装飾）にも同じ雲を映す。シーンをまたいで残るので Finalize で外す
 	object3DManager_->SetCloudLayer(cloudLayer_.get());
