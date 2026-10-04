@@ -22,7 +22,13 @@
 		{
 			"doubleSided":true,
 			"name":"Marble",
+			"normalTexture":{
+				"index":0
+			},
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":1
+				},
 				"metallicFactor":0,
 				"roughnessFactor":0.3499999940395355
 			}
@@ -30,6 +36,9 @@
 		{
 			"doubleSided":true,
 			"name":"Gold",
+			"normalTexture":{
+				"index":2
+			},
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
 					1,
@@ -48,20 +57,53 @@
 				{
 					"attributes":{
 						"POSITION":0,
-						"NORMAL":1
+						"NORMAL":1,
+						"TEXCOORD_0":2
 					},
-					"indices":2,
+					"indices":3,
 					"material":0
 				},
 				{
 					"attributes":{
-						"POSITION":3,
-						"NORMAL":4
+						"POSITION":4,
+						"NORMAL":5,
+						"TEXCOORD_0":6
 					},
-					"indices":5,
+					"indices":7,
 					"material":1
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"sampler":0,
+			"source":0
+		},
+		{
+			"sampler":0,
+			"source":1
+		},
+		{
+			"sampler":0,
+			"source":2
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/png",
+			"name":"Marble_NormalMap",
+			"uri":"Marble_NormalMap.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"Marble_BaseColor",
+			"uri":"Marble_BaseColor.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"Gold_NormalMap",
+			"uri":"Gold_NormalMap.png"
 		}
 	],
 	"accessors":[
@@ -89,12 +131,18 @@
 		},
 		{
 			"bufferView":2,
+			"componentType":5126,
+			"count":984,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":3,
 			"componentType":5123,
 			"count":1872,
 			"type":"SCALAR"
 		},
 		{
-			"bufferView":3,
+			"bufferView":4,
 			"componentType":5126,
 			"count":1002,
 			"max":[
@@ -110,13 +158,19 @@
 			"type":"VEC3"
 		},
 		{
-			"bufferView":4,
+			"bufferView":5,
 			"componentType":5126,
 			"count":1002,
 			"type":"VEC3"
 		},
 		{
-			"bufferView":5,
+			"bufferView":6,
+			"componentType":5126,
+			"count":1002,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":7,
 			"componentType":5123,
 			"count":1908,
 			"type":"SCALAR"
@@ -137,32 +191,50 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":3744,
+			"byteLength":7872,
 			"byteOffset":23616,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":3744,
+			"byteOffset":31488,
 			"target":34963
 		},
 		{
 			"buffer":0,
 			"byteLength":12024,
-			"byteOffset":27360,
+			"byteOffset":35232,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":12024,
-			"byteOffset":39384,
+			"byteOffset":47256,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":8016,
+			"byteOffset":59280,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":3816,
-			"byteOffset":51408,
+			"byteOffset":67296,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":55224,
+			"byteLength":71112,
 			"uri":"door_frame.bin"
 		}
 	]

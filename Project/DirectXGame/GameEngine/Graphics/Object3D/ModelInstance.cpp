@@ -263,6 +263,7 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 		m->roughness = 0.5f;
 		m->shadingModel = 0;
 		m->useNormalMap = 0;
+		m->cloudReflection = 0.0f;
 	}
 
 	// 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）

@@ -1,6 +1,7 @@
 #pragma once
 #include "GameScene.h"
 #include "Vector3.h"
+#include "Vector4.h"
 #include "Matrix4x4.h"
 #include "VerticalMenu.h"
 #include <memory>
@@ -10,6 +11,7 @@ class Skybox;
 class Object3DInstance;
 class WaterReflection;
 class WaterSurface;
+class CloudLayer;
 
 /// <summary>
 /// タイトルシーン
@@ -36,6 +38,7 @@ private:
 	void UpdateInput();
 	void UpdateCameraAndLogo(float dt);
 	void UpdateDoor();
+	void ApplyDoorMaterials();
 	void SetLogoVisible(bool visible);
 	void UpdateIntroPostEffect();
 	void OnImGuiTuning();
@@ -52,6 +55,9 @@ private:
 	// 水面（y=0 の浅い水。空とロゴを映し、水底の床が透ける）
 	std::unique_ptr<WaterReflection> waterReflection_;
 	std::unique_ptr<WaterSurface> water_;
+
+	// 遠景の雲。Skybox と水面が同じ CB を挿すので、空と映り込みで形がずれない
+	std::unique_ptr<CloudLayer> cloudLayer_;
 
 	// デバッグカメラで差し替わる前のゲームカメラ（反射はこの視点で作る）
 	Matrix4x4 gameViewProjection_{};
@@ -93,6 +99,20 @@ private:
 	bool showLogo_ = false;
 	float doorYaw_ = 3.1415927f;             // 扉の向き [rad]。0 で正面が +Z。開始時のカメラ（-Z 側から +Z を見る）に正面を向ける
 	float doorOpenDegrees_ = 0.0f;           // 扉板の開き角 [deg]。奥へ開く
+	// PBR は拡散を π で割るので、従来より強い日差しが要る（ロゴは BlinnPhong なので表示時に要確認）
+	float sunIntensity_ = 4.55f;
+	// 大理石の IBL 係数。空の平均色（濃い青）で白い石が青く染まるのを抑える
+	float doorMarbleEnvCoefficient_ = 0.25f;
+	// 金の PBR 値（.mat の値を上書き）。値は実機で調整したもの（2026-10-04）。
+	// 映り込みは IBL 専用の cubemap（地平線より下＝石の暖色）と遠景の雲で金色を出す
+	struct DoorGoldParams {
+		float envCoefficient = 0.56f;
+		float metallic = 1.0f;
+		float roughness = 0.6f;
+		Vector4 color = { 1.0f, 0.72f, 0.26f, 1.0f };  // (255, 184, 66)
+		float cloudReflection = 1.0f;  // 遠景の雲の映り込み（空とは別の強さ）
+	};
+	DoorGoldParams doorGold_;
 
 	// 無操作タイマー（秒）。閾値を超えたらデモ動画再生に遷移する予定
 	float idleSeconds_ = 0.0f;
