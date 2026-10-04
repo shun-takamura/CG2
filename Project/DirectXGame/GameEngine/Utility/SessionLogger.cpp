@@ -99,6 +99,10 @@ void SessionLogger::Initialize() {
     const Level defaultLevel = Level::Error;
 #endif
     minLevels_.fill(defaultLevel);
+#ifdef USE_PEPPER
+    // PEPPER の区間集計（TRACE）は計測用ビルド（Development）でも残す。Release は USE_PEPPER 未定義なので影響なし
+    minLevels_[static_cast<size_t>(Category::Profile)] = Level::Trace;
+#endif
 
     sessionDir_ = std::string("Logs/") + FolderStamp();
 

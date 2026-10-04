@@ -118,6 +118,10 @@ protected:
 	bool benchTextures_ = false;
 	// CLI フラグ: --exit-after-bench で計測後すぐ終了（tools/Python/run_load_bench.py 用）
 	bool exitAfterBench_ = false;
+	// CLI フラグ: --exit-after <秒> で、最初のフレームから指定秒（実時間）経ったら終了（描画計測の時間を揃える用。0 以下で無効）
+	double exitAfterSeconds_ = 0.0;
+	std::chrono::steady_clock::time_point exitAfterStart_{};
+	bool exitAfterStarted_ = false;
 
 	// KPI 計測: Run() の冒頭で起点を打ち、最初の Update で経過時間 + VRAM/RAM/CPU をログに出す
 	std::chrono::high_resolution_clock::time_point kpiStartTime_{};

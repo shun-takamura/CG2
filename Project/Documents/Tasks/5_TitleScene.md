@@ -293,7 +293,7 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
 | 同心円のさざ波（ランダム間隔の波の束）＋ノイズの揺らぎ | ✅（中心＝周回中心） |
 | カメラ：周回中心の周りを回る（`orbitAngle_`）。ロゴは中心の真上で常にカメラを向く | ✅ |
 | デバッグカメラ対応・反射の参照元切替（Debug） | ✅ |
-| 扉（`door_frame` / `door_leaf_L` / `door_leaf_R`）を周回中心に配置。反射・影に登録。開閉（奥へ）確認済み | ✅ 質感（A-1b）も cook 済み：大理石＋金の PBR |
+| 扉（`door_frame` / `door_leaf_L` / `door_leaf_R`）を周回中心に配置。反射・影に登録。開閉（奥へ）確認済み | ✅ 質感（A-1b）・色味の調整まで完了（§10.9） |
 | 雲なしの昼の青空 `title_clear_sky.dds`。平行光源の向きを空の太陽に合わせた | ✅ |
 | ⚠️ 扉の確認用にロゴを既定で非表示（`showLogo_ = false`）。Title Tuning → Door で切替 | **A-2（状態機械）で置き換える** |
 | ⚠️ `Game.cpp` の Debug 開始シーンを一時的に `"TITLE"` に変更中 | **確認が終わったら `"STAGEPLAY"` に戻す** |
@@ -329,9 +329,9 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
 
 #### チャット A（アセット＋演出本体）— 別チャット
 - 担当ファイル：`TitleScene.*`（状態機械・カメラ・ロゴ・扉）、Object3D のディゾルブ/ワイヤーフレーム関連、エフェクト JSON、アセット
-- [ ] A-1 **扉のモデル（必須）**：§10.5 の要件どおり。Claude が Blender スクリプトで生成（§10.5「作り方」）
+- [x] A-1 **扉のモデル（必須）**：§10.5 の要件どおり。**アセット完了（2026-10-04）**。Claude が Blender スクリプトで生成（§10.5「作り方」）
   - [x] A-1a 形のプレビュー（Blender レンダリング画像）→ ユーザー確認（第1案で確定・2026-10-04）
-  - [x] A-1b 大理石テクスチャ／法線マップ、金の質感（ボックス投影 UV＋FFT ノイズの継ぎ目無しタイル。cook 済み・両マテリアルとも shading=1。エンジンでの見た目は要確認）
+  - [x] A-1b 大理石テクスチャ／法線マップ、金の質感（ボックス投影 UV＋FFT ノイズの継ぎ目無しタイル。cook 済み・両マテリアルとも shading=1。色味は §10.9 の調整で確定）
   - [x] A-1c glTF 出力 → `cook_assets.py` → エンジンで表示確認（正面の向き・原点・開閉）。PBR の確認は A-1b の後
 - [ ] A-2 フェーズの状態機械（①〜⑥）。入力は ⑤ まで無効、⑤ でメニュー。`showLogo_` / `showDoor_` の暫定切替を置き換える
 - [ ] A-3 カメラ：扉用の構図への補間と正面での固定（詳細は §10.7）
@@ -351,7 +351,7 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
   - [ ] A-9d 扉の奥にポイントライト。開く量に合わせて強くし、金の装飾に光を映す
   - [ ] A-9e 周りの明るさを落とす（ヴィネット強化・空/水面を暗く）。**Bloom が無いので光を立たせるために必須**
   - [ ] A-9f `FadeTransition` に色指定を追加（今は黒が決め打ち：`FadeTransition.cpp:18` / `:74`）→ 白フェードで `HUB` へ
-- [x] A-11 昼の青空の cubemap（すずめ風）。`tools/BlenderPipeline/gen_title_sky.py` → `Resources/Cubemaps/title_clear_sky.dds`。光の向き `kSunLightDirection` を空の太陽に合わせ済み（エンジン上の影の向きは要確認）
+- [x] A-11 昼の青空の cubemap（すずめ風）。`tools/BlenderPipeline/gen_title_sky.py` → `Resources/Cubemaps/title_clear_sky.dds`。光の向き `kSunLightDirection` を空の太陽に合わせ済み。映り込み用の IBL 版 `title_clear_sky_ibl.dds` も作成（§10.9）
 - [ ] A-10 （発表会に間に合えば）構造物：ボス戦アリーナのパーツをモジュール化して共用し、タイトル用に中心を囲むよう数個配置（Blender 併用レベルエディタで配置を別管理）
 
 ### 10.4 チャット間の API（チャット W が実装済み・2026-10-04 確定、チャット A が呼ぶ）
@@ -489,5 +489,45 @@ tools/BlenderPipeline/gen_title_door.py（寸法・金の配置をパラメー�
   - 空：`tools/BlenderPipeline/gen_title_sky.py`（`--export Assets/title_clear_sky.hdr` / `--preview`）→ `convert_hdr_to_dds.py --silent`。**同名の DDS があると変換を飛ばす**ので、作り直すときは cmft → texconv を直接実行して上書きする
   - **Blender の GUI から書き出さない**（扉板の原点＝蝶番がずれる。`--export` は書き出し中だけ位置・回転を 0 に戻している）
 - 扉の座標：枠の原点は台座の底面の中央、正面は +Z。蝶番（枠のローカル）は L=(0.9, 0, -0.2) / R=(-0.9, 0, -0.2)。開くときは L が `yaw - open`、R が `yaw + open` で奥（-Z）へ。`TitleScene::UpdateDoor()` 参照。
-- アセット作業は A-1b まで完了（2026-10-04）。質感の調整は gen_title_door.py の MARBLE_* パラメータで。
+- **タイトル画面のアセット作業は完了（2026-10-04）**。詳細と残りの注意点は §10.9。
 - 優先順の目安：A-2（状態機械）→ A-3（カメラ）→ A-4/A-5（ディゾルブ・ロゴ消去）→ A-6/A-7（線画・実体化）→ A-9（扉に入る）。
+
+### 10.9 アセット作業のまとめ（2026-10-04 完了）
+
+#### 作ったもの
+| アセット | 中身 | 作り直し方 |
+|---|---|---|
+| 扉 | 枠＋左右の扉板（両開き・奥開き）。大理石＋金の PBR。UV はボックス投影（2m で1枚） | `gen_title_door.py --export Assets/Models/TitleDoor` → `cook_assets.py` |
+| 背景の空 `title_clear_sky.dds` | 雲なしの昼の青空（青強め：チリ 0 / オゾン 4 / 彩度 1.5）。背景と水面が使う | `gen_title_sky.py --export Assets/title_clear_sky.hdr` → cmft → texconv で上書き（§10.8） |
+| 映り込み用の空 `title_clear_sky_ibl.dds` | 地平線より下を石の暖色 (0.25, 0.21, 0.16) にした IBL 専用版。扉の金と大理石だけが使う | `gen_title_sky.py --ibl --export Assets/title_clear_sky_ibl.hdr` → 同上 |
+
+#### 色味の調整で分かったこと（同じ問題を踏まないために）
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| 金が真っ黒、大理石が暗い | `TitleScene` が IBL の環境マップ（t1）を設定していなかった。PBR の金属は環境マップの色だけで色が決まる | `SetEnvironmentTexture` を設定（**`LoadTexture` も必要**。`SetEnvironmentTexture` はパスを覚えるだけ） |
+| 大理石が青い | 拡散 IBL は cubemap の最粗 mip（空全体の平均＝濃い青）。PBR は拡散を π で割るので日差し 1.2 では負ける | 日差しを強く・暖色に、大理石の environmentCoefficient を下げる |
+| 金が緑（オリーブ）っぽい | 金属の映り込み＝「空の青 × 金色」。PBR として正しい結果 | 空の映り込みを弱め、**遠景の雲だけを別の強さで映す**（下記のエンジン変更） |
+| カメラより低い所の金が白っぽい | 反射が下向き→空の下半分（明るい水色で埋めてあった）を映す | IBL 専用 cubemap の地平線より下を石の暖色にする |
+| 設定した材質値が効かない | マテリアルは遅延ロードで、`Initialize` 直後はまだ無い | `UpdateDoor()` で毎フレーム上書き（submesh の .mat 名 `_Gold` / `_Marble` で見分ける） |
+
+#### 確定した値（`TitleScene.h`。Title Tuning → Door で調整可）
+| 項目 | 値 |
+|---|---|
+| 日差しの強さ / 色 | 4.55 / (1.0, 0.96, 0.9) |
+| 大理石の environmentCoefficient | 0.25 |
+| 金：environmentCoefficient / metallic / roughness | 0.56 / 1.0 / 0.6 |
+| 金の色 / 雲の映り込み | (255, 184, 66) / 1.0 |
+
+#### エンジン側の変更（**ArcanaEngine と同期すること**）
+- `Object3DManager`：ルートシグネチャ末尾に [13]=b7 / [14]=t5 ＋ サンプラ s4（`CloudSky.hlsli` と共用）。`SetCloudLayer()` / `BindCloud()`。雲が無いシーンはダミーを挿す。**ルートシグネチャを貼り直した後は BindFog / BindShadow と一緒に `BindCloud` が必須**（`AnimatedObject3DInstance` に追加済み）
+- `Material.h`：`padding2` → `cloudReflection`（既定 0＝他のモデルは無影響。サイズ不変）。`ModelInstance` / `AnimatedModelInstance` で 0 初期化
+- `Object3dPBR.PS.hlsl`：反射ベクトルで `CloudSky()` を引き、`cloudReflection` の強さで鏡面反射に足す（粗いほど弱く）
+- `Object3DInstance`：`GetModelInstance()` を追加（submesh ごとの材質調整用）
+- **雲を持つシーンは終了時に `object3DManager_->SetCloudLayer(nullptr)` 必須**（`CloudLayer` の寿命はシーン側。`TitleScene::Finalize` で実施済み）
+
+#### 残っている注意点（演出のチャットへ）
+- [ ] ルートシグネチャを変えたので、他のシーン（STAGEPLAY 等）の見た目が変わっていないか確認
+- [ ] ロゴは BlinnPhong のまま。日差しを 4.55 にしたので、表示時（A-2）に明るすぎないか確認
+- [ ] 台座の手前の上面の網目ノイズ（影のアクネか、水面と 5cm で深度が競合しているか未切り分け）
+- [ ] `Game.cpp` の Debug 開始シーンが `"TITLE"` のまま（確認が終わったら `"STAGEPLAY"` に戻す）
+- 形や色を変えるときは Blender で直接いじらず、スクリプトのパラメータを直して作り直す（§10.8）
