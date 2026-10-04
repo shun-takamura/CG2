@@ -35,12 +35,19 @@ public:
 private:
 	void UpdateInput();
 	void UpdateCameraAndLogo(float dt);
+	void UpdateDoor();
+	void SetLogoVisible(bool visible);
 	void UpdateIntroPostEffect();
 	void OnImGuiTuning();
 
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
 	std::unique_ptr<Object3DInstance> logo_;
+
+	// 扉（枠＋左右の扉板）。扉板の原点は蝶番の軸で、奥（-Z）へ開く
+	std::unique_ptr<Object3DInstance> doorFrame_;
+	std::unique_ptr<Object3DInstance> doorLeafL_;
+	std::unique_ptr<Object3DInstance> doorLeafR_;
 
 	// 水面（y=0 の浅い水。空とロゴを映し、水底の床が透ける）
 	std::unique_ptr<WaterReflection> waterReflection_;
@@ -64,7 +71,7 @@ private:
 	Vector3 orbitCenter_ = { 0.0f, 0.0f, 0.0f };
 	float orbitAngle_ = 0.0f;                // 周回角（＝カメラの Yaw）[rad]
 	float orbitSpeed_ = 0.04f;               // 周回の角速度 [rad/s]
-	float orbitRadius_ = 8.0f;               // 周回中心からカメラまでの水平距離 [m]
+	float orbitRadius_ = 20.0f;              // 周回中心からカメラまでの水平距離 [m]。扉（高さ約 3.7m）全体が入る距離
 	float cameraHeight_ = 1.5f;              // 水面からのカメラの高さ [m]
 	float aimHeight_ = 0.55f;                // カメラが見る点の水面からの高さ。ロゴより下を見るとロゴが画面上寄り＋映り込みが入る
 	float logoHeight_ = 0.95f;               // ロゴ中心の水面からの高さ [m]
@@ -80,6 +87,12 @@ private:
 	float introDuration_ = 1.4f;             // ロゴ登場とラジアルブラー収束の長さ
 	float introBlurWidth_ = 0.08f;
 	float vignetteIntensity_ = 0.7f;
+
+	// 扉の確認用（状態機械を作るまでの暫定。扉とロゴは同じ位置なので扉の確認中はロゴを隠す）
+	bool showDoor_ = true;
+	bool showLogo_ = false;
+	float doorYaw_ = 3.1415927f;             // 扉の向き [rad]。0 で正面が +Z。開始時のカメラ（-Z 側から +Z を見る）に正面を向ける
+	float doorOpenDegrees_ = 0.0f;           // 扉板の開き角 [deg]。奥へ開く
 
 	// 無操作タイマー（秒）。閾値を超えたらデモ動画再生に遷移する予定
 	float idleSeconds_ = 0.0f;

@@ -11,6 +11,7 @@
 #include "Log.h"
 #include "PepperMacros.h"
 #include <dxcapi.h>
+#include <algorithm>
 #include <cassert>
 
 #ifdef _DEBUG
@@ -252,6 +253,85 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	cmd->DrawInstanced(4, 1, 0, 0);
 }
 
+void WaterSurface::Update(float deltaTime)
+{
+	params_.time += deltaTime;
+
+	// 待機中の波の倍率を smoothstep で補間
+	if (ambientBlendElapsed_ < ambientBlendDuration_) {
+		ambientBlendElapsed_ = (std::min)(ambientBlendElapsed_ + deltaTime, ambientBlendDuration_);
+		float t = ambientBlendElapsed_ / ambientBlendDuration_;
+		t = t * t * (3.0f - 2.0f * t);
+		params_.ambientRingScale = ambientFrom_ + (ambientTo_ - ambientFrom_) * t;
+	}
+
+	if (bursting_) {
+		burstTimer_ -= deltaTime;
+		if (burstTimer_ <= 0.0f) {
+			EmitRing(burstCenter_,
+				burstAmplitude_ * (0.7f + 0.3f * NextRandom01()),
+				burstWavelength_ * (0.8f + 0.2f * NextRandom01()));
+			burstTimer_ += burstInterval_ * (0.8f + 0.4f * NextRandom01());
+		}
+	}
+}
+
+void WaterSurface::SetAmbientRingScale(float scale, float blendSeconds)
+{
+	scale = (std::max)(scale, 0.0f);
+	if (blendSeconds <= 0.0f) {
+		params_.ambientRingScale = scale;
+		ambientTo_ = scale;
+		ambientBlendElapsed_ = ambientBlendDuration_ = 0.0f;
+		return;
+	}
+	ambientFrom_ = params_.ambientRingScale;
+	ambientTo_ = scale;
+	ambientBlendElapsed_ = 0.0f;
+	ambientBlendDuration_ = blendSeconds;
+}
+
+void WaterSurface::EmitRing(const Vector3& center, float amplitude, float wavelength,
+	float packetLength, float maxRadius)
+{
+	EmittedRingForGPU& ring = params_.emittedRings[nextRingSlot_];
+	ring.center = { center.x, center.z };
+	ring.emitTime = params_.time;
+	ring.amplitude = (std::max)(amplitude, 0.0f);
+	ring.wavelength = (std::max)(wavelength, 0.05f);
+	ring.packetLength = (std::max)(packetLength, 0.5f);
+	ring.maxRadius = (std::max)(maxRadius, 1.0f);
+	nextRingSlot_ = (nextRingSlot_ + 1) % kMaxEmittedRings;
+}
+
+void WaterSurface::StartRingBurst(const Vector3& center, float interval, float amplitude, float wavelength)
+{
+	bursting_ = true;
+	burstCenter_ = center;
+	burstInterval_ = (std::max)(interval, 0.1f);
+	burstAmplitude_ = amplitude;
+	burstWavelength_ = wavelength;
+	burstTimer_ = 0.0f; // 次の Update で即1発
+}
+
+int WaterSurface::GetActiveEmittedRingCount() const
+{
+	int count = 0;
+	for (const EmittedRingForGPU& ring : params_.emittedRings) {
+		if (ring.amplitude <= 0.0f) continue;
+		// 束の後端が maxRadius を越えるまでは見えている
+		const float tail = (params_.time - ring.emitTime) * params_.ringSpeed - ring.packetLength * ring.wavelength;
+		if (tail < ring.maxRadius) ++count;
+	}
+	return count;
+}
+
+float WaterSurface::NextRandom01()
+{
+	randomState_ = randomState_ * 1664525u + 1013904223u;
+	return static_cast<float>(randomState_ >> 8) / static_cast<float>(1u << 24);
+}
+
 void WaterSurface::OnImGui()
 {
 #ifdef _DEBUG
@@ -277,6 +357,31 @@ void WaterSurface::OnImGui()
 	ImGui::SliderFloat("Ring Min Amplitude", &params_.ringMinAmplitude, 0.0f, 1.0f);
 	ImGui::DragFloat("Ring Packet Length", &params_.ringPacketLength, 0.05f, 0.5f, 10.0f);
 	ImGui::DragFloat("Ring Max Radius", &params_.ringMaxRadius, 0.5f, 1.0f, 500.0f);
+	ImGui::SeparatorText("Ring Control (test)");
+	ImGui::DragFloat("Emit Amplitude", &debugEmitAmplitude_, 0.005f, 0.0f, 1.0f);
+	ImGui::DragFloat("Emit Wavelength", &debugEmitWavelength_, 0.05f, 0.1f, 20.0f);
+	ImGui::DragFloat("Burst Interval", &debugBurstInterval_, 0.05f, 0.1f, 10.0f);
+	const Vector3 rippleCenter{ params_.rippleCenter.x, params_.waterHeight, params_.rippleCenter.y };
+	if (ImGui::Button("Emit Ring")) {
+		EmitRing(rippleCenter, debugEmitAmplitude_, debugEmitWavelength_);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Burst Start")) {
+		StartRingBurst(rippleCenter, debugBurstInterval_, debugEmitAmplitude_, debugEmitWavelength_);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Burst Stop")) {
+		StopRingBurst();
+	}
+	ImGui::Text("Emitted rings alive: %d / %d %s", GetActiveEmittedRingCount(), kMaxEmittedRings,
+		bursting_ ? "(bursting)" : "");
+	ImGui::DragFloat("Ambient Target", &debugAmbientTarget_, 0.01f, 0.0f, 3.0f);
+	ImGui::DragFloat("Ambient Blend [s]", &debugAmbientBlend_, 0.05f, 0.0f, 10.0f);
+	if (ImGui::Button("Apply Ambient")) {
+		SetAmbientRingScale(debugAmbientTarget_, debugAmbientBlend_);
+	}
+	ImGui::SameLine();
+	ImGui::Text("current: %.2f", params_.ambientRingScale);
 	ImGui::SeparatorText("Undulation (noise)");
 	ImGui::DragFloat("Noise Amplitude", &params_.noiseAmplitude, 0.001f, 0.0f, 0.5f);
 	ImGui::DragFloat("Noise Scale", &params_.noiseScale, 0.01f, 0.01f, 20.0f);
