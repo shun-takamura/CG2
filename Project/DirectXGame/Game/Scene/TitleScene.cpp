@@ -29,8 +29,10 @@
 #endif
 
 namespace {
-	// 背景は STG 冒頭セクションと同じ空を流用する（タイトル専用アセットを作らない）
-	constexpr const char* kTitleSkyboxPath = "Resources/Cubemaps/rogland_clear_night_8k.dds";
+	// 雲なしの昼の青空（tools/BlenderPipeline/gen_title_sky.py で生成。太陽の円盤は描いていない）
+	constexpr const char* kTitleSkyboxPath = "Resources/Cubemaps/title_clear_sky.dds";
+	// 空の太陽の向きから求めた光の進む向き（cubemap 上の太陽は仰角 55°、方向 (-0.191, 0.815, -0.547)）
+	const Vector3 kSunLightDirection = { 0.191f, -0.815f, 0.547f };
 
 	// 水底の床（仮素材。石畳の素材ができたら差し替える）
 	constexpr const char* kWaterFloorTexturePath = "Resources/Textures/Terrain/_TestRock_BaseColor.dds";
@@ -38,6 +40,12 @@ namespace {
 	constexpr float kWaterDepth = 0.1f;
 	constexpr float kCameraFarClip = 1000.0f;
 	constexpr float kWaterSize = 1500.0f; // 半径 750m < ファークリップ
+
+	// 扉（tools/BlenderPipeline/gen_title_door.py で生成）。枠の原点は台座の底面の中央で、正面が +Z。
+	// 扉板の蝶番の軸（枠のローカル）。左右は正面から見た向き（エンジンの +X が正面から見て左）
+	constexpr const char* kDoorModelDir = "Resources/Models/TitleDoor";
+	const Vector3 kDoorHingeL = { 0.9f, 0.0f, -0.2f };
+	const Vector3 kDoorHingeR = { -0.9f, 0.0f, -0.2f };
 
 	enum TitleMenuItem : int {
 		kTitleStart = 0,
@@ -76,17 +84,31 @@ void TitleScene::Initialize() {
 	waterReflection_ = std::make_unique<WaterReflection>();
 	waterReflection_->Initialize(dxCore_, srvManager_, object3DManager_, 1.0f);
 	waterReflection_->SetWaterHeight(kWaterHeight);
-	waterReflection_->AddTarget(logo_.get());
+	if (showLogo_) waterReflection_->AddTarget(logo_.get());
+
+	doorFrame_ = std::make_unique<Object3DInstance>();
+	doorFrame_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_frame.mesh", "TitleDoorFrame");
+	doorLeafL_ = std::make_unique<Object3DInstance>();
+	doorLeafL_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_leaf_L.mesh", "TitleDoorLeafL");
+	doorLeafR_ = std::make_unique<Object3DInstance>();
+	doorLeafR_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_leaf_R.mesh", "TitleDoorLeafR");
+	for (Object3DInstance* part : { doorFrame_.get(), doorLeafL_.get(), doorLeafR_.get() }) {
+		waterReflection_->AddTarget(part);
+	}
 
 	water_ = std::make_unique<WaterSurface>();
 	water_->Initialize(dxCore_, object3DManager_, kWaterFloorTexturePath);
 	water_->SetWaterHeight(kWaterHeight);
 	water_->GetParams().depth = kWaterDepth;
 	water_->SetSize(kWaterSize);
+	// 待機中は「ごく小さな波がたまに出る」程度に抑える（大きな波は演出側で EmitRing / StartRingBurst）
+	water_->GetParams().ringAmplitude = 0.013f;
+	water_->GetParams().ringInterval = 6.0f;
+	water_->GetParams().ringJitter = 0.7f;
 
 	// 平行光源の既定 intensity は 0 なので、ロゴを照らす光をここで必ず設定する
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
-		lm->SetDirectionalLightDirection({ 0.25f, -0.45f, 0.86f });
+		lm->SetDirectionalLightDirection(kSunLightDirection);
 		lm->SetDirectionalLightColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 		lm->SetDirectionalLightIntensity(1.2f);
 	}
@@ -121,6 +143,7 @@ void TitleScene::Update() {
 
 	// 遷移中も背景とロゴは動かし続ける（止まった画面を見せない）
 	UpdateCameraAndLogo(dt);
+	UpdateDoor();
 	gameViewProjection_ = camera_->GetViewProjectionMatrix();
 	gameEyePosition_ = camera_->GetTranslate();
 
@@ -129,6 +152,9 @@ void TitleScene::Update() {
 	UpdateDebugCameraIfActive();
 	skybox_->Update(dt);
 	logo_->Update();
+	doorFrame_->Update();
+	doorLeafL_->Update();
+	doorLeafR_->Update();
 	if (water_) water_->Update(dt);
 
 	UpdateIntroPostEffect();
@@ -223,6 +249,41 @@ void TitleScene::UpdateCameraAndLogo(float dt) {
 	logo_->SetScale({ s, s, s });
 }
 
+void TitleScene::UpdateDoor() {
+	if (!doorFrame_) return;
+	const float waterHeight = water_ ? water_->GetParams().waterHeight : kWaterHeight;
+	const float depth = water_ ? water_->GetParams().depth : kWaterDepth;
+
+	// 台座の底を水底の床に合わせる（台座の上面が水面から少し出る）
+	const Vector3 base{ orbitCenter_.x, waterHeight - depth, orbitCenter_.z };
+	Transform frameXf;
+	frameXf.scale = { 1.0f, 1.0f, 1.0f };
+	frameXf.rotate = { 0.0f, doorYaw_, 0.0f };
+	frameXf.translate = base;
+	const Matrix4x4 frameMatrix = MakeAffineMatrix(frameXf);
+
+	doorFrame_->SetTranslate(base);
+	doorFrame_->SetRotate(frameXf.rotate);
+
+	// 扉板は蝶番の軸まわりに回す。奥（-Z）へ開くので左右で符号が逆
+	const float open = doorOpenDegrees_ * (3.1415927f / 180.0f);
+	doorLeafL_->SetTranslate(TransformCoordinate(kDoorHingeL, frameMatrix));
+	doorLeafL_->SetRotate({ 0.0f, doorYaw_ - open, 0.0f });
+	doorLeafR_->SetTranslate(TransformCoordinate(kDoorHingeR, frameMatrix));
+	doorLeafR_->SetRotate({ 0.0f, doorYaw_ + open, 0.0f });
+}
+
+void TitleScene::SetLogoVisible(bool visible) {
+	if (showLogo_ == visible) return;
+	showLogo_ = visible;
+	if (!waterReflection_ || !logo_) return;
+	if (visible) {
+		waterReflection_->AddTarget(logo_.get());
+	} else {
+		waterReflection_->RemoveTarget(logo_.get());
+	}
+}
+
 void TitleScene::UpdateIntroPostEffect() {
 	auto* pe = Game::GetPostEffect();
 	if (!pe) return;
@@ -268,7 +329,12 @@ void TitleScene::Draw() {
 
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
-	if (logo_) logo_->Draw(dxCore_);
+	if (logo_ && showLogo_) logo_->Draw(dxCore_);
+	if (showDoor_) {
+		if (doorFrame_) doorFrame_->Draw(dxCore_);
+		if (doorLeafL_) doorLeafL_->Draw(dxCore_);
+		if (doorLeafR_) doorLeafR_->Draw(dxCore_);
+	}
 
 	// 水面は不透明物の後（ロゴとの前後は深度で決まる）
 	if (water_) water_->Draw(*camera_, kTitleSkyboxPath, waterReflection_.get());
@@ -322,6 +388,21 @@ void TitleScene::OnImGuiTuning() {
 			menuOpen_ = false;
 			if (auto* pe = Game::GetPostEffect(); pe && pe->radialBlur) pe->radialBlur->SetEnabled(true);
 		}
+		if (ImGui::CollapsingHeader("Door", ImGuiTreeNodeFlags_DefaultOpen)) {
+			bool showLogo = showLogo_;
+			if (ImGui::Checkbox("Logo Visible", &showLogo)) SetLogoVisible(showLogo);
+			if (ImGui::Checkbox("Door Visible", &showDoor_) && waterReflection_) {
+				for (Object3DInstance* part : { doorFrame_.get(), doorLeafL_.get(), doorLeafR_.get() }) {
+					if (showDoor_) {
+						waterReflection_->AddTarget(part);
+					} else {
+						waterReflection_->RemoveTarget(part);
+					}
+				}
+			}
+			ImGui::SliderAngle("Door Yaw", &doorYaw_, -180.0f, 180.0f);
+			ImGui::SliderFloat("Door Open (deg)", &doorOpenDegrees_, 0.0f, 90.0f);
+		}
 		if (ImGui::CollapsingHeader("Water", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (GetUseDebugCamera()) {
 				int source = reflectFromDebugCamera_ ? 1 : 0;
@@ -344,5 +425,10 @@ Camera* TitleScene::GetCamera() {
 
 void TitleScene::DrawShadowCasters() {
 	GameScene::DrawShadowCasters();
-	if (logo_) logo_->DrawShadowPass(dxCore_);
+	if (logo_ && showLogo_) logo_->DrawShadowPass(dxCore_);
+	if (showDoor_) {
+		if (doorFrame_) doorFrame_->DrawShadowPass(dxCore_);
+		if (doorLeafL_) doorLeafL_->DrawShadowPass(dxCore_);
+		if (doorLeafR_) doorLeafR_->DrawShadowPass(dxCore_);
+	}
 }

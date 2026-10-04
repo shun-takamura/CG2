@@ -4,6 +4,20 @@
 // 水面は板1枚なので頂点は動かさず、さざ波は法線だけを揺らす（反射方向・反射 RT の UV・屈折・フレネルに効く）。
 // レジスタは Object3D と取り決めを共有：b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ。t2 は PBR 法線用に空ける。
 
+#define MAX_EMITTED_RINGS 16 // C++ の WaterSurface::kMaxEmittedRings と合わせる
+
+// C++ の WaterSurface::EmittedRingForGPU と 1:1
+struct EmittedRing
+{
+    float2 center;      // ワールド XZ
+    float  emitTime;
+    float  amplitude;   // 0 なら未使用
+    float  wavelength;
+    float  packetLength;
+    float  maxRadius;
+    float  padding;
+};
+
 cbuffer WaterParams : register(b0)
 {
     float4 gWaterColor;          // 深い所で寄っていく水の色
@@ -39,6 +53,9 @@ cbuffer WaterParams : register(b0)
     float  gRingMinAmplitude;    // 束の高さの下限（比）
     float  gRingPacketLength;    // 束の長さ（波長の数）
     float  gRingMaxRadius;       // 波紋が届く距離 [m]
+    float  gAmbientRingScale;    // ランダムな波（待機中の波）の振幅倍率
+    float3 gPadding3;
+    EmittedRing gEmittedRings[MAX_EMITTED_RINGS]; // CPU から EmitRing で出した波
 };
 
 struct DirectionalLight
@@ -111,10 +128,60 @@ float Hash11(float x)
 
 #define MAX_RING_PACKETS 16
 
-// 同心円のさざ波。中心から平均 gRingInterval 秒ごとに「数波長ぶんの波の束」が出て外へ広がる。
+// 波の束1つ分の、半径方向の傾き dH/dr。
+// 束の中心は先端（age*speed）から半分後ろ。ガウス包絡 × sin。
+float RingPacketSlope(float r, float age, float amplitude, float wavelength, float packetLength, float footprint)
+{
+    const float k = 2.0f * kPi / wavelength;
+    const float halfLength = max(packetLength * wavelength * 0.5f, 1e-3f);
+    const float d = r - (age * gRingSpeed - halfLength);
+    const float envelope = exp(-(d * d) / (halfLength * halfLength));
+    if (envelope < 1e-3f)
+    {
+        return 0.0f;
+    }
+    float s, c;
+    sincos(k * d, s, c);
+    const float envelopeSlope = -2.0f * d / (halfLength * halfLength) * envelope;
+    return amplitude * (envelope * k * c + envelopeSlope * s) * AntiAliasFade(wavelength, footprint);
+}
+
+// 距離による減衰と、中心（方向が定まらない）の消去
+float RingDistanceFade(float r, float maxRadius, float wavelength)
+{
+    return exp(-r / gRingFalloff) * saturate(1.0f - r / maxRadius) * saturate(r / (wavelength * 0.5f));
+}
+
+// CPU から EmitRing で出した波（大きな波）。中心は波ごとに持つ
+float2 EmittedRingsGradient(float2 xz, float footprint)
+{
+    float2 gradient = float2(0.0f, 0.0f);
+    [loop]
+    for (int i = 0; i < MAX_EMITTED_RINGS; ++i)
+    {
+        const EmittedRing ring = gEmittedRings[i];
+        const float age = gTime - ring.emitTime;
+        if (ring.amplitude <= 0.0f || age < 0.0f)
+        {
+            continue;
+        }
+        const float2 toPoint = xz - ring.center;
+        const float r = length(toPoint);
+        const float slope = RingPacketSlope(r, age, ring.amplitude, ring.wavelength, ring.packetLength, footprint);
+        gradient += toPoint / max(r, 1e-4f) * (slope * RingDistanceFade(r, ring.maxRadius, ring.wavelength));
+    }
+    return gradient;
+}
+
+// 同心円のさざ波（待機中の波）。中心から平均 gRingInterval 秒ごとに「数波長ぶんの波の束」が出て外へ広がる。
 // 束ごとに出るタイミング・高さ・波長を時刻からのハッシュで決めるので、CPU 側に状態を持たない。
 float2 RingPacketsGradient(float2 xz, float footprint)
 {
+    if (gAmbientRingScale <= 0.0f)
+    {
+        return float2(0.0f, 0.0f);
+    }
+
     const float2 toPoint = xz - gRippleCenter;
     const float r = length(toPoint);
     const float2 radial = toPoint / max(r, 1e-4f);
@@ -124,9 +191,7 @@ float2 RingPacketsGradient(float2 xz, float footprint)
     const int packetCount = min(MAX_RING_PACKETS, (int) ceil(gRingMaxRadius / spacing) + 1);
     const float newest = floor(gTime / interval);
 
-    // 距離による減衰と、中心（方向が定まらない）の消去は全束共通
-    const float distanceFade = exp(-r / gRingFalloff) * saturate(1.0f - r / gRingMaxRadius)
-                             * saturate(r / (gRingWavelength * 0.5f));
+    const float distanceFade = RingDistanceFade(r, gRingMaxRadius, gRingWavelength);
 
     float slope = 0.0f; // 半径方向の傾き dH/dr
     [loop]
@@ -152,24 +217,11 @@ float2 RingPacketsGradient(float2 xz, float footprint)
         }
 
         const float wavelength = gRingWavelength * lerp(0.5f, 1.0f, hWavelength);
-        const float k = 2.0f * kPi / wavelength;
         const float amplitude = gRingAmplitude * lerp(gRingMinAmplitude, 1.0f, hAmplitude);
-        const float halfLength = max(gRingPacketLength * wavelength * 0.5f, 1e-3f);
-
-        // 束の中心は先端（age*speed）から半分後ろ。ガウス包絡 × sin
-        const float d = r - (age * gRingSpeed - halfLength);
-        const float envelope = exp(-(d * d) / (halfLength * halfLength));
-        if (envelope < 1e-3f)
-        {
-            continue;
-        }
-        float s, c;
-        sincos(k * d, s, c);
-        const float envelopeSlope = -2.0f * d / (halfLength * halfLength) * envelope;
-        slope += amplitude * (envelope * k * c + envelopeSlope * s) * AntiAliasFade(wavelength, footprint);
+        slope += RingPacketSlope(r, age, amplitude, wavelength, gRingPacketLength, footprint);
     }
 
-    return radial * (slope * distanceFade);
+    return radial * (slope * distanceFade * gAmbientRingScale);
 }
 
 // 水面の高さの勾配 (dH/dx, dH/dz) を返す。法線は normalize(-gx, 1, -gz)。
@@ -178,6 +230,7 @@ float2 WaveGradient(float2 xz, float footprint)
     float2 gradient = float2(0.0f, 0.0f);
 
     gradient += RingPacketsGradient(xz, footprint);
+    gradient += EmittedRingsGradient(xz, footprint);
 
     // ----- 揺らぎ：ノイズ2オクターブを別方向に流す -----
     {
