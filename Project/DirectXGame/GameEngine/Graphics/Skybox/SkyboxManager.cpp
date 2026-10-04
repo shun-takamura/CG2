@@ -39,7 +39,14 @@ void SkyboxManager::CreateRootSignature()
     descriptorRange1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRange1[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[4] = {};
+    // PS: SRV(t5) - 遠景の雲のノイズ（CloudLayer。雲を使わないシーンはダミー）
+    D3D12_DESCRIPTOR_RANGE descriptorRangeCloud[1] = {};
+    descriptorRangeCloud[0].BaseShaderRegister = 5;                  // t5
+    descriptorRangeCloud[0].NumDescriptors = 1;
+    descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[6] = {};
 
     // VS: CBV(b0) - TransformationMatrix用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -63,10 +70,21 @@ void SkyboxManager::CreateRootSignature()
     rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRange1;
     rootParameters[3].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange1);
 
+    // PS: CBV(b7) - 遠景の雲のパラメータ（CloudSky.hlsli。水面と同じ CB を共有する）
+    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[4].Descriptor.ShaderRegister = 7;
+
+    // PS: DescriptorTable(t5) - 遠景の雲のノイズ
+    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[5].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
+    rootParameters[5].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
+
     // ============================================
     // Sampler (PS の s0)
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;      // Cubemap用にCLAMP推奨
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -75,6 +93,17 @@ void SkyboxManager::CreateRootSignature()
     staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
     staticSamplers[0].ShaderRegister = 0;
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    // s4: 雲のノイズ。タイルするので WRAP、水平線で UV が引き伸ばされるので異方性
+    staticSamplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
+    staticSamplers[1].MaxAnisotropy = 8;
+    staticSamplers[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
+    staticSamplers[1].ShaderRegister = 4;
+    staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};
     rootSignaturDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;

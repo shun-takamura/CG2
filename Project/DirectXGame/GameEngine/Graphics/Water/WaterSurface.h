@@ -12,6 +12,7 @@ class DirectXCore;
 class Object3DManager;
 class WaterReflection;
 class Camera;
+class CloudLayer;
 
 /// <summary>
 /// 浅い水面（1枚の水平な板）。専用 PSO で描く。
@@ -22,7 +23,7 @@ class Camera;
 ///   - フレネル（Schlick）で反射と透過を混ぜ、最後に距離フォグ
 ///
 /// レジスタは Object3D と取り決めを共有する（b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ）。
-/// t2 は PBR 法線用に空けておく。
+/// t2 は PBR 法線用に空けておく。b7,t5,s4 は遠景の雲（Skybox と同じ CloudLayer を挿す）。
 /// </summary>
 class WaterSurface {
 public:
@@ -137,6 +138,8 @@ public:
 	void SetCenter(const Vector3& center) { center_ = center; }
 	/// <summary>同心円のさざ波の中心（ワールド座標。Y は無視）</summary>
 	void SetRippleCenter(const Vector3& center) { params_.rippleCenter = { center.x, center.z }; }
+	/// <summary>映り込む空に遠景の雲を重ねる（null で外す）。Skybox と同じ CloudLayer を渡すこと</summary>
+	void SetCloudLayer(const CloudLayer* cloudLayer) { cloudLayer_ = cloudLayer; }
 
 	void OnImGui();
 
@@ -164,6 +167,9 @@ private:
 	TransformForGPU* transformData_ = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> paramsResource_;
 	Params* paramsData_ = nullptr;
+	// 雲を使わないときに b7 へ挿す enabled=0 の CB
+	Microsoft::WRL::ComPtr<ID3D12Resource> disabledCloudResource_;
+	const CloudLayer* cloudLayer_ = nullptr;
 
 	// 0..1 の乱数（演出用。再現性は不要なので簡易な LCG）
 	float NextRandom01();

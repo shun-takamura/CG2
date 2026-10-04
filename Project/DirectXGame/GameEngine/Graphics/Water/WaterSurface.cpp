@@ -10,6 +10,7 @@
 #include "WindowsApplication.h"
 #include "Log.h"
 #include "PepperMacros.h"
+#include "Cloud/CloudLayer.h"
 #include <dxcapi.h>
 #include <algorithm>
 #include <cassert>
@@ -30,6 +31,8 @@ namespace {
 		kRootShadowConstants, // PS b5
 		kRootShadowMap,       // PS t3
 		kRootFog,             // PS b6
+		kRootCloud,           // PS b7 遠景の雲（Skybox と共有の CB）
+		kRootCloudNoise,      // PS t5 雲のノイズ
 		kRootCount
 	};
 }
@@ -44,6 +47,8 @@ void WaterSurface::Initialize(DirectXCore* dxCore, Object3DManager* object3DMana
 	floorTexturePath_ = floorTexturePath;
 
 	TextureManager::GetInstance()->LoadTexture(floorTexturePath_);
+	TextureManager::GetInstance()->LoadTexture(CloudLayer::GetFallbackTexturePath());
+	disabledCloudResource_ = CloudLayer::CreateDisabledConstantBuffer(dxCore_);
 
 	CreateRootSignature();
 	CreatePipelineState();
@@ -73,6 +78,7 @@ void WaterSurface::CreateRootSignature()
 	D3D12_DESCRIPTOR_RANGE rangeSky = makeRange(1);
 	D3D12_DESCRIPTOR_RANGE rangeShadow = makeRange(3);
 	D3D12_DESCRIPTOR_RANGE rangeFloor = makeRange(4);
+	D3D12_DESCRIPTOR_RANGE rangeCloudNoise = makeRange(5);
 
 	auto setCbv = [](D3D12_ROOT_PARAMETER& p, UINT reg, D3D12_SHADER_VISIBILITY vis) {
 		p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -96,10 +102,12 @@ void WaterSurface::CreateRootSignature()
 	setCbv(rootParameters[kRootShadowConstants], 5, D3D12_SHADER_VISIBILITY_PIXEL);
 	setTable(rootParameters[kRootShadowMap], &rangeShadow);
 	setCbv(rootParameters[kRootFog], 6, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootCloud], 7, D3D12_SHADER_VISIBILITY_PIXEL);
+	setTable(rootParameters[kRootCloudNoise], &rangeCloudNoise);
 
-	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）
-	D3D12_STATIC_SAMPLER_DESC samplers[4] = {};
-	for (UINT i = 0; i < 4; ++i) {
+	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）, s4 = 雲のノイズ（ラップ・異方性）
+	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
+	for (UINT i = 0; i < 5; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].MaxLOD = D3D12_FLOAT32_MAX;
@@ -117,6 +125,12 @@ void WaterSurface::CreateRootSignature()
 	samplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 	samplers[2].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
 	samplers[3].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	// Skybox の s4 と同じ設定（CloudSky.hlsli を共用するため）
+	samplers[4].Filter = D3D12_FILTER_ANISOTROPIC;
+	samplers[4].MaxAnisotropy = 8;
+	samplers[4].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	samplers[4].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	samplers[4].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 
 	D3D12_ROOT_SIGNATURE_DESC desc{};
 	desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -248,6 +262,11 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	cmd->SetGraphicsRootConstantBufferView(kRootShadowConstants, object3DManager_->GetShadowConstantsAddress());
 	cmd->SetGraphicsRootDescriptorTable(kRootShadowMap, object3DManager_->GetShadowSrvHandle());
 	cmd->SetGraphicsRootConstantBufferView(kRootFog, object3DManager_->GetFogAddress());
+	// 雲なしでもルートパラメータは埋める（enabled=0 なのでシェーダはテクスチャを読まない）
+	cmd->SetGraphicsRootConstantBufferView(kRootCloud,
+		cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress());
+	cmd->SetGraphicsRootDescriptorTable(kRootCloudNoise,
+		cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle() : tm->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
 
 	PEPPER_COUNT("DrawCall");
 	cmd->DrawInstanced(4, 1, 0, 0);

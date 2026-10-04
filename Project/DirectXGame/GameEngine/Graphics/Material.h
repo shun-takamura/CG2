@@ -17,7 +17,7 @@ typedef struct Material {
 	float roughness;            // PBR: 粗さ 0..1
 	int32_t shadingModel;       // 0=BlinnPhong, 1=PBR（PSO 選択に使用）
 	int32_t useNormalMap;       // 1=法線マップ(t2)を適用, 0=ジオメトリ法線
-	float padding2;
+	float cloudReflection;      // PBR: 鏡面反射に映す遠景の雲の強さ（0=映さない。CloudSky.hlsli）
 }Material;
 
 

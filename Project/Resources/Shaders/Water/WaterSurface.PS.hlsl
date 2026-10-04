@@ -3,6 +3,7 @@
 // 浅い水面。反射（映す物＋空）と、水底の床の透過をフレネルで混ぜる。
 // 水面は板1枚なので頂点は動かさず、さざ波は法線だけを揺らす（反射方向・反射 RT の UV・屈折・フレネルに効く）。
 // レジスタは Object3D と取り決めを共有：b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ。t2 は PBR 法線用に空ける。
+// b7,t5,s4 は遠景の雲（CloudSky.hlsli。Skybox と同じ CB を共有）。
 
 #define MAX_EMITTED_RINGS 16 // C++ の WaterSurface::kMaxEmittedRings と合わせる
 
@@ -79,6 +80,7 @@ SamplerState gClampSampler : register(s3);
 
 #include "../Object3D/Shadow.hlsli"
 #include "../Object3D/Fog.hlsli"
+#include "../Cloud/CloudSky.hlsli"
 
 struct PixelShaderOutput
 {
@@ -274,7 +276,11 @@ PixelShaderOutput main(WaterVertexOutput input)
     // 浅い角度で波に揺らされて水平線より下を向くと cubemap の地面側を拾うので、上半球に留める
     reflectDir.y = max(reflectDir.y, 0.02f);
     reflectDir = normalize(reflectDir);
-    float3 reflection = gSkyTexture.Sample(gSampler, reflectDir).rgb * gSkyIntensity;
+    float3 sky = gSkyTexture.Sample(gSampler, reflectDir).rgb;
+    // 雲は空と同じ関数で、水面の点から反射方向へ評価する（鏡像カメラから飛ばすレイと同じ直線なので空側とずれない）。
+    // 反射 RT（ロゴ・扉）より先に重ねるので、雲は映す物の後ろに入る
+    sky = ApplyCloudSky(sky, input.worldPosition, reflectDir);
+    float3 reflection = sky * gSkyIntensity;
     if (gHasReflection != 0)
     {
         const float4 clip = mul(float4(input.worldPosition, 1.0f), gReflectionViewProj);

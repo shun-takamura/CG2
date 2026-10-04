@@ -14,6 +14,7 @@
 #include <d3d12.h>
 
 class SkyboxManager;
+class CloudLayer;
 
 /// <summary>
 /// Skybox（天球）を描画するクラス
@@ -37,6 +38,11 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> indexBuffer_;
     Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
+    // 雲を使わないときに b7 へ挿す enabled=0 の CB
+    Microsoft::WRL::ComPtr<ID3D12Resource> disabledCloudResource_;
+
+    // 遠景の雲（null なら雲なし）。所有はシーン側
+    const CloudLayer* cloudLayer_ = nullptr;
 
     // バッファビュー
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
@@ -100,6 +106,9 @@ public:
     // セッター
     //==============================
     void SetCamera(Camera* camera) { camera_ = camera; }
+
+    /// <summary>遠景の雲を空に重ねる（null で外す）。水面にも同じ CloudLayer を渡すと映り込みと一致する</summary>
+    void SetCloudLayer(const CloudLayer* cloudLayer) { cloudLayer_ = cloudLayer; }
 
     /// <summary>全体着色を即座に設定（補間なし）</summary>
     void SetColor(const Vector4& color);

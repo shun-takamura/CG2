@@ -169,6 +169,8 @@ public:
     const std::string& GetTextureFilePath() const { return textureFilePath_; }
     const std::string& GetModelFileName() const { return modelFileName_; }
     const std::string& GetDirectoryPath() const { return directoryPath_; }
+    // 部位別マテリアル（submesh ごとの Material）を個別に調整するため
+    ModelInstance* GetModelInstance() const { return modelInstance_; }
 
     //==============================
     // 初期化・更新・描画

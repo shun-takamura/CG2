@@ -1,4 +1,5 @@
 #include "Skybox.hlsli"
+#include "../Cloud/CloudSky.hlsli"
 
 struct Material
 {
@@ -25,6 +26,10 @@ PixelShaderOutput main(VertexShaderOutput input)
     float4 c0 = gTexture0.Sample(gSampler, input.texcoord);
     float4 c1 = gTexture1.Sample(gSampler, input.texcoord);
     float4 textureColor = lerp(c0, c1, gMaterial.blendT);
+
+    // 遠景の雲。着色（暗転など）が雲にも掛かるよう、gMaterial.color の前で重ねる
+    textureColor.rgb = ApplyCloudSky(textureColor.rgb, gCloudEyePosition, normalize(input.texcoord));
+
     output.color = textureColor * gMaterial.color;
     return output;
 }

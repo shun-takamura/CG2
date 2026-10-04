@@ -78,7 +78,7 @@ struct Material
     float roughness;
     int shadingModel;
     int useNormalMap;
-    float padding2;
+    float cloudReflection;   // 鏡面反射に映す遠景の雲の強さ（0=映さない）
 };
 
 struct PixelShaderOutput
@@ -119,6 +119,7 @@ SamplerState gSampler : register(s0);
 // ===== Shadow (CSM + PCSS) =====
 #include "Shadow.hlsli"
 #include "Fog.hlsli"
+#include "../Cloud/CloudSky.hlsli"  // b7 / t5 / s4。鏡面反射に遠景の雲を映す
 
 // ===== Cook-Torrance BRDF =====
 
@@ -271,6 +272,16 @@ PixelShaderOutput main(VertexShaderOutput input)
     float3 specularIBL = prefiltered * Fr;
 
     float3 ambient = (diffuseIBL + specularIBL) * gMaterial.environmentCoefficient;
+
+    // 遠景の雲の映り込み。空の映り込み（environmentCoefficient）とは別の強さで足す
+    // （青空は弱く・雲は強く映して、金属が空の青でくすむのを避けられるように）。
+    // 雲はキューブマップに入っていないので反射ベクトルで直接引く。粗い面ほど映り込みを弱める
+    if (gMaterial.cloudReflection > 0.0f)
+    {
+        float4 cloud = CloudSky(input.worldPosition, R);
+        float sharpness = saturate(1.0f - roughness);
+        ambient += cloud.rgb * cloud.a * Fr * (gMaterial.cloudReflection * sharpness);
+    }
 
     output.color.rgb = Lo + ambient;
     output.color.a = gMaterial.color.a * textureColor.a;

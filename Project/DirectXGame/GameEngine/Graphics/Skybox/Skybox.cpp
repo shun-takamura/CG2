@@ -1,6 +1,7 @@
 #include "Skybox.h"
 #include "SkyboxManager.h"
 #include "PepperMacros.h"
+#include "Cloud/CloudLayer.h"
 
 void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const std::string& cubemapFilePath)
 {
@@ -21,6 +22,8 @@ void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const
     CreateIndexBuffer(dxCore);
     CreateTransformationMatrixResource(dxCore);
     CreateMaterialResource(dxCore);
+    disabledCloudResource_ = CloudLayer::CreateDisabledConstantBuffer(dxCore);
+    TextureManager::GetInstance()->LoadTexture(CloudLayer::GetFallbackTexturePath());
 
     // Transform初期化（Skyboxは原点・回転なし・スケール1）
     transform_ = {
@@ -147,6 +150,9 @@ void Skybox::Update(float deltaTime)
 
 void Skybox::Draw(DirectXCore* dxCore)
 {
+    // 遠景の雲は Skybox の PS 内で合成するので、雲のコストもこの区間に入る
+    PEPPER_GPU_SCOPE(dxCore->GetCommandList(), "Skybox::Draw");
+
     // 頂点バッファビューをセット
     dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
@@ -171,6 +177,15 @@ void Skybox::Draw(DirectXCore* dxCore)
     // SRV t1：次スロットのCubemap（クロスフェード先。非ブレンド時は現在と同一）
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         3, TextureManager::GetInstance()->GetSrvHandleGPU(nextCubemapFilePath_)
+    );
+
+    // b7 / t5：遠景の雲。雲なしでもルートパラメータは埋める（enabled=0 なのでシェーダはテクスチャを読まない）
+    dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
+        4, cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress()
+    );
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        5, cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle()
+                       : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath())
     );
 
     // インデックスを使用して描画

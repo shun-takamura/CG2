@@ -4,12 +4,16 @@
     blender -b --factory-startup -P tools/BlenderPipeline/gen_title_sky.py -- [オプション]
         --export <パス.hdr>   正距円筒の HDR を書き出す（例: Assets/title_clear_sky.hdr）
         --preview <フォルダ>  確認用 PNG（全天の展開図＋水平方向の見え方）を書き出す
+        --ibl                 映り込み（IBL）専用版にする：地平線より下を石っぽい暖色の灰色にする
+                              （例: --ibl --export Assets/title_clear_sky_ibl.hdr）
 
 HDR → cubemap DDS は既存の tools/Python/convert_hdr_to_dds.py（Assets/ 直下の *.hdr を変換）で行う。
 
 方針（5_TitleScene.md §10.5）:
 - 太陽の円盤は描かない（IBL で金に映したとき太陽の点だけが光るのを防ぐ）。日差しはエンジンの平行光源が担当
 - 地平線より下は地平線の色で埋める（水面の端の向こうに黒い地面が見えないように）
+- IBL 版（--ibl）は地平線より下を地面の色にする。下向きの反射（カメラより低い所の金など）が
+  明るい水色を映して白っぽくなるのを防ぐ。背景・水面に見せる空は通常版のまま使う
 - エンジンの Skybox はトーンマップ無しで値をそのまま出すので、地平線の明るさが 1 弱になるよう倍率を合わせる
 """
 
@@ -33,9 +37,12 @@ WIDTH = 4096               # 正距円筒（高さは半分）
 # 視線の z（sin 仰角）の下限。真横ちょうどは大気の通り道が最長で黄ばむので、
 # 仰角 6° 付近の水色で地平線とその下を埋める
 HORIZON_CLAMP_Z = 0.1
+# IBL 版の地平線より下の色（エンジンでの値＝線形）。水越しの石畳を想定した暖色の灰色
+IBL_GROUND_COLOR = (0.25, 0.21, 0.16)
+IBL_GROUND_BLEND_Z = 0.08  # 地平線から下へこの z（sin 仰角）までかけて地面の色へ移る
 
 
-def build_world(strength):
+def build_world(strength, ibl):
     world = bpy.data.worlds.new("TitleSky")
     bpy.context.scene.world = world
     world.use_nodes = True
@@ -97,9 +104,27 @@ def build_world(strength):
     hsv = nodes.new("ShaderNodeHueSaturation")
     hsv.inputs["Saturation"].default_value = SATURATION
     links.new(sky.outputs["Color"], hsv.inputs["Color"])
-    links.new(hsv.outputs["Color"], bg.inputs["Color"])
     bg.inputs["Strength"].default_value = strength
-    return bg
+    if not ibl:
+        links.new(hsv.outputs["Color"], bg.inputs["Color"])
+        return bg, None
+
+    # 視線の z が 0 → -IBL_GROUND_BLEND_Z で空 → 地面の色へ
+    ground_fac = nodes.new("ShaderNodeMapRange")
+    ground_fac.inputs["From Min"].default_value = 0.0
+    ground_fac.inputs["From Max"].default_value = -IBL_GROUND_BLEND_Z
+    ground_fac.inputs["To Min"].default_value = 0.0
+    ground_fac.inputs["To Max"].default_value = 1.0
+    ground_fac.clamp = True
+    links.new(sep.outputs["Z"], ground_fac.inputs["Value"])
+    ground = nodes.new("ShaderNodeRGB")
+    mix = nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    links.new(ground_fac.outputs["Result"], mix.inputs["Factor"])
+    links.new(hsv.outputs["Color"], mix.inputs[6])     # A（RGBA の入力）
+    links.new(ground.outputs["Color"], mix.inputs[7])  # B
+    links.new(mix.outputs[2], bg.inputs["Color"])      # Result（RGBA）
+    return bg, ground
 
 
 def setup_panorama():
@@ -160,15 +185,19 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     export_path = Path(argv[argv.index("--export") + 1]) if "--export" in argv else None
     preview_dir = Path(argv[argv.index("--preview") + 1]) if "--preview" in argv else None
+    ibl = "--ibl" in argv
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     setup_panorama()
-    bg = build_world(1.0)
+    bg, ground = build_world(1.0, ibl)
 
     # 地平線の明るさが TARGET_HORIZON_MAX になるよう倍率を決める
     zenith, horizon = measure_rows()
     strength = TARGET_HORIZON_MAX / max(max(horizon), 1e-6)
     bg.inputs["Strength"].default_value = strength
+    if ground is not None:
+        # Background の強さが全体に掛かるので、地面の色は割り戻して置く
+        ground.outputs["Color"].default_value = (*(c / strength for c in IBL_GROUND_COLOR), 1.0)
     fmt = lambda c: "(" + ", ".join(f"{v * strength:.3f}" for v in c) + ")"
     print(f"[gen_title_sky] strength={strength:.4f} zenith={fmt(zenith)} horizon={fmt(horizon)}")
 

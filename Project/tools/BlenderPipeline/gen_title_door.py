@@ -21,6 +21,7 @@ from pathlib import Path
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 # ============================================================
@@ -39,6 +40,21 @@ ARC_SEGMENTS = 16        # アーチ片側の分割数
 
 MAT_MARBLE = 0
 MAT_GOLD = 1
+
+# 質感
+UV_TILE_M = 2.0          # この長さ [m] でテクスチャ1枚（ボックス投影）
+TEX_SIZE = 1024
+MARBLE_SEED = 7
+MARBLE_BASE = (0.93, 0.92, 0.89)   # 地の色（sRGB）
+MARBLE_VEIN = (0.62, 0.64, 0.68)   # 筋の色（sRGB）
+MARBLE_VEIN_STRENGTH = 0.45        # 筋の濃さ（0〜1）
+MARBLE_VEIN_SHARPNESS = 4.0        # 大きいほど細く鋭い筋（10 を超えるとひび割れに見える）
+MARBLE_BUMP = 0.25                 # 法線マップの強さ（磨いた石なのでごく弱く）
+TEX_NAMES = {
+    "marble_base": "Marble_BaseColor",
+    "marble_normal": "Marble_NormalMap",  # "NormalMap" を含める＝cook が線形で圧縮する
+    "gold_normal": "Gold_NormalMap",
+}
 
 # 尖頭アーチ：右側の弧の中心を左へ C だけずらす（半径 R = 半幅 + C）
 ARC_C = (ARCH_RISE ** 2 - OPEN_HALF_W ** 2) / (2.0 * OPEN_HALF_W)
@@ -113,6 +129,7 @@ class MeshBuilder:
         bm.from_mesh(mesh)
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        box_project_uv(bm)
         bm.to_mesh(mesh)
         bm.free()
         obj = bpy.data.objects.new(name, mesh)
@@ -120,6 +137,19 @@ class MeshBuilder:
             obj.data.materials.append(mat)
         bpy.context.scene.collection.objects.link(obj)
         return obj
+
+
+def box_project_uv(bm):
+    """面ごとに法線が最も近い軸の方向から投影して、位置を UV にする。
+    大理石は継ぎ目の無いタイルなので、面の境目の継ぎ目は模様に紛れる"""
+    uv = bm.loops.layers.uv.verify()
+    for face in bm.faces:
+        n = face.normal
+        ax = max(range(3), key=lambda i: abs(n[i]))
+        u_axis, v_axis = [(1, 2), (0, 2), (0, 1)][ax]
+        for loop in face.loops:
+            co = loop.vert.co
+            loop[uv].uv = (co[u_axis] / UV_TILE_M, co[v_axis] / UV_TILE_M)
 
 
 def arch_x_at(d, x):
@@ -260,32 +290,118 @@ def build_leaf_left(right_obj, mats):
 
 
 # ============================================================
-# マテリアル（プレビュー用。エクスポート時はテクスチャに焼く）
+# テクスチャ（numpy で手続き生成。すべて継ぎ目の無いタイル）
+# 配列は行 0 = 画像の上（gen_terrain_material.py と同じ規約。法線は ny = -dy）
 # ============================================================
-def make_materials():
+def tileable_noise(rng, n, beta):
+    """白色ノイズを周波数空間で 1/f^beta に整形する。FFT なので自動的に周期的＝タイルできる"""
+    white = rng.standard_normal((n, n))
+    fx = np.fft.fftfreq(n)[None, :]
+    fy = np.fft.fftfreq(n)[:, None]
+    r = np.sqrt(fx * fx + fy * fy)
+    r[0, 0] = 1.0
+    spec = np.fft.fft2(white) / (r ** beta)
+    spec[0, 0] = 0.0
+    out = np.real(np.fft.ifft2(spec))
+    return (out - out.min()) / (out.max() - out.min())
+
+
+def marble_fields(n):
+    """(ベースカラー sRGB, 高さ) を返す"""
+    rng = np.random.default_rng(MARBLE_SEED)
+    warp = tileable_noise(rng, n, 2.2)    # 筋をうねらせる大きな揺らぎ
+    warp2 = tileable_noise(rng, n, 2.0)
+    cloud = tileable_noise(rng, n, 1.7)   # 地のむら
+    y, x = np.mgrid[0:n, 0:n] / n
+
+    def veins(kx, ky, w, field, sharp):
+        # 整数周波数の縞を揺らす（整数なのでタイルが切れない）。|sin| が 0 の所が細い筋
+        phase = 2.0 * np.pi * (kx * x + ky * y) + w * 2.0 * np.pi * field
+        return (1.0 - np.abs(np.sin(phase))) ** sharp
+
+    # 筋は太く柔らかく（鋭くするとひび割れに見える）。地の雲状のむらと重ねて模様にする
+    main = veins(1, 2, 1.6, warp, MARBLE_VEIN_SHARPNESS)
+    sub = veins(3, -1, 1.1, warp2, MARBLE_VEIN_SHARPNESS * 1.8) * 0.35
+    v = np.clip(main + sub, 0.0, 1.0)
+    haze = np.clip((cloud - 0.45) * 1.6, 0.0, 1.0) * 0.25   # 筋の周りのうっすらした灰色のもや
+
+    base = np.array(MARBLE_BASE)[None, None, :] + (cloud[..., None] - 0.5) * 0.04
+    vein = np.array(MARBLE_VEIN)[None, None, :]
+    mix = np.clip(v * MARBLE_VEIN_STRENGTH + haze, 0.0, 1.0)[..., None]
+    color = base * (1.0 - mix) + vein * mix
+    height = -v * 0.3 + (cloud - 0.5) * 0.1   # 磨いた石なので溝はほとんど付けない
+    return np.clip(color, 0.0, 1.0), height
+
+
+def height_to_normal(height, strength):
+    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
+    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
+    n = height.shape[0]
+    nx = -dx * strength * n / 64.0
+    ny = -dy * strength * n / 64.0
+    nz = np.ones_like(height)
+    length = np.sqrt(nx * nx + ny * ny + nz * nz)
+    return np.stack([nx / length, ny / length, nz / length], axis=-1) * 0.5 + 0.5
+
+
+def save_png(name, rgb, out_dir, non_color):
+    """rgb: (h, w, 3) 0..1、行 0 = 上。Blender の pixels は下の行から"""
+    h, w, _ = rgb.shape
+    img = bpy.data.images.new(name, width=w, height=h, alpha=False)
+    if non_color:
+        img.colorspace_settings.name = "Non-Color"
+    rgba = np.concatenate([np.flipud(rgb), np.ones((h, w, 1))], axis=-1).astype(np.float32)
+    img.pixels.foreach_set(rgba.ravel())
+    path = out_dir / f"{name}.png"
+    img.filepath_raw = str(path.resolve())
+    img.file_format = "PNG"
+    img.save()
+    print(f"[gen_title_door] texture {path}")
+    return img
+
+
+def make_textures(out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    color, height = marble_fields(TEX_SIZE)
+    flat = np.tile(np.array([0.5, 0.5, 1.0]), (4, 4, 1))
+    return {
+        "marble_base": save_png(TEX_NAMES["marble_base"], color, out_dir, non_color=False),
+        "marble_normal": save_png(TEX_NAMES["marble_normal"], height_to_normal(height, MARBLE_BUMP), out_dir, non_color=True),
+        "gold_normal": save_png(TEX_NAMES["gold_normal"], flat, out_dir, non_color=True),
+    }
+
+
+# ============================================================
+# マテリアル（glTF にそのまま出る構成：画像 → Base Color / Normal Map）
+# ============================================================
+def attach_normal_map(nt, bsdf, image):
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    nmap = nt.nodes.new("ShaderNodeNormalMap")
+    nt.links.new(tex.outputs["Color"], nmap.inputs["Color"])
+    nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def make_materials(textures):
     marble = bpy.data.materials.new("Marble")
     marble.use_nodes = True
     nt = marble.node_tree
     bsdf = nt.nodes["Principled BSDF"]
     bsdf.inputs["Roughness"].default_value = 0.35
-    noise = nt.nodes.new("ShaderNodeTexNoise")
-    noise.inputs["Scale"].default_value = 2.5
-    noise.inputs["Detail"].default_value = 8.0
-    noise.inputs["Distortion"].default_value = 4.0
-    ramp = nt.nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.elements[0].position = 0.45
-    ramp.color_ramp.elements[0].color = (0.62, 0.62, 0.64, 1.0)
-    ramp.color_ramp.elements[1].position = 0.52
-    ramp.color_ramp.elements[1].color = (0.93, 0.92, 0.89, 1.0)
-    nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
-    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    base = nt.nodes.new("ShaderNodeTexImage")
+    base.image = textures["marble_base"]
+    nt.links.new(base.outputs["Color"], bsdf.inputs["Base Color"])
+    attach_normal_map(nt, bsdf, textures["marble_normal"])
 
     gold = bpy.data.materials.new("Gold")
     gold.use_nodes = True
-    g = gold.node_tree.nodes["Principled BSDF"]
+    nt = gold.node_tree
+    g = nt.nodes["Principled BSDF"]
     g.inputs["Base Color"].default_value = (1.0, 0.68, 0.24, 1.0)
     g.inputs["Metallic"].default_value = 1.0
     g.inputs["Roughness"].default_value = 0.25
+    # 平らな法線マップ。cook の PBR 切替は法線マップの有無だけで決まるので金にも付ける
+    attach_normal_map(nt, g, textures["gold_normal"])
     return [marble, gold]
 
 
@@ -428,7 +544,9 @@ def main():
     export_dir = arg_path(argv, "--export")
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    mats = make_materials()
+    # テクスチャは書き出し先に置く（glTF からの参照がそのまま cook で解決される）。書き出さない時は一時フォルダ
+    tex_dir = export_dir if export_dir is not None else Path(bpy.app.tempdir) / "title_door_tex"
+    mats = make_materials(make_textures(tex_dir))
     frame = build_frame(mats)
     leaf_r = build_leaf_right(mats)
     leaf_l = build_leaf_left(leaf_r, mats)

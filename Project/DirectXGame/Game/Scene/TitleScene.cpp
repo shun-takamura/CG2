@@ -3,6 +3,8 @@
 #include "Camera.h"
 #include "Object3DManager.h"
 #include "Object3DInstance.h"
+#include "ModelInstance.h"
+#include "TextureManager.h"
 #include "Skybox.h"
 #include "LightManager.h"
 #include "SceneManager.h"
@@ -20,6 +22,7 @@
 #include "MathUtility.h"
 #include "Water/WaterReflection.h"
 #include "Water/WaterSurface.h"
+#include "Cloud/CloudLayer.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -31,8 +34,13 @@
 namespace {
 	// 雲なしの昼の青空（tools/BlenderPipeline/gen_title_sky.py で生成。太陽の円盤は描いていない）
 	constexpr const char* kTitleSkyboxPath = "Resources/Cubemaps/title_clear_sky.dds";
+	// 映り込み（PBR の IBL）専用。地平線より下を石っぽい暖色にしてあり、カメラより低い所の金が
+	// 明るい水色を映して白っぽくなるのを防ぐ（gen_title_sky.py --ibl）。背景・水面は通常版を使う
+	constexpr const char* kTitleIblPath = "Resources/Cubemaps/title_clear_sky_ibl.dds";
 	// 空の太陽の向きから求めた光の進む向き（cubemap 上の太陽は仰角 55°、方向 (-0.191, 0.815, -0.547)）
 	const Vector3 kSunLightDirection = { 0.191f, -0.815f, 0.547f };
+	// 日差しは少し暖色にして、空の青い環境光で白い大理石が青く染まるのを打ち消す
+	const Vector4 kSunLightColor = { 1.0f, 0.96f, 0.9f, 1.0f };
 
 	// 水底の床（仮素材。石畳の素材ができたら差し替える）
 	constexpr const char* kWaterFloorTexturePath = "Resources/Textures/Terrain/_TestRock_BaseColor.dds";
@@ -40,6 +48,9 @@ namespace {
 	constexpr float kWaterDepth = 0.1f;
 	constexpr float kCameraFarClip = 1000.0f;
 	constexpr float kWaterSize = 1500.0f; // 半径 750m < ファークリップ
+
+	// 遠景の雲のノイズ（tools/Python/gen_cloud_noise.py で生成。R=形 / G=マスク）
+	constexpr const char* kCloudNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
 
 	// 扉（tools/BlenderPipeline/gen_title_door.py で生成）。枠の原点は台座の底面の中央で、正面が +Z。
 	// 扉板の蝶番の軸（枠のローカル）。左右は正面から見た向き（エンジンの +X が正面から見て左）
@@ -77,6 +88,9 @@ void TitleScene::Initialize() {
 
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, kTitleSkyboxPath);
+	// PBR の IBL（t1）。無いと金属は真っ黒、大理石も環境光が無く暗くなる
+	TextureManager::GetInstance()->LoadTexture(kTitleIblPath);
+	object3DManager_->SetEnvironmentTexture(kTitleIblPath);
 
 	logo_ = std::make_unique<Object3DInstance>();
 	logo_->Initialize(object3DManager_, dxCore_, "Resources/Models/Title", "title.mesh", "TitleLogo");
@@ -106,11 +120,19 @@ void TitleScene::Initialize() {
 	water_->GetParams().ringInterval = 6.0f;
 	water_->GetParams().ringJitter = 0.7f;
 
+	cloudLayer_ = std::make_unique<CloudLayer>();
+	cloudLayer_->Initialize(dxCore_, kCloudNoisePath);
+	cloudLayer_->SetSunDirection({ -kSunLightDirection.x, -kSunLightDirection.y, -kSunLightDirection.z });
+	skybox_->SetCloudLayer(cloudLayer_.get());
+	// PBR の鏡面反射（金の装飾）にも同じ雲を映す。シーンをまたいで残るので Finalize で外す
+	object3DManager_->SetCloudLayer(cloudLayer_.get());
+	water_->SetCloudLayer(cloudLayer_.get());
+
 	// 平行光源の既定 intensity は 0 なので、ロゴを照らす光をここで必ず設定する
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(kSunLightDirection);
-		lm->SetDirectionalLightColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-		lm->SetDirectionalLightIntensity(1.2f);
+		lm->SetDirectionalLightColor(kSunLightColor);
+		lm->SetDirectionalLightIntensity(sunIntensity_);
 	}
 
 	if (auto* pe = Game::GetPostEffect()) {
@@ -135,6 +157,8 @@ void TitleScene::Initialize() {
 void TitleScene::Finalize() {
 	Game::GetPostEffect()->ResetEffects();
 	SoundManager::GetInstance()->Stop2DSound("bgm_title");
+	// cloudLayer_ はこのシーンと一緒に消えるので、共有の Object3DManager から外しておく
+	object3DManager_->SetCloudLayer(nullptr);
 }
 
 void TitleScene::Update() {
@@ -151,6 +175,8 @@ void TitleScene::Update() {
 	// Skybox / ロゴはその時点の VP を CB に焼くので、差し替えの後で Update する
 	UpdateDebugCameraIfActive();
 	skybox_->Update(dt);
+	// 空側のレイの原点は描画カメラ（デバッグカメラ中はそちら）
+	if (cloudLayer_) cloudLayer_->Update(dt, camera_->GetTranslate());
 	logo_->Update();
 	doorFrame_->Update();
 	doorLeafL_->Update();
@@ -271,6 +297,29 @@ void TitleScene::UpdateDoor() {
 	doorLeafL_->SetRotate({ 0.0f, doorYaw_ - open, 0.0f });
 	doorLeafR_->SetTranslate(TransformCoordinate(kDoorHingeR, frameMatrix));
 	doorLeafR_->SetRotate({ 0.0f, doorYaw_ + open, 0.0f });
+
+	// マテリアルは GPU 側の準備ができてから作られる（遅延ロード）ので、初期化時ではなく毎フレーム上書きする
+	ApplyDoorMaterials();
+}
+
+void TitleScene::ApplyDoorMaterials() {
+	// 部位ごとの .mat 名（door_*_Marble.mat / door_*_Gold.mat）で大理石と金を見分ける
+	for (Object3DInstance* part : { doorFrame_.get(), doorLeafL_.get(), doorLeafR_.get() }) {
+		ModelInstance* model = part ? part->GetModelInstance() : nullptr;
+		if (!model) continue;
+		for (const RenderSubmesh& sm : model->GetSubmeshes()) {
+			if (!sm.material) continue;
+			if (sm.matFilePath.find("_Gold") != std::string::npos) {
+				sm.material->environmentCoefficient = doorGold_.envCoefficient;
+				sm.material->metallic = doorGold_.metallic;
+				sm.material->roughness = doorGold_.roughness;
+				sm.material->color = doorGold_.color;
+				sm.material->cloudReflection = doorGold_.cloudReflection;
+			} else {
+				sm.material->environmentCoefficient = doorMarbleEnvCoefficient_;
+			}
+		}
+	}
 }
 
 void TitleScene::SetLogoVisible(bool visible) {
@@ -402,6 +451,16 @@ void TitleScene::OnImGuiTuning() {
 			}
 			ImGui::SliderAngle("Door Yaw", &doorYaw_, -180.0f, 180.0f);
 			ImGui::SliderFloat("Door Open (deg)", &doorOpenDegrees_, 0.0f, 90.0f);
+			if (ImGui::SliderFloat("Sun Intensity", &sunIntensity_, 0.0f, 8.0f)) {
+				if (auto* lm = LightManager::GetInstance()) lm->SetDirectionalLightIntensity(sunIntensity_);
+			}
+			// マテリアルは UpdateDoor で毎フレーム反映される
+			ImGui::SliderFloat("Marble Env (IBL)", &doorMarbleEnvCoefficient_, 0.0f, 1.5f);
+			ImGui::SliderFloat("Gold Env (IBL)", &doorGold_.envCoefficient, 0.0f, 1.5f);
+			ImGui::SliderFloat("Gold Metallic", &doorGold_.metallic, 0.0f, 1.0f);
+			ImGui::SliderFloat("Gold Roughness", &doorGold_.roughness, 0.04f, 1.0f);
+			ImGui::ColorEdit3("Gold Color", &doorGold_.color.x);
+			ImGui::SliderFloat("Gold Cloud Reflect", &doorGold_.cloudReflection, 0.0f, 3.0f);
 		}
 		if (ImGui::CollapsingHeader("Water", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (GetUseDebugCamera()) {
@@ -413,6 +472,9 @@ void TitleScene::OnImGuiTuning() {
 			}
 			if (water_) water_->OnImGui();
 			if (waterReflection_) waterReflection_->OnImGui();
+		}
+		if (ImGui::CollapsingHeader("Cloud")) {
+			if (cloudLayer_) cloudLayer_->OnImGui();
 		}
 	}
 	ImGui::End();

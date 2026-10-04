@@ -11,7 +11,7 @@
 #include "Vector4.h"
 #include <string>
 
-
+class CloudLayer;
 
 class Object3DManager{
 public:
@@ -39,6 +39,9 @@ public:
     // 平面リフレクション用の鏡側 CB（VS b1）のルートパラメータ番号。
     // 既存インデックスを動かさないよう末尾に足してある。通常描画のシェーダは参照しない。
     static constexpr UINT kRootReflectionCamera = 12;
+    // 遠景の雲（CloudSky.hlsli の b7 / t5）。PBR の鏡面反射に雲を映すために使う
+    static constexpr UINT kRootCloudParams = 13;
+    static constexpr UINT kRootCloudNoise = 14;
 
 private:
 
@@ -106,6 +109,10 @@ private:
     // 距離フォグ（b6）。Initialize で確保し、DrawSetting で毎フレームバインドする。
     Microsoft::WRL::ComPtr<ID3D12Resource> fogResource_;
     FogParams* fogData_ = nullptr;
+
+    // 遠景の雲（b7 / t5）。未設定のシーンは enabled=0 のダミー CB とダミーテクスチャを挿す
+    CloudLayer* cloudLayer_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D12Resource> disabledCloudResource_;
 
 public:
   
@@ -196,6 +203,18 @@ public:
             commandList->SetGraphicsRootDescriptorTable(9, shadowSrvHandle_);
         }
     }
+
+    /// <summary>
+    /// PBR の鏡面反射に映す雲。シーンをまたいで残るので、雲を持つシーンは終了時に必ず nullptr に戻すこと
+    /// （CloudLayer の寿命はシーン側）。映る強さはマテリアルの cloudReflection（既定 0）で決まる。
+    /// </summary>
+    void SetCloudLayer(CloudLayer* cloudLayer) { cloudLayer_ = cloudLayer; }
+
+    /// <summary>
+    /// 雲の b7(rootParameter[13]) / t5(rootParameter[14]) をバインドする。
+    /// **ルートシグネチャを貼り直した直後は BindFog / BindShadow と一緒に必ず呼ぶこと**。
+    /// </summary>
+    void BindCloud(ID3D12GraphicsCommandList* commandList) const;
 
     // 別ルートシグネチャ（水面など）から同じシャドウ／フォグを参照するための取得口
     D3D12_GPU_VIRTUAL_ADDRESS GetShadowConstantsAddress() const { return shadowConstantsAddr_; }

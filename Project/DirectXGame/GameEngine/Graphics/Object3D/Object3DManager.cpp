@@ -1,4 +1,5 @@
 ﻿#include "Object3DManager.h"
+#include "Cloud/CloudLayer.h"
 
 void Object3DManager::Initialize(DirectXCore* dxCore)
 {
@@ -36,6 +37,10 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
     fogResource_ = dxCore_->CreateBufferResource(sizeof(FogParams));
     fogResource_->Map(0, nullptr, reinterpret_cast<void**>(&fogData_));
     *fogData_ = FogParams{};
+
+    // 雲（b7 / t5）を使わないシーン用のダミー。PBR の PS が無条件に参照するので未バインドにしない
+    disabledCloudResource_ = CloudLayer::CreateDisabledConstantBuffer(dxCore_);
+    TextureManager::GetInstance()->LoadTexture(CloudLayer::GetFallbackTexturePath());
 
     // ID Pass 用 PSO / RootSignature を1回だけ作成
     CreateIdPassObjects();
@@ -81,6 +86,18 @@ void Object3DManager::DrawSetting()
 
     // 距離フォグ（b6 = rootParameter[11]）。全オブジェクト共通なのでここで1回だけ。
     BindFog(dxCore_->GetCommandList());
+
+    // 遠景の雲（b7 / t5）
+    BindCloud(dxCore_->GetCommandList());
+}
+
+void Object3DManager::BindCloud(ID3D12GraphicsCommandList* commandList) const
+{
+    commandList->SetGraphicsRootConstantBufferView(kRootCloudParams,
+        cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootDescriptorTable(kRootCloudNoise,
+        cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle()
+                    : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
 }
 
 void Object3DManager::SetBlendMode(BlendMode blendMode)
@@ -140,7 +157,14 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeNormalMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeNormalMap[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[13] = {};
+    // PS: SRV(t5) - 遠景の雲のノイズ（CloudSky.hlsli）
+    D3D12_DESCRIPTOR_RANGE descriptorRangeCloud[1] = {};
+    descriptorRangeCloud[0].BaseShaderRegister = 5;                      // t5
+    descriptorRangeCloud[0].NumDescriptors = 1;
+    descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[15] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -220,10 +244,19 @@ void Object3DManager::CreateRootSignature()
     rootParameters[kRootReflectionCamera].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     rootParameters[kRootReflectionCamera].Descriptor.ShaderRegister = 1;  // b1
 
+    // rootParameters[13] / [14] = 遠景の雲（CloudSky.hlsli の b7 / t5）。PBR の鏡面反射に雲を映す
+    rootParameters[kRootCloudParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootCloudParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootCloudParams].Descriptor.ShaderRegister = 7;  // b7
+    rootParameters[kRootCloudNoise].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootCloudNoise].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootCloudNoise].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
+    rootParameters[kRootCloudNoise].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
+
     // ============================================
-    // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み)
+    // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み, s4 = 雲のノイズ)
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[3] = {};
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[4] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;         // バイリニアフィルタ
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 0~1の範囲をリピート
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -252,6 +285,17 @@ void Object3DManager::CreateRootSignature()
     staticSamplers[2].MaxLOD = D3D12_FLOAT32_MAX;
     staticSamplers[2].ShaderRegister = 2;                               // s2
     staticSamplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    // 雲のノイズ。Skybox / WaterSurface の s4 と同じ設定（CloudSky.hlsli を共用するため）
+    staticSamplers[3].Filter = D3D12_FILTER_ANISOTROPIC;
+    staticSamplers[3].MaxAnisotropy = 8;
+    staticSamplers[3].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[3].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[3].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[3].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    staticSamplers[3].MaxLOD = D3D12_FLOAT32_MAX;
+    staticSamplers[3].ShaderRegister = 4;                               // s4
+    staticSamplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};
     rootSignaturDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
