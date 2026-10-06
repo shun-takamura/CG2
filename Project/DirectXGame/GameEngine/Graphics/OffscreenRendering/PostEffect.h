@@ -20,6 +20,7 @@
 #include "OutlineNormalEffect.h"
 #include "MaskedGrayscaleEffect.h"
 #include "MaskedOutlineEffect.h"
+#include "LightShaftEffect.h"
 #include "ColorInvertEffect.h"
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
@@ -152,6 +153,7 @@ public:
 	OutlineDepthEffect* outlineDepth = nullptr;
 	OutlineNormalEffect* outlineNormal = nullptr;
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
+	LightShaftEffect* lightShaft = nullptr;
 	MaskedOutlineEffect* maskedOutline = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;

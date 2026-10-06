@@ -5,6 +5,7 @@
 #include "DStorageManager.h"
 #include "PepperMacros.h"
 #include "Log.h"
+#include "Object3DManager.h"
 
 // テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
 // 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
@@ -118,6 +119,15 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 			}
 		}
 		if (sm.material) sm.material->useNormalMap = sm.normalMapFilePath.empty() ? 0 : 1;
+
+		// 視差のハイトマップ（線形データ）。ロードに失敗したら視差なし扱い
+		if (!sm.heightMapFilePath.empty()) {
+			tm->LoadTextureLinear(sm.heightMapFilePath);
+			if (!tm->HasTexture(sm.heightMapFilePath)) {
+				sm.heightMapFilePath.clear();
+			}
+		}
+		if (sm.material) sm.material->useParallax = sm.heightMapFilePath.empty() ? 0 : 1;
 	}
 
 	// 後方互換: submesh[0] を既存メンバへ（フォールバック適用後の非空パス）
@@ -159,6 +169,12 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 		const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
 		cmd->SetGraphicsRootDescriptorTable(
 			10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+		);
+
+		// 視差のハイトマップ(t4)。無い場合はベースで埋める（PS は useParallax で判定）
+		const std::string& heightSrvPath = !sm.heightMapFilePath.empty() ? sm.heightMapFilePath : texPath;
+		cmd->SetGraphicsRootDescriptorTable(
+			Object3DManager::kRootHeightMap, TextureManager::GetInstance()->GetSrvHandleGPU(heightSrvPath)
 		);
 
 		// 分割ドロー（StartIndexLocation = indexStart）
@@ -264,6 +280,12 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 		m->shadingModel = 0;
 		m->useNormalMap = 0;
 		m->cloudReflection = 0.0f;
+		m->dissolveEnable = 0;
+		m->dissolveProgress = 1.0f;
+		m->useParallax = 0;
+		m->parallaxDepth = 0.0f;
+		m->parallaxMinLayers = 8.0f;
+		m->parallaxMaxLayers = 32.0f;
 	}
 
 	// 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）
@@ -349,7 +371,7 @@ Node ModelInstance::ReadNode(aiNode* node)
 }
 
 // .mat (MATL) から base_color_path を抽出するヘルパー。
-// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v3 を許容する。
+// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v4 を許容する。
 static std::string ReadMatBaseColorPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
@@ -361,7 +383,7 @@ static std::string ReadMatBaseColorPath(const std::string& matPath)
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version < 1 || version > 3) return {};
+	if (version < 1 || version > 4) return {};
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);
@@ -386,6 +408,26 @@ static std::string ReadMatNormalMapPath(const std::string& matPath)
 	char normalPath[256]{};
 	h.Read(normalPath, 256);
 	return std::string(normalPath);
+}
+
+// .mat (MATL) v4 から height_map_path を抽出するヘルパー（固定オフセット 564 = v3 の末尾）
+static std::string ReadMatHeightMapPath(const std::string& matPath)
+{
+	auto h = AssetLocator::GetInstance()->Open(matPath);
+	if (!h.IsValid()) return {};
+
+	char magic[4]{};
+	h.Read(magic, 4);
+	if (std::memcmp(magic, "MATL", 4) != 0) return {};
+
+	uint32_t version = 0;
+	h.Read(&version, 4);
+	if (version < 4) return {};  // v4 から height_map_path
+
+	h.Seek(564);
+	char heightPath[256]{};
+	h.Read(heightPath, 256);
+	return std::string(heightPath);
 }
 
 void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::string& filename)
@@ -471,6 +513,7 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 			// .mat を開いて base_color_path / normal_map_path を取得（GPU 前でも AssetLocator で読める）
 			sm.textureFilePath = ReadMatBaseColorPath(sm.matFilePath);
 			sm.normalMapFilePath = ReadMatNormalMapPath(sm.matFilePath);
+			sm.heightMapFilePath = ReadMatHeightMapPath(sm.matFilePath);
 			submeshes_.push_back(std::move(sm));
 		}
 

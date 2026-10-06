@@ -69,7 +69,23 @@ struct Material
     float shininess;
     float environmentCoefficient;
     int useEnvironmentMap; // このShaderでは使わないが構造体の整合性のため
-    float padding2;
+    // 以下このShaderでは使わないが、ディゾルブの値まで C++ の Material.h とオフセットを揃えるため
+    float metallic;
+    float roughness;
+    int shadingModel;
+    int useNormalMap;
+    float cloudReflection;
+    // ディゾルブ（Dissolve.hlsli。C++ の Material.h と同じ並び）
+    int dissolveEnable;
+    float dissolveProgress;
+    float dissolveEdgeWidth;
+    float dissolveNoiseScale;
+    float dissolveHeightMin;
+    float dissolveHeightMax;
+    float dissolveNoiseWeight;
+    float dissolvePadding;
+    float3 dissolveEdgeColor;
+    float dissolvePadding2;
 };
 
 struct PixelShaderOutput
@@ -109,11 +125,15 @@ SamplerState gSampler : register(s0);
 // ===== Shadow (CSM + PCSS) =====
 #include "Shadow.hlsli"
 #include "Fog.hlsli"
+#include "Dissolve.hlsli"
 
 
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
+
+    // 消える部分はここで捨てる（以降の計算を省く）
+    float dissolveEdge = ApplyDissolve(input.worldPosition);
 
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
@@ -249,6 +269,7 @@ PixelShaderOutput main(VertexShaderOutput input)
 
     // 距離フォグ（最後に乗せる＝ライティング/IBL/シャドウの結果すべてに効かせる）。
     // アルファは触らない（ApplyFog 内で rgb のみ扱う）。
+    output.color.rgb = ApplyDissolveEdge(output.color.rgb, dissolveEdge);
     output.color.rgb = ApplyFog(output.color.rgb, input.worldPosition, gCamera.worldPosition);
 
     return output;

@@ -2,6 +2,7 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include "Matrix4x4.h"
 #include "Vector2.h"
@@ -9,6 +10,8 @@
 #include "Vector4.h"
 
 class DirectXCore;
+class SRVManager;
+class RippleSimulation;
 class Object3DManager;
 class WaterReflection;
 class Camera;
@@ -81,12 +84,28 @@ public:
 		float   ambientRingScale = 1.0f;                    // ランダムな波（待機中の波）の振幅倍率。SetAmbientRingScale で補間
 		float   padding3[3]{};
 		EmittedRingForGPU emittedRings[kMaxEmittedRings]{}; // EmitRing / Burst で出した波
+		// ----- 波のシミュレーション（RippleSimulation の高さマップ t6）。毎フレーム内部で設定 -----
+		Vector2 simCenter{};                                // 範囲の中心（ワールド XZ）
+		float   simSize = 40.0f;                            // 範囲の一辺 [m]
+		float   simNormalScale = 1.0f;                      // 高さの傾きを法線に足す倍率
+		float   simTexel = 1.0f / 512.0f;                   // 1 テクセルの UV 幅
+		float   padding4[3]{};
+		// ----- 水底の床の法線マップ（t7）と視差（ハイトマップ t8）。SetFloorMaps で有効になる -----
+		float   floorParallaxDepth = 0.0f;                  // 凹凸の深さ（UV 1 あたり。深さ[m] ÷ テクスチャ1枚の長さ[m]）
+		float   floorNormalStrength = 1.0f;                 // 法線マップの強さ
+		int     floorUseNormalMap = 0;                      // 内部で設定
+		int     floorUseParallax = 0;                       // 内部で設定
+		float   floorParallaxMinLayers = 8.0f;              // 真上から見たときのレイマーチの段数
+		float   floorParallaxMaxLayers = 24.0f;             // 浅い角度から見たときの段数
+		float   floorNormalFlipY = 1.0f;                    // 法線マップの緑の向き（-1 で反転）
+		float   padding5 = 0.0f;
 	};
 
 	WaterSurface();
 	~WaterSurface();
 
-	void Initialize(DirectXCore* dxCore, Object3DManager* object3DManager, const std::string& floorTexturePath);
+	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
+		const std::string& floorTexturePath);
 
 	/// <summary>波の時間を進める（待機中の波の倍率の補間、連続発射もここで進む）</summary>
 	void Update(float deltaTime);
@@ -124,6 +143,17 @@ public:
 	/// <summary>EmitRing で出した波のうち、まだ水面に残っている数</summary>
 	int GetActiveEmittedRingCount() const;
 
+	//==============================
+	// 波のシミュレーション（RippleSimulation。数の上限なし・干渉する）
+	//==============================
+	/// <summary>
+	/// その位置にガウス形のへこみを入れて波を立てる（マウスでなぞる等）。範囲は波紋の中心まわり simSize 四方。
+	/// </summary>
+	void AddRippleImpulse(const Vector3& position, float radius, float strength);
+	/// <summary>シミュレーションを進める。シーンの Draw の最初（水面・反射を描く前）に呼ぶ</summary>
+	void DispatchSimulation();
+	RippleSimulation* GetRippleSimulation() const { return rippleSimulation_.get(); }
+
 	/// <summary>
 	/// 描画。シーン RT（本体 DSV）がバインド済みで、不透明物を描いた後に呼ぶ。
 	/// reflection が nullptr / 未準備なら空の反射だけになる。
@@ -136,6 +166,12 @@ public:
 	void SetSize(float size) { size_ = size; }
 	void SetFollowCamera(bool follow) { followCamera_ = follow; }
 	void SetCenter(const Vector3& center) { center_ = center; }
+	/// <summary>
+	/// 水底の床に法線マップとハイトマップ（視差）を足す。空文字ならその機能は使わない。
+	/// 床のテクスチャ 1 枚の長さは Params::floorTiling（[回/m]）で合わせること。
+	/// </summary>
+	/// <param name="parallaxDepth">凹凸の深さ（UV 1 あたり。深さ[m] ÷ テクスチャ1枚の長さ[m]）</param>
+	void SetFloorMaps(const std::string& normalMapPath, const std::string& heightMapPath, float parallaxDepth);
 	/// <summary>同心円のさざ波の中心（ワールド座標。Y は無視）</summary>
 	void SetRippleCenter(const Vector3& center) { params_.rippleCenter = { center.x, center.z }; }
 	/// <summary>映り込む空に遠景の雲を重ねる（null で外す）。Skybox と同じ CloudLayer を渡すこと</summary>
@@ -156,6 +192,9 @@ private:
 	DirectXCore* dxCore_ = nullptr;
 	Object3DManager* object3DManager_ = nullptr;
 	std::string floorTexturePath_;
+	std::string floorNormalMapPath_;
+	std::string floorHeightMapPath_;
+	std::unique_ptr<RippleSimulation> rippleSimulation_;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;

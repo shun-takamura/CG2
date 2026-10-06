@@ -59,6 +59,8 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
         if (!sm.matFilePath.empty() && sm.material) {
             MaterialData matTmp;
             LoadMatFile(sm.matFilePath, matTmp, sm.material);
+            // 視差（POM）はスキンメッシュでは扱わない（ハイトマップを貼らないので必ず切る）
+            sm.material->useParallax = 0;
         }
 
         // テクスチャ無しマテリアル（色のみ PBR 等）や、参照先 DDS が見つからない場合は
@@ -237,6 +239,12 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
         m->shadingModel = 0;
         m->useNormalMap = 0;
         m->cloudReflection = 0.0f;
+        m->dissolveEnable = 0;
+        m->dissolveProgress = 1.0f;
+        m->useParallax = 0;
+        m->parallaxDepth = 0.0f;
+        m->parallaxMinLayers = 8.0f;
+        m->parallaxMaxLayers = 32.0f;
     }
 
     // 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）
@@ -424,8 +432,8 @@ std::string ReadMatBaseColorPath_V2(const std::string& matPath)
     if (std::memcmp(magic, "MATL", 4) != 0) return {};
     uint32_t version = 0;
     h.Read(&version, 4);
-    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v3 を許容
-    if (version < 1 || version > 3) return {};
+    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v4 を許容
+    if (version < 1 || version > 4) return {};
     char path[256]{};
     h.Read(path, 256);
     return std::string(path);

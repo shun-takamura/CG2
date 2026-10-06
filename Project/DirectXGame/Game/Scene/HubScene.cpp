@@ -12,6 +12,8 @@
 #include "TextRenderer.h"
 #include "SoundManager.h"
 #include "Vector4.h"
+#include "AttractMode.h"
+#include "UIPointer.h"
 
 namespace {
 	enum HubItem : int {
@@ -33,6 +35,7 @@ void HubScene::Initialize() {
 
 	menu_.SetItems({ "Stage1", "タイトルに戻る" });
 	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
+	attractTimer_ = 0.0f;
 }
 
 void HubScene::Finalize() {
@@ -47,7 +50,27 @@ void HubScene::Update() {
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
 
-	const VerticalMenu::Result result = menu_.Update(actions);
+	// デモモード：一定時間でカーソルを「タイトルに戻る」へ動かし、少し見せてから決定してタイトルへ
+	if (auto* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
+		const float prev = attractTimer_;
+		attractTimer_ += GetScaledDeltaTime();
+		if (prev < attract->hubWait && attractTimer_ >= attract->hubWait) {
+			menu_.SetSelectedIndex(kHubBackToTitle);
+			SoundManager::GetInstance()->Play2DSound("se_ui_cursor");
+		}
+		if (attractTimer_ >= attract->hubWait + attract->hubConfirmDelay) {
+			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+			SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+			return;
+		}
+	} else {
+		attractTimer_ = 0.0f;
+	}
+
+	menu_.SetPosition({ static_cast<float>(dxCore_->GetSwapChainWidth()) * 0.5f,
+		static_cast<float>(dxCore_->GetSwapChainHeight()) * 0.55f });
+	const UIPointer pointer = UIPointer::FromInput(input_);
+	const VerticalMenu::Result result = menu_.Update(actions, &pointer);
 	if (result == VerticalMenu::Result::Canceled) {
 		SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
 		return;
@@ -79,7 +102,8 @@ void HubScene::Draw() {
 	tr->DrawText(heading, { (screenW - headingW) * 0.5f, screenH * 0.25f }, headingScale,
 		{ 1.0f, 1.0f, 1.0f, 1.0f }, 3.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 
-	menu_.Draw({ screenW * 0.5f, screenH * 0.55f });
+	menu_.SetPosition({ screenW * 0.5f, screenH * 0.55f });
+	menu_.Draw();
 	tr->Flush();
 }
 

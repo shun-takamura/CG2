@@ -15,7 +15,13 @@ void FadeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCor
 	fadeSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "FadeTransition");
 	fadeSprite_->SetPosition({ 0.0f, 0.0f });
 	fadeSprite_->SetSize({ screenWidth_, screenHeight_ });
-	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f }); // 黒、最初は透明
+	fadeSprite_->SetColor({ color_.x, color_.y, color_.z, 0.0f }); // 最初は透明
+}
+
+void FadeTransition::SetNextFade(const Vector3& color, float fadeDuration, float holdDuration) {
+	color_ = color;
+	fadeDuration_ = fadeDuration;
+	holdDuration_ = holdDuration;
 }
 
 void FadeTransition::Finalize() {
@@ -66,11 +72,15 @@ void FadeTransition::Update() {
 			alpha_ = 0.0f;
 			state_ = TransitionState::None;
 			isTransitioning_ = false;
+			// SetNextFade の指定はこの1回だけ
+			color_ = { 0.0f, 0.0f, 0.0f };
+			fadeDuration_ = kDefaultFadeDuration;
+			holdDuration_ = kDefaultHoldDuration;
 		}
 	}
 
 	// α値をスプライトに適用
-	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, alpha_ });
+	fadeSprite_->SetColor({ color_.x, color_.y, color_.z, alpha_ });
 	fadeSprite_->Update();
 }
 

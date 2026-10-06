@@ -79,6 +79,22 @@ struct Material
     int shadingModel;
     int useNormalMap;
     float cloudReflection;   // 鏡面反射に映す遠景の雲の強さ（0=映さない）
+    // ディゾルブ（Dissolve.hlsli。C++ の Material.h と同じ並び）
+    int dissolveEnable;
+    float dissolveProgress;
+    float dissolveEdgeWidth;
+    float dissolveNoiseScale;
+    float dissolveHeightMin;
+    float dissolveHeightMax;
+    float dissolveNoiseWeight;
+    float dissolvePadding;
+    float3 dissolveEdgeColor;
+    float dissolvePadding2;
+    // 視差オクルージョン（POM）。この PS だけが宣言する
+    int useParallax;
+    float parallaxDepth;      // 凹凸の深さ（UV 1 あたり）
+    float parallaxMinLayers;  // 正面から見たときのレイマーチの段数
+    float parallaxMaxLayers;  // 浅い角度から見たときの段数
 };
 
 struct PixelShaderOutput
@@ -114,11 +130,13 @@ cbuffer SpotLightBuffer : register(b4)
 Texture2D<float4> gTexture : register(t0);
 TextureCube<float4> gEnvironmentTexture : register(t1);  // IBL 用スカイボックス
 Texture2D<float4> gNormalMap : register(t2);
+Texture2D<float4> gHeightMap : register(t4);   // 視差のハイトマップ（R。1=高い）
 SamplerState gSampler : register(s0);
 
 // ===== Shadow (CSM + PCSS) =====
 #include "Shadow.hlsli"
 #include "Fog.hlsli"
+#include "Dissolve.hlsli"
 #include "../Cloud/CloudSky.hlsli"  // b7 / t5 / s4。鏡面反射に遠景の雲を映す
 
 // ===== Cook-Torrance BRDF =====
@@ -184,14 +202,59 @@ float3 PBRLight(float3 N, float3 V, float3 L, float3 radiance,
     return (diffuse + specular) * radiance * NdotL;
 }
 
+// 視差オクルージョン（POM）。接空間の視線でハイトマップの中をレイマーチし、表面に当たった所の UV を返す。
+// 視線が浅いほど段数を増やす。最後は前後の段の間を線形補間して段の縞を消す。
+// ループの中は SampleGrad（元の UV の微分）で引く＝分岐やループで mip 選択が乱れない
+float2 ParallaxOcclusionUV(float2 uv, float3 viewTS)
+{
+    const float2 dx = ddx(uv);
+    const float2 dy = ddy(uv);
+    const float layers = lerp(gMaterial.parallaxMaxLayers, gMaterial.parallaxMinLayers, saturate(viewTS.z));
+    const float layerDepth = 1.0f / layers;
+    // 1 段ごとの UV のずれ。真横に近い視線で発散しないよう z の下限を置く
+    const float2 shift = viewTS.xy / max(viewTS.z, 0.1f) * gMaterial.parallaxDepth;
+    const float2 deltaUV = shift / layers;
+
+    float2 currentUV = uv;
+    float currentDepth = 0.0f;
+    float mapDepth = 1.0f - gHeightMap.SampleGrad(gSampler, currentUV, dx, dy).r;
+    [loop]
+    for (int i = 0; i < 64 && currentDepth < mapDepth; ++i)
+    {
+        currentUV -= deltaUV;
+        mapDepth = 1.0f - gHeightMap.SampleGrad(gSampler, currentUV, dx, dy).r;
+        currentDepth += layerDepth;
+    }
+
+    // 当たった段と 1 つ手前の段の間で、表面と交わる位置を補間する
+    const float2 prevUV = currentUV + deltaUV;
+    const float after = mapDepth - currentDepth;
+    const float before = (1.0f - gHeightMap.SampleGrad(gSampler, prevUV, dx, dy).r) - (currentDepth - layerDepth);
+    const float w = after / (after - before + 1e-5f);
+    return lerp(currentUV, prevUV, saturate(w));
+}
+
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
 
+    // 消える部分はここで捨てる（以降の計算を省く）
+    float dissolveEdge = ApplyDissolve(input.worldPosition);
+
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
+    float3 V = normalize(gCamera.worldPosition - input.worldPosition);
+    float3 N = normalize(input.normal);
+
+    // 視差：ずらした UV でベースカラーと法線マップを引く（シルエットは変わらない）
+    if (gMaterial.useParallax != 0)
+    {
+        float3 T = normalize(input.tangent);
+        float3 B = normalize(input.bitangent);
+        float3 viewTS = normalize(float3(dot(V, T), dot(V, B), dot(V, N)));
+        transformedUV.xy = ParallaxOcclusionUV(transformedUV.xy, viewTS);
+    }
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
 
-    float3 N = normalize(input.normal);
     // 法線マップで N をピクセル単位に差し替え（TBN でタンジェント空間→ワールド）
     if (gMaterial.useNormalMap != 0)
     {
@@ -201,7 +264,6 @@ PixelShaderOutput main(VertexShaderOutput input)
         float3x3 TBN = float3x3(T, B, N);
         N = normalize(mul(normalTS, TBN));
     }
-    float3 V = normalize(gCamera.worldPosition - input.worldPosition);
 
     float3 albedo = gMaterial.color.rgb * textureColor.rgb;
     float metallic = saturate(gMaterial.metallic);
@@ -297,6 +359,7 @@ PixelShaderOutput main(VertexShaderOutput input)
 
     // 距離フォグ（最後に乗せる＝ライティング/IBL/シャドウの結果すべてに効かせる）。
     // アルファは触らない（ApplyFog 内で rgb のみ扱う）。
+    output.color.rgb = ApplyDissolveEdge(output.color.rgb, dissolveEdge);
     output.color.rgb = ApplyFog(output.color.rgb, input.worldPosition, gCamera.worldPosition);
 
     return output;

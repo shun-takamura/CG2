@@ -53,6 +53,7 @@ struct RenderSubmesh
 	std::string matFilePath;        // .mat パス（assimp 経路など無い場合は空）
 	std::string textureFilePath;    // base color DDS
 	std::string normalMapFilePath;  // 法線 DDS（空＝なし）
+	std::string heightMapFilePath;  // 視差のハイトマップ DDS（.mat v4。空＝なし）
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
 	Material* material = nullptr;    // materialResource を Map したポインタ

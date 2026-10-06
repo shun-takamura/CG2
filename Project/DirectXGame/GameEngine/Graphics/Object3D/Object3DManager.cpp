@@ -89,6 +89,16 @@ void Object3DManager::DrawSetting()
 
     // 遠景の雲（b7 / t5）
     BindCloud(dxCore_->GetCommandList());
+
+    // 視差のハイトマップ（t4）のダミー。実物は ModelInstance が submesh ごとに貼る
+    BindHeightMapFallback(dxCore_->GetCommandList());
+}
+
+void Object3DManager::BindHeightMapFallback(ID3D12GraphicsCommandList* commandList) const
+{
+    // 雲のダミーと同じ 2D テクスチャを流用する（PS は useParallax=0 のとき読まない）
+    commandList->SetGraphicsRootDescriptorTable(kRootHeightMap,
+        TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
 }
 
 void Object3DManager::BindCloud(ID3D12GraphicsCommandList* commandList) const
@@ -164,7 +174,14 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[15] = {};
+    // PS: SRV(t4) - 視差オクルージョンのハイトマップ
+    D3D12_DESCRIPTOR_RANGE descriptorRangeHeight[1] = {};
+    descriptorRangeHeight[0].BaseShaderRegister = 4;                      // t4
+    descriptorRangeHeight[0].NumDescriptors = 1;
+    descriptorRangeHeight[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeHeight[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[16] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -252,6 +269,12 @@ void Object3DManager::CreateRootSignature()
     rootParameters[kRootCloudNoise].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[kRootCloudNoise].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
     rootParameters[kRootCloudNoise].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
+
+    // rootParameters[15] = 視差オクルージョンのハイトマップ（t4）
+    rootParameters[kRootHeightMap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootHeightMap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootHeightMap].DescriptorTable.pDescriptorRanges = descriptorRangeHeight;
+    rootParameters[kRootHeightMap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeHeight);
 
     // ============================================
     // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み, s4 = 雲のノイズ)
@@ -478,7 +501,7 @@ void Object3DManager::CreateIdPassObjects()
 
     // ----- Root Signature -----
     // [0] VS CBV(b0) = TransformationMatrix
-    // [1] PS RootConstant(b0) = uint id
+    // [1] PS RootConstant(b0) = uint id（＋ディゾルブ版は続けて 7 個。WriteIDDissolve.PS / Object3DInstance::DrawIdPass）
     D3D12_ROOT_PARAMETER rootParams[2] = {};
     rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
@@ -488,7 +511,7 @@ void Object3DManager::CreateIdPassObjects()
     rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParams[1].Constants.ShaderRegister = 0;
     rootParams[1].Constants.RegisterSpace = 0;
-    rootParams[1].Constants.Num32BitValues = 1;
+    rootParams[1].Constants.Num32BitValues = kIdPassConstantCount;
 
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};
     rsDesc.NumParameters = _countof(rootParams);
@@ -562,5 +585,12 @@ void Object3DManager::CreateIdPassObjects()
     desc.SampleDesc.Count = 1;
 
     hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&idPipelineState_));
+    assert(SUCCEEDED(hr));
+
+    // ディゾルブ中の物用：消えている部分に ID を書かない（他は同じ設定）
+    IDxcBlob* psDissolve = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/WriteIDDissolve.PS.hlsl", L"ps_6_0");
+    assert(psDissolve);
+    desc.PS = { psDissolve->GetBufferPointer(), psDissolve->GetBufferSize() };
+    hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&idDissolvePipelineState_));
     assert(SUCCEEDED(hr));
 }

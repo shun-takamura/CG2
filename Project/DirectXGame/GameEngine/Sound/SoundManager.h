@@ -56,6 +56,8 @@ public:
     // 止めるときは Stop2DSound(name)。同じ name で呼び直すと前の再生を止めて鳴らし直す。
     void Play2DSoundLooped(const std::string& name, float volume = 1.0f);
     void Stop2DSound(const std::string& name);
+    // 再生中の 2D 音の音量を変える（フェードは呼び出し側で毎フレーム呼ぶ）。再生していなければ何もしない
+    void Set2DSoundVolume(const std::string& name, float volume);
 
     // 3D再生（SE用）※ ハンドルを返す、0は無効
     uint32_t Play3DSound(

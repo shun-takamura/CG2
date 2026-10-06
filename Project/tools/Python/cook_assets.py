@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import struct
 import subprocess
 import sys
@@ -61,6 +62,9 @@ MESH_FLAG_HAS_SKINNING = 0x1
 #          + normal_map_path(256)
 MAT_MAGIC = b"MATL"
 MAT_VERSION = 3
+# v4 = v3 + height_map_path(256) + parallax_depth(4)。視差（POM）用。
+# ハイトマップがあるマテリアルだけ v4 で書く（他は v3 のまま＝既存の読み手に影響しない）
+MAT_VERSION_PARALLAX = 4
 MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256  # = 564
 
 # ---- マテリアルデフォルト値（ModelInstance::CreateMaterialData と合わせる）----
@@ -476,11 +480,13 @@ def _write_mat_v2(out_path: Path, base_color_path: str,
                   metallic=MAT_DEFAULT_METALLIC,
                   roughness=MAT_DEFAULT_ROUGHNESS,
                   shading_model=MAT_DEFAULT_SHADING_MODEL,
-                  normal_map_path=MAT_DEFAULT_NORMAL_MAP) -> None:
+                  normal_map_path=MAT_DEFAULT_NORMAL_MAP,
+                  height_map_path: str = "",
+                  parallax_depth: float = 0.0) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("wb") as f:
         f.write(MAT_MAGIC)
-        f.write(struct.pack("<I", MAT_VERSION))
+        f.write(struct.pack("<I", MAT_VERSION_PARALLAX if height_map_path else MAT_VERSION))
         f.write(_fixed_path_bytes(base_color_path))
         f.write(struct.pack("<4f", *color))
         f.write(struct.pack("<i", enable_lighting))
@@ -491,6 +497,9 @@ def _write_mat_v2(out_path: Path, base_color_path: str,
         f.write(struct.pack("<f", roughness))
         f.write(struct.pack("<i", shading_model))
         f.write(_fixed_path_bytes(normal_map_path))
+        if height_map_path:
+            f.write(_fixed_path_bytes(height_map_path))
+            f.write(struct.pack("<f", parallax_depth))
 
 
 # ============================================================
@@ -998,7 +1007,7 @@ def _gltf_find_normal_map_path(gltf, gltf_path: Path, mat_index: int = 0) -> str
     uri = urllib.parse.unquote(uri)
     try:
         rel = gltf_path.relative_to(ASSETS_DIR)
-        return (RESOURCES_DIR / (rel.parent / uri).with_suffix(".dds")).as_posix()
+        return posixpath.normpath((RESOURCES_DIR / (rel.parent / uri).with_suffix(".dds")).as_posix())
     except ValueError:
         return ""
 
@@ -1029,9 +1038,29 @@ def _gltf_find_base_color_path(gltf, gltf_path: Path, mat_index: int = 0) -> str
     try:
         rel = gltf_path.relative_to(ASSETS_DIR)
         tex_in_assets = rel.parent / uri
-        return (RESOURCES_DIR / tex_in_assets.with_suffix(".dds")).as_posix()
+        return posixpath.normpath((RESOURCES_DIR / tex_in_assets.with_suffix(".dds")).as_posix())
     except ValueError:
         return ""
+
+
+def _gltf_find_parallax(gltf, gltf_path: Path, mat_index: int = 0) -> tuple[str, float]:
+    """マテリアルの extras（heightTexture / parallaxDepth）から視差用のハイトマップと深さを返す。
+    glTF にはハイトマップの標準が無いので、Blender のカスタムプロパティ等で extras に載せて運ぶ。
+    heightTexture は glTF からの相対パス（画像の uri と同じ扱い）。parallaxDepth は UV 1 あたりの深さ"""
+    materials = gltf.get("materials", [])
+    if not materials or mat_index < 0 or mat_index >= len(materials):
+        return "", 0.0
+    extras = materials[mat_index].get("extras", {}) or {}
+    uri = extras.get("heightTexture", "")
+    if not uri:
+        return "", 0.0
+    uri = urllib.parse.unquote(uri)
+    try:
+        rel = gltf_path.relative_to(ASSETS_DIR)
+        path = posixpath.normpath((RESOURCES_DIR / (rel.parent / uri).with_suffix(".dds")).as_posix())
+    except ValueError:
+        return "", 0.0
+    return path, float(extras.get("parallaxDepth", 0.0))
 
 
 # ============================================================
@@ -1140,6 +1169,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
         metallic, roughness = _gltf_find_pbr_factors(gltf, real_idx)
         normal_map_path = _gltf_find_normal_map_path(gltf, task.src, real_idx)
         base_color_factor = _gltf_find_base_color_factor(gltf, real_idx)
+        height_map_path, parallax_depth = _gltf_find_parallax(gltf, task.src, real_idx)
 
         # 法線マップの有無だけを PBR 切替のトリガーにする。
         # metallic/roughness の有無は使えない: _gltf_find_pbr_factors は未指定時に
@@ -1163,7 +1193,9 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
                       color=base_color_factor,
                       metallic=metallic, roughness=roughness,
                       shading_model=shading_model,
-                      normal_map_path=normal_map_path)
+                      normal_map_path=normal_map_path,
+                      height_map_path=height_map_path,
+                      parallax_depth=parallax_depth)
         mat_path_cache[mat_idx] = _sibling_resource_path(mat_resource_base, mat_filename)
 
     # .skel

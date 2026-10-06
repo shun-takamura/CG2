@@ -503,6 +503,15 @@ void PostEffect::InitializeEffects()
 		effectOwners_.push_back(std::move(mo));
 	}
 
+	// ----- LightShaft（idMaskRT_ を t1 に参照。idMask が targetId の物を光源にした放射状の光の筋）-----
+	{
+		auto ls = std::make_unique<LightShaftEffect>();
+		ls->InitializeMasked(dxCore_, outlineRootSignature_.Get(), basePsoDesc_, idMaskRT_.get());
+		lightShaft = ls.get();
+		effectOrder_.push_back(lightShaft);
+		effectOwners_.push_back(std::move(ls));
+	}
+
 	// ----- Distortion（distortionRT_ を t1 に、scene depth を t2 に参照）-----
 	// 専用 RS を使う（color t0 + distortion t1 + depth t2 + cbuffer b0）
 	// per-instance の歪み強度を使う設計のため、グローバルストレングスは 1 で固定。

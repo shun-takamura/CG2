@@ -57,6 +57,19 @@ cbuffer WaterParams : register(b0)
     float  gAmbientRingScale;    // ランダムな波（待機中の波）の振幅倍率
     float3 gPadding3;
     EmittedRing gEmittedRings[MAX_EMITTED_RINGS]; // CPU から EmitRing で出した波
+    float2 gSimCenter;           // 波のシミュレーションの範囲の中心（ワールド XZ）
+    float  gSimSize;             // 範囲の一辺 [m]
+    float  gSimNormalScale;      // 高さの傾きを法線に足す倍率
+    float  gSimTexel;            // 1 テクセルの UV 幅
+    float3 gPadding4;
+    float  gFloorParallaxDepth;  // 床の凹凸の深さ（UV 1 あたり）
+    float  gFloorNormalStrength;
+    int    gFloorUseNormalMap;
+    int    gFloorUseParallax;
+    float  gFloorParallaxMinLayers;
+    float  gFloorParallaxMaxLayers;
+    float  gFloorNormalFlipY;
+    float  gPadding5;
 };
 
 struct DirectionalLight
@@ -75,6 +88,9 @@ cbuffer DirectionalLightBuffer : register(b1)
 Texture2D<float4> gReflectionTexture : register(t0);
 TextureCube<float4> gSkyTexture : register(t1);
 Texture2D<float4> gFloorTexture : register(t4);
+Texture2D<float2> gRippleHeight : register(t6); // 波のシミュレーション（R=高さ。RippleSimulation.CS）
+Texture2D<float4> gFloorNormalMap : register(t7); // 床の法線マップ（接空間）
+Texture2D<float4> gFloorHeightMap : register(t8); // 床のハイトマップ（R。1=高い）
 SamplerState gSampler : register(s0);
 SamplerState gClampSampler : register(s3);
 
@@ -234,6 +250,22 @@ float2 WaveGradient(float2 xz, float footprint)
     gradient += RingPacketsGradient(xz, footprint);
     gradient += EmittedRingsGradient(xz, footprint);
 
+    // ----- 波のシミュレーション：高さマップの傾き（中心差分） -----
+    {
+        const float2 uv = (xz - gSimCenter) / gSimSize + 0.5f;
+        if (all(uv > 0.0f) && all(uv < 1.0f))
+        {
+            const float2 du = float2(gSimTexel, 0.0f);
+            const float2 dv = float2(0.0f, gSimTexel);
+            const float hx = gRippleHeight.SampleLevel(gClampSampler, uv + du, 0).r - gRippleHeight.SampleLevel(gClampSampler, uv - du, 0).r;
+            const float hz = gRippleHeight.SampleLevel(gClampSampler, uv + dv, 0).r - gRippleHeight.SampleLevel(gClampSampler, uv - dv, 0).r;
+            const float texelWorld = gSimSize * gSimTexel;
+            // 遠くで 1 ピクセルに何テクセルも入るとちらつくので弱める（数テクセル＝おおよその最短波長）
+            const float fade = AntiAliasFade(texelWorld * 6.0f, footprint);
+            gradient += float2(hx, hz) / (2.0f * texelWorld) * (gSimNormalScale * fade);
+        }
+    }
+
     // ----- 揺らぎ：ノイズ2オクターブを別方向に流す -----
     {
         const float s1 = gNoiseScale;
@@ -250,6 +282,34 @@ float2 WaveGradient(float2 xz, float footprint)
     return gradient;
 }
 
+// 床の視差オクルージョン（Object3dPBR.PS の ParallaxOcclusionUV と同じ手順）。
+// 床は水平なので接空間は T=+X / B=+Z / N=+Y。viewTS は床から視点へ向かう向き
+float2 FloorParallaxUV(float2 uv, float3 viewTS)
+{
+    const float2 dx = ddx(uv);
+    const float2 dy = ddy(uv);
+    const float layers = lerp(gFloorParallaxMaxLayers, gFloorParallaxMinLayers, saturate(viewTS.z));
+    const float layerDepth = 1.0f / layers;
+    const float2 deltaUV = viewTS.xy / max(viewTS.z, 0.1f) * gFloorParallaxDepth / layers;
+
+    float2 currentUV = uv;
+    float currentDepth = 0.0f;
+    float mapDepth = 1.0f - gFloorHeightMap.SampleGrad(gSampler, currentUV, dx, dy).r;
+    [loop]
+    for (int i = 0; i < 64 && currentDepth < mapDepth; ++i)
+    {
+        currentUV -= deltaUV;
+        mapDepth = 1.0f - gFloorHeightMap.SampleGrad(gSampler, currentUV, dx, dy).r;
+        currentDepth += layerDepth;
+    }
+
+    const float2 prevUV = currentUV + deltaUV;
+    const float after = mapDepth - currentDepth;
+    const float before = (1.0f - gFloorHeightMap.SampleGrad(gSampler, prevUV, dx, dy).r) - (currentDepth - layerDepth);
+    const float w = after / (after - before + 1e-5f);
+    return lerp(currentUV, prevUV, saturate(w));
+}
+
 PixelShaderOutput main(WaterVertexOutput input)
 {
     PixelShaderOutput output;
@@ -260,7 +320,6 @@ PixelShaderOutput main(WaterVertexOutput input)
 
     const float2 gradient = WaveGradient(xz, footprint);
     const float3 normal = normalize(float3(-gradient.x, 1.0f, -gradient.y));
-    const float3 floorNormal = float3(0.0f, 1.0f, 0.0f);
 
     // 見え方は反射を作った視点基準（通常は描画カメラと同じ。デバッグ時はゲームカメラ基準の見え方を焼き付ける）
     const float3 viewDir = normalize(input.worldPosition - gShadingEye); // 視点→水面
@@ -302,7 +361,25 @@ PixelShaderOutput main(WaterVertexOutput input)
     const float viewTravel = gDepth / max(-refractDir.y, 1e-3f);
     const float3 floorPosition = input.worldPosition + refractDir * viewTravel;
 
-    const float3 albedo = gFloorTexture.Sample(gSampler, floorPosition.xz * gFloorTiling).rgb;
+    // 床の UV（視差で、屈折したレイが凹凸に当たる所までずらす）
+    float2 floorUv = floorPosition.xz * gFloorTiling;
+    if (gFloorUseParallax != 0)
+    {
+        const float3 toEye = -refractDir;
+        floorUv = FloorParallaxUV(floorUv, normalize(float3(toEye.x, toEye.z, toEye.y)));
+    }
+    const float3 albedo = gFloorTexture.Sample(gSampler, floorUv).rgb;
+
+    // 床の法線（法線マップの接空間 → ワールド。T=+X / B=+Z / N=+Y）
+    float3 floorNormal = float3(0.0f, 1.0f, 0.0f);
+    if (gFloorUseNormalMap != 0)
+    {
+        float3 n = gFloorNormalMap.Sample(gSampler, floorUv).xyz * 2.0f - 1.0f;
+        n.y *= gFloorNormalFlipY;
+        n.xy *= gFloorNormalStrength;
+        floorNormal = normalize(float3(n.x, n.z, n.y));
+    }
+
     const float3 lightDir = normalize(-gDirectionalLight.direction);
     const float NdotL = saturate(dot(floorNormal, lightDir));
     const float shadow = CalcShadowFactor(floorPosition, floorNormal, input.position.xy);

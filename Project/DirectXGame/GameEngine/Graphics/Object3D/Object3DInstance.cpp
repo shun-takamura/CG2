@@ -111,15 +111,36 @@ void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
 
     auto* cmd = dxCore->GetCommandList();
     cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    // ディゾルブ中は消えている部分に ID を書かない（書くと、アウトラインがまだ出ていない部分の背景まで線にする）
+    const Material* mat = modelInstance_->GetMaterialPointer();
+    const bool dissolving = mat && mat->dissolveEnable != 0;
+
     cmd->SetGraphicsRootSignature(object3DManager_->GetIdRootSignature());
-    cmd->SetPipelineState(object3DManager_->GetIdPipelineState());
+    cmd->SetPipelineState(dissolving ? object3DManager_->GetIdDissolvePipelineState()
+                                     : object3DManager_->GetIdPipelineState());
 
     // VS CBV b0 = TransformationMatrix
     cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
 
-    // PS Root Constant b0 = objectId
+    // PS Root Constant b0 = objectId（ディゾルブ版は WriteIDDissolve.PS の IdDissolveCB と同じ並びで続ける）
     const UINT idValue = static_cast<UINT>(objectId_);
-    cmd->SetGraphicsRoot32BitConstant(1, idValue, 0);
+    if (dissolving) {
+        struct IdDissolveConstants {
+            UINT objectId;
+            float progress;
+            float edgeWidth;
+            float noiseScale;
+            float heightMin;
+            float heightMax;
+            float noiseWeight;
+            float padding;
+        } constants{ idValue, mat->dissolveProgress, mat->dissolveEdgeWidth, mat->dissolveNoiseScale,
+                     mat->dissolveHeightMin, mat->dissolveHeightMax, mat->dissolveNoiseWeight, 0.0f };
+        static_assert(sizeof(IdDissolveConstants) == Object3DManager::kIdPassConstantCount * 4);
+        cmd->SetGraphicsRoot32BitConstants(1, Object3DManager::kIdPassConstantCount, &constants, 0);
+    } else {
+        cmd->SetGraphicsRoot32BitConstant(1, idValue, 0);
+    }
 
     modelInstance_->DrawIdPass(dxCore);
 }

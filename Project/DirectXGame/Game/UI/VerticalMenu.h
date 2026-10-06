@@ -6,10 +6,12 @@
 #include <vector>
 
 class InputActionMap;
+struct UIPointer;
 
 /// <summary>
-/// キーボード/パッドで操作する縦並びの選択メニュー。
+/// キーボード/パッド/マウスで操作する縦並びの選択メニュー。
 /// MenuUp/MenuDown で選択、MenuConfirm で決定、MenuCancel でキャンセルを返す。
+/// マウスは項目の上にカーソルを動かすと選択、項目の上で左クリックすると決定。
 /// 描画は TextRenderer に積むだけなので、Flush は呼び出し側で行う。
 /// </summary>
 class VerticalMenu {
@@ -22,10 +24,13 @@ public:
 
 	void SetItems(std::vector<std::string> items, int initialIndex = 0);
 
-	Result Update(InputActionMap* actions);
+	// pointer が null ならマウスは使わない
+	Result Update(InputActionMap* actions, const UIPointer* pointer = nullptr);
 
-	// center.x を中央揃えの基準、center.y を項目ブロック全体の縦中心として描画する
-	void Draw(const Vector2& center) const;
+	// 配置。center.x を中央揃えの基準、center.y を項目ブロック全体の縦中心にする。
+	// Draw とマウスの当たり判定の両方がこの位置を使うので、Update より前に設定する
+	void SetPosition(const Vector2& center) { center_ = center; }
+	void Draw() const;
 
 	int GetSelectedIndex() const { return selectedIndex_; }
 	void SetSelectedIndex(int index);
@@ -34,7 +39,12 @@ public:
 	void SetLineHeight(float lineHeight) { lineHeight_ = lineHeight; }
 
 private:
+	// 画面上のその位置にある項目の番号（無ければ -1）
+	int HitTest(const Vector2& position) const;
+	std::string MakeLabel(size_t index, bool selected) const;
+
 	std::vector<std::string> items_;
+	Vector2 center_{};
 	int selectedIndex_ = 0;
 
 	float scale_ = 1.5f;

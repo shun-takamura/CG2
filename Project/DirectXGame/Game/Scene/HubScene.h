@@ -25,4 +25,6 @@ public:
 private:
 	std::unique_ptr<Camera> camera_;
 	VerticalMenu menu_;
+	// デモモード（AttractMode）の経過秒
+	float attractTimer_ = 0.0f;
 };

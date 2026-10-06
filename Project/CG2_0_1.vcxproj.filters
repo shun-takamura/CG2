@@ -111,7 +111,13 @@
     <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\UI\UIPointer.cpp">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\AttractMode.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StageSelectScene.cpp">
@@ -230,7 +236,13 @@
     <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\UI\UIPointer.h">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\AttractMode.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageSelectScene.h">

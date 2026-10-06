@@ -68,7 +68,7 @@ void Scene::ClearHighlights() {
 
 void Scene::RunIdPass(ID3D12GraphicsCommandList* commandList) {
 	(void)commandList;
-	if (highlightedEntities_.empty()) return;
+	if (highlightedEntities_.empty() && !HasExtraIdPassObjects()) return;
 
 	for (IImGuiEditable* e : highlightedEntities_) {
 		if (!e) continue;
@@ -95,6 +95,8 @@ void Scene::RunIdPass(ID3D12GraphicsCommandList* commandList) {
 		}
 	next: ;
 	}
+
+	if (HasExtraIdPassObjects()) DrawExtraIdPassObjects();
 }
 
 void Scene::UpdateGlobalEffects(Camera* camera, float deltaTime) {
