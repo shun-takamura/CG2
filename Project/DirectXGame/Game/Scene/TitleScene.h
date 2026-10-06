@@ -154,7 +154,7 @@ private:
 	float logoSwayAmplitude_ = 0.12f;        // 左右の首振り幅 [rad]
 	float logoSwaySpeed_ = 0.7f;
 	float introDuration_ = 1.4f;             // ロゴ登場の長さ
-	float vignetteIntensity_ = 0.7f;
+	float vignetteIntensity_ = 0.0f;         // 0 で無効（2026-10-06：扉の見上げ構図で画面が暗く見えたので切った）
 	// ⑤ のメニュー（スタート / ゲーム終了）の縦位置（画面の高さに対する割合）。扉に重ならないよう下寄せ
 	float menuHeightRatio_ = 0.94f;
 
