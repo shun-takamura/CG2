@@ -309,10 +309,11 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
             );
         }
         // 上でルートシグネチャを貼り直している＝Object3DManager::DrawSetting のバインドは
-        // 全部無効化されているので、フォグ(b6)とシャドウ(b5/t3)と雲(b7/t5)はここで貼り直す必要がある。
+        // 全部無効化されているので、フォグ(b6)とシャドウ(b5/t3)と雲(b7/t5)とハイトマップ(t4)はここで貼り直す必要がある。
         object3DManager_->BindFog(dxCore->GetCommandList());
         object3DManager_->BindShadow(dxCore->GetCommandList());
         object3DManager_->BindCloud(dxCore->GetCommandList());
+        object3DManager_->BindHeightMapFallback(dxCore->GetCommandList());
     }
 
     // Skinning済みVBVで描画

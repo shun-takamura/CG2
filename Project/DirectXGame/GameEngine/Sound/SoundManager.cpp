@@ -215,6 +215,13 @@ void SoundManager::Stop2DSound(const std::string& name)
     sourceVoices2D_.erase(it);
 }
 
+void SoundManager::Set2DSoundVolume(const std::string& name, float volume)
+{
+    auto it = sourceVoices2D_.find(name);
+    if (it == sourceVoices2D_.end()) { return; }
+    it->second->SetVolume(volume);
+}
+
 uint32_t SoundManager::Play3DSound(
     const std::string& name,
     const Vector3& position,

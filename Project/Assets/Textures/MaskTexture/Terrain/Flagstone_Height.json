@@ -1,0 +1,6 @@
+{
+  "tile_m": 3.0,
+  "height_min_m": -0.013000000000000001,
+  "height_max_m": 0.006809345616921586,
+  "note": "Height.png \u306e 0..1 \u306f height_min_m..height_max_m [m]\u3002\u8996\u5dee\u306e\u6df1\u3055\u306f (max-min)"
+}

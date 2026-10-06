@@ -128,6 +128,10 @@ struct EffectPrimitiveComponent {
     bool        useDistortion        = false;
     std::string distortionTexturePath;
     float       distortionStrength      = 0.5f; // 0..1。per-instance の歪み強度（texture.a × vertex.color.a と乗算）
+    // true のとき、寿命の間に distortionStrength → distortionEndStrength へ線形補間する（歪みを徐々に消す用。
+    // 一定のままだと寿命が切れた瞬間に歪みがパッと消える）
+    bool        distortionStrengthAnim  = false;
+    float       distortionEndStrength   = 0.0f;
     bool        distortionUvAutoScroll  = false;
     Vector2     distortionUvScrollSpeed = { 0.0f, 0.0f };
     Vector2     distortionUvOffset      = { 0.0f, 0.0f };

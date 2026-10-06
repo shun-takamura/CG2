@@ -369,6 +369,10 @@ void EffectComponentEditable::OnImGuiInspector() {
 
                 // --- 強度（per-instance） ---
                 dirty |= ImGui::SliderFloat("Strength##Distortion", &c.distortionStrength, 0.0f, 1.0f, "%.3f");
+                dirty |= ImGui::Checkbox("Animate Strength##Distortion", &c.distortionStrengthAnim);
+                if (!c.distortionStrengthAnim) ImGui::BeginDisabled();
+                dirty |= ImGui::SliderFloat("End Strength##Distortion", &c.distortionEndStrength, 0.0f, 1.0f, "%.3f");
+                if (!c.distortionStrengthAnim) ImGui::EndDisabled();
 
                 ImGui::Separator();
 

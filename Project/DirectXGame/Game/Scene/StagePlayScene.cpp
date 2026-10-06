@@ -58,6 +58,7 @@
 #endif
 #include "MathUtility.h"
 #include "WindowsApplication.h"
+#include "UIPointer.h"
 #include <algorithm>
 #include "Json/JsonValue.h"
 #include "Json/JsonParser.h"
@@ -2967,7 +2968,10 @@ void StagePlayScene::SetPauseView(PauseView view) {
 }
 
 void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
-	const VerticalMenu::Result result = pauseMenu_.Update(actions);
+	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetSwapChainWidth()) * 0.5f,
+		static_cast<float>(dxCore_->GetSwapChainHeight()) * 0.58f });
+	const UIPointer pointer = UIPointer::FromInput(input_);
+	const VerticalMenu::Result result = pauseMenu_.Update(actions, &pointer);
 	const int index = pauseMenu_.GetSelectedIndex();
 
 	if (pauseView_ == PauseView::Main) {
@@ -3026,7 +3030,8 @@ void StagePlayScene::DrawPauseMenu() {
 			{ 0.85f, 0.85f, 0.85f, 1.0f }, 2.0f, black);
 	}
 
-	pauseMenu_.Draw({ screenW * 0.5f, screenH * 0.58f });
+	pauseMenu_.SetPosition({ screenW * 0.5f, screenH * 0.58f });
+	pauseMenu_.Draw();
 }
 
 void StagePlayScene::Update() {

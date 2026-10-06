@@ -245,6 +245,8 @@ namespace {
         if (o["useDistortion"].IsBool()) c.useDistortion = o["useDistortion"].AsBool(c.useDistortion);
         if (o["distortionTexturePath"].IsString()) c.distortionTexturePath = o["distortionTexturePath"].AsString();
         c.distortionStrength = AsFloat(o["distortionStrength"], c.distortionStrength);
+        if (o["distortionStrengthAnim"].IsBool()) c.distortionStrengthAnim = o["distortionStrengthAnim"].AsBool(c.distortionStrengthAnim);
+        c.distortionEndStrength = AsFloat(o["distortionEndStrength"], c.distortionEndStrength);
         if (o["distortionUvAutoScroll"].IsBool()) c.distortionUvAutoScroll = o["distortionUvAutoScroll"].AsBool(c.distortionUvAutoScroll);
         c.distortionUvScrollSpeed = AsVec2(o["distortionUvScrollSpeed"], c.distortionUvScrollSpeed);
         c.distortionUvOffset      = AsVec2(o["distortionUvOffset"],      c.distortionUvOffset);
@@ -632,6 +634,8 @@ namespace EffectDefIO {
             o["useDistortion"]           = c.useDistortion;
             o["distortionTexturePath"]   = c.distortionTexturePath;
             o["distortionStrength"]      = static_cast<double>(c.distortionStrength);
+            o["distortionStrengthAnim"]  = c.distortionStrengthAnim;
+            o["distortionEndStrength"]   = static_cast<double>(c.distortionEndStrength);
             o["distortionUvAutoScroll"]  = c.distortionUvAutoScroll;
             o["distortionUvScrollSpeed"] = Vec2ToJson(c.distortionUvScrollSpeed);
             o["distortionUvOffset"]      = Vec2ToJson(c.distortionUvOffset);

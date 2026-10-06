@@ -132,6 +132,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
@@ -202,6 +205,9 @@
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\WaterSurface.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\RippleSimulation.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp">
@@ -512,6 +518,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.h">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
@@ -648,6 +657,9 @@
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\WaterSurface.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\RippleSimulation.h">
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\PointLight.h">

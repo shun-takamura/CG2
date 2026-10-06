@@ -131,6 +131,12 @@ public:
 	void ClearHighlights();
 	const std::vector<IImGuiEditable*>& GetHighlights() const { return highlightedEntities_; }
 	void RunIdPass(struct ID3D12GraphicsCommandList* commandList);
+	/// <summary>
+	/// シーンがメンバで直接持つ物（コンテナ外。タイトルの扉など）を ID パスに描く。
+	/// 描く物がある間は HasExtraIdPassObjects を true にする（ハイライトが空でも ID パスが走る）。
+	/// </summary>
+	virtual bool HasExtraIdPassObjects() const { return false; }
+	virtual void DrawExtraIdPassObjects() {}
 
 	/// <summary>
 	/// 動的 Object3D をシャドウパスへ描画する。

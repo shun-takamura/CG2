@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "BaseTransition.h"
+#include "Vector3.h"
 #include <memory>
 
 class SpriteInstance;
@@ -25,8 +26,19 @@ public:
 
 	void SetFadeDuration(float duration) { fadeDuration_ = duration; }
 
+	/// <summary>
+	/// 次の1回だけ色と長さを変える（タイトルの扉に入る白フェード等）。
+	/// 遷移が終わると黒・既定の長さに戻るので、他のシーンのフェードには影響しない。
+	/// ChangeScene(..., TransitionType::Fade) の直前に呼ぶ。
+	/// </summary>
+	void SetNextFade(const Vector3& color, float fadeDuration, float holdDuration);
+
 private:
+	static constexpr float kDefaultFadeDuration = 0.5f;
+	static constexpr float kDefaultHoldDuration = 0.1f;
+
 	std::unique_ptr<SpriteInstance> fadeSprite_;
-	float fadeDuration_ = 0.5f;
+	float fadeDuration_ = kDefaultFadeDuration;
 	float alpha_ = 0.0f;
+	Vector3 color_ = { 0.0f, 0.0f, 0.0f };
 };

@@ -28,6 +28,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
+#include "AttractMode.h"
 #include "Camera.h"
 #include "DStorageManager.h"
 #include "InputAction.h"
@@ -68,6 +69,16 @@ namespace {
 		for (const Bgm& b : kBGM) {
 			const std::string path = std::string("Resources/Sounds/BGM/") + b.file;
 			if (std::filesystem::exists(path)) sm->LoadFile(b.name, path);
+		}
+		// タイトル画面専用（クレジットは Documents/Readme.md）。HUB は bgm_title のまま
+		struct TitleSound { const char* name; const char* path; };
+		static const TitleSound kTitleSounds[] = {
+			{ "bgm_title_scene",    "Resources/Sounds/TitleScene/BGM/TitleBGM.mp3" },
+			{ "se_title_open_door", "Resources/Sounds/TitleScene/SE/OpenDoor.mp3" },
+			{ "se_title_in_door",   "Resources/Sounds/TitleScene/SE/InDoor.mp3" },
+		};
+		for (const TitleSound& t : kTitleSounds) {
+			if (std::filesystem::exists(t.path)) sm->LoadFile(t.name, t.path);
 		}
 	}
 }
@@ -266,6 +277,11 @@ void Game::Update() {
 	if (endRequest_) {
 		return;
 	}
+
+	// F8：デモモード（展示用の自動進行）の開始・終了。どのシーンからでも切り替えられる
+	if (input_ && input_->GetKeyboard() && input_->GetKeyboard()->TriggerKey(DIK_F8)) {
+		AttractMode::GetInstance()->Toggle();
+	}
 }
 
 void Game::Draw() {
@@ -321,7 +337,7 @@ void Game::Draw() {
 	// ----- ID Pass：ハイライト対象を idMaskRT に書き込む -----
 	if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
 		PEPPER_SCOPE("Game::IdPass");
-		if (!scene->GetHighlights().empty()) {
+		if (!scene->GetHighlights().empty() || scene->HasExtraIdPassObjects()) {
 			auto* cmd = dxCore_->GetCommandList();
 			postEffect_->BeginIdPass(cmd);
 

@@ -26,6 +26,30 @@
       }
     },
     {
+      "type": "Object3D",
+      "name": "flagstone_floor.mesh",
+      "tag": "None",
+      "dir": "Resources/Models/FlagstoneFloor",
+      "file": "flagstone_floor.mesh",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          73.389732360839844,
+          893.42816162109375,
+          128.73443603515625
+        ]
+      }
+    },
+    {
       "type": "Primitive",
       "name": "Plane (1)",
       "tag": "None",

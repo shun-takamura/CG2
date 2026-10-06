@@ -4,6 +4,9 @@
     blender -b --factory-startup -P tools/BlenderPipeline/gen_title_door.py -- [オプション]
         --save <パス.blend>   生成した扉を .blend で保存（Blender で開いて確認する用）
         --export <フォルダ>   部位ごとに glTF を書き出す（例: Assets/Models/TitleDoor）
+        --export-lines <フォルダ>  演出の線画用に、部位ごとの特徴線を細い角柱にした glTF だけを書き出す
+                              （door_frame_lines など。扉本体とテクスチャは書き出さない）
+        --export-light <フォルダ>  演出の「光の部屋」door_light（扉の奥の、開口部の形をした内向きの筒）だけを書き出す
         --preview <フォルダ>  確認用の PNG を3枚レンダリング（正面・斜め・開いた状態）
 
 座標（Blender）: X=右 / Y=奥（正面は -Y 側から見る）/ Z=上。
@@ -37,6 +40,15 @@ PEDESTAL_H = 0.15        # 台座の高さ
 LEAF_T = 0.07            # 扉板の厚み
 LEAF_GAP = 0.004         # 合わせ目の隙間（片側）
 ARC_SEGMENTS = 16        # アーチ片側の分割数
+
+# 線画（タイトルの演出 ③ で扉より先に現れる線）
+LINE_ANGLE_DEG = 30.0    # 隣り合う面がこの角度以上折れている辺を線にする（アーチの分割は拾わない）
+LINE_HALF_W = 0.012      # 線（角柱）の半分の太さ
+
+# 光の部屋（タイトルの演出 ⑥ で扉が開いた奥に見える、ライティング無しの白い筒）
+LIGHT_ROOM_MARGIN = 0.15  # 開口部より外へ広げる幅（枠の幅 0.3 の内側に収め、正面から枠の外へはみ出さない）
+LIGHT_ROOM_DEPTH = 2.5    # 枠の奥の面からの奥行き
+LIGHT_ROOM_FLOOR = 0.003  # 床を台座の上面から浮かせる（同じ高さだと深度が競合する）
 
 MAT_MARBLE = 0
 MAT_GOLD = 1
@@ -533,6 +545,98 @@ def export_parts(out_dir, objs):
         print(f"[gen_title_door] exported {path}")
 
 
+def build_feature_lines(obj):
+    """obj の特徴線（折れ目・縁・大理石と金の境目）を細い角柱のメッシュにした別オブジェクトを作る。
+    メッシュは obj と同じローカル空間で作り、位置・回転も obj に合わせる（エンジン側で同じ変換を使える）"""
+    src = bmesh.new()
+    src.from_mesh(obj.data)
+    threshold = math.radians(LINE_ANGLE_DEG)
+    segments = []
+    for e in src.edges:
+        faces = e.link_faces
+        if len(faces) == 2:
+            is_crease = e.calc_face_angle(0.0) >= threshold
+            is_seam = faces[0].material_index != faces[1].material_index
+            if not (is_crease or is_seam):
+                continue
+        elif len(faces) != 1:
+            continue
+        a, b = e.verts[0].co.copy(), e.verts[1].co.copy()
+        if (b - a).length > 1e-4:
+            segments.append((a, b))
+    src.free()
+
+    r = LINE_HALF_W
+    bm = bmesh.new()
+    for a, b in segments:
+        d = (b - a).normalized()
+        u = d.cross(Vector((0.0, 0.0, 1.0)))
+        if u.length < 1e-3:
+            u = d.cross(Vector((1.0, 0.0, 0.0)))
+        u.normalize()
+        v = d.cross(u)
+        # 角でつながるよう、両端を太さぶん延ばす
+        a0, b0 = a - d * r, b + d * r
+        offs = [(u * math.cos(t) + v * math.sin(t)) * r * math.sqrt(2.0)
+                for t in (math.pi * (0.25 + 0.5 * k) for k in range(4))]
+        ring_a = [bm.verts.new(a0 + o) for o in offs]
+        ring_b = [bm.verts.new(b0 + o) for o in offs]
+        for k in range(4):
+            j = (k + 1) % 4
+            bm.faces.new((ring_a[k], ring_a[j], ring_b[j], ring_b[k]))
+        bm.faces.new(list(reversed(ring_a)))
+        bm.faces.new(ring_b)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+
+    name = f"{obj.name}_lines"
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    mat = bpy.data.materials.get("DoorLine") or bpy.data.materials.new("DoorLine")
+    mesh.materials.append(mat)
+    line_obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(line_obj)
+    line_obj.location = obj.location.copy()
+    line_obj.rotation_euler = obj.rotation_euler.copy()
+    print(f"[gen_title_door] {name}: {len(segments)} lines, {len(mesh.polygons) * 2} tris")
+    return line_obj
+
+
+def build_light_room():
+    """開口部の形を奥へ押し出した筒（手前は開放、奥は閉じる）。面は内向きにし、外からは見えないようにする。
+    枠の奥の面から始めるので枠との間に隙間が無く、開口部から覗いても背景が見えない"""
+    profile = opening_profile(LIGHT_ROOM_MARGIN)          # 右下 → アーチ → 左下
+    z_floor = Z0 + LIGHT_ROOM_FLOOR
+    profile = [(x, max(z, z_floor)) for x, z in profile]
+    y0, y1 = FRAME_BACK, FRAME_BACK + LIGHT_ROOM_DEPTH
+
+    bm = bmesh.new()
+    front = [bm.verts.new((x, y0, z)) for x, z in profile]
+    back = [bm.verts.new((x, y1, z)) for x, z in profile]
+    n = len(profile)
+    walls = []
+    for i in range(n):  # 最後の辺（左下 → 右下）が床
+        j = (i + 1) % n
+        walls.append(bm.faces.new((front[i], front[j], back[j], back[i])))
+    cap = bm.faces.new(back)
+
+    # 内向きにそろえる（筒の中心から見て面が手前を向くように）
+    center = Vector((0.0, (y0 + y1) * 0.5, Z0 + (SPRING_H + ARCH_RISE) * 0.5))
+    bm.normal_update()
+    for f in walls + [cap]:
+        if f.normal.dot(center - f.calc_center_median()) < 0.0:
+            f.normal_flip()
+
+    mesh = bpy.data.meshes.new("door_light")
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(bpy.data.materials.get("DoorLight") or bpy.data.materials.new("DoorLight"))
+    obj = bpy.data.objects.new("door_light", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    print(f"[gen_title_door] door_light: {len(mesh.polygons)} faces")
+    return obj
+
+
 def arg_path(argv, name):
     return Path(argv[argv.index(name) + 1]) if name in argv else None
 
@@ -542,6 +646,8 @@ def main():
     preview_dir = arg_path(argv, "--preview")
     save_path = arg_path(argv, "--save")
     export_dir = arg_path(argv, "--export")
+    lines_dir = arg_path(argv, "--export-lines")
+    light_dir = arg_path(argv, "--export-light")
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     # テクスチャは書き出し先に置く（glTF からの参照がそのまま cook で解決される）。書き出さない時は一時フォルダ
@@ -557,6 +663,15 @@ def main():
         save_blend(save_path)
     if export_dir is not None:
         export_parts(export_dir, [frame, leaf_l, leaf_r])
+    if lines_dir is not None:
+        lines = [build_feature_lines(o) for o in (frame, leaf_l, leaf_r)]
+        export_parts(lines_dir, lines)
+        for o in lines:
+            bpy.data.objects.remove(o)
+    if light_dir is not None:
+        room = build_light_room()
+        export_parts(light_dir, [room])
+        bpy.data.objects.remove(room)
 
     if preview_dir is None:
         return

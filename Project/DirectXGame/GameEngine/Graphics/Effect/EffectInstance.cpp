@@ -301,6 +301,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         rt.renderer->SetTranslate(pos);
         rt.renderer->SetScale(scale);
         rt.renderer->SetColor(color);
+        // 歪みの強さを寿命に沿って補間（静的な値は ApplyPrimitiveStaticParams で設定済み）
+        if (pc.useDistortion && pc.distortionStrengthAnim && !pc.distortionTexturePath.empty()) {
+            rt.renderer->SetDistortionStrength(pc.distortionStrength + (pc.distortionEndStrength - pc.distortionStrength) * t);
+        }
 
         // ディゾルブ閾値：コンポーネント出現(local)を基準に、In(出現:1→0) と Out(消滅:0→1) を
         // max で時間合成する（0=完全表示 / 1=完全に消えた）。マスク未設定や In/Out 両方OFFなら無効。

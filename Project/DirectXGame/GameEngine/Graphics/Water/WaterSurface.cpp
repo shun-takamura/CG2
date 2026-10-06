@@ -11,6 +11,7 @@
 #include "Log.h"
 #include "PepperMacros.h"
 #include "Cloud/CloudLayer.h"
+#include "RippleSimulation.h"
 #include <dxcapi.h>
 #include <algorithm>
 #include <cassert>
@@ -33,6 +34,9 @@ namespace {
 		kRootFog,             // PS b6
 		kRootCloud,           // PS b7 遠景の雲（Skybox と共有の CB）
 		kRootCloudNoise,      // PS t5 雲のノイズ
+		kRootRippleHeight,    // PS t6 波のシミュレーションの高さマップ（RippleSimulation）
+		kRootFloorNormal,     // PS t7 床の法線マップ
+		kRootFloorHeight,     // PS t8 床のハイトマップ（視差）
 		kRootCount
 	};
 }
@@ -40,9 +44,12 @@ namespace {
 WaterSurface::WaterSurface() = default;
 WaterSurface::~WaterSurface() = default;
 
-void WaterSurface::Initialize(DirectXCore* dxCore, Object3DManager* object3DManager, const std::string& floorTexturePath)
+void WaterSurface::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
+	const std::string& floorTexturePath)
 {
 	dxCore_ = dxCore;
+	rippleSimulation_ = std::make_unique<RippleSimulation>();
+	rippleSimulation_->Initialize(dxCore, srvManager);
 	object3DManager_ = object3DManager;
 	floorTexturePath_ = floorTexturePath;
 
@@ -79,6 +86,9 @@ void WaterSurface::CreateRootSignature()
 	D3D12_DESCRIPTOR_RANGE rangeShadow = makeRange(3);
 	D3D12_DESCRIPTOR_RANGE rangeFloor = makeRange(4);
 	D3D12_DESCRIPTOR_RANGE rangeCloudNoise = makeRange(5);
+	D3D12_DESCRIPTOR_RANGE rangeRippleHeight = makeRange(6);
+	D3D12_DESCRIPTOR_RANGE rangeFloorNormal = makeRange(7);
+	D3D12_DESCRIPTOR_RANGE rangeFloorHeight = makeRange(8);
 
 	auto setCbv = [](D3D12_ROOT_PARAMETER& p, UINT reg, D3D12_SHADER_VISIBILITY vis) {
 		p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -104,6 +114,9 @@ void WaterSurface::CreateRootSignature()
 	setCbv(rootParameters[kRootFog], 6, D3D12_SHADER_VISIBILITY_PIXEL);
 	setCbv(rootParameters[kRootCloud], 7, D3D12_SHADER_VISIBILITY_PIXEL);
 	setTable(rootParameters[kRootCloudNoise], &rangeCloudNoise);
+	setTable(rootParameters[kRootRippleHeight], &rangeRippleHeight);
+	setTable(rootParameters[kRootFloorNormal], &rangeFloorNormal);
+	setTable(rootParameters[kRootFloorHeight], &rangeFloorHeight);
 
 	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）, s4 = 雲のノイズ（ラップ・異方性）
 	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
@@ -241,6 +254,10 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	params_.screenSize = { static_cast<float>(WindowsApplication::kClientWidth),
 		static_cast<float>(WindowsApplication::kClientHeight) };
 	params_.hasReflection = (reflectionReady && reflection->HasContent()) ? 1 : 0;
+	params_.simCenter = rippleSimulation_->GetCenter();
+	params_.simSize = rippleSimulation_->GetSettings().simSize;
+	params_.simNormalScale = rippleSimulation_->GetSettings().normalScale;
+	params_.simTexel = 1.0f / static_cast<float>(RippleSimulation::kResolution);
 	*paramsData_ = params_;
 
 	TextureManager* tm = TextureManager::GetInstance();
@@ -267,6 +284,12 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 		cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress());
 	cmd->SetGraphicsRootDescriptorTable(kRootCloudNoise,
 		cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle() : tm->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
+	cmd->SetGraphicsRootDescriptorTable(kRootRippleHeight, rippleSimulation_->GetHeightSrvHandle());
+	// 法線マップ・ハイトマップが無ければ床のテクスチャで埋める（シェーダはフラグで読まない）
+	cmd->SetGraphicsRootDescriptorTable(kRootFloorNormal,
+		params_.floorUseNormalMap ? tm->GetSrvHandleGPU(floorNormalMapPath_) : floorSrv);
+	cmd->SetGraphicsRootDescriptorTable(kRootFloorHeight,
+		params_.floorUseParallax ? tm->GetSrvHandleGPU(floorHeightMapPath_) : floorSrv);
 
 	PEPPER_COUNT("DrawCall");
 	cmd->DrawInstanced(4, 1, 0, 0);
@@ -275,6 +298,9 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 void WaterSurface::Update(float deltaTime)
 {
 	params_.time += deltaTime;
+	// シミュレーションの範囲は波紋の中心まわり（タイトルでは周回中心）
+	rippleSimulation_->SetCenter(params_.rippleCenter);
+	rippleSimulation_->Update(deltaTime);
 
 	// 待機中の波の倍率を smoothstep で補間
 	if (ambientBlendElapsed_ < ambientBlendDuration_) {
@@ -345,6 +371,29 @@ int WaterSurface::GetActiveEmittedRingCount() const
 	return count;
 }
 
+void WaterSurface::SetFloorMaps(const std::string& normalMapPath, const std::string& heightMapPath, float parallaxDepth)
+{
+	// どちらも色ではない値なので sRGB として読まない
+	TextureManager* tm = TextureManager::GetInstance();
+	floorNormalMapPath_ = normalMapPath;
+	floorHeightMapPath_ = heightMapPath;
+	if (!floorNormalMapPath_.empty()) tm->LoadTextureLinear(floorNormalMapPath_);
+	if (!floorHeightMapPath_.empty()) tm->LoadTextureLinear(floorHeightMapPath_);
+	params_.floorUseNormalMap = (!floorNormalMapPath_.empty() && tm->HasTexture(floorNormalMapPath_)) ? 1 : 0;
+	params_.floorUseParallax = (!floorHeightMapPath_.empty() && tm->HasTexture(floorHeightMapPath_)) ? 1 : 0;
+	params_.floorParallaxDepth = parallaxDepth;
+}
+
+void WaterSurface::AddRippleImpulse(const Vector3& position, float radius, float strength)
+{
+	rippleSimulation_->AddImpulse(position, radius, strength);
+}
+
+void WaterSurface::DispatchSimulation()
+{
+	rippleSimulation_->Dispatch();
+}
+
 float WaterSurface::NextRandom01()
 {
 	randomState_ = randomState_ * 1664525u + 1013904223u;
@@ -365,6 +414,16 @@ void WaterSurface::OnImGui()
 	ImGui::DragFloat("IOR", &params_.ior, 0.005f, 1.0f, 2.0f);
 	ImGui::DragFloat("Floor Tiling", &params_.floorTiling, 0.01f, 0.01f, 10.0f);
 	ImGui::DragFloat("Floor Ambient", &params_.ambient, 0.01f, 0.0f, 2.0f);
+	if (params_.floorUseNormalMap) {
+		ImGui::DragFloat("Floor Normal Strength", &params_.floorNormalStrength, 0.01f, 0.0f, 4.0f);
+		bool flip = params_.floorNormalFlipY < 0.0f;
+		if (ImGui::Checkbox("Floor Normal Flip Y", &flip)) params_.floorNormalFlipY = flip ? -1.0f : 1.0f;
+	}
+	if (params_.floorUseParallax) {
+		ImGui::DragFloat("Floor Parallax Depth", &params_.floorParallaxDepth, 0.0005f, 0.0f, 0.1f, "%.4f");
+		ImGui::DragFloat("Floor Parallax Min Layers", &params_.floorParallaxMinLayers, 1.0f, 1.0f, 64.0f);
+		ImGui::DragFloat("Floor Parallax Max Layers", &params_.floorParallaxMaxLayers, 1.0f, 1.0f, 64.0f);
+	}
 	ImGui::SeparatorText("Ripple (rings)");
 	ImGui::DragFloat2("Ripple Center XZ", &params_.rippleCenter.x, 0.1f);
 	ImGui::DragFloat("Ring Amplitude", &params_.ringAmplitude, 0.001f, 0.0f, 0.5f);
@@ -401,6 +460,17 @@ void WaterSurface::OnImGui()
 	}
 	ImGui::SameLine();
 	ImGui::Text("current: %.2f", params_.ambientRingScale);
+	ImGui::SeparatorText("Ripple Simulation (GPU)");
+	{
+		RippleSimulation::Settings& sim = rippleSimulation_->GetSettings();
+		ImGui::DragFloat("Sim Size [m]", &sim.simSize, 0.5f, 2.0f, 500.0f);
+		ImGui::DragFloat("Wave Speed [m/s]", &sim.waveSpeed, 0.05f, 0.05f, 20.0f);
+		ImGui::SliderFloat("Damping", &sim.damping, 0.9f, 1.0f, "%.4f");
+		ImGui::DragFloat("Steps / s", &sim.stepsPerSecond, 1.0f, 10.0f, 240.0f);
+		ImGui::SliderFloat("Edge Fade", &sim.edgeFade, 0.001f, 0.5f);
+		ImGui::DragFloat("Normal Scale", &sim.normalScale, 0.01f, 0.0f, 20.0f);
+		if (ImGui::Button("Clear Ripples")) rippleSimulation_->Clear();
+	}
 	ImGui::SeparatorText("Undulation (noise)");
 	ImGui::DragFloat("Noise Amplitude", &params_.noiseAmplitude, 0.001f, 0.0f, 0.5f);
 	ImGui::DragFloat("Noise Scale", &params_.noiseScale, 0.01f, 0.01f, 20.0f);

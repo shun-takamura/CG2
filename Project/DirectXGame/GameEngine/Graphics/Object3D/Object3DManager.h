@@ -42,6 +42,8 @@ public:
     // 遠景の雲（CloudSky.hlsli の b7 / t5）。PBR の鏡面反射に雲を映すために使う
     static constexpr UINT kRootCloudParams = 13;
     static constexpr UINT kRootCloudNoise = 14;
+    // 視差オクルージョン（POM）のハイトマップ（PS t4）。ModelInstance が submesh ごとに貼る
+    static constexpr UINT kRootHeightMap = 15;
 
 private:
 
@@ -100,6 +102,7 @@ private:
     // ID Pass 用：Object3d.VS + WriteID.PS、出力 R8_UINT、深度テストあり書き込み無し
     Microsoft::WRL::ComPtr<ID3D12RootSignature> idRootSignature_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> idPipelineState_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> idDissolvePipelineState_;
     void CreateIdPassObjects();
 
     // シャドウ受光リソース（毎フレーム Framework から設定）。0 のうちは未バインド。
@@ -150,6 +153,9 @@ public:
 
     // ID Pass の PSO / RootSignature
     ID3D12PipelineState* GetIdPipelineState() const { return idPipelineState_.Get(); }
+    // ディゾルブ中の物用（WriteIDDissolve.PS）。ルート定数 [1] に id ＋ディゾルブの値を kIdPassConstantCount 個渡す
+    ID3D12PipelineState* GetIdDissolvePipelineState() const { return idDissolvePipelineState_.Get(); }
+    static constexpr UINT kIdPassConstantCount = 8;
     ID3D12RootSignature* GetIdRootSignature() const { return idRootSignature_.Get(); }
 
     // セッター
@@ -215,6 +221,12 @@ public:
     /// **ルートシグネチャを貼り直した直後は BindFog / BindShadow と一緒に必ず呼ぶこと**。
     /// </summary>
     void BindCloud(ID3D12GraphicsCommandList* commandList) const;
+
+    /// <summary>
+    /// ハイトマップ t4(rootParameter[15]) にダミーを貼る。視差を使わない描画でも未バインドにしないため。
+    /// ModelInstance / AnimatedModelInstance は submesh ごとに貼り直す
+    /// </summary>
+    void BindHeightMapFallback(ID3D12GraphicsCommandList* commandList) const;
 
     // 別ルートシグネチャ（水面など）から同じシャドウ／フォグを参照するための取得口
     D3D12_GPU_VIRTUAL_ADDRESS GetShadowConstantsAddress() const { return shadowConstantsAddr_; }
