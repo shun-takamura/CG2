@@ -56,7 +56,7 @@ struct ParticleOrbit
     float enabled;       // 0/1
     float spinSpeed;     // 帯上を流れる速度（spinAxis まわり、rad/s）
     float tumbleSpeed;   // 帯自体の回転速度（tumbleAxis まわり、rad/s）
-    float pad0;
+    float radiusEndRatio; // 最終円の半径 / 生成時の円の半径（radiusEnable 時のみ）
     float3 center;
     float pad1;
     float3 spinAxis;     // 帯上の流れの軸（＝現在のリング法線。CPUが毎フレ更新）
@@ -67,8 +67,10 @@ struct ParticleOrbit
     float convergeEnable;
     float3 centerDelta;  // 周回中心が前回 Update から動いた量（粒子を一緒に平行移動させる）
     float3 convergeCenter;
-    float pad7;
-    float4 convergeLUT[8]; // 32サンプル（convergeCurve を焼いた 0..1。4成分=連続4サンプル）
+    float radiusEnable;  // 0/1。周回半径を寿命に沿って 1 → radiusEndRatio へ変える
+    // 移動カーブ LUT（32サンプル、0..1。4成分=連続4サンプル）。converge 時は収束カーブ、
+    // orbit 時は半径カーブを焼く（両者は排他なので1本を共用）。
+    float4 motionLUT[8];
 };
 
 // ハミルトン積（エンジンの Multiply(q1,q2) と一致）
@@ -115,18 +117,24 @@ float4 EvalGradient(float t)
     return gGradient.keyColor[gGradient.keyCount - 1];
 }
 
-// 収束カーブ LUT（32サンプル＝float4[8]）を t(0..1) で区分線形サンプル。
-float SampleConvergeLUT(float t)
+// 移動カーブ LUT（32サンプル＝float4[8]）を t(0..1) で区分線形サンプル。
+float SampleMotionLUT(float t)
 {
     t = saturate(t);
     float f = t * 31.0f;
     int i = (int) floor(f);
-    if (i >= 31) return gOrbit.convergeLUT[7].w;
+    if (i >= 31) return gOrbit.motionLUT[7].w;
     float fr = f - (float) i;
     int j = i + 1;
-    float a = gOrbit.convergeLUT[i >> 2][i & 3];
-    float b = gOrbit.convergeLUT[j >> 2][j & 3];
+    float a = gOrbit.motionLUT[i >> 2][i & 3];
+    float b = gOrbit.motionLUT[j >> 2][j & 3];
     return lerp(a, b, fr);
+}
+
+// 周回半径の倍率（生成時の円=1）。0 にすると比率が戻せなくなるので下限を持たせる。
+float OrbitRadiusScale(float t)
+{
+    return max(lerp(1.0f, gOrbit.radiusEndRatio, SampleMotionLUT(t)), 1e-3f);
 }
 
 [numthreads(1024, 1, 1)]
@@ -142,7 +150,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
             {
                 // 収束：velocity に保持した spawn 位置から convergeCenter へ、カーブ進行度で寄せる。
                 float tt = saturate(gParticles[particleIndex].currentTime / gParticles[particleIndex].lifeTime);
-                float s = SampleConvergeLUT(tt);
+                float s = SampleMotionLUT(tt);
                 gParticles[particleIndex].translate =
                     lerp(gParticles[particleIndex].velocity, gOrbit.convergeCenter, s);
             }
@@ -158,6 +166,16 @@ void main(uint3 DTid : SV_DispatchThreadID)
                 rel = RotateAxis(rel, gOrbit.tumbleAxis, gOrbit.tumbleSpeed * gPerFrame.deltaTime);
                 // spin：帯上を流れる（現在のリング法線まわり）
                 rel = RotateAxis(rel, gOrbit.spinAxis, gOrbit.spinSpeed * gPerFrame.deltaTime);
+                // 半径の収縮/拡大：前フレームとの倍率比をかける（太さの散らばりも同じ比で保たれる）。
+                // spawn 直後（currentTime==0）は生成時の円＝倍率1 から始める。
+                if (gOrbit.radiusEnable > 0.5f)
+                {
+                    float life = gParticles[particleIndex].lifeTime;
+                    float cur = gParticles[particleIndex].currentTime;
+                    float prevScale = (cur > 0.0f) ? OrbitRadiusScale(cur / life) : 1.0f;
+                    float nextScale = OrbitRadiusScale((cur + gPerFrame.deltaTime) / life);
+                    rel *= nextScale / prevScale;
+                }
                 gParticles[particleIndex].translate = gOrbit.center + rel;
             }
             else

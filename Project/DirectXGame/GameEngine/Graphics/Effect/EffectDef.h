@@ -139,6 +139,11 @@ struct EffectPrimitiveComponent {
     bool        distortionUvFlipU = false;
     bool        distortionUvFlipV = false;
 
+    // ----- Bloom（発光） -----
+    // useBloom のとき、Bloom パスで発光 RT に「見た目 × bloomIntensity」を描き、ぼかしてシーンに足す。
+    bool  useBloom       = false;
+    float bloomIntensity = 1.0f;
+
     // ----- Dissolve（オブジェクト単位のディゾルブ） -----
     // useDissolve かつ dissolveMaskPath が指定されているとき、マスク(グレースケール)を読み、
     // mask.r < threshold のピクセルを discard する（threshold: 0=完全表示 / 1=完全に消えた）。
@@ -255,12 +260,23 @@ struct EffectParticleComponent {
     float   orbitSpinSpeed  = 1.0f;     // 帯上を流れる速度 rad/s（軸＝Ring Normal）
     float   orbitTumbleSpeed = 0.0f;    // 帯自体の回転速度 rad/s
     Vector3 orbitTumbleAxis  = { 0.0f, 1.0f, 0.0f }; // 帯回転の軸
+    // 周回半径の変化：生成時の円（＝emitRadius）から最終円（orbitRadiusEnd）へ、各粒子の寿命に沿って変える。
+    // 進み方は orbitRadiusCurve（0=生成時の円, 1=最終円）。burst でまとめて出すと円全体が縮む見た目になる。
+    bool        orbitRadiusEnable = false;
+    float       orbitRadiusEnd    = 0.0f;
+    EffectCurve orbitRadiusCurve;
 
     // ----- 収束（移動をグラフで制御：spawn位置→エミッタ中心） -----
     // convergeEnable のとき velocity 物理/orbit を使わず、各粒子を spawn 位置から中心へ寄せる。
     // 進み具合は convergeCurve(0→1) で制御（Scale/Dissolve と同じカーブ。0=spawn, 1=中心）。
     bool        convergeEnable = false;
     EffectCurve convergeCurve;
+
+    // ----- Bloom（発光） -----
+    // useBloom のとき、Bloom パスで発光 RT に「見た目 × bloomIntensity」を描き、ぼかしてシーンに足す。
+    // グループ単位の設定なので、同じ gpuParticleGroupName を使う他のコンポーネントとも共有される。
+    bool  useBloom       = false;
+    float bloomIntensity = 1.0f;
 
     // ----- Dissolve（粒子ごとの寿命ディゾルブ） -----
     // 各粒子が自分の寿命比率(0..1)に応じて、In(出現:[0,inEnd]) / Out(消滅:[outStart,1]) で

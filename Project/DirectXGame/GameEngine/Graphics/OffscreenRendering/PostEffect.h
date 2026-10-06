@@ -24,6 +24,7 @@
 #include "ColorInvertEffect.h"
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
+#include "BloomEffect.h"
 #include "Matrix4x4.h"
 
 // 前方宣言
@@ -92,6 +93,9 @@ public:
 	// Distortion 用 RT（R8G8B8A8_UNORM）。RG=歪み方向, A=強度。Distortion Effect の参照対象。
 	RenderTexture* GetDistortionRT() const { return distortionRT_.get(); }
 
+	// Bloom 用の発光 RT（R16G16B16A16_FLOAT）。Bloom Pass で光らせたいエフェクトだけが書き込む。
+	RenderTexture* GetBloomRT() const { return bloomRT_.get(); }
+
 	// シーンキャプチャ RT（ディスラプター崩壊の破片が反転して貼る元絵）。
 	RenderTexture* GetCaptureRT() const { return captureRT_.get(); }
 	uint32_t GetCaptureSRVIndex() const;
@@ -121,6 +125,16 @@ public:
 	/// Distortion Pass の終了：distortionRT を PIXEL_SHADER_RESOURCE 状態に遷移。
 	/// </summary>
 	void EndDistortionPass(ID3D12GraphicsCommandList* commandList);
+
+	/// <summary>
+	/// Bloom Pass の開始：bloomRT を 0 でクリアし、RTV＋ビューポートをバインドする。Distortion Pass の後に呼ぶ。
+	/// dsvHandle を渡すとシーン深度でテストされ、手前の物に隠れた発光は描かれない。
+	/// </summary>
+	void BeginBloomPass(ID3D12GraphicsCommandList* commandList, D3D12_CPU_DESCRIPTOR_HANDLE* dsvHandle = nullptr);
+	/// <summary>
+	/// Bloom Pass の終了：bloomRT を PIXEL_SHADER_RESOURCE 状態に遷移。
+	/// </summary>
+	void EndBloomPass(ID3D12GraphicsCommandList* commandList);
 
 	/// <summary>
 	/// プレビュー用：指定された color SRV と distortion SRV を入力に、現在バインドされている RTV に対して
@@ -158,6 +172,7 @@ public:
 	ColorInvertEffect* colorInvert = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;
 	DistortionEffect* distortion = nullptr;
+	BloomEffect* bloom = nullptr;
 
 private:
 	void CreateRootSignatures();
@@ -181,6 +196,9 @@ private:
 
 	// Distortion 用 RT（R8G8B8A8_UNORM、Distortion Pass で歪み源プリミティブが書き込む）
 	std::unique_ptr<RenderTexture> distortionRT_;
+
+	// Bloom 用の発光 RT（R16G16B16A16_FLOAT、Bloom Pass で bloom 指定のエフェクトが書き込む）
+	std::unique_ptr<RenderTexture> bloomRT_;
 
 	// シーンキャプチャ RT（ディスラプター崩壊の破片用。renderTextureA_ のコピー先）
 	std::unique_ptr<RenderTexture> captureRT_;

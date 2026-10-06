@@ -37,6 +37,7 @@ namespace {
 		kRootRippleHeight,    // PS t6 波のシミュレーションの高さマップ（RippleSimulation）
 		kRootFloorNormal,     // PS t7 床の法線マップ
 		kRootFloorHeight,     // PS t8 床のハイトマップ（視差）
+		kRootCloudMoko,       // PS t9 雲のもこもこの高さ
 		kRootCount
 	};
 }
@@ -89,6 +90,7 @@ void WaterSurface::CreateRootSignature()
 	D3D12_DESCRIPTOR_RANGE rangeRippleHeight = makeRange(6);
 	D3D12_DESCRIPTOR_RANGE rangeFloorNormal = makeRange(7);
 	D3D12_DESCRIPTOR_RANGE rangeFloorHeight = makeRange(8);
+	D3D12_DESCRIPTOR_RANGE rangeCloudMoko = makeRange(9);
 
 	auto setCbv = [](D3D12_ROOT_PARAMETER& p, UINT reg, D3D12_SHADER_VISIBILITY vis) {
 		p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -117,6 +119,7 @@ void WaterSurface::CreateRootSignature()
 	setTable(rootParameters[kRootRippleHeight], &rangeRippleHeight);
 	setTable(rootParameters[kRootFloorNormal], &rangeFloorNormal);
 	setTable(rootParameters[kRootFloorHeight], &rangeFloorHeight);
+	setTable(rootParameters[kRootCloudMoko], &rangeCloudMoko);
 
 	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）, s4 = 雲のノイズ（ラップ・異方性）
 	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
@@ -284,6 +287,8 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 		cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress());
 	cmd->SetGraphicsRootDescriptorTable(kRootCloudNoise,
 		cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle() : tm->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
+	cmd->SetGraphicsRootDescriptorTable(kRootCloudMoko,
+		cloudLayer_ ? cloudLayer_->GetMokoSrvHandle() : tm->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
 	cmd->SetGraphicsRootDescriptorTable(kRootRippleHeight, rippleSimulation_->GetHeightSrvHandle());
 	// 法線マップ・ハイトマップが無ければ床のテクスチャで埋める（シェーダはフラグで読まない）
 	cmd->SetGraphicsRootDescriptorTable(kRootFloorNormal,

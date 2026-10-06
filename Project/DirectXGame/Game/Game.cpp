@@ -35,6 +35,7 @@
 #include "Config/KeyConfig.h"
 #include "GPUParticleManager.h"
 #include "Effect/EffectManager.h"
+#include "Effect/EffectEditorWindow.h"
 #include "Components/PrefabManager.h"
 #include "Scene/Scene.h"
 #include "LightManager.h"
@@ -401,6 +402,25 @@ void Game::Draw() {
 		postEffect_->EndDistortionPass(cmd);
 	}
 
+	// ----- Bloom Pass：useBloom なエフェクトだけを発光 RT（bloomRT）に書き込む -----
+	// Distortion と同じく、発光源が無いフレームはパスも PostEffect の Bloom 合成も丸ごとスキップする。
+	const bool bloomActive = EffectManager::GetInstance()->HasActiveBloomSource();
+	if (postEffect_ && postEffect_->bloom) {
+		postEffect_->bloom->SetEnabled(bloomActive);
+	}
+	if (bloomActive) {
+		PEPPER_SCOPE("Game::BloomPass");
+		auto* cmd = dxCore_->GetCommandList();
+		// RTV＋ビューポートは BeginBloomPass が設定する。深度テスト用に DSV を渡す
+		auto dsv = dxCore_->GetDsvHandle();
+		postEffect_->BeginBloomPass(cmd, &dsv);
+
+		srvManager_->PreDraw();
+		EffectManager::GetInstance()->DrawBloomPass();
+
+		postEffect_->EndBloomPass(cmd);
+	}
+
 	// 2. Swapchainに切り替え
 	dxCore_->BeginDraw();
 
@@ -444,6 +464,13 @@ void Game::Draw() {
 		// RT → SRV に戻す（ImGui::Image で読めるように）
 		std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
 		cmd->ResourceBarrier(1, &barrier);
+	}
+	// Effect Editor のプレビュー RT への描画。どのシーンでも動くよう、シーンに任せずここで描く。
+	// 共有の深度バッファをクリアして使うので、シーンの深度を読む処理（ID パス・ポストエフェクト）が
+	// すべて終わったこの位置で行う。エディタを開いていなければ中で何もしない
+	if (auto* effectEditor = ImGuiManager::Instance().GetEffectEditorWindow()) {
+		srvManager_->PreDraw();
+		effectEditor->Render();
 	}
 	// ImGui を Swapchain に描画するために RTV を戻す
 	dxCore_->RestoreSwapchainRenderTarget(cmd);

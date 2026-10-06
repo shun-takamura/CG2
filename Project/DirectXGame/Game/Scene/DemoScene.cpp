@@ -52,7 +52,6 @@
 #include "ModelManager.h"
 #include "IImGuiEditable.h"
 #include "LineRenderer.h"
-#include "Effect/EffectEditorWindow.h"
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -813,26 +812,7 @@ void DemoScene::Draw() {
 		s->Draw();
 	}
 
-#ifdef _DEBUG
-	// Effect Editor プレビュー RT への描画（Scene RT が確定した後、ImGuiレンダ前に行う）
-	if (auto* edit = ImGuiManager::Instance().GetEffectEditorWindow()) {
-		edit->Render();
-
-		// Scene RT に戻して、以降の描画が Effect Editor RT へ漏れないようにする
-		auto* commandList = dxCore_->GetCommandList();
-		auto rtv = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-		auto dsv = dxCore_->GetDsvHandle();
-		commandList->OMSetRenderTargets(1, &rtv, false, &dsv);
-		// ビューポート/シザーも Scene サイズへ戻す
-		D3D12_VIEWPORT vp{};
-		vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
-		vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
-		vp.MaxDepth = 1.0f;
-		commandList->RSSetViewports(1, &vp);
-		D3D12_RECT sc{ 0, 0, static_cast<LONG>(WindowsApplication::kClientWidth), static_cast<LONG>(WindowsApplication::kClientHeight) };
-		commandList->RSSetScissorRects(1, &sc);
-	}
-#endif
+	// Effect Editor のプレビューは Game::Draw がシーンに関係なく描く
 }
 
 // =============================================================

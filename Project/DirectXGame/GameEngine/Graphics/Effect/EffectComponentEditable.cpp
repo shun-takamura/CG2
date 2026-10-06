@@ -340,6 +340,15 @@ void EffectComponentEditable::OnImGuiInspector() {
             }
         }
 
+        // ===== Bloom（発光） =====
+        if (ImGui::CollapsingHeader("Bloom##Primitive", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Checkbox("Use Bloom##Primitive", &c.useBloom);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("見た目 × 強度 を発光として周りにぼかして足す。\n空や白い物は光らず、ON にしたものだけが光る");
+            if (c.useBloom) {
+                dirty |= ImGui::DragFloat("Intensity##PrimitiveBloom", &c.bloomIntensity, 0.02f, 0.0f, 20.0f);
+            }
+        }
+
         // ===== Distortion（歪みエフェクト） =====
         if (ImGui::CollapsingHeader("Distortion", ImGuiTreeNodeFlags_DefaultOpen)) {
             dirty |= ImGui::Checkbox("Use Distortion", &c.useDistortion);
@@ -531,6 +540,13 @@ void EffectComponentEditable::OnImGuiInspector() {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("粒子シミュの時間グループ。World=シーンのスローに従う / Effect=必殺技の全停止中でも動く");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("加算(Add)では黒系の粒子が映らない。黒い煙などは Normal を選ぶ");
 
+        // ===== Bloom（発光） =====
+        dirty |= ImGui::Checkbox("Use Bloom##Particle", &c.useBloom);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("粒子の見た目 × 強度 を発光として周りにぼかして足す。\nGPU グループ単位の設定（同じグループ名を使う他の成分とも共有）");
+        if (c.useBloom) {
+            dirty |= ImGui::DragFloat("Bloom Intensity##Particle", &c.bloomIntensity, 0.02f, 0.0f, 20.0f);
+        }
+
         // ===== Rotation（3D姿勢。ビルボード None で有効） =====
         ImGui::SeparatorText("Rotation (3D)");
         if (c.billboardMode != BillboardMode::None) {
@@ -660,6 +676,16 @@ void EffectComponentEditable::OnImGuiInspector() {
             dirty |= ImGui::DragFloat("Tumble Speed (帯自体の回転)", &c.orbitTumbleSpeed, 0.05f, -50.0f, 50.0f);
             dirty |= ImGui::DragFloat3("Tumble Axis", &c.orbitTumbleAxis.x, 0.01f);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("帯（リング平面）自体を回す軸。Ring Normal と直交させると首を振る");
+
+            dirty |= ImGui::Checkbox("Radius Change (円の収縮/拡大)", &c.orbitRadiusEnable);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("各粒子の寿命に沿って周回半径を 生成時の円 → 最終円 へ変える。\nburst でまとめて出すと円全体が縮む。連続 emit なら内へ吸われる渦になる。");
+            if (c.orbitRadiusEnable) {
+                // 生成時の円は発生半径そのもの（Emit Radius と同じ値を編集する）
+                dirty |= ImGui::DragFloat("Start Radius (生成時の円)", &c.emitRadius, 0.01f, 0.0f, 100.0f);
+                dirty |= ImGui::DragFloat("End Radius (最終円)", &c.orbitRadiusEnd, 0.01f, 0.0f, 100.0f);
+                dirty |= DrawCurveEditor("OrbitRadiusCurve", c.orbitRadiusCurve);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("半径変化の進み具合（横=寿命比率0..1 / 縦=生成時の円→最終円 0..1）");
+            }
         }
 
         // ===== Converge（収束：spawn位置→中心。移動をカーブで制御）=====

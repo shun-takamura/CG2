@@ -51,6 +51,12 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	distortionRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8G8B8A8_UNORM, distortionClear);
 
+	// Bloom 用の発光 RT。1.0 を超える強度を保つため float、0 でクリア
+	float bloomClear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	bloomRT_ = std::make_unique<RenderTexture>();
+	bloomRT_->Initialize(dxCore_, srvManager_, width, height,
+		BloomEffect::kFormat, bloomClear);
+
 	// シーンキャプチャ RT（ディスラプター崩壊の破片用。シーン RT と同じ sRGB）
 	captureRT_ = std::make_unique<RenderTexture>();
 	captureRT_->Initialize(dxCore_, srvManager_, width, height,
@@ -525,6 +531,18 @@ void PostEffect::InitializeEffects()
 		effectOrder_.push_back(distortion);
 		effectOwners_.push_back(std::move(de));
 	}
+
+	// ----- Bloom（bloomRT_ を縮小＋ぼかししてシーンに加算。専用 RS）-----
+	// 有効/無効は毎フレーム Game.cpp / EffectEditor から EffectManager の状態で自動切替する。
+	// 光をグレースケール等の色調整にも通すため、チェーンの先頭に置く。
+	{
+		auto be = std::make_unique<BloomEffect>();
+		be->InitializeBloom(dxCore_, srvManager_, basePsoDesc_, width_, height_);
+		be->SetEnabled(false);
+		bloom = be.get();
+		effectOrder_.insert(effectOrder_.begin(), bloom);
+		effectOwners_.push_back(std::move(be));
+	}
 }
 
 // ===================================================================
@@ -567,6 +585,22 @@ void PostEffect::EndDistortionPass(ID3D12GraphicsCommandList* commandList)
 {
 	if (!distortionRT_) return;
 	distortionRT_->EndRender(commandList);
+}
+
+// ===================================================================
+// Bloom Pass の開始/終了
+// ===================================================================
+
+void PostEffect::BeginBloomPass(ID3D12GraphicsCommandList* commandList, D3D12_CPU_DESCRIPTOR_HANDLE* dsvHandle)
+{
+	if (!bloomRT_) return;
+	bloomRT_->BeginRender(commandList, dsvHandle); // 初期化時のクリア色（0）でクリアされる
+}
+
+void PostEffect::EndBloomPass(ID3D12GraphicsCommandList* commandList)
+{
+	if (!bloomRT_) return;
+	bloomRT_->EndRender(commandList);
 }
 
 void PostEffect::RunDistortionForPreview(ID3D12GraphicsCommandList* commandList,
@@ -684,6 +718,15 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* out
 		dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	}
 
+	// Bloom の縮小＋ぼかしはチェーンの前に済ませる（RTV を切り替えるので、Swapchain 出力なら戻す）
+	if (bloom && bloom->IsEnabled()) {
+		bloom->Prepare(commandList, bloomRT_->GetSRVIndex(), bloomRT_->GetWidth(), bloomRT_->GetHeight());
+		if (!useOutputTarget) {
+			dxCore_->RestoreSwapchainRenderTarget(commandList);
+			srvManager_->PreDraw();
+		}
+	}
+
 	// 全エフェクトOFF → コピーだけ
 	if (activeEffects.empty()) {
 		// outputTarget が指定されている場合は、ここで RTV を切り替えてから描画する
@@ -748,6 +791,12 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 {
 	if (effect->NeedsCBuffer()) {
 		effect->UpdateConstantBuffer();
+	}
+
+	if (effect == bloom) {
+		// Bloom: scene t0 + 縮小段 t1..t4 + ルート定数 b0（専用 RS、描画まで BloomEffect が行う）
+		bloom->Composite(commandList, input->GetSRVIndex());
+		return;
 	}
 
 	if (effect == distortion) {
@@ -899,9 +948,9 @@ void PostEffect::ShowImGui()
 	for (int i = 0; i < static_cast<int>(effectOrder_.size()); ++i) {
 		auto* effect = effectOrder_[i];
 
-		// Distortion はエフェクト連動の自動制御（per-instance strength）にしたので、
-		// ユーザー操作の対象外。ImGui リストからは除外する。
-		if (effect == distortion) continue;
+		// Distortion / Bloom はエフェクト連動の自動制御なので、ON/OFF はユーザー操作の対象外。
+		// ImGui リストからは除外する（Bloom のパラメータは下に別枠で出す）。
+		if (effect == distortion || effect == bloom) continue;
 
 		ImGui::PushID(i);
 
@@ -936,6 +985,13 @@ void PostEffect::ShowImGui()
 		std::swap(effectOrder_[moveFrom], effectOrder_[moveTo]);
 	}
 
+	if (bloom) {
+		ImGui::SeparatorText("Bloom (エフェクト連動で自動 ON)");
+		ImGui::PushID("Bloom");
+		bloom->ShowImGui();
+		ImGui::PopID();
+	}
+
 	ImGui::Separator();
 	if (ImGui::Button("Reset All")) {
 		ResetEffects();
@@ -966,5 +1022,6 @@ void PostEffect::Finalize()
 	if (renderTextureB_) renderTextureB_->Finalize();
 	if (idMaskRT_)       idMaskRT_->Finalize();
 	if (distortionRT_)   distortionRT_->Finalize();
+	if (bloomRT_)        bloomRT_->Finalize();
 	if (captureRT_)      captureRT_->Finalize();
 }

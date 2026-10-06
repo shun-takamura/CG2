@@ -1,0 +1,135 @@
+{
+  "name": "DoorParticle",
+  "totalDuration": 1,
+  "loop": false,
+  "primitives": [],
+  "particles": [
+    {
+      "displayName": "",
+      "gpuParticleGroupName": "DoorParticle",
+      "texturePath": "Resources/Textures/circle.dds",
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "duration": 0.30000001192092896,
+      "burstCount": 16,
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "colorMode": 0,
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "scaleMin": [
+        0.5,
+        0.5
+      ],
+      "scaleMax": [
+        0.5,
+        0.5
+      ],
+      "uniformScale": false,
+      "startScale": 1,
+      "endScale": 1,
+      "emitRadius": 2,
+      "particleLifeTime": 1,
+      "emitShape": 1,
+      "ringNormal": [
+        0,
+        0,
+        1
+      ],
+      "ringThickness": 0.05000000074505806,
+      "velocityMode": 1,
+      "velocityDir": [
+        0,
+        1,
+        0
+      ],
+      "velocitySpeed": 3,
+      "velocityJitter": 0,
+      "randomRotateOnSpawn": true,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "orbitEnabled": true,
+      "orbitSpinSpeed": 3.8499999046325684,
+      "orbitTumbleSpeed": 0,
+      "orbitTumbleAxis": [
+        0,
+        0,
+        0
+      ],
+      "orbitRadiusEnable": true,
+      "orbitRadiusEnd": 1.0199999809265137,
+      "orbitRadiusCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "convergeEnable": false,
+      "convergeCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "useBloom": true,
+      "bloomIntensity": 1,
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInEnd": 0.30000001192092896,
+      "dissolveOutEnable": false,
+      "dissolveOutStart": 0.69999998807907104,
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.40000000596046448,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806,
+      "colorKeys": [],
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "hueShiftRandomPhase": true
+    }
+  ],
+  "lights": [],
+  "sounds": []
+}

@@ -1,4 +1,5 @@
 #include "Skybox.hlsli"
+#define CLOUD_SKY_MOKO // もこもこ（t9）を使う。PBR の映り込みは使わない
 #include "../Cloud/CloudSky.hlsli"
 
 struct Material

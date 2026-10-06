@@ -39,6 +39,9 @@ public:
     // Distortion Pass（メインの rootSignature_ を流用 / PSO のみ専用）
     ID3D12PipelineState* GetDistortionPipelineState() const { return distortionPipelineState_.Get(); }
 
+    // Bloom Pass（メインの rootSignature_ / Primitive シェーダを流用、発光 RT 向けの加算 PSO のみ専用）
+    ID3D12PipelineState* GetBloomPipelineState() const { return bloomPipelineState_.Get(); }
+
 private:
     PrimitivePipeline() = default;
     ~PrimitivePipeline() = default;
@@ -49,6 +52,7 @@ private:
     void CreateGraphicsPipelineState(BlendMode mode, bool depthWrite, bool cullBackface);
     void CreateIdPassObjects();
     void CreateDistortionPassObjects();
+    void CreateBloomPassObjects();
 
     DirectXCore* dxCore_ = nullptr;
     SRVManager* srvManager_ = nullptr;
@@ -63,4 +67,7 @@ private:
 
     // Distortion Pass 用（DistortionRT に歪みマップを書き込む）
     Microsoft::WRL::ComPtr<ID3D12PipelineState> distortionPipelineState_;
+
+    // Bloom Pass 用（発光 RT に加算で書き込む）
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> bloomPipelineState_;
 };

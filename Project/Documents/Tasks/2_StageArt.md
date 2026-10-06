@@ -174,7 +174,7 @@ Poly Haven の HDRI → `tools/Python/convert_hdr_to_dds.py` で cubemap 化。
 |---|---|---|
 | SkyAboveClouds | 高度感・開放感 | 遠景の雲海板、まばらな浮遊岩。フォグは遠め（near 800） |
 | CloudLayer | **通過の緊張**（高高度と低空の中間ではない） | 濃い白フォグ（density 2.0・far 220）で視界を潰す。ここだけ物を減らして「何も見えない」を作る |
-| LowAltitude | 速度感 | **近景を高速で通過する物**を最も密に置く。地面が見えることで速度が知覚される |
+| LowAltitude | 速度感 | **大河の上を水面すれすれで飛ぶ**（2026-10-06 確定）。水から出る岩（当たり判定なし）をレール近くに置き、岸は草原、遠景の山は板ポリ。詳細は [11_LowAltitudeFlight.md](11_LowAltitudeFlight.md) |
 | Canyon | 圧迫感・終盤感 | 左右の壁を近づける。fog を暗く、lightIntensity を落とす（現 0.5） |
 
 ---

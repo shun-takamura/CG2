@@ -180,6 +180,23 @@ public:
     /// </summary>
     bool HasActiveDistortionSource() const;
 
+    /// <summary>
+    /// useBloom な Primitive / GPU パーティクルを発光 RT に描画する。
+    /// Game::Draw が Distortion Pass の後に呼ぶ想定。RTV/DSV/Viewport/Scissor は呼び出し側が設定済みであること。
+    /// </summary>
+    void DrawBloomPass();
+
+    /// <summary>
+    /// プレビュー版 Bloom パス。呼ぶ直前に DrawPreview() でプレビュー WVP / PerView が更新されている前提。
+    /// </summary>
+    void DrawBloomPassPreview();
+
+    /// <summary>
+    /// 発光させるものが1つでもあるか（無ければ Bloom パスと合成を丸ごとスキップできる）。
+    /// preview=true ならエディタのプレビュー側を調べる。
+    /// </summary>
+    bool HasActiveBloomSource(bool preview = false) const;
+
     // プレビュー RT への描画。SetPreviewCamera で設定したカメラ視点で同じインスタンスを描画する。
     // 呼び出し前にプレビュー RT を BeginRender 済みであること。
     void DrawPreview();

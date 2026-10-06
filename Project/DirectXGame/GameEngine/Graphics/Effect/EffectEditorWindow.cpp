@@ -69,6 +69,10 @@ void EffectEditorWindow::Finalize() {
     if (previewDistortionRT_)    { previewDistortionRT_->Finalize();    previewDistortionRT_.reset(); }
     if (oldPreviewOutputRT_)     { oldPreviewOutputRT_->Finalize();     oldPreviewOutputRT_.reset(); }
     if (previewOutputRT_)        { previewOutputRT_->Finalize();        previewOutputRT_.reset(); }
+    if (oldPreviewBloomRT_)       { oldPreviewBloomRT_->Finalize();       oldPreviewBloomRT_.reset(); }
+    if (previewBloomRT_)          { previewBloomRT_->Finalize();          previewBloomRT_.reset(); }
+    if (oldPreviewBloomOutputRT_) { oldPreviewBloomOutputRT_->Finalize(); oldPreviewBloomOutputRT_.reset(); }
+    if (previewBloomOutputRT_)    { previewBloomOutputRT_->Finalize();    previewBloomOutputRT_.reset(); }
 }
 
 void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height) {
@@ -84,6 +88,8 @@ void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height
     swapOut(renderTexture_,        oldRenderTexture_);
     swapOut(previewDistortionRT_,  oldPreviewDistortionRT_);
     swapOut(previewOutputRT_,      oldPreviewOutputRT_);
+    swapOut(previewBloomRT_,       oldPreviewBloomRT_);
+    swapOut(previewBloomOutputRT_, oldPreviewBloomOutputRT_);
 
     // メインのプレビュー RT
     renderTexture_ = std::make_unique<RenderTexture>();
@@ -101,6 +107,15 @@ void EffectEditorWindow::EnsureRenderTextureSize(uint32_t width, uint32_t height
     previewOutputRT_ = std::make_unique<RenderTexture>();
     const float outClear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     previewOutputRT_->Initialize(dxCore_, srvManager_, width, height,
+        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, outClear);
+
+    // Bloom 用：発光 RT（0 でクリア）と、ブルーム合成後の最終表示用
+    previewBloomRT_ = std::make_unique<RenderTexture>();
+    const float bloomClear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    previewBloomRT_->Initialize(dxCore_, srvManager_, width, height,
+        BloomEffect::kFormat, bloomClear);
+    previewBloomOutputRT_ = std::make_unique<RenderTexture>();
+    previewBloomOutputRT_->Initialize(dxCore_, srvManager_, width, height,
         DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, outClear);
 
     rtWidth_ = width;
@@ -160,6 +175,8 @@ void EffectEditorWindow::Render() {
     if (oldRenderTexture_) { oldRenderTexture_->Finalize(); oldRenderTexture_.reset(); }
     if (oldPreviewDistortionRT_) { oldPreviewDistortionRT_->Finalize(); oldPreviewDistortionRT_.reset(); }
     if (oldPreviewOutputRT_) { oldPreviewOutputRT_->Finalize(); oldPreviewOutputRT_.reset(); }
+    if (oldPreviewBloomRT_) { oldPreviewBloomRT_->Finalize(); oldPreviewBloomRT_.reset(); }
+    if (oldPreviewBloomOutputRT_) { oldPreviewBloomOutputRT_->Finalize(); oldPreviewBloomOutputRT_.reset(); }
 
     if (!renderTexture_ || !isOpen_) return;
 
@@ -255,6 +272,33 @@ void EffectEditorWindow::Render() {
         dxCore_->TransitionDepthState(commandList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
         lastFrameDistortionApplied_ = true;
+    }
+
+    // ===== Bloom プレビュー合成 =====
+    // 発光させるものが無いフレームは何もしない（表示は歪み合成結果 or 通常 RT のまま）。
+    lastFrameBloomApplied_ = false;
+    if (previewBloom_ && previewBloomRT_ && previewBloomOutputRT_ &&
+        EffectManager::GetInstance()->HasActiveBloomSource(true)) {
+        EnsurePostEffect();
+        if (BloomEffect* bloom = postEffect_ ? postEffect_->bloom : nullptr) {
+            // (A) 発光 RT に useBloom なものだけを描く（深度は renderTexture_ 描画時のものでテスト）
+            previewBloomRT_->BeginRender(commandList, &dsv);
+            srvManager_->PreDraw();
+            EffectManager::GetInstance()->DrawBloomPassPreview();
+            previewBloomRT_->EndRender(commandList);
+
+            // (B) 縮小＋ぼかし
+            bloom->Prepare(commandList, previewBloomRT_->GetSRVIndex(), rtWidth_, rtHeight_);
+
+            // (C) 歪み合成済みならその結果に、そうでなければ通常 RT にブルームを足す
+            RenderTexture* src = lastFrameDistortionApplied_ ? previewOutputRT_.get() : renderTexture_.get();
+            previewBloomOutputRT_->BeginRender(commandList);
+            srvManager_->PreDraw();
+            bloom->Composite(commandList, src->GetSRVIndex());
+            previewBloomOutputRT_->EndRender(commandList);
+
+            lastFrameBloomApplied_ = true;
+        }
     }
 }
 
@@ -460,6 +504,21 @@ void EffectEditorWindow::OnDraw() {
         }
     }
 
+    // ブルームプレビュー（自前 PostEffect の Bloom を使う）
+    ImGui::Checkbox("Bloom", &previewBloom_);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("ON: Use Bloom にしたコンポーネントの発光をプレビューに合成する。\n"
+                          "下の Intensity はプレビュー専用（シーンの強さは PostEffect ウィンドウで調整）。");
+    }
+    if (previewBloom_ && postEffect_ && postEffect_->bloom) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(160.0f);
+        float intensity = postEffect_->bloom->GetIntensity();
+        if (ImGui::DragFloat("Intensity##PreviewBloom", &intensity, 0.01f, 0.0f, 4.0f, "%.2f")) {
+            postEffect_->bloom->SetIntensity(intensity);
+        }
+    }
+
     // Timeline：シーク可能なスライダー。ドラッグ中は SeekPreview で t=0 から早送り再シミュレート。
     // 非ドラッグ時はスライダー値を現在の経過時間に追従させ、再生位置を表示する。
     // シーン内の他エフェクトのタイムラインを拾わないよう、ハンドル指定で取得する。
@@ -489,10 +548,13 @@ void EffectEditorWindow::OnDraw() {
         pendingHeight_ = newH;
     }
 
-    // distortion 合成済みなら出力 RT を、そうでなければ通常の RT を表示
-    RenderTexture* showRT = (lastFrameDistortionApplied_ && previewOutputRT_)
-        ? previewOutputRT_.get()
-        : renderTexture_.get();
+    // ブルーム合成済み → 歪み合成済み → 通常 RT の順に、最後まで処理した RT を表示
+    RenderTexture* showRT = renderTexture_.get();
+    if (lastFrameBloomApplied_ && previewBloomOutputRT_) {
+        showRT = previewBloomOutputRT_.get();
+    } else if (lastFrameDistortionApplied_ && previewOutputRT_) {
+        showRT = previewOutputRT_.get();
+    }
     uint32_t srvIndex = showRT->GetSRVIndex();
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = srvManager_->GetGPUDescriptorHandle(srvIndex);
 
