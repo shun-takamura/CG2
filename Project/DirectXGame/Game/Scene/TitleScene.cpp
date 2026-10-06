@@ -198,12 +198,6 @@ void TitleScene::Initialize() {
 		lm->SetDirectionalLightIntensity(sunIntensity_);
 	}
 
-	if (auto* pe = Game::GetPostEffect()) {
-		if (pe->vignette) {
-			pe->vignette->SetEnabled(true);
-			pe->vignette->SetIntensity(vignetteIntensity_);
-		}
-	}
 
 	menu_.SetItems({ "スタート", "ゲーム終了" });
 	SoundManager::GetInstance()->Play2DSoundLooped(kTitleBgm, bgmVolume_);
@@ -857,7 +851,11 @@ float TitleScene::GetPostEffectFade() const {
 void TitleScene::UpdatePostEffect() {
 	auto* pe = Game::GetPostEffect();
 	if (!pe) return;
-	if (pe->vignette) pe->vignette->SetIntensity(vignetteIntensity_ * GetPostEffectFade());
+	if (pe->vignette) {
+		const float intensity = vignetteIntensity_ * GetPostEffectFade();
+		pe->vignette->SetEnabled(intensity > 0.0f);
+		pe->vignette->SetIntensity(intensity);
+	}
 }
 
 void TitleScene::Draw() {
