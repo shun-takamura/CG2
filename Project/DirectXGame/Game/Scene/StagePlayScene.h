@@ -29,6 +29,7 @@ class SpriteInstance;
 class LightningRuntime;
 class RailStagePart;
 class BossStagePart;
+class BossArenaWater;
 
 /// <summary>
 /// ステージプレイシーン
@@ -146,6 +147,8 @@ private:
 	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
 	// StagePlayScene は IBossStageHost 経由でのみこれを操作する。
 	std::unique_ptr<BossStagePart> bossStage_;
+	// ボス戦の床（石畳＋薄い水）。Boss フェーズ中だけ更新・描画する
+	std::unique_ptr<BossArenaWater> bossWater_;
 
 	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する

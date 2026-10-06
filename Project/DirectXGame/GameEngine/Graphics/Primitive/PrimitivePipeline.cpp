@@ -24,6 +24,7 @@ void PrimitivePipeline::Initialize(DirectXCore* dxCore, SRVManager* srvManager) 
 
     CreateIdPassObjects();
     CreateDistortionPassObjects();
+    CreateBloomPassObjects();
 }
 
 void PrimitivePipeline::Finalize() {
@@ -37,6 +38,7 @@ void PrimitivePipeline::Finalize() {
     idPipelineState_.Reset();
     idRootSignature_.Reset();
     distortionPipelineState_.Reset();
+    bloomPipelineState_.Reset();
     rootSignature_.Reset();
 }
 
@@ -421,5 +423,68 @@ void PrimitivePipeline::CreateDistortionPassObjects() {
     desc.SampleDesc.Count = 1;
 
     HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&distortionPipelineState_));
+    assert(SUCCEEDED(hr));
+}
+
+void PrimitivePipeline::CreateBloomPassObjects() {
+    // 通常描画と同じ rootSignature_ / シェーダで描き、見た目そのままを発光 RT に足し込む。
+    // 強度は Bloom 専用マテリアル CB の color に乗せる（PrimitiveMesh::DrawBloomPass）。
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Primitive/Primitive.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Primitive/Primitive.PS.hlsl", L"ps_6_0");
+    assert(vs && ps);
+
+    D3D12_INPUT_ELEMENT_DESC elems[4] = {};
+    elems[0].SemanticName = "POSITION";
+    elems[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    elems[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[1].SemanticName = "TEXCOORD";
+    elems[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+    elems[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[2].SemanticName = "NORMAL";
+    elems[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    elems[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    elems[3].SemanticName = "COLOR";
+    elems[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    elems[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+    D3D12_RASTERIZER_DESC rasterizer{};
+    rasterizer.CullMode = D3D12_CULL_MODE_NONE;
+    rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
+    rasterizer.DepthClipEnable = TRUE;
+
+    // 加算（重なった光は足し合わさる）。元のブレンドモードに関係なく発光量として足す。
+    D3D12_BLEND_DESC blend{};
+    blend.RenderTarget[0].BlendEnable = TRUE;
+    blend.RenderTarget[0].SrcBlend  = D3D12_BLEND_SRC_ALPHA;
+    blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOp   = D3D12_BLEND_OP_ADD;
+    blend.RenderTarget[0].SrcBlendAlpha  = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOpAlpha   = D3D12_BLEND_OP_ADD;
+    blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+    // 深度：テストのみ（手前の物に隠れた所は光らない）
+    D3D12_DEPTH_STENCIL_DESC dsDesc{};
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+    desc.pRootSignature = rootSignature_.Get();
+    desc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+    desc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+    desc.InputLayout = { elems, _countof(elems) };
+    desc.BlendState = blend;
+    desc.RasterizerState = rasterizer;
+    desc.DepthStencilState = dsDesc;
+    desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+    desc.NumRenderTargets = 1;
+    // 発光 RT のフォーマットに合わせる（BloomEffect::kFormat）
+    desc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    desc.SampleDesc.Count = 1;
+
+    HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&bloomPipelineState_));
     assert(SUCCEEDED(hr));
 }

@@ -15,7 +15,7 @@ class EnemyController;
 class IBossStageHost {
 public:
 	virtual ~IBossStageHost() = default;
-	// プレハブをスプラインなしで指定座標にスポーンして返す（ボス本体・地面に流用）。
+	// プレハブをスプラインなしで指定座標にスポーンして返す（ボス本体に流用）。
 	virtual IImGuiEditable* SpawnPrefabAt(const std::string& prefabName, const Vector3& pos) = 0;
 	virtual void RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) = 0;
 	virtual void UpdateEnemyControllers(float dt, IImGuiEditable* player, float stageTimeSec) = 0;
@@ -37,7 +37,7 @@ public:
 
 	void Initialize(IBossStageHost* host, Camera* camera);
 
-	// Phase::Boss 突入時に1回：地面・ボス本体をスポーンし、ボスAIコントローラを登録、プレイヤーを地上開始位置へ。
+	// Phase::Boss 突入時に1回：ボス本体をスポーンし、ボスAIコントローラを登録、プレイヤーを地上開始位置へ。
 	void Enter();
 	// Boss フェーズ中に毎フレーム：ボスAI（敵コントローラ）更新＋撃破掃除＋ボス生存監視。
 	void Update(float worldDt);
@@ -73,6 +73,9 @@ public:
 	// 照準トラッカーに乗らない＝ジャスト回避の攻撃元(attacker)はこちらを使う必要がある。
 	IImGuiEditable* GetBossEntity() const { return boss_; }
 	bool IsLockOn() const { return camMode_ == BossCamMode::LockOn; }
+	// 床（BossArenaWater の石畳）を合わせるためのアリーナ情報
+	float GetGroundY() const { return groundY_; }
+	const Vector3& GetArenaCenter() const { return arenaCenter_; }
 	void OnImGuiTuning(bool& changed);
 
 	// 撃破イベントを一度だけ通知する（検出直後の1回だけ true。呼ぶたびに消費される）。
@@ -85,7 +88,6 @@ private:
 	Camera*         camera_ = nullptr;
 
 	IImGuiEditable* boss_   = nullptr; // スポーンしたボス本体（撃破で null 化）
-	IImGuiEditable* ground_ = nullptr;
 	bool  bossSpawned_ = false;
 
 	// 撃破イベント（ConsumeBossDefeated で一度だけ読み出される）
@@ -143,5 +145,4 @@ private:
 	bool ComputeBossYawPitch(float& outYaw, float& outPitch) const;
 
 	std::string bossPrefab_   = "boss";
-	std::string groundPrefab_ = "boss_ground";
 };

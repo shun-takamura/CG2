@@ -307,6 +307,46 @@ void PrimitiveMesh::DrawDistortionPassPreview(uint32_t normalMapSrvIndex) {
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void PrimitiveMesh::DrawBloomPass(float intensity) {
+    DrawBloomPassImpl(transformResource_.Get(), intensity);
+}
+
+void PrimitiveMesh::DrawBloomPassPreview(float intensity) {
+    DrawBloomPassImpl(transformPreviewResource_.Get(), intensity);
+}
+
+void PrimitiveMesh::DrawBloomPassImpl(ID3D12Resource* transformResource, float intensity) {
+    if (!transformResource || !materialData_ || indexCount_ == 0 || vertexCount_ == 0) return;
+
+    auto* pp = PrimitivePipeline::GetInstance();
+    if (!bloomMaterialResource_) {
+        bloomMaterialResource_ = pp->GetDxCore()->CreateBufferResource(sizeof(PrimitiveMaterial));
+        bloomMaterialResource_->Map(0, nullptr, reinterpret_cast<void**>(&bloomMaterialData_));
+    }
+    // UV / ディゾルブ等は通常描画と同じ。色だけ強度倍（float RT なので 1 を超えて良い）
+    *bloomMaterialData_ = *materialData_;
+    bloomMaterialData_->color.x *= intensity;
+    bloomMaterialData_->color.y *= intensity;
+    bloomMaterialData_->color.z *= intensity;
+
+    auto* cmd = pp->GetDxCore()->GetCommandList();
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(pp->GetRootSignature());
+    cmd->SetPipelineState(pp->GetBloomPipelineState());
+
+    cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    cmd->IASetIndexBuffer(&indexBufferView_);
+
+    cmd->SetGraphicsRootConstantBufferView(0, transformResource->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(1, bloomMaterialResource_->GetGPUVirtualAddress());
+    SRVManager* srvManager = pp->GetSRVManager();
+    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(hasTexture_ ? textureSrvIndex_ : whiteSrvIndex_));
+    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_));
+
+    PEPPER_COUNT("DrawCall");
+    cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void PrimitiveMesh::DrawPreview() {
     if (!transformPreviewResource_) return;
 

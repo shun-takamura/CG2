@@ -46,7 +46,14 @@ void SkyboxManager::CreateRootSignature()
     descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[6] = {};
+    // PS: SRV(t9) - 遠景の雲のもこもこの高さ（CloudLayer。雲を使わないシーンはダミー）
+    D3D12_DESCRIPTOR_RANGE descriptorRangeCloudMoko[1] = {};
+    descriptorRangeCloudMoko[0].BaseShaderRegister = 9;              // t9
+    descriptorRangeCloudMoko[0].NumDescriptors = 1;
+    descriptorRangeCloudMoko[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeCloudMoko[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[7] = {};
 
     // VS: CBV(b0) - TransformationMatrix用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -80,6 +87,12 @@ void SkyboxManager::CreateRootSignature()
     rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[5].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
     rootParameters[5].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
+
+    // PS: DescriptorTable(t9) - 遠景の雲のもこもこ
+    rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[6].DescriptorTable.pDescriptorRanges = descriptorRangeCloudMoko;
+    rootParameters[6].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloudMoko);
 
     // ============================================
     // Sampler (PS の s0)

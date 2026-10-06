@@ -43,6 +43,7 @@ void GPUParticleManager::Finalize()
     materialResource_.Reset();
     vertexResource_.Reset();
     for (auto& pso : drawPSOs_) pso.Reset();
+    bloomPSO_.Reset();
     drawRootSig_.Reset();
     updatePSO_.Reset();
     updateRootSig_.Reset();
@@ -182,7 +183,8 @@ void GPUParticleManager::SetEmitterShape(const std::string& name, int mode, cons
 
 void GPUParticleManager::SetGroupOrbit(const std::string& name, bool enabled, const Vector3& center,
                                        const Vector3& spinAxis, float spinSpeed,
-                                       const Vector3& tumbleAxis, float tumbleSpeed)
+                                       const Vector3& tumbleAxis, float tumbleSpeed,
+                                       bool radiusEnable, float radiusEndRatio)
 {
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.orbitData) return;
@@ -193,18 +195,27 @@ void GPUParticleManager::SetGroupOrbit(const std::string& name, bool enabled, co
     o.spinSpeed = spinSpeed;
     o.tumbleAxis = tumbleAxis;
     o.tumbleSpeed = tumbleSpeed;
+    o.radiusEnable = radiusEnable ? 1.0f : 0.0f;
+    o.radiusEndRatio = radiusEndRatio;
 }
 
-void GPUParticleManager::SetGroupConverge(const std::string& name, bool enable, const Vector3& center, const float lut32[32])
+void GPUParticleManager::SetGroupConverge(const std::string& name, bool enable, const Vector3& center)
 {
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.orbitData) return;
     auto& o = *it->second.orbitData;
     o.convergeEnable = enable ? 1.0f : 0.0f;
     o.convergeCenter = center;
+}
+
+void GPUParticleManager::SetGroupMotionLUT(const std::string& name, const float lut32[32])
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end() || !it->second.orbitData) return;
+    auto& o = *it->second.orbitData;
     // 32 サンプルを float4[8] にパック（.x..w=連続4サンプル）
     for (int i = 0; i < 8; ++i) {
-        o.convergeLUT[i] = { lut32[i * 4 + 0], lut32[i * 4 + 1], lut32[i * 4 + 2], lut32[i * 4 + 3] };
+        o.motionLUT[i] = { lut32[i * 4 + 0], lut32[i * 4 + 1], lut32[i * 4 + 2], lut32[i * 4 + 3] };
     }
 }
 
@@ -284,6 +295,74 @@ void GPUParticleManager::SetGroupBlendMode(const std::string& name, int mode)
     if (it == groups_.end()) return;
     if (mode < 0 || mode >= kCountOfBlendMode) mode = kBlendModeAdd;
     it->second.blendMode = static_cast<BlendMode>(mode);
+}
+
+void GPUParticleManager::SetGroupBloom(const std::string& name, bool enable, float intensity)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    GPUParticleGroup& g = it->second;
+    g.bloomEnable = enable;
+    if (!enable) return;
+
+    if (!g.bloomMaterialResource) {
+        g.bloomMaterialResource = dxCore_->CreateBufferResource(sizeof(Material));
+        g.bloomMaterialResource->Map(0, nullptr, reinterpret_cast<void**>(&g.bloomMaterialData));
+        *g.bloomMaterialData = {};
+        g.bloomMaterialData->uvTransform = MakeIdentity4x4();
+    }
+    // 粒子色 × テクスチャ × この color が発光量になる（float RT なので 1 を超えて良い）
+    g.bloomMaterialData->color = { intensity, intensity, intensity, 1.0f };
+}
+
+bool GPUParticleManager::HasBloomGroup(bool preview) const
+{
+    for (const auto& pair : groups_) {
+        const GPUParticleGroup& g = pair.second;
+        if (g.bloomEnable && g.isPreview == preview && g.initializedOnGPU) return true;
+    }
+    return false;
+}
+
+void GPUParticleManager::DrawBloom()
+{
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (g.isPreview) continue;
+        DrawGroupBloom(g, g.perViewResource.Get());
+    }
+}
+
+void GPUParticleManager::DrawBloomPreview()
+{
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        if (!g.isPreview) continue;
+        DrawGroupBloom(g, g.perViewPreviewResource.Get());
+    }
+}
+
+void GPUParticleManager::DrawGroupBloom(GPUParticleGroup& g, ID3D12Resource* perViewCB)
+{
+    // 未初期化（まだ一度も Draw されていない）グループは粒子バッファが COMMON 状態なので描かない。
+    // 初期化済みなら Draw 後の NON_PIXEL_SHADER_RESOURCE のまま残っている。
+    if (!g.bloomEnable || !g.initializedOnGPU || !g.bloomMaterialResource) return;
+
+    auto commandList = dxCore_->GetCommandList();
+    commandList->SetGraphicsRootSignature(drawRootSig_.Get());
+    commandList->SetPipelineState(bloomPSO_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+    srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(1, perViewCB->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(2, g.bloomMaterialResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
+
+    PEPPER_COUNT("DrawCall");
+    commandList->DrawInstanced(6, kMaxParticles, 0, 0);
 }
 
 void GPUParticleManager::SetGroupBillboardMode(const std::string& name, BillboardMode mode)
@@ -774,6 +853,10 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
         g.dissolveResource->Unmap(0, nullptr);
         g.dissolveData = nullptr;
     }
+    if (g.bloomMaterialResource && g.bloomMaterialData) {
+        g.bloomMaterialResource->Unmap(0, nullptr);
+        g.bloomMaterialData = nullptr;
+    }
     g.emitterResource.Reset();
     g.gradientResource.Reset();
     g.orbitResource.Reset();
@@ -781,6 +864,7 @@ void GPUParticleManager::ReleaseGroupResources(GPUParticleGroup& g)
     g.perViewResource.Reset();
     g.perViewPreviewResource.Reset();
     g.dissolveResource.Reset();
+    g.bloomMaterialResource.Reset();
     g.freeListResource.Reset();
     g.freeListIndexResource.Reset();
     g.particleResource.Reset();
@@ -1180,6 +1264,23 @@ void GPUParticleManager::CreateDrawPipeline()
 
         psoDesc.BlendState = blend;
         hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&drawPSOs_[mode]));
+        assert(SUCCEEDED(hr));
+    }
+
+    // Bloom Pass 用：元のブレンドモードに関係なく加算で発光 RT（BloomEffect::kFormat）へ描く
+    {
+        D3D12_BLEND_DESC blend{};
+        blend.RenderTarget[0].BlendEnable = TRUE;
+        blend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+        blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+        blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+        blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+        blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+        blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        psoDesc.BlendState = blend;
+        psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&bloomPSO_));
         assert(SUCCEEDED(hr));
     }
 }

@@ -16,6 +16,8 @@
 #include <utility>
 #include <array>
 
+struct Material;
+
 class Camera;
 
 // GPU Particle 管理クラス
@@ -104,17 +106,25 @@ public:
     /// <summary>
     /// 周回（orbit）を設定。enabled なら粒子を center まわりに axis で angularSpeed[rad/s] 回す（外に出さない）。
     /// center は毎フレ更新（プレイヤー追従など）して良い。
+    /// radiusEnable なら周回半径を寿命に沿って 1 → radiusEndRatio 倍へ変える（進み方は SetGroupMotionLUT）。
     /// </summary>
     void SetGroupOrbit(const std::string& name, bool enabled, const Vector3& center,
                        const Vector3& spinAxis, float spinSpeed,
-                       const Vector3& tumbleAxis, float tumbleSpeed);
+                       const Vector3& tumbleAxis, float tumbleSpeed,
+                       bool radiusEnable = false, float radiusEndRatio = 1.0f);
 
     /// <summary>
     /// 収束（移動をカーブで制御）を設定。enable で各粒子を spawn 位置から center へ寄せる。
-    /// lut32 は convergeCurve(0..1) を 32 サンプルに焼いた配列（0=spawn, 1=center）。
+    /// 進み方は SetGroupMotionLUT（0=spawn, 1=center）。
     /// 併せて velocityMode=4（emit 時に spawn 位置を保持）にしておくこと。
     /// </summary>
-    void SetGroupConverge(const std::string& name, bool enable, const Vector3& center, const float lut32[32]);
+    void SetGroupConverge(const std::string& name, bool enable, const Vector3& center);
+
+    /// <summary>
+    /// 移動カーブ LUT を設定。lut32 はカーブ(0..1)を 32 サンプルに焼いた配列。
+    /// converge 時は収束の進み、orbit 時は半径変化の進みとして使われる（両者は排他）。
+    /// </summary>
+    void SetGroupMotionLUT(const std::string& name, const float lut32[32]);
 
     /// <summary>
     /// 多色グラデーションを設定。locations(0..1) と colors の組を最大 kMaxGradientKeys 個。
@@ -149,6 +159,19 @@ public:
     void SetGroupBlendMode(const std::string& name, int mode);
     void SetGroupBillboardMode(const std::string& name, BillboardMode mode);
     void SetGroupTimeGroup(const std::string& name, TimeGroup group);
+
+    // ===== Bloom =====
+    /// <summary>
+    /// グループを Bloom 対象にする。有効なグループは DrawBloom / DrawBloomPreview で発光 RT に
+    /// 「通常描画と同じ見た目 × intensity」を加算で描く。
+    /// </summary>
+    void SetGroupBloom(const std::string& name, bool enable, float intensity);
+    // Bloom 対象のグループが（シーン用 or プレビュー用に）1つでもあるか
+    bool HasBloomGroup(bool preview) const;
+    // Bloom 対象のシーン用グループを発光 RT に描く（シミュレーションはしない。Draw の後に呼ぶ）
+    void DrawBloom();
+    // 上記のプレビュー版（DrawPreview の後に呼ぶ）
+    void DrawBloomPreview();
 
     // ===== 毎フレーム =====
     // シーン用グループのみを更新する（プレビュー用グループはスキップ）。
@@ -247,7 +270,7 @@ private:
         float   enabled = 0.0f;
         float   spinSpeed = 0.0f;
         float   tumbleSpeed = 0.0f;
-        float   pad0 = 0.0f;
+        float   radiusEndRatio = 1.0f; // 最終円の半径 / 生成時の円の半径
         Vector3 center = { 0.0f, 0.0f, 0.0f };
         float   pad1 = 0.0f;
         Vector3 spinAxis = { 0.0f, 0.0f, 1.0f };
@@ -260,8 +283,9 @@ private:
         // 粒子を中心と一緒に平行移動させ、エミッタが動いてもリングが崩れないようにする。
         Vector3 centerDelta = { 0.0f, 0.0f, 0.0f };
         Vector3 convergeCenter = { 0.0f, 0.0f, 0.0f };
-        float   pad7 = 0.0f;
-        Vector4 convergeLUT[8] = {}; // 32サンプル（convergeCurve を焼いた 0..1。4成分=4サンプル）
+        float   radiusEnable = 0.0f; // 0/1。周回半径を寿命に沿って変える
+        // 移動カーブ LUT（32サンプル 0..1。4成分=4サンプル）。converge=収束カーブ / orbit=半径カーブ（排他なので共用）
+        Vector4 motionLUT[8] = {};
     };
 
     struct PerFrame
@@ -337,6 +361,11 @@ private:
         uint32_t dissolveMaskSrvIndex = 0;
         bool     hasDissolveMask = false;
 
+        // Bloom（描画 PS b0 をグループ専用の強度入りマテリアルに差し替えて発光 RT へ描く）
+        bool      bloomEnable = false;
+        Microsoft::WRL::ComPtr<ID3D12Resource> bloomMaterialResource;
+        Material* bloomMaterialData = nullptr;
+
         // 状態
         BlendMode     blendMode    = kBlendModeAdd; // 描画ブレンド（既定 Add＝後方互換）
         BillboardMode billboardMode = BillboardMode::Full;
@@ -365,6 +394,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12PipelineState> updatePSO_;
     Microsoft::WRL::ComPtr<ID3D12RootSignature> drawRootSig_;
     std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kCountOfBlendMode> drawPSOs_;
+    // Bloom Pass 用（発光 RT に加算で描く。drawRootSig_ を共用）
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> bloomPSO_;
 
     // 共通リソース
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
@@ -405,6 +436,8 @@ private:
     void UpdateGroupSim(GPUParticleGroup& g, float dt);
     // 1グループを Init/Emit/Update CS でシミュレートし、指定 PerView CB で描画（Draw / DrawPreview 共用）。
     void SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resource* perViewCB);
+    // 1グループを Bloom PSO で発光 RT へ描く（シミュレーション済みの粒子をそのまま使う）
+    void DrawGroupBloom(GPUParticleGroup& g, ID3D12Resource* perViewCB);
 
     void TransitionParticle(GPUParticleGroup& g, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 };

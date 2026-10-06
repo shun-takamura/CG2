@@ -135,6 +135,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BloomEffect.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
@@ -519,6 +522,9 @@
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.h">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BloomEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.h">

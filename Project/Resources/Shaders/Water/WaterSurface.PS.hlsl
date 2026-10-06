@@ -3,7 +3,7 @@
 // 浅い水面。反射（映す物＋空）と、水底の床の透過をフレネルで混ぜる。
 // 水面は板1枚なので頂点は動かさず、さざ波は法線だけを揺らす（反射方向・反射 RT の UV・屈折・フレネルに効く）。
 // レジスタは Object3D と取り決めを共有：b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ。t2 は PBR 法線用に空ける。
-// b7,t5,s4 は遠景の雲（CloudSky.hlsli。Skybox と同じ CB を共有）。
+// b7,t5,s4,t9 は遠景の雲（CloudSky.hlsli。Skybox と同じ CB を共有）。
 
 #define MAX_EMITTED_RINGS 16 // C++ の WaterSurface::kMaxEmittedRings と合わせる
 
@@ -96,6 +96,7 @@ SamplerState gClampSampler : register(s3);
 
 #include "../Object3D/Shadow.hlsli"
 #include "../Object3D/Fog.hlsli"
+#define CLOUD_SKY_MOKO // もこもこ（t9）を使う。PBR の映り込みは使わない
 #include "../Cloud/CloudSky.hlsli"
 
 struct PixelShaderOutput

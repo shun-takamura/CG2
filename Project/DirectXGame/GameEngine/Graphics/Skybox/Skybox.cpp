@@ -179,12 +179,16 @@ void Skybox::Draw(DirectXCore* dxCore)
         3, TextureManager::GetInstance()->GetSrvHandleGPU(nextCubemapFilePath_)
     );
 
-    // b7 / t5：遠景の雲。雲なしでもルートパラメータは埋める（enabled=0 なのでシェーダはテクスチャを読まない）
+    // b7 / t5 / t9：遠景の雲。雲なしでもルートパラメータは埋める（enabled=0 なのでシェーダはテクスチャを読まない）
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
         4, cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress()
     );
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
         5, cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle()
+                       : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath())
+    );
+    dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
+        6, cloudLayer_ ? cloudLayer_->GetMokoSrvHandle()
                        : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath())
     );
 

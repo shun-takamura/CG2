@@ -343,6 +343,29 @@ bool EffectManager::HasActiveDistortionSource() const {
     return false;
 }
 
+void EffectManager::DrawBloomPass() {
+    for (auto& inst : activeInstances_) {
+        if (inst) inst->DrawBloomPass();
+    }
+    if (gpuParticleManager_) gpuParticleManager_->DrawBloom();
+}
+
+void EffectManager::DrawBloomPassPreview() {
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->DrawBloomPassPreview();
+    }
+    if (gpuParticleManager_) gpuParticleManager_->DrawBloomPreview();
+}
+
+bool EffectManager::HasActiveBloomSource(bool preview) const {
+    // パーティクルはインスタンス終了後も粒子が残るので、グループの設定で判定する
+    if (gpuParticleManager_ && gpuParticleManager_->HasBloomGroup(preview)) return true;
+    for (const auto& inst : preview ? previewInstances_ : activeInstances_) {
+        if (inst && inst->HasActiveBloomSource()) return true;
+    }
+    return false;
+}
+
 void EffectManager::DrawPreview() {
     if (!previewCamera_) return;
 

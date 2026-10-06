@@ -64,11 +64,25 @@ public:
 		Vector3 edgeColor{ 0.06f, 0.06f, 0.05f };
 		float   sunPower = 8.0f;
 		float   sunGlow = 0.35f;
+
+		// もこもこ（gen_cloud_noise.py --moko の高さ）。式の手本は同スクリプトの moko_render
+		bool    mokoEnabled = true;                       // false で従来の陰影（比較用）
+		float   mokoScale = 900.0f;                       // もこもこ1枚が覆う幅 [m]（形の 1/3 前後で積雲らしい粒になる）
+		float   mokoAmount = 0.3f;                        // 密度に足す量（輪郭のちぎれ具合）
+		int     lightSteps = 2;                           // 大きい影：太陽側へ何歩サンプルするか（1歩 = lightStep [m]）。0〜3
+		float   density = 0.35f;                          // 大きい影の透過率の強さ。上げると雲の中心が暗くなる
+		float   microStep = 12.0f;                        // 小さい影：太陽側の何 m 先の高さと比べるか
+		float   microGain = 6.0f;                         // 小さい影の強さ
+		Vector3 rimColor{ 1.0f, 0.95f, 0.85f };
+		float   rimIntensity = 0.08f;                     // 前方散乱のリム（太陽の方を見たときに縁が光る）
+		float   rimAmbient = 0.15f;                       // 太陽の向きに関係なく縁を光らせる量
+		float   rimG = 0.6f;                              // HG 位相関数の g（大きいほど太陽の方だけが光る）
 	};
 
 	CloudLayer();
 	~CloudLayer();
 
+	/// <summary>もこもこの高さ（t9）は GetMokoTexturePath() の固定パスから読む</summary>
 	void Initialize(DirectXCore* dxCore, const std::string& noiseTexturePath);
 
 	/// <summary>スクロールとしきい値の揺れを進め、CB を書き換える。空側のレイの原点（描画カメラの位置）もここで渡す</summary>
@@ -81,6 +95,9 @@ public:
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetConstantBufferAddress() const;
 	D3D12_GPU_DESCRIPTOR_HANDLE GetNoiseSrvHandle() const;
+	/// <summary>もこもこの高さ（t9）。Skybox と水面だけが挿す（PBR の映り込みは使わない）</summary>
+	D3D12_GPU_DESCRIPTOR_HANDLE GetMokoSrvHandle() const;
+	static const char* GetMokoTexturePath();
 
 	void OnImGui();
 
@@ -127,9 +144,22 @@ private:
 		Vector3 shadowColor;
 		float   sunGlow;
 		Vector3 edgeColor;
-		float   padding;
+		int     mokoEnabled;
+		Vector2 mokoOffset;
+		float   mokoTiling;
+		float   mokoAmount;
+		Vector2 mokoLightStep;
+		Vector2 mokoMicroStep;
+		float   density;
+		int     lightSteps;
+		float   microGain;
+		float   rimIntensity;
+		Vector3 rimColor;
+		float   rimAmbient;
+		float   rimG;
+		Vector3 padding;
 	};
-	static_assert(sizeof(ConstantsForGPU) == 192, "CloudSky.hlsli の CloudSkyParams とサイズを合わせる");
+	static_assert(sizeof(ConstantsForGPU) == 272, "CloudSky.hlsli の CloudSkyParams とサイズを合わせる");
 
 	DirectXCore* dxCore_ = nullptr;
 	std::string noiseTexturePath_;
@@ -144,5 +174,6 @@ private:
 	Vector2 detailOffset_{};
 	Vector2 maskOffset_{};
 	Vector2 evolveOffset_{};
+	Vector2 mokoOffset_{};
 	float time_ = 0.0f;
 };

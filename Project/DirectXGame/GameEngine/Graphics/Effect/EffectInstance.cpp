@@ -19,6 +19,12 @@ namespace {
         if (v > 1.0f) return 1.0f;
         return v;
     }
+    // カーブ(0..1)を GPU の移動カーブ LUT 用に 32 サンプルへ焼く
+    void BakeCurveLUT(const EffectCurve& curve, float out[32]) {
+        for (int s = 0; s < 32; ++s) {
+            out[s] = Saturate(curve.Evaluate(static_cast<float>(s) / 31.0f));
+        }
+    }
     Vector3 LerpV3(const Vector3& a, const Vector3& b, float t) {
         return {
             a.x + (b.x - a.x) * t,
@@ -363,9 +369,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         // 周回（orbit）は burst 後も毎フレーム更新（中心はエフェクト位置＋offset に追従）。
         if (gpu_->HasGroup(groupName)) {
             const Vector3 center = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+            // 半径変化は「生成時の円＝emitRadius」に対する比で渡す（シェーダは前フレームとの比をかける）。
+            const float radiusEndRatio = (pc.emitRadius > 1e-4f) ? pc.orbitRadiusEnd / pc.emitRadius : 1.0f;
             gpu_->SetGroupOrbit(groupName, pc.orbitEnabled, center,
-                                effRingNormal, pc.orbitSpinSpeed,        // spin：帯上を流れる（現在のリング法線まわり）
-                                pc.orbitTumbleAxis, pc.orbitTumbleSpeed); // tumble：帯自体の回転
+                                effRingNormal, pc.orbitSpinSpeed,         // spin：帯上を流れる（現在のリング法線まわり）
+                                pc.orbitTumbleAxis, pc.orbitTumbleSpeed,  // tumble：帯自体の回転
+                                pc.orbitRadiusEnable, radiusEndRatio);
             if (pc.orbitEnabled) {
                 gpu_->SetEmitterShape(groupName, pc.emitShape, effRingNormal, pc.ringThickness);
             }
@@ -381,14 +390,14 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                                    pc.dissolveInEnable, pc.dissolveInEnd,
                                    pc.dissolveOutEnable, pc.dissolveOutStart,
                                    pc.dissolveEdgeEnable, pc.dissolveEdgeColor, pc.dissolveEdgeWidth);
+            // ブルーム（時間非依存＝毎フレーム設定でライブ反映）
+            gpu_->SetGroupBloom(groupName, pc.useBloom, pc.bloomIntensity);
             // 収束（移動をカーブで制御）。orbit と排他（シェーダは converge を優先）。中心はエフェクト位置＋offset。
-            // convergeCurve を 32 サンプルに焼いて渡す（時間非依存＝毎フレーム設定でライブ反映）。
-            float convLut[32];
-            for (int s = 0; s < 32; ++s) {
-                const float tt = static_cast<float>(s) / 31.0f;
-                convLut[s] = Saturate(pc.convergeCurve.Evaluate(tt));
-            }
-            gpu_->SetGroupConverge(groupName, pc.convergeEnable, center, convLut);
+            gpu_->SetGroupConverge(groupName, pc.convergeEnable, center);
+            // 移動カーブ LUT は converge と orbit 半径で共用（排他）。時間非依存＝毎フレーム設定でライブ反映。
+            float motionLut[32];
+            BakeCurveLUT(pc.convergeEnable ? pc.convergeCurve : pc.orbitRadiusCurve, motionLut);
+            gpu_->SetGroupMotionLUT(groupName, motionLut);
         }
 
         if (rt.burstFired) continue;
@@ -410,11 +419,9 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             if (pc.convergeEnable) {
                 gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 4);
                 float convLut[32];
-                for (int s = 0; s < 32; ++s) {
-                    const float tt = static_cast<float>(s) / 31.0f;
-                    convLut[s] = Saturate(pc.convergeCurve.Evaluate(tt));
-                }
-                gpu_->SetGroupConverge(groupName, true, pos, convLut);
+                BakeCurveLUT(pc.convergeCurve, convLut);
+                gpu_->SetGroupConverge(groupName, true, pos);
+                gpu_->SetGroupMotionLUT(groupName, convLut);
             }
             // 初速モード（0=ランダム / 1=方向固定 / 2=放射）。mode に応じた baseVelocity を渡す。
             else if (pc.velocityMode == 1) {
@@ -725,6 +732,34 @@ bool EffectInstance::HasActiveDistortionSource() const {
         if (rt.renderer && rt.started && !rt.finished && rt.renderer->HasDistortionTexture()) {
             return true;
         }
+    }
+    return false;
+}
+
+void EffectInstance::DrawBloomPass() {
+    for (size_t i = 0; i < primitives_.size() && i < def_.primitives.size(); ++i) {
+        const auto& rt = primitives_[i];
+        const auto& pc = def_.primitives[i];
+        if (pc.useBloom && rt.renderer && rt.started && !rt.finished) {
+            rt.renderer->DrawBloomPass(pc.bloomIntensity);
+        }
+    }
+}
+
+void EffectInstance::DrawBloomPassPreview() {
+    for (size_t i = 0; i < primitives_.size() && i < def_.primitives.size(); ++i) {
+        const auto& rt = primitives_[i];
+        const auto& pc = def_.primitives[i];
+        if (pc.useBloom && rt.renderer && rt.started && !rt.finished) {
+            rt.renderer->DrawBloomPassPreview(pc.bloomIntensity);
+        }
+    }
+}
+
+bool EffectInstance::HasActiveBloomSource() const {
+    for (size_t i = 0; i < primitives_.size() && i < def_.primitives.size(); ++i) {
+        const auto& rt = primitives_[i];
+        if (def_.primitives[i].useBloom && rt.renderer && rt.started && !rt.finished) return true;
     }
     return false;
 }

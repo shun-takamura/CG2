@@ -26,6 +26,7 @@ void CloudLayer::Initialize(DirectXCore* dxCore, const std::string& noiseTexture
 	dxCore_ = dxCore;
 	noiseTexturePath_ = noiseTexturePath;
 	TextureManager::GetInstance()->LoadTexture(noiseTexturePath_);
+	TextureManager::GetInstance()->LoadTexture(GetMokoTexturePath());
 
 	constantsResource_ = dxCore_->CreateBufferResource((sizeof(ConstantsForGPU) + 255) & ~255);
 	constantsResource_->Map(0, nullptr, reinterpret_cast<void**>(&constantsData_));
@@ -54,6 +55,9 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	scroll(detailOffset_, params_.detailWind, detailScale);
 	scroll(maskOffset_, params_.maskWind, maskScale);
 	scroll(evolveOffset_, params_.evolveWind, evolveScale);
+	// もこもこは形（大）と同じ風で流す（こぶだけが雲の上を滑って見えないように）
+	const float mokoScale = (std::max)(params_.mokoScale, 1.0f);
+	scroll(mokoOffset_, params_.shapeWind, mokoScale);
 
 	const float swingA = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodA, 0.1f));
 	const float swingB = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodB, 0.1f));
@@ -64,11 +68,19 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	const float detailContrast = 1.0f / std::sqrt((1.0f - w) * (1.0f - w) + w * w);
 
 	// 太陽側へ lightStep [m] ずらす量を、大きい形の UV に直す。太陽が真上なら水平成分が無いのでずらさない
+	// もこもこ側の大きい影の1歩・小さい影の比較距離も、同じ向きでもこもこの UV に直す
 	Vector2 lightOffset{ 0.0f, 0.0f };
+	Vector2 mokoLightStep{ 0.0f, 0.0f };
+	Vector2 mokoMicroStep{ 0.0f, 0.0f };
 	const float sunXZ = std::sqrt(sunDirection_.x * sunDirection_.x + sunDirection_.z * sunDirection_.z);
 	if (sunXZ > 1e-4f) {
-		const float k = params_.lightStep / shapeScale / sunXZ;
-		lightOffset = { sunDirection_.x * k, sunDirection_.z * k };
+		const Vector2 towardSun{ sunDirection_.x / sunXZ, sunDirection_.z / sunXZ };
+		const float k = params_.lightStep / shapeScale;
+		lightOffset = { towardSun.x * k, towardSun.y * k };
+		const float km = params_.lightStep / mokoScale;
+		mokoLightStep = { towardSun.x * km, towardSun.y * km };
+		const float kMicro = params_.microStep / mokoScale;
+		mokoMicroStep = { towardSun.x * kMicro, towardSun.y * kMicro };
 	}
 
 	ConstantsForGPU c{};
@@ -104,6 +116,19 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	c.shadowColor = params_.shadowColor;
 	c.sunGlow = params_.sunGlow;
 	c.edgeColor = params_.edgeColor;
+	c.mokoEnabled = params_.mokoEnabled ? 1 : 0;
+	c.mokoOffset = mokoOffset_;
+	c.mokoTiling = 1.0f / mokoScale;
+	c.mokoAmount = params_.mokoAmount;
+	c.mokoLightStep = mokoLightStep;
+	c.mokoMicroStep = mokoMicroStep;
+	c.density = params_.density;
+	c.lightSteps = std::clamp(params_.lightSteps, 0, 3);
+	c.microGain = params_.microGain;
+	c.rimIntensity = params_.rimIntensity;
+	c.rimColor = params_.rimColor;
+	c.rimAmbient = params_.rimAmbient;
+	c.rimG = std::clamp(params_.rimG, 0.0f, 0.95f);
 	*constantsData_ = c;
 }
 
@@ -115,6 +140,16 @@ D3D12_GPU_VIRTUAL_ADDRESS CloudLayer::GetConstantBufferAddress() const
 D3D12_GPU_DESCRIPTOR_HANDLE CloudLayer::GetNoiseSrvHandle() const
 {
 	return TextureManager::GetInstance()->GetSrvHandleGPU(noiseTexturePath_);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE CloudLayer::GetMokoSrvHandle() const
+{
+	return TextureManager::GetInstance()->GetSrvHandleGPU(GetMokoTexturePath());
+}
+
+const char* CloudLayer::GetMokoTexturePath()
+{
+	return "Resources/Textures/Cloud/cloud_moko_height.dds";
 }
 
 Microsoft::WRL::ComPtr<ID3D12Resource> CloudLayer::CreateDisabledConstantBuffer(DirectXCore* dxCore)
@@ -174,5 +209,19 @@ void CloudLayer::OnImGui()
 	ImGui::ColorEdit3("Edge Color", &p.edgeColor.x, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
 	ImGui::DragFloat("Sun Power", &p.sunPower, 0.1f, 1.0f, 128.0f);
 	ImGui::DragFloat("Sun Glow", &p.sunGlow, 0.01f, 0.0f, 4.0f);
+	ImGui::SeparatorText("Moko (puffy detail)");
+	ImGui::Checkbox("Moko Enabled", &p.mokoEnabled);
+	ImGui::BeginDisabled(!p.mokoEnabled);
+	ImGui::DragFloat("Moko Scale [m]", &p.mokoScale, 5.0f, 10.0f, 50000.0f);
+	ImGui::SliderFloat("Moko Amount", &p.mokoAmount, 0.0f, 1.0f);
+	ImGui::SliderInt("Light Steps", &p.lightSteps, 0, 3);
+	ImGui::DragFloat("Density (large shadow)", &p.density, 0.01f, 0.0f, 4.0f);
+	ImGui::DragFloat("Micro Step [m]", &p.microStep, 0.5f, 0.0f, 500.0f);
+	ImGui::DragFloat("Micro Gain (small shadow)", &p.microGain, 0.1f, 0.0f, 30.0f);
+	ImGui::ColorEdit3("Rim Color", &p.rimColor.x, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+	ImGui::DragFloat("Rim Intensity", &p.rimIntensity, 0.005f, 0.0f, 2.0f);
+	ImGui::DragFloat("Rim Ambient", &p.rimAmbient, 0.01f, 0.0f, 2.0f);
+	ImGui::SliderFloat("Rim G", &p.rimG, 0.0f, 0.95f);
+	ImGui::EndDisabled();
 #endif
 }

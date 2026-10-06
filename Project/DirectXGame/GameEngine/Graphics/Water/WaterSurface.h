@@ -26,7 +26,7 @@ class CloudLayer;
 ///   - フレネル（Schlick）で反射と透過を混ぜ、最後に距離フォグ
 ///
 /// レジスタは Object3D と取り決めを共有する（b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ）。
-/// t2 は PBR 法線用に空けておく。b7,t5,s4 は遠景の雲（Skybox と同じ CloudLayer を挿す）。
+/// t2 は PBR 法線用に空けておく。b7,t5,s4,t9 は遠景の雲（Skybox と同じ CloudLayer を挿す）。
 /// </summary>
 class WaterSurface {
 public:

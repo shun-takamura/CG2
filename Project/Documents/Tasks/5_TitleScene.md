@@ -331,7 +331,7 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
 - [x] W-3 連続で大きな波を出し続ける／止める（`StartRingBurst` / `StopRingBurst`。止めても出た波は自然に外へ抜けて消える）
 - [x] W-4 Title Tuning に確認用ボタン（Emit / Burst Start / Burst Stop / 待機の強さ）
 - [x] W-5 待機中の「ごく小さな波がたまに」のパラメータ決め（仮：振幅0.013/間隔6s/ばらつき0.7。実機で調整して確定）
-- [ ] W-6 （任意）ロゴの「揺らぎ」用に、ある地点・時刻の波の高さ/位相を CPU から取れる関数（`SampleRingPhase` 等）。ロゴ側の頂点の揺らしに使う場合のみ
+- [x] ~~W-6~~ **不要（2026-10-06）**：ロゴは板ポリで頂点を揺らせず、揺らぎは Distortion エフェクトで作った（A-5）。（旧：ロゴの「揺らぎ」用に、ある地点・時刻の波の高さ/位相を CPU から取れる関数（`SampleRingPhase` 等）。ロゴ側の頂点の揺らしに使う場合のみ）
 
 #### チャット A（アセット＋演出本体）— 別チャット
 - 担当ファイル：`TitleScene.*`（状態機械・カメラ・ロゴ・扉）、Object3D のディゾルブ/ワイヤーフレーム関連、エフェクト JSON、アセット
@@ -344,7 +344,7 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
   - **仮演出（後のタスクで置き換える）**：③ 待つだけ（→ A-6 で線画に置き換え済み）／⑥ 扉を 85° 開いて黒フェードで HUB（→ A-9）。② のロゴ消去と ④ の扉の実体化はディゾルブ（A-4）に置き換え済み
   - [x] A-2a 扉の初期状態は非表示。④ の開始で表示し、反射・影に登録（`SetDoorVisible`）。ロゴは ② の終わりに反射から外す（`SetLogoVisible`）
   - [x] A-2b メニューのキャンセルを無視、デモプレイ用の `idleSeconds_` / `kDemoTriggerSeconds` を削除
-- [ ] A-3 カメラ：扉用の構図への補間と正面での固定（詳細は §10.7）
+- [x] A-3 カメラ：扉用の構図への補間と正面での固定（詳細は §10.7）
   - [x] A-3a Title Tuning → Camera Framing に FOV（`camera_->SetFovY` を毎フレーム反映）・距離・高さ・見る点のスライダーと「Framing Blend」（0=ロゴ用 / 1=扉用）。実機で値を決めたら §10.7 を更新する（2026-10-05・ビルド未確認）
   - [x] A-3b 構図を `CameraFraming`（FOV・距離・高さ・見る点の高さ）としてまとめ、ロゴ用→扉用を **④ の間（扉が出始めてから出きるまで）** に補間する
   - [x] A-3c **方式を変更（2026-10-05）**：カメラを扉の正面へ回り込ませるのではなく、③ の開始で「今の角速度から ease-out（2次）で ③〜④ の間に止まる角度」＝開始角＋角速度×時間/2 を求め、**扉の向き `doorYaw_` をその角度＋π に合わせて立てる**（扉は ③ まで存在しないので向きは自由）。最短回り・巻き戻りの問題が起きない
@@ -376,7 +376,7 @@ Step 13 10秒放置でデモ再生 / 入力で復帰                idleSeconds_
   - [x] A-9c 光芒と後光 → **新規ポストエフェクト `LightShaftEffect`**（GPU Gems 3 の Volumetric Light Scattering）。光の部屋だけを ID パス（id=3、深度テストで見えている部分のみ）でマスクにし、各ピクセルから光源（扉の奥 0.7m・高さ 1.6m を画面 UV に投影）へ向かってマスクを減衰つきでサンプルして加算。扉板が遮った所は自然に筋の影になる。Bloom（画面全体の明るさ）だと昼の空や白い大理石まで光るので使わない。ラジアルブラーとエフェクト JSON は使わない
     - エンジン：`FilterEffect/LightShaftEffect.*`・`Shaders/PostEffect/Filters/LightShaft.PS.hlsl` を新規、`PostEffect` に登録（outline 用ルートシグネチャを共用）。ArcanaEngine.vcxproj(.filters) に追記済み。**ArcanaEngine 同期対象**
   - [x] A-9d 扉の奥にポイントライト（`AcquirePointLight`、開く量に合わせて強く）。`ResetSequence` / `Finalize` で `ReleasePointLight`
-  - [ ] A-9e 周りを暗くする → **保留（2026-10-05）**。ライトシャフトを入れて見づらければ入れる。入れる場合、水面は空の cubemap を直接引くので `WaterSurface` に明るさ係数が要る
+  - [x] ~~A-9e 周りを暗くする~~ → **入れない（2026-10-06 決定。今の暗さで十分）**。ライトシャフトを入れて見づらければ入れる。入れる場合、水面は空の cubemap を直接引くので `WaterSurface` に明るさ係数が要る
   - [x] A-9f `FadeTransition::SetNextFade(色, フェード, ホールド)`：次の1回だけ色と長さを変え、終わったら黒・既定（0.5s / 0.1s）に戻る
     - **罠（2026-10-05 修正）**：トランジションの板はシーンと一緒に描かれ（`SceneManager::Draw` の最後）、**その後でポストエフェクトが掛かる**。真っ白でもヴィネットの縁とライトシャフトが残り、HUB へ切り替わった瞬間に消えてパッと変わって見えた → 白フェードに合わせて両方を弱める（`TitleScene::GetPostEffectFade`）。根本対策（トランジションをポストエフェクトの後に描く）は全シーンに影響するので未実施
   - [x] A-9g 音：`Game.cpp` で `bgm_title_scene`（TitleBGM.mp3）/ `se_title_open_door`（OpenDoor.mp3）/ `se_title_in_door`（InDoor.mp3）を読み込み。**HUB は従来の `bgm_title` のまま**。BGM は ⑥ で 2 秒かけてフェードアウト（`SoundManager::Set2DSoundVolume` を追加、ArcanaEngine 同期対象）。クレジットは `Documents/Readme.md`

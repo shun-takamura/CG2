@@ -18,6 +18,7 @@
 #include "MaskedGrayscaleEffect.h"
 #include "Primitive/LineRenderer.h"
 #include "Spline/SplineCurveActor.h"
+#include "BossArenaWater.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -85,7 +86,6 @@ namespace {
 #ifdef _DEBUG
 #include "KeyboardInput.h"
 #include "ImGuiManager.h"
-#include "Effect/EffectEditorWindow.h"
 #endif
 
 StagePlayScene::StagePlayScene() = default;
@@ -2159,6 +2159,7 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 	if (railStage_) railStage_->OnImGuiTuning(changed); // 既存の Rail Camera / Wave Editor セクション
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
+	if (bossWater_ && ImGui::CollapsingHeader("Boss Water")) bossWater_->OnImGui();
 
 	if (ImGui::CollapsingHeader("Skybox")) {
 		// 候補 Cubemap（手持ちの3枚）。新しい dds を足したらここに追記する。
@@ -2730,6 +2731,9 @@ void StagePlayScene::Initialize() {
 	// Boss（ボス戦）専用ロジックの初期化。突入までは何もスポーンしない（Enter で生成）。
 	bossStage_ = std::make_unique<BossStagePart>();
 	bossStage_->Initialize(this, camera_.get());
+	// ボス戦の床。PSO 等はここで作っておき、ボス戦突入時にカクつかせない
+	bossWater_ = std::make_unique<BossArenaWater>();
+	bossWater_->Initialize(dxCore_, srvManager_, object3DManager_);
 
 	phase_ = Phase::Rail;
 	prevPhase_ = Phase::Rail;
@@ -3131,6 +3135,12 @@ void StagePlayScene::Update() {
 	// ボス戦 tick（ボスAI更新＋撃破掃除）。Enter 済みのこのフレームから駆動される。
 	if (phase_ == Phase::Boss && bossStage_) {
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
+		if (bossWater_) {
+			const Vector3& c = bossStage_->GetArenaCenter();
+			bossWater_->SetGroundY(bossStage_->GetGroundY());
+			bossWater_->SetArenaCenter(c.x, c.z);
+			bossWater_->Update(GetScaledDeltaTime(TimeGroup::World));
+		}
 		UpdateBossHpBarUI(GetScaledDeltaTime(TimeGroup::UI));
 
 		// ボス撃破検出：スコア加点・撃破数カウントの上でリザルトへ。
@@ -4179,6 +4189,10 @@ void StagePlayScene::Update() {
 }
 
 void StagePlayScene::Draw() {
+	const bool drawBossWater = (phase_ == Phase::Boss && bossWater_);
+	// 波のシミュレーション（コンピュート）はシーン RT をバインドする前に回す
+	if (drawBossWater) bossWater_->DispatchSimulation();
+
 	// Skybox を最初に描画（深度書き込みなしの ReadOnly DSV）
 	auto* commandList = dxCore_->GetCommandList();
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
@@ -4208,6 +4222,13 @@ void StagePlayScene::Draw() {
 		weapon_->Draw(dxCore_);
 	}
 	DrawDynamicAnimated();
+
+	// ボス戦の床（石畳＋水面）。不透明物の後・Primitive（半透明の弾など）の前。
+	// 水面は深度を書くので、後から描く物は水面の上に出る。Primitive は自前でルートシグネチャを貼り直す
+	if (drawBossWater && skybox_) {
+		bossWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
+	}
+
 	DrawDynamicPrimitives();
 
 	// LightningRuntime テスト描画
@@ -4306,28 +4327,7 @@ void StagePlayScene::Draw() {
 	LineRenderer::GetInstance()->SetCamera(camera_.get());
 	LineRenderer::GetInstance()->Draw();
 
-#ifdef _DEBUG
-	// Effect Editor プレビュー RT への描画。
-	// これを呼ばないと EffectEditor が開かれた瞬間に RT のバリアが整わず
-	// SRV 読み出しと衝突して D3D12 GPU 検証エラーになる。
-	if (auto* edit = ImGuiManager::Instance().GetEffectEditorWindow()) {
-		edit->Render();
-
-		// Scene RT に戻して以降の描画が漏れないようにする
-		auto rtv = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-		auto dsv = dxCore_->GetDsvHandle();
-		commandList->OMSetRenderTargets(1, &rtv, false, &dsv);
-		D3D12_VIEWPORT vp{};
-		vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
-		vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
-		vp.MaxDepth = 1.0f;
-		commandList->RSSetViewports(1, &vp);
-		D3D12_RECT sc{ 0, 0,
-			static_cast<LONG>(WindowsApplication::kClientWidth),
-			static_cast<LONG>(WindowsApplication::kClientHeight) };
-		commandList->RSSetScissorRects(1, &sc);
-	}
-#endif
+	// Effect Editor のプレビューは Game::Draw がシーンに関係なく描く
 }
 
 void StagePlayScene::Seek(float seconds) {

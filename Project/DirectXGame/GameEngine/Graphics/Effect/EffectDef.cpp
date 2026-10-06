@@ -241,6 +241,9 @@ namespace {
         if (o["uvFlipU"].IsBool()) c.uvFlipU = o["uvFlipU"].AsBool(c.uvFlipU);
         if (o["uvFlipV"].IsBool()) c.uvFlipV = o["uvFlipV"].AsBool(c.uvFlipV);
 
+        // Bloom
+        if (o["useBloom"].IsBool()) c.useBloom = o["useBloom"].AsBool(c.useBloom);
+        c.bloomIntensity = AsFloat(o["bloomIntensity"], c.bloomIntensity);
         // Distortion
         if (o["useDistortion"].IsBool()) c.useDistortion = o["useDistortion"].AsBool(c.useDistortion);
         if (o["distortionTexturePath"].IsString()) c.distortionTexturePath = o["distortionTexturePath"].AsString();
@@ -319,9 +322,15 @@ namespace {
         c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
         c.orbitTumbleSpeed = AsFloat(o["orbitTumbleSpeed"], c.orbitTumbleSpeed);
         c.orbitTumbleAxis  = AsVec3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
+        if (o["orbitRadiusEnable"].IsBool()) c.orbitRadiusEnable = o["orbitRadiusEnable"].AsBool(c.orbitRadiusEnable);
+        c.orbitRadiusEnd   = AsFloat(o["orbitRadiusEnd"], c.orbitRadiusEnd);
+        c.orbitRadiusCurve = AsCurve(o["orbitRadiusCurve"], c.orbitRadiusCurve);
         // 収束（spawn→中心）
         if (o["convergeEnable"].IsBool()) c.convergeEnable = o["convergeEnable"].AsBool(c.convergeEnable);
         c.convergeCurve = AsCurve(o["convergeCurve"], c.convergeCurve);
+        // Bloom
+        if (o["useBloom"].IsBool()) c.useBloom = o["useBloom"].AsBool(c.useBloom);
+        c.bloomIntensity = AsFloat(o["bloomIntensity"], c.bloomIntensity);
         // Dissolve（粒子ごとの寿命）
         if (o["useDissolve"].IsBool()) c.useDissolve = o["useDissolve"].AsBool(c.useDissolve);
         if (o["dissolveMaskPath"].IsString()) c.dissolveMaskPath = o["dissolveMaskPath"].AsString();
@@ -630,6 +639,9 @@ namespace EffectDefIO {
             o["uvScale"]        = Vec2ToJson(c.uvScale);
             o["uvFlipU"]        = c.uvFlipU;
             o["uvFlipV"]        = c.uvFlipV;
+            // Bloom
+            o["useBloom"]       = c.useBloom;
+            o["bloomIntensity"] = static_cast<double>(c.bloomIntensity);
             // Distortion
             o["useDistortion"]           = c.useDistortion;
             o["distortionTexturePath"]   = c.distortionTexturePath;
@@ -696,8 +708,14 @@ namespace EffectDefIO {
             o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
             o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
             o["orbitTumbleAxis"]  = Vec3ToJson(c.orbitTumbleAxis);
+            o["orbitRadiusEnable"] = c.orbitRadiusEnable;
+            o["orbitRadiusEnd"]    = static_cast<double>(c.orbitRadiusEnd);
+            o["orbitRadiusCurve"]  = CurveToJson(c.orbitRadiusCurve);
             o["convergeEnable"]   = c.convergeEnable;
             o["convergeCurve"]    = CurveToJson(c.convergeCurve);
+            // Bloom
+            o["useBloom"]       = c.useBloom;
+            o["bloomIntensity"] = static_cast<double>(c.bloomIntensity);
             // Dissolve（粒子ごとの寿命）
             o["useDissolve"]        = c.useDissolve;
             o["dissolveMaskPath"]   = c.dissolveMaskPath;

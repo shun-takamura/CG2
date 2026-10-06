@@ -14,7 +14,12 @@
 //   ディゾルブ … 補正値を場所ごとに時間で揺らす。雲が場所ごとにバラバラに湧いたり消えたりする
 //   太陽側 … 太陽の方へずらした位置の形。そちらが濃ければ光が遮られている＝暗くする（光側マーチの1ステップ相当）
 //
-// レジスタ：b7 / t5 / s4（b0〜b6, t0〜t4, s0〜s3 は各 PS の既存の取り決め）
+// もこもこ（CLOUD_SKY_MOKO を include 前に定義した PS だけ。Skybox / 水面）：
+//   タイル可能な高さ（gen_cloud_noise.py --moko）を、密度への加算（輪郭をちぎる）・太陽方向の透過率（大きい影）・
+//   こぶの太陽側との比較（小さい影）・リムに使い回す。式の手本は gen_cloud_noise.py の moko_render。
+//   PBR の金属への映り込み（CloudSky()）は定義しないので t9 を宣言せず、Object3D のルートシグネチャは変わらない。
+//
+// レジスタ：b7 / t5 / s4、もこもこは t9（b0〜b6, t0〜t4, t6〜t8, s0〜s3 は各 PS の既存の取り決め）
 
 // C++ の CloudLayer::ConstantsForGPU と 1:1（16 バイト単位で並べてある）
 cbuffer CloudSkyParams : register(b7)
@@ -51,11 +56,27 @@ cbuffer CloudSkyParams : register(b7)
     float3 gCloudShadowColor;     // 光が遮られた所（雲の底）の色
     float  gCloudSunGlow;         // 太陽の方向で薄い所を明るくする量
     float3 gCloudEdgeColor;       // 縁の帯に足す色
-    float  gCloudPadding;
+    int    gCloudMokoEnabled;     // 0 なら従来の陰影（比較用）
+    float2 gCloudMokoOffset;      // もこもこのスクロール量（UV。形（大）と同じ風で流す）
+    float  gCloudMokoTiling;      // 繰り返し [回/m]
+    float  gCloudMokoAmount;      // 密度に足す量（輪郭のちぎれ具合）
+    float2 gCloudMokoLightStep;   // 大きい影の1歩をもこもこの UV に直したもの
+    float2 gCloudMokoMicroStep;   // 小さい影で比べる距離（もこもこの UV）
+    float  gCloudDensity;         // 大きい影の透過率の強さ
+    int    gCloudLightSteps;      // 大きい影の歩数（0〜3）
+    float  gCloudMicroGain;       // 小さい影の強さ
+    float  gCloudRimIntensity;    // 前方散乱のリムの強さ
+    float3 gCloudRimColor;
+    float  gCloudRimAmbient;      // 太陽の向きに関係なく縁を光らせる量
+    float  gCloudRimG;            // HG 位相関数の g（大きいほど太陽の方だけが光る）
+    float3 gCloudPadding;
 };
 
 Texture2D<float2> gCloudNoise : register(t5); // R=形 / G=マスク（どちらも 0..1 に一様分布）
 SamplerState gCloudSampler : register(s4);    // WRAP + 異方性
+#ifdef CLOUD_SKY_MOKO
+Texture2D<float> gCloudMoko : register(t9);   // もこもこの高さ 0..1（BC4）
+#endif
 
 // 大小2枚の形を混ぜる。2枚の平均は分布が中央に寄るので、0.5 を中心に広げ直して補正値の意味（被覆率）を保つ
 float CloudShape(float2 xz, float2 extraUv)
@@ -66,9 +87,24 @@ float CloudShape(float2 xz, float2 extraUv)
     return saturate(0.5f + (mixed - 0.5f) * gCloudDetailContrast);
 }
 
+#ifdef CLOUD_SKY_MOKO
+float CloudMoko(float2 mokoUv)
+{
+    return gCloudMoko.Sample(gCloudSampler, mokoUv);
+}
+#endif
+
+// HG 位相関数を「等方散乱=1」で正規化したもの。cosTheta=1（太陽の方）で最大
+float CloudPhaseHG(float cosTheta, float g)
+{
+    const float g2 = g * g;
+    return (1.0f - g2) / pow(max(1.0f + g2 - 2.0f * g * cosTheta, 1e-4f), 1.5f);
+}
+
 // origin から dir（正規化済み）へ見た雲。rgb=雲の色（線形）, a=被覆率。
 // 空気遠近は hazeColor へ hazeScale の強さで寄せる（背後の空の色が分からない呼び出し元は 0）
-float4 CloudSkyCore(float3 origin, float3 dir, float3 hazeColor, float hazeScale)
+// useMoko はリテラルで渡す（false なら分岐ごと消えて、もこもこのサンプルが残らない）
+float4 CloudSkyCore(float3 origin, float3 dir, float3 hazeColor, float hazeScale, bool useMoko)
 {
     if (gCloudEnabled == 0)
     {
@@ -89,22 +125,66 @@ float4 CloudSkyCore(float3 origin, float3 dir, float3 hazeColor, float hazeScale
         - (mask - 0.5f) * gCloudMaskStrength
         + (evolve - 0.5f) * gCloudEvolveAmount;
 
-    // ゼノブレ式の透明度。縁は smoothstep 相当で丸める
-    const float over = (shape - threshold) * gCloudSharpness;
-    float alpha = saturate(over);
-    alpha = alpha * alpha * (3.0f - 2.0f * alpha);
-
-    // 太陽側の形のほうが濃い＝そちらに雲が続いていて光が遮られる。塊ごとに明暗の側ができる
-    const float sunwardShape = CloudShape(xz, gCloudLightOffset);
-    const float occlusion = saturate((sunwardShape - shape) * gCloudLightContrast);
-    const float thickness = saturate((over - 1.0f) * gCloudShadowDepth);
-    const float darkness = saturate(max(occlusion, thickness));
-
-    const float edge = 4.0f * alpha * (1.0f - alpha);
     const float sun = pow(saturate(dot(dir, gCloudSunDirection)), gCloudSunPower);
-    float3 color = lerp(gCloudLitColor, gCloudShadowColor, darkness);
-    color += gCloudEdgeColor * edge;
-    color += gCloudLitColor * (sun * gCloudSunGlow * (1.0f - darkness));
+    float over;
+    float alpha;
+    float3 color;
+
+#ifdef CLOUD_SKY_MOKO
+    [branch]
+    if (useMoko && gCloudMokoEnabled != 0)
+    {
+        // もこもこを密度に足して輪郭をちぎる（もこもこ感の大半は輪郭から来る）
+        const float2 mokoUv = xz * gCloudMokoTiling + gCloudMokoOffset;
+        const float moko = CloudMoko(mokoUv);
+        over = (shape + gCloudMokoAmount * (moko - 0.5f) - threshold) * gCloudSharpness;
+        alpha = saturate(over);
+        alpha = alpha * alpha * (3.0f - 2.0f * alpha);
+
+        // 大きい影：太陽側へ数歩サンプルし、通り抜ける密度から透過率を出す（光側マーチの 2D 版）。
+        // 補正値は手前の点の値を使い回す（マスク・ディゾルブを歩ごとに引き直さない）
+        float optical = 0.0f;
+        [loop]
+        for (int i = 1; i <= gCloudLightSteps; ++i)
+        {
+            const float stepShape = CloudShape(xz, gCloudLightOffset * i);
+            const float stepMoko = CloudMoko(mokoUv + gCloudMokoLightStep * i);
+            optical += max((stepShape + gCloudMokoAmount * (stepMoko - 0.5f) - threshold) * gCloudSharpness, 0.0f);
+        }
+        const float macro = exp(-optical * gCloudDensity);
+
+        // 小さい影：こぶの太陽側が明るく、谷が灰色（数テクセル離れた比較なので 8bit の段差が筋にならない）
+        const float slope = moko - CloudMoko(mokoUv + gCloudMokoMicroStep);
+        const float micro = saturate(0.55f + slope * gCloudMicroGain);
+
+        const float light = saturate(0.35f * macro + 0.65f * sqrt(macro) * (0.4f + 0.96f * micro));
+        color = lerp(gCloudShadowColor, gCloudLitColor, light);
+
+        // リム：薄い縁が光る。太陽の方を見ると前方散乱で強く、背にしても rimAmbient の分だけ残る
+        const float edge = 4.0f * alpha * (1.0f - alpha);
+        const float phase = CloudPhaseHG(dot(dir, gCloudSunDirection), gCloudRimG);
+        color += gCloudRimColor * edge * (gCloudRimAmbient + gCloudRimIntensity * phase) * sqrt(macro);
+        color += gCloudLitColor * (sun * gCloudSunGlow * macro);
+    }
+    else
+#endif
+    {
+        // ゼノブレ式の透明度。縁は smoothstep 相当で丸める
+        over = (shape - threshold) * gCloudSharpness;
+        alpha = saturate(over);
+        alpha = alpha * alpha * (3.0f - 2.0f * alpha);
+
+        // 太陽側の形のほうが濃い＝そちらに雲が続いていて光が遮られる。塊ごとに明暗の側ができる
+        const float sunwardShape = CloudShape(xz, gCloudLightOffset);
+        const float occlusion = saturate((sunwardShape - shape) * gCloudLightContrast);
+        const float thickness = saturate((over - 1.0f) * gCloudShadowDepth);
+        const float darkness = saturate(max(occlusion, thickness));
+
+        const float edge = 4.0f * alpha * (1.0f - alpha);
+        color = lerp(gCloudLitColor, gCloudShadowColor, darkness);
+        color += gCloudEdgeColor * edge;
+        color += gCloudLitColor * (sun * gCloudSunGlow * (1.0f - darkness));
+    }
 
     // 空気遠近：遠い雲ほど背後の空の色に寄り、コントラストが落ちる
     const float haze = saturate((distance - gCloudHazeStart) / max(gCloudHazeEnd - gCloudHazeStart, 1.0f)) * gCloudHazeMax;
@@ -121,14 +201,14 @@ float4 CloudSkyCore(float3 origin, float3 dir, float3 hazeColor, float hazeScale
 // 空（Skybox / 水面の映り込み）用：その方向の空の色 skyColor に雲を重ねた色を返す。空気遠近は skyColor へ寄せる
 float3 ApplyCloudSky(float3 skyColor, float3 origin, float3 dir)
 {
-    const float4 cloud = CloudSkyCore(origin, dir, skyColor, 1.0f);
+    const float4 cloud = CloudSkyCore(origin, dir, skyColor, 1.0f, true);
     return lerp(skyColor, cloud.rgb, cloud.a);
 }
 
 // 物の鏡面反射（Object3dPBR）用：雲だけを返す。背後の空の色を持たないので空気遠近は掛けない
 float4 CloudSky(float3 origin, float3 dir)
 {
-    return CloudSkyCore(origin, dir, float3(0.0f, 0.0f, 0.0f), 0.0f);
+    return CloudSkyCore(origin, dir, float3(0.0f, 0.0f, 0.0f), 0.0f, false);
 }
 
 #endif // CLOUD_SKY_HLSLI

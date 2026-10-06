@@ -47,6 +47,11 @@ public:
     // 上記のプレビュー版。VS CBV には transformPreviewResource_（プレビューカメラの WVP）を bind する。
     void DrawDistortionPassPreview(uint32_t normalMapSrvIndex);
 
+    // Bloom Pass：発光 RT に「通常描画と同じ見た目 × intensity」を加算で書き込む
+    void DrawBloomPass(float intensity);
+    // 上記のプレビュー版（VS CBV にプレビューカメラの WVP を bind する）
+    void DrawBloomPassPreview(float intensity);
+
     // プレビュー用 CB を bind して描画
     void DrawPreview();
 
@@ -120,6 +125,8 @@ private:
     void CreateTransformResource();
     void CreateMaterialResource();
 
+    void DrawBloomPassImpl(ID3D12Resource* transformResource, float intensity);
+
     // 指定カメラに対するワールド行列を構築（billboardMode に応じて回転に補正がかかる）
     Matrix4x4 BuildWorldMatrix(Camera* camera) const;
 
@@ -159,6 +166,10 @@ private:
     // 通常テクスチャと独立した uvTransform を持つ
     Microsoft::WRL::ComPtr<ID3D12Resource> distortionMaterialResource_;
     PrimitiveMaterial* distortionMaterialData_ = nullptr;
+
+    // Bloom 用マテリアル CB（通常マテリアルの color に強度を掛けた写し）。初回の Bloom 描画時に作る。
+    Microsoft::WRL::ComPtr<ID3D12Resource> bloomMaterialResource_;
+    PrimitiveMaterial* bloomMaterialData_ = nullptr;
 
     // Transform
     Transform transform_{

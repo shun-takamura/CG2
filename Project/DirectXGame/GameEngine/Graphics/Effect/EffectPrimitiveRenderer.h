@@ -85,6 +85,10 @@ public:
     void DrawDistortionPass();
     void DrawDistortionPassPreview();
 
+    // ===== Bloom =====
+    void DrawBloomPass(float intensity)        { mesh_.DrawBloomPass(intensity); }
+    void DrawBloomPassPreview(float intensity) { mesh_.DrawBloomPassPreview(intensity); }
+
 private:
     PrimitiveMesh mesh_;
     int primitiveType_ = 0;

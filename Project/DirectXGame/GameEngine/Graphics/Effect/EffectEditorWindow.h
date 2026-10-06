@@ -76,6 +76,8 @@ private:
     std::unique_ptr<PostEffect> postEffect_;
     // プレビューに歪みを適用するか（自前化により Game の PostEffect 設定に依存しない）。
     bool previewDistortion_ = true;
+    // プレビューにブルームを適用するか
+    bool previewBloom_ = true;
 
     std::unique_ptr<RenderTexture> renderTexture_;
     uint32_t rtWidth_  = 0;
@@ -92,6 +94,14 @@ private:
     std::unique_ptr<RenderTexture> oldPreviewOutputRT_;
     // 直近の Render() で歪み合成までやったか（OnDraw で表示先を切り替えるフラグ）
     bool lastFrameDistortionApplied_ = false;
+
+    // Bloom プレビュー用：発光 RT（float）と、ブルーム合成後の最終表示先
+    std::unique_ptr<RenderTexture> previewBloomRT_;
+    std::unique_ptr<RenderTexture> previewBloomOutputRT_;
+    std::unique_ptr<RenderTexture> oldPreviewBloomRT_;
+    std::unique_ptr<RenderTexture> oldPreviewBloomOutputRT_;
+    // 直近の Render() でブルーム合成までやったか
+    bool lastFrameBloomApplied_ = false;
 
     DebugCamera debugCamera_;
     Camera      camera_;

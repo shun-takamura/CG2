@@ -27,9 +27,6 @@ void BossStagePart::Initialize(IBossStageHost* host, Camera* camera) {
 void BossStagePart::Enter() {
 	if (bossSpawned_ || !host_) return;
 
-	// デバッグ地面（視覚のみ）
-	ground_ = host_->SpawnPrefabAt(groundPrefab_, arenaCenter_);
-
 	// ボス本体：アリーナ中心の +Z 側に接地。
 	const Vector3 bossPos{ arenaCenter_.x, groundY_ + bossHeight_, arenaCenter_.z + bossForward_ };
 	boss_ = host_->SpawnPrefabAt(bossPrefab_, bossPos);
@@ -304,7 +301,6 @@ bool BossStagePart::ConsumeBossDefeated() {
 void BossStagePart::Reset() {
 	if (host_) host_->ClearBossRuntimeState();
 	boss_        = nullptr;
-	ground_      = nullptr;
 	bossSpawned_ = false;
 	groundVelocity_ = { 0.0f, 0.0f };
 	knockbackTimer_ = 0.0f;
