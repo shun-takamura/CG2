@@ -54,6 +54,8 @@ struct RenderSubmesh
 	std::string textureFilePath;    // base color DDS
 	std::string normalMapFilePath;  // 法線 DDS（空＝なし）
 	std::string heightMapFilePath;  // 視差のハイトマップ DDS（.mat v4。空＝なし）
+	std::string terrainColorArrayPath;   // 地形の層の色の配列 DDS（.mat v5。空＝地形でない）
+	std::string terrainNormalArrayPath;  // 地形の層の法線の配列 DDS（.mat v5）
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
 	Material* material = nullptr;    // materialResource を Map したポインタ

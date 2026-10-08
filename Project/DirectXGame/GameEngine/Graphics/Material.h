@@ -37,10 +37,16 @@ typedef struct Material {
 	float parallaxDepth;        // 凹凸の深さ（UV 1 あたり。実寸の深さ[m] ÷ UV 1 の長さ[m]）
 	float parallaxMinLayers;    // 正面から見たときのレイマーチの段数
 	float parallaxMaxLayers;    // 浅い角度から見たときの段数
+
+	// 地形（.mat v5。Terrain.PS のみが読む）。層の順番は 草 / 土 / 岩 = スプラットマップの R / G / B
+	Vector4 terrainTile;        // xyz = 層ごとのタイル長 [m]、w = 高さブレンドの幅
+	Vector4 terrainRoughness;   // xyz = 層ごとの粗さ、w = 岩の三平面投影の鋭さ
+	Vector4 terrainParams;      // x = 低い周波数の色ムラの強さ、y = 濡れた所を暗くする強さ、zw = 予備
+	Vector4 terrainPadding;
 }Material;
 // HLSL 側（Object3d*.PS.hlsl の Material）とレイアウトを合わせる。定数バッファは 256B 単位なので確保量は変わらない。
-// 末尾の視差は PBR の PS だけが宣言する（他の PS は手前までしか読まないので宣言しなくてよい）
-static_assert(sizeof(Material) == 192, "Material のレイアウトを変えたら Object3D の PS 側も合わせること");
+// 末尾の視差は PBR / 地形の PS、地形の欄は地形の PS だけが宣言する（他の PS は手前までしか読まないので宣言しなくてよい）
+static_assert(sizeof(Material) == 256, "Material のレイアウトを変えたら Object3D の PS 側も合わせること");
 
 
 struct MaterialData
@@ -48,10 +54,12 @@ struct MaterialData
 	std::string textureFilePath;
 	std::string normalMapFilePath;   // 法線マップ DDS パス（空＝なし）
 	std::string heightMapFilePath;   // ハイトマップ DDS パス（.mat v4。空＝視差なし）
+	std::string terrainColorArrayPath;   // 地形の層の色の配列 DDS（.mat v5。空＝地形でない）
+	std::string terrainNormalArrayPath;  // 地形の層の法線の配列 DDS（.mat v5）
 	uint32_t textureIndex = 0;
 };
 
-// .mat v1〜v4 を読み出して MaterialData と Material 構造体（GPU 定数バッファ）に流し込む。
+// .mat v1〜v5 を読み出して MaterialData と Material 構造体（GPU 定数バッファ）に流し込む。
 // Material* out_gpu_material が nullptr でなければ GPU 用パラメータも上書きする。
 // 成功時 true。
 inline bool LoadMatFile(const std::string& matPath,
@@ -67,7 +75,7 @@ inline bool LoadMatFile(const std::string& matPath,
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version < 1 || version > 4) return false;
+	if (version < 1 || version > 5) return false;
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);
@@ -110,6 +118,22 @@ inline bool LoadMatFile(const std::string& matPath,
 		h.Read(&parallaxDepth, 4);
 	}
 
+	// v5 で追加された地形の層（配列テクスチャ 2 本と層ごとのパラメータ）
+	float terrainTile[3]{ 4.0f, 4.0f, 8.0f };
+	float terrainRoughness[3]{ 0.95f, 0.9f, 0.8f };
+	float terrainExtra[4]{ 0.2f, 4.0f, 0.25f, 0.45f };  // heightBlend / triplanarSharpness / macroVariation / wetness
+	if (version >= 5) {
+		char colorArrayPath[256]{};
+		char normalArrayPath[256]{};
+		h.Read(colorArrayPath, 256);
+		h.Read(normalArrayPath, 256);
+		out_data.terrainColorArrayPath = std::string(colorArrayPath);
+		out_data.terrainNormalArrayPath = std::string(normalArrayPath);
+		h.Read(terrainTile, sizeof(terrainTile));
+		h.Read(terrainRoughness, sizeof(terrainRoughness));
+		h.Read(terrainExtra, sizeof(terrainExtra));
+	}
+
 	if (out_gpu_material) {
 		out_gpu_material->color = Vector4(color[0], color[1], color[2], color[3]);
 		out_gpu_material->enableLighting = enableLighting;
@@ -123,6 +147,9 @@ inline bool LoadMatFile(const std::string& matPath,
 		// ハイトマップの読み込みに失敗したら呼び出し側で 0 に戻す
 		out_gpu_material->useParallax = out_data.heightMapFilePath.empty() ? 0 : 1;
 		out_gpu_material->parallaxDepth = parallaxDepth;
+		out_gpu_material->terrainTile = Vector4(terrainTile[0], terrainTile[1], terrainTile[2], terrainExtra[0]);
+		out_gpu_material->terrainRoughness = Vector4(terrainRoughness[0], terrainRoughness[1], terrainRoughness[2], terrainExtra[1]);
+		out_gpu_material->terrainParams = Vector4(terrainExtra[2], terrainExtra[3], 0.0f, 0.0f);
 	}
 	return true;
 }

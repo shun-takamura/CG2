@@ -33,6 +33,7 @@ public:
         kShaderEnvironmentMap,     // 環境マップあり
         kShaderNoEnvironmentMap,   // 環境マップなし
         kShaderPBR,                // PBR（Cook-Torrance）
+        kShaderTerrain,            // 地形（スプラット＋3 層。.mat v5 の shadingModel = 2）
         kCountOfShaderType
     };
 
@@ -44,6 +45,9 @@ public:
     static constexpr UINT kRootCloudNoise = 14;
     // 視差オクルージョン（POM）のハイトマップ（PS t4）。ModelInstance が submesh ごとに貼る
     static constexpr UINT kRootHeightMap = 15;
+    // 地形の層の配列（PS t6 = 色 / t7 = 法線。Texture2DArray）。ModelInstance が地形の submesh だけに貼る
+    static constexpr UINT kRootTerrainLayerColor = 16;
+    static constexpr UINT kRootTerrainLayerNormal = 17;
 
 private:
 

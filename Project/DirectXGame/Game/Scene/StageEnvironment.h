@@ -3,12 +3,15 @@
 #include "Vector4.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 class Skybox;
 class JsonValue;
 class Object3DManager;
+class CloudLayer;
+class DirectXCore;
 
 /// <summary>
 /// ステージを時間で区切った「環境セクション」1件分の定義。
@@ -68,7 +71,24 @@ public:
 		std::function<void(const std::string&)> onCubemapChanged = {});
 
 	/// <summary>
-	/// Rail フェーズ中に毎フレーム呼ぶ。
+	/// 遠景の雲（タイトルと同じ CloudLayer）を作り、Skybox と Object3DManager に挿す。
+	/// Initialize の後・Reset の前に呼ぶ（Reset でセクションの光の向き＝太陽の向きが入る）。
+	/// </summary>
+	void InitializeClouds(DirectXCore* dxCore);
+
+	/// <summary>雲のスクロールを進める。フェーズに関係なく毎フレーム、Skybox の Update の前に呼ぶ</summary>
+	void UpdateClouds(float deltaTime, const Vector3& eyePosition);
+
+	/// <summary>Object3DManager はシーンをまたいで生きるので、雲を外して返す</summary>
+	void Finalize();
+
+	// unique_ptr<CloudLayer> を前方宣言のまま持つので、生成・破棄は .cpp 側で定義する
+	StageEnvironment();
+	~StageEnvironment();
+
+	/// <summary>
+	/// Rail フェーズ中に毎フレーム呼ぶ。区間の値が変わった時（切り替えの補間中・区間の値の編集）だけ
+	/// ライト・フォグ・空の着色に書き込む。区間の途中で外から変えた値は、次の切り替えまでそのまま残る。
 	/// </summary>
 	/// <param name="stageSec">ステージ経過秒（RailStagePart::GetStageSeconds()）。</param>
 	/// <param name="applyTint">
@@ -90,6 +110,8 @@ public:
 
 	/// <param name="seekTo">"Jump" ボタンでその秒へシークするためのコールバック。</param>
 	void OnImGuiTuning(bool& changed, const std::function<void(float)>& seekTo);
+	/// <summary>雲のパラメータ（保存はしない。値が決まったら既定値かチューニング JSON へ移す）</summary>
+	void OnImGuiClouds();
 
 	void LoadFromJson(const JsonValue& root);   // root["sections"]
 	void SaveToJson(JsonValue& root) const;
@@ -108,6 +130,7 @@ private:
 	Skybox* skybox_ = nullptr;
 	Object3DManager* object3DManager_ = nullptr;
 	std::function<void(const std::string&)> onCubemapChanged_;
+	std::unique_ptr<CloudLayer> cloudLayer_;
 
 	std::vector<StageSection> sections_;
 	int            skyIndex_ = -1;   // 今 Skybox に載っているセクション（BlendTo の再発火防止）

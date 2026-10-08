@@ -238,8 +238,7 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 #ifdef _DEBUG
-	// TODO(一時): 水面反射の確認のため TITLE 開始。確認が終わったら "STAGEPLAY" に戻す
-	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+	SceneManager::GetInstance()->ChangeSceneImmediate("STAGEPLAY");
 #else
 	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
 #endif

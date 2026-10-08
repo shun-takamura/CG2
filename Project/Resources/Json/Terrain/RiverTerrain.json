@@ -1,0 +1,15 @@
+{
+  "name": "RiverTerrain",
+  "x_min": -1000.0,
+  "x_max": 1000.0,
+  "z_min": 900.0,
+  "z_max": 2600.0,
+  "uv": "u = (x - x_min) / (x_max - x_min)、v = (z_max - z) / (z_max - z_min)。地形メッシュの UV・スプラットマップと同じ",
+  "waterHeight": 0.0,
+  "riverMap": "Resources/Textures/MaskTexture/Terrain/RiverTerrain_RiverMap.dds",
+  "riverMapSize": 1024,
+  "maxDepth": 10.0,
+  "maxFlowSpeed": 8.0,
+  "channels": "R = 水深 / maxDepth、G = 0.5 + 0.5 * 流れのワールド X / maxFlowSpeed、B = 同 Z、A = 予備（1）",
+  "shoreLines": "Resources/Json/Terrain/RiverTerrain_Shore.json"
+}

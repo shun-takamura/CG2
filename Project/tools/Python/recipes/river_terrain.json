@@ -1,0 +1,103 @@
+{
+  "name": "RiverTerrain",
+  "seed": 20261008,
+  "extent": {
+    "x_min": -1000.0,
+    "x_max": 1000.0,
+    "z_min": 900.0,
+    "z_max": 2600.0
+  },
+  "cell_m": 2.0,
+  "river": {
+    "rail_index_range": [
+      11,
+      42
+    ],
+    "half_width_min": 100.0,
+    "half_width_max": 240.0,
+    "width_wavelength": 300.0,
+    "bed_y": -3.0,
+    "shore_in": 20.0,
+    "shore_out": 10.0,
+    "width_bias": 1.0,
+    "edge_noise_amp": 80.0,
+    "edge_noise_wavelength": 200.0,
+    "guard": 110.0,
+    "guard_smooth": 30.0
+  },
+  "bank": {
+    "height_min": 1.0,
+    "height_max": 4.0,
+    "wavelength": 180.0
+  },
+  "hills": {
+    "height": 70.0,
+    "start": 120.0,
+    "ramp": 450.0,
+    "wavelength": 700.0,
+    "octaves": 5,
+    "persistence": 0.5,
+    "lacunarity": 2.0,
+    "sharpness": 1.6,
+    "ridge_mix": 0.5,
+    "ridge_wavelength": 450.0
+  },
+  "terrace": {
+    "step": 24.0,
+    "riser": 0.22,
+    "strength": 0.85,
+    "jitter": 1.0,
+    "jitter_wavelength": 250.0,
+    "mask_coverage": 0.45,
+    "mask_wavelength": 380.0,
+    "step_variation": 0.4,
+    "riser_range": [
+      0.12,
+      0.35
+    ],
+    "variation_wavelength": 300.0
+  },
+  "detail": {
+    "amp": 2.5,
+    "wavelength": 70.0,
+    "octaves": 3,
+    "start": 15.0,
+    "ramp": 60.0
+  },
+  "mounds": [
+    {
+      "z_min": 2100.0,
+      "z_max": 2500.0,
+      "z_fade": 150.0,
+      "height": 110.0,
+      "start": 40.0,
+      "ramp": 200.0,
+      "wavelength": 320.0,
+      "variation": 0.5
+    }
+  ],
+  "splat": {
+    "rock_jitter": 0.08,
+    "rock_jitter_wavelength": 30.0,
+    "outcrop_coverage": 0.05,
+    "outcrop_wavelength": 45.0,
+    "outcrop_min_slope": 0.06
+  },
+  "material": {
+    "tile": [
+      4.0,
+      5.0,
+      11.0
+    ]
+  },
+  "rocks": {
+    "amp": 2.5,
+    "cell": 6.0,
+    "tilt": 0.35,
+    "crack": 0.18,
+    "crack_depth": 0.6
+  },
+  "cliff": {
+    "enabled": true
+  }
+}

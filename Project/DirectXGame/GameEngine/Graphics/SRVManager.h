@@ -52,6 +52,11 @@ public:
 	/// </summary>
 	void CreateSRVForCubemap(uint32_t srvIndex, ID3D12Resource* pResource, DXGI_FORMAT format, UINT MipLevels);
 
+	/// <summary>
+	/// キューブでない配列テクスチャ用の SRV（Texture2DArray）を生成する
+	/// </summary>
+	void CreateSRVForTexture2DArray(uint32_t srvIndex, ID3D12Resource* pResource, DXGI_FORMAT format, UINT MipLevels, UINT arraySize);
+
 	// SRV生成(Structured Buffer用)
 	void CreateSRVForStructuredBuffer(uint32_t srvIndex, ID3D12Resource* pResource, UINT elementNums, UINT structureByteStride);
 

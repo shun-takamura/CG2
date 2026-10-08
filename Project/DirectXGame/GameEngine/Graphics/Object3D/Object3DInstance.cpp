@@ -72,7 +72,11 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
   // Materialのフラグに応じてPSOを切り替え
     if (modelInstance_) {
         Material* mat = modelInstance_->GetMaterialPointer();
-        if (mat && mat->shadingModel == 1) {
+        if (mat && mat->shadingModel == 2) {
+            dxCore->GetCommandList()->SetPipelineState(
+                object3DManager_->GetPipelineState(Object3DManager::kShaderTerrain)
+            );
+        } else if (mat && mat->shadingModel == 1) {
             dxCore->GetCommandList()->SetPipelineState(
                 object3DManager_->GetPipelineState(Object3DManager::kShaderPBR)
             );
@@ -172,7 +176,9 @@ void Object3DInstance::DrawReflection(DirectXCore* dxCore,
 
     Object3DManager::ShaderType shaderType = Object3DManager::kShaderNoEnvironmentMap;
     if (Material* mat = modelInstance_->GetMaterialPointer()) {
-        if (mat->shadingModel == 1) {
+        if (mat->shadingModel == 2) {
+            shaderType = Object3DManager::kShaderTerrain;
+        } else if (mat->shadingModel == 1) {
             shaderType = Object3DManager::kShaderPBR;
         } else if (mat->useEnvironmentMap) {
             shaderType = Object3DManager::kShaderEnvironmentMap;

@@ -1,5 +1,6 @@
 #include "StageEnvironment.h"
 
+#include "Cloud/CloudLayer.h"
 #include "Json/JsonValue.h"
 #include "LightManager.h"
 #include "MathUtility.h"
@@ -14,6 +15,11 @@
 #include "imgui.h"
 
 namespace {
+
+	constexpr const char* kCloudNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
+	// タイトルの雲は高さ 300m。CloudSky はカメラが雲の平面より上だと雲を描かないので、
+	// 高高度（Y=900）の区間でも頭上に見えるよう上げる
+	constexpr float kCloudHeight = 1500.0f;
 
 	float Lerp1(float a, float b, float t) { return a + (b - a) * t; }
 
@@ -36,6 +42,17 @@ namespace {
 		v.fogFar = s.fogFar;
 		v.fogDensity = s.fogDensity;
 		return v;
+	}
+
+	bool SameVec3(const Vector3& a, const Vector3& b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
+	bool SameVec4(const Vector4& a, const Vector4& b) { return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w; }
+
+	// 前回書き込んだ値と同じか。同じならライト等に書き込まない（区間の途中で外から変えた値を潰さないため）
+	bool SameValues(const StageEnvValues& a, const StageEnvValues& b) {
+		return SameVec4(a.skyTint, b.skyTint) && SameVec3(a.lightDir, b.lightDir)
+			&& SameVec4(a.lightColor, b.lightColor) && a.lightIntensity == b.lightIntensity
+			&& SameVec4(a.fogColor, b.fogColor) && a.fogNear == b.fogNear
+			&& a.fogFar == b.fogFar && a.fogDensity == b.fogDensity;
 	}
 
 	StageEnvValues BlendValues(const StageEnvValues& a, const StageEnvValues& b, float t) {
@@ -95,6 +112,27 @@ void StageEnvironment::Initialize(Skybox* skybox, Object3DManager* object3DManag
 	object3DManager_ = object3DManager;
 	onCubemapChanged_ = std::move(onCubemapChanged);
 	skyIndex_ = -1;
+}
+
+StageEnvironment::StageEnvironment() = default;
+StageEnvironment::~StageEnvironment() = default;
+
+void StageEnvironment::InitializeClouds(DirectXCore* dxCore) {
+	cloudLayer_ = std::make_unique<CloudLayer>();
+	cloudLayer_->Initialize(dxCore, kCloudNoisePath);
+	cloudLayer_->GetParams().height = kCloudHeight;
+	if (skybox_) skybox_->SetCloudLayer(cloudLayer_.get());
+	if (object3DManager_) object3DManager_->SetCloudLayer(cloudLayer_.get());
+}
+
+void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition) {
+	if (cloudLayer_) cloudLayer_->Update(deltaTime, eyePosition);
+}
+
+void StageEnvironment::Finalize() {
+	if (object3DManager_) object3DManager_->SetCloudLayer(nullptr);
+	if (skybox_) skybox_->SetCloudLayer(nullptr);
+	cloudLayer_.reset();
 }
 
 int StageEnvironment::FindSectionIndex(float stageSec) const {
@@ -171,6 +209,8 @@ void StageEnvironment::ApplyValues(const StageEnvValues& v, bool applyTint) {
 		lm->SetDirectionalLightDirection(dir);
 		lm->SetDirectionalLightColor(v.lightColor);
 		lm->SetDirectionalLightIntensity(v.lightIntensity);
+		// 雲の陰影は太陽へ向かう向き（光の進む向きの逆）で取る
+		if (cloudLayer_) cloudLayer_->SetSunDirection({ -dir.x, -dir.y, -dir.z });
 	}
 
 	// 距離フォグ（Object3D 系 PS の b6）。Primitive/パーティクル/Skybox は対象外。
@@ -204,8 +244,14 @@ void StageEnvironment::Update(float stageSec, bool applyTint) {
 		skyIndex_ = sky;
 	}
 
-	Evaluate(stageSec, current_);
-	ApplyValues(current_, applyTint);
+	// 値が変わった時（区間の切り替えの補間中・ImGui で区間の値を変えた時）だけ書き込む。
+	// 区間の途中ではライト・フォグ・空の着色に触らないので、演出や ImGui がその場で変えた値はそのまま残る
+	StageEnvValues next{};
+	Evaluate(stageSec, next);
+	if (!SameValues(next, current_)) {
+		current_ = next;
+		ApplyValues(current_, applyTint);
+	}
 }
 
 void StageEnvironment::Reset(float stageSec) {
@@ -286,6 +332,7 @@ void StageEnvironment::OnImGuiTuning(bool& changed, const std::function<void(flo
 	// 候補 Cubemap。StagePlayScene の "Skybox" セクションと同じ並び。
 	static const char* kCubemaps[] = {
 		"",   // = 前のセクションを引き継ぐ
+		"Resources/Cubemaps/title_clear_sky.dds",
 		"Resources/Cubemaps/rogland_clear_night_8k.dds",
 		"Resources/Cubemaps/rogland_clear_night_4k.dds",
 		"Resources/Cubemaps/passendorf_snow_8k.dds",
@@ -385,4 +432,10 @@ void StageEnvironment::OnImGuiTuning(bool& changed, const std::function<void(flo
 	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	ImGui::DragFloat("Fog Density", &s.fogDensity, 0.01f, 0.0f, 4.0f, "%.2f");
 	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+}
+
+void StageEnvironment::OnImGuiClouds() {
+	if (!cloudLayer_ || !ImGui::CollapsingHeader("Clouds")) return;
+	ImGui::TextDisabled("タイトルと同じ遠景の雲。ここでの変更は保存されない");
+	cloudLayer_->OnImGui();
 }
