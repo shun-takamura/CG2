@@ -66,6 +66,11 @@ MAT_VERSION = 3
 # ハイトマップがあるマテリアルだけ v4 で書く（他は v3 のまま＝既存の読み手に影響しない）
 MAT_VERSION_PARALLAX = 4
 MAT_HEADER_SIZE = 4 + 4 + 256 + 16 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256  # = 564
+# v5 = v4 + layer_color_array_path(256) + layer_normal_array_path(256) + tile(3f) + roughness(3f)
+#      + height_blend + triplanar_sharpness + macro_variation + wetness（4f）。地形シェーダ（shadingModel = 2）用。
+# 層を持つマテリアルだけ v5 で書く（v4 の視差の欄は空で埋める）
+MAT_VERSION_TERRAIN = 5
+MAT_SHADING_TERRAIN = 2
 
 # ---- マテリアルデフォルト値（ModelInstance::CreateMaterialData と合わせる）----
 MAT_DEFAULT_COLOR = (1.0, 1.0, 1.0, 1.0)
@@ -482,11 +487,18 @@ def _write_mat_v2(out_path: Path, base_color_path: str,
                   shading_model=MAT_DEFAULT_SHADING_MODEL,
                   normal_map_path=MAT_DEFAULT_NORMAL_MAP,
                   height_map_path: str = "",
-                  parallax_depth: float = 0.0) -> None:
+                  parallax_depth: float = 0.0,
+                  terrain_layers: dict | None = None) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if terrain_layers:
+        version = MAT_VERSION_TERRAIN
+    elif height_map_path:
+        version = MAT_VERSION_PARALLAX
+    else:
+        version = MAT_VERSION
     with out_path.open("wb") as f:
         f.write(MAT_MAGIC)
-        f.write(struct.pack("<I", MAT_VERSION_PARALLAX if height_map_path else MAT_VERSION))
+        f.write(struct.pack("<I", version))
         f.write(_fixed_path_bytes(base_color_path))
         f.write(struct.pack("<4f", *color))
         f.write(struct.pack("<i", enable_lighting))
@@ -497,9 +509,16 @@ def _write_mat_v2(out_path: Path, base_color_path: str,
         f.write(struct.pack("<f", roughness))
         f.write(struct.pack("<i", shading_model))
         f.write(_fixed_path_bytes(normal_map_path))
-        if height_map_path:
+        if version >= MAT_VERSION_PARALLAX:
             f.write(_fixed_path_bytes(height_map_path))
             f.write(struct.pack("<f", parallax_depth))
+        if version >= MAT_VERSION_TERRAIN:
+            t = terrain_layers
+            f.write(_fixed_path_bytes(t["colorArray"]))
+            f.write(_fixed_path_bytes(t["normalArray"]))
+            f.write(struct.pack("<3f", *t["tile"]))
+            f.write(struct.pack("<3f", *t["roughness"]))
+            f.write(struct.pack("<4f", t["heightBlend"], t["triplanarSharpness"], t["macroVariation"], t["wetness"]))
 
 
 # ============================================================
@@ -1063,6 +1082,19 @@ def _gltf_find_parallax(gltf, gltf_path: Path, mat_index: int = 0) -> tuple[str,
     return path, float(extras.get("parallaxDepth", 0.0))
 
 
+def _gltf_find_terrain_layers(gltf, mat_index: int = 0) -> dict | None:
+    """マテリアルの extras.terrainLayers（gen_terrain.py が書く）を返す。無ければ None。
+    配列テクスチャのパスは Resources 相対のまま（gen_terrain_layers.py が Resources に直接書く）"""
+    materials = gltf.get("materials", [])
+    if not materials or mat_index < 0 or mat_index >= len(materials):
+        return None
+    extras = materials[mat_index].get("extras", {}) or {}
+    layers = extras.get("terrainLayers")
+    if not layers or not layers.get("colorArray") or not layers.get("normalArray"):
+        return None
+    return layers
+
+
 # ============================================================
 # .skel / .anim ライター
 # ============================================================
@@ -1170,6 +1202,7 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
         normal_map_path = _gltf_find_normal_map_path(gltf, task.src, real_idx)
         base_color_factor = _gltf_find_base_color_factor(gltf, real_idx)
         height_map_path, parallax_depth = _gltf_find_parallax(gltf, task.src, real_idx)
+        terrain_layers = _gltf_find_terrain_layers(gltf, real_idx)
 
         # 法線マップの有無だけを PBR 切替のトリガーにする。
         # metallic/roughness の有無は使えない: _gltf_find_pbr_factors は未指定時に
@@ -1177,6 +1210,8 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
         # いずれも metallicFactor を明示済みなので、それを条件にすると軒並み PBR へ倒れて
         # 既存の見た目が壊れる。normalTexture を持つのは新規に作る素材だけ。
         shading_model = 1 if normal_map_path else MAT_DEFAULT_SHADING_MODEL
+        if terrain_layers:
+            shading_model = MAT_SHADING_TERRAIN
 
         # 単一マテリアルは従来通り stem.mat（後方互換）。複数はマテリアル名/index でサフィックス
         if single_material:
@@ -1195,7 +1230,10 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
                       shading_model=shading_model,
                       normal_map_path=normal_map_path,
                       height_map_path=height_map_path,
-                      parallax_depth=parallax_depth)
+                      parallax_depth=parallax_depth,
+                      terrain_layers=terrain_layers,
+                      env_coeff=(terrain_layers.get("environment", MAT_DEFAULT_ENV_COEFF)
+                                 if terrain_layers else MAT_DEFAULT_ENV_COEFF))
         mat_path_cache[mat_idx] = _sibling_resource_path(mat_resource_base, mat_filename)
 
     # .skel

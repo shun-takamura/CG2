@@ -30,7 +30,7 @@
       "name": "SkyAboveClouds",
       "startSec": 0,
       "blendSec": 4,
-      "skyboxPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
+      "skyboxPath": "Resources/Cubemaps/title_clear_sky.dds",
       "skyboxTint": [
         1,
         1,
@@ -38,9 +38,9 @@
         1
       ],
       "lightDir": [
-        0.30000001192092896,
-        -0.80000001192092896,
-        0.5
+        0.191,
+        -0.815,
+        0.547
       ],
       "lightColor": [
         1,
@@ -63,7 +63,7 @@
       "name": "CloudLayer",
       "startSec": 54,
       "blendSec": 6,
-      "skyboxPath": "Resources/Cubemaps/passendorf_snow_8k.dds",
+      "skyboxPath": "",
       "skyboxTint": [
         1,
         1,
@@ -104,9 +104,9 @@
         1
       ],
       "lightDir": [
-        0.34999999403953552,
-        -0.85000002384185791,
-        0.40000000596046448
+        0.191,
+        -0.815,
+        0.547
       ],
       "lightColor": [
         1,
@@ -114,7 +114,7 @@
         0.93999999761581421,
         1
       ],
-      "lightIntensity": 0.89999997615814209,
+      "lightIntensity": 2.5,
       "fogColor": [
         0.69999998807907104,
         0.77999997138977051,
@@ -175,7 +175,7 @@
     "specialFadeIn": 0.40000000596046448,
     "specialFadeOut": 0.60000002384185791,
     "bossBlendDuration": 5,
-    "defaultPath": "Resources/Cubemaps/rogland_clear_night_8k.dds",
+    "defaultPath": "Resources/Cubemaps/title_clear_sky.dds",
     "bossPath": "Resources/Cubemaps/passendorf_snow_8k.dds"
   },
   "aim": {

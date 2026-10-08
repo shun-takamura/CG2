@@ -1,0 +1,133 @@
+{
+  "name": "TerrainLayers",
+  "size": 1024,
+  "layers": [
+    {
+      "name": "Grass",
+      "seed": 101,
+      "scale": 24.0,
+      "octaves": 5,
+      "persistence": 0.55,
+      "lacunarity": 2.0,
+      "bump_strength": 0.025,
+      "colors": {
+        "low": [
+          0.16,
+          0.26,
+          0.07
+        ],
+        "mid": [
+          0.27,
+          0.4,
+          0.12
+        ],
+        "high": [
+          0.42,
+          0.52,
+          0.2
+        ]
+      },
+      "slope_rock_color": [
+        0.3,
+        0.38,
+        0.14
+      ],
+      "slope_rock_threshold": 0.8,
+      "color_jitter": 0.05
+    },
+    {
+      "name": "Dirt",
+      "seed": 202,
+      "scale": 10.0,
+      "octaves": 5,
+      "persistence": 0.5,
+      "lacunarity": 2.0,
+      "bump_strength": 0.055,
+      "colors": {
+        "low": [
+          0.36,
+          0.3,
+          0.22
+        ],
+        "mid": [
+          0.52,
+          0.46,
+          0.35
+        ],
+        "high": [
+          0.64,
+          0.59,
+          0.48
+        ]
+      },
+      "slope_rock_color": [
+        0.45,
+        0.42,
+        0.38
+      ],
+      "slope_rock_threshold": 0.7,
+      "color_jitter": 0.04
+    },
+    {
+      "name": "Rock",
+      "type": "voronoi",
+      "seed": 303,
+      "warp": 0.035,
+      "warp_scale": 6.0,
+      "gap_scale": 8.0,
+      "levels": [
+        {
+          "cells": 18,
+          "weight": 1.0,
+          "step": 0.6,
+          "tilt": 0.35,
+          "crack": 0.09,
+          "gap_cut": 0.3,
+          "crack_depth": 0.55,
+          "crack_darken": 0.45
+        },
+        {
+          "cells": 90,
+          "weight": 0.3,
+          "step": 0.4,
+          "tilt": 0.5,
+          "crack": 0.07,
+          "gap_cut": 0.5,
+          "crack_depth": 0.18,
+          "crack_darken": 0.0
+        }
+      ],
+      "grain": 0.35,
+      "grain_scale": 24.0,
+      "palette": [
+        [
+          0.42,
+          0.3,
+          0.24
+        ],
+        [
+          0.5,
+          0.4,
+          0.33
+        ],
+        [
+          0.47,
+          0.45,
+          0.42
+        ],
+        [
+          0.34,
+          0.29,
+          0.25
+        ],
+        [
+          0.55,
+          0.48,
+          0.4
+        ]
+      ],
+      "color_jitter": 0.12,
+      "bump_strength": 0.08
+    }
+  ]
+}

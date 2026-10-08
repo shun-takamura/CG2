@@ -97,8 +97,12 @@ void Object3DManager::DrawSetting()
 void Object3DManager::BindHeightMapFallback(ID3D12GraphicsCommandList* commandList) const
 {
     // 雲のダミーと同じ 2D テクスチャを流用する（PS は useParallax=0 のとき読まない）
-    commandList->SetGraphicsRootDescriptorTable(kRootHeightMap,
-        TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath()));
+    const D3D12_GPU_DESCRIPTOR_HANDLE fallback =
+        TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath());
+    commandList->SetGraphicsRootDescriptorTable(kRootHeightMap, fallback);
+    // 地形の層（t6 / t7）も未バインドにしない。読むのは地形の PS だけで、地形の submesh は実物を貼り直す
+    commandList->SetGraphicsRootDescriptorTable(kRootTerrainLayerColor, fallback);
+    commandList->SetGraphicsRootDescriptorTable(kRootTerrainLayerNormal, fallback);
 }
 
 void Object3DManager::BindCloud(ID3D12GraphicsCommandList* commandList) const
@@ -181,7 +185,19 @@ void Object3DManager::CreateRootSignature()
     descriptorRangeHeight[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeHeight[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[16] = {};
+    // PS: SRV(t6 / t7) - 地形の層の色・法線の配列
+    D3D12_DESCRIPTOR_RANGE descriptorRangeTerrainColor[1] = {};
+    descriptorRangeTerrainColor[0].BaseShaderRegister = 6;                // t6
+    descriptorRangeTerrainColor[0].NumDescriptors = 1;
+    descriptorRangeTerrainColor[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeTerrainColor[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    D3D12_DESCRIPTOR_RANGE descriptorRangeTerrainNormal[1] = {};
+    descriptorRangeTerrainNormal[0].BaseShaderRegister = 7;               // t7
+    descriptorRangeTerrainNormal[0].NumDescriptors = 1;
+    descriptorRangeTerrainNormal[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descriptorRangeTerrainNormal[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParameters[18] = {};
 
     // PS: CBV(b0) - マテリアル用
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
@@ -276,10 +292,20 @@ void Object3DManager::CreateRootSignature()
     rootParameters[kRootHeightMap].DescriptorTable.pDescriptorRanges = descriptorRangeHeight;
     rootParameters[kRootHeightMap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeHeight);
 
+    // rootParameters[16] / [17] = 地形の層の配列（t6 / t7）
+    rootParameters[kRootTerrainLayerColor].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootTerrainLayerColor].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootTerrainLayerColor].DescriptorTable.pDescriptorRanges = descriptorRangeTerrainColor;
+    rootParameters[kRootTerrainLayerColor].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeTerrainColor);
+    rootParameters[kRootTerrainLayerNormal].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootTerrainLayerNormal].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootTerrainLayerNormal].DescriptorTable.pDescriptorRanges = descriptorRangeTerrainNormal;
+    rootParameters[kRootTerrainLayerNormal].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeTerrainNormal);
+
     // ============================================
-    // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み, s4 = 雲のノイズ)
+    // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み, s4 = 雲のノイズ, s5 = 地形の層)
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[4] = {};
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[5] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;         // バイリニアフィルタ
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 0~1の範囲をリピート
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -320,6 +346,17 @@ void Object3DManager::CreateRootSignature()
     staticSamplers[3].ShaderRegister = 4;                               // s4
     staticSamplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
+    // 地形の層（Terrain.PS）。低空から地面を浅い角度で見るので異方性にする（線形だと遠くの地面がボケる）
+    staticSamplers[4].Filter = D3D12_FILTER_ANISOTROPIC;
+    staticSamplers[4].MaxAnisotropy = 16;
+    staticSamplers[4].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[4].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[4].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSamplers[4].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    staticSamplers[4].MaxLOD = D3D12_FLOAT32_MAX;
+    staticSamplers[4].ShaderRegister = 5;                               // s5
+    staticSamplers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};
     rootSignaturDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     rootSignaturDesc.pParameters = rootParameters;
@@ -359,6 +396,9 @@ void Object3DManager::CreateGraphicsPipelineState(ShaderType shaderType, BlendMo
         break;
     case kShaderPBR:
         psFilePath = L"Resources/Shaders/Object3D/Object3dPBR.PS.hlsl";
+        break;
+    case kShaderTerrain:
+        psFilePath = L"Resources/Shaders/Object3D/Terrain.PS.hlsl";
         break;
     default:
         assert(false);

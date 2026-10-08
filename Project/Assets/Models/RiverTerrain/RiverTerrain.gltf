@@ -1,0 +1,169 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "gen_terrain.py"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "RiverTerrain"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "RiverTerrain",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "RiverTerrain",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.95
+      },
+      "normalTexture": {
+        "index": 1
+      },
+      "extras": {
+        "terrainLayers": {
+          "colorArray": "Resources/Textures/Terrain/TerrainLayers_Color.dds",
+          "normalArray": "Resources/Textures/NormalMapTexture/Terrain/TerrainLayers_Normal.dds",
+          "tile": [
+            4.0,
+            5.0,
+            11.0
+          ],
+          "roughness": [
+            0.95,
+            0.9,
+            0.8
+          ],
+          "heightBlend": 0.2,
+          "triplanarSharpness": 4.0,
+          "macroVariation": 0.25,
+          "wetness": 0.45,
+          "environment": 0.4
+        }
+      }
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    },
+    {
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "uri": "../../Textures/MaskTexture/Terrain/RiverTerrain_Splat.png"
+    },
+    {
+      "uri": "../../Textures/MaskTexture/Terrain/RiverTerrain_Tint.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 851851,
+      "type": "VEC3",
+      "min": [
+        -1000.0,
+        -154.0,
+        900.0
+      ],
+      "max": [
+        1000.0,
+        109.22099304199219,
+        2600.0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 851851,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 851851,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 851851,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5125,
+      "count": 5100000,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 10222212,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 10222212,
+      "byteLength": 10222212,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 20444424,
+      "byteLength": 13629616,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 34074040,
+      "byteLength": 6814808,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 40888848,
+      "byteLength": 20400000,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "RiverTerrain.bin",
+      "byteLength": 61288848
+    }
+  ]
+}

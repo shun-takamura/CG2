@@ -432,8 +432,8 @@ std::string ReadMatBaseColorPath_V2(const std::string& matPath)
     if (std::memcmp(magic, "MATL", 4) != 0) return {};
     uint32_t version = 0;
     h.Read(&version, 4);
-    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v4 を許容
-    if (version < 1 || version > 4) return {};
+    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v5 を許容
+    if (version < 1 || version > 5) return {};
     char path[256]{};
     h.Read(path, 256);
     return std::string(path);

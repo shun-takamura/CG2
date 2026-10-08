@@ -96,6 +96,8 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 		if (!sm.matFilePath.empty() && sm.material) {
 			MaterialData tmp;
 			LoadMatFile(sm.matFilePath, tmp, sm.material);
+			sm.terrainColorArrayPath = tmp.terrainColorArrayPath;
+			sm.terrainNormalArrayPath = tmp.terrainNormalArrayPath;
 		}
 
 		// テクスチャ無しマテリアル（色のみ PBR 等）や、参照先 DDS が見つからない場合は
@@ -128,6 +130,17 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 			}
 		}
 		if (sm.material) sm.material->useParallax = sm.heightMapFilePath.empty() ? 0 : 1;
+
+		// 地形の層（配列テクスチャ。色は sRGB、法線は線形）。どちらかが読めなければ地形として描かない
+		if (!sm.terrainColorArrayPath.empty() && !sm.terrainNormalArrayPath.empty()) {
+			tm->LoadTexture(sm.terrainColorArrayPath);
+			tm->LoadTextureLinear(sm.terrainNormalArrayPath);
+			if (!tm->HasTexture(sm.terrainColorArrayPath) || !tm->HasTexture(sm.terrainNormalArrayPath)) {
+				sm.terrainColorArrayPath.clear();
+				sm.terrainNormalArrayPath.clear();
+				if (sm.material && sm.material->shadingModel == 2) sm.material->shadingModel = 1;
+			}
+		}
 	}
 
 	// 後方互換: submesh[0] を既存メンバへ（フォールバック適用後の非空パス）
@@ -176,6 +189,14 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 		cmd->SetGraphicsRootDescriptorTable(
 			Object3DManager::kRootHeightMap, TextureManager::GetInstance()->GetSrvHandleGPU(heightSrvPath)
 		);
+
+		// 地形の層の配列(t6 / t7)。地形でない submesh は DrawSetting の仮のテクスチャのまま（地形の PS しか読まない）
+		if (!sm.terrainColorArrayPath.empty()) {
+			cmd->SetGraphicsRootDescriptorTable(Object3DManager::kRootTerrainLayerColor,
+				TextureManager::GetInstance()->GetSrvHandleGPU(sm.terrainColorArrayPath));
+			cmd->SetGraphicsRootDescriptorTable(Object3DManager::kRootTerrainLayerNormal,
+				TextureManager::GetInstance()->GetSrvHandleGPU(sm.terrainNormalArrayPath));
+		}
 
 		// 分割ドロー（StartIndexLocation = indexStart）
 		PEPPER_COUNT("DrawCall");
@@ -371,7 +392,7 @@ Node ModelInstance::ReadNode(aiNode* node)
 }
 
 // .mat (MATL) から base_color_path を抽出するヘルパー。
-// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v4 を許容する。
+// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v5 を許容する。
 static std::string ReadMatBaseColorPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
@@ -383,7 +404,7 @@ static std::string ReadMatBaseColorPath(const std::string& matPath)
 
 	uint32_t version = 0;
 	h.Read(&version, 4);
-	if (version < 1 || version > 4) return {};
+	if (version < 1 || version > 5) return {};
 
 	char baseColorPath[256]{};
 	h.Read(baseColorPath, 256);

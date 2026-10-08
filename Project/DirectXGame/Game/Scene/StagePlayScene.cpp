@@ -2156,6 +2156,7 @@ void StagePlayScene::OnImGuiTuning() {
 	if (stageEnv_) {
 		// "Jump" は Rail タイムラインのシーク。Seek() 側で環境も即時適用される。
 		stageEnv_->OnImGuiTuning(changed, [this](float sec) { Seek(sec); });
+		stageEnv_->OnImGuiClouds();
 	}
 	if (railStage_) railStage_->OnImGuiTuning(changed); // 既存の Rail Camera / Wave Editor セクション
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
@@ -2164,6 +2165,7 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Skybox")) {
 		// 候補 Cubemap（手持ちの3枚）。新しい dds を足したらここに追記する。
 		static const char* kCubemaps[] = {
+			"Resources/Cubemaps/title_clear_sky.dds",
 			"Resources/Cubemaps/rogland_clear_night_8k.dds",
 			"Resources/Cubemaps/rogland_clear_night_4k.dds",
 			"Resources/Cubemaps/passendorf_snow_8k.dds",
@@ -2722,6 +2724,7 @@ void StagePlayScene::Initialize() {
 	stageEnv_->Initialize(skybox_.get(), object3DManager_, [this](const std::string& path) {
 		if (object3DManager_) object3DManager_->SetEnvironmentTexture(path);
 	});
+	stageEnv_->InitializeClouds(dxCore_);
 	stageEnv_->Reset(0.0f);   // ステージ先頭のセクションを即時適用（セクション0件なら無効果）
 
 	// STG（Rail）専用ロジック一式の初期化（レールカメラ用スプライン・向きキー・Wave定義ロード）。
@@ -2828,6 +2831,8 @@ void StagePlayScene::Finalize() {
 	// Object3DManager はシーンをまたいで生きているので、フォグを必ず切って返す
 	// （切らないと DemoScene 等に StagePlay の霧が残る）。
 	if (object3DManager_) object3DManager_->DisableFog();
+	// 雲も同じ理由で外す（CloudLayer は stageEnv_ と一緒に消える）
+	if (stageEnv_) stageEnv_->Finalize();
 	SoundManager::GetInstance()->Stop2DSound("bgm_stage");
 	SoundManager::GetInstance()->Stop2DSound("bgm_boss");
 	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
@@ -3616,6 +3621,7 @@ void StagePlayScene::Update() {
 		prevBossBattleActive_ = bossBattleActive_;
 
 		// クロスフェード/着色補間はヒットストップの影響を受けない実時間で進める
+		if (stageEnv_) stageEnv_->UpdateClouds(GetScaledDeltaTime(TimeGroup::UI), camera_->GetTranslate());
 		skybox_->Update(GetScaledDeltaTime(TimeGroup::UI));
 	}
 

@@ -936,6 +936,12 @@ void TitleScene::Draw() {
 		tr->DrawText(label, { (screenW - w) * 0.5f, screenH * 0.72f }, scale,
 			{ 1.0f, 1.0f, 1.0f, blink }, 2.0f, { 0.0f, 0.0f, 0.0f, blink });
 	}
+
+	// デモモード中は、人が見て通常モードへ戻せるよう操作を左上に出しておく
+	if (AttractMode::GetInstance()->IsEnabled()) {
+		tr->DrawText("デモプレイ中　F8 で通常モードに戻る", { 28.0f, 24.0f }, 0.85f,
+			{ 1.0f, 1.0f, 1.0f, 0.9f }, 2.0f, { 0.0f, 0.0f, 0.0f, 0.6f });
+	}
 	tr->Flush();
 }
 

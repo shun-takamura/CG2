@@ -560,6 +560,13 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
                 data->srvIndex, data->resource.Get(),
                 data->metadata.format,
                 static_cast<UINT>(data->metadata.mipLevels));
+        } else if (data->metadata.arraySize > 1) {
+            // 地形の層など（Texture2DArray）。Texture2D の SRV だと 1 枚目しか見えない
+            srvManager_->CreateSRVForTexture2DArray(
+                data->srvIndex, data->resource.Get(),
+                data->metadata.format,
+                static_cast<UINT>(data->metadata.mipLevels),
+                static_cast<UINT>(data->metadata.arraySize));
         } else {
             srvManager_->CreateSRVForTexture2D(
                 data->srvIndex, data->resource.Get(),
@@ -589,6 +596,12 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
             data->srvIndex, data->resource.Get(),
             data->metadata.format,
             static_cast<UINT>(data->metadata.mipLevels));
+    } else if (data->metadata.arraySize > 1) {
+        srvManager_->CreateSRVForTexture2DArray(
+            data->srvIndex, data->resource.Get(),
+            data->metadata.format,
+            static_cast<UINT>(data->metadata.mipLevels),
+            static_cast<UINT>(data->metadata.arraySize));
     } else {
         srvManager_->CreateSRVForTexture2D(
             data->srvIndex, data->resource.Get(),
