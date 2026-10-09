@@ -114,6 +114,12 @@ public:
 	void LoadFromJson(const JsonValue& root);   // root["camera"]（既存キー名を維持、データ非破壊）
 	void SaveToJson(JsonValue& root) const;
 
+	/// <summary>
+	/// 自機のコライダーの下端が下回ってはいけない Y。水面の窓（camera.waterClamp）の外では
+	/// 制限なし（-FLT_MAX）を返す。水しぶきは「自機の Y − 水面の Y」で判定する（L7）。
+	/// </summary>
+	float GetPlayerFloorY() const;
+
 	bool OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY);
 	Vector3 CameraOffsetToWorld(const Vector3& off) const;
 	Vector3 WorldToCameraOffset(const Vector3& world) const;
@@ -133,6 +139,29 @@ private:
 	bool aimAuthoring_ = false, prevAimAuthoring_ = false;
 	float prevTimeScales_[static_cast<int>(TimeGroup::Count)] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float railCameraSpeed_ = 1.0f / 120.0f;
+
+	// 大河の上でカメラと自機を水面より下へ入れない（11_LowAltitudeFlight.md L4）。
+	// 窓は秒で持ち、毎フレーム進行度へ換算してカメラへ渡す（speed を変えても窓がずれない）。
+	struct WaterClamp {
+		bool  enabled       = true;
+		float startSec      = 60.0f;   // 雲抜けの降下中〜
+		float endSec        = 119.0f;  // 〜縁を越える直前まで（120s はもう縁の先で Y=0。そこで外すと跳ねる）
+		float surfaceY      = 0.0f;    // 水面の高さ（§3.0）
+		float cameraMinY    = 2.0f;    // カメラの下限（水面からではなくワールド Y）。低空 3.5m より十分下に置く
+		float cameraSoftness = 0.5f;   // 押し上げのなめらかさ[m]
+		float playerMargin  = 0.3f;    // 自機のコライダー下端と水面の余白[m]
+	} waterClamp_;
+
+	// 低空の間だけ接線の向きに足す見下ろし角（rotKeys が無い時だけ効く。L8 が rotKeys を書けばそちらが優先）。
+	// 視野が狭い（FovY 0.45）ので 10° を超えると地平線が画面の上へ出る。
+	struct LowPitch {
+		bool  enabled  = true;
+		float deg      = 5.0f;
+		float startSec = 72.0f;    // 雲抜けの降下が水平に近づく頃〜
+		float endSec   = 119.0f;   // 〜縁を越える直前まで
+		float fadeSec  = 3.0f;     // 窓の内側でこの秒数かけて入る／抜ける
+	} lowPitch_;
+	void ApplyWaterClampToCamera();
 
 	WaveDef currentWave_;
 	std::vector<bool> spawnFired_, retreatFired_;

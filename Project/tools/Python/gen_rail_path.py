@@ -35,12 +35,23 @@ TOTAL_POINTS = 60          # 凍結。変えると t の対応が全部ずれる
 SEC_PER_POINT = 3.0        # 60 点 × 3 秒 = 180 秒
 
 Y_SKY = 900.0              # 高高度の巡航高度
-Y_LOW = 40.0               # 地上低空飛行の高度（地面 Y=0）
+Y_LOW = 3.5                # 大河の上の低空飛行（水面 Y=0）。視野が狭く（FovY 0.45）12m 先の画面下端は
+                           # カメラの 2.75m 下までなので、低く飛んで camera.lowPitch で少し見下ろす（11 §5）
 Y_CANYON = -60.0           # 谷の中（谷底 Y=-150 想定）
 
 # 降下の区間（インデックス）。セクション境界の blendSec 窓と秒を揃えてある。
-DIVE_CLOUD = (17, 23)      # 雲抜け急降下   idx17(51s) → idx23(69s)。窓は 53-67s
+DIVE_CLOUD = (17, 23)      # 雲抜け急降下   idx17(51s) → idx23(69s)。窓は 53-67s（水平間隔の切り替え）
 DIVE_CANYON = (39, 41)     # 谷への落下     idx39(117s) → idx41(123s)。窓は 117-123s
+
+# 雲抜けの高度だけは反比例のように尾を引かせる（前半で一気に落ち、後半は緩やかに水平へ）。
+# smoothstep だと Catmull-Rom が降下直後に約 5m 行き過ぎて水面に潜るため。
+# 形は (1-u)^p (1+p u)。p=2 で smoothstep と一致し、大きいほど前半が急で尾が長い。
+DIVE_CLOUD_Y_END = 25      # 高度が Y_LOW に着く点（idx25 = 75s）。69〜75s は見下ろしたまま降り続ける
+DIVE_TAIL_POWER = 4.0
+
+# 縁を越えた直後の点（idx40, Z≈2565 は縁の先の空中）の高度。
+# 縁（Z≈2520〜2538）を越えるまでカメラを Y_LOW 付近に保ち、越えてから滝と一緒に落とす。
+CANYON_LIP_Y = 0.0
 
 SPACING_SKY = 70.0         # 水平間隔[m]/点
 SPACING_DIVE = 40.0        # 降下中は水平を詰める（3D距離が伸びすぎないように）
@@ -82,10 +93,20 @@ def smoothstep(a, b, x):
     return t * t * (3.0 - 2.0 * t)
 
 
+def dive_tail(a, b, x, p):
+    """x を [a,b] で 0→1 に写す。入りはなめらか、後半は反比例のように緩やかに 1 へ近づく。"""
+    if b <= a:
+        return 0.0 if x < a else 1.0
+    u = min(max((x - a) / (b - a), 0.0), 1.0)
+    return 1.0 - (1.0 - u) ** p * (1.0 + p * u)
+
+
 def altitude(idx):
-    """インデックス→高度。2 回の降下を smoothstep で繋ぐ。"""
+    """インデックス→高度。雲抜けは尾を引く形、谷への落下は smoothstep で繋ぐ。"""
+    if idx == DIVE_CANYON[0] + 1:
+        return CANYON_LIP_Y
     y = Y_SKY
-    y += (Y_LOW - Y_SKY) * smoothstep(DIVE_CLOUD[0], DIVE_CLOUD[1], idx)
+    y += (Y_LOW - Y_SKY) * dive_tail(DIVE_CLOUD[0], DIVE_CLOUD_Y_END, idx, DIVE_TAIL_POWER)
     y += (Y_CANYON - Y_LOW) * smoothstep(DIVE_CANYON[0], DIVE_CANYON[1], idx)
     return y
 

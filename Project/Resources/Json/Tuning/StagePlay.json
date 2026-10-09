@@ -22,6 +22,22 @@
   "camera": {
     "speed": 0.0055555556900799274,
     "rotKeys": [],
+    "waterClamp": {
+      "enabled": true,
+      "startSec": 60,
+      "endSec": 119,
+      "surfaceY": 0,
+      "cameraMinY": 2,
+      "cameraSoftness": 0.5,
+      "playerMargin": 0.3
+    },
+    "lowPitch": {
+      "enabled": true,
+      "deg": 5,
+      "startSec": 72,
+      "endSec": 119,
+      "fadeSec": 3
+    },
     "nearClip": 0.5,
     "farClip": 5000
   },

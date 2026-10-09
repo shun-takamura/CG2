@@ -83,6 +83,8 @@ cbuffer WaterParams : register(b0)
     float  gRiverMinCos;         // 水の中を通る長さの角度補正の下限
     float  gRiverShoreFade;      // 水際で反射ごと消えていく幅 [m]
     float  gReflectionRtWeight;  // 反射 RT（映す物）の重み。0 で空だけ
+    float  gReflectionDistance;  // > 0 なら反射 RT も波で傾いた反射の向きで引く（映る物までの想定距離 [m]）。0 で従来
+    float3 gPadding6;
 };
 
 struct DirectionalLight
@@ -382,6 +384,18 @@ PixelShaderOutput main(WaterVertexOutput input)
         const bool inView = clip.w > 0.0f && all(reflectionUv >= 0.0f) && all(reflectionUv <= 1.0f);
         if (inView)
         {
+            if (gReflectionDistance > 0.0f)
+            {
+                // 空と同じく、波で傾いた反射の向きで引く（UV を少しずらすだけだと、空は大きく揺れるのに映る物はほぼ揺れない）。
+                // 反射の向きの鏡像（Y を反転）へ想定距離だけ進んだ点を投影すると、反射 RT 上の位置になる。
+                // 波が無ければ鏡像の向き = 視線の向きなので、水面の点と同じ位置になる
+                const float3 r = reflect(viewDir, normal);
+                const float4 q = mul(float4(input.worldPosition + float3(r.x, -r.y, r.z) * gReflectionDistance, 1.0f), gReflectionViewProj);
+                if (q.w > 0.0f)
+                {
+                    reflectionUv = q.xy / q.w * float2(0.5f, -0.5f) + 0.5f;
+                }
+            }
             reflectionUv += normal.xz * gDistortion;
             // 反射 RT は乗算済み α（rgb は α 込み）。不透明の物は a=1、加算のエフェクトは a を増やさず rgb だけ足される
             const float4 mirrored = gReflectionTexture.Sample(gClampSampler, reflectionUv) * gReflectionRtWeight;

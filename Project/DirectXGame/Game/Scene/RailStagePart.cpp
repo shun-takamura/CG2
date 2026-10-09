@@ -18,6 +18,7 @@
 #include "Spline/SplineCurveActor.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -194,6 +195,7 @@ bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, 
 #endif
 			railAim_->Apply(camera_, eye);
 		} else {
+			ApplyWaterClampToCamera();
 			railCamera_->Update(scaledDt);
 		}
 	}
@@ -343,6 +345,7 @@ void RailStagePart::Seek(float seconds) {
 		t = std::clamp(t, 0.0f, 1.0f);
 		railCamera_->SetProgress(t);
 		// Seek 結果を即カメラに反映（dt=0 で Update）
+		ApplyWaterClampToCamera();
 		railCamera_->Update(0.0f);
 		if (camera_) camera_->Update();
 	}
@@ -464,9 +467,51 @@ float RailStagePart::GetStageSeconds() const {
 	return (railCameraSpeed_ > 1e-8f) ? (t / railCameraSpeed_) : 0.0f;
 }
 
+void RailStagePart::ApplyWaterClampToCamera() {
+	if (!railCamera_) return;
+	const WaterClamp& w = waterClamp_;
+	railCamera_->SetMinYWindow(w.enabled, w.cameraMinY,
+		w.startSec * railCameraSpeed_, w.endSec * railCameraSpeed_, w.cameraSoftness);
+
+	const LowPitch& lp = lowPitch_;
+	railCamera_->SetPitchBiasWindow(lp.enabled ? lp.deg * (3.14159265f / 180.0f) : 0.0f,
+		lp.startSec * railCameraSpeed_, lp.endSec * railCameraSpeed_, lp.fadeSec * railCameraSpeed_);
+}
+
+float RailStagePart::GetPlayerFloorY() const {
+	const WaterClamp& w = waterClamp_;
+	if (!w.enabled) return -FLT_MAX;
+	const float sec = GetStageSeconds();
+	if (sec < w.startSec || sec > w.endSec) return -FLT_MAX;
+	return w.surfaceY + w.playerMargin;
+}
+
 void RailStagePart::LoadFromJson(const JsonValue& root) {
 	railCameraSpeed_ = static_cast<float>(
 		root["camera"]["speed"].AsDouble(railCameraSpeed_));
+
+	{
+		const JsonValue& wc = root["camera"]["waterClamp"];
+		if (wc.IsObject()) {
+			WaterClamp& w = waterClamp_;
+			w.enabled        = wc["enabled"].AsBool(w.enabled);
+			w.startSec       = static_cast<float>(wc["startSec"].AsDouble(w.startSec));
+			w.endSec         = static_cast<float>(wc["endSec"].AsDouble(w.endSec));
+			w.surfaceY       = static_cast<float>(wc["surfaceY"].AsDouble(w.surfaceY));
+			w.cameraMinY     = static_cast<float>(wc["cameraMinY"].AsDouble(w.cameraMinY));
+			w.cameraSoftness = static_cast<float>(wc["cameraSoftness"].AsDouble(w.cameraSoftness));
+			w.playerMargin   = static_cast<float>(wc["playerMargin"].AsDouble(w.playerMargin));
+		}
+		const JsonValue& lpj = root["camera"]["lowPitch"];
+		if (lpj.IsObject()) {
+			LowPitch& lp = lowPitch_;
+			lp.enabled  = lpj["enabled"].AsBool(lp.enabled);
+			lp.deg      = static_cast<float>(lpj["deg"].AsDouble(lp.deg));
+			lp.startSec = static_cast<float>(lpj["startSec"].AsDouble(lp.startSec));
+			lp.endSec   = static_cast<float>(lpj["endSec"].AsDouble(lp.endSec));
+			lp.fadeSec  = static_cast<float>(lpj["fadeSec"].AsDouble(lp.fadeSec));
+		}
+	}
 	{
 		// レールカメラ向きキーの復元
 		const JsonValue& keys = root["camera"]["rotKeys"];
@@ -540,6 +585,27 @@ void RailStagePart::SaveToJson(JsonValue& root) const {
 			keysArr.Push(std::move(keyObj));
 		}
 		camObj["rotKeys"] = std::move(keysArr);
+	}
+	{
+		const WaterClamp& w = waterClamp_;
+		JsonValue wc = JsonValue::MakeObject();
+		wc["enabled"]        = w.enabled;
+		wc["startSec"]       = static_cast<double>(w.startSec);
+		wc["endSec"]         = static_cast<double>(w.endSec);
+		wc["surfaceY"]       = static_cast<double>(w.surfaceY);
+		wc["cameraMinY"]     = static_cast<double>(w.cameraMinY);
+		wc["cameraSoftness"] = static_cast<double>(w.cameraSoftness);
+		wc["playerMargin"]   = static_cast<double>(w.playerMargin);
+		camObj["waterClamp"] = std::move(wc);
+
+		const LowPitch& lp = lowPitch_;
+		JsonValue lpj = JsonValue::MakeObject();
+		lpj["enabled"]  = lp.enabled;
+		lpj["deg"]      = static_cast<double>(lp.deg);
+		lpj["startSec"] = static_cast<double>(lp.startSec);
+		lpj["endSec"]   = static_cast<double>(lp.endSec);
+		lpj["fadeSec"]  = static_cast<double>(lp.fadeSec);
+		camObj["lowPitch"] = std::move(lpj);
 	}
 	root["camera"] = std::move(camObj);
 }
@@ -619,6 +685,39 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 		if (ImGui::IsItemDeactivatedAfterEdit()) {
 			changed = true;
 			if (railCamera_) railCamera_->SetSpeed(railCameraSpeed_);
+		}
+
+		ImGui::SeparatorText("Water Clamp（水面より下に入れない）");
+		{
+			WaterClamp& w = waterClamp_;
+			ImGui::Checkbox("Enabled##wc", &w.enabled);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloatRange2("Window (s)##wc", &w.startSec, &w.endSec, 0.5f, 0.0f, 300.0f, "%.1f", "%.1f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Surface Y##wc", &w.surfaceY, 0.05f);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Camera Min Y##wc", &w.cameraMinY, 0.05f);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Camera Softness##wc", &w.cameraSoftness, 0.01f, 0.01f, 10.0f);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Player Margin##wc", &w.playerMargin, 0.01f, 0.0f, 10.0f);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			const float floorY = GetPlayerFloorY();
+			if (floorY > -FLT_MAX) ImGui::Text("Player floor Y: %.2f（窓の中）", floorY);
+			else                   ImGui::TextDisabled("Player floor: なし（窓の外）");
+		}
+
+		ImGui::SeparatorText("Low Pitch（低空で見下ろす。rotKeys が空の時だけ）");
+		{
+			LowPitch& lp = lowPitch_;
+			ImGui::Checkbox("Enabled##lp", &lp.enabled);
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Pitch Down (deg)##lp", &lp.deg, 0.1f, -10.0f, 15.0f, "%.1f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloatRange2("Window (s)##lp", &lp.startSec, &lp.endSec, 0.5f, 0.0f, 300.0f, "%.1f", "%.1f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+			ImGui::DragFloat("Fade (s)##lp", &lp.fadeSec, 0.1f, 0.0f, 20.0f, "%.1f");
+			if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		}
 
 		ImGui::SeparatorText("Authoring（向きキー作成）");

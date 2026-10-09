@@ -3,15 +3,15 @@
   "seed": 20261008,
   "extent": {
     "x_min": -1000.0,
-    "x_max": 1000.0,
+    "x_max": 1300.0,
     "z_min": 900.0,
-    "z_max": 2600.0
+    "z_max": 4000.0
   },
   "cell_m": 2.0,
   "river": {
     "rail_index_range": [
       11,
-      42
+      39
     ],
     "half_width_min": 100.0,
     "half_width_max": 240.0,
@@ -23,7 +23,14 @@
     "edge_noise_amp": 80.0,
     "edge_noise_wavelength": 200.0,
     "guard": 110.0,
-    "guard_smooth": 30.0
+    "guard_smooth": 30.0,
+    "tail_extend": 100.0,
+    "taper": {
+      "z_start": 2200.0,
+      "z_end": 2470.0,
+      "half_width": 112.0,
+      "noise_cut": 0.85
+    }
   },
   "bank": {
     "height_min": 1.0,
@@ -66,14 +73,28 @@
   },
   "mounds": [
     {
-      "z_min": 2100.0,
-      "z_max": 2500.0,
-      "z_fade": 150.0,
+      "z_min": 1950.0,
+      "z_max": 2350.0,
+      "z_fade": 220.0,
       "height": 110.0,
       "start": 40.0,
       "ramp": 200.0,
       "wavelength": 320.0,
-      "variation": 0.5
+      "variation": 0.5,
+      "side": "right",
+      "z_wobble": 120.0
+    },
+    {
+      "z_min": 1900.0,
+      "z_max": 2300.0,
+      "z_fade": 200.0,
+      "height": 90.0,
+      "start": 40.0,
+      "ramp": 200.0,
+      "wavelength": 320.0,
+      "variation": 0.5,
+      "side": "left",
+      "z_wobble": 120.0
     }
   ],
   "splat": {
@@ -98,6 +119,69 @@
     "crack_depth": 0.6
   },
   "cliff": {
+    "enabled": true,
+    "river_ends": true
+  },
+  "plateau": {
+    "enabled": true,
+    "z_start": 2500.0,
+    "blend": 200.0,
+    "rise": 60.0,
+    "rise_z": [
+      2650.0,
+      3400.0
+    ],
+    "amp": 10.0,
+    "wavelength": 260.0,
+    "z_wobble": 110.0
+  },
+  "peaks": [
+    {
+      "x": 20.0,
+      "z": 2340.0,
+      "radius": 240.0,
+      "height": 200.0,
+      "warp": 0.25
+    },
+    {
+      "x": -150.0,
+      "z": 2290.0,
+      "radius": 200.0,
+      "height": 115.0,
+      "warp": 0.3
+    },
+    {
+      "x": 110.0,
+      "z": 2460.0,
+      "radius": 170.0,
+      "height": 140.0,
+      "warp": 0.3
+    }
+  ],
+  "canyon": {
     "enabled": true
-  }
+  },
+  "coast": {
+    "enabled": true
+  },
+  "chunks": [
+    {
+      "name": "RiverTerrain",
+      "x_min": -1000.0,
+      "x_max": 1000.0,
+      "z_min": 900.0,
+      "z_max": 2600.0,
+      "streamGroup": "LowAltitude",
+      "river_map": true,
+      "shore": true
+    },
+    {
+      "name": "CanyonTerrain",
+      "x_min": -700.0,
+      "x_max": 1300.0,
+      "z_min": 2600.0,
+      "z_max": 4000.0,
+      "streamGroup": "Plateau"
+    }
+  ]
 }
