@@ -51,6 +51,8 @@ namespace {
 	constexpr EntityTag kDefaultReflectTags[] = {
 		EntityTag::Terrain, EntityTag::Player, EntityTag::Enemy, EntityTag::Boss,
 	};
+	// 反射 RT を波で傾いた反射の向きで引くときの、映る物までの想定距離 [m]（低空から山まで 300〜500m）
+	constexpr float kDefaultReflectionDistance = 300.0f;
 }
 
 RiverWater::RiverWater() = default;
@@ -73,6 +75,8 @@ void RiverWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3
 	water_->SetSize((std::max)(loaded_.xMax - loaded_.xMin, loaded_.zMax - loaded_.zMin));
 
 	for (EntityTag t : kDefaultReflectTags) reflectTags_[static_cast<int>(t)] = true;
+	// 映った山・地形も空と同じ揺れ方にする（13 番 §4.6）。タイトルの水面は 0 のまま
+	water_->GetParams().reflectionDistance = kDefaultReflectionDistance;
 	LoadTuning();
 
 	// 反射 RT の解像度は作る時に決まるので、調整値を読んでから作る
@@ -261,6 +265,7 @@ void RiverWater::LoadTuning() {
 	p.noiseScale = ReadFloat(surface, "noiseScale", p.noiseScale);
 	p.noiseSpeed = ReadFloat(surface, "noiseSpeed", p.noiseSpeed);
 	p.distortion = ReadFloat(surface, "distortion", p.distortion);
+	p.reflectionDistance = ReadFloat(surface, "reflectionDistance", p.reflectionDistance);
 
 	const JsonValue& refl = root["reflection"];
 	reflectionScale_ = ReadFloat(refl, "resolutionScale", reflectionScale_);
@@ -301,6 +306,7 @@ void RiverWater::SaveTuning() const {
 	surface["noiseScale"] = static_cast<double>(p.noiseScale);
 	surface["noiseSpeed"] = static_cast<double>(p.noiseSpeed);
 	surface["distortion"] = static_cast<double>(p.distortion);
+	surface["reflectionDistance"] = static_cast<double>(p.reflectionDistance);
 	root["surface"] = std::move(surface);
 
 	JsonValue refl = JsonValue::MakeObject();

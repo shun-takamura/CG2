@@ -33,6 +33,18 @@ public:
 	void SetLoop(bool loop)             { loop_ = loop; }
 	void SetPaused(bool paused)         { paused_ = paused; }
 
+	// 進行度 [tStart, tEnd] の間だけ、カメラの Y を minY より下げない（水面に潜らない保険）。
+	// softness[m] の幅でなめらかに押し上げる（折れ目を出さない）。
+	void SetMinYWindow(bool enabled, float minY, float tStart, float tEnd, float softness) {
+		minYEnabled_ = enabled; minY_ = minY; minYStartT_ = tStart; minYEndT_ = tEnd; minYSoftness_ = softness;
+	}
+
+	// 回転キーが無い時（接線を向く時）だけ、進行度 [tStart, tEnd] の間ピッチを pitchRad 足す（+ で見下ろす）。
+	// 窓の内側 fadeT の幅で smoothstep で入る／抜ける。
+	void SetPitchBiasWindow(float pitchRad, float tStart, float tEnd, float fadeT) {
+		pitchBias_ = pitchRad; pitchStartT_ = tStart; pitchEndT_ = tEnd; pitchFadeT_ = fadeT;
+	}
+
 	float GetProgress() const { return progress_; }
 	bool  IsFinished() const  { return !loop_ && progress_ >= 1.0f; }
 
@@ -47,4 +59,15 @@ private:
 	float speed_    = 0.1f;
 	bool  loop_     = false;
 	bool  paused_   = false;
+
+	bool  minYEnabled_  = false;
+	float minY_         = 0.0f;
+	float minYStartT_   = 0.0f;
+	float minYEndT_     = 0.0f;
+	float minYSoftness_ = 1.0f;
+
+	float pitchBias_   = 0.0f;
+	float pitchStartT_ = 0.0f;
+	float pitchEndT_   = 0.0f;
+	float pitchFadeT_  = 0.0f;
 };

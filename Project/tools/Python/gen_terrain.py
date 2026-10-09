@@ -11,7 +11,9 @@
     - 高さは「川の断面（川底 → 岸の斜面 → 草原）」＋「外側の丘（fBm）」の足し算。
       川底は bed_y で止める（深さの色は川のマップが持つ。12 番 §2.3）。
     - 谷にも流用できるよう、形のパラメータはすべてレシピ JSON に出す（12 番 §6）。
-      崖・滝の口・滝の手前の丘は Step 4 で足す。
+    - 2026-10-09（12 番 §8 Step 7）：蛇行の内側の大きい山（peaks）、縁の向こうの台地（plateau）、
+      谷のレールに沿った峡谷（canyon）、海岸（coast）。高さは extent 全体で 1 枚として計算し、
+      chunks で複数のメッシュ（streamGroup 別）に切り分ける。
 
 使い方（Project/ で実行）:
     python tools/Python/gen_terrain.py --recipe tools/Python/recipes/river_terrain.json
@@ -21,7 +23,10 @@
       --scene  : StagePlay.json の <name> エントリだけを書き換える（無ければ足す）
       --river-map: 川のマップ（L3 の水面用）と共通の .json を書き、cook する
       --shore  : 左右の岸の線（L6 の岩配置・L10 の茂み用）を書く
+      --visibility: 見通しチェック。実機と同じ視野で、後から読む塊・谷の中が画面に映る割合を秒ごとに出す
       --no-cook: --gltf / --river-map でも cook を走らせない
+  chunks があると --gltf / --scene は塊ごと（<塊の名前>.mesh など）、--river-map / --shore は river_map / shore が
+  true の塊だけで書く。以下の <name> は塊の名前（Generated/ の確認用の出力だけはレシピの name）。
 
 出力（Generated/ は .gitignore 済み。Assets/ に置くと cook が BC7_SRGB で上書きするので置かない）:
     Generated/Terrain/<name>/<name>_Height.npy      float32 の高さ [m]（後段のメッシュ化用）
@@ -45,7 +50,9 @@
     Resources/Json/Terrain/<name>.json   ワールド XZ ↔ UV の対応・maxDepth・maxFlowSpeed（ゲームが読む。スプラットマップと共有）
     Generated/Terrain/<name>/<name>_RiverMapPreview.png   水深の色＋流れの矢印
 --shore の出力:
-    Resources/Json/Terrain/<name>_Shore.json   左右の岸（水際 = 高さ 0 の線）のポリライン [[x, z], ...]（Z の昇順）
+    Resources/Json/Terrain/<name>_Shore.json   左右の岸（水際 = 高さ 0 の線）のポリライン [[x, z], ...]（下流へ向かう順）
+--visibility の出力:
+    Generated/Terrain/<name>/<name>_Vis_<秒>s.png   実機の視野の簡易レンダ（マゼンタ = 後から読む塊、黄 = 谷の中）
 """
 
 from __future__ import annotations
@@ -83,6 +90,10 @@ DEFAULT_RECIPE: dict = {
         "bed_y": -3.0,
         "shore_in": 30.0,             # 川の縁から内側へ、川底に着くまでの距離 [m]
         "shore_out": 25.0,            # 川の縁から外側へ、草原の高さに着くまでの距離 [m]
+        "head_extend": 1500.0,        # 中心線の始まりを接線方向に延ばす長さ [m]（範囲の端で縁が丸まらないように）
+        "tail_extend": 1500.0,        # 中心線の終わりを延ばす長さ [m]。滝で終わる川は縁に届く分だけ
+        # 滝の手前で川を絞る（滝の幅 ≈ 谷の幅。11 番 §1-E の絵2）。half_width = 0 で無効
+        "taper": {"z_start": 0.0, "z_end": 0.0, "half_width": 0.0, "noise_cut": 0.8},
     },
     "bank": {"height_min": 0.0, "height_max": 3.0, "wavelength": 180.0},
     "hills": {
@@ -113,8 +124,24 @@ DEFAULT_RECIPE: dict = {
     },
     # 陸の上全体の細かい起伏（つるっとした輪郭を崩す）
     "detail": {"amp": 0.0, "wavelength": 70.0, "octaves": 3, "start": 15.0, "ramp": 60.0},
-    # 決まった範囲に盛る丘（滝の手前の視線を切る丘など）。両岸に同じ設定で盛る
+    # 決まった範囲に盛る丘（滝の手前の視線を切る丘など）。side で片岸だけにもできる
     "mounds": [],
+    # 縁の向こうの台地（11 番 §1-F）。z_start から blend で川沿いの丘と入れ替え、奥へ向かって rise まで上る。
+    # 上っていくので、低空（Y≈3.5）からも谷の切れ目と左右の草原が見える
+    "plateau": {
+        "enabled": False,
+        "z_start": 2450.0,
+        "blend": 220.0,
+        "z_wobble": 0.0,                # z_start を列ごとに ± これだけ揺らす [m]
+        "z_wobble_wavelength": 300.0,
+        "rise": 0.0,                    # 奥での高さ [m]
+        "rise_z": [2700.0, 3450.0],     # この Z の範囲で 0 → rise へ上る
+        "amp": 10.0,                    # なだらかな起伏の高さ [m]
+        "wavelength": 260.0,
+    },
+    # 大きい山（蛇行の内側。11 番 §3.0「低空の蛇行と山」・ユーザーの参考画像 5 枚目）。
+    # 裾は緩い草の斜面、上は縦の溝の入った急な岩肌。川の側は川が削った崖になる
+    "peaks": [],
     # 台地の縁の崖（滝）。縁より先は谷底まで落とす。谷の中の細部は谷の担当（12 番 §0）
     "cliff": {
         "enabled": False,
@@ -125,8 +152,36 @@ DEFAULT_RECIPE: dict = {
         "face_jitter": 5.0,             # 崖面を高さ方向にも前後させる量 [m]（平らな壁に見せない）
         "floor_y": -150.0,              # 谷底（§3.0）
         "notch": 15.0,                  # 川の所だけ縁を奥へ切り込ませる量 [m]（滝の口）
+        "river_ends": False,            # 川を縁で終わらせる（縁の先は台地。峡谷と組み合わせる）
         "rail_clear_x": 60.0,           # レールからこの横の距離 [m] 以内は縁を rail_max_z までに収める
         "rail_max_z": 2525.0,           # §2.3：レールが通る所は縁を Z ≤ 2540（idx40 は Z=2565・Y=−10 で台地より下を通る）
+    },
+    # 縁の先の峡谷（谷のレールに沿った溝）。無効なら縁の先は全幅で谷底（旧来の形）。
+    # 谷の中の細部（岩柱・障害物・当たり判定）は谷の担当。谷のレールを変えたらこのスクリプトを流し直す
+    "canyon": {
+        "enabled": False,
+        "rail_index_range": [39, 59],
+        "tail_extend": 900.0,           # 谷のレールの終わりを海まで延ばす [m]
+        "half_width": 130.0,            # 上の半幅 [m]（仮。谷の担当が決める）
+        "half_width_amp": 15.0,         # 左右別の 1D ノイズで揺らす量
+        "half_width_wavelength": 180.0,
+        "wall_noise_amp": 10.0,         # 壁の線のギザギザ（尾根ノイズ）
+        "wall_noise_wavelength": 60.0,
+        "floor_ratio": 0.55,            # 谷底の半幅 = 上の半幅 × これ
+        "step": 16.0,                   # 壁の段（石を積んだような段）の高さ [m]
+        "riser": 0.45,                  # 1 段のうち切り立つ部分の割合
+        "step_jitter": 0.6,
+    },
+    # 海岸（谷の出口の先）。台地は海食崖で海へ落ちる。海の水面は L3／ボス戦の担当（ここは地形だけ）
+    "coast": {
+        "enabled": False,
+        "sea_y": -150.0,                # 海面（11 番 §3.0：谷底と同じ）
+        "z": 3620.0,                    # 海岸線の基準の Z [m]
+        "amp": 90.0,
+        "wavelength": 420.0,
+        "width": 70.0,                  # 崖の上から海底まで落ちる水平の幅 [m]
+        "sea_floor_y": -178.0,
+        "floor_slope": 0.04,            # 沖へ向かって深くなる勾配
     },
     # 岩の所（スプラットの岩）に盛る塊の凹凸。網より細かい形は無いので、影が落ちる凹凸はここで作る
     "rocks": {
@@ -186,6 +241,43 @@ DEFAULT_RECIPE: dict = {
         "accel_length": 600.0,        # 滝の口の手前、この距離で加速する [m]
         "bank_slow": 40.0,            # 水際からこの距離 [m] までは遅くする
     },
+    # 出力するメッシュの分け方。高さは extent 全体で 1 枚として計算し、ここで切り分ける（境目の行は共有するので隙間は出ない）。
+    # 空なら extent 全体を name の 1 枚にする。river_map / shore はその塊だけで書く
+    # 例: {"name": "RiverTerrain", "x_min": .., "x_max": .., "z_min": .., "z_max": .., "streamGroup": "LowAltitude",
+    #      "river_map": true, "shore": true}
+    "chunks": [],
+    # 見通しチェック（--visibility）：実機と同じ視野で、hide_z より奥（後から読む塊）が画面に映る割合を秒ごとに出す
+    "visibility": {
+        "t_from": 72.0,
+        "t_to": 117.0,
+        "hide_z": 2600.0,
+        "interior_z": 2540.0,           # 谷の中の判定：縁より奥で
+        "interior_y": -10.0,            #   この高さより下（11 番 §3.0「谷の物の高さの上限」）
+        "fov_y": 0.45,                  # カメラの FovY [rad]
+        "aspect": 16.0 / 9.0,
+        "pitch_bias_deg": -5.0,         # camera.lowPitch（11 番 §5.3）
+        "pitch_window": [72.0, 119.0],
+        "width": 240,
+        "snap_secs": [87, 90, 93, 96, 100, 103, 105, 106, 108, 111, 114],
+    },
+}
+
+PEAK_DEFAULT: dict = {
+    "x": 0.0, "z": 0.0,           # 山の中心 [m]
+    "radius": 250.0,              # 裾の半径 [m]
+    "height": 200.0,
+    "foot": 0.15,                 # 裾（草の斜面）の高さの割合
+    "foot_r": [0.70, 1.0],        # 裾が立ち上がる半径の範囲（radius に対する割合）
+    "core_r": [0.25, 0.62],       # 岩の本体が立ち上がる範囲
+    "warp": 0.18,                 # 輪郭を歪ませる量（円く見せない）
+    "warp_wavelength": 220.0,
+    "flute": 0.35,                # 縦の溝（柱状の岩肌）の深さの割合
+    "flute_wavelength": 22.0,     # 溝の間隔 [m]
+    "crag": 0.25,                 # 頂上付近のギザギザ
+    "crag_wavelength": 70.0,
+    "river_start": 5.0,           # 川の縁からこの距離で立ち上がる [m]（川の側は削られた崖になる）
+    "river_ramp": 60.0,
+    "rock_r": 0.66,               # この半径より内側は岩の塗り（裾は草。木は L10）
 }
 
 MOUND_DEFAULT: dict = {
@@ -196,23 +288,25 @@ MOUND_DEFAULT: dict = {
     "ramp": 200.0,
     "wavelength": 320.0,          # 高さの揺れ（峰と鞍部）の波長
     "variation": 0.5,             # 高さの揺れの強さ（0 = 一様な壁）
+    "side": "both",               # "both" / "left" / "right"（下流を向いて）
+    "z_wobble": 0.0,              # z_min / z_max を列ごとに ± これだけ揺らす [m]
+    "z_wobble_wavelength": 300.0,
 }
 
 SCENE_PATH = "Resources/Json/Scenes/StagePlay.json"
 TERRAIN_JSON_DIR = "Resources/Json/Terrain"
 STREAM_GROUP = "LowAltitude"
 CATMULL_SUBDIV = 16        # レール 1 区間あたりの分割数
-CENTERLINE_EXTEND = 1500.0  # 中心線の両端を接線方向に延ばす長さ [m]（範囲の端で縁が丸まらないように）
-PREVIEW_SCALE = 2
+PREVIEW_SCALE = 1
 SUN_TOWARD = (-0.191, 0.815, -0.547)   # 太陽へ向かう向き（タイトルの空・StagePlay の sections と同じ）
 
-# 確認用の視点：(名前, レールの制御点, 高さの上書き[m] or None, yaw[deg, +X 側が正], 見下ろし[deg])
+# 確認用の視点（広角の見渡し図）：(名前, レールの制御点, 高さの上書き[m] or None, yaw[deg, +X 側が正。None = レールの向き], 見下ろし[deg])
 VIEWS = [
-    ("Dive_idx20", 20, None, 0.0, 35.0),     # 降下の途中（Y=470）。地形の端の見え方
-    ("Low_idx31", 31, None, 0.0, 4.0),      # 低空（Y=40）から滝の手前の丘を見る
-    ("Low_idx31_y10", 31, 10.0, 0.0, 2.0),  # L4 で高度を下げた後の想定
-    ("Low_idx27_right", 27, None, 40.0, 6.0),
-    ("Falls_idx37", 37, None, 0.0, 8.0),     # 滝の手前から縁を見る
+    ("Dive_idx20", 20, None, 0.0, 35.0),        # 降下の途中（Y=345）。地形の端の見え方
+    ("Low_idx26", 26, 30.0, None, 6.0),         # 低空の前半（少し上から）
+    ("Meander_idx30", 30, 30.0, None, 2.0),     # 11 番 §1-E 絵1：山が正面
+    ("Falls_idx36", 36, 30.0, None, 2.0),       # 絵2：曲がり終えて縁と谷
+    ("Canyon_idx44", 44, None, None, 5.0),      # 谷の中
 ]
 
 
@@ -320,14 +414,35 @@ def catmull_rom_xz(points: list[list[float]], subdiv: int) -> np.ndarray:
     return np.array(out)
 
 
-def build_centerline(rail_points, idx_range) -> np.ndarray:
+def build_centerline(rail_points, idx_range, head_extend: float, tail_extend: float) -> np.ndarray:
     a, b = idx_range
     line = catmull_rom_xz(rail_points[a:b + 1], CATMULL_SUBDIV)
-    d0 = line[0] - line[1]
-    d1 = line[-1] - line[-2]
-    head = line[0] + d0 / np.linalg.norm(d0) * CENTERLINE_EXTEND
-    tail = line[-1] + d1 / np.linalg.norm(d1) * CENTERLINE_EXTEND
-    return np.vstack([head, line, tail])
+    parts = [line]
+    if head_extend > 0.0:
+        d0 = line[0] - line[1]
+        parts.insert(0, (line[0] + d0 / np.linalg.norm(d0) * head_extend)[None, :])
+    if tail_extend > 0.0:
+        d1 = line[-1] - line[-2]
+        parts.append((line[-1] + d1 / np.linalg.norm(d1) * tail_extend)[None, :])
+    return np.vstack(parts)
+
+
+def rail_sample(rail, s: float) -> np.ndarray:
+    """制御点の番号 s（小数）でのレールの位置。SplineCurveActor と同じ Catmull-Rom（端はクランプ）"""
+    n = len(rail)
+    seg = min(max(int(math.floor(s)), 0), n - 2)
+    t = min(max(s - seg, 0.0), 1.0)
+    p0, p1 = np.array(rail[max(seg - 1, 0)]), np.array(rail[seg])
+    p2, p3 = np.array(rail[seg + 1]), np.array(rail[min(seg + 2, n - 1)])
+    return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                  + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+
+
+def rail_forward(rail, s: float) -> np.ndarray:
+    a = rail_sample(rail, max(s - 0.02, 0.0))
+    b = rail_sample(rail, min(s + 0.02, len(rail) - 1.0))
+    d = b - a
+    return d / max(np.linalg.norm(d), 1e-9)
 
 
 def signed_distance(px: np.ndarray, pz: np.ndarray, line: np.ndarray, chunk: int = 16384):
@@ -360,6 +475,47 @@ def signed_distance(px: np.ndarray, pz: np.ndarray, line: np.ndarray, chunk: int
 
 # ---------------------------------------------------------------- 高さ
 
+def cliff_edge_line(xs: np.ndarray, line: np.ndarray, cl: dict, crng: np.random.Generator) -> np.ndarray:
+    """台地の縁の線（列ごとの Z）。尾根ノイズで尖ったギザギザ。レールの周りは手前に収める"""
+    rid = np.zeros_like(xs)
+    amp_sum, wl = 0.0, cl["wavelength"]
+    for o in range(4):
+        v = value_noise_1d(xs, wl, crng)
+        rid += (1.0 - np.abs(2.0 * v - 1.0)) ** 2 * (0.5 ** o)
+        amp_sum += 0.5 ** o
+        wl *= 0.5
+    rid = (rid / amp_sum - 0.5) * 2.0
+    z_edge = cl["z"] + cl["amp"] * rid
+    # 中心線の X は縁の Z で引く
+    rail_x = float(np.interp(cl["z"], line[:, 1], line[:, 0]))
+    near = 1.0 - smoothstep(cl["rail_clear_x"], cl["rail_clear_x"] + 40.0, np.abs(xs - rail_x))
+    return z_edge + (np.minimum(z_edge, cl["rail_max_z"]) - z_edge) * near
+
+
+def build_peak(px: np.ndarray, pz: np.ndarray, edge: np.ndarray, pk: dict, rng: np.random.Generator):
+    """大きい山の高さ [m] と岩の塗りの重みを返す。裾は緩い草の斜面、本体は縦の溝の入った岩"""
+    dx, dz = px - pk["x"], pz - pk["z"]
+    dist = np.sqrt(dx * dx + dz * dz)
+    warp = normalize_signed(fbm_2d(px, pz, pk["warp_wavelength"], 3, 0.5, 2.0, rng))
+    r = dist / (pk["radius"] * (1.0 + pk["warp"] * warp))
+    core = 1.0 - smoothstep(pk["core_r"][0], pk["core_r"][1], r)
+    foot = 1.0 - smoothstep(pk["foot_r"][0], pk["foot_r"][1], r)
+    # 縦の溝：中心からの角度方向に細かく、半径方向に長い尾根ノイズ（参考画像の柱状の岩肌）。
+    # 角度の継ぎ目（±π）は山の裏（+Z 側）に向ける
+    # 角度はノイズで曲げる（まっすぐな放射線だと真上から星形に見える）。山頂付近は溝を弱める
+    bend = normalize_signed(fbm_2d(px, pz, 90.0, 3, 0.5, 2.0, rng)) * pk["flute_wavelength"] * 2.5
+    arc = np.arctan2(-dx, -dz) * pk["radius"] + bend
+    n = value_noise_2d(arc, dist * 0.12, pk["flute_wavelength"], rng)
+    flute = (1.0 - np.abs(2.0 * n - 1.0)) ** 2
+    flute = 1.0 + (flute - 1.0) * smoothstep(0.12, 0.4, r)
+    crag = ridged_2d(px, pz, pk["crag_wavelength"], 3, rng)
+    body = core * (1.0 - pk["flute"] + pk["flute"] * flute) * (1.0 - pk["crag"] + pk["crag"] * crag)
+    river = smoothstep(pk["river_start"], pk["river_start"] + pk["river_ramp"], edge)
+    height = pk["height"] * (pk["foot"] * foot + (1.0 - pk["foot"]) * body) * river
+    rock = (1.0 - smoothstep(pk["rock_r"] - 0.04, pk["rock_r"] + 0.04, r)) * smoothstep(0.3, 0.6, river)
+    return height, rock
+
+
 def build_height(recipe: dict):
     ext = recipe["extent"]
     cell = float(recipe["cell_m"])
@@ -372,14 +528,22 @@ def build_height(recipe: dict):
     rng = np.random.default_rng(recipe["seed"])
     rail = gen_rail_path.build_points()
     rv = recipe["river"]
-    line = build_centerline(rail, rv["rail_index_range"])
+    line = build_centerline(rail, rv["rail_index_range"], rv["head_extend"], rv["tail_extend"])
     sd, tangent = signed_distance(px, pz, line)
+
+    cl = recipe["cliff"]
+    crng = np.random.default_rng(int(recipe["seed"]) + 41)
+    z_edge = cliff_edge_line(xs, line, cl, crng) if cl["enabled"] else None
 
     # 半幅は「その点の Z」で引く。最寄り点の弧長で引くと、川から遠い所で最寄り点が別の曲がりへ
     # 飛んで段差（横筋）が出る。レールは Z に単調なので Z で十分。左右の岸は別のノイズ。
+    tp = rv["taper"]
+    taper = smoothstep(tp["z_start"], tp["z_end"], pz) if tp["half_width"] > 0.0 else np.zeros_like(pz)
+
     def side_width():
         n = value_noise_1d(pz, rv["width_wavelength"], rng) ** rv["width_bias"]
-        return rv["half_width_min"] + (rv["half_width_max"] - rv["half_width_min"]) * n
+        hw = rv["half_width_min"] + (rv["half_width_max"] - rv["half_width_min"]) * n
+        return hw + (tp["half_width"] - hw) * taper
     hw_right, hw_left = side_width(), side_width()
     half_width = np.where(sd >= 0.0, hw_right, hw_left)
     edge = np.abs(sd) - half_width   # 川の縁からの距離（川の中で負）
@@ -387,9 +551,12 @@ def build_height(recipe: dict):
         wobble = fbm_2d(px, pz, rv["edge_noise_wavelength"], 4, 0.5, 2.0, rng)
         # fBm は 0.5 付近に固まるので、標準偏差で正規化して振れ幅を amp に合わせる
         wobble = np.clip((wobble - wobble.mean()) / (2.0 * wobble.std()), -1.0, 1.0)
-        edge += rv["edge_noise_amp"] * wobble
+        edge += rv["edge_noise_amp"] * wobble * (1.0 - tp["noise_cut"] * taper)
     # どれだけ揺らしても、レールの周りは水にする
     edge = smooth_min(edge, np.abs(sd) - rv["guard"], rv["guard_smooth"])
+    if z_edge is not None and cl.get("river_ends", False):
+        # 川は滝の縁で終わる。縁を越えた所は陸（峡谷の中は後で掘る）
+        edge = np.maximum(edge, (pz - (z_edge[None, :] + 10.0)) * 3.0)
 
     bk = recipe["bank"]
     bank = bk["height_min"] + (bk["height_max"] - bk["height_min"]) \
@@ -408,8 +575,15 @@ def build_height(recipe: dict):
 
     for m in recipe["mounds"]:
         m = merge(MOUND_DEFAULT, m)
-        zmask = smoothstep(m["z_min"] - m["z_fade"], m["z_min"], pz) \
-            * (1.0 - smoothstep(m["z_max"], m["z_max"] + m["z_fade"], pz))
+        zw = 0.0
+        if m["z_wobble"] > 0.0:   # 範囲の端を列ごとに揺らす（一直線だと真上から目立つ）
+            zw = (m["z_wobble"] * (value_noise_1d(xs, m["z_wobble_wavelength"], rng) * 2.0 - 1.0))[None, :]
+        zmask = smoothstep(m["z_min"] - m["z_fade"] + zw, m["z_min"] + zw, pz) \
+            * (1.0 - smoothstep(m["z_max"] + zw, m["z_max"] + m["z_fade"] + zw, pz))
+        if m["side"] == "right":
+            zmask = zmask * (sd >= 0.0)
+        elif m["side"] == "left":
+            zmask = zmask * (sd < 0.0)
         vary = ridged_2d(px, pz, m["wavelength"], 3, rng)
         shape = 1.0 - m["variation"] + m["variation"] * vary
         land = np.maximum(land, m["height"] * shape * zmask * smoothstep(m["start"], m["start"] + m["ramp"], edge))
@@ -423,10 +597,22 @@ def build_height(recipe: dict):
         where = smoothstep(1.0 - cov - 0.08, 1.0 - cov + 0.08, where) if cov < 1.0 else 1.0
         if tr["step_variation"] > 0.0 or tr["riser_range"][0] != tr["riser_range"][1]:
             step_scale = 1.0 + tr["step_variation"] * (value_noise_2d(px, pz, tr["variation_wavelength"], rng) * 2.0 - 1.0)
-            riser = tr["riser_range"][0] + (tr["riser_range"][1] - tr["riser_range"][0])                 * value_noise_2d(px, pz, tr["variation_wavelength"] * 0.6, rng)
+            riser = tr["riser_range"][0] + (tr["riser_range"][1] - tr["riser_range"][0]) \
+                * value_noise_2d(px, pz, tr["variation_wavelength"] * 0.6, rng)
             stepped = terrace(land, tr["step"] * step_scale, riser, phase)
         # 低い所（岸に近い草原）まで段にすると畑の畝になるので、1 段目より上だけ効かせる
         land += (np.maximum(stepped, 0.0) - land) * tr["strength"] * where * smoothstep(0.3 * tr["step"], tr["step"], land)
+
+    # 縁の向こうの台地：川沿いの丘と入れ替え、奥へ上っていく草原にする
+    pl = recipe["plateau"]
+    if pl["enabled"]:
+        prng = np.random.default_rng(int(recipe["seed"]) + 51)
+        roll = fbm_2d(px, pz, pl["wavelength"], 4, 0.5, 2.0, prng)
+        roll = (roll - roll.min()) / max(roll.max() - roll.min(), 1e-9)
+        plateau = pl["rise"] * smoothstep(pl["rise_z"][0], pl["rise_z"][1], pz) + pl["amp"] * roll
+        z0 = pl["z_start"] + pl["z_wobble"] * (value_noise_1d(xs, pl["z_wobble_wavelength"], prng) * 2.0 - 1.0)
+        w = smoothstep(z0[None, :], z0[None, :] + pl["blend"], pz)   # 境目を列ごとに揺らす（一直線だと真上から目立つ）
+        land = land + (plateau - land) * w
     h += land
 
     dt = recipe["detail"]
@@ -437,42 +623,79 @@ def build_height(recipe: dict):
         on_land = edge > rv["shore_out"]
         h = np.where(on_land, np.maximum(h, bk["height_min"] * 0.5), h)
 
+    # 大きい山（細かい起伏より後に盛る。岩の本体を段々にしない）
+    peak_rock = np.zeros_like(h)
+    for i, pk in enumerate(recipe["peaks"]):
+        pk = merge(PEAK_DEFAULT, pk)
+        ph, pr = build_peak(px, pz, edge, pk, np.random.default_rng(int(recipe["seed"]) + 61 + i))
+        h = np.where(ph > 0.0, np.maximum(h, ph), h)   # 山の外（ph = 0）は川底を埋めない
+        peak_rock = np.maximum(peak_rock, pr)
+
     # 台地の縁の崖。岩の判定より前に入れて、崖面にも岩の塗りと塊の凹凸を乗せる
     beyond = np.zeros_like(h)
-    cl = recipe["cliff"]
+    canyon_sd = None
     if cl["enabled"]:
-        crng = np.random.default_rng(int(recipe["seed"]) + 41)
-        # 縁の線（列ごと）：尾根ノイズで尖ったギザギザ
-        rid = np.zeros_like(xs)
-        amp_sum, wl = 0.0, cl["wavelength"]
-        for o in range(4):
-            v = value_noise_1d(xs, wl, crng)
-            rid += (1.0 - np.abs(2.0 * v - 1.0)) ** 2 * (0.5 ** o)
-            amp_sum += 0.5 ** o
-            wl *= 0.5
-        rid = (rid / amp_sum - 0.5) * 2.0
-        z_edge = cl["z"] + cl["amp"] * rid
-        # レールの周りは縁を手前に収める（中心線の X は縁の Z で引く）
-        rail_x = float(np.interp(cl["z"], line[:, 1], line[:, 0]))
-        near = 1.0 - smoothstep(cl["rail_clear_x"], cl["rail_clear_x"] + 40.0, np.abs(xs - rail_x))
-        z_edge = z_edge + (np.minimum(z_edge, cl["rail_max_z"]) - z_edge) * near
         # 川の所は縁を奥へ切り込ませる（滝の口）。崖面は高さ方向にも前後させる
         in_river = 1.0 - smoothstep(-20.0, 10.0, edge)
         jitter = cl["face_jitter"] * normalize_signed(fbm_2d(px, pz, 30.0, 3, 0.5, 2.0, crng))
         z0 = z_edge[None, :] - cl["notch"] * in_river + jitter
-        beyond = smoothstep(z0, z0 + cl["face_width"], pz)
+        head = smoothstep(z0, z0 + cl["face_width"], pz)
         floor = cl["floor_y"] + 4.0 * normalize_signed(fbm_2d(px, pz, 60.0, 3, 0.5, 2.0, crng))
+        cn = recipe["canyon"]
+        if cn["enabled"]:
+            # 縁の先は谷のレールに沿った溝だけを掘る。壁は段（石を積んだような崖）
+            krng = np.random.default_rng(int(recipe["seed"]) + 71)
+            cline = build_centerline(rail, cn["rail_index_range"], 0.0, cn["tail_extend"])
+            canyon_sd, _ = signed_distance(px, pz, cline)
+
+            def canyon_side():
+                n = value_noise_1d(pz, cn["half_width_wavelength"], krng) * 2.0 - 1.0
+                return cn["half_width"] + cn["half_width_amp"] * n
+            w_right, w_left = canyon_side(), canyon_side()
+            top = np.where(canyon_sd >= 0.0, w_right, w_left)
+            top = top + cn["wall_noise_amp"] * (ridged_2d(px, pz, cn["wall_noise_wavelength"], 3, krng) * 2.0 - 1.0)
+            bottom = top * cn["floor_ratio"]
+            u = np.clip((np.abs(canyon_sd) - bottom) / np.maximum(top - bottom, 1e-3), 0.0, 1.0)
+            depth = np.maximum(h - floor, 1.0)
+            phase = value_noise_2d(px, pz, 120.0, krng) * cn["step_jitter"]
+            prof = np.clip(terrace(u * depth, cn["step"], cn["riser"], phase) / depth, 0.0, 1.0)
+            # 段の量子化で谷の外の台地まで削らないよう、壁の上端では必ず 1・谷底では 0 に戻す
+            prof = prof + (1.0 - prof) * smoothstep(0.95, 1.0, u)
+            prof = prof * smoothstep(0.0, 0.05, u)
+            beyond = head * (1.0 - prof)
+        else:
+            beyond = head
         h = h + (floor - h) * beyond
 
+    # 海岸：谷の出口の先で台地を海食崖にして海底へ落とす
+    sea = np.zeros_like(h)
+    co = recipe["coast"]
+    if co["enabled"]:
+        srng = np.random.default_rng(int(recipe["seed"]) + 81)
+        wob = value_noise_1d(xs, co["wavelength"], srng) * 0.7 + value_noise_1d(xs, co["wavelength"] * 0.35, srng) * 0.3
+        zc = co["z"] + co["amp"] * (wob * 2.0 - 1.0)
+        sea = smoothstep(zc[None, :], zc[None, :] + co["width"], pz)
+        seabed = co["sea_floor_y"] - co["floor_slope"] * np.maximum(pz - zc[None, :], 0.0)
+        h = h + (seabed - h) * sea
+        beyond = np.maximum(beyond, sea)
+
     # 岩の所に塊の凹凸を盛る（岩の重みは盛る前の形で決め、スプラットもそれを使う）
-    rock = rock_weight(h, edge, px, pz, recipe)
+    rock = np.maximum(rock_weight(h, edge, px, pz, recipe), peak_rock)
     rk = recipe["rocks"]
     if rk["amp"] > 0.0:
         h = h + rock_blocks(px, pz, rk, int(recipe["seed"]) + 21) * smoothstep(0.15, 0.6, rock)
 
+    # 見えている面の高さ（川の水面 Y=0・海面 sea_y を含む）。簡易レンダと見通しチェック用
+    surface = np.where((h < 0.0) & (beyond < 0.02), 0.0, h)
+    if co["enabled"]:
+        surface = np.where(sea > 0.5, np.maximum(h, co["sea_y"]), surface)
+
     return {
         "rock": rock,
         "beyond": beyond,
+        "sea": sea,
+        "surface": surface.astype(np.float32),
+        "canyon_sd": canyon_sd,
         "height": h.astype(np.float32), "xs": xs, "zs": zs, "sd": sd, "edge": edge,
         "half_width": half_width, "line": line, "rail": rail, "tangent": tangent, "pz": pz,
     }
@@ -509,9 +732,14 @@ def make_preview(res: dict, cell: float) -> Image.Image:
     water = np.array([0.15, 0.30, 0.55])
     grass = np.array([0.35, 0.55, 0.25])
     hill = np.array([0.60, 0.52, 0.38])
+    gorge = np.array([0.45, 0.38, 0.33])
     t = np.clip(h / 60.0, 0.0, 1.0)[..., None]
     land = grass * (1 - t) + hill * t
-    color = np.where((h < 0.0)[..., None], water, land) * (0.35 + 0.65 * shade)
+    beyond = (res["beyond"] > 0.02)[..., None]
+    land = np.where(beyond & (h < 0.0)[..., None], gorge, land)
+    surf = res["surface"]
+    is_water = (surf > h + 0.01)[..., None]   # 水面が地面より上にある所
+    color = np.where(is_water, water, land) * (0.35 + 0.65 * shade)
     img = Image.fromarray((np.clip(color, 0, 1) * 255).astype(np.uint8), "RGB")
     img = img.resize((img.width * PREVIEW_SCALE, img.height * PREVIEW_SCALE), Image.NEAREST)
 
@@ -576,6 +804,36 @@ def report(res: dict, cell: float) -> None:
         print(f" {i:3d}  ({x:7.1f}, {y:6.1f}, {z:7.1f})  {g:6.2f}  {hw:5.0f}  {y - g:8.1f}")
     c, where = rail_clearance(res, 36, 41)
     print(f"\nレールと地面（水面）の最小の離れ（idx36〜41）: {c:.1f} m  at (idx, X, Y, Z) = {where}")
+    if res.get("canyon_sd") is not None:
+        c, where = rail_clearance(res, 41, len(res["rail"]) - 1)
+        print(f"谷のレールと谷底の最小の離れ（idx41〜）: {c:.1f} m  at {where}")
+        side, at = canyon_side_room(res)
+        print(f"谷のレールの高さでの壁までの横の余裕（左右の小さい方）: 最小 {side:.0f} m  at idx {at}")
+
+
+def canyon_side_room(res: dict, s_from: float = 41.0, step: float = 0.25):
+    """谷のレールの高さで、レールから左右の壁（地面がレールより高くなる所）までの横の距離の最小"""
+    rail = res["rail"]
+    worst = (float("inf"), None)
+    s = s_from
+    while s <= len(rail) - 1:
+        p = rail_sample(rail, s)
+        f = rail_forward(rail, s)
+        nrm = np.array([-f[2], f[0]])
+        nrm /= max(np.linalg.norm(nrm), 1e-9)
+        room = []
+        for sign in (1.0, -1.0):
+            d = 0.0
+            while d < 400.0:
+                g = sample_bilinear(res["height"], res["xs"], res["zs"], p[0] + sign * nrm[0] * d, p[2] + sign * nrm[1] * d)
+                if math.isnan(g) or g > p[1]:
+                    break
+                d += 1.0
+            room.append(d)
+        if min(room) < worst[0]:
+            worst = (min(room), round(s, 2))
+        s += step
+    return worst
 
 # ---------------------------------------------------------------- glTF（cook_assets.py の RH→LH 変換を見越して逆算する）
 
@@ -590,11 +848,12 @@ def surface_normals(h: np.ndarray, cell: float):
 
 
 def build_gltf(res: dict, cell: float, name: str, base_color_uri: str, material: dict,
-               tint_uri: str) -> tuple[dict, bytes]:
+               tint_uri: str, normals=None) -> tuple[dict, bytes]:
+    """normals: 切り分ける前の全体で求めた (法線, X 勾配)。塊の端で片側差分になって境目の陰影がずれるのを防ぐ"""
     h = res["height"].astype(np.float64)
     rows, cols = h.shape
     X, Z = np.meshgrid(res["xs"], res["zs"])
-    n, dhdx = surface_normals(h, cell)
+    n, dhdx = normals if normals is not None else surface_normals(h, cell)
 
     # 接線 = dP/du（+X 方向）を法線に直交化。従法線 dP/dv は -Z 向きなので handedness は +1
     t = np.stack([np.ones_like(h), dhdx, np.zeros_like(h)], axis=-1)
@@ -821,41 +1080,41 @@ def build_tint(res: dict, recipe: dict, splat: np.ndarray) -> np.ndarray:
     return grass * wg + 1.0 * wd + rock * wr
 
 
-def export_gltf(res: dict, recipe: dict, project_root: Path) -> None:
-    name = recipe["name"]
+def export_gltf(res: dict, recipe: dict, project_root: Path, name: str,
+                splat_grid: np.ndarray, tint_grid: np.ndarray, normals) -> None:
+    """1 つの塊を glTF にする。スプラット・色合い・法線は切り分ける前の全体で求めたものを切り出して渡す"""
     cell = float(recipe["cell_m"])
     assets = project_root / "Assets"
     tex_rel = f"Textures/MaskTexture/Terrain/{name}_Splat.png"
     (assets / tex_rel).parent.mkdir(parents=True, exist_ok=True)
-    splat_grid = build_splat(res, recipe)
     splat = resize_channels(splat_grid, int(recipe["splat"]["size"]))
     Image.fromarray((np.clip(splat, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8), "RGBA").save(assets / tex_rel)
 
     out_dir = assets / "Models" / name
     out_dir.mkdir(parents=True, exist_ok=True)
     tint_rel = f"Textures/MaskTexture/Terrain/{name}_Tint.png"
-    tint = resize_channels(build_tint(res, recipe, splat_grid), int(recipe["tint"]["size"]))
+    tint = resize_channels(tint_grid, int(recipe["tint"]["size"]))
     Image.fromarray((np.clip(tint * 0.5, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8), "RGB").save(assets / tint_rel)
 
     gltf, blob = build_gltf(res, cell, name, base_color_uri=f"../../{tex_rel}", material=recipe["material"],
-                            tint_uri=f"../../{tint_rel}")
+                            tint_uri=f"../../{tint_rel}", normals=normals)
     (out_dir / f"{name}.bin").write_bytes(blob)
     (out_dir / f"{name}.gltf").write_text(json.dumps(gltf, indent=2), encoding="utf-8")
     print(f"glTF     : {out_dir / (name + '.gltf')}  ({len(blob) / 1e6:.1f} MB)")
 
 
-def run_cook(project_root: Path, name: str) -> None:
+def run_cook(project_root: Path, names: list[str]) -> None:
     result = subprocess.run([sys.executable, str(project_root / "tools" / "Python" / "cook_assets.py")],
                             cwd=str(project_root), capture_output=True, text=True)
     for line in result.stdout.splitlines():
-        if name in line:
+        if any(n in line for n in names):
             print(line)
     if result.returncode != 0:
         print(result.stderr.rstrip(), file=sys.stderr)
         raise SystemExit(f"cook_assets.py failed (exit {result.returncode})")
 
 
-def write_scene_entry(project_root: Path, name: str) -> None:
+def write_scene_entry(project_root: Path, name: str, stream_group: str) -> None:
     """シーン JSON の name エントリだけを書き換える（11 番 §3.1 の 4.：キー単位の所有）。"""
     scene = project_root / SCENE_PATH
     doc = json.loads(scene.read_text(encoding="utf-8"))
@@ -865,7 +1124,7 @@ def write_scene_entry(project_root: Path, name: str) -> None:
         "tag": "Terrain",
         "dir": f"Resources/Models/{name}",
         "file": f"{name}.mesh",
-        "streamGroup": STREAM_GROUP,
+        "streamGroup": stream_group,
         "transform": {"scale": [1, 1, 1], "rotate": [0, 0, 0], "translate": [0, 0, 0]},
     }
     objs = doc.setdefault("objects", [])
@@ -891,7 +1150,7 @@ def render_view(res: dict, cell: float, color: np.ndarray, eye, yaw_deg: float, 
     地形の外は描かないので、範囲の端がそのまま見える（端の確認用）。"""
     h = res["height"]
     xs, zs = res["xs"], res["zs"]
-    beyond = res.get("beyond", np.zeros_like(h)) > 0.02   # 崖の先（谷）は水面を描かない
+    surface = res["surface"]   # 川の水面・海面を含む
     rows, cols = h.shape
     focal = (width * 0.5) / math.tan(math.radians(fov_deg) * 0.5)
     horizon = height * 0.5 - focal * math.tan(math.radians(pitch_deg))
@@ -916,8 +1175,8 @@ def render_view(res: dict, cell: float, color: np.ndarray, eye, yaw_deg: float, 
         valid = (ix >= 0) & (ix < cols) & (iz >= 0) & (iz < rows)
         ixc, izc = np.clip(ix, 0, cols - 1), np.clip(iz, 0, rows - 1)
         hv = h[izc, ixc]
-        is_water = (hv < 0.0) & ~beyond[izc, ixc]
-        surf = np.where(is_water, 0.0, hv)
+        surf = surface[izc, ixc]
+        is_water = surf > hv + 0.01
         col = np.where(is_water[:, None], water, color[izc, ixc])
         haze = 1.0 - np.exp(-d / 2500.0)
         col = col + (sky_hor - col) * haze
@@ -932,17 +1191,131 @@ def render_view(res: dict, cell: float, color: np.ndarray, eye, yaw_deg: float, 
     return Image.fromarray((np.clip(img, 0.0, 1.0) * 255).astype(np.uint8), "RGB")
 
 
-def make_views(res: dict, cell: float, out_dir: Path, name: str) -> None:
+def view_colors(res: dict, cell: float) -> np.ndarray:
+    """簡易レンダ用の色（仮の色 × 太陽の陰影）。行 0 = z_max"""
     rows, cols = res["height"].shape
     base = np.asarray(make_temp_color(res, cell, (cols, rows)), dtype=np.float64) / 255.0
     n = surface_normals(res["height"], cell)[0]
     sun = np.array(SUN_TOWARD) / np.linalg.norm(SUN_TOWARD)
     shade = 0.35 + 0.65 * np.clip(n @ sun, 0.0, 1.0)
-    color = base * shade[..., None]
+    return base * shade[..., None]
+
+
+def make_views(res: dict, cell: float, out_dir: Path, name: str, color: np.ndarray) -> None:
     for view_name, idx, y_override, yaw, pitch in VIEWS:
         x, y, z = res["rail"][idx]
         eye = (x, y if y_override is None else y_override, z)
+        if yaw is None:
+            f = rail_forward(res["rail"], float(idx))
+            yaw = math.degrees(math.atan2(f[0], f[2]))
         render_view(res, cell, color, eye, yaw, pitch).save(out_dir / f"{name}_View_{view_name}.png")
+
+
+# ---------------------------------------------------------------- 見通しチェック（L9 の谷のロード。11 番 §3.0）
+
+def raycast_frame(res: dict, cell: float, eye: np.ndarray, forward: np.ndarray, pitch_bias: float,
+                  fov_y: float, aspect: float, width: int, far: float = 4000.0):
+    """実機と同じ視野で高さマップへ光線を飛ばし、各画素が当たったかと、最初に当たった点（X, Z, 面の Y）を返す。
+    見える面は res["surface"]（川の水面・海面を含む）。最寄りの格子点で引く簡易版"""
+    height = int(round(width / aspect))
+    surface = res["surface"]
+    xs, zs = res["xs"], res["zs"]
+    rows, cols = surface.shape
+    yaw = math.atan2(forward[0], forward[2])
+    pitch = math.asin(max(-1.0, min(1.0, forward[1]))) + pitch_bias
+    ty = math.tan(fov_y * 0.5)
+    tx = ty * aspect
+    u = ((np.arange(width) + 0.5) / width * 2.0 - 1.0) * tx
+    v = (1.0 - (np.arange(height) + 0.5) / height * 2.0) * ty
+    U, V = np.meshgrid(u, v)
+    # カメラ空間（+Z 前、+Y 上）→ ピッチ（上向きが正）→ ヨー
+    d = np.stack([U, V, np.ones_like(U)], axis=-1)
+    d /= np.linalg.norm(d, axis=-1, keepdims=True)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    dy = d[..., 1] * cp + d[..., 2] * sp
+    dz = -d[..., 1] * sp + d[..., 2] * cp
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    dx = d[..., 0] * cy + dz * sy
+    dz = -d[..., 0] * sy + dz * cy
+    dx, dy, dz = dx.ravel(), dy.ravel(), dz.ravel()
+    hit = np.zeros(dx.size, dtype=bool)
+    hx = np.full(dx.size, np.nan)
+    hz = np.full(dx.size, np.nan)
+    hy = np.full(dx.size, np.nan)
+    alive = np.ones(dx.size, dtype=bool)
+    t = 0.5
+    while t < far and alive.any():
+        idx = np.nonzero(alive)[0]
+        x = eye[0] + dx[idx] * t
+        y = eye[1] + dy[idx] * t
+        z = eye[2] + dz[idx] * t
+        ix = np.round((x - xs[0]) / cell).astype(np.int64)
+        iz = np.round((zs[0] - z) / cell).astype(np.int64)
+        inside = (ix >= 0) & (ix < cols) & (iz >= 0) & (iz < rows)
+        g = np.full(idx.size, -np.inf)
+        g[inside] = surface[iz[inside], ix[inside]]
+        h_now = inside & (y <= g)
+        k = idx[h_now]
+        hit[k] = True
+        hx[k] = x[h_now]
+        hz[k] = z[h_now]
+        hy[k] = g[h_now]
+        alive[k] = False
+        t = t * 1.012 + 0.2
+    shape = (height, width)
+    return hit.reshape(shape), hx.reshape(shape), hz.reshape(shape), hy.reshape(shape)
+
+
+def visibility_check(res: dict, recipe: dict, out_dir: Path, name: str, color: np.ndarray) -> None:
+    vs = recipe["visibility"]
+    cell = float(recipe["cell_m"])
+    rail = res["rail"]
+    xs, zs = res["xs"], res["zs"]
+    snaps = set(int(s) for s in vs["snap_secs"])
+    w0, w1 = vs["pitch_window"]
+    print(f"\n見通しチェック: 画面に占める割合  左 = Z > {vs['hide_z']:.0f}（谷側の地形の塊）"
+          f" / 右 = Z > {vs['interior_z']:.0f} かつ Y < {vs['interior_y']:.0f}（谷の中＝谷の物を置く所）")
+    t = float(vs["t_from"])
+    rows_out = []
+    while t <= vs["t_to"] + 1e-6:
+        s = t / gen_rail_path.SEC_PER_POINT
+        eye = rail_sample(rail, s)
+        fwd = rail_forward(rail, s)
+        bias = math.radians(vs["pitch_bias_deg"]) * smoothstep(w0, w0 + 3.0, np.array(t)) \
+            * (1.0 - smoothstep(w1 - 3.0, w1, np.array(t)))
+        hit, hx, hz, hy = raycast_frame(res, cell, eye, fwd, float(bias), vs["fov_y"], vs["aspect"], int(vs["width"]))
+        hidden = hit & (hz > vs["hide_z"])
+        interior = hit & (hz > vs["interior_z"]) & (hy < vs["interior_y"])
+        frac = float(hidden.mean())
+        frac_in = float(interior.mean())
+        rows_out.append((t, frac, frac_in))
+        mark = "  ← 谷の中が見える" if frac_in > 0.0 else ""
+        print(f"  {t:5.0f}s  ({eye[0]:6.0f}, {eye[1]:5.1f}, {eye[2]:6.0f})  {frac * 100:6.2f} %  {frac_in * 100:6.2f} %{mark}")
+        if int(round(t)) in snaps:
+            img = np.empty(hit.shape + (3,))
+            img[:] = np.array([0.62, 0.78, 0.95])
+            ix = np.clip(np.round((np.nan_to_num(hx) - xs[0]) / cell).astype(int), 0, len(xs) - 1)
+            iz = np.clip(np.round((zs[0] - np.nan_to_num(hz)) / cell).astype(int), 0, len(zs) - 1)
+            col = color[iz, ix]
+            water = res["surface"][iz, ix] > res["height"][iz, ix] + 0.01
+            col = np.where(water[..., None], np.array([0.20, 0.36, 0.48]), col)
+            dist = np.sqrt((np.nan_to_num(hx) - eye[0]) ** 2 + (np.nan_to_num(hz) - eye[2]) ** 2)
+            haze = (1.0 - np.exp(-dist / 2500.0))[..., None]
+            col = col + (np.array([0.75, 0.85, 0.95]) - col) * haze
+            img = np.where(hit[..., None], col, img)
+            img = np.where(hidden[..., None], img * 0.55 + np.array([1.0, 0.0, 1.0]) * 0.45, img)
+            img = np.where(interior[..., None], img * 0.3 + np.array([1.0, 0.85, 0.0]) * 0.7, img)
+            out = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8), "RGB")
+            out = out.resize((out.width * 4, out.height * 4), Image.NEAREST)
+            out.save(out_dir / f"{name}_Vis_{int(round(t)):03d}s.png")
+        t += 1.0
+    for col, label in ((1, "谷側の地形の塊"), (2, "谷の中")):
+        seen = [r for r in rows_out if r[col] > 0.0]
+        if seen:
+            print(f"  → {label}が最初に見えるのは {seen[0][0]:.0f}s（{seen[0][col] * 100:.2f} %）")
+        else:
+            print(f"  → {label}は期間中は見えない")
+    print("  画像（_Vis_*.png）：マゼンタ = 谷側の地形の塊、黄 = 谷の中")
 
 
 # ---------------------------------------------------------------- 川のマップ（L2 → L3）
@@ -1021,8 +1394,7 @@ def river_map_preview(depth: np.ndarray, flow: np.ndarray, land: np.ndarray, max
     return img
 
 
-def export_river_map(res: dict, recipe: dict, project_root: Path, out_dir: Path) -> None:
-    name = recipe["name"]
+def export_river_map(res: dict, recipe: dict, project_root: Path, out_dir: Path, name: str, ext: dict) -> None:
     cell = float(recipe["cell_m"])
     rm = recipe["river_map"]
     rgba, depth, flow = build_river_map(res, cell, rm)
@@ -1036,7 +1408,6 @@ def export_river_map(res: dict, recipe: dict, project_root: Path, out_dir: Path)
     land = res["height"] >= 0.0
     river_map_preview(depth, flow, land, rm["max_depth"], rm["max_speed"]).save(out_dir / f"{name}_RiverMapPreview.png")
 
-    ext = recipe["extent"]
     info = {
         "name": name,
         "x_min": ext["x_min"], "x_max": ext["x_max"], "z_min": ext["z_min"], "z_max": ext["z_max"],
@@ -1061,43 +1432,72 @@ def export_river_map(res: dict, recipe: dict, project_root: Path, out_dir: Path)
 
 # ---------------------------------------------------------------- 岸の線（L2 → L6 / L10）
 
+def sample_bilinear_vec(grid: np.ndarray, xs: np.ndarray, zs: np.ndarray, x: np.ndarray, z: np.ndarray) -> np.ndarray:
+    """sample_bilinear の配列版。範囲の外は nan"""
+    cell = xs[1] - xs[0]
+    fx = (x - xs[0]) / cell
+    fz = (zs[0] - z) / cell
+    ok = (fx >= 0) & (fx < len(xs) - 1) & (fz >= 0) & (fz < len(zs) - 1)
+    ix = np.clip(np.floor(fx).astype(np.int64), 0, len(xs) - 2)
+    iz = np.clip(np.floor(fz).astype(np.int64), 0, len(zs) - 2)
+    tx, tz = fx - ix, fz - iz
+    v = (grid[iz, ix] * (1 - tx) + grid[iz, ix + 1] * tx) * (1 - tz) \
+        + (grid[iz + 1, ix] * (1 - tx) + grid[iz + 1, ix + 1] * tx) * tz
+    return np.where(ok, v, np.nan)
+
+
 def extract_shores(res: dict, cell: float, step_m: float) -> tuple[list, list]:
-    """行（Z）ごとに中心線から左右へたどり、最初に陸（高さ 0 以上）になる所を左右の岸とする。
-    水際は隣の格子点との線形補間で求める。崖の先（谷）は岸にしない。
-    入り江が Z 方向に折り返す所は 1 行 1 点なので拾いきれない（L6 の配置には十分）"""
+    """中心線を弧長 step_m おきにたどり、左右の法線方向へ進んで最初に陸（高さ 0 以上）になる所を岸とする。
+    水際は直前の点との線形補間。中心が水でない所（範囲の外・崖の先）は飛ばす。
+    蛇行で川が横（±X）を向く所も拾える（行ごとにたどる旧方式は横向きの所で岸を取り違えた）"""
     h = res["height"]
     xs, zs = res["xs"], res["zs"]
-    beyond = res.get("beyond", np.zeros_like(h)) > 0.02
+    beyond = res["beyond"].astype(np.float32)
     line = res["line"]
-    every = max(1, int(round(step_m / cell)))
-    left, right = [], []
-    for r in range(h.shape[0] - 1, -1, -every):      # 行は z_max から並ぶので、逆順で Z の昇順
-        z = float(zs[r])
-        cx = float(np.interp(z, line[:, 1], line[:, 0]))
-        c0 = int(round((cx - xs[0]) / cell))
-        if not (0 <= c0 < h.shape[1]) or h[r, c0] >= 0.0 or beyond[r, c0]:
-            continue
-        row = h[r]
-        land = row >= 0.0
-        lc = np.nonzero(land[:c0])[0]
-        if lc.size:
-            c = lc[-1]                                 # c は陸、c+1 は水
-            t = row[c] / (row[c] - row[c + 1])
-            left.append([round(float(xs[c] + t * cell), 2), round(z, 2)])
-        rc = np.nonzero(land[c0:])[0]
-        if rc.size:
-            c = c0 + rc[0]                             # c は陸、c-1 は水
-            t = row[c] / (row[c] - row[c - 1])
-            right.append([round(float(xs[c] - t * cell), 2), round(z, 2)])
+    seg = np.diff(line, axis=0)
+    seg_len = np.linalg.norm(seg, axis=1)
+    acc = np.concatenate([[0.0], np.cumsum(seg_len)])
+    s = np.arange(0.0, acc[-1], step_m)
+    k = np.clip(np.searchsorted(acc, s, side="right") - 1, 0, len(seg) - 1)
+    t = (s - acc[k]) / np.maximum(seg_len[k], 1e-9)
+    cx = line[k, 0] + seg[k, 0] * t
+    cz = line[k, 1] + seg[k, 1] * t
+    tdir = seg[k] / np.maximum(seg_len[k], 1e-9)[:, None]
+    hc = sample_bilinear_vec(h, xs, zs, cx, cz)
+    bc = sample_bilinear_vec(beyond, xs, zs, cx, cz)
+    valid = ~np.isnan(hc) & (hc < 0.0) & (bc < 0.02)
+
+    def walk(nx_: np.ndarray, nz_: np.ndarray) -> list:
+        found = np.full(s.size, np.nan)
+        prev = hc.copy()
+        alive = valid.copy()
+        dstep = cell * 0.5
+        d = dstep
+        while d < 800.0 and alive.any():
+            hv = sample_bilinear_vec(h, xs, zs, cx + nx_ * d, cz + nz_ * d)
+            gone = alive & np.isnan(hv)
+            alive &= ~gone
+            land = alive & (hv >= 0.0)
+            frac = prev / np.where(land, prev - hv, 1.0)
+            found = np.where(land, d - dstep + frac * dstep, found)
+            alive &= ~land
+            prev = np.where(alive, hv, prev)
+            d += dstep
+        pts = []
+        for i in np.nonzero(~np.isnan(found))[0]:
+            pts.append([round(float(cx[i] + nx_[i] * found[i]), 2), round(float(cz[i] + nz_[i] * found[i]), 2)])
+        return pts
+    # 下流を向いて左 = (-tz, tx)、右 = (tz, -tx)
+    left = walk(-tdir[:, 1], tdir[:, 0])
+    right = walk(tdir[:, 1], -tdir[:, 0])
     return left, right
 
 
-def export_shores(res: dict, recipe: dict, project_root: Path) -> None:
-    name = recipe["name"]
+def export_shores(res: dict, recipe: dict, project_root: Path, name: str) -> None:
     left, right = extract_shores(res, float(recipe["cell_m"]), 4.0)
     info = {
         "name": name,
-        "note": "左右の岸（水際 = 高さ 0 の線）。[x, z] の Z の昇順。左右は +Z（下流）を向いて。崖の先（谷）は含まない",
+        "note": "左右の岸（水際 = 高さ 0 の線）。[x, z] を下流へ向かう順（中心線の弧長 4m おき）。左右は下流を向いて。崖の先（谷）は含まない",
         "waterHeight": 0.0,
         "left": left,
         "right": right,
@@ -1108,6 +1508,33 @@ def export_shores(res: dict, recipe: dict, project_root: Path) -> None:
     print(f"shore    : {TERRAIN_JSON_DIR}/{name}_Shore.json  左 {len(left)} 点 / 右 {len(right)} 点")
 
 
+# ---------------------------------------------------------------- 塊（メッシュ）への切り分け
+
+def chunk_list(recipe: dict) -> list[dict]:
+    if recipe["chunks"]:
+        return recipe["chunks"]
+    ext = recipe["extent"]
+    return [{"name": recipe["name"], **ext, "streamGroup": STREAM_GROUP, "river_map": True, "shore": True}]
+
+
+def chunk_slices(res: dict, ch: dict) -> tuple[slice, slice]:
+    xs, zs = res["xs"], res["zs"]
+    eps = 1e-6
+    cols = np.nonzero((xs >= ch["x_min"] - eps) & (xs <= ch["x_max"] + eps))[0]
+    rows = np.nonzero((zs >= ch["z_min"] - eps) & (zs <= ch["z_max"] + eps))[0]
+    return slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1)
+
+
+def crop_res(res: dict, rs: slice, cs: slice) -> dict:
+    out = dict(res)
+    for k, v in res.items():
+        if isinstance(v, np.ndarray) and v.ndim >= 2 and v.shape[:2] == res["height"].shape:
+            out[k] = v[rs, cs]
+    out["xs"] = res["xs"][cs]
+    out["zs"] = res["zs"][rs]
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="地形のハイトマップを手続き生成する（12_TerrainRendering.md）")
     ap.add_argument("--recipe", type=Path, help="レシピ JSON（既定値へ上書きマージ）")
@@ -1116,6 +1543,7 @@ def main() -> None:
     ap.add_argument("--scene", action="store_true", help="StagePlay.json に <name> のエントリを書く")
     ap.add_argument("--river-map", action="store_true", help="川のマップと共通の .json を書いて cook する")
     ap.add_argument("--shore", action="store_true", help="左右の岸の線を JSON に書く（L6 / L10 用）")
+    ap.add_argument("--visibility", action="store_true", help="見通しチェック（後から読む塊が画面に映る割合）")
     ap.add_argument("--no-cook", action="store_true")
     args = ap.parse_args()
 
@@ -1151,19 +1579,36 @@ def main() -> None:
     }
     (out_dir / f"{name}_Height.json").write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
     make_preview(res, cell).save(out_dir / f"{name}_Preview.png")
-    make_views(res, cell, out_dir, name)
+    color = view_colors(res, cell)
+    make_views(res, cell, out_dir, name, color)
     print(f"\n出力: {out_dir}")
+    if args.visibility:
+        visibility_check(res, recipe, out_dir, name, color)
 
+    chunks = chunk_list(recipe)
     if args.gltf:
-        export_gltf(res, recipe, project_root)
-    if args.river_map:
-        export_river_map(res, recipe, project_root, out_dir)
-    if args.shore:
-        export_shores(res, recipe, project_root)
+        # スプラット・色合い・法線は全体で求めてから切り出す（塊の境目で塗りと陰影を揃える）
+        splat_full = build_splat(res, recipe)
+        tint_full = build_tint(res, recipe, splat_full)
+        n_full, dhdx_full = surface_normals(res["height"], cell)
+    for ch in chunks:
+        rs, cs = chunk_slices(res, ch)
+        sub = crop_res(res, rs, cs)
+        print(f"\n[{ch['name']}] X {sub['xs'][0]:.0f}..{sub['xs'][-1]:.0f} / Z {sub['zs'][-1]:.0f}..{sub['zs'][0]:.0f}"
+              f"  {sub['height'].shape[1]} x {sub['height'].shape[0]}（{sub['height'].size:,} 頂点）  streamGroup = {ch['streamGroup']}")
+        if args.gltf:
+            export_gltf(sub, recipe, project_root, ch["name"], splat_full[rs, cs], tint_full[rs, cs],
+                        (n_full[rs, cs], dhdx_full[rs, cs]))
+        if args.river_map and ch.get("river_map"):
+            ext = {k: ch[k] for k in ("x_min", "x_max", "z_min", "z_max")}
+            export_river_map(sub, recipe, project_root, out_dir, ch["name"], ext)
+        if args.shore and ch.get("shore"):
+            export_shores(sub, recipe, project_root, ch["name"])
     if (args.gltf or args.river_map) and not args.no_cook:
-        run_cook(project_root, name)
+        run_cook(project_root, [ch["name"] for ch in chunks])
     if args.scene:
-        write_scene_entry(project_root, name)
+        for ch in chunks:
+            write_scene_entry(project_root, ch["name"], ch["streamGroup"])
 
 
 if __name__ == "__main__":

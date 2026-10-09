@@ -1,0 +1,169 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "gen_terrain.py"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "CanyonTerrain"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "CanyonTerrain",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "CanyonTerrain",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.95
+      },
+      "normalTexture": {
+        "index": 1
+      },
+      "extras": {
+        "terrainLayers": {
+          "colorArray": "Resources/Textures/Terrain/TerrainLayers_Color.dds",
+          "normalArray": "Resources/Textures/NormalMapTexture/Terrain/TerrainLayers_Normal.dds",
+          "tile": [
+            4.0,
+            5.0,
+            11.0
+          ],
+          "roughness": [
+            0.95,
+            0.9,
+            0.8
+          ],
+          "heightBlend": 0.2,
+          "triplanarSharpness": 4.0,
+          "macroVariation": 0.25,
+          "wetness": 0.45,
+          "environment": 0.4
+        }
+      }
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    },
+    {
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "uri": "../../Textures/MaskTexture/Terrain/CanyonTerrain_Splat.png"
+    },
+    {
+      "uri": "../../Textures/MaskTexture/Terrain/CanyonTerrain_Tint.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 701701,
+      "type": "VEC3",
+      "min": [
+        -1300.0,
+        -196.40206909179688,
+        2600.0
+      ],
+      "max": [
+        700.0,
+        74.58501434326172,
+        4000.0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 701701,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 701701,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 701701,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5125,
+      "count": 4200000,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 8420412,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 8420412,
+      "byteLength": 8420412,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 16840824,
+      "byteLength": 11227216,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 28068040,
+      "byteLength": 5613608,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 33681648,
+      "byteLength": 16800000,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "CanyonTerrain.bin",
+      "byteLength": 50481648
+    }
+  ]
+}

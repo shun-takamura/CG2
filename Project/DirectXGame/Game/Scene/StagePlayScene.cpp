@@ -20,6 +20,7 @@
 #include "Spline/SplineCurveActor.h"
 #include "BossArenaWater.h"
 #include "RiverWater.h"
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -3438,6 +3439,25 @@ void StagePlayScene::Update() {
 			return true;
 		};
 
+		// 水面の床（大河の上だけ。窓の外は -FLT_MAX）。コライダーのワールド Y 方向の下端で比べる。
+		const float playerFloorY = railStage_ ? railStage_->GetPlayerFloorY() : -FLT_MAX;
+		const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_->GetRotate());
+		auto colliderBottomY = [&](float ox, float oy) {
+			const Vector3 p = TransformCoordinate(
+				{ playerLocalOffset_.x + ox, playerLocalOffset_.y + oy, playerLocalOffset_.z }, camWorld);
+			const Collider& col = Gameplay::Of(player_).GetCollider();
+			Vector3 he{ 0.0f, 0.0f, 0.0f };
+			switch (col.shape) {
+			case ColliderShape::Sphere:  he = { col.radius, col.radius, col.radius }; break;
+			case ColliderShape::OBB:     he = col.halfExtents; break;
+			case ColliderShape::Capsule: he = { col.capsuleRadius, 0.5f * col.capsuleHeight + col.capsuleRadius, col.capsuleRadius }; break;
+			}
+			const float extentY = std::fabs(camRot.m[0][1]) * he.x
+			                    + std::fabs(camRot.m[1][1]) * he.y
+			                    + std::fabs(camRot.m[2][1]) * he.z;
+			return p.y + col.offset.y - extentY;
+		};
+
 		// 軸ごとに採否判定（X 単独・Y 単独で押し戻し）。拒否された軸は速度もゼロに（壁にぶつかった扱い）。
 		Vector2 next = playerInputOffset_;
 		bool blockedX = false;
@@ -3448,13 +3468,26 @@ void StagePlayScene::Update() {
 			playerVelocity_.x = 0.0f;
 			blockedX = true;
 		}
-		if (isInsideClip(next.x, candidate.y)) {
+		// 床より下へ動く候補は不可（上へ動くのは常に可＝床の下に入っても抜け出せる）
+		const bool sinksBelowFloor = candidate.y < playerInputOffset_.y
+			&& colliderBottomY(next.x, candidate.y) < playerFloorY;
+		if (isInsideClip(next.x, candidate.y) && !sinksBelowFloor) {
 			next.y = candidate.y;
 		} else {
 			playerVelocity_.y = 0.0f;
 			blockedY = true;
 		}
 		playerInputOffset_ = next;
+
+		// カメラが降りて自機が床の下に入ったら、床まで持ち上げる（カメラの上方向で戻す）
+		if (playerFloorY > -FLT_MAX) {
+			const float deficit = playerFloorY - colliderBottomY(playerInputOffset_.x, playerInputOffset_.y);
+			const float upY = camRot.m[1][1];
+			if (deficit > 0.0f && upY > 0.1f) {
+				playerInputOffset_.y += deficit / upY;
+				if (playerVelocity_.y < 0.0f) playerVelocity_.y = 0.0f;
+			}
+		}
 
 		// MOVE_BLOCKED: 非ブロック→ブロックの立ち上がりエッジでのみ出力（SUNDAY のスタック判定材料）
 		if (blockedX && !prevMoveBlockedX_) {

@@ -115,6 +115,11 @@ public:
 		float   riverMinCos = 0.15f;                        // 浅い角度で水の中を通る長さが伸びすぎないようにする下限
 		float   riverShoreFade = 0.4f;                      // 水際で反射ごと消えていく幅 [m]
 		float   reflectionRtWeight = 1.0f;                  // 反射 RT（映す物）の重み。0 で空だけ。カメラの高さでの足切りのフェードに使う
+		// ----- 反射 RT の揺らぎ方 -----
+		// 映る物までの想定距離 [m]。> 0 なら反射 RT も空と同じく「波で傾いた反射の向き」で引く
+		// （その向きへこの距離だけ進んだ点の鏡像を投影する）。大きいほど揺れが空に近づく。0 で従来（UV を distortion だけずらす）
+		float   reflectionDistance = 0.0f;
+		float   padding6[3]{};
 	};
 
 	/// <summary>川のマップとワールド座標の対応（RiverTerrain.json と同じ値）</summary>

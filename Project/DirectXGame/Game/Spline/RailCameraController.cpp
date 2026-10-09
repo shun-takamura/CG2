@@ -44,7 +44,13 @@ void RailCameraController::Update(float deltaTime) {
 		}
 	}
 
-	const Vector3 eye = cameraPath_->Sample(progress_);
+	Vector3 eye = cameraPath_->Sample(progress_);
+	if (minYEnabled_ && progress_ >= minYStartT_ && progress_ <= minYEndT_) {
+		// なめらかな max(y, minY)。y が minY より十分上なら y のまま
+		const float d = eye.y - minY_;
+		const float k = (std::max)(minYSoftness_, 1e-4f);
+		eye.y = minY_ + 0.5f * (d + std::sqrt(d * d + k * k));
+	}
 
 	// ----- 向き：回転キー列を評価（無ければ接線方向を向く保険）-----
 	Vector3 euler{ 0.0f, 0.0f, 0.0f };
@@ -59,6 +65,15 @@ void RailCameraController::Update(float deltaTime) {
 		euler = { -std::asin(std::clamp(fwd.y, -1.0f, 1.0f)),
 				  std::atan2(fwd.x, fwd.z),
 				  0.0f };
+		if (pitchBias_ != 0.0f && progress_ >= pitchStartT_ && progress_ <= pitchEndT_) {
+			float w = 1.0f;
+			if (pitchFadeT_ > 1e-6f) {
+				const float edge = (std::min)(progress_ - pitchStartT_, pitchEndT_ - progress_) / pitchFadeT_;
+				const float u = std::clamp(edge, 0.0f, 1.0f);
+				w = u * u * (3.0f - 2.0f * u);
+			}
+			euler.x += pitchBias_ * w;
+		}
 	} else if (n == 1) {
 		euler = (*rotKeys_)[0]->rotate;
 	} else {

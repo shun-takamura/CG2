@@ -536,6 +536,10 @@ void WaterSurface::OnImGui()
 	ImGui::DragFloat("Noise Scale", &params_.noiseScale, 0.01f, 0.01f, 20.0f);
 	ImGui::DragFloat("Noise Speed", &params_.noiseSpeed, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Distortion", &params_.distortion, 0.001f, 0.0f, 0.3f);
+	ImGui::DragFloat("Reflection Distance [m]", &params_.reflectionDistance, 5.0f, 0.0f, 5000.0f, "%.0f");
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("> 0: reflection RT is sampled along the wave-tilted reflection ray (wobbles like the sky). 0: legacy UV offset");
+	}
 	const char* views[] = { "Composite", "Floor only", "Reflection only", "Fresnel", "Normal" };
 	ImGui::Combo("Debug View", &params_.debugView, views, IM_ARRAYSIZE(views));
 #endif
