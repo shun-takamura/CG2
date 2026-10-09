@@ -25,6 +25,8 @@ public:
 
     void Update(Camera* camera, float deltaTime);
     void Draw();
+    /// <summary>水面の反射 RT へ Primitive を描く（def の reflect が false なら何もしない）</summary>
+    void DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos);
 
     /// <summary>
     /// 編集中の def をライブ反映する（EffectEditor プレビュー用）。

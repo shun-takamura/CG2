@@ -359,6 +359,9 @@ struct EffectDef {
     // 寿命を外から制御したい場合は EffectManager::Stop(handle) で止める。
     bool        loop = false;
 
+    // false なら水面の反射 RT に描かない（既定は映す。13_RiverWater.md §4.4）
+    bool        reflect = true;
+
     std::vector<EffectPrimitiveComponent> primitives;
     std::vector<EffectParticleComponent>  particles;
     std::vector<EffectLightComponent>     lights;

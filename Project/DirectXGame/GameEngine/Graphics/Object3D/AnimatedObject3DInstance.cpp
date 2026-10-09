@@ -1,6 +1,7 @@
 ﻿#include "AnimatedObject3DInstance.h"
 #include "imgui.h"
 #include <cmath>
+#include <algorithm>
 #include "PrimitiveMesh.h"
 #include "PrimitiveGenerator.h"
 #include "LineRenderer.h"
@@ -191,6 +192,7 @@ void AnimatedObject3DInstance::Update(float deltaTime)
         worldViewProjectionMatrix = worldMatrix;
     }
 
+    worldMatrix_ = worldMatrix;
     transformationMatrixData_->World = worldMatrix;
     transformationMatrixData_->WVP = worldViewProjectionMatrix;
     transformationMatrixData_->WorldInverseTranspose = Transpose(Inverse(worldMatrix));
@@ -318,6 +320,54 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 
     // Skinning済みVBVで描画
     animatedModelInstance_->DrawSkinning(dxCore, skinCluster_);
+}
+
+void AnimatedObject3DInstance::DrawReflection(DirectXCore* dxCore,
+    D3D12_GPU_VIRTUAL_ADDRESS reflectionViewProjAddress,
+    D3D12_GPU_VIRTUAL_ADDRESS reflectionCameraAddress)
+{
+    if (!visible_) return;
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!animatedModelInstance_ || !hasSkinCluster_ || !skinningComputeManager_ || !object3DManager_) return;
+
+    // 反射のパスはシーン描画の最初なので、ここで今フレームのスキニングを済ませる（本編の Draw では二重に回らない）
+    DispatchSkinning(dxCore);
+
+    auto* cmd = dxCore->GetCommandList();
+    Material* mat = animatedModelInstance_->GetMaterialPointer();
+    Object3DManager::ShaderType shaderType = Object3DManager::kShaderNoEnvironmentMap;
+    if (mat && mat->shadingModel == 1) {
+        shaderType = Object3DManager::kShaderPBR;
+    } else if (mat && mat->useEnvironmentMap) {
+        shaderType = Object3DManager::kShaderEnvironmentMap;
+    }
+    cmd->SetPipelineState(object3DManager_->GetReflectionPipelineState(shaderType));
+
+    cmd->SetGraphicsRootConstantBufferView(1, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(4, reflectionCameraAddress);
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootReflectionCamera, reflectionViewProjAddress);
+
+    animatedModelInstance_->DrawSkinning(dxCore, skinCluster_);
+}
+
+bool AnimatedObject3DInstance::GetWorldBoundingSphere(Vector3& center, float& radius) const
+{
+    // バインドポーズから外へ出る分の余白（距離判定はもともと大ざっぱな間引きなので多めでよい）
+    constexpr float kPoseMargin = 1.5f;
+
+    if (!animatedModelInstance_) return false;
+    const BoundingSphere& local = animatedModelInstance_->GetBoundingSphere();
+    if (!local.IsValid()) return false;
+
+    center = TransformCoordinate(local.center, worldMatrix_);
+    // 行ベクトル規約なので、各軸のスケールは 0〜2 行目の長さ
+    const float sx = Length(Vector3{ worldMatrix_.m[0][0], worldMatrix_.m[0][1], worldMatrix_.m[0][2] });
+    const float sy = Length(Vector3{ worldMatrix_.m[1][0], worldMatrix_.m[1][1], worldMatrix_.m[1][2] });
+    const float sz = Length(Vector3{ worldMatrix_.m[2][0], worldMatrix_.m[2][1], worldMatrix_.m[2][2] });
+    radius = local.radius * (std::max)({ sx, sy, sz }) * kPoseMargin;
+    return true;
 }
 
 void AnimatedObject3DInstance::DrawIdPass(DirectXCore* dxCore)

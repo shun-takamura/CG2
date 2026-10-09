@@ -19,6 +19,7 @@
 #include "Primitive/LineRenderer.h"
 #include "Spline/SplineCurveActor.h"
 #include "BossArenaWater.h"
+#include "RiverWater.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -2737,6 +2738,9 @@ void StagePlayScene::Initialize() {
 	// ボス戦の床。PSO 等はここで作っておき、ボス戦突入時にカクつかせない
 	bossWater_ = std::make_unique<BossArenaWater>();
 	bossWater_->Initialize(dxCore_, srvManager_, object3DManager_);
+	// 大河の水面。PSO 等はここで作り、川のデータは雲の中（loadStartSec）で別スレッドから読む
+	riverWater_ = std::make_unique<RiverWater>();
+	riverWater_->Initialize(dxCore_, srvManager_, object3DManager_, stageEnv_->GetCloudLayer());
 
 	phase_ = Phase::Rail;
 	prevPhase_ = Phase::Rail;
@@ -3597,6 +3601,10 @@ void StagePlayScene::Update() {
 	if (stageEnv_ && phase_ == Phase::Rail && railStage_) {
 		stageEnv_->Update(railStage_->GetStageSeconds(), !specialActive_);
 	}
+	// 大河の水面：時刻でロードを始め、波を進める（波は World 時間＝スロー中は流れも遅い）
+	if (riverWater_ && phase_ == Phase::Rail && railStage_) {
+		riverWater_->Update(railStage_->GetStageSeconds(), GetScaledDeltaTime(TimeGroup::World));
+	}
 
 	// カメラが確定した後に Skybox を更新する（VP 焼き込みのため、回り込みを背景にも反映）。
 	if (skybox_) {
@@ -4198,6 +4206,10 @@ void StagePlayScene::Draw() {
 	const bool drawBossWater = (phase_ == Phase::Boss && bossWater_);
 	// 波のシミュレーション（コンピュート）はシーン RT をバインドする前に回す
 	if (drawBossWater) bossWater_->DispatchSimulation();
+	// 大河の水面の反射 RT（映す物を鏡像で描く）。シーン RT を貼る前に描き、下で貼り直す
+	if (riverWater_ && phase_ == Phase::Rail && camera_) {
+		riverWater_->RenderReflection(*camera_, object3DInstances_, dynamicAnimated_);
+	}
 
 	// Skybox を最初に描画（深度書き込みなしの ReadOnly DSV）
 	auto* commandList = dxCore_->GetCommandList();
@@ -4233,6 +4245,10 @@ void StagePlayScene::Draw() {
 	// 水面は深度を書くので、後から描く物は水面の上に出る。Primitive は自前でルートシグネチャを貼り直す
 	if (drawBossWater && skybox_) {
 		bossWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
+	}
+	// 大河の水面。下の地形（川底）を乗算済み α で透かすので、地形を含む不透明物の後に描く
+	if (riverWater_ && phase_ == Phase::Rail && skybox_) {
+		riverWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
 	}
 
 	DrawDynamicPrimitives();
@@ -4349,6 +4365,8 @@ void StagePlayScene::Seek(float seconds) {
 	if (railStage_) railStage_->Seek(seconds);
 	// 環境セクションはクロスフェードを挟まず即時適用する（巻き戻しで色を確認するため）。
 	if (stageEnv_) stageEnv_->Reset(seconds);
+	// 大河の水面のロード窓より後へ飛んだら、その場で読み終える
+	if (riverWater_) riverWater_->Seek(seconds);
 }
 
 // IRailStageHost::ClearWaveRuntimeState() の実装。RailStagePart::Seek() から host_ 経由で呼ばれる。

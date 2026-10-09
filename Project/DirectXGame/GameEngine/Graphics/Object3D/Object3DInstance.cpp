@@ -4,6 +4,7 @@
 #include "Material.h"
 #include "TextureManager.h"
 #include "EditorDropPayload.h"  // MATERIAL_DROP / SPRITE_DROP 等の D&D ペイロード
+#include <algorithm>
 
 void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore,
     const std::string& directorPath, const std::string& filename,
@@ -37,6 +38,24 @@ void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore*
         {0.0f, 0.0f, 0.0f},
         {0.0f, 0.0f, 0.0f}
     };
+}
+
+bool Object3DInstance::GetWorldBoundingSphere(Vector3& center, float& radius) const
+{
+    if (!modelInstance_) return false;
+    const BoundingSphere& local = modelInstance_->GetBoundingSphere();
+    if (!local.IsValid()) return false;
+
+    // Update と同じ合成（rootNode の localMatrix → ワールド）。転送用の CB は書き込み専用メモリなので読まない
+    const Matrix4x4 worldMatrix = hasWorldOverride_ ? worldOverride_ : MakeAffineMatrix(transform_);
+    const Matrix4x4 m = Multiply(modelInstance_->GetModelData().rootNode.localMatrix, worldMatrix);
+    center = TransformCoordinate(local.center, m);
+    // 行ベクトル規約なので、各軸のスケールは 0〜2 行目の長さ
+    const float sx = Length(Vector3{ m.m[0][0], m.m[0][1], m.m[0][2] });
+    const float sy = Length(Vector3{ m.m[1][0], m.m[1][1], m.m[1][2] });
+    const float sz = Length(Vector3{ m.m[2][0], m.m[2][1], m.m[2][2] });
+    radius = local.radius * (std::max)({ sx, sy, sz });
+    return true;
 }
 
 void Object3DInstance::Update()

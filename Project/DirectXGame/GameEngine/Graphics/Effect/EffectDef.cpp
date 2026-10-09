@@ -399,6 +399,7 @@ namespace EffectDefIO {
         }
         out.totalDuration = AsFloat(root["totalDuration"], out.totalDuration);
         if (root["loop"].IsBool()) out.loop = root["loop"].AsBool(out.loop);
+        if (root["reflect"].IsBool()) out.reflect = root["reflect"].AsBool(out.reflect);
 
         // primitives
         const JsonValue& prims = root["primitives"];
@@ -591,6 +592,8 @@ namespace EffectDefIO {
         root["name"] = def.name;
         root["totalDuration"] = static_cast<double>(def.totalDuration);
         root["loop"] = def.loop;
+        // 既定（映す）のときは書かない＝既存の JSON を保存し直しても差分が出ない
+        if (!def.reflect) root["reflect"] = false;
 
         JsonValue primArr = JsonValue::MakeArray();
         for (const auto& c : def.primitives) {

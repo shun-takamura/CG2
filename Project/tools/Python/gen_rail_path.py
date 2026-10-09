@@ -55,6 +55,24 @@ WAVELEN_SKY = 900.0        # S字の波長[m]
 WAVELEN_LOW = 700.0
 WAVELEN_CANYON = 400.0
 
+# 低空後半の蛇行（11_LowAltitudeFlight.md §1-E / §3.0「低空の蛇行と山」）。
+# 山を正面に見て（idx30〜31）右へ切り、山の裾を左に見て回り込み（idx32〜35）、
+# idx36 以降は縁へ向かうまっすぐな区間。Y は altitude() のまま、XZ だけ置き換える。
+# 速さはエンジンと同じ Catmull-Rom の弧長で 25〜27 m/s に揃えてある。
+MEANDER_XZ = {
+    30: (44.0, 1928.0),
+    31: (62.0, 2003.0),
+    32: (105.0, 2066.0),
+    33: (175.0, 2104.0),
+    34: (250.0, 2136.0),
+    35: (302.0, 2188.0),
+    36: (320.0, 2262.0),
+    37: (322.0, 2340.0),
+    38: (322.0, 2420.0),
+    39: (322.0, 2500.0),   # 縁の手前。この X が縁の出口になる
+}
+CANYON_FIRST = 40          # ここから後ろ（谷）は形を変えず、縁の出口の X へ平行移動する
+
 
 def smoothstep(a, b, x):
     """x を [a,b] で 0→1 に滑らかに写す。"""
@@ -105,6 +123,14 @@ def build_points():
         # 位相は距離で進める＝区間をまたいでも折れ目が出ない
         phase += 2.0 * math.pi * seg / wav
         z += seg
+
+    last = max(MEANDER_XZ)
+    shift_x = MEANDER_XZ[last][0] - pts[last][0]
+    for i, (x, mz) in MEANDER_XZ.items():
+        pts[i][0] = round(x, 3)
+        pts[i][2] = round(mz, 3)
+    for i in range(CANYON_FIRST, TOTAL_POINTS):
+        pts[i][0] = round(pts[i][0] + shift_x, 3)
     return pts
 
 
@@ -122,6 +148,11 @@ def report(pts):
         s = sum(segs[i] for i in range(a, min(b, len(segs))))
         n = min(b, len(segs)) - a
         print(f"  {name:<15} {s:7.0f} m   {s / (n * SEC_PER_POINT):5.1f} m/s")
+    a, b = min(MEANDER_XZ) - 1, max(MEANDER_XZ)
+    s = sum(segs[a:b])
+    print(f"  {'Meander':<15} {s:7.0f} m   {s / ((b - a) * SEC_PER_POINT):5.1f} m/s"
+          f"   最速 {max(segs[a:b]) / SEC_PER_POINT:.1f} m/s（目安 35 以内）")
+    print(f"縁の出口 X = {pts[max(MEANDER_XZ)][0]:.0f}（谷 idx{CANYON_FIRST}〜 を平行移動）")
     fastest = max(range(len(segs)), key=lambda i: segs[i])
     print(f"最速セグメント: idx{fastest} ({fastest * SEC_PER_POINT:.0f}s) "
           f"{segs[fastest]:.0f}m → {segs[fastest] / SEC_PER_POINT:.1f} m/s")

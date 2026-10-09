@@ -382,6 +382,34 @@ void PrimitiveMesh::DrawPreview() {
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void PrimitiveMesh::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos) {
+    if (!transformReflectionResource_ || indexCount_ == 0 || vertexCount_ == 0) return;
+
+    // ビルボードは鏡像の視点基準で組む（鏡像の View で組むと、反射の中でも画面を向く）
+    const Matrix4x4 worldMatrix = BuildWorldMatrixFromMatrices(mirroredView, mirroredCameraPos);
+    transformReflectionData_->WVP = Multiply(worldMatrix, mirroredViewProjection);
+    transformReflectionData_->World = worldMatrix;
+
+    PrimitivePipeline::GetInstance()->PreDraw(blendMode_, depthWrite_, false);
+
+    DirectXCore* dxCore = PrimitivePipeline::GetInstance()->GetDxCore();
+    ID3D12GraphicsCommandList* commandList = dxCore->GetCommandList();
+    commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+    commandList->IASetIndexBuffer(&indexBufferView_);
+
+    commandList->SetGraphicsRootConstantBufferView(0, transformReflectionResource_->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(1, materialResource_->GetGPUVirtualAddress());
+    SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
+    if (hasTexture_) {
+        commandList->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
+    }
+    const uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
+    commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+
+    PEPPER_COUNT("DrawCall");
+    commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+}
+
 void PrimitiveMesh::SetTexture(const std::string& textureFilePath) {
     TextureManager::GetInstance()->LoadTexture(textureFilePath);
     textureSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex(textureFilePath);
@@ -467,6 +495,8 @@ void PrimitiveMesh::CreateTransformResource() {
     // プレビュー用（同じインスタンスを別カメラで描画するため）
     transformPreviewResource_ = dxCore->CreateBufferResource(sizeof(TransformationMatrix));
     transformPreviewResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformPreviewData_));
+    transformReflectionResource_ = dxCore->CreateBufferResource(sizeof(TransformationMatrix));
+    transformReflectionResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformReflectionData_));
     transformPreviewData_->WVP = MakeIdentity4x4();
     transformPreviewData_->World = MakeIdentity4x4();
 }

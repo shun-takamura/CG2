@@ -31,6 +31,9 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
         LoadModel(directoryPath, filename);
         animation_ = LoadAnimationFile(directoryPath, filename);
     }
+    if (!bounds_.IsValid() && !modelData_.vertices.empty()) {
+        bounds_ = ComputeBoundingSphere(modelData_.vertices);
+    }
 
     // submesh テーブルが無い場合は、全 index を 1 submesh として扱う（Draw を統一）
     if (submeshes_.empty()) {
@@ -618,11 +621,19 @@ void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const 
     h.Read(&indexOffset, 4);
     h.Read(&skinOffset, 4);
     h.Read(&submeshOffset, 4);
-    assert(version == 3 && "expected .mesh v3");
+    assert((version == 3 || version == 4) && "expected .mesh v3 / v4");
 
     char skeletonPathBuf[256]{};
     h.Read(skeletonPathBuf, 256);
     std::string skeletonPath(skeletonPathBuf);
+
+    // v4 はヘッダ末尾に包む球（バインドポーズ）。データの位置は各 offset で引くので v3 と同じ読み方で済む
+    if (version >= 4) {
+        float sphere[4]{};
+        h.Read(sphere, sizeof(sphere));
+        bounds_.center = { sphere[0], sphere[1], sphere[2] };
+        bounds_.radius = sphere[3];
+    }
 
     const bool hasSkinning = (flags & 0x1) != 0;
 

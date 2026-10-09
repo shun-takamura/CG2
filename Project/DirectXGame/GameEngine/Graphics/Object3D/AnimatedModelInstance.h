@@ -64,6 +64,8 @@ class AnimatedModelInstance
     uint32_t    indexCount_       = 0;
     uint32_t    skinFileOffset_   = 0;
     bool        hasSkinning_      = false;
+    // モデル空間の包む球（バインドポーズ。.mesh v4 のヘッダ、無ければ頂点から計算）
+    BoundingSphere bounds_;
     // .skel から読んだ joint-index 順の Inverse Bind Pose Matrix。
     // CPU 経路では skinClusterData 経由で再構築されるが、DStorage 経路では
     // ここをそのまま SkinCluster に渡す。
@@ -92,6 +94,8 @@ public:
 
     const ModelData& GetModelData() const { return modelData_; }
     const Animation& GetAnimation() const { return animation_; }
+    /// <summary>モデル空間の包む球（バインドポーズ）。IsValid() が false なら大きさ不明</summary>
+    const BoundingSphere& GetBoundingSphere() const { return bounds_; }
 
     Material* GetMaterialPointer() const { return material_; }
 

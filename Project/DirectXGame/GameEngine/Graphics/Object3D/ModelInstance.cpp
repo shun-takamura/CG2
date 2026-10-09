@@ -1,6 +1,8 @@
 #include "ModelInstance.h"
 #include <filesystem> // std::filesystem::path を使うために必要
 #include <cstring>
+#include <algorithm>
+#include <cmath>
 #include "AssetLocator.h"
 #include "DStorageManager.h"
 #include "PepperMacros.h"
@@ -17,6 +19,29 @@ static const std::string& EnsureFallbackWhiteTexture()
 		tm->CreateSolidColorTexture(kWhite, 255, 255, 255, 255);
 	}
 	return kWhite;
+}
+
+BoundingSphere ComputeBoundingSphere(const std::vector<VertexData>& vertices)
+{
+	BoundingSphere sphere;
+	if (vertices.empty()) return sphere;
+
+	Vector3 minP{ vertices[0].position.x, vertices[0].position.y, vertices[0].position.z };
+	Vector3 maxP = minP;
+	for (const VertexData& v : vertices) {
+		minP = { (std::min)(minP.x, v.position.x), (std::min)(minP.y, v.position.y), (std::min)(minP.z, v.position.z) };
+		maxP = { (std::max)(maxP.x, v.position.x), (std::max)(maxP.y, v.position.y), (std::max)(maxP.z, v.position.z) };
+	}
+	sphere.center = { (minP.x + maxP.x) * 0.5f, (minP.y + maxP.y) * 0.5f, (minP.z + maxP.z) * 0.5f };
+	float radiusSq = 0.0f;
+	for (const VertexData& v : vertices) {
+		const float dx = v.position.x - sphere.center.x;
+		const float dy = v.position.y - sphere.center.y;
+		const float dz = v.position.z - sphere.center.z;
+		radiusSq = (std::max)(radiusSq, dx * dx + dy * dy + dz * dz);
+	}
+	sphere.radius = std::sqrt(radiusSq);
+	return sphere;
 }
 
 void ModelInstance::Initialize(ModelCore* modelCore, const std::string& directorPath, const std::string& filename)
@@ -38,6 +63,11 @@ void ModelInstance::LoadCPU(const std::string& directoryPath, const std::string&
 		LoadMeshBinary(directoryPath, filename);
 	} else {
 		LoadModel(directoryPath, filename);
+	}
+
+	// 包む球が .mesh v4 のヘッダに無く、頂点が CPU にあるなら計算する（pack の v3 は不明のまま＝常に見える扱い）
+	if (!bounds_.IsValid() && !modelData_.vertices.empty()) {
+		bounds_ = ComputeBoundingSphere(modelData_.vertices);
 	}
 
 	// テクスチャファイルパスは文字列コピーのみ（GPUロードはGPUフェーズで検証する）
@@ -453,11 +483,12 @@ static std::string ReadMatHeightMapPath(const std::string& matPath)
 
 void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::string& filename)
 {
-	// Cooker (tools/Python/cook_assets.py) が出力した .mesh v2 バイナリを直読みする。
-	// v2 フォーマット:
-	//   [Header 296B] magic("MESH") + version(2) + flags + vertex_count + index_count
+	// Cooker (tools/Python/cook_assets.py) が出力した .mesh バイナリ（v3 / v4）を直読みする。
+	// フォーマット:
+	//   [Header 296B] magic("MESH") + version + flags + vertex_count + index_count
 	//                 + submesh_count + vertex_offset + index_offset + skin_offset
 	//                 + submesh_offset + skeleton_path[256]
+	//   [Bounds 16B]  v4 のみ。包む球 center(3f) + radius(1f)。データの位置は各 offset で引くので v3 と同じ読み方で済む
 	//   [Vertex Data]   VertexData × vertex_count
 	//   [Index Data]    uint32 × index_count
 	//   [Skin Data]     HAS_SKINNING のときのみ
@@ -483,10 +514,17 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 	h.Read(&skinOffset, 4);
 	h.Read(&submeshOffset, 4);
 
-	if (version != 3) return;  // v3 のみサポート（tangent 付き）
+	if (version != 3 && version != 4) return;  // v3 = tangent 付き、v4 = v3 ＋ヘッダ末尾に包む球
 
 	// skeleton_path は今は使わない（スキニングモデルは別経路）
 	h.Seek(h.GetPosition() + 256);
+
+	if (version >= 4) {
+		float sphere[4]{};
+		h.Read(sphere, sizeof(sphere));
+		bounds_.center = { sphere[0], sphere[1], sphere[2] };
+		bounds_.radius = sphere[3];
+	}
 
 	// 静的 .mesh はノード階層を持たないので rootNode の localMatrix を単位行列にしておく
 	modelData_.rootNode.localMatrix = MakeIdentity4x4();

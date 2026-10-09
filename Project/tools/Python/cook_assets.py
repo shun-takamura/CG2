@@ -42,13 +42,17 @@ TEXCONV = Path("externals/texconv/Texconv.exe")
 # 法線マップは sRGB だと法線がずれるので、ファイル名/フォルダ名に "NormalMap" を含めること。
 LINEAR_TEXTURE_HINTS = ("MaskTexture", "NormalMap")
 
-# ---- .mesh v3 フォーマット定数 ----
+# ---- .mesh v4 フォーマット定数 ----
 # Header: magic(4) + version(4) + flags(4) + vc(4) + ic(4) + smc(4)
 #       + vo(4) + io(4) + so(4) + smo(4) + skeleton_path(256)
+#       + bounds(16) = center(3f) + radius(1f)
 # v3 で頂点に tangent(Vector4) を追加（法線マップ用。w=handedness）
+# v4 でヘッダ末尾に包む球を追加（水面の反射などの距離判定用。頂点が CPU に来ない pack モードでも使えるように
+#    クック時に計算しておく）。中心・半径はモデル空間（LH 変換後）。スキニングモデルはバインドポーズ
 MESH_MAGIC = b"MESH"
-MESH_VERSION = 3
-MESH_HEADER_SIZE = 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256  # = 288
+MESH_VERSION = 4
+MESH_BOUNDS_SIZE = 16
+MESH_HEADER_SIZE = 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 256 + MESH_BOUNDS_SIZE  # = 312
 MESH_VERTEX_SIZE = 16 + 8 + 12 + 16                              # = 52 (pos + uv + normal + tangent)
 MESH_SKIN_VERTEX_SIZE = 16 + 16                                  # = 32 (joint_indices + weights)
 MESH_SUBMESH_SIZE = 4 + 4 + 256                                  # = 264
@@ -414,13 +418,27 @@ def _build_obj_mesh_buffers(obj_path: Path):
     return vertex_buffer, index_buffer, submeshes, mtllib
 
 
+def _compute_bounding_sphere(vertex_buffer: list[tuple]) -> tuple[float, float, float, float]:
+    """頂点を全部包む球（中心 = AABB の中心、半径 = そこから一番遠い頂点まで）。"""
+    if not vertex_buffer:
+        return (0.0, 0.0, 0.0, 0.0)
+    xs = [v[0] for v in vertex_buffer]
+    ys = [v[1] for v in vertex_buffer]
+    zs = [v[2] for v in vertex_buffer]
+    cx = (min(xs) + max(xs)) * 0.5
+    cy = (min(ys) + max(ys)) * 0.5
+    cz = (min(zs) + max(zs)) * 0.5
+    r2 = max((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 for x, y, z in zip(xs, ys, zs))
+    return (cx, cy, cz, r2 ** 0.5)
+
+
 def _write_mesh_v2(out_path: Path,
                    vertex_buffer: list[tuple],
                    index_buffer: list[int],
                    submeshes: list[tuple[int, int, str]],
                    skeleton_path: str = "",
                    skin_buffer: list[tuple] | None = None) -> None:
-    """共通 .mesh v2 ライター。
+    """共通 .mesh ライター（今は v4。関数名は呼び出し側との互換のため据え置き）。
 
     submeshes: [(index_start, index_count, material_path)]
     skin_buffer: None または [(joint_idx[4], weights[4])] のリスト
@@ -443,7 +461,7 @@ def _write_mesh_v2(out_path: Path,
         submesh_offset = skin_offset + vertex_count * MESH_SKIN_VERTEX_SIZE
 
     with out_path.open("wb") as f:
-        # ---- Header (288 bytes) ----
+        # ---- Header (312 bytes) ----
         f.write(MESH_MAGIC)
         f.write(struct.pack("<IIIIIIIII",
                             MESH_VERSION,
@@ -456,6 +474,8 @@ def _write_mesh_v2(out_path: Path,
                             skin_offset,
                             submesh_offset))
         f.write(_fixed_path_bytes(skeleton_path))
+        # ---- Bounds (v4) ----
+        f.write(struct.pack("<4f", *_compute_bounding_sphere(vertex_buffer)))
 
         # ---- Vertex Data ---- (v3: pos4 + uv2 + normal3 + tangent4 = 13 float)
         for v in vertex_buffer:
@@ -1408,7 +1428,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Assets/ → Resources/ アセットコンバータ")
     parser.add_argument("--force", action="store_true", help="差分を無視して全再変換")
     parser.add_argument("--dry-run", action="store_true", help="実際の変換は行わず予定のみ表示")
+    parser.add_argument("--meshes-only", action="store_true",
+                        help="今ある .mesh だけを差分を無視して再変換（.mesh の形式を上げた時用）")
     args = parser.parse_args()
+    mesh_actions = (Action.CONVERT_OBJ_TO_MESH, Action.CONVERT_GLTF_TO_MESH)
 
     if not ASSETS_DIR.exists():
         print(
@@ -1435,7 +1458,11 @@ def main() -> int:
         if task.action == Action.SKIP:
             continue
 
-        if not needs_rebuild(task, cache, args.force):
+        # 形式を上げる時は、今ある .mesh だけを作り直す（未クックの試験用レイアウト等を増やさない）
+        if args.meshes_only and (task.action not in mesh_actions or not task.dst.exists()):
+            continue
+
+        if not needs_rebuild(task, cache, args.force or args.meshes_only):
             up_to_date += 1
             continue
 

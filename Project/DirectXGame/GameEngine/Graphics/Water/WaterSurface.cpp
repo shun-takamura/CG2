@@ -38,6 +38,7 @@ namespace {
 		kRootFloorNormal,     // PS t7 床の法線マップ
 		kRootFloorHeight,     // PS t8 床のハイトマップ（視差）
 		kRootCloudMoko,       // PS t9 雲のもこもこの高さ
+		kRootRiverMap,        // PS t10 川のマップ（大河モード）
 		kRootCount
 	};
 }
@@ -52,14 +53,15 @@ void WaterSurface::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Objec
 	rippleSimulation_ = std::make_unique<RippleSimulation>();
 	rippleSimulation_->Initialize(dxCore, srvManager);
 	object3DManager_ = object3DManager;
-	floorTexturePath_ = floorTexturePath;
+	// 床を使わない（大河モード）ときも、ルートパラメータを埋めるテクスチャは要る
+	floorTexturePath_ = floorTexturePath.empty() ? CloudLayer::GetFallbackTexturePath() : floorTexturePath;
 
 	TextureManager::GetInstance()->LoadTexture(floorTexturePath_);
 	TextureManager::GetInstance()->LoadTexture(CloudLayer::GetFallbackTexturePath());
 	disabledCloudResource_ = CloudLayer::CreateDisabledConstantBuffer(dxCore_);
 
 	CreateRootSignature();
-	CreatePipelineState();
+	pipelineState_ = CreatePipelineState(false);
 	CreateVertexBuffer();
 
 	transformResource_ = dxCore_->CreateBufferResource(sizeof(TransformForGPU));
@@ -91,6 +93,7 @@ void WaterSurface::CreateRootSignature()
 	D3D12_DESCRIPTOR_RANGE rangeFloorNormal = makeRange(7);
 	D3D12_DESCRIPTOR_RANGE rangeFloorHeight = makeRange(8);
 	D3D12_DESCRIPTOR_RANGE rangeCloudMoko = makeRange(9);
+	D3D12_DESCRIPTOR_RANGE rangeRiverMap = makeRange(10);
 
 	auto setCbv = [](D3D12_ROOT_PARAMETER& p, UINT reg, D3D12_SHADER_VISIBILITY vis) {
 		p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -120,6 +123,7 @@ void WaterSurface::CreateRootSignature()
 	setTable(rootParameters[kRootFloorNormal], &rangeFloorNormal);
 	setTable(rootParameters[kRootFloorHeight], &rangeFloorHeight);
 	setTable(rootParameters[kRootCloudMoko], &rangeCloudMoko);
+	setTable(rootParameters[kRootRiverMap], &rangeRiverMap);
 
 	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）, s4 = 雲のノイズ（ラップ・異方性）
 	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
@@ -167,7 +171,7 @@ void WaterSurface::CreateRootSignature()
 	assert(SUCCEEDED(hr));
 }
 
-void WaterSurface::CreatePipelineState()
+Microsoft::WRL::ComPtr<ID3D12PipelineState> WaterSurface::CreatePipelineState(bool premultipliedAlpha)
 {
 	IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Water/WaterSurface.VS.hlsl", L"vs_6_0");
 	IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Water/WaterSurface.PS.hlsl", L"ps_6_0");
@@ -185,6 +189,18 @@ void WaterSurface::CreatePipelineState()
 	D3D12_BLEND_DESC blend{};
 	blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	blend.RenderTarget[0].BlendEnable = FALSE; // 床の透過はシェーダ内で合成するので不透明で描く
+	if (premultipliedAlpha) {
+		// 大河モード：下の地形 × (1 - a) に、水の色と反射（乗算済み）を足す。
+		// a が 0 の所でも反射は足されるので、透けている浅瀬にも空が映る
+		D3D12_RENDER_TARGET_BLEND_DESC& rt = blend.RenderTarget[0];
+		rt.BlendEnable = TRUE;
+		rt.SrcBlend = D3D12_BLEND_ONE;
+		rt.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		rt.BlendOp = D3D12_BLEND_OP_ADD;
+		rt.SrcBlendAlpha = D3D12_BLEND_ONE;
+		rt.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+		rt.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	}
 
 	D3D12_DEPTH_STENCIL_DESC depth{};
 	depth.DepthEnable = TRUE;
@@ -206,8 +222,31 @@ void WaterSurface::CreatePipelineState()
 	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	desc.SampleDesc.Count = 1;
 
-	HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState_));
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+	HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState));
 	assert(SUCCEEDED(hr));
+	return pipelineState;
+}
+
+void WaterSurface::InitializeRiverMode()
+{
+	if (riverPipelineState_) return;
+	riverPipelineState_ = CreatePipelineState(true);
+	// 大河は一方向に流れるので、タイトルの同心円の波は出さない
+	params_.ambientRingScale = 0.0f;
+	ambientFrom_ = ambientTo_ = 0.0f;
+}
+
+void WaterSurface::SetRiverMap(const std::string& riverMapPath, const RiverMapInfo& info)
+{
+	assert(riverPipelineState_ && "SetRiverMap は InitializeRiverMode の後に呼ぶ");
+	riverMapPath_ = riverMapPath;
+	params_.riverMapOrigin = { info.xMin, info.zMax };
+	params_.riverMapInvSize = {
+		1.0f / (std::max)(info.xMax - info.xMin, 1e-3f),
+		1.0f / (std::max)(info.zMax - info.zMin, 1e-3f) };
+	params_.riverMaxDepth = info.maxDepth;
+	params_.riverMode = TextureManager::GetInstance()->IsGPUReady(riverMapPath_) ? 1 : 0;
 }
 
 void WaterSurface::CreateVertexBuffer()
@@ -266,8 +305,10 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	TextureManager* tm = TextureManager::GetInstance();
 	const D3D12_GPU_DESCRIPTOR_HANDLE floorSrv = tm->GetSrvHandleGPU(floorTexturePath_);
 
+	const bool river = params_.riverMode != 0 && riverPipelineState_;
+
 	cmd->SetGraphicsRootSignature(rootSignature_.Get());
-	cmd->SetPipelineState(pipelineState_.Get());
+	cmd->SetPipelineState(river ? riverPipelineState_.Get() : pipelineState_.Get());
 	cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
@@ -295,6 +336,8 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 		params_.floorUseNormalMap ? tm->GetSrvHandleGPU(floorNormalMapPath_) : floorSrv);
 	cmd->SetGraphicsRootDescriptorTable(kRootFloorHeight,
 		params_.floorUseParallax ? tm->GetSrvHandleGPU(floorHeightMapPath_) : floorSrv);
+	// 川のマップが無ければ床のテクスチャで埋める（シェーダは riverMode=0 で読まない）
+	cmd->SetGraphicsRootDescriptorTable(kRootRiverMap, river ? tm->GetSrvHandleGPU(riverMapPath_) : floorSrv);
 
 	PEPPER_COUNT("DrawCall");
 	cmd->DrawInstanced(4, 1, 0, 0);
@@ -408,6 +451,18 @@ float WaterSurface::NextRandom01()
 void WaterSurface::OnImGui()
 {
 #ifdef _DEBUG
+	if (riverPipelineState_) {
+		ImGui::SeparatorText("River");
+		ImGui::Text("River map: %s", params_.riverMode ? riverMapPath_.c_str() : "(not loaded)");
+		ImGui::DragFloat("Depth Threshold [m]", &params_.riverDepthThreshold, 0.005f, 0.0f, 2.0f, "%.3f");
+		ImGui::DragFloat("Shore Fade [m]", &params_.riverShoreFade, 0.01f, 0.0f, 5.0f);
+		ImGui::DragFloat("Opacity [1/m]", &params_.riverOpacity, 0.01f, 0.0f, 10.0f);
+		ImGui::SliderFloat("Min Cos", &params_.riverMinCos, 0.01f, 1.0f);
+		ImGui::ColorEdit3("Shallow Color", &params_.riverShallowColor.x);
+		ImGui::ColorEdit3("Deep Color", &params_.riverDeepColor.x);
+		ImGui::DragFloat("Deep Depth [m]", &params_.riverDeepDepth, 0.05f, 0.1f, 50.0f);
+		ImGui::SeparatorText("Common");
+	}
 	ImGui::DragFloat("Water Height", &params_.waterHeight, 0.01f, -100.0f, 100.0f);
 	ImGui::DragFloat("Water Depth", &params_.depth, 0.005f, 0.0f, 10.0f);
 	ImGui::DragFloat("Water Size", &size_, 1.0f, 1.0f, 5000.0f);

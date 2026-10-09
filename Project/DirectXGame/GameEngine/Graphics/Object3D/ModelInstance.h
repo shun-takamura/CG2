@@ -44,6 +44,20 @@ struct ModelData
 	std::map<std::string, JointWeightData> skinClusterData;
 };
 
+/// <summary>
+/// モデルを包む球（モデル空間）。.mesh v4 はクック時に計算してヘッダに持つ。
+/// radius &lt; 0 は「分からない」（v3 の .mesh を pack モードで読んだ時など）。使う側は常に見える扱いにする。
+/// </summary>
+struct BoundingSphere
+{
+	Vector3 center{};
+	float radius = -1.0f;
+	bool IsValid() const { return radius >= 0.0f; }
+};
+
+/// <summary>頂点を全部包む球（中心 = AABB の中心）。cook_assets.py の _compute_bounding_sphere と同じ作り方</summary>
+BoundingSphere ComputeBoundingSphere(const std::vector<VertexData>& vertices);
+
 // 部位別マテリアル用のランタイム submesh。
 // 頂点/インデックスは 1 本のバッファに連結され、submesh は index 範囲でその部分を指す。
 struct RenderSubmesh
@@ -103,6 +117,9 @@ class ModelInstance
 	uint32_t    indexFileOffset_  = 0;
 	uint32_t    indexCount_       = 0;
 
+	// モデル空間の包む球（.mesh v4 のヘッダ、無ければ頂点から計算）
+	BoundingSphere bounds_;
+
 	//==============================
 	// メンバ関数
 	//==============================
@@ -125,6 +142,9 @@ public:
 	void DrawShadowPass(DirectXCore* dxCore);
 
 	const ModelData& GetModelData() const { return modelData_; }
+
+	/// <summary>モデル空間の包む球。IsValid() が false なら大きさ不明</summary>
+	const BoundingSphere& GetBoundingSphere() const { return bounds_; }
 
 	// ---- インスタンシング描画（外部の専用レンダラが VBV/IBV とサブメッシュ情報を借りる）----
 	// 頂点/インデックスバッファはモデル全体で 1 本。サブメッシュは index 範囲でその部分を指す。

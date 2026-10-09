@@ -104,6 +104,8 @@ public:
 	void Reset(float stageSec);
 
 	bool HasSections() const { return !sections_.empty(); }
+	/// <summary>遠景の雲（InitializeClouds 前は null）。大河の水面に映る空へ重ねるのに使う</summary>
+	const CloudLayer* GetCloudLayer() const { return cloudLayer_.get(); }
 	const StageEnvValues& GetCurrent() const { return current_; }
 	/// <summary>必殺技の暗転から復帰する時の目標色（＝今のセクションの着色）。</summary>
 	const Vector4& GetCurrentTint() const { return current_.skyTint; }
