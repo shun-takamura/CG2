@@ -4,6 +4,7 @@
 #include "SRVManager.h"
 #include "Object3DManager.h"
 #include "Object3DInstance.h"
+#include "AnimatedObject3DInstance.h"
 #include "Camera.h"
 #include "CameraForGPU.h"
 #include "RenderTexture.h"
@@ -11,6 +12,7 @@
 #include "MathUtility.h"
 #include "WindowsApplication.h"
 #include "PepperMacros.h"
+#include "Effect/EffectManager.h"
 #include <algorithm>
 #include <cassert>
 
@@ -98,17 +100,30 @@ void WaterReflection::RemoveTarget(Object3DInstance* target)
 	targets_.erase(std::remove(targets_.begin(), targets_.end(), target), targets_.end());
 }
 
+void WaterReflection::AddTarget(AnimatedObject3DInstance* target)
+{
+	if (!target) return;
+	if (std::find(animatedTargets_.begin(), animatedTargets_.end(), target) != animatedTargets_.end()) return;
+	animatedTargets_.push_back(target);
+}
+
 void WaterReflection::ClearTargets()
 {
 	targets_.clear();
+	animatedTargets_.clear();
 }
 
 void WaterReflection::Render(const Camera& camera)
 {
-	Render(camera.GetViewProjectionMatrix(), camera.GetTranslate());
+	RenderInternal(camera.GetViewProjectionMatrix(), camera.GetTranslate(), &camera.GetViewMatrix());
 }
 
 void WaterReflection::Render(const Matrix4x4& viewProjection, const Vector3& eyePosition)
+{
+	RenderInternal(viewProjection, eyePosition, nullptr);
+}
+
+void WaterReflection::RenderInternal(const Matrix4x4& viewProjection, const Vector3& eyePosition, const Matrix4x4* view)
 {
 	PEPPER_SCOPE("WaterReflection::Render");
 
@@ -117,18 +132,31 @@ void WaterReflection::Render(const Matrix4x4& viewProjection, const Vector3& eye
 	sourceEyePosition_ = eyePosition;
 	const Vector3& camPos = eyePosition;
 
-	// 描画距離で絞る。遠い物は映さない（そこは空の反射が代わりに映る）
+	// 描画距離で絞る。遠い物は映さない（そこは空の反射が代わりに映る）。
+	// 原点ではなく包む球で測る（地形のように原点から離れた所に広がる物も正しく残す）。
+	// 球が分からない物は常に描く
+	auto isWithinFarClip = [&](const auto* t) {
+		Vector3 center{};
+		float radius = 0.0f;
+		if (!t->GetWorldBoundingSphere(center, radius)) return true;
+		const float distance = Length(Vector3{ center.x - camPos.x, center.y - camPos.y, center.z - camPos.z }) - radius;
+		return distance <= farClip_;
+	};
 	visibleTargets_.clear();
 	for (Object3DInstance* t : targets_) {
-		const Vector3& p = t->GetTranslate();
-		if (Length(Vector3{ p.x - camPos.x, p.y - camPos.y, p.z - camPos.z }) <= farClip_) {
-			visibleTargets_.push_back(t);
-		}
+		if (isWithinFarClip(t)) visibleTargets_.push_back(t);
 	}
-	drawnCount_ = static_cast<uint32_t>(visibleTargets_.size());
+	visibleAnimatedTargets_.clear();
+	for (AnimatedObject3DInstance* t : animatedTargets_) {
+		if (isWithinFarClip(t)) visibleAnimatedTargets_.push_back(t);
+	}
+	drawnCount_ = static_cast<uint32_t>(visibleTargets_.size() + visibleAnimatedTargets_.size());
+	const bool hasVisible = drawnCount_ > 0;
+	// エフェクトは出ているかを前もって知る手段が無いので、描く設定なら毎フレームパスを回す
+	const bool drawEffects = drawEffects_ && view != nullptr;
 
 	// 映す物が無く、RT も既に空なら何もしない（RT は SRV 状態のまま使い回す）
-	if (visibleTargets_.empty() && !hasContent_ && srvReady_) {
+	if (!hasVisible && !drawEffects && !hasContent_ && srvReady_) {
 		return;
 	}
 
@@ -150,7 +178,7 @@ void WaterReflection::Render(const Matrix4x4& viewProjection, const Vector3& eye
 	renderTexture_->BeginRender(cmd, &dsv);
 	cmd->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	if (!visibleTargets_.empty()) {
+	if (hasVisible) {
 		object3DManager_->DrawSetting();
 		LightManager::GetInstance()->BindLights(cmd);
 
@@ -158,11 +186,23 @@ void WaterReflection::Render(const Matrix4x4& viewProjection, const Vector3& eye
 		for (Object3DInstance* t : visibleTargets_) {
 			t->DrawReflection(dxCore_, base, base + kCameraCBOffset);
 		}
+		for (AnimatedObject3DInstance* t : visibleAnimatedTargets_) {
+			t->DrawReflection(dxCore_, base, base + kCameraCBOffset);
+		}
+	}
+
+	// エフェクトは不透明の物の後（反射 RT の深度で物の奥は隠れる）。ブルーム・歪みは描かない。
+	// 鏡像の View = 鏡像行列 × 本編の View（ViewProj と同じ作り）。ビルボードはこれで組むと反射の中でも画面を向く
+	if (drawEffects) {
+		const Matrix4x4 mirroredView = Multiply(mirror, *view);
+		// 転送用の CB は書き込み専用メモリなので読み返さず、ここで作り直す
+		const Vector3 mirroredEye{ camPos.x, 2.0f * waterHeight_ - camPos.y, camPos.z };
+		EffectManager::GetInstance()->DrawReflection(mirroredView, Multiply(mirror, viewProjection), mirroredEye);
 	}
 
 	renderTexture_->EndRender(cmd);
 	srvReady_ = true;
-	hasContent_ = !visibleTargets_.empty();
+	hasContent_ = hasVisible || drawEffects;
 
 	// シーン RT は本体解像度なので、ビューポートを戻して返す
 	D3D12_VIEWPORT viewport{};

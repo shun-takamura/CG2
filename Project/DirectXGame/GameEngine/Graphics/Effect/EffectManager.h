@@ -163,6 +163,12 @@ public:
     void Draw();
 
     /// <summary>
+    /// 水面の反射 RT へ GPU パーティクルと Primitive を描く（WaterReflection::Render から呼ぶ）。
+    /// ブルーム・歪みのパスは描かない。パーティクルは前フレームに進めた状態をそのまま描く（シミュレーションしない）。
+    /// </summary>
+    void DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos);
+
+    /// <summary>
     /// アクティブな全 EffectInstance の useDistortion な Primitive を distortionRT に描画する。
     /// Game::Draw が IdPass の後に呼ぶ想定。RTV/DSV/Viewport/Scissor は呼び出し側が設定済みであること。
     /// </summary>

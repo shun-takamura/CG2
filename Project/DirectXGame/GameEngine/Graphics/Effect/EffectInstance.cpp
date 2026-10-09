@@ -392,6 +392,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
                                    pc.dissolveEdgeEnable, pc.dissolveEdgeColor, pc.dissolveEdgeWidth);
             // ブルーム（時間非依存＝毎フレーム設定でライブ反映）
             gpu_->SetGroupBloom(groupName, pc.useBloom, pc.bloomIntensity);
+            // 水面に映すか（エフェクト単位。def の reflect）
+            gpu_->SetGroupReflect(groupName, def_.reflect);
             // 収束（移動をカーブで制御）。orbit と排他（シェーダは converge を優先）。中心はエフェクト位置＋offset。
             gpu_->SetGroupConverge(groupName, pc.convergeEnable, center);
             // 移動カーブ LUT は converge と orbit 半径で共用（排他）。時間非依存＝毎フレーム設定でライブ反映。
@@ -707,6 +709,15 @@ void EffectInstance::Draw() {
     for (auto& rt : primitives_) {
         if (rt.renderer && rt.started && !rt.finished) {
             rt.renderer->Draw();
+        }
+    }
+}
+
+void EffectInstance::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos) {
+    if (!def_.reflect) return;
+    for (auto& rt : primitives_) {
+        if (rt.renderer && rt.started && !rt.finished) {
+            rt.renderer->DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
         }
     }
 }

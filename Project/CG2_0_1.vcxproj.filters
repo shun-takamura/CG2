@@ -141,6 +141,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\BossArenaWater.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\RiverWater.cpp">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
@@ -267,6 +270,9 @@
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\BossArenaWater.h">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\RiverWater.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h">

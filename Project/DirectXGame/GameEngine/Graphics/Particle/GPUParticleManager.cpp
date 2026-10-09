@@ -365,6 +365,49 @@ void GPUParticleManager::DrawGroupBloom(GPUParticleGroup& g, ID3D12Resource* per
     commandList->DrawInstanced(6, kMaxParticles, 0, 0);
 }
 
+void GPUParticleManager::SetGroupReflect(const std::string& name, bool reflect)
+{
+    auto it = groups_.find(name);
+    if (it == groups_.end()) return;
+    it->second.reflect = reflect;
+}
+
+void GPUParticleManager::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos)
+{
+    // Update と同じ作り方（View の回転の転置）。鏡像の View を使うと、反射の中で画面を向く
+    Matrix4x4 bb = MakeIdentity4x4();
+    bb.m[0][0] = mirroredView.m[0][0]; bb.m[0][1] = mirroredView.m[1][0]; bb.m[0][2] = mirroredView.m[2][0];
+    bb.m[1][0] = mirroredView.m[0][1]; bb.m[1][1] = mirroredView.m[1][1]; bb.m[1][2] = mirroredView.m[2][1];
+    bb.m[2][0] = mirroredView.m[0][2]; bb.m[2][1] = mirroredView.m[1][2]; bb.m[2][2] = mirroredView.m[2][2];
+
+    auto commandList = dxCore_->GetCommandList();
+    for (auto& pair : groups_) {
+        GPUParticleGroup& g = pair.second;
+        // 未初期化のグループは粒子バッファが COMMON 状態なので描かない（DrawGroupBloom と同じ）
+        if (g.isPreview || !g.reflect || !g.initializedOnGPU || !g.perViewReflectionData) continue;
+
+        g.perViewReflectionData->viewProjection = mirroredViewProjection;
+        g.perViewReflectionData->billboardMatrix = bb;
+        g.perViewReflectionData->cameraPosition = mirroredCameraPos;
+        g.perViewReflectionData->billboardMode = static_cast<uint32_t>(g.billboardMode);
+
+        commandList->SetGraphicsRootSignature(drawRootSig_.Get());
+        commandList->SetPipelineState(drawPSOs_[g.blendMode].Get());
+        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
+        commandList->SetGraphicsRootConstantBufferView(1, g.perViewReflectionResource->GetGPUVirtualAddress());
+        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+        commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
+
+        PEPPER_COUNT("DrawCall");
+        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+    }
+}
+
 void GPUParticleManager::SetGroupBillboardMode(const std::string& name, BillboardMode mode)
 {
     auto it = groups_.find(name);
@@ -808,6 +851,11 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.perViewData->billboardMatrix = MakeIdentity4x4();
     g.perViewData->cameraPosition = { 0.0f, 0.0f, 0.0f };
     g.perViewData->billboardMode = static_cast<uint32_t>(BillboardMode::Full);
+
+    // PerView CB（水面の反射用）
+    g.perViewReflectionResource = dxCore_->CreateBufferResource(sizeof(PerView));
+    g.perViewReflectionResource->Map(0, nullptr, reinterpret_cast<void**>(&g.perViewReflectionData));
+    *g.perViewReflectionData = *g.perViewData;
 
     // PerView CB（プレビュー用）
     g.perViewPreviewResource = dxCore_->CreateBufferResource(sizeof(PerView));

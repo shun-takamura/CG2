@@ -30,6 +30,7 @@ class LightningRuntime;
 class RailStagePart;
 class BossStagePart;
 class BossArenaWater;
+class RiverWater;
 
 /// <summary>
 /// ステージプレイシーン
@@ -149,6 +150,8 @@ private:
 	std::unique_ptr<BossStagePart> bossStage_;
 	// ボス戦の床（石畳＋薄い水）。Boss フェーズ中だけ更新・描画する
 	std::unique_ptr<BossArenaWater> bossWater_;
+	// 低空飛行の大河の水面。PSO はシーン初期化で作り、川のデータは雲の中で読む（13_RiverWater.md）
+	std::unique_ptr<RiverWater> riverWater_;
 
 	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する

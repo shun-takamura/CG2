@@ -41,6 +41,11 @@ public:
     void UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos);
     void DrawPreview();
 
+    // 水面の反射 RT へ描く（鏡像の視点）
+    void DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos) {
+        mesh_.DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
+    }
+
     // ===== 動的に書き換えるパラメータ =====
     void SetTranslate(const Vector3& v) { mesh_.GetTransform().translate = v; }
     void SetScale(const Vector3& v)     { mesh_.GetTransform().scale     = v; }

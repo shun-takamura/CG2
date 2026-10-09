@@ -27,6 +27,9 @@ class CloudLayer;
 ///
 /// レジスタは Object3D と取り決めを共有する（b1=平行光源 / b5,t3,s1,s2=シャドウ / b6=フォグ）。
 /// t2 は PBR 法線用に空けておく。b7,t5,s4,t9 は遠景の雲（Skybox と同じ CloudLayer を挿す）。
+///
+/// 大河モード（ステージの低空。13_RiverWater.md）では床を描かず、t10 の川のマップの水深で
+/// 水の色と不透明度を決め、乗算済み α で下の地形を透かす。範囲外と浅い所は描かない。
 /// </summary>
 class WaterSurface {
 public:
@@ -99,13 +102,51 @@ public:
 		float   floorParallaxMaxLayers = 24.0f;             // 浅い角度から見たときの段数
 		float   floorNormalFlipY = 1.0f;                    // 法線マップの緑の向き（-1 で反転）
 		float   padding5 = 0.0f;
+		// ----- 大河モード（SetRiverMap で有効）。床を描かず、川のマップの水深で色と不透明度を決めて地形を透かす -----
+		int     riverMode = 0;                              // 内部で設定
+		float   riverDepthThreshold = 0.03f;                // これより浅い所は描かない [m]（岸の下・滝の縁の先）
+		float   riverMaxDepth = 10.0f;                      // 川のマップの R=1 の水深 [m]。内部で設定
+		float   riverOpacity = 0.6f;                        // 水の濁り [1/m]。大きいほど浅くても不透明
+		Vector2 riverMapOrigin{};                           // (x_min, z_max)。内部で設定
+		Vector2 riverMapInvSize{};                          // (1/(x_max-x_min), 1/(z_max-z_min))。内部で設定
+		Vector4 riverShallowColor{ 0.30f, 0.55f, 0.45f, 1.0f }; // 浅い所の水の色
+		Vector4 riverDeepColor{ 0.04f, 0.16f, 0.20f, 1.0f };    // 深い所の水の色
+		float   riverDeepDepth = 6.0f;                      // この水深で深い色になりきる [m]
+		float   riverMinCos = 0.15f;                        // 浅い角度で水の中を通る長さが伸びすぎないようにする下限
+		float   riverShoreFade = 0.4f;                      // 水際で反射ごと消えていく幅 [m]
+		float   reflectionRtWeight = 1.0f;                  // 反射 RT（映す物）の重み。0 で空だけ。カメラの高さでの足切りのフェードに使う
+	};
+
+	/// <summary>川のマップとワールド座標の対応（RiverTerrain.json と同じ値）</summary>
+	struct RiverMapInfo {
+		float xMin = -1000.0f;
+		float xMax = 1000.0f;
+		float zMin = 900.0f;
+		float zMax = 2600.0f;
+		float maxDepth = 10.0f;
 	};
 
 	WaterSurface();
 	~WaterSurface();
 
+	/// <param name="floorTexturePath">水底の床。空文字なら床を使わない（大河モード用。代わりのテクスチャで埋める）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
 		const std::string& floorTexturePath);
+
+	//==============================
+	// 大河モード
+	//==============================
+	/// <summary>
+	/// 大河モード用の PSO（乗算済み α のブレンド）を作る。重いのでシーン初期化で呼ぶ。
+	/// タイトル・ボス戦は呼ばない（従来の不透明の PSO だけを使う）。
+	/// </summary>
+	void InitializeRiverMode();
+	/// <summary>
+	/// 川のマップ（R=水深 / maxDepth、GB=流れ）を挿して大河モードにする。
+	/// テクスチャは GPU フェーズまで済ませておくこと。InitializeRiverMode の後に呼ぶ。
+	/// </summary>
+	void SetRiverMap(const std::string& riverMapPath, const RiverMapInfo& info);
+	bool IsRiverMode() const { return params_.riverMode != 0; }
 
 	/// <summary>波の時間を進める（待機中の波の倍率の補間、連続発射もここで進む）</summary>
 	void Update(float deltaTime);
@@ -186,7 +227,8 @@ private:
 	};
 
 	void CreateRootSignature();
-	void CreatePipelineState();
+	/// <param name="premultipliedAlpha">true なら大河モード用（乗算済み α のブレンド）</param>
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(bool premultipliedAlpha);
 	void CreateVertexBuffer();
 
 	DirectXCore* dxCore_ = nullptr;
@@ -198,6 +240,8 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> riverPipelineState_; // InitializeRiverMode で作る
+	std::string riverMapPath_;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer_;
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};

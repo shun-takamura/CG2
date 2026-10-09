@@ -57,6 +57,8 @@ class AnimatedObject3DInstance : public IImGuiEditable {
 
     Transform transform_;
     Transform cameraTransform_;
+    // Update で求めたワールド行列（CPU 側の控え。転送用の CB は書き込み専用メモリなので読まない）
+    Matrix4x4 worldMatrix_ = MakeIdentity4x4();
 
     std::string textureFilePath_;
     std::string modelFileName_;
@@ -248,6 +250,21 @@ public:
     // シャドウパス用：transform を b0 にバインドし、Skinning 済み VBV で深度を書く。
     // スキニングのDispatchは事前に済んでいる前提（DispatchDynamicAnimatedSkinning）。
     void DrawShadowPass(DirectXCore* dxCore);
+
+    /// <summary>
+    /// 水面の反射 RT へ描く（WaterReflection::Render から呼ばれる）。Object3DInstance::DrawReflection と同じく
+    /// 自分の World を使い回し、鏡像の ViewProj（b1）とカメラ（b2）は鏡側の CB を挿す。
+    /// スキニングは CS 済みの頂点を使うので、反射用の VS は静的モデルと共通。
+    /// </summary>
+    void DrawReflection(DirectXCore* dxCore,
+        D3D12_GPU_VIRTUAL_ADDRESS reflectionViewProjAddress,
+        D3D12_GPU_VIRTUAL_ADDRESS reflectionCameraAddress);
+
+    /// <summary>
+    /// ワールド空間の包む球。バインドポーズの球に余白を足す（腕を伸ばす等で頂点が外に出るため）。
+    /// モデルが無い・球が分からない時は false（呼び出し側は常に見える扱いにする）。
+    /// </summary>
+    bool GetWorldBoundingSphere(Vector3& center, float& radius) const;
 
 #ifdef USE_IMGUI
     // Skeletonのデバッグ描画（全モデル描画後に呼ぶ）

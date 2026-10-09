@@ -324,6 +324,15 @@ void EffectManager::Draw() {
     }
 }
 
+void EffectManager::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos) {
+    if (gpuParticleManager_) {
+        gpuParticleManager_->DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
+    }
+    for (auto& inst : activeInstances_) {
+        if (inst) inst->DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
+    }
+}
+
 void EffectManager::DrawDistortionPass() {
     for (auto& inst : activeInstances_) {
         if (inst) inst->DrawDistortionPass();

@@ -166,6 +166,8 @@ public:
     /// 「通常描画と同じ見た目 × intensity」を加算で描く。
     /// </summary>
     void SetGroupBloom(const std::string& name, bool enable, float intensity);
+    /// <summary>水面の反射 RT に描くか（既定 true）</summary>
+    void SetGroupReflect(const std::string& name, bool reflect);
     // Bloom 対象のグループが（シーン用 or プレビュー用に）1つでもあるか
     bool HasBloomGroup(bool preview) const;
     // Bloom 対象のシーン用グループを発光 RT に描く（シミュレーションはしない。Draw の後に呼ぶ）
@@ -194,6 +196,13 @@ public:
 
     // プレビュー用グループを独立シミュレート＋描画（プレビュー用 PerView を使う）
     void DrawPreview();
+
+    /// <summary>
+    /// 水面の反射 RT へ全グループ（プレビュー以外・reflect=true）を描く。シミュレーションはせず、
+    /// 前フレームに進めた粒子をそのまま描く（反射のパスはシーン描画の最初で、まだ今フレームの Draw 前のため）。
+    /// 鏡像の View でビルボードを組むので、反射の中でも粒子は画面を向く。
+    /// </summary>
+    void DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos);
 
     // ImGui デバッグUI
     void OnImGui();
@@ -345,6 +354,11 @@ private:
         // PerView CB（メイン用）
         Microsoft::WRL::ComPtr<ID3D12Resource> perViewResource;
         PerView* perViewData = nullptr;
+
+        // PerView CB（水面の反射用。DrawReflection で鏡像の視点を書く）
+        Microsoft::WRL::ComPtr<ID3D12Resource> perViewReflectionResource;
+        PerView* perViewReflectionData = nullptr;
+        bool reflect = true;
 
         // PerView CB（プレビュー用、同じ粒子をプレビュー RT に別カメラで描画する）
         Microsoft::WRL::ComPtr<ID3D12Resource> perViewPreviewResource;

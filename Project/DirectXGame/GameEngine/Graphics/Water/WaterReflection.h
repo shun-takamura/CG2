@@ -12,6 +12,7 @@ class DirectXCore;
 class SRVManager;
 class Object3DManager;
 class Object3DInstance;
+class AnimatedObject3DInstance;
 class Camera;
 class RenderTexture;
 struct CameraForGPU;
@@ -41,6 +42,9 @@ public:
 	//==============================
 	void AddTarget(Object3DInstance* target);
 	void RemoveTarget(Object3DInstance* target);
+	/// <summary>アニメーションするモデル（自機・敵など）。スキニングは反射のパスの中で済ませる</summary>
+	void AddTarget(AnimatedObject3DInstance* target);
+	/// <summary>静的・アニメーションの両方を外す</summary>
 	void ClearTargets();
 
 	/// <summary>
@@ -57,12 +61,18 @@ public:
 	/// </summary>
 	void Render(const Matrix4x4& viewProjection, const Vector3& eyePosition);
 
+	/// <summary>
+	/// エフェクト（GPU パーティクル・エフェクトの Primitive）も反射 RT に描くか。既定 false（タイトルは描かない）。
+	/// ビルボードに View 行列が要るので、Render(const Camera&) の時だけ描く。
+	/// </summary>
+	void SetDrawEffects(bool draw) { drawEffects_ = draw; }
+
 	//==============================
 	// パラメータ
 	//==============================
 	void SetWaterHeight(float height) { waterHeight_ = height; }
 	float GetWaterHeight() const { return waterHeight_; }
-	/// <summary>反射側の描画距離（本編カメラから物の原点まで）。これより遠い物は映さない</summary>
+	/// <summary>反射側の描画距離（本編カメラから物を包む球の表面まで）。これより遠い物は映さない</summary>
 	void SetFarClip(float distance) { farClip_ = distance; }
 	float GetFarClip() const { return farClip_; }
 
@@ -96,6 +106,8 @@ private:
 	static constexpr uint32_t kCameraCBOffset = 256;
 
 	void CreateDepthBuffer(uint32_t width, uint32_t height);
+	/// <param name="view">本編カメラの View。null ならエフェクトは描かない</param>
+	void RenderInternal(const Matrix4x4& viewProjection, const Vector3& eyePosition, const Matrix4x4* view);
 
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
@@ -111,6 +123,8 @@ private:
 
 	std::vector<Object3DInstance*> targets_;
 	std::vector<Object3DInstance*> visibleTargets_;
+	std::vector<AnimatedObject3DInstance*> animatedTargets_;
+	std::vector<AnimatedObject3DInstance*> visibleAnimatedTargets_;
 
 	Matrix4x4 sourceViewProjection_{};
 	Vector3 sourceEyePosition_{};
@@ -122,5 +136,6 @@ private:
 
 	bool srvReady_ = false;
 	bool hasContent_ = false;
+	bool drawEffects_ = false;
 	uint32_t drawnCount_ = 0;
 };

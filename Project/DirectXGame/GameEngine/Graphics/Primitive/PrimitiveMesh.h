@@ -55,6 +55,12 @@ public:
     // プレビュー用 CB を bind して描画
     void DrawPreview();
 
+    /// <summary>
+    /// 水面の反射 RT へ描く。鏡像の View / ViewProj（行列式が負）で WVP を作り、反射用 CB に書いて描く。
+    /// 鏡像で三角形の巻きが反転するので、裏面カリングは切る。
+    /// </summary>
+    void DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos);
+
     // テクスチャ設定（パスを指定。未指定時は白テクスチャ相当の扱い）
     void SetTexture(const std::string& textureFilePath);
 
@@ -157,6 +163,9 @@ private:
     // ワールド行列は同じものを格納（プレビュー描画でも World 用途に使えるよう）
     Microsoft::WRL::ComPtr<ID3D12Resource> transformPreviewResource_;
     TransformationMatrix* transformPreviewData_ = nullptr;
+    // 水面の反射用（DrawReflection）
+    Microsoft::WRL::ComPtr<ID3D12Resource> transformReflectionResource_;
+    TransformationMatrix* transformReflectionData_ = nullptr;
 
     // マテリアルバッファ
     Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;

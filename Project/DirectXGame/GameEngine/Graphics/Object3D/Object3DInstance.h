@@ -172,6 +172,12 @@ public:
     // 部位別マテリアル（submesh ごとの Material）を個別に調整するため
     ModelInstance* GetModelInstance() const { return modelInstance_; }
 
+    /// <summary>
+    /// ワールド空間の包む球（モデルの球をワールド行列で動かし、半径に一番大きいスケールを掛ける）。
+    /// モデルが無い・球が分からない時は false（呼び出し側は常に見える扱いにする）。
+    /// </summary>
+    bool GetWorldBoundingSphere(Vector3& center, float& radius) const;
+
     //==============================
     // 初期化・更新・描画
     //==============================

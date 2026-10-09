@@ -70,6 +70,19 @@ cbuffer WaterParams : register(b0)
     float  gFloorParallaxMaxLayers;
     float  gFloorNormalFlipY;
     float  gPadding5;
+    // ----- 大河モード（13_RiverWater.md）。C++ の WaterSurface::Params の末尾と 1:1 -----
+    int    gRiverMode;           // 0=従来（床を透かす不透明）/ 1=大河（川のマップ・乗算済み α）
+    float  gRiverDepthThreshold; // これより浅い所は描かない [m]
+    float  gRiverMaxDepth;       // 川のマップの R=1 の水深 [m]
+    float  gRiverOpacity;        // 水の濁り [1/m]
+    float2 gRiverMapOrigin;      // (x_min, z_max)
+    float2 gRiverMapInvSize;     // (1/幅X, 1/幅Z)
+    float4 gRiverShallowColor;
+    float4 gRiverDeepColor;
+    float  gRiverDeepDepth;      // この水深で深い色になりきる [m]
+    float  gRiverMinCos;         // 水の中を通る長さの角度補正の下限
+    float  gRiverShoreFade;      // 水際で反射ごと消えていく幅 [m]
+    float  gReflectionRtWeight;  // 反射 RT（映す物）の重み。0 で空だけ
 };
 
 struct DirectionalLight
@@ -91,6 +104,7 @@ Texture2D<float4> gFloorTexture : register(t4);
 Texture2D<float2> gRippleHeight : register(t6); // 波のシミュレーション（R=高さ。RippleSimulation.CS）
 Texture2D<float4> gFloorNormalMap : register(t7); // 床の法線マップ（接空間）
 Texture2D<float4> gFloorHeightMap : register(t8); // 床のハイトマップ（R。1=高い）
+Texture2D<float4> gRiverMap : register(t10); // 川のマップ（R=水深/maxDepth、GB=流れ。大河モードのみ）
 SamplerState gSampler : register(s0);
 SamplerState gClampSampler : register(s3);
 
@@ -319,6 +333,25 @@ PixelShaderOutput main(WaterVertexOutput input)
     const float2 xz = input.worldPosition.xz;
     const float footprint = max(length(ddx(xz)), length(ddy(xz)));
 
+    // 大河モード：川のマップの水深。描かない所は波の計算より先に落とす
+    float riverDepth = 0.0f;
+    if (gRiverMode != 0)
+    {
+        const float2 riverUv = float2((xz.x - gRiverMapOrigin.x) * gRiverMapInvSize.x,
+                                      (gRiverMapOrigin.y - xz.y) * gRiverMapInvSize.y);
+        // 範囲の外（地形の外）には水を張らない。外周の地形の端は遠景の物で隠す
+        if (any(riverUv < 0.0f) || any(riverUv > 1.0f))
+        {
+            discard;
+        }
+        riverDepth = gRiverMap.SampleLevel(gClampSampler, riverUv, 0).r * gRiverMaxDepth;
+        // 岸の下と滝の縁の先（深さ 0）。縁の先の空中に鏡が浮いたり、谷から天井に見えたりしないように
+        if (riverDepth < gRiverDepthThreshold)
+        {
+            discard;
+        }
+    }
+
     const float2 gradient = WaveGradient(xz, footprint);
     const float3 normal = normalize(float3(-gradient.x, 1.0f, -gradient.y));
 
@@ -350,11 +383,57 @@ PixelShaderOutput main(WaterVertexOutput input)
         if (inView)
         {
             reflectionUv += normal.xz * gDistortion;
-            const float4 mirrored = gReflectionTexture.Sample(gClampSampler, reflectionUv);
-            reflection = lerp(reflection, mirrored.rgb, mirrored.a);
+            // 反射 RT は乗算済み α（rgb は α 込み）。不透明の物は a=1、加算のエフェクトは a を増やさず rgb だけ足される
+            const float4 mirrored = gReflectionTexture.Sample(gClampSampler, reflectionUv) * gReflectionRtWeight;
+            reflection = reflection * (1.0f - mirrored.a) + mirrored.rgb;
         }
     }
     reflection *= gReflectionIntensity;
+
+    // ===== 大河モード：床を描かず、水の色と反射を乗算済み α で下の地形（川底）に重ねる =====
+    if (gRiverMode != 0)
+    {
+        const float3 lightDirection = normalize(-gDirectionalLight.direction);
+        const float3 up = float3(0.0f, 1.0f, 0.0f);
+        const float sunShadow = CalcShadowFactor(input.worldPosition, up, input.position.xy);
+        const float3 incoming = gDirectionalLight.color.rgb * gDirectionalLight.intensity
+            * saturate(lightDirection.y) * sunShadow + gAmbient;
+        const float deepness = saturate(riverDepth / max(gRiverDeepDepth, 1e-3f));
+        const float3 body = lerp(gRiverShallowColor.rgb, gRiverDeepColor.rgb, deepness) * incoming;
+
+        // 視線が水の中を通る長さ（真上からなら水深、斜めほど長い）で透け具合を決める
+        const float transmittance = exp(-gRiverOpacity * riverDepth / max(cosTheta, gRiverMinCos));
+        // 下の地形が残る割合 = 透過 × (1 - フレネル)
+        float alpha = 1.0f - transmittance * (1.0f - fresnel);
+        const float3 premultiplied = body * (1.0f - transmittance) * (1.0f - fresnel) + reflection * fresnel;
+
+        if (gDebugView >= 1 && gDebugView <= 4)
+        {
+            float3 debugColor = body;
+            if (gDebugView == 2)
+            {
+                debugColor = reflection;
+            }
+            else if (gDebugView == 3)
+            {
+                debugColor = fresnel.xxx;
+            }
+            else if (gDebugView == 4)
+            {
+                debugColor = normal * 0.5f + 0.5f;
+            }
+            output.color = float4(debugColor, 1.0f);
+            return output;
+        }
+
+        // フォグは乗算前の色に掛ける（下の地形はフォグ済みなので、そのまま重ねて釣り合う）
+        float3 straight = premultiplied / max(alpha, 1e-4f);
+        straight = ApplyFog(straight, input.worldPosition, gCameraPosition);
+        // 水際は反射ごと薄くして、discard の境目を線にしない
+        alpha *= saturate((riverDepth - gRiverDepthThreshold) / max(gRiverShoreFade, 1e-4f));
+        output.color = float4(straight * alpha, alpha);
+        return output;
+    }
 
     // ===== 透過（水底の床） =====
     // 屈折したレイが水底（水面 - depth）に当たる位置の床を見る。波で屈折方向が揺れて床も揺らぐ
