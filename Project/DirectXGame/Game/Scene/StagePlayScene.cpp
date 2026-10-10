@@ -67,6 +67,9 @@
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <filesystem>
+#include "Cloud/CloudRaymarcher.h"
+#include <shellapi.h> // CommandLineToArgvW（計測用の起動引数）
+#include <cwchar>
 
 #ifdef _DEBUG
 #include "imgui.h"
@@ -76,6 +79,26 @@
 
 namespace {
 	constexpr const char* kStagePlayTuningPath = "Resources/Json/Tuning/StagePlay.json";
+
+	// 雲海の縦穴（降下の線）を拾う秒の範囲。急降下 idx17→23（51〜69 秒）の雲の層を上下にはみ出して覆う
+	constexpr float kCloudShaftStartSec = 48.0f;
+	constexpr float kCloudShaftEndSec = 66.0f;
+
+	// 起動引数 "--key 値" の値を返す（無ければ空）。計測用（tools/Python/run_cloud_bench.py）
+	std::wstring FindCommandLineValue(const wchar_t* key) {
+		std::wstring value;
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (!argv) return value;
+		for (int i = 1; i + 1 < argc; ++i) {
+			if (std::wcscmp(argv[i], key) == 0) {
+				value = argv[i + 1];
+				break;
+			}
+		}
+		::LocalFree(argv);
+		return value;
+	}
 
 	// カメラのワールド行列（Camera::Update → MakeAffineMatrix）と同じ Rx·Ry·Rz 順の回転行列。
 	// MakeRotateMatrix(Vector3) は Rz·Ry·Rx なので、ピッチとヨーが同時に掛かる姿勢（降下中など）で
@@ -2159,6 +2182,7 @@ void StagePlayScene::OnImGuiTuning() {
 		// "Jump" は Rail タイムラインのシーク。Seek() 側で環境も即時適用される。
 		stageEnv_->OnImGuiTuning(changed, [this](float sec) { Seek(sec); });
 		stageEnv_->OnImGuiClouds();
+		stageEnv_->OnImGuiRaymarchClouds();
 	}
 	if (railStage_) railStage_->OnImGuiTuning(changed); // 既存の Rail Camera / Wave Editor セクション
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
@@ -2733,6 +2757,17 @@ void StagePlayScene::Initialize() {
 	// LoadTuningFromJson() で読み込み済みの speed/rotKeys を使ってセットアップする。
 	railStage_->Initialize(this, camera_.get());
 
+	// 雲海のレイマーチ。降下の縦穴はシーン読み込みでレールが本物に差し替わった後に RebuildCloudShaft で拾い直す
+	{
+		stageEnv_->InitializeRaymarchClouds(dxCore_, srvManager_,
+			WindowsApplication::kClientWidth, WindowsApplication::kClientHeight, {});
+		RebuildCloudShaft();
+		// --no-raymarch-clouds：雲海なしで起動（run_cloud_bench.py で雲あり/なしを比べる用）
+		if (std::wstring(::GetCommandLineW()).find(L"--no-raymarch-clouds") != std::wstring::npos) {
+			stageEnv_->GetCloudRaymarcher()->GetParams().enabled = false;
+		}
+	}
+
 	// Boss（ボス戦）専用ロジックの初期化。突入までは何もスポーンしない（Enter で生成）。
 	bossStage_ = std::make_unique<BossStagePart>();
 	bossStage_->Initialize(this, camera_.get());
@@ -2770,9 +2805,14 @@ void StagePlayScene::Initialize() {
 	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
 	bool sceneLoaded = false;
 	{
-		const std::string kAutoLoadPath = "Resources/Json/Scenes/StagePlay.json";
-		if (std::filesystem::exists(kAutoLoadPath)) {
-			sceneLoaded = LoadSceneFromJson(kAutoLoadPath);
+		std::string autoLoadPath = "Resources/Json/Scenes/StagePlay.json";
+		// --scene-json <パス>：配置を差し替えて起動（板の雲を N 枚に増やした計測用シーンなど）。パスは ASCII 前提
+		if (const std::wstring w = FindCommandLineValue(L"--scene-json"); !w.empty()) {
+			autoLoadPath.clear();
+			for (wchar_t c : w) autoLoadPath.push_back(static_cast<char>(c));
+		}
+		if (std::filesystem::exists(autoLoadPath)) {
+			sceneLoaded = LoadSceneFromJson(autoLoadPath);
 		}
 	}
 
@@ -2823,6 +2863,12 @@ void StagePlayScene::Initialize() {
 		HP& hp = Gameplay::Of(player_).GetHP();
 		hp.currentHP = std::clamp(ckPlayerHP, 0, hp.maxHP);
 		specialGauge_ = std::clamp(ckSpecialGauge, 0.0f, specialGaugeMax_);
+	}
+
+	// --bench-hold <秒>：その秒へシークしてレールを止める（同じ画面のまま GPU 時間を測る用）
+	if (const std::wstring w = FindCommandLineValue(L"--bench-hold"); !w.empty()) {
+		benchHoldSec_ = static_cast<float>(std::wcstod(w.c_str(), nullptr));
+		Seek(benchHoldSec_);
 	}
 }
 
@@ -3091,7 +3137,9 @@ void StagePlayScene::Update() {
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
 		// SeekMax 到達で Landing へ自動遷移（このフレームはレール位置を直前ポーズで凍結）
-		if (railStage_->UpdateCamera(actions, GetScaledDeltaTime(), seekMaxSec_)) {
+		// --bench-hold 中はレールを進めない（dt=0 なら位置も時刻も止まる）
+		const float railDt = (benchHoldSec_ >= 0.0f) ? 0.0f : GetScaledDeltaTime();
+		if (railStage_->UpdateCamera(actions, railDt, seekMaxSec_)) {
 			phase_ = Phase::Landing;
 			landingTimer_ = 0.0f;
 		} else {
@@ -4284,6 +4332,11 @@ void StagePlayScene::Draw() {
 		riverWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
 	}
 
+	// 雲海のレイマーチ。不透明物・水面の深度で止め、半透明（Primitive）の前に重ねる。水面には映さない
+	if (stageEnv_ && phase_ == Phase::Rail && camera_) {
+		stageEnv_->DrawRaymarchClouds(*camera_, Game::GetPostEffect()->GetSceneRenderTarget());
+	}
+
 	DrawDynamicPrimitives();
 
 	// LightningRuntime テスト描画
@@ -4414,6 +4467,17 @@ IImGuiEditable* StagePlayScene::GetPlayer() const {
 // 完全型（デストラクタ）が必要なため .cpp で定義。
 void StagePlayScene::RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) {
 	GameScene::RegisterEnemyController(std::move(ctrl));
+}
+
+void StagePlayScene::RebuildCloudShaft() {
+	if (!railStage_ || !stageEnv_ || !stageEnv_->GetCloudRaymarcher()) return;
+	// レールの降下区間を 16 点で拾う（レールを直せば穴も付いてくる）
+	std::vector<Vector3> shaftPath;
+	for (int i = 0; i < 16; ++i) {
+		const float sec = kCloudShaftStartSec + (kCloudShaftEndSec - kCloudShaftStartSec) * static_cast<float>(i) / 15.0f;
+		shaftPath.push_back(railStage_->SampleCameraPathAtSec(sec));
+	}
+	stageEnv_->GetCloudRaymarcher()->SetShaftPath(shaftPath);
 }
 
 // IRailStageHost::EnsureCameraPathSpline() の実装。
@@ -4612,6 +4676,8 @@ void StagePlayScene::OnAfterSceneLoad() {
 	// dynamicSplines_ を作り直したので、レールカメラの走行スプラインを取り直す。
 	// これを忘れると解放済みのスプラインを指したまま走る（Auto Reload で毎回踏む）。
 	if (railStage_) railStage_->RebindCameraPath();
+	// 雲海の縦穴もレールから拾い直す（ここより前はレールが既定の仮の形で、穴が降下ルートとずれる）
+	RebuildCloudShaft();
 
 	// dynamicSprites_ を全削除したので UI スプライトを建て直す（生ポインタの dangling 回避）
 	InitializeHPBarUI();

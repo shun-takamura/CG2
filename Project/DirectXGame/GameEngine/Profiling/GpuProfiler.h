@@ -32,6 +32,16 @@ public:
     /// <summary>直近に開始した GPU 区間を閉じる（end タイムスタンプを積む）。</summary>
     void EndScope(ID3D12GraphicsCommandList* commandList);
 
+    /// <summary>
+    /// パイプライン統計の区間を開始する（PS の実行回数＝描いた画素数×重なり、などを数える）。
+    /// 統計の区間は入れ子にしない（中で別の統計区間を開いても無視する）。
+    /// 結果は Profiler のカウンタ「名前.PSInv」「名前.Prims」になる。
+    /// </summary>
+    void BeginStatsScope(ID3D12GraphicsCommandList* commandList, const char* name);
+
+    /// <summary>BeginStatsScope で開いた区間を閉じる。</summary>
+    void EndStatsScope(ID3D12GraphicsCommandList* commandList);
+
     /// <summary>積んだタイムスタンプを readback バッファへ解決する。コマンドリストを閉じる直前に。</summary>
     void ResolveTimestamps(ID3D12GraphicsCommandList* commandList);
 
@@ -45,6 +55,7 @@ private:
     GpuProfiler& operator=(const GpuProfiler&) = delete;
 
     static constexpr uint32_t kMaxSlots = 512;     // タイムスタンプ枠（1区間=2枠）
+    static constexpr uint32_t kMaxStatsSlots = 32; // パイプライン統計の枠（1区間=1枠）
     static constexpr uint32_t kInvalidSlot = 0xFFFFFFFFu;
 
     // 計測中の区間（GPU はネスト可。LIFO で閉じる）
@@ -65,8 +76,21 @@ private:
     std::vector<Pending> stack_;
     std::vector<Done> done_;
 
+    // パイプライン統計（PS の実行回数など）
+    struct StatsDone {
+        std::string name;
+        uint32_t slot = 0;
+    };
+    bool statsInitialized_ = false;
+    bool statsActive_ = false;       // 統計の区間を開いている間 true（入れ子を防ぐ）
+    bool statsSkipped_ = false;      // 入れ子・枠不足で開かなかった区間（End で釣り合いだけ取る）
+    uint32_t statsSlotCount_ = 0;
+    std::vector<StatsDone> statsDone_;
+
     Microsoft::WRL::ComPtr<ID3D12QueryHeap> queryHeap_;
     Microsoft::WRL::ComPtr<ID3D12Resource> readback_;
+    Microsoft::WRL::ComPtr<ID3D12QueryHeap> statsHeap_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> statsReadback_;
 };
 
 /// <summary>GPU 区間計測を RAII で行う。PEPPER_GPU_SCOPE マクロが内部で生成する。</summary>
@@ -81,6 +105,25 @@ public:
     }
     GpuProfileScope(const GpuProfileScope&) = delete;
     GpuProfileScope& operator=(const GpuProfileScope&) = delete;
+
+private:
+    ID3D12GraphicsCommandList* commandList_;
+};
+
+/// <summary>GPU 区間の時間＋パイプライン統計を RAII で取る。PEPPER_GPU_STATS_SCOPE マクロが生成する。</summary>
+class GpuStatsScope {
+public:
+    GpuStatsScope(ID3D12GraphicsCommandList* commandList, const char* name)
+        : commandList_(commandList) {
+        GpuProfiler::Instance().BeginScope(commandList_, name);
+        GpuProfiler::Instance().BeginStatsScope(commandList_, name);
+    }
+    ~GpuStatsScope() {
+        GpuProfiler::Instance().EndStatsScope(commandList_);
+        GpuProfiler::Instance().EndScope(commandList_);
+    }
+    GpuStatsScope(const GpuStatsScope&) = delete;
+    GpuStatsScope& operator=(const GpuStatsScope&) = delete;
 
 private:
     ID3D12GraphicsCommandList* commandList_;

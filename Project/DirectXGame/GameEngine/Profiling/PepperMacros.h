@@ -22,6 +22,12 @@
 #define PEPPER_GPU_SCOPE(commandList, name) \
     GpuProfileScope PEPPER_CONCAT(pepperGpuScope_, __LINE__)((commandList), (name))
 
+// GPU 区間計測＋パイプライン統計。時間に加えて、PS の実行回数（=描いた画素数×重なり）を
+// カウンタ「名前.PSInv」、ラスタライズしたプリミティブ数を「名前.Prims」に出す。
+// 統計の区間は入れ子にしない（内側は無視される）。半透明のオーバードロー量を測る用。
+#define PEPPER_GPU_STATS_SCOPE(commandList, name) \
+    GpuStatsScope PEPPER_CONCAT(pepperGpuStatsScope_, __LINE__)((commandList), (name))
+
 // 名前付きカウンタ（DrawCall 回数など「個数」）。描画呼び出しの直前などに1行。
 #define PEPPER_COUNT(name) Profiler::Instance().Count((name), 1)
 #define PEPPER_COUNT_N(name, n) Profiler::Instance().Count((name), (n))
@@ -49,6 +55,7 @@
 
 #define PEPPER_SCOPE(name) ((void)0)
 #define PEPPER_GPU_SCOPE(commandList, name) ((void)0)
+#define PEPPER_GPU_STATS_SCOPE(commandList, name) ((void)0)
 #define PEPPER_COUNT(name) ((void)0)
 #define PEPPER_COUNT_N(name, n) ((void)0)
 #define PEPPER_GAUGE(name, value) ((void)0)

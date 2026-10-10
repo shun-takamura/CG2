@@ -1,6 +1,7 @@
 #include "StageEnvironment.h"
 
 #include "Cloud/CloudLayer.h"
+#include "Cloud/CloudRaymarcher.h"
 #include "Json/JsonValue.h"
 #include "LightManager.h"
 #include "MathUtility.h"
@@ -125,14 +126,32 @@ void StageEnvironment::InitializeClouds(DirectXCore* dxCore) {
 	if (object3DManager_) object3DManager_->SetCloudLayer(cloudLayer_.get());
 }
 
+void StageEnvironment::InitializeRaymarchClouds(DirectXCore* dxCore, SRVManager* srvManager,
+	uint32_t screenWidth, uint32_t screenHeight, const std::vector<Vector3>& shaftPath) {
+	if (!raymarcher_) raymarcher_ = std::make_unique<CloudRaymarcher>();
+	raymarcher_->Initialize(dxCore, srvManager, screenWidth, screenHeight);
+	raymarcher_->SetShaftPath(shaftPath);
+	// 太陽の向きは今の平行光源から取る（以降はセクションの切り替えで ApplyValues が更新する）
+	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
+		const Vector3 d = lm->GetDirectionalLightData()->direction;
+		raymarcher_->SetSunDirection({ -d.x, -d.y, -d.z });
+	}
+}
+
 void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition) {
 	if (cloudLayer_) cloudLayer_->Update(deltaTime, eyePosition);
+	if (raymarcher_) raymarcher_->Update(deltaTime);
+}
+
+void StageEnvironment::DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget) {
+	if (raymarcher_ && skybox_) raymarcher_->Draw(camera, sceneTarget, skybox_->GetCubemapFilePath());
 }
 
 void StageEnvironment::Finalize() {
 	if (object3DManager_) object3DManager_->SetCloudLayer(nullptr);
 	if (skybox_) skybox_->SetCloudLayer(nullptr);
 	cloudLayer_.reset();
+	raymarcher_.reset();
 }
 
 int StageEnvironment::FindSectionIndex(float stageSec) const {
@@ -211,6 +230,7 @@ void StageEnvironment::ApplyValues(const StageEnvValues& v, bool applyTint) {
 		lm->SetDirectionalLightIntensity(v.lightIntensity);
 		// 雲の陰影は太陽へ向かう向き（光の進む向きの逆）で取る
 		if (cloudLayer_) cloudLayer_->SetSunDirection({ -dir.x, -dir.y, -dir.z });
+		if (raymarcher_) raymarcher_->SetSunDirection({ -dir.x, -dir.y, -dir.z });
 	}
 
 	// 距離フォグ（Object3D 系 PS の b6）。Primitive/パーティクル/Skybox は対象外。
@@ -270,6 +290,12 @@ void StageEnvironment::Reset(float stageSec) {
 }
 
 void StageEnvironment::LoadFromJson(const JsonValue& root) {
+	// 雲海のパラメータは GPU の準備（InitializeRaymarchClouds）より先に読まれるので、器だけ先に作って持っておく
+	if (root["raymarchClouds"].IsObject()) {
+		if (!raymarcher_) raymarcher_ = std::make_unique<CloudRaymarcher>();
+		raymarcher_->LoadFromJson(root["raymarchClouds"]);
+	}
+
 	const JsonValue& arr = root["sections"];
 	if (!arr.IsArray()) return;
 
@@ -324,6 +350,12 @@ void StageEnvironment::SaveToJson(JsonValue& root) const {
 		arr.Push(std::move(o));
 	}
 	root["sections"] = std::move(arr);
+
+	if (raymarcher_) {
+		JsonValue clouds;
+		raymarcher_->SaveToJson(clouds);
+		root["raymarchClouds"] = std::move(clouds);
+	}
 }
 
 void StageEnvironment::OnImGuiTuning(bool& changed, const std::function<void(float)>& seekTo) {
@@ -438,4 +470,10 @@ void StageEnvironment::OnImGuiClouds() {
 	if (!cloudLayer_ || !ImGui::CollapsingHeader("Clouds")) return;
 	ImGui::TextDisabled("タイトルと同じ遠景の雲。ここでの変更は保存されない");
 	cloudLayer_->OnImGui();
+}
+
+void StageEnvironment::OnImGuiRaymarchClouds() {
+	if (!raymarcher_ || !ImGui::CollapsingHeader("Raymarch Clouds")) return;
+	ImGui::TextDisabled("雲海（ゼノブレ式＋入口・出口は B'）。ステージの Save で Tuning/StagePlay.json に保存");
+	raymarcher_->OnImGui();
 }
