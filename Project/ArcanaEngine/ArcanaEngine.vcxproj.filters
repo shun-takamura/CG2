@@ -204,6 +204,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Cloud\CloudLayer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Cloud</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Cloud\CloudRaymarcher.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Cloud</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\WaterReflection.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
     </ClCompile>
@@ -657,6 +660,9 @@
       <Filter>DirectXGame\GameEngine\Graphics\Shadow</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Cloud\CloudLayer.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Cloud</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Cloud\CloudRaymarcher.h">
       <Filter>DirectXGame\GameEngine\Graphics\Cloud</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\WaterReflection.h">

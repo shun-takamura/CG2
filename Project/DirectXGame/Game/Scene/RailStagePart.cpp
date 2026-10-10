@@ -461,6 +461,11 @@ float RailStagePart::GetCameraProgressT() const {
 	return railCamera_ ? railCamera_->GetProgress() : -1.0f;
 }
 
+Vector3 RailStagePart::SampleCameraPathAtSec(float sec) const {
+	if (!cameraPath_) return { 0.0f, 0.0f, 0.0f };
+	return cameraPath_->Sample(std::clamp(sec * railCameraSpeed_, 0.0f, 1.0f));
+}
+
 float RailStagePart::GetStageSeconds() const {
 	const float t = GetCameraProgressT();
 	if (t < 0.0f) return 0.0f;

@@ -78,6 +78,9 @@ protected:
 	void OnAfterSceneLoad() override;
 
 private:
+	// 雲海の降下の縦穴をレールの降下区間から拾い直す（シーン読み込みでレールが差し替わった後に呼ぶ）
+	void RebuildCloudShaft();
+
 	std::unique_ptr<Camera> camera_;
 	std::unique_ptr<Skybox> skybox_;
 
@@ -502,6 +505,7 @@ private:
 
 	// ----- Rail → Landing 自動遷移 -----
 	float seekMaxSec_ = 180.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存（3分＝3セクション×1分）
+	float benchHoldSec_ = -1.0f; // 起動引数 --bench-hold の秒（>=0 でレールをその秒で止める。計測用、JSON非保存）
 
 	// ----- Landing フェーズ（滞在時間・自動進行）-----
 	float landingDuration_ = 10.0f; // Landing 滞在秒（将来カメラ演出に置換予定）。JSON "phase.landingDurationSec"

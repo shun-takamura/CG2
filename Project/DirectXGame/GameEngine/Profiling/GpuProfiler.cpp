@@ -53,6 +53,20 @@ void GpuProfiler::Initialize(ID3D12Device* device, ID3D12CommandQueue* commandQu
     stack_.reserve(64);
     done_.reserve(64);
     initialized_ = true;
+
+    // パイプライン統計（直接キューなら使える。失敗しても時間の計測は続ける）
+    D3D12_QUERY_HEAP_DESC statsDesc{};
+    statsDesc.Type = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+    statsDesc.Count = kMaxStatsSlots;
+    statsDesc.NodeMask = 0;
+    bufferDesc.Width = sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS) * kMaxStatsSlots;
+    if (SUCCEEDED(device->CreateQueryHeap(&statsDesc, IID_PPV_ARGS(&statsHeap_))) &&
+        SUCCEEDED(device->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufferDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&statsReadback_)))) {
+        statsDone_.reserve(kMaxStatsSlots);
+        statsInitialized_ = true;
+    }
 }
 
 void GpuProfiler::BeginScope(ID3D12GraphicsCommandList* commandList, const char* name) {
@@ -83,13 +97,44 @@ void GpuProfiler::EndScope(ID3D12GraphicsCommandList* commandList) {
     done_.push_back({ p.name, p.beginSlot, endSlot });
 }
 
-void GpuProfiler::ResolveTimestamps(ID3D12GraphicsCommandList* commandList) {
-    if (!initialized_ || !commandList || slotCount_ == 0) {
+void GpuProfiler::BeginStatsScope(ID3D12GraphicsCommandList* commandList, const char* name) {
+    if (!statsInitialized_ || !commandList || statsActive_ || statsSlotCount_ >= kMaxStatsSlots) {
+        // 入れ子・枠不足は数えない（外側の区間に含まれる）
+        statsSkipped_ = statsSkipped_ || statsActive_;
         return;
     }
-    commandList->ResolveQueryData(
-        queryHeap_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, slotCount_,
-        readback_.Get(), 0);
+    const uint32_t slot = statsSlotCount_++;
+    commandList->BeginQuery(statsHeap_.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, slot);
+    statsDone_.push_back({ name, slot });
+    statsActive_ = true;
+}
+
+void GpuProfiler::EndStatsScope(ID3D12GraphicsCommandList* commandList) {
+    if (statsSkipped_) {
+        statsSkipped_ = false;  // 入れ子の内側を閉じただけ。外側はまだ開いている
+        return;
+    }
+    if (!statsActive_ || !commandList || statsDone_.empty()) {
+        return;
+    }
+    commandList->EndQuery(statsHeap_.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, statsDone_.back().slot);
+    statsActive_ = false;
+}
+
+void GpuProfiler::ResolveTimestamps(ID3D12GraphicsCommandList* commandList) {
+    if (!commandList) {
+        return;
+    }
+    if (initialized_ && slotCount_ > 0) {
+        commandList->ResolveQueryData(
+            queryHeap_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, slotCount_,
+            readback_.Get(), 0);
+    }
+    if (statsInitialized_ && statsSlotCount_ > 0 && !statsActive_) {
+        commandList->ResolveQueryData(
+            statsHeap_.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, statsSlotCount_,
+            statsReadback_.Get(), 0);
+    }
 }
 
 void GpuProfiler::ReadbackAndReport() {
@@ -114,8 +159,28 @@ void GpuProfiler::ReadbackAndReport() {
         }
     }
 
+    if (statsInitialized_ && statsSlotCount_ > 0 && !statsActive_) {
+        D3D12_RANGE readRange{ 0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS) * statsSlotCount_ };
+        void* mapped = nullptr;
+        if (SUCCEEDED(statsReadback_->Map(0, &readRange, &mapped)) && mapped) {
+            const auto* stats = static_cast<const D3D12_QUERY_DATA_PIPELINE_STATISTICS*>(mapped);
+            for (const auto& d : statsDone_) {
+                const D3D12_QUERY_DATA_PIPELINE_STATISTICS& q = stats[d.slot];
+                // 同名区間が1フレームに複数あってもカウンタなので合算される
+                Profiler::Instance().Count((d.name + ".PSInv").c_str(), static_cast<int64_t>(q.PSInvocations));
+                Profiler::Instance().Count((d.name + ".Prims").c_str(), static_cast<int64_t>(q.CPrimitives));
+            }
+            const D3D12_RANGE writeRange{ 0, 0 };
+            statsReadback_->Unmap(0, &writeRange);
+        }
+    }
+
     // 次フレーム用にリセット
     slotCount_ = 0;
     stack_.clear();
     done_.clear();
+    statsSlotCount_ = 0;
+    statsActive_ = false;
+    statsSkipped_ = false;
+    statsDone_.clear();
 }

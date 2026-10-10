@@ -9,6 +9,8 @@
 // 自作ヘッダーのインクルード
 //============================
 #include "WindowsApplication.h"
+#include <shellapi.h> // CommandLineToArgvW（--start-scene）
+#include <cwchar>
 #include "DirectXCore.h"
 #include "SpriteManager.h"
 #include "Object3DManager.h"
@@ -237,11 +239,26 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	// シーンマネージャに最初のシーンをセット
+	{
 #ifdef _DEBUG
-	SceneManager::GetInstance()->ChangeSceneImmediate("STAGEPLAY");
+		std::string startScene = "STAGEPLAY";
 #else
-	SceneManager::GetInstance()->ChangeSceneImmediate("TITLE");
+		std::string startScene = "TITLE";
 #endif
+		// --start-scene <名前>：最初のシーンを指定（計測用。tools/Python/run_cloud_bench.py が使う）
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (argv) {
+			for (int i = 1; i + 1 < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--start-scene") == 0) {
+					startScene.clear();
+					for (const wchar_t* c = argv[i + 1]; *c; ++c) startScene.push_back(static_cast<char>(*c));
+				}
+			}
+			::LocalFree(argv);
+		}
+		SceneManager::GetInstance()->ChangeSceneImmediate(startScene);
+	}
 
 	// PostEffect初期化（RenderTextureも内部で作成される）
 	postEffect_ = std::make_unique<PostEffect>();

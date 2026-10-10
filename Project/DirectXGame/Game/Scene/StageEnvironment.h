@@ -2,6 +2,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -11,7 +12,11 @@ class Skybox;
 class JsonValue;
 class Object3DManager;
 class CloudLayer;
+class CloudRaymarcher;
 class DirectXCore;
+class SRVManager;
+class Camera;
+class RenderTexture;
 
 /// <summary>
 /// ステージを時間で区切った「環境セクション」1件分の定義。
@@ -76,8 +81,21 @@ public:
 	/// </summary>
 	void InitializeClouds(DirectXCore* dxCore);
 
+	/// <summary>
+	/// 雲海のレイマーチ（9_CloudRendering フェーズ3）を作る。shaftPath は降下の線（縦穴の中心。レールから拾う）。
+	/// パラメータは LoadFromJson（root["raymarchClouds"]）で先に読んだ値を使う
+	/// </summary>
+	void InitializeRaymarchClouds(DirectXCore* dxCore, SRVManager* srvManager,
+		uint32_t screenWidth, uint32_t screenHeight, const std::vector<Vector3>& shaftPath);
+
 	/// <summary>雲のスクロールを進める。フェーズに関係なく毎フレーム、Skybox の Update の前に呼ぶ</summary>
 	void UpdateClouds(float deltaTime, const Vector3& eyePosition);
+
+	/// <summary>雲海を描いてシーンに重ねる。不透明物・水面の後、Primitive の前</summary>
+	void DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget);
+
+	/// <summary>雲海（InitializeRaymarchClouds 前でも JSON の値は持つ）。L5 は GetParams().opacity / enabled で消す</summary>
+	CloudRaymarcher* GetCloudRaymarcher() { return raymarcher_.get(); }
 
 	/// <summary>Object3DManager はシーンをまたいで生きるので、雲を外して返す</summary>
 	void Finalize();
@@ -114,6 +132,8 @@ public:
 	void OnImGuiTuning(bool& changed, const std::function<void(float)>& seekTo);
 	/// <summary>雲のパラメータ（保存はしない。値が決まったら既定値かチューニング JSON へ移す）</summary>
 	void OnImGuiClouds();
+	/// <summary>雲海のパラメータ（ステージの Save で root["raymarchClouds"] に保存される）</summary>
+	void OnImGuiRaymarchClouds();
 
 	void LoadFromJson(const JsonValue& root);   // root["sections"]
 	void SaveToJson(JsonValue& root) const;
@@ -133,6 +153,7 @@ private:
 	Object3DManager* object3DManager_ = nullptr;
 	std::function<void(const std::string&)> onCubemapChanged_;
 	std::unique_ptr<CloudLayer> cloudLayer_;
+	std::unique_ptr<CloudRaymarcher> raymarcher_;
 
 	std::vector<StageSection> sections_;
 	int            skyIndex_ = -1;   // 今 Skybox に載っているセクション（BlendTo の再発火防止）

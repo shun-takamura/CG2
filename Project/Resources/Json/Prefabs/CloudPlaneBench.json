@@ -1,0 +1,53 @@
+{
+  "kind": "Primitive",
+  "model": {
+    "dir": "",
+    "file": "",
+    "animated": false
+  },
+  "tag": "None",
+  "defaults": {
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "primitive": {
+    "primitiveType": 0,
+    "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "blendMode": 1,
+    "depthWrite": false,
+    "alphaReference": 0,
+    "cullBackface": false,
+    "samplerMode": 0,
+    "uvAutoScroll": false,
+    "uvScrollSpeed": [
+      0,
+      0
+    ],
+    "uvOffset": [
+      0,
+      0
+    ],
+    "uvScale": [
+      1,
+      1
+    ],
+    "uvFlipU": false,
+    "uvFlipV": false,
+    "billboardMode": "Full",
+    "timeGroup": "World"
+  }
+}

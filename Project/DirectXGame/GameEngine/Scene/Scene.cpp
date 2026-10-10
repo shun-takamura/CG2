@@ -553,7 +553,8 @@ void Scene::UpdateDynamicPrimitives() {
 
 void Scene::DrawDynamicPrimitives() {
 	PEPPER_SCOPE("Scene::DrawDynamicPrimitives");
-	PEPPER_GPU_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicPrimitives");
+	// 半透明の板（板の雲など）のオーバードロー量を測るため、時間に加えて PS の実行回数も取る
+	PEPPER_GPU_STATS_SCOPE(dxCore_->GetCommandList(), "Scene::DrawDynamicPrimitives");
 	for (auto& p : dynamicPrimitives_) {
 		p->Draw();
 	}

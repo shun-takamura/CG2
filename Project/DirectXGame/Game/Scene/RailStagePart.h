@@ -109,6 +109,8 @@ public:
 	void Seek(float seconds);              // 旧 StagePlayScene::Seek() の Rail/Wave 再構築部分
 	float GetCameraProgressT() const;
 	float GetStageSeconds() const;         // progress / speed。SeekMax比較・ImGui表示に使う
+	/// <summary>ステージ秒 sec のときのレール上のカメラ位置（揺れ・水面クランプ前の素の位置）</summary>
+	Vector3 SampleCameraPathAtSec(float sec) const;
 
 	void OnImGuiTuning(bool& changed);      // "Rail Camera" + (_DEBUG) "Wave Editor"
 	void LoadFromJson(const JsonValue& root);   // root["camera"]（既存キー名を維持、データ非破壊）
