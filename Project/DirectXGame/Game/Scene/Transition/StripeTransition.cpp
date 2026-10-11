@@ -58,7 +58,7 @@ void StripeTransition::CreateStripes() {
 	needsRecreate_ = false;
 }
 
-void StripeTransition::Start(std::function<void()> onSceneChange) {
+void StripeTransition::OnStartCover() {
 	if (needsRecreate_) {
 		CreateStripes();
 	}
@@ -66,96 +66,78 @@ void StripeTransition::Start(std::function<void()> onSceneChange) {
 	for (size_t i = 0; i < stripeProgress_.size(); ++i) {
 		stripeProgress_[i] = 0.0f;
 	}
-	currentTime_ = 0.0f;
-
-	BaseTransition::Start(onSceneChange);
 }
 
-void StripeTransition::Update() {
-	// デバッグ強制表示中は常に更新
-	if (!isTransitioning_ && !debugForceShow_) return;
+bool StripeTransition::UpdateCover(float /*dt*/) {
+	bool allComplete = true;
+	float triggerY = debugStripeHeight_ / 2.0f;
 
-	// 通常のトランジション処理
-	if (isTransitioning_) {
-		// 経過時間を加算（フレームレート非依存にするため実 dt を使う）
-		currentTime_ += dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
+	for (size_t i = 0; i < stripes_.size(); ++i) {
+		bool shouldStart = false;
 
-		if (state_ == TransitionState::FadeIn) {
-			bool allComplete = true;
-			float triggerY = debugStripeHeight_ / 2.0f;
-
-			for (size_t i = 0; i < stripes_.size(); ++i) {
-				bool shouldStart = false;
-
-				if (i == 0) {
-					shouldStart = true;
-				} else {
-					float prevTriggerPoint = stripePositions_[i - 1].y + (debugStripeHeight_ * 2.0f / 3.0f);
-					if (prevTriggerPoint >= triggerY) {
-						shouldStart = true;
-					}
-				}
-
-				if (shouldStart && stripeProgress_[i] < 1.0f) {
-					stripeProgress_[i] += moveSpeed_;
-					if (stripeProgress_[i] > 1.0f) {
-						stripeProgress_[i] = 1.0f;
-					}
-				}
-
-				if (stripeProgress_[i] < 1.0f) {
-					allComplete = false;
-				}
-			}
-
-			if (allComplete) {
-				state_ = TransitionState::Hold;
-				currentTime_ = 0.0f;
-			}
-
-		} else if (state_ == TransitionState::Hold) {
-			if (!sceneChangeTriggered_ && onSceneChange_) {
-				onSceneChange_();
-				sceneChangeTriggered_ = true;
-			}
-
-			if (currentTime_ >= holdDuration_) {
-				state_ = TransitionState::FadeOut;
-				currentTime_ = 0.0f;
-			}
-
-		} else if (state_ == TransitionState::FadeOut) {
-			bool allGone = true;
-
-			for (size_t i = 0; i < stripes_.size(); ++i) {
-				bool shouldStart = false;
-
-				if (i == 0) {
-					shouldStart = true;
-				} else {
-					if (stripeProgress_[i - 1] <= 0.7f) {
-						shouldStart = true;
-					}
-				}
-
-				if (shouldStart && stripeProgress_[i] > 0.0f) {
-					stripeProgress_[i] -= moveSpeed_;
-					if (stripeProgress_[i] < 0.0f) {
-						stripeProgress_[i] = 0.0f;
-					}
-				}
-
-				if (stripeProgress_[i] > 0.0f) {
-					allGone = false;
-				}
-			}
-
-			if (allGone) {
-				state_ = TransitionState::None;
-				isTransitioning_ = false;
+		if (i == 0) {
+			shouldStart = true;
+		} else {
+			float prevTriggerPoint = stripePositions_[i - 1].y + (debugStripeHeight_ * 2.0f / 3.0f);
+			if (prevTriggerPoint >= triggerY) {
+				shouldStart = true;
 			}
 		}
+
+		if (shouldStart && stripeProgress_[i] < 1.0f) {
+			stripeProgress_[i] += moveSpeed_;
+			if (stripeProgress_[i] > 1.0f) {
+				stripeProgress_[i] = 1.0f;
+			}
+		}
+
+		if (stripeProgress_[i] < 1.0f) {
+			allComplete = false;
+		}
 	}
+	return allComplete;
+}
+
+bool StripeTransition::UpdateReveal(float /*dt*/) {
+	bool allGone = true;
+
+	for (size_t i = 0; i < stripes_.size(); ++i) {
+		bool shouldStart = false;
+
+		if (i == 0) {
+			shouldStart = true;
+		} else {
+			if (stripeProgress_[i - 1] <= 0.7f) {
+				shouldStart = true;
+			}
+		}
+
+		if (shouldStart && stripeProgress_[i] > 0.0f) {
+			stripeProgress_[i] -= moveSpeed_;
+			if (stripeProgress_[i] < 0.0f) {
+				stripeProgress_[i] = 0.0f;
+			}
+		}
+
+		if (stripeProgress_[i] > 0.0f) {
+			allGone = false;
+		}
+	}
+	return allGone;
+}
+
+void StripeTransition::SetFullyCovered() {
+	if (needsRecreate_) {
+		CreateStripes();
+	}
+	for (size_t i = 0; i < stripeProgress_.size(); ++i) {
+		stripeProgress_[i] = 1.0f;
+	}
+}
+
+void StripeTransition::UpdateVisual() {
+	// デバッグ強制表示中は常に更新
+	if (!isTransitioning_ && !debugForceShow_) return;
 
 	// 帯の位置を更新
 	UpdateStripePositions();

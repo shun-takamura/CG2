@@ -56,13 +56,13 @@ void GameOverScene::Update() {
 		switch (options_[selectedIndex_]) {
 		case Option::BossRetry:
 			BossRetryState::GetInstance()->RequestBossRetry();
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			return;
 		case Option::RailRetry:
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			return;
 		case Option::BackToStageSelect:
-			SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("HUB");
 			return;
 		}
 	}

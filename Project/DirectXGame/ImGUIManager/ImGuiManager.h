@@ -66,6 +66,12 @@ struct EditorHostHooks {
     /// 未配線なら CollisionSystem のサイドテーブルを編集する。
     /// </summary>
     struct Collider* (*getCollider)(IImGuiEditable* e) = nullptr;
+
+    /// <summary>
+    /// TimeControler の「Scene Switch」欄の中身（シーンの切り替え先・トランジションの選択）。
+    /// シーンの一覧と切り替えはホストのシーン管理が持つので、エンジンは呼ぶだけ。未配線なら欄を出さない。
+    /// </summary>
+    void (*drawSceneSwitcher)() = nullptr;
 };
 
 /// <summary>

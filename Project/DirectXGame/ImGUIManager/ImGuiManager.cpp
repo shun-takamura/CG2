@@ -335,6 +335,12 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
             ImGui::Separator();
 
+            // ===== シーンの切り替え（中身はホストが描く） =====
+            if (hostHooks_.drawSceneSwitcher &&
+                ImGui::CollapsingHeader("Scene Switch", ImGuiTreeNodeFlags_DefaultOpen)) {
+                hostHooks_.drawSceneSwitcher();
+            }
+
             // ===== シーンタイムライン（シーク） =====
             if (ImGui::CollapsingHeader("Scene Timeline", ImGuiTreeNodeFlags_DefaultOpen)) {
                 if (!scene) {

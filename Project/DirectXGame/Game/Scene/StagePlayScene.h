@@ -530,6 +530,8 @@ private:
 	// ポーズ中は Update を早期 return してゲーム全体（エフェクト含む）を凍結し、メニューだけ動かす
 	enum class PauseView { Main, ConfirmTitle };
 	bool paused_ = false;
+	// トランジション中も最初の1回だけ Update を通したか（カメラ・空・物体の行列を一度書くため）
+	bool firstUpdateDone_ = false;
 	PauseView pauseView_ = PauseView::Main;
 	VerticalMenu pauseMenu_;
 	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため dynamicSprites_ 外で所有）

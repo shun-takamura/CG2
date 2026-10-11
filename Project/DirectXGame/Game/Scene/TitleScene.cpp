@@ -731,7 +731,7 @@ void TitleScene::UpdateEnter() {
 		if (auto* fade = TransitionManager::GetInstance()->GetTransition<FadeTransition>(TransitionType::Fade)) {
 			fade->SetNextFade({ 1.0f, 1.0f, 1.0f }, whiteFadeSeconds_, whiteHoldSeconds_);
 		}
-		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Fade);
+		SceneManager::GetInstance()->ChangeScene("HUB");
 	}
 }
 

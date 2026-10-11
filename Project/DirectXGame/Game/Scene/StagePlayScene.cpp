@@ -2884,6 +2884,9 @@ void StagePlayScene::Finalize() {
 	if (object3DManager_) object3DManager_->DisableFog();
 	// 雲も同じ理由で外す（CloudLayer は stageEnv_ と一緒に消える）
 	if (stageEnv_) stageEnv_->Finalize();
+	// EffectManager は全シーン共通で、Update するのはステージ等の一部のシーンだけ。残すと次のシーン
+	// （ゲームオーバー等）で止まったまま描かれ、ボスの攻撃の歪み（Distortion）が画面に掛かり続ける
+	if (auto* em = EffectManager::GetInstance()) em->StopAll();
 	SoundManager::GetInstance()->Stop2DSound("bgm_stage");
 	SoundManager::GetInstance()->Stop2DSound("bgm_boss");
 	if (specialBarrierEffectHandle_ != kInvalidEffectHandle) {
@@ -3045,7 +3048,7 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 			ClosePauseMenu();
 			break;
 		case 1: // リトライ
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			break;
 		case 2: // タイトルに戻る（確認を挟む）
 			SetPauseView(PauseView::ConfirmTitle);
@@ -3062,7 +3065,7 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 		return;
 	}
 	if (result == VerticalMenu::Result::Confirmed && index == 1) {
-		SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("TITLE");
 	}
 }
 
@@ -3095,9 +3098,13 @@ void StagePlayScene::DrawPauseMenu() {
 }
 
 void StagePlayScene::Update() {
-	if (SceneManager::GetInstance()->IsTransitioning()) {
+	// 画面が覆われている間は止める（開いている間は見えているので動かす）。ただし最初の1回だけは通す。
+	// Initialize の時点ではレールカメラ・カメラ行列・Skybox・物体の行列が一度も書かれておらず、
+	// 開いていく画面に初期値の絵が映るため
+	if (SceneManager::GetInstance()->IsTransitionCovering() && firstUpdateDone_) {
 		return;
 	}
+	firstUpdateDone_ = true;
 
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
@@ -3118,11 +3125,11 @@ void StagePlayScene::Update() {
 	// DEBUG専用ショートカット（StagePlayScene完成時に削除）
 	auto* kb = input_->GetKeyboard();
 	if (kb->TriggerKey(DIK_F2)) {
-		SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("RESULT");
 		return;
 	}
 	if (kb->TriggerKey(DIK_F3)) {
-		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("HUB");
 		return;
 	}
 	if (kb->TriggerKey(DIK_F4)) {
@@ -3205,7 +3212,7 @@ void StagePlayScene::Update() {
 		if (bossStage_->ConsumeBossDefeated()) {
 			ScoreManager::GetInstance()->AddScore(bossStage_->GetLastBossScoreValue());
 			ScoreManager::GetInstance()->AddKill();
-			SceneManager::GetInstance()->ChangeScene("RESULT", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("RESULT");
 		}
 	}
 
@@ -4882,7 +4889,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		gameOverTriggered_ = true;
 		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
-		SceneManager::GetInstance()->ChangeScene("GAMEOVER", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("GAMEOVER");
 	}
 }
 

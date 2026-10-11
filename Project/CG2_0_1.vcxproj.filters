@@ -195,6 +195,21 @@
     <ClCompile Include="DirectXGame\Game\Scene\Transition\FadeTransition.cpp">
       <Filter>DirectXGame\Game\Scene\Transition</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Transition\InkTransition.cpp">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Transition\FeatherRiseTransition.cpp">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Transition\FeatherLandTransition.cpp">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Transition\FeatherRenderer.cpp">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Transition\ScreenWaterSurface.cpp">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Transition\StripeTransition.cpp">
       <Filter>DirectXGame\Game\Scene\Transition</Filter>
     </ClCompile>
@@ -419,6 +434,9 @@
     <ClInclude Include="DirectXGame\Game\Scene\SceneManager.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\SceneRoutes.h">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\TitleScene.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
@@ -426,6 +444,24 @@
       <Filter>DirectXGame\Game\Scene\Transition</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Transition\FadeTransition.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\InkTransition.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\TransitionTuning.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\FeatherRiseTransition.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\FeatherLandTransition.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\FeatherRenderer.h">
+      <Filter>DirectXGame\Game\Scene\Transition</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Transition\ScreenWaterSurface.h">
       <Filter>DirectXGame\Game\Scene\Transition</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Transition\StripeTransition.h">

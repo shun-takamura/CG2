@@ -37,7 +37,7 @@ void ResultScene::Update() {
 
 	auto* actions = input_->GetActionMap();
 	if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
-		SceneManager::GetInstance()->ChangeScene("HUB", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("HUB");
 		return;
 	}
 
