@@ -14,6 +14,8 @@
 #include "Vector4.h"
 #include "AttractMode.h"
 #include "UIPointer.h"
+#include "SpriteInstance.h"
+#include "SpriteManager.h"
 
 namespace {
 	enum HubItem : int {
@@ -34,6 +36,15 @@ void HubScene::Initialize() {
 	object3DManager_->SetDefaultCamera(camera_.get());
 
 	menu_.SetItems({ "Stage1", "タイトルに戻る" });
+
+	// 白い背景（墨のトランジションの黒が映えるように）。文字は白＋黒の縁取りなので白地でも読める
+	background_ = std::make_unique<SpriteInstance>();
+	background_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "HubBackground");
+	background_->SetPosition({ 0.0f, 0.0f });
+	background_->SetSize({ static_cast<float>(dxCore_->GetSwapChainWidth()),
+		static_cast<float>(dxCore_->GetSwapChainHeight()) });
+	background_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	background_->Update();
 	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
 	attractTimer_ = 0.0f;
 }
@@ -60,7 +71,7 @@ void HubScene::Update() {
 		}
 		if (attractTimer_ >= attract->hubWait + attract->hubConfirmDelay) {
 			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
-			SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("TITLE");
 			return;
 		}
 	} else {
@@ -72,16 +83,16 @@ void HubScene::Update() {
 	const UIPointer pointer = UIPointer::FromInput(input_);
 	const VerticalMenu::Result result = menu_.Update(actions, &pointer);
 	if (result == VerticalMenu::Result::Canceled) {
-		SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+		SceneManager::GetInstance()->ChangeScene("TITLE");
 		return;
 	}
 	if (result == VerticalMenu::Result::Confirmed) {
 		switch (menu_.GetSelectedIndex()) {
 		case kHubStage1:
-			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			return;
 		case kHubBackToTitle:
-			SceneManager::GetInstance()->ChangeScene("TITLE", TransitionType::Stripe);
+			SceneManager::GetInstance()->ChangeScene("TITLE");
 			return;
 		}
 	}
@@ -95,6 +106,11 @@ void HubScene::Draw() {
 
 	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
 	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+
+	if (background_) {
+		spriteManager_->DrawSetting();
+		background_->Draw();
+	}
 
 	const char* heading = "STAGE SELECT";
 	const float headingScale = 2.0f;

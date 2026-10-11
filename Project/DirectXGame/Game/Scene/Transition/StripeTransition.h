@@ -17,9 +17,7 @@ public:
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
 		float screenWidth, float screenHeight) override;
 	void Finalize() override;
-	void Update() override;
 	void Draw() override;
-	void Start(std::function<void()> onSceneChange) override;
 
 	TransitionType GetType() const override { return TransitionType::Stripe; }
 	std::string GetName() const override { return "Stripe"; }
@@ -34,6 +32,13 @@ public:
 	/// ImGuiでデバッグ表示・調整
 	/// </summary>
 	void OnImGui();
+
+protected:
+	void OnStartCover() override;
+	bool UpdateCover(float dt) override;
+	bool UpdateReveal(float dt) override;
+	void SetFullyCovered() override;
+	void UpdateVisual() override;
 
 private:
 	void CreateStripes();

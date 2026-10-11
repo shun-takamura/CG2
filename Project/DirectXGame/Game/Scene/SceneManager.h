@@ -61,6 +61,16 @@ public:
 	void ChangeScene(const std::string& sceneName, TransitionType transitionType);
 
 	/// <summary>
+	/// シーン変更（トランジションは組み合わせ表 SceneRoutes から引く。ゲームの遷移は基本これを使う）
+	/// </summary>
+	void ChangeScene(const std::string& sceneName);
+
+	/// <summary>
+	/// シーン変更（覆う側と開く側を別の種類で指定。開く側に TransitionManager::kRevealByScene で開く演出なし）
+	/// </summary>
+	void ChangeScene(const std::string& sceneName, TransitionType coverType, TransitionType revealType);
+
+	/// <summary>
 	/// シーン変更（ランダムトランジション）
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
@@ -93,6 +103,16 @@ public:
 	bool IsTransitioning() const;
 
 	/// <summary>
+	/// トランジションの今の段階（覆う / 隠したまま / 開く / 何もしていない）
+	/// </summary>
+	TransitionState GetTransitionPhase() const;
+
+	/// <summary>
+	/// 画面が覆われていく途中か、覆われているか。シーンはこの間だけ止まればよい（開いている間は見えている）
+	/// </summary>
+	bool IsTransitionCovering() const;
+
+	/// <summary>
 	/// 最後に使用されたトランジションの種類を取得
 	/// </summary>
 	TransitionType GetLastUsedTransitionType() const;
@@ -101,6 +121,11 @@ public:
 	/// 最後に使用されたトランジション名を取得
 	/// </summary>
 	std::string GetLastUsedTransitionName() const;
+
+	/// <summary>
+	/// フレームの Present（＋GPU完了待ち）直後に呼ぶ。シーン切り替え後の最初のフレームならロード計測を出力する
+	/// </summary>
+	void OnFramePresented();
 
 	//====================
 	// マネージャーのゲッター
@@ -121,6 +146,20 @@ private:
 
 	void SetupScene(Scene* scene);
 	void ExecuteSceneChange();
+
+	// シーン切り替え1回分の計測（決定 → 最初のフレームが画面に出るまで）
+	struct SceneChangeTiming {
+		enum Mark { Request, ChangeBegin, Finalized, Created, Initialized, FirstUpdated, Presented, kMarkCount };
+		bool active = false;
+		bool waitingFirstUpdate = false;
+		std::string from;
+		std::string to;
+		double wallMs[kMarkCount] = {};
+		double cpuMs[kMarkCount] = {};
+	};
+	void MarkSceneChange(SceneChangeTiming::Mark mark);
+	void LogSceneChangeTiming() const;
+	SceneChangeTiming changeTiming_;
 
 	// 現在のシーン
 	std::unique_ptr<Scene> currentScene_;

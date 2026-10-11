@@ -30,6 +30,7 @@
 #include "CameraCapture.h"
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
+#include "SceneRoutes.h"
 #include "AttractMode.h"
 #include "Camera.h"
 #include "DStorageManager.h"
@@ -84,6 +85,77 @@ namespace {
 			if (std::filesystem::exists(t.path)) sm->LoadFile(t.name, t.path);
 		}
 	}
+
+#ifdef _DEBUG
+	// TimeControler の「Scene Switch」欄（EditorHostHooks::drawSceneSwitcher）。
+	// 行き先を選んで、ゲームと同じ組み合わせ（SceneRoutes）か、手で選んだトランジションで切り替える。
+	// STAGEPLAY からはクリア / 失敗を選ぶと、ゲームが実際に使う行き先（RESULT / GAMEOVER）になる。
+	void DrawSceneSwitcher() {
+		static const char* const kScenes[] = { "TITLE", "HUB", "STAGESELECT", "STAGEPLAY", "RESULT", "GAMEOVER", "DEMO" };
+		struct TransitionChoice { const char* name; TransitionType type; };
+		static const TransitionChoice kCovers[] = {
+			{ "Stripe", TransitionType::Stripe }, { "Fade", TransitionType::Fade }, { "Ink", TransitionType::Ink }, { "FeatherLand", TransitionType::FeatherLand }, { "FeatherRise", TransitionType::FeatherRise },
+		};
+		// 開く側は「行き先のシーンに任せる（開く演出なし）」も選べる
+		static const TransitionChoice kReveals[] = {
+			{ "Stripe", TransitionType::Stripe }, { "Fade", TransitionType::Fade }, { "Ink", TransitionType::Ink }, { "FeatherLand", TransitionType::FeatherLand }, { "FeatherRise", TransitionType::FeatherRise },
+			{ "None (scene reveals)", TransitionManager::kRevealByScene },
+		};
+		const auto nameOf = [](TransitionType type) -> const char* {
+			for (const TransitionChoice& c : kReveals) {
+				if (c.type == type) return c.name;
+			}
+			return "?";
+		};
+
+		static int sceneIndex = 1;
+		static int stageOutcome = -1;   // -1 = 選ばない / 0 = クリア / 1 = 失敗
+		static bool overrideTransition = false;
+		static int coverIndex = 0;
+		static int revealIndex = 0;
+
+		auto* sm = SceneManager::GetInstance();
+		const std::string& current = sm->GetCurrentSceneName();
+
+		// 行き先：STAGEPLAY 中はクリア / 失敗のどちらかに印を付けると、そちらが優先
+		const char* destination = kScenes[sceneIndex];
+		if (current == "STAGEPLAY") {
+			bool clear = (stageOutcome == 0);
+			bool fail = (stageOutcome == 1);
+			if (ImGui::Checkbox("Clear", &clear)) stageOutcome = clear ? 0 : -1;
+			ImGui::SameLine();
+			if (ImGui::Checkbox("Fail", &fail)) stageOutcome = fail ? 1 : -1;
+			if (stageOutcome == 0) destination = "RESULT";
+			if (stageOutcome == 1) destination = "GAMEOVER";
+		}
+		ImGui::BeginDisabled(current == "STAGEPLAY" && stageOutcome >= 0);
+		ImGui::Combo("Destination", &sceneIndex, kScenes, IM_ARRAYSIZE(kScenes));
+		ImGui::EndDisabled();
+
+		// トランジション：既定は表（SceneRoutes）どおり。差し替えるときだけ覆う側・開く側を選ぶ
+		const SceneRoutes::Transitions route = SceneRoutes::Find(current, destination);
+		ImGui::Text("Route: %s -> %s  (cover %s / reveal %s)", current.c_str(), destination,
+			nameOf(route.cover), nameOf(route.reveal));
+		ImGui::Checkbox("Override Transition", &overrideTransition);
+		if (overrideTransition) {
+			const auto getName = [](void* data, int i) -> const char* {
+				return static_cast<const TransitionChoice*>(data)[i].name;
+			};
+			ImGui::Combo("Cover", &coverIndex, getName, const_cast<TransitionChoice*>(kCovers), IM_ARRAYSIZE(kCovers));
+			ImGui::Combo("Reveal", &revealIndex, getName, const_cast<TransitionChoice*>(kReveals), IM_ARRAYSIZE(kReveals));
+		}
+
+		ImGui::BeginDisabled(sm->IsTransitioning());
+		if (ImGui::Button("Switch")) {
+			if (overrideTransition) {
+				sm->ChangeScene(destination, kCovers[coverIndex].type, kReveals[revealIndex].type);
+			} else {
+				sm->ChangeScene(destination);
+			}
+		}
+		ImGui::EndDisabled();
+	}
+#endif // _DEBUG
 }
 
 Game::Game() {
@@ -186,6 +258,10 @@ void Game::Initialize() {
 		hooks.getCollider = [](IImGuiEditable* e) -> Collider* {
 			return &Gameplay::Of(e).GetCollider();
 		};
+
+#ifdef _DEBUG
+		hooks.drawSceneSwitcher = &DrawSceneSwitcher;
+#endif
 
 		ImGuiManager::SetHostHooks(hooks);
 	}
@@ -507,6 +583,8 @@ void Game::Draw() {
 
 	// 5. 終了
 	dxCore_->EndDraw();
+	// シーン切り替え後の最初のフレームが画面に出た時点（Present＋GPU完了）でロード計測を出力
+	SceneManager::GetInstance()->OnFramePresented();
 	dxCore_->TickIntermediateResources();
 	dxCore_->TickPendingCallbacks();
 }

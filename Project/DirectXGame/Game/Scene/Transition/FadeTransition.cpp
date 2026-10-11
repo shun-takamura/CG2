@@ -2,6 +2,7 @@
 #include "SpriteManager.h"
 #include "SpriteInstance.h"
 #include "DirectXCore.h"
+#include <algorithm>
 
 void FadeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
 	float screenWidth, float screenHeight) {
@@ -28,60 +29,38 @@ void FadeTransition::Finalize() {
 	fadeSprite_.reset();
 }
 
-void FadeTransition::Start(std::function<void()> onSceneChange) {
+void FadeTransition::OnStartCover() {
 	alpha_ = 0.0f;
-	currentTime_ = 0.0f;
-	BaseTransition::Start(onSceneChange);
 }
 
-void FadeTransition::Update() {
+bool FadeTransition::UpdateCover(float /*dt*/) {
+	// フェードイン：α値を0→1（currentTime_ は基底が進める）
+	alpha_ = (std::min)(currentTime_ / fadeDuration_, 1.0f);
+	return alpha_ >= 1.0f;
+}
+
+bool FadeTransition::UpdateReveal(float /*dt*/) {
+	// フェードアウト：α値を1→0
+	alpha_ = (std::max)(1.0f - currentTime_ / fadeDuration_, 0.0f);
+	return alpha_ <= 0.0f;
+}
+
+void FadeTransition::SetFullyCovered() {
+	alpha_ = 1.0f;
+}
+
+void FadeTransition::UpdateVisual() {
 	if (!isTransitioning_) return;
-
-	// 経過時間を加算（フレームレート非依存にするため実 dt を使う）
-	currentTime_ += dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
-
-	// 状態に応じた処理
-	if (state_ == TransitionState::FadeIn) {
-		// フェードイン：α値を0→1
-		alpha_ = currentTime_ / fadeDuration_;
-
-		// 1.0でクランプ
-		if (alpha_ >= 1.0f) {
-			alpha_ = 1.0f;
-			state_ = TransitionState::Hold;
-			currentTime_ = 0.0f;
-		}
-	} else if (state_ == TransitionState::Hold) {
-		// シーン切り替えを実行
-		if (!sceneChangeTriggered_ && onSceneChange_) {
-			onSceneChange_();
-			sceneChangeTriggered_ = true;
-		}
-
-		// 少し待ってからフェードアウトへ
-		if (currentTime_ >= holdDuration_) {
-			state_ = TransitionState::FadeOut;
-			currentTime_ = 0.0f;
-		}
-	} else if (state_ == TransitionState::FadeOut) {
-		// フェードアウト：α値を1→0
-		alpha_ = 1.0f - (currentTime_ / fadeDuration_);
-
-		// 0でクランプ
-		if (alpha_ <= 0.0f) {
-			alpha_ = 0.0f;
-			state_ = TransitionState::None;
-			isTransitioning_ = false;
-			// SetNextFade の指定はこの1回だけ
-			color_ = { 0.0f, 0.0f, 0.0f };
-			fadeDuration_ = kDefaultFadeDuration;
-			holdDuration_ = kDefaultHoldDuration;
-		}
-	}
-
-	// α値をスプライトに適用
 	fadeSprite_->SetColor({ color_.x, color_.y, color_.z, alpha_ });
 	fadeSprite_->Update();
+}
+
+void FadeTransition::OnFinished() {
+	alpha_ = 0.0f;
+	// SetNextFade の指定はこの1回だけ
+	color_ = { 0.0f, 0.0f, 0.0f };
+	fadeDuration_ = kDefaultFadeDuration;
+	holdDuration_ = kDefaultHoldDuration;
 }
 
 void FadeTransition::Draw() {

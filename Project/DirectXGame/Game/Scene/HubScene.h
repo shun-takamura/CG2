@@ -4,6 +4,7 @@
 #include <memory>
 
 class Camera;
+class SpriteInstance;
 
 /// <summary>
 /// ハブシーン（ステージ選択を兼ねる）
@@ -24,6 +25,7 @@ public:
 
 private:
 	std::unique_ptr<Camera> camera_;
+	std::unique_ptr<SpriteInstance> background_;
 	VerticalMenu menu_;
 	// デモモード（AttractMode）の経過秒
 	float attractTimer_ = 0.0f;

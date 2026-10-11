@@ -17,9 +17,7 @@ public:
 		float screenWidth, float screenHeight) override;
 
 	void Finalize() override;
-	void Update() override;
 	void Draw() override;
-	void Start(std::function<void()> onSceneChange) override;
 
 	TransitionType GetType() const override { return TransitionType::Fade; }
 	std::string GetName() const override { return "Fade"; }
@@ -32,6 +30,14 @@ public:
 	/// ChangeScene(..., TransitionType::Fade) の直前に呼ぶ。
 	/// </summary>
 	void SetNextFade(const Vector3& color, float fadeDuration, float holdDuration);
+
+protected:
+	void OnStartCover() override;
+	bool UpdateCover(float dt) override;
+	bool UpdateReveal(float dt) override;
+	void SetFullyCovered() override;
+	void UpdateVisual() override;
+	void OnFinished() override;
 
 private:
 	static constexpr float kDefaultFadeDuration = 0.5f;

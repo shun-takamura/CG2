@@ -30,6 +30,11 @@ public:
 	static TransitionManager* GetInstance();
 
 	/// <summary>
+	/// 開く側に指定すると、開く演出なしで終わる（覆い切って Hold を抜けた時点で終了し、行き先のシーンが自分で開く）
+	/// </summary>
+	static constexpr TransitionType kRevealByScene = TransitionType::None;
+
+	/// <summary>
 	/// 初期化
 	/// </summary>
 	/// <param name="screenWidth">画面幅。0 なら WindowsApplication の実クライアントサイズを使う</param>
@@ -70,6 +75,14 @@ public:
 		const std::string& toScene, std::function<void()> onSceneChange);
 
 	/// <summary>
+	/// 覆う側と開く側を別の種類にして遷移開始（例：墨で覆ってストライプで開く）
+	/// </summary>
+	/// <param name="coverType">覆う側</param>
+	/// <param name="revealType">開く側。coverType と同じなら覆う側がそのまま開く。kRevealByScene なら開く演出なし</param>
+	void StartTransition(TransitionType coverType, TransitionType revealType,
+		const std::string& fromScene, const std::string& toScene, std::function<void()> onSceneChange);
+
+	/// <summary>
 	/// ランダムなトランジションで遷移開始
 	/// </summary>
 	void StartRandomTransition(const std::string& fromScene,
@@ -79,6 +92,16 @@ public:
 	/// トランジション中かどうか
 	/// </summary>
 	bool IsTransitioning() const;
+
+	/// <summary>
+	/// 今の段階（覆う / 隠したまま / 開く / 何もしていない）。覆う側から開く側へ引き継いでも途切れない
+	/// </summary>
+	TransitionState GetPhase() const;
+
+	/// <summary>
+	/// 画面が覆われていく途中か、覆われているか（シーンが止まっていてよい区間）
+	/// </summary>
+	bool IsCovering() const;
 
 	/// <summary>
 	/// 現在のトランジションを取得
@@ -116,6 +139,13 @@ public:
 	void OnImGui();
 
 	/// <summary>
+	/// 全トランジションの調整値を Resources/Json/Tuning/Transition.json から読む / へ書く
+	/// （トランジションごとに GetName() の欄。Initialize の最後に読む）
+	/// </summary>
+	void LoadTuning();
+	void SaveTuning() const;
+
+	/// <summary>
 	/// 特定のトランジションを取得（設定変更用）
 	/// </summary>
 	template<typename T>
@@ -138,6 +168,9 @@ private:
 
 	// 現在アクティブなトランジション
 	BaseTransition* currentTransition_ = nullptr;
+
+	// 覆う側が終わったら引き継ぐ開く側（覆う側と同じ種類 / 開く演出なしのときは nullptr）
+	BaseTransition* pendingReveal_ = nullptr;
 
 	// 最後のトランジション記録
 	TransitionRecord lastRecord_;
