@@ -26,6 +26,21 @@ void BaseTransition::StartReveal() {
 	UpdateVisual();
 }
 
+void BaseTransition::StartCovered(std::function<void()> onSceneChange, bool playReveal) {
+	if (isTransitioning_) return;
+
+	isTransitioning_ = true;
+	state_ = TransitionState::Hold;
+	currentTime_ = 0.0f;
+	holdTime_ = 0.0f;
+	sceneChangeTriggered_ = false;
+	onSceneChange_ = onSceneChange;
+	playReveal_ = playReveal;
+	OnStartCover();
+	SetFullyCovered();
+	UpdateVisual();
+}
+
 void BaseTransition::Update() {
 	if (isTransitioning_) {
 		const float dt = GetStepDeltaTime();

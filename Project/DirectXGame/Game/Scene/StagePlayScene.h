@@ -528,7 +528,8 @@ private:
 
 	// ----- ポーズメニュー -----
 	// ポーズ中は Update を早期 return してゲーム全体（エフェクト含む）を凍結し、メニューだけ動かす
-	enum class PauseView { Main, ConfirmTitle };
+	// 確認の画面（ConfirmStageSelect / ConfirmTitle）は「いいえ / はい」
+	enum class PauseView { Main, ConfirmStageSelect, ConfirmTitle };
 	bool paused_ = false;
 	// トランジション中も最初の1回だけ Update を通したか（カメラ・空・物体の行列を一度書くため）
 	bool firstUpdateDone_ = false;

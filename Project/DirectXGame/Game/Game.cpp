@@ -21,6 +21,7 @@
 #include "Editor/GameInspectorSections.h"
 #include "Editor/GameAssetBrowserSections.h"
 #include "StagePlayScene.h"
+#include "HubScene.h"
 #include "KeyboardInput.h"
 #include "SceneManager.h"
 #include "SceneFactory.h"
@@ -93,8 +94,10 @@ namespace {
 	void DrawSceneSwitcher() {
 		static const char* const kScenes[] = { "TITLE", "HUB", "STAGESELECT", "STAGEPLAY", "RESULT", "GAMEOVER", "DEMO" };
 		struct TransitionChoice { const char* name; TransitionType type; };
+		// 覆う側は「シーンが覆い終えた（覆い切った所から始める）」も選べる
 		static const TransitionChoice kCovers[] = {
 			{ "Stripe", TransitionType::Stripe }, { "Fade", TransitionType::Fade }, { "Ink", TransitionType::Ink }, { "FeatherLand", TransitionType::FeatherLand }, { "FeatherRise", TransitionType::FeatherRise },
+			{ "None (scene covered)", TransitionManager::kCoverByScene },
 		};
 		// 開く側は「行き先のシーンに任せる（開く演出なし）」も選べる
 		static const TransitionChoice kReveals[] = {
@@ -102,6 +105,7 @@ namespace {
 			{ "None (scene reveals)", TransitionManager::kRevealByScene },
 		};
 		const auto nameOf = [](TransitionType type) -> const char* {
+			if (type == TransitionType::None) return "None (scene)";
 			for (const TransitionChoice& c : kReveals) {
 				if (c.type == type) return c.name;
 			}
@@ -182,6 +186,17 @@ void Game::RegisterGameEditorWindows() {
 
 	imgui.AddCallbackWindow("Transition",
 		[]() { TransitionManager::GetInstance()->OnImGui(); });
+
+	imgui.AddCallbackWindow("Hub Tuning",
+		[]() {
+			auto* sm = SceneManager::GetInstance();
+			auto* scene = sm ? sm->GetCurrentScene() : nullptr;
+			if (auto* hub = dynamic_cast<HubScene*>(scene)) {
+				hub->OnImGuiTuning();
+			} else {
+				ImGui::TextDisabled("Active only in HUB scene.");
+			}
+		});
 
 	imgui.AddCallbackWindow("StagePlay Tuning",
 		[]() {

@@ -180,6 +180,11 @@ void TransitionManager::StartTransition(TransitionType coverType, TransitionType
 		return;
 	}
 
+	if (coverType == kCoverByScene) {
+		StartCoveredByScene(revealType, fromScene, toScene, std::move(onSceneChange));
+		return;
+	}
+
 	auto it = transitions_.find(type);
 	if (it == transitions_.end()) {
 		// 指定されたトランジションが見つからない場合はコールバックを直接実行
@@ -219,6 +224,34 @@ void TransitionManager::StartTransition(TransitionType coverType, TransitionType
 	// トランジション開始
 	currentTransition_->Start(onSceneChange, coverPlaysReveal);
 	OutputDebugStringA("Transition started!\n");
+}
+
+void TransitionManager::StartCoveredByScene(TransitionType revealType,
+	const std::string& fromScene, const std::string& toScene, std::function<void()> onSceneChange) {
+	// 開く側が決まっていればそれを覆い切った所から始め、ロードしてから開く。
+	// 開く側もシーンが演じるなら、黒の Fade を「真っ暗のまま差し替える係」にして開かずに終わる
+	// （ロードのフレームと Hold の間を黒で押さえる。行き先のシーンは最初の1枚を真っ暗で描く取り決め）
+	bool playReveal = true;
+	auto it = transitions_.end();
+	if (revealType != kRevealByScene) {
+		it = transitions_.find(revealType);
+	}
+	if (it == transitions_.end()) {
+		it = transitions_.find(TransitionType::Fade);
+		playReveal = false;
+	}
+	if (it == transitions_.end()) {
+		if (onSceneChange) onSceneChange();
+		return;
+	}
+
+	currentTransition_ = it->second.get();
+	pendingReveal_ = nullptr;
+
+	lastRecord_ = { kCoverByScene, "(scene)", fromScene, toScene };
+	history_.push_back(lastRecord_);
+
+	currentTransition_->StartCovered(std::move(onSceneChange), playReveal);
 }
 
 void TransitionManager::StartRandomTransition(const std::string& fromScene,

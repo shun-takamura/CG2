@@ -78,6 +78,12 @@ public:
 	void StartReveal();
 
 	/// <summary>
+	/// 覆い切った状態の Hold から始める（覆う側をシーンが自分で演じ終えたとき。TransitionManager::kCoverByScene）。
+	/// 次のフレームでシーンを差し替え、Hold の秒数が経ったら開く（playReveal が false なら開かずに終わる）
+	/// </summary>
+	void StartCovered(std::function<void()> onSceneChange, bool playReveal = true);
+
+	/// <summary>
 	/// トランジション中かどうか
 	/// </summary>
 	bool IsTransitioning() const { return isTransitioning_; }

@@ -14,12 +14,13 @@ class SpriteInstance;
 
 /// <summary>
 /// 羽根の飛翔（リトライ → ステージ）。15_SceneTransition.md T4。着水（FeatherLandTransition）と対。
-///   覆う：着水で羽根が消えた所に一枚がディゾルブの逆再生でよみがえる → 右下から左上へ吹き上がる突風で飛び立ち、
+///   覆う：画面の右下寄り（originUV）に一枚がディゾルブの逆再生でよみがえる → 右下から左上へ吹き上がる突風で飛び立ち、
 ///        右下の外から羽根が吹き込んで**羽根だけで画面を埋め尽くす**（ここでロード。
 ///        ロードの間も吹き込み続けて埋めたまま）
 ///   開く：吹き込みが止まり、残りの羽根が左上へ抜けて晴れると次のシーンになっている
 ///        （白フェード版は whiteFade で切り替えられる。来週はスタート演出の「白から始まる後半」に任せる案もある）
 /// 描く順：シーン＋隙間埋め（ScreenRipple.PS）→ 羽根 →（白フェード版のみ）白。
+/// よみがえる所は入口（死亡・ポーズ）に関係なく決まった位置（2026-10-13 ユーザー指示：どの羽根の飛翔も右下から左上へ吹き抜けて画面を覆う）。
 /// 飛び立つ所の波紋は入れない（2026-10-11 ユーザー指示）。ScreenRipple.PS の波紋の読み出しは平らな水面なので素通し。
 /// </summary>
 class FeatherRiseTransition : public BaseTransition {
@@ -60,6 +61,7 @@ public:
 		float burstOffsetX = 0.3f;        // 一緒に舞い上がる羽根を出す所を、よみがえった一枚から左右へずらす量（画面の幅に対する割合。正で右）
 
 		// よみがえる一枚
+		Vector2 originUV = { 0.7f, 0.7f }; // よみがえる画面の位置（UV、右下寄り）
 		float heroDepth = 4.0f;           // 奥行き
 		float heroSize = 0.9f;            // 長さ
 		float heroLiftAcceleration = 7.0f;// 飛び立つ加速（毎秒毎秒）
@@ -100,6 +102,7 @@ public:
 			v("sizeMax", sizeMax);
 			v("burstCount", burstCount);
 			v("burstOffsetX", burstOffsetX);
+			v("originUV", originUV);
 			v("heroDepth", heroDepth);
 			v("heroSize", heroSize);
 			v("heroLiftAcceleration", heroLiftAcceleration);
@@ -187,7 +190,6 @@ private:
 	std::vector<FlyingFeather> flying_;
 	FlyingFeather hero_{};
 	bool heroLifted_ = false;
-	Vector2 originUV_ = { 0.5f, 0.6f };
 	std::vector<FeatherRenderer::Feather> drawList_;
 	std::mt19937 random_{ 20261012u };
 	float spawnAccumulator_ = 0.0f;

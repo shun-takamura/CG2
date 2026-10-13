@@ -12,6 +12,7 @@ struct UIPointer;
 /// キーボード/パッド/マウスで操作する縦並びの選択メニュー。
 /// MenuUp/MenuDown で選択、MenuConfirm で決定、MenuCancel でキャンセルを返す。
 /// マウスは項目の上にカーソルを動かすと選択、項目の上で左クリックすると決定。
+/// 選べない項目（SetItemEnabled）は灰色で描き、上下キーでは飛ばし、マウスでも選ばない。
 /// 描画は TextRenderer に積むだけなので、Flush は呼び出し側で行う。
 /// </summary>
 class VerticalMenu {
@@ -22,7 +23,12 @@ public:
 		Canceled,
 	};
 
+	// 項目を差し替える（すべて選べる状態に戻る）
 	void SetItems(std::vector<std::string> items, int initialIndex = 0);
+
+	// 項目を選べる / 選べないにする。選んでいた項目を選べなくしたら、次の選べる項目へ移る
+	void SetItemEnabled(int index, bool enabled);
+	bool IsItemEnabled(int index) const;
 
 	// pointer が null ならマウスは使わない
 	Result Update(InputActionMap* actions, const UIPointer* pointer = nullptr);
@@ -42,8 +48,11 @@ private:
 	// 画面上のその位置にある項目の番号（無ければ -1）
 	int HitTest(const Vector2& position) const;
 	std::string MakeLabel(size_t index, bool selected) const;
+	// from から step（+1 / -1）の向きにたどって最初の選べる項目（無ければ from のまま）
+	int FindEnabled(int from, int step) const;
 
 	std::vector<std::string> items_;
+	std::vector<bool> enabled_;
 	Vector2 center_{};
 	int selectedIndex_ = 0;
 
@@ -51,6 +60,7 @@ private:
 	float lineHeight_ = 60.0f;
 	Vector4 normalColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
 	Vector4 selectedColor_ = { 1.0f, 0.85f, 0.2f, 1.0f };
+	Vector4 disabledColor_ = { 0.5f, 0.5f, 0.5f, 1.0f };
 	Vector4 outlineColor_ = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float outlineThickness_ = 2.0f;
 };

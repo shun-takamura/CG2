@@ -16,8 +16,8 @@ public:
 	// ----- 自動で押すまでの待ち時間 [s]（Debug では Title Tuning → Attract で調整） -----
 	float titleIdleWait = 4.0f;     // タイトル①：ロゴの登場が終わってから Press するまで
 	float titleReadyWait = 2.0f;    // タイトル⑤：メニューが出てから「スタート」を決定するまで
-	float hubWait = 2.5f;           // HUB：シーン開始からカーソルを「タイトルに戻る」へ動かすまで
-	float hubConfirmDelay = 0.8f;   // HUB：カーソルを動かしてから決定するまで
+	float hubWait = 2.5f;           // HUB：シーン開始からタイトルへ戻るまで（hubWait + hubConfirmDelay の合計で戻る）
+	float hubConfirmDelay = 0.8f;   // HUB：同上の上乗せ分（メニューが「出撃」だけになり、カーソルを動かす先が無くなったため）
 
 private:
 	AttractMode() = default;

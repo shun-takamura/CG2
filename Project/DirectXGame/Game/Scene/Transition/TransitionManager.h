@@ -35,6 +35,13 @@ public:
 	static constexpr TransitionType kRevealByScene = TransitionType::None;
 
 	/// <summary>
+	/// 覆う側に指定すると、シーンが自分で覆い切った（演じ終えた）ものとして、覆い切った状態から始める。
+	/// シーンは演じ終えてから ChangeScene を呼ぶ。開く側が kRevealByScene なら、黒のまま差し替えて開かずに終わる。
+	/// kRevealByScene と同じ値（None ＝ その側はシーンが演じる）で、覆う側と開く側のどちらに書くかで区別する
+	/// </summary>
+	static constexpr TransitionType kCoverByScene = TransitionType::None;
+
+	/// <summary>
 	/// 初期化
 	/// </summary>
 	/// <param name="screenWidth">画面幅。0 なら WindowsApplication の実クライアントサイズを使う</param>
@@ -77,7 +84,7 @@ public:
 	/// <summary>
 	/// 覆う側と開く側を別の種類にして遷移開始（例：墨で覆ってストライプで開く）
 	/// </summary>
-	/// <param name="coverType">覆う側</param>
+	/// <param name="coverType">覆う側。kCoverByScene ならシーンが覆い終えた所（覆い切った状態）から始める</param>
 	/// <param name="revealType">開く側。coverType と同じなら覆う側がそのまま開く。kRevealByScene なら開く演出なし</param>
 	void StartTransition(TransitionType coverType, TransitionType revealType,
 		const std::string& fromScene, const std::string& toScene, std::function<void()> onSceneChange);
@@ -162,6 +169,10 @@ private:
 	~TransitionManager() = default;
 	TransitionManager(const TransitionManager&) = delete;
 	TransitionManager& operator=(const TransitionManager&) = delete;
+
+	// 覆う側が kCoverByScene のときの開始（覆い切った状態の Hold から）
+	void StartCoveredByScene(TransitionType revealType,
+		const std::string& fromScene, const std::string& toScene, std::function<void()> onSceneChange);
 
 	// 登録されたトランジション
 	std::unordered_map<TransitionType, std::unique_ptr<BaseTransition>> transitions_;
