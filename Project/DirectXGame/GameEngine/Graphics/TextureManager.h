@@ -137,6 +137,15 @@ public:
 	/// <param name="a">アルファ (0-255)</param>
 	void CreateSolidColorTexture(const std::string& name, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+	/// <summary>
+	/// よそが作った SRV（RenderTexture など）を名前で引けるように登録する。モデルのテクスチャとして貼るとき用。
+	/// 同じ名前は上書きする（作り直した RenderTexture を登録し直す）。SRV と resource の寿命は呼び出し側が持つ
+	/// （登録している間 resource の参照は1つ持つ）
+	/// </summary>
+	void RegisterExternalTexture(const std::string& name, ID3D12Resource* resource, uint32_t srvIndex);
+	// RegisterExternalTexture の登録を外す（SRV を解放する前に呼ぶ）
+	void UnregisterExternalTexture(const std::string& name) { textureDatas.erase(name); }
+
 	// シングルトンインスタンスの取得
 	static TextureManager* GetInstance();
 

@@ -109,6 +109,12 @@ private:
     Microsoft::WRL::ComPtr<ID3D12PipelineState> idDissolvePipelineState_;
     void CreateIdPassObjects();
 
+    // 発光パス用（ブルームの発光 RT に光る分だけ書く）：Object3d.VS + WriteEmissive.PS、
+    // 出力 float（BloomEffect::kFormat）、加算、深度テストあり書き込み無し
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> bloomRootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> bloomPipelineState_;
+    void CreateBloomPassObjects();
+
     // シャドウ受光リソース（毎フレーム Framework から設定）。0 のうちは未バインド。
     D3D12_GPU_VIRTUAL_ADDRESS   shadowConstantsAddr_ = 0;       // b5 = ShadowConstants
     D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle_{};             // t3 = シャドウマップ SRV
@@ -161,6 +167,12 @@ public:
     ID3D12PipelineState* GetIdDissolvePipelineState() const { return idDissolvePipelineState_.Get(); }
     static constexpr UINT kIdPassConstantCount = 8;
     ID3D12RootSignature* GetIdRootSignature() const { return idRootSignature_.Get(); }
+
+    // 発光パスの PSO / RootSignature。ルート [0] VS b0 = TransformationMatrix / [1] PS b0 = Material /
+    // [2] PS b1 = ルート定数 kBloomPassConstantCount 個（倍率） / [3] PS t0 = ベースカラー
+    ID3D12PipelineState* GetBloomPipelineState() const { return bloomPipelineState_.Get(); }
+    ID3D12RootSignature* GetBloomRootSignature() const { return bloomRootSignature_.Get(); }
+    static constexpr UINT kBloomPassConstantCount = 4;
 
     // セッター
     void SetDefaultCamera(Camera* camera) { defaultCamera_ = camera; }

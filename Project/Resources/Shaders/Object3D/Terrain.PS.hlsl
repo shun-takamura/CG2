@@ -47,7 +47,7 @@ struct Material
     float4 terrainTile;        // xyz = 層ごとのタイル長 [m]、w = 高さブレンドの幅
     float4 terrainRoughness;   // xyz = 層ごとの粗さ、w = 岩の三平面投影の鋭さ
     float4 terrainParams;      // x = 低い周波数の色ムラの強さ、y = 濡れた所を暗くする強さ
-    float4 terrainPadding;
+    float4 emissive;           // 発光（rgb）。ライティングのあとに足す
 };
 
 struct PixelShaderOutput
@@ -245,6 +245,7 @@ PixelShaderOutput main(VertexShaderOutput input)
 
     output.color.rgb = Lo + ambient;
     output.color.a = 1.0f;
+    output.color.rgb += gMaterial.emissive.rgb;
     output.color.rgb = ApplyFog(output.color.rgb, P, gCamera.worldPosition);
     return output;
 }

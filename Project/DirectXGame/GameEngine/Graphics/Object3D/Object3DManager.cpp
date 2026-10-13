@@ -1,4 +1,5 @@
 ﻿#include "Object3DManager.h"
+#include "BloomEffect.h"
 #include "Cloud/CloudLayer.h"
 
 void Object3DManager::Initialize(DirectXCore* dxCore)
@@ -44,6 +45,7 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
 
     // ID Pass 用 PSO / RootSignature を1回だけ作成
     CreateIdPassObjects();
+    CreateBloomPassObjects();
 }
 
 void Object3DManager::DrawSetting()
@@ -632,5 +634,121 @@ void Object3DManager::CreateIdPassObjects()
     assert(psDissolve);
     desc.PS = { psDissolve->GetBufferPointer(), psDissolve->GetBufferSize() };
     hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&idDissolvePipelineState_));
+    assert(SUCCEEDED(hr));
+}
+
+void Object3DManager::CreateBloomPassObjects()
+{
+    HRESULT hr;
+
+    // ----- Root Signature -----
+    // [0] VS CBV(b0) = TransformationMatrix
+    // [1] PS CBV(b0) = Material（発光とディゾルブを読む）
+    // [2] PS RootConstant(b1) = 倍率
+    // [3] PS DescriptorTable(t0) = ベースカラー（emissive.w = 1 のとき発光に掛ける）
+    D3D12_DESCRIPTOR_RANGE textureRange[1] = {};
+    textureRange[0].BaseShaderRegister = 0;
+    textureRange[0].NumDescriptors = 1;
+    textureRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    textureRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParams[4] = {};
+    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[0].Descriptor.ShaderRegister = 0;
+
+    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[1].Descriptor.ShaderRegister = 0;
+
+    rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[2].Constants.ShaderRegister = 1;
+    rootParams[2].Constants.RegisterSpace = 0;
+    rootParams[2].Constants.Num32BitValues = kBloomPassConstantCount;
+
+    rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[3].DescriptorTable.pDescriptorRanges = textureRange;
+    rootParams[3].DescriptorTable.NumDescriptorRanges = _countof(textureRange);
+
+    D3D12_STATIC_SAMPLER_DESC sampler{};
+    sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    sampler.MaxLOD = D3D12_FLOAT32_MAX;
+    sampler.ShaderRegister = 0;
+    sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    D3D12_ROOT_SIGNATURE_DESC rsDesc{};
+    rsDesc.NumParameters = _countof(rootParams);
+    rsDesc.pParameters = rootParams;
+    rsDesc.NumStaticSamplers = 1;
+    rsDesc.pStaticSamplers = &sampler;
+    rsDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    Microsoft::WRL::ComPtr<ID3DBlob> sigBlob, errBlob;
+    hr = D3D12SerializeRootSignature(&rsDesc, D3D_ROOT_SIGNATURE_VERSION_1, &sigBlob, &errBlob);
+    if (FAILED(hr) && errBlob) Log(static_cast<char*>(errBlob->GetBufferPointer()));
+    assert(SUCCEEDED(hr));
+    hr = dxCore_->GetDevice()->CreateRootSignature(
+        0, sigBlob->GetBufferPointer(), sigBlob->GetBufferSize(),
+        IID_PPV_ARGS(&bloomRootSignature_));
+    assert(SUCCEEDED(hr));
+
+    // ----- PSO -----
+    IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/Object3d.VS.hlsl", L"vs_6_0");
+    IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Object3D/WriteEmissive.PS.hlsl", L"ps_6_0");
+    assert(vs && ps);
+
+    D3D12_INPUT_ELEMENT_DESC elems[4] = {};
+    elems[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+    elems[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+    elems[2] = { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+    elems[3] = { "TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+
+    D3D12_INPUT_LAYOUT_DESC inputLayout{};
+    inputLayout.pInputElementDescs = elems;
+    inputLayout.NumElements = _countof(elems);
+
+    D3D12_RASTERIZER_DESC rasterizer{};
+    rasterizer.CullMode = D3D12_CULL_MODE_BACK;
+    rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
+
+    // 加算（エフェクトの発光と重なったら足し合わせる）
+    D3D12_BLEND_DESC blend{};
+    blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    blend.RenderTarget[0].BlendEnable = TRUE;
+    blend.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    blend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+    blend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+
+    // メイン描画で書いた深度に LessEqual（手前の物に隠れた所は光らない）
+    D3D12_DEPTH_STENCIL_DESC dsDesc{};
+    dsDesc.DepthEnable = true;
+    dsDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+    desc.pRootSignature = bloomRootSignature_.Get();
+    desc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+    desc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+    desc.InputLayout = inputLayout;
+    desc.BlendState = blend;
+    desc.RasterizerState = rasterizer;
+    desc.DepthStencilState = dsDesc;
+    desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+    desc.NumRenderTargets = 1;
+    desc.RTVFormats[0] = BloomEffect::kFormat;
+    desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    desc.SampleDesc.Count = 1;
+
+    hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&bloomPipelineState_));
     assert(SUCCEEDED(hr));
 }

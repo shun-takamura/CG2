@@ -32,6 +32,7 @@
 #include "QRCodeReader.h"
 #include "TransitionManager.h"
 #include "SceneRoutes.h"
+#include "TextRenderer.h"
 #include "AttractMode.h"
 #include "Camera.h"
 #include "DStorageManager.h"
@@ -511,7 +512,12 @@ void Game::Draw() {
 
 	// ----- Bloom Pass：useBloom なエフェクトだけを発光 RT（bloomRT）に書き込む -----
 	// Distortion と同じく、発光源が無いフレームはパスも PostEffect の Bloom 合成も丸ごとスキップする。
-	const bool bloomActive = EffectManager::GetInstance()->HasActiveBloomSource();
+	// シーンが自分で光らせる物（コクピットの発光など）と文字の発光の層（TextRenderer）も同じ発光 RT に描く
+	Scene* bloomScene = SceneManager::GetInstance()->GetCurrentScene();
+	const bool effectBloom = EffectManager::GetInstance()->HasActiveBloomSource();
+	const bool sceneBloom = bloomScene && bloomScene->HasBloomSources();
+	const bool textBloom = TextRenderer::GetInstance()->HasPendingGlow();
+	const bool bloomActive = effectBloom || sceneBloom || textBloom;
 	if (postEffect_ && postEffect_->bloom) {
 		postEffect_->bloom->SetEnabled(bloomActive);
 	}
@@ -523,7 +529,9 @@ void Game::Draw() {
 		postEffect_->BeginBloomPass(cmd, &dsv);
 
 		srvManager_->PreDraw();
-		EffectManager::GetInstance()->DrawBloomPass();
+		if (effectBloom) EffectManager::GetInstance()->DrawBloomPass();
+		if (sceneBloom) bloomScene->DrawBloomSources();
+		if (textBloom) TextRenderer::GetInstance()->FlushGlow();
 
 		postEffect_->EndBloomPass(cmd);
 	}

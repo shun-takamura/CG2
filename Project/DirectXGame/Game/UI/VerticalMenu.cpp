@@ -106,6 +106,14 @@ int VerticalMenu::HitTest(const Vector2& position) const {
 	return -1;
 }
 
+Vector2 VerticalMenu::GetItemDrawPosition(int index) const {
+	TextRenderer* tr = TextRenderer::GetInstance();
+	const float totalHeight = lineHeight_ * static_cast<float>(items_.size());
+	const float top = center_.y - totalHeight * 0.5f;
+	const float w = tr->IsInitialized() ? tr->MeasureWidth(GetItemLabel(index), scale_) : 0.0f;
+	return { center_.x - w * 0.5f, top + lineHeight_ * static_cast<float>(index) };
+}
+
 void VerticalMenu::Draw() const {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;

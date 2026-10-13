@@ -248,6 +248,7 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
         m->parallaxDepth = 0.0f;
         m->parallaxMinLayers = 8.0f;
         m->parallaxMaxLayers = 32.0f;
+        m->emissive = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     // 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）

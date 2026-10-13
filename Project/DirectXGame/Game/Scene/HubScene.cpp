@@ -8,6 +8,9 @@
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "Hub/HubMechModel.h"
+#include "Hub/HatchSign.h"
+#include "Hub/CockpitLighting.h"
+#include "Hub/CockpitConsole.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
@@ -15,17 +18,17 @@
 #include "Config/GameActions.h"
 #include "Game.h"
 #include "PostEffect.h"
+#include "RadialBlurEffect.h"
 #include "DirectXCore.h"
 #include "TextRenderer.h"
 #include "SoundManager.h"
 #include "Vector4.h"
 #include "AttractMode.h"
 #include "UIPointer.h"
-#include "SpriteInstance.h"
-#include "SpriteManager.h"
 #include "FadeTransition.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
+#include <algorithm>
 #include <filesystem>
 
 #ifdef _DEBUG
@@ -59,9 +62,12 @@ namespace {
 	constexpr float kGalleryFrontZ = 7.0f;
 	constexpr float kGalleryWidth = 16.0f;
 	constexpr float kGalleryDepth = 14.0f;
+	// 回廊の縁から手のひらの手前（指先は z 5.6m 付近）へ伸ばす石の足場。待機の視点はこの上
+	constexpr float kBridgeEndZ = 6.0f;
+	constexpr float kBridgeWidth = 2.4f;
 }
 
-HubScene::HubScene() = default;
+HubScene::HubScene(Entry entry) : entry_(entry) {}
 HubScene::~HubScene() = default;
 
 void HubScene::Initialize() {
@@ -90,22 +96,36 @@ void HubScene::Initialize() {
 	galleryFloor_->SetScale({ kGalleryWidth / kFloorMeshSize, 1.0f, kGalleryDepth / kFloorMeshSize });
 	galleryFloor_->SetTranslate({ 0.0f, kGalleryHeight, kGalleryFrontZ + kGalleryDepth * 0.5f });
 	galleryFloor_->Update();
+	bridgeFloor_ = std::make_unique<Object3DInstance>();
+	bridgeFloor_->Initialize(object3DManager_, dxCore_, kFloorModelDir, kFloorMesh, "HubBridgeFloor");
+	bridgeFloor_->SetScale({ kBridgeWidth / kFloorMeshSize, 1.0f, (kGalleryFrontZ - kBridgeEndZ) / kFloorMeshSize });
+	bridgeFloor_->SetTranslate({ 0.0f, kGalleryHeight, (kGalleryFrontZ + kBridgeEndZ) * 0.5f });
+	bridgeFloor_->Update();
+
+	hatchSign_ = std::make_unique<HatchSign>();
+	hatchSign_->Initialize(object3DManager_, dxCore_, srvManager_);
+	cockpitLighting_ = std::make_unique<CockpitLighting>();
+	cockpitLighting_->Initialize();
+	console_ = std::make_unique<CockpitConsole>();
+	console_->Initialize();
 
 	LoadTuning();
 
 	menu_.SetItems({ "出撃" });
 
-	// 閉じ切りで真っ暗にする黒い板
-	blackout_ = std::make_unique<SpriteInstance>();
-	blackout_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "HubBlackout");
-	blackout_->SetPosition({ 0.0f, 0.0f });
-	blackout_->SetSize({ static_cast<float>(dxCore_->GetSwapChainWidth()),
-		static_cast<float>(dxCore_->GetSwapChainHeight()) });
-
 	boarding_.Stop();
-	ApplyBoardingPose();
+	disembark_.Stop();
+	reveal_.Reset();
+	state_ = State::Waiting;
+	leaving_ = false;
+	if (entry_ == Entry::Cockpit) {
+		// ポーズの「ステージセレクトに戻る」（⑩）：座った所から起動を演じる
+		EnterCockpit();
+	}
+	ApplyPose();
 	camera_->Update();
 	skybox_->Update(0.0f);
+	hatchSign_->Update(0.0f, mech_->GetPosition());
 
 	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
 	attractTimer_ = 0.0f;
@@ -113,17 +133,40 @@ void HubScene::Initialize() {
 
 void HubScene::Finalize() {
 	SoundManager::GetInstance()->Stop2DSound("bgm_title");
+	if (auto* blur = Game::GetPostEffect()->radialBlur) blur->SetEnabled(false);
+	if (cockpitLighting_) cockpitLighting_->Finalize(mech_.get());
+	if (hatchSign_) hatchSign_->Finalize();
+}
+
+Vector2 HubScene::GetScreenSize() const {
+	return { static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()) };
+}
+
+bool HubScene::IsGlowAllowed() const {
+	return !SceneManager::GetInstance()->IsTransitioning();
+}
+
+void HubScene::EnterCockpit() {
+	state_ = State::Cockpit;
+	boarding_.Stop();   // 視点は乗り込みの最後の姿勢（ApplyPose）
+	reveal_.StartBoot();
+	cockpitTime_ = 0.0f;
 }
 
 void HubScene::Update() {
-	if (SceneManager::GetInstance()->IsTransitioning()) {
+	// 覆われている間だけ止める。開いている間は演出を進める（入力は各状態で止める）
+	if (SceneManager::GetInstance()->IsTransitionCovering()) {
 		return;
 	}
 
 	const float dt = GetScaledDeltaTime();
 
-	// 乗り込み中は入力を読まない（ChangeScene を呼ぶまでは遷移中ではないので、自分で止める）
-	if (boarding_.IsPlaying()) {
+	switch (state_) {
+	case State::Waiting:
+		UpdateWaiting(dt);
+		break;
+	case State::Boarding:
+		// 乗り込み中は入力を読まない
 		boarding_.Update(dt);
 		if (boarding_.ConsumeSitImpact()) {
 			camera_->Shake(boarding_.GetSitShakeIntensity(), boarding_.GetSitShakeSeconds());
@@ -131,21 +174,29 @@ void HubScene::Update() {
 		if (boarding_.ConsumeCloseImpact()) {
 			camera_->Shake(boarding_.GetCloseShakeIntensity(), boarding_.GetCloseShakeSeconds());
 		}
-		ApplyBoardingPose();
-		camera_->UpdateShake(dt);
-		camera_->Update();
-		skybox_->Update(dt);
 		if (boarding_.IsFinished()) {
-			// 真っ暗のまま切り替える（組み合わせ表の覆う側は kCoverByScene）
-			SceneManager::GetInstance()->ChangeScene("STAGESELECT");
+			// 閉じ切ったらそのままコクピットの起動へ（シーンは切り替えない）
+			EnterCockpit();
 		}
-		return;
+		break;
+	case State::Cockpit:
+		UpdateCockpit(dt);
+		break;
+	case State::Disembarking:
+		UpdateDisembarking(dt);
+		break;
 	}
 
-	ApplyBoardingPose();
+	ApplyPose();
 	camera_->UpdateShake(dt);
 	camera_->Update();
 	skybox_->Update(dt);
+	hatchSign_->Update(dt, mech_->GetPosition());
+}
+
+void HubScene::UpdateWaiting(float dt) {
+	// 白フェードで開いている途中などは入力を読まない
+	if (SceneManager::GetInstance()->IsTransitioning()) return;
 
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
@@ -162,8 +213,8 @@ void HubScene::Update() {
 		attractTimer_ = 0.0f;
 	}
 
-	menu_.SetPosition({ static_cast<float>(dxCore_->GetSwapChainWidth()) * 0.5f,
-		static_cast<float>(dxCore_->GetSwapChainHeight()) * kMenuHeightRatio });
+	const Vector2 screen = GetScreenSize();
+	menu_.SetPosition({ screen.x * 0.5f, screen.y * kMenuHeightRatio });
 	const UIPointer pointer = UIPointer::FromInput(input_);
 	const VerticalMenu::Result result = menu_.Update(actions, &pointer);
 	if (result == VerticalMenu::Result::Canceled) {
@@ -173,15 +224,68 @@ void HubScene::Update() {
 	if (result == VerticalMenu::Result::Confirmed) {
 		switch (menu_.GetSelectedIndex()) {
 		case kHubSortie:
-			// 乗り込み（18 番 ①の OUT）を演じてから STAGESELECT へ
+			// 乗り込み（18 番 ①の OUT）→ 閉じ切ったらコクピット（①の IN）
 			boarding_.Start();
+			state_ = State::Boarding;
 			return;
 		}
 	}
 }
 
+void HubScene::UpdateCockpit(float dt) {
+	cockpitTime_ += dt;
+	reveal_.Update(dt);
+	if (reveal_.IsShutdownFinished()) {
+		// ②の IN：降りる（機体に背を向けて乗るときと同じ道を戻る）
+		state_ = State::Disembarking;
+		disembark_.Start(boarding_.GetHomeKey(), boarding_.GetMinLightScale());
+		return;
+	}
+	if (leaving_ || SceneManager::GetInstance()->IsTransitioning()) return;
+
+	auto* actions = input_->GetActionMap();
+	if (!actions) return;
+	const CockpitReveal::State st = reveal_.Evaluate();
+	const bool inputEnabled = st.inputEnabled && reveal_.GetPhase() == CockpitReveal::Phase::Booting;
+	const UIPointer pointer = UIPointer::FromInput(input_);
+	switch (console_->Update(actions, &pointer, GetScreenSize(), inputEnabled)) {
+	case CockpitConsole::Result::Stage1:
+		// ③ ステージ選択 → ステージは未定（組み合わせ表でストライプを仮置き）
+		leaving_ = true;
+		SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
+		break;
+	case CockpitConsole::Result::BackToHub:
+		reveal_.StartShutdown();   // ②の OUT
+		break;
+	default:
+		break;
+	}
+}
+
+void HubScene::UpdateDisembarking(float dt) {
+	// 降りている間は入力を読まない
+	disembark_.Update(dt);
+	if (disembark_.IsFinished()) {
+		// 振り返り終えた姿勢は待機の視点（乗り込みのキー 0）と同じ
+		disembark_.Stop();
+		boarding_.Stop();
+		reveal_.Reset();
+		state_ = State::Waiting;
+	}
+}
+
 void HubScene::Draw() {
 	auto* commandList = dxCore_->GetCommandList();
+
+	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
+	if (hatchSign_) hatchSign_->RenderSignTexture(commandList);
+
+	// シーンの RT とビューポートを戻す
+	const Vector2 screen = GetScreenSize();
+	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, screen.x, screen.y, 0.0f, 1.0f };
+	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(screen.x), static_cast<LONG>(screen.y) };
+	commandList->RSSetViewports(1, &viewport);
+	commandList->RSSetScissorRects(1, &scissor);
 
 	// 空を最初に描く（深度書き込みなしの ReadOnly DSV）
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
@@ -196,35 +300,52 @@ void HubScene::Draw() {
 	LightManager::GetInstance()->BindLights(commandList);
 	if (groundFloor_) groundFloor_->Draw(dxCore_);
 	if (galleryFloor_) galleryFloor_->Draw(dxCore_);
+	if (bridgeFloor_) bridgeFloor_->Draw(dxCore_);
 	if (mech_) mech_->Draw(dxCore_);
-
-	const HubBoardingSequence::Pose pose = boarding_.GetCurrentPose();
-	if (blackout_ && pose.blackout > 0.0f) {
-		blackout_->SetColor({ 0.0f, 0.0f, 0.0f, pose.blackout });
-		blackout_->Update();
-		spriteManager_->DrawSetting();
-		blackout_->Draw();
-	}
+	// 表示板は半透明なので最後に
+	if (hatchSign_) hatchSign_->Draw(dxCore_);
 
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	// メニューは待機中だけ（決定したら消して乗り込みを見せる）
-	if (!boarding_.IsPlaying() && !boarding_.IsPreviewing()) {
-		const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-		const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
-		menu_.SetPosition({ screenW * 0.5f, screenH * kMenuHeightRatio });
+	if (state_ == State::Waiting && !boarding_.IsPreviewing()) {
+		// 待機のメニュー（決定したら消して乗り込みを見せる）
+		menu_.SetPosition({ screen.x * 0.5f, screen.y * kMenuHeightRatio });
 		menu_.Draw();
+	} else if (state_ == State::Cockpit && console_) {
+		const CockpitReveal::State st = reveal_.Evaluate();
+		console_->Draw(screen, st.backgroundAlpha, st.menuTime, st.collapse, cockpitTime_, IsGlowAllowed());
 	}
 	tr->Flush();
+}
+
+bool HubScene::HasBloomSources() const {
+	return IsGlowAllowed() && cockpitLighting_ && hatchSign_;
+}
+
+void HubScene::DrawBloomSources() {
+	if (mech_ && cockpitLighting_) {
+		mech_->DrawBloom(dxCore_, cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
+	}
+	if (hatchSign_) hatchSign_->DrawBloom(dxCore_);
 }
 
 Camera* HubScene::GetCamera() {
 	return camera_.get();
 }
 
-void HubScene::ApplyBoardingPose() {
-	const HubBoardingSequence::Pose pose = boarding_.GetCurrentPose();
+void HubScene::ApplyPose() {
+	// 視点とハッチ：降りる間（とそのシーク中）は降りる時間軸、コクピットの中は乗り込みの最後の姿勢、ほかは乗り込み
+	const bool cockpitView = state_ == State::Cockpit;
+	HubBoardingSequence::Pose pose{};
+	if (state_ == State::Disembarking || disembark_.IsPreviewing()) {
+		const HubDisembarkSequence::Pose d = disembark_.GetCurrentPose();
+		pose = { d.eye, d.yaw, d.pitch, d.hatchOpenRatio, d.lightScale };
+	} else {
+		pose = cockpitView ? boarding_.Evaluate(boarding_.GetEndTime()) : boarding_.GetCurrentPose();
+	}
+	const CockpitReveal::State st = reveal_.Evaluate();
+
 	const Vector3& origin = mech_->GetPosition();
 	camera_->SetFovY(DegToRad(fovYDegrees_));
 	camera_->SetTranslate({ origin.x + pose.eye.x, origin.y + pose.eye.y, origin.z + pose.eye.z });
@@ -233,11 +354,29 @@ void HubScene::ApplyBoardingPose() {
 	mech_->SetHatchOpenRatio(pose.hatchOpenRatio);
 	mech_->Update();
 
-	// 平行光源の既定 intensity は 0 なので毎フレーム決める。ハッチが閉じるにつれて弱める
+	// 平行光源の既定 intensity は 0 なので毎フレーム決める。
+	// ハッチが閉じるにつれて弱め、外が透ける（全天周囲モニターが外を映す）につれて戻す
+	const float revealAmount = cockpitView ? st.reveal : 0.0f;
+	const float minLight = boarding_.GetMinLightScale();
+	const float lightScale = cockpitView ? minLight + (1.0f - minLight) * revealAmount : pose.lightScale;
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(kSunLightDirection);
 		lm->SetDirectionalLightColor(kSunLightColor);
-		lm->SetDirectionalLightIntensity(sunIntensity_ * pose.lightScale);
+		lm->SetDirectionalLightIntensity(sunIntensity_ * lightScale);
+	}
+
+	// ハッチの表示板。LOCK はコクピットの中にいる間だけ（待機へ戻る暗転で視点が外へ出たら UNLOCK）
+	hatchSign_->SetLocked(cockpitView && st.signLocked);
+	hatchSign_->SetVisibility(cockpitView ? st.signAlpha : 1.0f);
+	// コクピットの灯り・光る部位（表示板と同じ色）・外を映す六角形
+	cockpitLighting_->Apply(*mech_, st.lightLevel, revealAmount, GetScreenSize(), hatchSign_->GetColor());
+
+	// ラジアルブラー（背景を出す直前に上げ、文字を出すときに下げる）
+	if (auto* blur = Game::GetPostEffect()->radialBlur) {
+		const float width = cockpitView ? st.blurWidth : 0.0f;
+		blur->SetEnabled(width > 0.0f);
+		blur->SetCenter(0.5f, 0.5f);
+		blur->SetBlurWidth(width);
 	}
 }
 
@@ -260,6 +399,11 @@ void HubScene::LoadTuning() {
 	sunIntensity_ = static_cast<float>(root["sunIntensity"].AsDouble(sunIntensity_));
 	if (mech_) mech_->LoadTuning(root["mech"]);
 	boarding_.LoadTuning(root["boarding"]);
+	disembark_.LoadTuning(root["disembark"]);
+	reveal_.LoadTuning(root["cockpitReveal"]);
+	if (cockpitLighting_) cockpitLighting_->LoadTuning(root["cockpitLighting"]);
+	if (hatchSign_) hatchSign_->LoadTuning(root["hatchSign"]);
+	if (console_) console_->LoadTuning(root["cockpitConsole"]);
 }
 
 void HubScene::SaveTuning() const {
@@ -270,6 +414,11 @@ void HubScene::SaveTuning() const {
 	root["sunIntensity"] = JsonValue(static_cast<double>(sunIntensity_));
 	if (mech_) mech_->SaveTuning(root["mech"]);
 	boarding_.SaveTuning(root["boarding"]);
+	disembark_.SaveTuning(root["disembark"]);
+	reveal_.SaveTuning(root["cockpitReveal"]);
+	if (cockpitLighting_) cockpitLighting_->SaveTuning(root["cockpitLighting"]);
+	if (hatchSign_) hatchSign_->SaveTuning(root["hatchSign"]);
+	if (console_) console_->SaveTuning(root["cockpitConsole"]);
 	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
 }
 
@@ -280,6 +429,10 @@ void HubScene::OnImGuiTuning() {
 	if (ImGui::Button("Reload Tuning")) LoadTuning();
 	ImGui::SameLine();
 	ImGui::TextDisabled("%s", kTuningPath);
+	static const char* kStateNames[] = { "Waiting", "Boarding", "Cockpit", "Disembarking" };
+	ImGui::Text("State: %s  (entry: %s)", kStateNames[static_cast<int>(state_)],
+		entry_ == Entry::Cockpit ? "Cockpit" : "Temple");
+
 	ImGui::SeparatorText("To Title (white fade)");
 	ImGui::DragFloat("White Fade (s)", &whiteFadeSeconds_, 0.05f, 0.05f, 5.0f);
 	ImGui::DragFloat("White Hold (s)", &whiteHoldSeconds_, 0.05f, 0.0f, 5.0f);
@@ -291,12 +444,51 @@ void HubScene::OnImGuiTuning() {
 	if (mech_ && ImGui::CollapsingHeader("Mech")) {
 		mech_->OnImGui();
 	}
-	if (ImGui::CollapsingHeader("Boarding (18 OUT-1)", ImGuiTreeNodeFlags_DefaultOpen)) {
-		// 最後まで再生すると STAGESELECT へ切り替わる（本番と同じ）
-		if (ImGui::Button("Play")) boarding_.Start();
+	if (ImGui::CollapsingHeader("Boarding (18 OUT-1)")) {
+		// 最後まで再生するとコクピットの起動へ進む（本番と同じ）
+		if (ImGui::Button("Play")) {
+			reveal_.Reset();
+			boarding_.Start();
+			state_ = State::Boarding;
+		}
 		ImGui::SameLine();
-		if (ImGui::Button("Stop")) boarding_.Stop();
+		if (ImGui::Button("Stop")) {
+			boarding_.Stop();
+			reveal_.Reset();
+			state_ = State::Waiting;
+		}
 		boarding_.OnImGui();
+	}
+	if (ImGui::CollapsingHeader("Cockpit Reveal (18 IN-1 / OUT-2)", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::Button("Boot")) EnterCockpit();
+		ImGui::SameLine();
+		if (ImGui::Button("Shutdown") && state_ == State::Cockpit) reveal_.StartShutdown();
+		reveal_.OnImGui();
+	}
+	if (ImGui::CollapsingHeader("Disembark (18 IN-2)")) {
+		// 最後まで再生すると待機へ戻る（本番と同じ）
+		if (ImGui::Button("Play##Disembark")) {
+			reveal_.Reset();
+			disembark_.Start(boarding_.GetHomeKey(), boarding_.GetMinLightScale());
+			state_ = State::Disembarking;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Stop##Disembark")) {
+			disembark_.Stop();
+			boarding_.Stop();
+			reveal_.Reset();
+			state_ = State::Waiting;
+		}
+		disembark_.OnImGui(boarding_.GetHomeKey(), boarding_.GetMinLightScale());
+	}
+	if (cockpitLighting_ && ImGui::CollapsingHeader("Cockpit Lighting / Hex")) {
+		cockpitLighting_->OnImGui();
+	}
+	if (hatchSign_ && ImGui::CollapsingHeader("Hatch Sign")) {
+		hatchSign_->OnImGui();
+	}
+	if (console_ && ImGui::CollapsingHeader("Cockpit Console (stage select UI)")) {
+		console_->OnImGui();
 	}
 #endif // _DEBUG
 }

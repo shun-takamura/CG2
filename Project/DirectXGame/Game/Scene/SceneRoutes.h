@@ -22,10 +22,10 @@ namespace SceneRoutes {
 
 	inline constexpr Transitions kDefault = { TransitionType::Stripe, TransitionType::Stripe };
 
-	// ステージ選択（コクピット）の開く側。HUB からも、ポーズの「ステージセレクトに戻る」からも同じ IN で開く
-	// （18_HubTransitions.md ①の IN：真っ暗から緑の灯りと UI が起動する）。
-	// ①の IN ができたら TransitionManager::kRevealByScene に変える。それまでは仮にストライプ
-	inline constexpr TransitionType kStageSelectReveal = TransitionType::Stripe;
+	// ステージ選択（コクピット）の開く側。ステージ選択は HUB のシーンの中なので、別のシーンから来るのは
+	// ポーズの「ステージセレクトに戻る」（⑩）だけ。シーン名 STAGESELECT の HubScene がコクピットの起動を演じる
+	// （18_HubTransitions.md ①「C で決まったこと」）。None ＝ TransitionManager::kRevealByScene
+	inline constexpr TransitionType kStageSelectReveal = TransitionType::None;
 
 	// HUB の開く側。ステージ・ゲームオーバー・リザルトから戻るときは「機体から降りる」で開く
 	// （18_HubTransitions.md ②の IN、⑦）。できたら kRevealByScene に変える。それまでは仮にストライプ
@@ -36,13 +36,11 @@ namespace SceneRoutes {
 		// ⑧ タイトル ↔ HUB：白フェード（色と長さは TitleScene / HubScene が直前に FadeTransition::SetNextFade で決める）
 		{ "TITLE",       "HUB",         { TransitionType::Fade,   TransitionType::Fade   } },
 		{ "HUB",         "TITLE",       { TransitionType::Fade,   TransitionType::Fade   } },
-		// ① HUB → ステージ選択：乗り込み（HUB が演じて真っ暗で ChangeScene）→ 起動（ステージ選択が演じる）。
-		// 覆う側の None は TransitionManager::kCoverByScene（このヘッダは BaseTransition.h しか include しないので None と書く）
-		{ "HUB",         "STAGESELECT", { TransitionType::None,   kStageSelectReveal } },
-		// ② ステージ選択 → HUB：UI のシャットダウン（ステージ選択が演じる）→ 機体から降りる。
-		// ②の OUT ができたら覆う側を kCoverByScene に変える。それまでは仮にストライプ
-		{ "STAGESELECT", "HUB",         { TransitionType::Stripe, kHubReveal } },
-		// ③ ステージ選択 → ステージ：未定（ストライプを仮置き）
+		// ①② HUB ↔ ステージ選択は同じ HubScene の中（シーンを切り替えない）。
+		// シーン名 STAGESELECT で始まった HubScene（⑩）からタイトルへ戻るときも白フェード
+		{ "STAGESELECT", "TITLE",       { TransitionType::Fade,   TransitionType::Fade   } },
+		// ③ ステージ選択 → ステージ：未定（ストライプを仮置き）。HubScene のシーン名は入口で HUB / STAGESELECT のどちらか
+		{ "HUB",         "STAGEPLAY",   { TransitionType::Stripe, TransitionType::Stripe } },
 		{ "STAGESELECT", "STAGEPLAY",   { TransitionType::Stripe, TransitionType::Stripe } },
 		// ⑨ ステージ → リザルト / ゲームオーバー（死亡は羽根の着水、15_SceneTransition.md T4）
 		{ "STAGEPLAY",   "RESULT",      { TransitionType::Stripe, TransitionType::Stripe } },

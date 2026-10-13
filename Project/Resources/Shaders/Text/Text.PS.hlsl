@@ -17,6 +17,13 @@ struct PSInput
 
 float4 main(PSInput input) : SV_TARGET0
 {
+    // 塗りつぶしの四角（TextRenderer::DrawRect）。アトラスを読まない
+    if (input.outlineWidth < -0.5)
+    {
+        if (input.color.a <= 0.001) discard;
+        return input.color;
+    }
+
     // [0,1] サンプルから縁(0.5)基準の signed distance に
     float sd = gAtlas.Sample(gSampler, input.uv) - 0.5;
 

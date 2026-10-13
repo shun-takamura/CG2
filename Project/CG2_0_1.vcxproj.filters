@@ -126,10 +126,25 @@
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\Game\Scene\AttractMode.cpp">
-      <Filter>DirectXGame\Game\Scene</Filter>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubCameraTrack.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\Game\Scene\StageSelectScene.cpp">
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubDisembarkSequence.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\CockpitReveal.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\CockpitLighting.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HatchSign.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\CockpitConsole.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\AttractMode.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp">
@@ -278,10 +293,25 @@
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Scene\AttractMode.h">
-      <Filter>DirectXGame\Game\Scene</Filter>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubCameraTrack.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Scene\StageSelectScene.h">
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubDisembarkSequence.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\CockpitReveal.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\CockpitLighting.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HatchSign.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\CockpitConsole.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\AttractMode.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h">

@@ -43,6 +43,14 @@ public:
 
 	void SetScale(float scale) { scale_ = scale; }
 	void SetLineHeight(float lineHeight) { lineHeight_ = lineHeight; }
+	float GetScale() const { return scale_; }
+	float GetLineHeight() const { return lineHeight_; }
+
+	// 見た目を自前で描くとき用（Draw と同じ文字列と左上の位置。マウスの当たりもこの位置）
+	int GetItemCount() const { return static_cast<int>(items_.size()); }
+	const std::string& GetItemText(int index) const { return items_[index]; }
+	std::string GetItemLabel(int index) const { return MakeLabel(static_cast<size_t>(index), index == selectedIndex_); }
+	Vector2 GetItemDrawPosition(int index) const;
 
 private:
 	// 画面上のその位置にある項目の番号（無ければ -1）

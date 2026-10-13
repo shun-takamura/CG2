@@ -58,6 +58,11 @@ void HubMechModel::Draw(DirectXCore* dxCore) {
 	hatch_->Draw(dxCore);
 }
 
+void HubMechModel::DrawBloom(DirectXCore* dxCore, float bloomScale, bool includeAll) {
+	cockpit_->DrawBloomPass(dxCore, bloomScale, includeAll);
+	hatch_->DrawBloomPass(dxCore, bloomScale, includeAll);
+}
+
 void HubMechModel::LoadTuning(const JsonValue& node) {
 	if (!node.IsObject()) return;
 	hatchOpenDegrees_ = static_cast<float>(node["hatchOpenDegrees"].AsDouble(hatchOpenDegrees_));

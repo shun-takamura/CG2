@@ -86,6 +86,15 @@ struct Material
     float dissolvePadding;
     float3 dissolveEdgeColor;
     float dissolvePadding2;
+    // 視差オクルージョン（POM。PBR の PS だけが使う）／地形（Terrain の PS だけが使う）。発光の位置まで並びを揃える
+    int useParallax;
+    float parallaxDepth;
+    float parallaxMinLayers;
+    float parallaxMaxLayers;
+    float4 terrainTile;
+    float4 terrainRoughness;
+    float4 terrainParams;
+    float4 emissive;           // 発光（rgb）。ライティングのあとに足す
 };
 
 struct PixelShaderOutput
@@ -133,7 +142,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     PixelShaderOutput output;
 
     // 消える部分はここで捨てる（以降の計算を省く）
-    float dissolveEdge = ApplyDissolve(input.worldPosition);
+    float dissolveEdge = ApplyDissolve(input.worldPosition, input.position.xy);
 
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
@@ -270,6 +279,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     // 距離フォグ（最後に乗せる＝ライティング/IBL/シャドウの結果すべてに効かせる）。
     // アルファは触らない（ApplyFog 内で rgb のみ扱う）。
     output.color.rgb = ApplyDissolveEdge(output.color.rgb, dissolveEdge);
+    output.color.rgb = ApplyEmissive(output.color.rgb, textureColor.rgb);
     output.color.rgb = ApplyFog(output.color.rgb, input.worldPosition, gCamera.worldPosition);
 
     return output;

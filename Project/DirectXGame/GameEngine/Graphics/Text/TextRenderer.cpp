@@ -6,8 +6,10 @@
 #include "Utf8.h"
 #include "Log.h"
 #include "PepperMacros.h"
+#include "BloomEffect.h"
 
 #include <cassert>
+#include <cstring>
 #include <d3dcompiler.h>
 
 TextRenderer* TextRenderer::GetInstance()
@@ -32,12 +34,13 @@ void TextRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager,
 	CreateRootSignature();
 	CreatePipelineState();
 	CreateInstanceBuffer();
-	CreateScreenCB();
 
 	// ASCII+仮名を CPU 側でラスタライズしておく（テクスチャ転送は Flush 時）
 	atlas_->PreloadDefaultCharset(nullptr);
 
-	cpuInstances_.reserve(kMaxInstances);
+	layers_[kLayerScreen].reserve(kMaxInstances);
+	layers_[kLayerGlow].reserve(1024);
+	layers_[kLayerOffscreen].reserve(256);
 	initialized_ = true;
 }
 
@@ -47,16 +50,12 @@ void TextRenderer::Finalize()
 		instanceResource_->Unmap(0, nullptr);
 		instanceData_ = nullptr;
 	}
-	if (screenCB_) {
-		screenCB_->Unmap(0, nullptr);
-		screenCBData_ = nullptr;
-	}
 	if (atlas_) { atlas_->Finalize(); atlas_.reset(); }
 	instanceResource_.Reset();
-	screenCB_.Reset();
 	pipelineState_.Reset();
+	glowPipelineState_.Reset();
 	rootSignature_.Reset();
-	cpuInstances_.clear();
+	for (auto& layer : layers_) layer.clear();
 	initialized_ = false;
 }
 
@@ -82,10 +81,12 @@ void TextRenderer::CreateRootSignature()
 	params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 	params[0].DescriptorTable.pDescriptorRanges = rangeInst;
 	params[0].DescriptorTable.NumDescriptorRanges = 1;
-	// [1] VS CBV(b0) - screen size
-	params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	// [1] VS ルート定数(b0) - 描く先の大きさ（ピクセル）と、層の区画の先頭のインスタンス番号
+	params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 	params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	params[1].Descriptor.ShaderRegister = 0;
+	params[1].Constants.ShaderRegister = 0;
+	params[1].Constants.RegisterSpace = 0;
+	params[1].Constants.Num32BitValues = 4;
 	// [2] PS DescriptorTable - atlas (t0)
 	params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
@@ -166,33 +167,47 @@ void TextRenderer::CreatePipelineState()
 
 	HRESULT hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState_));
 	assert(SUCCEEDED(hr));
+
+	// 発光の層：ブルームの発光 RT（float）へ加算（色 × α を足す。重なるほど強く光る）
+	psoDesc.RTVFormats[0] = BloomEffect::kFormat;
+	psoDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	psoDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+	psoDesc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	psoDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+	hr = dxCore_->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&glowPipelineState_));
+	assert(SUCCEEDED(hr));
 }
 
 void TextRenderer::CreateInstanceBuffer()
 {
-	instanceResource_ = dxCore_->CreateBufferResource(sizeof(GlyphInstance) * kMaxInstances);
+	// 層ごとに kMaxInstances ずつの区画（同じフレームに複数の層を描いても上書きし合わない）
+	const uint32_t total = kMaxInstances * kLayerCount;
+	instanceResource_ = dxCore_->CreateBufferResource(sizeof(GlyphInstance) * total);
 	instanceResource_->Map(0, nullptr, reinterpret_cast<void**>(&instanceData_));
 
 	instanceSrvIndex_ = srvManager_->Allocate();
 	srvManager_->CreateSRVForStructuredBuffer(instanceSrvIndex_, instanceResource_.Get(),
-		kMaxInstances, sizeof(GlyphInstance));
+		total, sizeof(GlyphInstance));
 }
 
-void TextRenderer::CreateScreenCB()
+void TextRenderer::SetTransform(const Vector2& center, const Vector2& scale)
 {
-	screenCB_ = dxCore_->CreateBufferResource(sizeof(ScreenCB));
-	screenCB_->Map(0, nullptr, reinterpret_cast<void**>(&screenCBData_));
-	screenCBData_->screenW = static_cast<float>(WindowsApplication::kClientWidth);
-	screenCBData_->screenH = static_cast<float>(WindowsApplication::kClientHeight);
-	screenCBData_->pad0 = 0.0f;
-	screenCBData_->pad1 = 0.0f;
+	hasTransform_ = true;
+	transformCenter_ = center;
+	transformScale_ = scale;
 }
 
-void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float scale, const Vector4& color,
-	float outlineThickness, const Vector4& outlineColor)
+void TextRenderer::ResetTransform()
+{
+	hasTransform_ = false;
+	transformScale_ = { 1.0f, 1.0f };
+}
+
+void TextRenderer::PushText(std::vector<GlyphInstance>& out, std::string_view utf8, const Vector2& pos, float scale,
+	const Vector4& color, float outlineThickness, const Vector4& outlineColor)
 {
 	if (!initialized_ || !atlas_) return;
-	if (cpuInstances_.size() >= kMaxInstances) return;
+	if (out.size() >= kMaxInstances) return;
 
 	const float baseline = atlas_->GetAscent() * scale;
 	float penX = pos.x;
@@ -207,21 +222,67 @@ void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float sca
 		if (!g.valid) continue;
 
 		if (g.width > 0 && g.height > 0) {
-			if (cpuInstances_.size() >= kMaxInstances) break;
+			if (out.size() >= kMaxInstances) break;
 			GlyphInstance inst{};
 			inst.screenPosX = penX + g.xoff * scale;
 			inst.screenPosY = penY + g.yoff * scale;
 			inst.sizeX = g.width * scale;
 			inst.sizeY = g.height * scale;
+			if (hasTransform_) {
+				inst.screenPosX = transformCenter_.x + (inst.screenPosX - transformCenter_.x) * transformScale_.x;
+				inst.screenPosY = transformCenter_.y + (inst.screenPosY - transformCenter_.y) * transformScale_.y;
+				inst.sizeX *= transformScale_.x;
+				inst.sizeY *= transformScale_.y;
+			}
 			inst.u0 = g.u0; inst.v0 = g.v0; inst.u1 = g.u1; inst.v1 = g.v1;
 			inst.r = color.x; inst.g = color.y; inst.b = color.z; inst.a = color.w;
 			inst.outR = outlineColor.x; inst.outG = outlineColor.y;
 			inst.outB = outlineColor.z; inst.outA = outlineColor.w;
 			inst.outlineWidth = outlineThickness;
-			cpuInstances_.push_back(inst);
+			out.push_back(inst);
 		}
 		penX += g.advance * scale;
 	}
+}
+
+void TextRenderer::PushRect(std::vector<GlyphInstance>& out, const Vector2& pos, const Vector2& size, const Vector4& color)
+{
+	if (!initialized_ || out.size() >= kMaxInstances) return;
+	GlyphInstance inst{};
+	inst.screenPosX = pos.x;
+	inst.screenPosY = pos.y;
+	inst.sizeX = size.x;
+	inst.sizeY = size.y;
+	if (hasTransform_) {
+		inst.screenPosX = transformCenter_.x + (inst.screenPosX - transformCenter_.x) * transformScale_.x;
+		inst.screenPosY = transformCenter_.y + (inst.screenPosY - transformCenter_.y) * transformScale_.y;
+		inst.sizeX *= transformScale_.x;
+		inst.sizeY *= transformScale_.y;
+	}
+	inst.r = color.x; inst.g = color.y; inst.b = color.z; inst.a = color.w;
+	inst.outlineWidth = -1.0f;   // 塗りつぶし（Text.PS がアトラスを読まない）
+	out.push_back(inst);
+}
+
+void TextRenderer::DrawText(std::string_view utf8, const Vector2& pos, float scale, const Vector4& color,
+	float outlineThickness, const Vector4& outlineColor)
+{
+	PushText(CurrentLayer(), utf8, pos, scale, color, outlineThickness, outlineColor);
+}
+
+void TextRenderer::DrawRect(const Vector2& pos, const Vector2& size, const Vector4& color)
+{
+	PushRect(CurrentLayer(), pos, size, color);
+}
+
+void TextRenderer::DrawTextGlow(std::string_view utf8, const Vector2& pos, float scale, const Vector4& color)
+{
+	PushText(layers_[kLayerGlow], utf8, pos, scale, color, 0.0f, { 0.0f, 0.0f, 0.0f, 0.0f });
+}
+
+void TextRenderer::DrawRectGlow(const Vector2& pos, const Vector2& size, const Vector4& color)
+{
+	PushRect(layers_[kLayerGlow], pos, size, color);
 }
 
 float TextRenderer::MeasureWidth(std::string_view utf8, float scale)
@@ -239,10 +300,11 @@ float TextRenderer::MeasureWidth(std::string_view utf8, float scale)
 	return w;
 }
 
-void TextRenderer::Flush()
+void TextRenderer::DrawLayer(Layer layer, ID3D12PipelineState* pso, float targetWidth, float targetHeight)
 {
+	std::vector<GlyphInstance>& instances = layers_[layer];
 	if (!initialized_ || !atlas_) {
-		cpuInstances_.clear();
+		instances.clear();
 		return;
 	}
 
@@ -252,28 +314,57 @@ void TextRenderer::Flush()
 	atlas_->FlushPendingUploads(cmd);
 	atlas_->EnsureShaderResourceState(cmd);
 
-	if (cpuInstances_.empty()) return;
+	if (instances.empty()) return;
 
-	// 画面サイズを最新化（Resize 追従）
-	screenCBData_->screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-	screenCBData_->screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	// CPU 側のインスタンスを、この層の区画へ反映
+	const uint32_t n = static_cast<uint32_t>(instances.size());
+	const uint32_t base = kMaxInstances * static_cast<uint32_t>(layer);
+	std::memcpy(instanceData_ + base, instances.data(), sizeof(GlyphInstance) * n);
 
-	// CPU 側のインスタンスを GPU バッファに反映
-	const uint32_t n = static_cast<uint32_t>(cpuInstances_.size());
-	std::memcpy(instanceData_, cpuInstances_.data(), sizeof(GlyphInstance) * n);
+	struct RootConstants { float width, height; uint32_t instanceBase, pad; } constants{
+		targetWidth, targetHeight, base, 0 };
 
-	// 描画
 	cmd->SetGraphicsRootSignature(rootSignature_.Get());
-	cmd->SetPipelineState(pipelineState_.Get());
+	cmd->SetPipelineState(pso);
 	cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	cmd->IASetVertexBuffers(0, 0, nullptr); // SV_VertexID で頂点生成
 
 	srvManager_->SetGraphicsRootDescriptorTable(0, instanceSrvIndex_);
-	cmd->SetGraphicsRootConstantBufferView(1, screenCB_->GetGPUVirtualAddress());
+	cmd->SetGraphicsRoot32BitConstants(1, 4, &constants, 0);
 	srvManager_->SetGraphicsRootDescriptorTable(2, atlas_->GetSrvIndex());
 
 	PEPPER_COUNT("DrawCall");
 	cmd->DrawInstanced(4, n, 0, 0);
 
-	cpuInstances_.clear();
+	instances.clear();
+}
+
+void TextRenderer::Flush()
+{
+	if (!dxCore_) return;
+	// 画面サイズは毎回最新化（Resize 追従）
+	DrawLayer(kLayerScreen, pipelineState_.Get(),
+		static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+}
+
+void TextRenderer::FlushGlow()
+{
+	if (!dxCore_) return;
+	// 発光 RT は画面と同じ大きさ
+	DrawLayer(kLayerGlow, glowPipelineState_.Get(),
+		static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+}
+
+void TextRenderer::BeginOffscreen(float width, float height)
+{
+	offscreenActive_ = true;
+	offscreenWidth_ = width;
+	offscreenHeight_ = height;
+}
+
+void TextRenderer::FlushOffscreen()
+{
+	offscreenActive_ = false;
+	if (!dxCore_) return;
+	DrawLayer(kLayerOffscreen, pipelineState_.Get(), offscreenWidth_, offscreenHeight_);
 }

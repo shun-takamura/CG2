@@ -7,16 +7,18 @@ struct GlyphInstance
     float4 uvRect;        // (u0, v0, u1, v1)
     float4 color;         // 本体色 RGBA
     float4 outlineColor;  // アウトライン色 RGBA（.a で有効/無効も判定）
-    float  outlineWidth;  // アウトライン太さ [screen pixel]、0 で無効
+    float  outlineWidth;  // アウトライン太さ [screen pixel]、0 で無効、負なら塗りつぶしの四角
     float3 _pad;
 };
 
 StructuredBuffer<GlyphInstance> gInstances : register(t0);
 
+// ルート定数（TextRenderer::DrawLayer）
 cbuffer ScreenInfo : register(b0)
 {
-    float2 gScreenSize; // ピクセル
-    float2 gPad;
+    float2 gScreenSize;    // 描く先の大きさ（ピクセル）
+    uint gInstanceBase;    // 層の区画の先頭（通常 / 発光 / 画面の外でバッファの区画が分かれている）
+    uint gPad;
 };
 
 struct VSOutput
@@ -37,7 +39,7 @@ static const float2 kCorners[4] = {
 
 VSOutput main(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 {
-    GlyphInstance inst = gInstances[iid];
+    GlyphInstance inst = gInstances[gInstanceBase + iid];
     float2 corner = kCorners[vid];
 
     float2 px = inst.screenPos + corner * inst.size;
