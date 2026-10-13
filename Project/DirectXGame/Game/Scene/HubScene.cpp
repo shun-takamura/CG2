@@ -2,12 +2,11 @@
 
 #include "Camera.h"
 #include "Object3DManager.h"
-#include "Object3DInstance.h"
 #include "Skybox.h"
-#include "TextureManager.h"
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "Hub/HubMechModel.h"
+#include "Hub/HubTemple.h"
 #include "Hub/HatchSign.h"
 #include "Hub/CockpitLighting.h"
 #include "Hub/CockpitConsole.h"
@@ -37,34 +36,21 @@
 
 namespace {
 	enum HubItem : int {
-		kHubSortie = 0,   // 搭乗（必殺技の切り替え・タイトルに戻るは後で足す。17 番 §0）
+		kHubSortie = 0,   // 搭乗（必殺技の切り替えは後で足す。17 番 §0）
+		kHubToTitle,      // タイトルに戻る（白フェード。扉の方を向く演出は後で）
 	};
 
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Hub.json";
 	// メニューは画面の下の方（機体の胸を隠さない）
 	constexpr float kMenuHeightRatio = 0.78f;
 
-	// 神殿のモデル（17 番 H1）ができるまでの仮の背景と映り込み（タイトルの空を借りる）
+	// 丸窓から見える空はタイトルの空（映り込みの IBL は神殿のもの。HubTemple）
 	constexpr const char* kSkyboxPath = "Resources/Cubemaps/title_clear_sky.dds";
-	constexpr const char* kIblPath = "Resources/Cubemaps/title_clear_sky_ibl.dds";
 	constexpr float kCameraFarClip = 500.0f;
 
 	// 機体の正面（+Z）を前上から照らす（光の進む向き）
 	const Vector3 kSunLightDirection = { -0.191f, -0.815f, -0.547f };
 	const Vector4 kSunLightColor = { 1.0f, 0.96f, 0.9f, 1.0f };
-
-	// 仮の床：石畳の板（tools/Python/gen_flagstone_floor.py。30m 四方・中心が原点）
-	constexpr const char* kFloorModelDir = "Resources/Models/FlagstoneFloor";
-	constexpr const char* kFloorMesh = "flagstone_floor.mesh";
-	constexpr float kFloorMeshSize = 30.0f;
-	// 回廊は手のひらと同じ高さ。機体側の縁は z = 7m（指先との間を一歩で渡る）
-	constexpr float kGalleryHeight = 10.6f;
-	constexpr float kGalleryFrontZ = 7.0f;
-	constexpr float kGalleryWidth = 16.0f;
-	constexpr float kGalleryDepth = 14.0f;
-	// 回廊の縁から手のひらの手前（指先は z 5.6m 付近）へ伸ばす石の足場。待機の視点はこの上
-	constexpr float kBridgeEndZ = 6.0f;
-	constexpr float kBridgeWidth = 2.4f;
 }
 
 HubScene::HubScene(Entry entry) : entry_(entry) {}
@@ -80,27 +66,19 @@ void HubScene::Initialize() {
 
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, kSkyboxPath);
-	// PBR の IBL。無いと金属は真っ黒になる
-	TextureManager::GetInstance()->LoadTexture(kIblPath);
-	object3DManager_->SetEnvironmentTexture(kIblPath);
-
 	mech_ = std::make_unique<HubMechModel>();
 	mech_->Initialize(object3DManager_, dxCore_);
 
-	groundFloor_ = std::make_unique<Object3DInstance>();
-	groundFloor_->Initialize(object3DManager_, dxCore_, kFloorModelDir, kFloorMesh, "HubGroundFloor");
-	groundFloor_->SetScale({ 2.0f, 1.0f, 2.0f });
-	groundFloor_->Update();
-	galleryFloor_ = std::make_unique<Object3DInstance>();
-	galleryFloor_->Initialize(object3DManager_, dxCore_, kFloorModelDir, kFloorMesh, "HubGalleryFloor");
-	galleryFloor_->SetScale({ kGalleryWidth / kFloorMeshSize, 1.0f, kGalleryDepth / kFloorMeshSize });
-	galleryFloor_->SetTranslate({ 0.0f, kGalleryHeight, kGalleryFrontZ + kGalleryDepth * 0.5f });
-	galleryFloor_->Update();
-	bridgeFloor_ = std::make_unique<Object3DInstance>();
-	bridgeFloor_->Initialize(object3DManager_, dxCore_, kFloorModelDir, kFloorMesh, "HubBridgeFloor");
-	bridgeFloor_->SetScale({ kBridgeWidth / kFloorMeshSize, 1.0f, (kGalleryFrontZ - kBridgeEndZ) / kFloorMeshSize });
-	bridgeFloor_->SetTranslate({ 0.0f, kGalleryHeight, (kGalleryFrontZ + kBridgeEndZ) * 0.5f });
-	bridgeFloor_->Update();
+	// 神殿（回廊・足場・輪・扉・鏡の床）。機体も床に映す
+	temple_ = std::make_unique<HubTemple>();
+	temple_->Initialize(object3DManager_, dxCore_, srvManager_);
+	temple_->AddReflectionTarget(mech_->GetBody());
+	temple_->AddReflectionTarget(mech_->GetCockpit());
+	temple_->AddReflectionTarget(mech_->GetHatch());
+	// PBR の IBL（神殿を機体の胸の位置から撮ったもの）。無いと金属は真っ黒になる
+	object3DManager_->SetEnvironmentTexture(temple_->GetIblPath());
+	// 距離フォグはステージ（StageEnvironment）が点けたまま残るので、神殿では切る
+	object3DManager_->SetFogParams(Object3DManager::FogParams{});
 
 	hatchSign_ = std::make_unique<HatchSign>();
 	hatchSign_->Initialize(object3DManager_, dxCore_, srvManager_);
@@ -111,14 +89,19 @@ void HubScene::Initialize() {
 
 	LoadTuning();
 
-	menu_.SetItems({ "搭乗" });
+	menu_.SetItems({ "搭乗", "タイトルに戻る" });
 
 	boarding_.Stop();
 	disembark_.Stop();
+	entrySequence_.Stop();
 	reveal_.Reset();
 	state_ = State::Waiting;
 	leaving_ = false;
-	if (entry_ == Entry::Cockpit) {
+	if (entry_ == Entry::Temple) {
+		// タイトルから：白フェードが晴れる間に時計の門の扉の前から歩いて入る（18 番 ⑧）
+		entrySequence_.Start(boarding_.GetHomeKey());
+		state_ = State::Entering;
+	} else if (entry_ == Entry::Cockpit) {
 		// ポーズの「ステージセレクトに戻る」（⑩）：座った所から起動を演じる
 		EnterCockpit();
 	} else if (entry_ == Entry::Disembark) {
@@ -177,6 +160,9 @@ void HubScene::Update() {
 	const float dt = GetScaledDeltaTime();
 
 	switch (state_) {
+	case State::Entering:
+		UpdateEntering(dt);
+		break;
 	case State::Waiting:
 		UpdateWaiting();
 		break;
@@ -207,6 +193,7 @@ void HubScene::Update() {
 	camera_->UpdateShake(dt);
 	camera_->Update();
 	skybox_->Update(dt);
+	temple_->Update(dt);
 	hatchSign_->Update(dt, mech_->GetPosition());
 }
 
@@ -246,7 +233,20 @@ void HubScene::UpdateWaiting() {
 			boarding_.Start();
 			state_ = State::Boarding;
 			return;
+		case kHubToTitle:
+			ChangeToTitle();
+			return;
 		}
+	}
+}
+
+void HubScene::UpdateEntering(float dt) {
+	// 入場中は入力を読まない（デモモードの待ち時間も入場が終わってから数える）
+	entrySequence_.Update(dt);
+	if (entrySequence_.IsFinished()) {
+		entrySequence_.Stop();
+		state_ = State::Waiting;
+		attractMenu_.Reset();
 	}
 }
 
@@ -321,6 +321,8 @@ void HubScene::Draw() {
 
 	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
 	if (hatchSign_) hatchSign_->RenderSignTexture(commandList);
+	// 鏡の床に映す物を反射 RT へ（これも RT を切り替えるので、シーンの RT を描き始める前に）
+	if (temple_) temple_->RenderReflection(*camera_);
 
 	// シーンの RT とビューポートを戻す
 	const Vector2 screen = GetScreenSize();
@@ -340,10 +342,12 @@ void HubScene::Draw() {
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
-	if (groundFloor_) groundFloor_->Draw(dxCore_);
-	if (galleryFloor_) galleryFloor_->Draw(dxCore_);
-	if (bridgeFloor_) bridgeFloor_->Draw(dxCore_);
+	if (temple_) temple_->Draw(dxCore_);
 	if (mech_) mech_->Draw(dxCore_);
+	// 鏡の床は不透明物の後（ルートシグネチャを替えるので、表示板の前に Object3D を貼り直す）
+	if (temple_) temple_->DrawFloor(*camera_);
+	object3DManager_->DrawSetting();
+	LightManager::GetInstance()->BindLights(commandList);
 	// 表示板は半透明なので最後に
 	if (hatchSign_) hatchSign_->Draw(dxCore_);
 
@@ -383,6 +387,10 @@ void HubScene::ApplyPose() {
 	if (state_ == State::Disembarking || disembark_.IsPreviewing()) {
 		const HubDisembarkSequence::Pose d = disembark_.GetCurrentPose();
 		pose = { d.eye, d.yaw, d.pitch, d.hatchOpenRatio, d.lightScale };
+	} else if (state_ == State::Entering || entrySequence_.IsPreviewing()) {
+		// ハッチは開いて待っている・外の光はそのまま
+		const HubEntrySequence::Pose e = entrySequence_.GetCurrentPose();
+		pose = { e.eye, e.yaw, e.pitch, 1.0f, 1.0f };
 	} else {
 		pose = cockpitView ? boarding_.Evaluate(boarding_.GetEndTime()) : boarding_.GetCurrentPose();
 	}
@@ -440,8 +448,10 @@ void HubScene::LoadTuning() {
 	fovYDegrees_ = static_cast<float>(root["fovYDegrees"].AsDouble(fovYDegrees_));
 	sunIntensity_ = static_cast<float>(root["sunIntensity"].AsDouble(sunIntensity_));
 	if (mech_) mech_->LoadTuning(root["mech"]);
+	if (temple_) temple_->LoadTuning(root["temple"]);
 	boarding_.LoadTuning(root["boarding"]);
 	disembark_.LoadTuning(root["disembark"]);
+	entrySequence_.LoadTuning(root["entry"]);
 	reveal_.LoadTuning(root["cockpitReveal"]);
 	if (cockpitLighting_) cockpitLighting_->LoadTuning(root["cockpitLighting"]);
 	if (hatchSign_) hatchSign_->LoadTuning(root["hatchSign"]);
@@ -455,8 +465,10 @@ void HubScene::SaveTuning() const {
 	root["fovYDegrees"] = JsonValue(static_cast<double>(fovYDegrees_));
 	root["sunIntensity"] = JsonValue(static_cast<double>(sunIntensity_));
 	if (mech_) mech_->SaveTuning(root["mech"]);
+	if (temple_) temple_->SaveTuning(root["temple"]);
 	boarding_.SaveTuning(root["boarding"]);
 	disembark_.SaveTuning(root["disembark"]);
+	entrySequence_.SaveTuning(root["entry"]);
 	reveal_.SaveTuning(root["cockpitReveal"]);
 	if (cockpitLighting_) cockpitLighting_->SaveTuning(root["cockpitLighting"]);
 	if (hatchSign_) hatchSign_->SaveTuning(root["hatchSign"]);
@@ -471,7 +483,7 @@ void HubScene::OnImGuiTuning() {
 	if (ImGui::Button("Reload Tuning")) LoadTuning();
 	ImGui::SameLine();
 	ImGui::TextDisabled("%s", kTuningPath);
-	static const char* kStateNames[] = { "Waiting", "Boarding", "Cockpit", "Disembarking" };
+	static const char* kStateNames[] = { "Entering", "Waiting", "Boarding", "Cockpit", "Disembarking" };
 	static const char* kEntryNames[] = { "Temple", "Cockpit", "Disembark" };
 	ImGui::Text("State: %s  (entry: %s)", kStateNames[static_cast<int>(state_)],
 		kEntryNames[static_cast<int>(entry_)]);
@@ -486,6 +498,25 @@ void HubScene::OnImGuiTuning() {
 
 	if (mech_ && ImGui::CollapsingHeader("Mech")) {
 		mech_->OnImGui();
+	}
+	if (temple_ && ImGui::CollapsingHeader("Temple (17 H1/H2)")) {
+		temple_->OnImGui();
+	}
+	if (ImGui::CollapsingHeader("Entry from Title (18-8)")) {
+		// 最後まで再生すると待機へ（本番と同じ）
+		if (ImGui::Button("Play##Entry")) {
+			boarding_.Stop();
+			disembark_.Stop();
+			reveal_.Reset();
+			entrySequence_.Start(boarding_.GetHomeKey());
+			state_ = State::Entering;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Stop##Entry")) {
+			entrySequence_.Stop();
+			state_ = State::Waiting;
+		}
+		entrySequence_.OnImGui(boarding_.GetHomeKey());
 	}
 	if (ImGui::CollapsingHeader("Boarding (18 OUT-1)")) {
 		// 最後まで再生するとコクピットの起動へ進む（本番と同じ）

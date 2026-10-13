@@ -123,6 +123,12 @@
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubMechModel.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubTemple.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
@@ -288,6 +294,12 @@
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubMechModel.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubTemple.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.h">

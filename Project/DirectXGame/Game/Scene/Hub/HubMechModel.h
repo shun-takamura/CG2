@@ -26,6 +26,8 @@ public:
 	/// </summary>
 	void DrawBloom(DirectXCore* dxCore, float bloomScale, bool includeAll);
 
+	// 神殿の鏡の床に映すため（HubTemple）
+	Object3DInstance* GetBody() const { return body_.get(); }
 	// コクピットの中の見た目（灯り・発光・六角形）を部位のマテリアルで変えるため（CockpitLighting）
 	Object3DInstance* GetCockpit() const { return cockpit_.get(); }
 	Object3DInstance* GetHatch() const { return hatch_.get(); }
@@ -46,6 +48,8 @@ public:
 	void OnImGui();
 
 private:
+	void ApplyBodyMaterial();
+
 	std::unique_ptr<Object3DInstance> body_;
 	std::unique_ptr<Object3DInstance> cockpit_;
 	std::unique_ptr<Object3DInstance> hatch_;
@@ -57,4 +61,9 @@ private:
 	// 開いた角度（X 軸まわり、度）。Blender の −115° はエンジンでも同じ符号（どちらも +Z の前が上・後ろへ回る）
 	float hatchOpenDegrees_ = -115.0f;
 	bool drawBody_ = true;   // デバッグ：本体を隠してコクピットとハッチだけ見る
+	// 本体の質感の上書き（cook の値は metallicRoughness テクスチャの中央値で、粗さ 0.671 とかなりマット）。
+	// エンジンは金属度・粗さのテクスチャを読まないので部位ごとの差は出せない
+	bool overrideBodyMaterial_ = true;
+	float bodyRoughness_ = 0.35f;
+	float bodyMetallic_ = 0.05f;
 };

@@ -1,0 +1,340 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "HubRing_C"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Marble",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.30000001192092896
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "MarbleDark",
+      "normalTexture": {
+        "index": 2
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 3
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.25
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Gold",
+      "normalTexture": {
+        "index": 4
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          1,
+          0.699999988079071,
+          0.30000001192092896,
+          1
+        ],
+        "roughnessFactor": 0.2800000011920929
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "HubRing_C",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 1
+        },
+        {
+          "attributes": {
+            "POSITION": 8,
+            "NORMAL": 9,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 2
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Marble_NormalMap",
+      "uri": "Marble_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Marble_BaseColor",
+      "uri": "Marble_BaseColor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "MarbleDark_NormalMap",
+      "uri": "MarbleDark_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "MarbleDark_BaseColor",
+      "uri": "MarbleDark_BaseColor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Gold_NormalMap",
+      "uri": "Gold_NormalMap.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 1922,
+      "max": [
+        0.5,
+        13.16740608215332,
+        13.293537139892578
+      ],
+      "min": [
+        -0.5,
+        -13.16740608215332,
+        -13.16740608215332
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 1922,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 1922,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 5184,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 1938,
+      "max": [
+        0.5,
+        13.270000457763672,
+        13.270000457763672
+      ],
+      "min": [
+        -0.5,
+        -13.270000457763672,
+        -13.293537139892578
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 1938,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 1938,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5123,
+      "count": 3456,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 1288,
+      "max": [
+        0.3199999928474426,
+        13.539999961853027,
+        13.539999961853027
+      ],
+      "min": [
+        -0.3199999928474426,
+        -13.539999961853027,
+        -13.539999961853027
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 1288,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 1288,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5123,
+      "count": 3840,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 23064,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 23064,
+      "byteOffset": 23064,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15376,
+      "byteOffset": 46128,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10368,
+      "byteOffset": 61504,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 23256,
+      "byteOffset": 71872,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 23256,
+      "byteOffset": 95128,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15504,
+      "byteOffset": 118384,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6912,
+      "byteOffset": 133888,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15456,
+      "byteOffset": 140800,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15456,
+      "byteOffset": 156256,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10304,
+      "byteOffset": 171712,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7680,
+      "byteOffset": 182016,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 189696,
+      "uri": "HubRing_C.bin"
+    }
+  ]
+}

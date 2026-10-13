@@ -3,6 +3,7 @@
 #include "VerticalMenu.h"
 #include "Hub/HubBoardingSequence.h"
 #include "Hub/HubDisembarkSequence.h"
+#include "Hub/HubEntrySequence.h"
 #include "Hub/CockpitReveal.h"
 #include "AttractMode.h"
 #include "Vector2.h"
@@ -12,6 +13,7 @@ class Camera;
 class Skybox;
 class Object3DInstance;
 class HubMechModel;
+class HubTemple;
 class HatchSign;
 class CockpitLighting;
 class CockpitConsole;
@@ -19,7 +21,8 @@ class CockpitConsole;
 /// <summary>
 /// ハブシーン（神殿。17_HubScene.md）。**ステージ選択（コクピット）もこのシーンの中**（2026-10-13 統合。18 番 ①「C で決まったこと」）。
 /// 状態のまとめ役で、中身は Hub/ の部品がする：
-///   待機（回廊から機体を見る。メニューは「搭乗」だけ）
+///   入場（タイトルから。HubEntrySequence：白フェードが晴れる間に時計の門の扉の前から待機の視点まで歩く。18 番 ⑧）
+///   → 待機（足場から機体を見る。メニューは「搭乗」だけ）
 ///   → 乗り込み（HubBoardingSequence。18 番 ①の OUT）
 ///   → コクピット（CockpitReveal の時間軸で、表示板 HatchSign が LOCKED → 六角形で外が透ける CockpitLighting
 ///      → ラジアルブラー → 文字のステージ選択 CockpitConsole。①の IN）
@@ -27,7 +30,7 @@ class CockpitConsole;
 /// 入口：TITLE から＝待機／シーン名 STAGESELECT（ポーズの「ステージセレクトに戻る」⑩）＝コクピットの起動から／
 ///   別のシーンから HUB へ（⑦。今はステージからデバッグの F3）＝真っ暗なコクピットに灯りが点いて（CockpitReveal の帰着）から降りる。
 /// キャンセルで白フェードしてタイトルへ（18 番 ⑧）。ゲーム終了はタイトルの責務に一本化している。
-/// 神殿のモデル（17 番 H1）ができるまで、床と回廊は石畳の板・背景はタイトルの空で仮に置く。
+/// 神殿（17 番 H1・H2）は HubTemple（天球儀の聖堂・鏡の大理石の床）。丸窓から見える空はタイトルの空。
 /// 調整値は Resources/Json/Tuning/Hub.json（ImGui の「Hub Tuning」で保存 / 読み直し）。
 /// </summary>
 class HubScene : public GameScene {
@@ -56,7 +59,8 @@ public:
 
 private:
 	enum class State {
-		Waiting,     // 回廊で待機
+		Entering,    // タイトルから入って、時計の門の扉の前から待機の視点まで歩く
+		Waiting,     // 足場で待機
 		Boarding,    // 乗り込み
 		Cockpit,     // コクピット（起動・ステージ選択・シャットダウン）
 		Disembarking,  // 降りる（機体に背を向けて乗るときと同じ道を戻り、振り返って待機の視点へ）
@@ -71,6 +75,7 @@ private:
 	void UpdateWaiting();
 	void UpdateCockpit(float dt);
 	void UpdateDisembarking(float dt);
+	void UpdateEntering(float dt);
 
 	// 今の見え方をカメラ・ハッチ・光・コクピットへ反映する
 	void ApplyPose();
@@ -89,14 +94,13 @@ private:
 	std::unique_ptr<HubMechModel> mech_;
 	HubBoardingSequence boarding_;
 	HubDisembarkSequence disembark_;
+	HubEntrySequence entrySequence_;
 	CockpitReveal reveal_;
 	std::unique_ptr<HatchSign> hatchSign_;
 	std::unique_ptr<CockpitLighting> cockpitLighting_;
 	std::unique_ptr<CockpitConsole> console_;
-	// 仮の床（地上）・回廊・足場。神殿のモデルができたら差し替える
-	std::unique_ptr<Object3DInstance> groundFloor_;
-	std::unique_ptr<Object3DInstance> galleryFloor_;
-	std::unique_ptr<Object3DInstance> bridgeFloor_;   // 回廊から手のひらの手前へ伸ばす足場（待機の視点はこの上）
+	// 神殿（回廊と、手のひらの手前へ伸ばした足場もこの中。待機の視点は足場の上）
+	std::unique_ptr<HubTemple> temple_;
 	VerticalMenu menu_;
 	// デモモード（AttractMode）：待機の「搭乗」・ステージ選択の項目を自動で選ぶ
 	AttractMenuTimer attractMenu_;

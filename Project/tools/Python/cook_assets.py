@@ -41,6 +41,11 @@ TEXCONV = Path("externals/texconv/Texconv.exe")
 # パスにこの部分文字列が含まれる PNG は線形値として圧縮する（マスク・ノーマル等）。
 # 法線マップは sRGB だと法線がずれるので、ファイル名/フォルダ名に "NormalMap" を含めること。
 LINEAR_TEXTURE_HINTS = ("MaskTexture", "NormalMap")
+# 色の PNG を「sRGB で保存された物」として読ませる（texconv -srgbi）パスのヒント（部分一致）。
+# このプロジェクトの PNG は sRGB チャンクを持たないので、指定しないと texconv が線形とみなして sRGB へもう一度変換し、
+# 暗い色ほど持ち上がる（紺が明るい灰色に。2026-10-14 に HUB の機体で発覚）。本来は全部に効かせるべきだが、
+# 今の見た目は持ち上がった色で調整してあるので、提出までは機体だけにする（17 番 §5.1 の罠）
+SRGB_INPUT_HINTS = ("HubMech",)
 
 # ---- .mesh v4 フォーマット定数 ----
 # Header: magic(4) + version(4) + flags(4) + vc(4) + ic(4) + smc(4)
@@ -1368,12 +1373,14 @@ def convert_png_to_dds(task: FileTask) -> bool:
     # ヒントはパス要素の「部分一致」で判定する（例: フォルダ名 "NormalMapTexture" も拾う）
     is_linear = any(hint in part for part in task.src.parts for hint in LINEAR_TEXTURE_HINTS)
     fmt = "BC7_UNORM" if is_linear else "BC7_UNORM_SRGB"
+    srgb_input = not is_linear and any(hint in part for part in task.src.parts for hint in SRGB_INPUT_HINTS)
 
     cmd = [
         str(TEXCONV),
         "-nologo",
         "-y",
         "-f", fmt,
+        *(["-srgbi"] if srgb_input else []),
         "-bc", "x",  # x = max quality BC compression mode
         "-o", str(task.dst.parent),
         str(task.src),
