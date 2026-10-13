@@ -5,6 +5,9 @@
 #include "ResultScene.h"
 #include "GameOverScene.h"
 #include "DemoScene.h"
+#include "SceneManager.h"
+#include "SceneRoutes.h"
+#include "TransitionManager.h"
 
 std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
 
@@ -12,7 +15,12 @@ std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
         return std::make_unique<TitleScene>();
     }
     else if (sceneName == "HUB") {
-        return std::make_unique<HubScene>();
+        // 入口は来た道で決める（18_HubTransitions.md ⑦）。開く側をシーンに任せる道（今はステージからデバッグの F3）なら
+        // 真っ暗なコクピットから降りる。タイトルから（白フェード）・デバッグの起動は神殿で待機から。
+        // ここではまだ切り替える前なので、今のシーン名＝前のシーン
+        const std::string& from = SceneManager::GetInstance()->GetCurrentSceneName();
+        const bool revealByScene = SceneRoutes::Find(from, sceneName).reveal == TransitionManager::kRevealByScene;
+        return std::make_unique<HubScene>(revealByScene ? HubScene::Entry::Disembark : HubScene::Entry::Temple);
     }
     else if (sceneName == "STAGESELECT") {
         // ステージ選択は HUB のコクピットの中（18_HubTransitions.md ①「C で決まったこと」）。起動から始める

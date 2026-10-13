@@ -937,11 +937,7 @@ void TitleScene::Draw() {
 			{ 1.0f, 1.0f, 1.0f, blink }, 2.0f, { 0.0f, 0.0f, 0.0f, blink });
 	}
 
-	// デモモード中は、人が見て通常モードへ戻せるよう操作を左上に出しておく
-	if (AttractMode::GetInstance()->IsEnabled()) {
-		tr->DrawText("デモプレイ中　F8 で通常モードに戻る", { 28.0f, 24.0f }, 0.85f,
-			{ 1.0f, 1.0f, 1.0f, 0.9f }, 2.0f, { 0.0f, 0.0f, 0.0f, 0.6f });
-	}
+	// デモモード中の「デモプレイ中」の表示は Game::Draw がどのシーンでも出す（AttractMode::DrawLabel）
 	tr->Flush();
 }
 
@@ -1012,7 +1008,12 @@ void TitleScene::OnImGuiTuning() {
 			ImGui::DragFloat("Title Idle Wait (s)", &attract->titleIdleWait, 0.1f, 0.0f, 30.0f);
 			ImGui::DragFloat("Title Ready Wait (s)", &attract->titleReadyWait, 0.1f, 0.0f, 30.0f);
 			ImGui::DragFloat("HUB Wait (s)", &attract->hubWait, 0.1f, 0.0f, 30.0f);
-			ImGui::DragFloat("HUB Confirm Delay (s)", &attract->hubConfirmDelay, 0.05f, 0.0f, 10.0f);
+			ImGui::DragFloat("Menu Wait (s)", &attract->menuWait, 0.05f, 0.0f, 10.0f);
+			ImGui::DragFloat("Menu Confirm Delay (s)", &attract->menuConfirmDelay, 0.05f, 0.0f, 10.0f);
+			ImGui::DragFloat("Stage Action Time (s)", &attract->stageActionTime, 0.1f, 0.0f, 60.0f);
+			ImGui::DragFloat("GameOver Wait (s)", &attract->gameOverWait, 0.1f, 0.0f, 30.0f);
+			ImGui::Text("Next stage run: %s",
+				attract->nextStageRun == AttractMode::StageRun::GameOver ? "GameOver" : "Pause -> StageSelect");
 		}
 		if (ImGui::CollapsingHeader("Enter (6)")) {
 			ImGui::DragFloat("Open (s)", &enterOpenSeconds_, 0.05f, 0.0f, 10.0f);

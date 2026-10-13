@@ -23,13 +23,14 @@ namespace SceneRoutes {
 	inline constexpr Transitions kDefault = { TransitionType::Stripe, TransitionType::Stripe };
 
 	// ステージ選択（コクピット）の開く側。ステージ選択は HUB のシーンの中なので、別のシーンから来るのは
-	// ポーズの「ステージセレクトに戻る」（⑩）だけ。シーン名 STAGESELECT の HubScene がコクピットの起動を演じる
+	// ポーズの「ステージセレクトに戻る」（⑩）と、ゲームオーバー・リザルトの「ステージ選択に戻る」。シーン名 STAGESELECT の HubScene がコクピットの起動を演じる
 	// （18_HubTransitions.md ①「C で決まったこと」）。None ＝ TransitionManager::kRevealByScene
 	inline constexpr TransitionType kStageSelectReveal = TransitionType::None;
 
-	// HUB の開く側。ステージ・ゲームオーバー・リザルトから戻るときは「機体から降りる」で開く
-	// （18_HubTransitions.md ②の IN、⑦）。できたら kRevealByScene に変える。それまでは仮にストライプ
-	inline constexpr TransitionType kHubReveal = TransitionType::Stripe;
+	// HUB の開く側。別のシーンから HUB へ戻るときは「機体から降りる」で開く
+	// （18_HubTransitions.md ②の IN、⑦）。None ＝ TransitionManager::kRevealByScene。
+	// SceneFactory はこの表で「開く側がシーン」の道から来たら HubScene を真っ暗なコクピット（Entry::Disembark）から始める
+	inline constexpr TransitionType kHubReveal = TransitionType::None;
 
 	// 組み合わせの正本は 18_HubTransitions.md §0（HUB まわり）と 15_SceneTransition.md（羽根・墨）
 	inline constexpr Route kRoutes[] = {
@@ -51,10 +52,12 @@ namespace SceneRoutes {
 		// ポーズの「ステージセレクトに戻る」：ストライプで覆い、ステージ選択の IN で開く
 		{ "STAGEPLAY",   "STAGESELECT", { TransitionType::Stripe, kStageSelectReveal } },
 		{ "STAGEPLAY",   "TITLE",       { TransitionType::Stripe, TransitionType::Stripe } },
-		// ⑦ HUB へ戻る：進行を捨てる遷移は墨、リザルトからは黒フェード。開く側は「機体から降りる」
+		// ゲームオーバー・リザルトからはステージ選択へ戻る（⑩と同じくコクピットの起動で開く）。
+		// 進行を捨てる遷移は墨、リザルトからは黒フェード
+		{ "GAMEOVER",    "STAGESELECT", { TransitionType::Ink,    kStageSelectReveal } },
+		{ "RESULT",      "STAGESELECT", { TransitionType::Fade,   kStageSelectReveal } },
+		// ⑦ HUB へ戻る（今はステージからデバッグの F3 だけ）：墨。開く側は「機体から降りる」
 		{ "STAGEPLAY",   "HUB",         { TransitionType::Ink,    kHubReveal } },
-		{ "GAMEOVER",    "HUB",         { TransitionType::Ink,    kHubReveal } },
-		{ "RESULT",      "HUB",         { TransitionType::Fade,   kHubReveal } },
 	};
 
 	/// <summary>from → to の組み合わせを引く（表に無ければ kDefault）</summary>

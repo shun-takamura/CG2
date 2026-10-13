@@ -37,7 +37,7 @@
 
 namespace {
 	enum HubItem : int {
-		kHubSortie = 0,   // 出撃（必殺技の切り替え・タイトルに戻るは後で足す。17 番 §0）
+		kHubSortie = 0,   // 搭乗（必殺技の切り替え・タイトルに戻るは後で足す。17 番 §0）
 	};
 
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Hub.json";
@@ -111,7 +111,7 @@ void HubScene::Initialize() {
 
 	LoadTuning();
 
-	menu_.SetItems({ "出撃" });
+	menu_.SetItems({ "搭乗" });
 
 	boarding_.Stop();
 	disembark_.Stop();
@@ -121,6 +121,10 @@ void HubScene::Initialize() {
 	if (entry_ == Entry::Cockpit) {
 		// ポーズの「ステージセレクトに戻る」（⑩）：座った所から起動を演じる
 		EnterCockpit();
+	} else if (entry_ == Entry::Disembark) {
+		// ⑦：墨（黒フェード）の黒から真っ暗なコクピットへつなぐ。覆われている間は Update を止めるので、
+		// 墨が消えた最初のフレームはここで作った真っ暗な見え方になる
+		EnterArrive();
 	}
 	ApplyPose();
 	camera_->Update();
@@ -128,7 +132,8 @@ void HubScene::Initialize() {
 	hatchSign_->Update(0.0f, mech_->GetPosition());
 
 	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
-	attractTimer_ = 0.0f;
+	attractMenu_.Reset();
+	cockpitFromBoarding_ = false;
 }
 
 void HubScene::Finalize() {
@@ -151,6 +156,16 @@ void HubScene::EnterCockpit() {
 	boarding_.Stop();   // 視点は乗り込みの最後の姿勢（ApplyPose）
 	reveal_.StartBoot();
 	cockpitTime_ = 0.0f;
+	attractMenu_.Reset();
+}
+
+void HubScene::EnterArrive() {
+	// 視点・ハッチ・ステージ選択の UI の扱いはコクピットと同じ（入力は起動中しか受け付けないので読まれない）。
+	// 帰着が終わると Off になり、UpdateCockpit がシャットダウンの後と同じく降りる
+	state_ = State::Cockpit;
+	boarding_.Stop();
+	reveal_.StartArrive();
+	cockpitTime_ = 0.0f;
 }
 
 void HubScene::Update() {
@@ -163,7 +178,7 @@ void HubScene::Update() {
 
 	switch (state_) {
 	case State::Waiting:
-		UpdateWaiting(dt);
+		UpdateWaiting();
 		break;
 	case State::Boarding:
 		// 乗り込み中は入力を読まない
@@ -177,6 +192,7 @@ void HubScene::Update() {
 		if (boarding_.IsFinished()) {
 			// 閉じ切ったらそのままコクピットの起動へ（シーンは切り替えない）
 			EnterCockpit();
+			cockpitFromBoarding_ = true;
 		}
 		break;
 	case State::Cockpit:
@@ -194,34 +210,36 @@ void HubScene::Update() {
 	hatchSign_->Update(dt, mech_->GetPosition());
 }
 
-void HubScene::UpdateWaiting(float dt) {
+void HubScene::UpdateWaiting() {
 	// 白フェードで開いている途中などは入力を読まない
 	if (SceneManager::GetInstance()->IsTransitioning()) return;
 
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
 
-	// デモモード：一定時間 HUB を見せてからタイトルへ戻る（メニューに「タイトルに戻る」が無いのでキャンセル扱い）
-	if (auto* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
-		attractTimer_ += dt;
-		if (attractTimer_ >= attract->hubWait + attract->hubConfirmDelay) {
-			SoundManager::GetInstance()->Play2DSound("se_ui_cancel");
-			ChangeToTitle();
-			return;
-		}
-	} else {
-		attractTimer_ = 0.0f;
-	}
-
 	const Vector2 screen = GetScreenSize();
 	menu_.SetPosition({ screen.x * 0.5f, screen.y * kMenuHeightRatio });
 	const UIPointer pointer = UIPointer::FromInput(input_);
-	const VerticalMenu::Result result = menu_.Update(actions, &pointer);
+	VerticalMenu::Result result = menu_.Update(actions, &pointer);
+
+	// デモモード：神殿を見せてから「搭乗」を選ぶ（一周の始まり。タイトルへは戻らない）
+	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
+		if (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->hubWait, attract->menuConfirmDelay)
+			== AttractMenuTimer::Step::Confirm && result == VerticalMenu::Result::None) {
+			menu_.SetSelectedIndex(kHubSortie);
+			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+			result = VerticalMenu::Result::Confirmed;
+		}
+	} else {
+		attractMenu_.Reset();
+	}
+
 	if (result == VerticalMenu::Result::Canceled) {
 		ChangeToTitle();
 		return;
 	}
 	if (result == VerticalMenu::Result::Confirmed) {
+		attractMenu_.Reset();
 		switch (menu_.GetSelectedIndex()) {
 		case kHubSortie:
 			// 乗り込み（18 番 ①の OUT）→ 閉じ切ったらコクピット（①の IN）
@@ -248,7 +266,30 @@ void HubScene::UpdateCockpit(float dt) {
 	const CockpitReveal::State st = reveal_.Evaluate();
 	const bool inputEnabled = st.inputEnabled && reveal_.GetPhase() == CockpitReveal::Phase::Booting;
 	const UIPointer pointer = UIPointer::FromInput(input_);
-	switch (console_->Update(actions, &pointer, GetScreenSize(), inputEnabled)) {
+	CockpitConsole::Result result = console_->Update(actions, &pointer, GetScreenSize(), inputEnabled);
+
+	// デモモード：乗り込んで来たら「ステージ1」、ポーズから来たら「HUB に戻る」を選ぶ
+	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled() && inputEnabled) {
+		const CockpitConsole::Result pick = cockpitFromBoarding_
+			? CockpitConsole::Result::Stage1 : CockpitConsole::Result::BackToHub;
+		switch (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->menuWait, attract->menuConfirmDelay)) {
+		case AttractMenuTimer::Step::MoveCursor:
+			console_->SelectItem(pick, true);
+			break;
+		case AttractMenuTimer::Step::Confirm:
+			if (result == CockpitConsole::Result::None) {
+				console_->SelectItem(pick, false);
+				SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+				result = pick;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	if (result != CockpitConsole::Result::None) attractMenu_.Reset();
+
+	switch (result) {
 	case CockpitConsole::Result::Stage1:
 		// ③ ステージ選択 → ステージは未定（組み合わせ表でストライプを仮置き）
 		leaving_ = true;
@@ -271,6 +312,7 @@ void HubScene::UpdateDisembarking(float dt) {
 		boarding_.Stop();
 		reveal_.Reset();
 		state_ = State::Waiting;
+		attractMenu_.Reset();   // デモモードはここで一周。また神殿を見せてから「搭乗」
 	}
 }
 
@@ -312,7 +354,7 @@ void HubScene::Draw() {
 		// 待機のメニュー（決定したら消して乗り込みを見せる）
 		menu_.SetPosition({ screen.x * 0.5f, screen.y * kMenuHeightRatio });
 		menu_.Draw();
-	} else if (state_ == State::Cockpit && console_) {
+	} else if (state_ == State::Cockpit && console_ && reveal_.GetPhase() != CockpitReveal::Phase::Arriving) {
 		const CockpitReveal::State st = reveal_.Evaluate();
 		console_->Draw(screen, st.backgroundAlpha, st.menuTime, st.collapse, cockpitTime_, IsGlowAllowed());
 	}
@@ -358,7 +400,7 @@ void HubScene::ApplyPose() {
 	// ハッチが閉じるにつれて弱め、外が透ける（全天周囲モニターが外を映す）につれて戻す
 	const float revealAmount = cockpitView ? st.reveal : 0.0f;
 	const float minLight = boarding_.GetMinLightScale();
-	const float lightScale = cockpitView ? minLight + (1.0f - minLight) * revealAmount : pose.lightScale;
+	const float lightScale = cockpitView ? (minLight + (1.0f - minLight) * revealAmount) * st.sunScale : pose.lightScale;
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(kSunLightDirection);
 		lm->SetDirectionalLightColor(kSunLightColor);
@@ -430,8 +472,9 @@ void HubScene::OnImGuiTuning() {
 	ImGui::SameLine();
 	ImGui::TextDisabled("%s", kTuningPath);
 	static const char* kStateNames[] = { "Waiting", "Boarding", "Cockpit", "Disembarking" };
+	static const char* kEntryNames[] = { "Temple", "Cockpit", "Disembark" };
 	ImGui::Text("State: %s  (entry: %s)", kStateNames[static_cast<int>(state_)],
-		entry_ == Entry::Cockpit ? "Cockpit" : "Temple");
+		kEntryNames[static_cast<int>(entry_)]);
 
 	ImGui::SeparatorText("To Title (white fade)");
 	ImGui::DragFloat("White Fade (s)", &whiteFadeSeconds_, 0.05f, 0.05f, 5.0f);
@@ -463,6 +506,9 @@ void HubScene::OnImGuiTuning() {
 		if (ImGui::Button("Boot")) EnterCockpit();
 		ImGui::SameLine();
 		if (ImGui::Button("Shutdown") && state_ == State::Cockpit) reveal_.StartShutdown();
+		ImGui::SameLine();
+		// ⑦の入口と同じ：真っ暗なコクピットから灯りを点けて降りる
+		if (ImGui::Button("Arrive")) EnterArrive();
 		reveal_.OnImGui();
 	}
 	if (ImGui::CollapsingHeader("Disembark (18 IN-2)")) {

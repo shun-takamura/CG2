@@ -2,6 +2,7 @@
 
 #include "CockpitReveal.h"
 #include "TextRenderer.h"
+#include "SoundManager.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
 #include <algorithm>
@@ -87,6 +88,13 @@ CockpitConsole::Result CockpitConsole::Update(InputActionMap* actions, const UIP
 		}
 	}
 	return Result::None;
+}
+
+void CockpitConsole::SelectItem(Result item, bool playSound) {
+	const int index = (item == Result::Stage1) ? kItemStage1 : kItemBackToHub;
+	if (menu_.GetSelectedIndex() == index) return;
+	menu_.SetSelectedIndex(index);
+	if (playSound) SoundManager::GetInstance()->Play2DSound("se_ui_cursor");
 }
 
 void CockpitConsole::Text(std::string_view text, const Vector2& pos, float scale, const Vector4& color, float glowStrength) {

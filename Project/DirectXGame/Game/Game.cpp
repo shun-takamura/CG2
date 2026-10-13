@@ -396,6 +396,9 @@ void Game::Update() {
 void Game::Draw() {
 	PEPPER_SCOPE("Framework::Draw");
 
+	// 文字のインスタンスバッファの書き込み位置を先頭へ（同じフレームの Flush は続きへ書く）
+	TextRenderer::GetInstance()->BeginFrame();
+
 	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
 	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
 	if (shadowMap_) {
@@ -440,6 +443,21 @@ void Game::Draw() {
 
 	// シーン描画
 	SceneManager::GetInstance()->Draw();
+
+	// デモモードの表示：どのシーンでも、トランジションの上に出す。
+	// トランジションが RT を切り替えていることがあるので、シーンの RT とビューポートを付け直してから描く
+	if (AttractMode::GetInstance()->IsEnabled()) {
+		auto* cmd = dxCore_->GetCommandList();
+		auto rtv = postEffect_->GetSceneRenderTarget()->GetRTVHandle();
+		cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
+		const float width = static_cast<float>(dxCore_->GetSwapChainWidth());
+		const float height = static_cast<float>(dxCore_->GetSwapChainHeight());
+		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, width, height, 0.0f, 1.0f };
+		D3D12_RECT scissor{ 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
+		cmd->RSSetViewports(1, &viewport);
+		cmd->RSSetScissorRects(1, &scissor);
+		AttractMode::GetInstance()->DrawLabel();
+	}
 
 	postEffect_->EndSceneRender(dxCore_->GetCommandList());
 

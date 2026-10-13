@@ -54,6 +54,10 @@ void CockpitReveal::ResetToDefaults() {
 	lightsOffTime_ = 0.9f;
 	lightsOffSeconds_ = 0.3f;
 	shutdownEndTime_ = 1.3f;
+	arriveLightsOnTime_ = 0.4f;
+	arriveSignTime_ = 0.7f;
+	arriveLightsDownTime_ = 1.5f;
+	arriveEndTime_ = 1.9f;
 }
 
 void CockpitReveal::Reset() {
@@ -71,10 +75,16 @@ void CockpitReveal::StartShutdown() {
 	time_ = 0.0f;
 }
 
+void CockpitReveal::StartArrive() {
+	phase_ = Phase::Arriving;
+	time_ = 0.0f;
+}
+
 void CockpitReveal::Update(float deltaTime) {
 	if (phase_ == Phase::Idle || phase_ == Phase::Off) return;
 	time_ += deltaTime;
-	if (phase_ == Phase::ShuttingDown && time_ >= shutdownEndTime_) {
+	if ((phase_ == Phase::ShuttingDown && time_ >= shutdownEndTime_) ||
+		(phase_ == Phase::Arriving && time_ >= arriveEndTime_)) {
 		phase_ = Phase::Off;
 	}
 }
@@ -132,6 +142,23 @@ CockpitReveal::State CockpitReveal::Evaluate() const {
 		s.lightLevel = (std::max)(idleLightLevel_, 1.0f - off) * (1.0f - blink);
 		break;
 	}
+
+	case Phase::Arriving: {
+		// 真っ暗 → 灯りがチカチカして点く → LOCKED が出る → シャットダウンの終わりと同じく待機の明るさへ落ちる。
+		// 終わった所（Off）の見え方とつながるので、そのまま降りる（ハッチが開いて UNLOCK）へ進める
+		const float t = time_;
+		s.backgroundAlpha = 0.0f;
+		s.collapse = 1.0f;   // ステージ選択の UI は出さない
+		s.signLocked = true;
+		s.signAlpha = Flicker(t - arriveSignTime_, signHideSeconds_);
+		const float on = Flicker(t - arriveLightsOnTime_, lightsOnSeconds_);
+		const float off = Clamp01((t - arriveLightsDownTime_) / (std::max)(lightsOffSeconds_, 1e-4f));
+		const float blink = (off > 0.35f && off < 0.5f) ? 0.4f : 0.0f;
+		s.lightLevel = (std::min)(on, (std::max)(idleLightLevel_, 1.0f - off) * (1.0f - blink));
+		// 外の光も真っ暗の間は 0（閉じたコクピットの壁をうっすら照らさない）
+		s.sunScale = SmoothStep01((t - arriveLightsOnTime_) / (std::max)(lightsOnSeconds_, 1e-4f));
+		break;
+	}
 	}
 	return s;
 }
@@ -162,6 +189,10 @@ void CockpitReveal::LoadTuning(const JsonValue& node) {
 	readFloat("lightsOffTime", lightsOffTime_);
 	readFloat("lightsOffSeconds", lightsOffSeconds_);
 	readFloat("shutdownEndTime", shutdownEndTime_);
+	readFloat("arriveLightsOnTime", arriveLightsOnTime_);
+	readFloat("arriveSignTime", arriveSignTime_);
+	readFloat("arriveLightsDownTime", arriveLightsDownTime_);
+	readFloat("arriveEndTime", arriveEndTime_);
 }
 
 void CockpitReveal::SaveTuning(JsonValue& node) const {
@@ -190,11 +221,15 @@ void CockpitReveal::SaveTuning(JsonValue& node) const {
 	write("lightsOffTime", lightsOffTime_);
 	write("lightsOffSeconds", lightsOffSeconds_);
 	write("shutdownEndTime", shutdownEndTime_);
+	write("arriveLightsOnTime", arriveLightsOnTime_);
+	write("arriveSignTime", arriveSignTime_);
+	write("arriveLightsDownTime", arriveLightsDownTime_);
+	write("arriveEndTime", arriveEndTime_);
 }
 
 void CockpitReveal::OnImGui() {
 #ifdef _DEBUG
-	static const char* kPhaseNames[] = { "Idle", "Booting", "ShuttingDown", "Off" };
+	static const char* kPhaseNames[] = { "Idle", "Booting", "ShuttingDown", "Off", "Arriving" };
 	ImGui::Text("Phase: %s  t=%.2f s", kPhaseNames[static_cast<int>(phase_)], time_);
 	if (ImGui::Button("Reset To Defaults")) ResetToDefaults();
 
@@ -224,5 +259,12 @@ void CockpitReveal::OnImGui() {
 	ImGui::DragFloat("Lights Off", &lightsOffTime_, 0.01f, 0.0f, 5.0f);
 	ImGui::DragFloat("Lights Off (s)", &lightsOffSeconds_, 0.01f, 0.0f, 3.0f);
 	ImGui::DragFloat("End", &shutdownEndTime_, 0.01f, 0.0f, 5.0f);
+
+	ImGui::SeparatorText("Arrive (s from ink cleared, 18-7)");
+	ImGui::DragFloat("Arrive Lights On", &arriveLightsOnTime_, 0.01f, 0.0f, 5.0f);
+	ImGui::DragFloat("Arrive Sign", &arriveSignTime_, 0.01f, 0.0f, 5.0f);
+	ImGui::DragFloat("Arrive Lights Down", &arriveLightsDownTime_, 0.01f, 0.0f, 5.0f);
+	ImGui::DragFloat("Arrive End", &arriveEndTime_, 0.01f, 0.0f, 5.0f);
+	ImGui::TextDisabled("Flicker uses Lights On (s) / Sign Hide (s); fall uses Lights Off (s).");
 #endif // _DEBUG
 }

@@ -11,6 +11,7 @@
 #include "BossStagePart.h"
 #include "StageEnvironment.h"
 #include "VerticalMenu.h"
+#include "AttractMode.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -541,6 +542,14 @@ private:
 	void SetPauseView(PauseView view);
 	void UpdatePauseMenu(class InputActionMap* actions);
 	void DrawPauseMenu();
+
+	// ----- デモモード（AttractMode）：始まって数秒でゲームオーバー / ポーズ →「ステージセレクトに戻る」→「はい」-----
+	// ポーズのメニューを自動で選んだら true（このフレームは人の入力を読まない）
+	bool UpdateAttract();
+	float attractTime_ = 0.0f;       // 始まってからの実時間（トランジション中は数えない）
+	bool attractActed_ = false;      // このステージでのゲームオーバー / ポーズを済ませた
+	bool attractPausing_ = false;    // デモモードが開いたポーズ（メニューを自動で選ぶ）
+	AttractMenuTimer attractMenu_;
 
 	// ----- ボス HP バー（ボス戦中のみ画面上部中央）-----
 	// 下地 → 遅延ゲージ（減った分を遅れて追う白）→ 現在HP → 発狂ライン目盛り、の順に重ねる
