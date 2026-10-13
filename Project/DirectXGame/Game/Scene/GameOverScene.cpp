@@ -52,7 +52,28 @@ void GameOverScene::Update() {
 		selectedIndex_ = (selectedIndex_ + static_cast<int>(options_.size()) - 1) % static_cast<int>(options_.size());
 	}
 
-	if (actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
+	bool confirmed = actions->IsTriggered(static_cast<int>(Action::MenuConfirm));
+
+	// デモモード：少し見せてから「シューティングからリトライ」を選ぶ（次のステージ1はポーズでステージ選択へ戻る）
+	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
+		int retryIndex = 0;
+		for (int i = 0; i < static_cast<int>(options_.size()); ++i) {
+			if (options_[i] == Option::RailRetry) retryIndex = i;
+		}
+		const AttractMenuTimer::Step step =
+			attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->gameOverWait, attract->menuConfirmDelay);
+		if (step == AttractMenuTimer::Step::MoveCursor) {
+			selectedIndex_ = retryIndex;
+		} else if (step == AttractMenuTimer::Step::Confirm && !confirmed) {
+			selectedIndex_ = retryIndex;
+			confirmed = true;
+		}
+	} else {
+		attractMenu_.Reset();
+	}
+
+	if (confirmed) {
+		attractMenu_.Reset();
 		switch (options_[selectedIndex_]) {
 		case Option::BossRetry:
 			BossRetryState::GetInstance()->RequestBossRetry();
@@ -62,7 +83,8 @@ void GameOverScene::Update() {
 			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			return;
 		case Option::BackToStageSelect:
-			SceneManager::GetInstance()->ChangeScene("HUB");
+			// ポーズの「ステージセレクトに戻る」（⑩）と同じく、コクピットの起動から
+			SceneManager::GetInstance()->ChangeScene("STAGESELECT");
 			return;
 		}
 	}

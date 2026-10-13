@@ -56,8 +56,13 @@ public:
 	// 文字列の描画ピクセル幅を取得（レイアウト用）。
 	float MeasureWidth(std::string_view utf8, float scale = 1.0f);
 
+	// フレームの描画の頭で呼ぶ（インスタンスバッファの書き込み位置を先頭へ戻す）。
+	// 1 フレームに同じ層を何度 Flush しても、前の Flush の分を上書きしないよう続きへ書くため
+	void BeginFrame();
+
 	// シーンが描画を終えた最後に呼び出す。
 	// 内部で bake 待ちをアトラスに反映し、最終的に 1 つの DrawCall を発行する。
+	// 1 フレームに何度呼んでもよい（続きの位置へ書く。区画からあふれた分は描かない）
 	void Flush();
 
 	// 発光の層を、今バインドされている発光 RT（BloomEffect::kFormat）へ描く。Game の発光パスが呼ぶ
@@ -128,6 +133,8 @@ private:
 	uint32_t instanceSrvIndex_ = 0;
 
 	std::array<std::vector<GlyphInstance>, kLayerCount> layers_; // フレーム内バッファ
+	// 層ごとの、このフレームで区画に書き終えた数（GPU はフレームの最後に読むので、同じフレームの Flush は続きへ書く）
+	std::array<uint32_t, kLayerCount> layerWritten_{};
 
 	bool offscreenActive_ = false;
 	float offscreenWidth_ = 0.0f;

@@ -15,6 +15,7 @@ public:
 		Booting,        // 閉じ切ってから起動中（入力を受け付ける所まで含む）
 		ShuttingDown,   // シャットダウン中
 		Off,            // シャットダウンが終わった
+		Arriving,       // 帰着：ステージなどから戻って真っ暗なコクピットに灯りが点く（⑦。終わると Off＝シャットダウンの終わりと同じ見え方）
 	};
 
 	/// <summary>ある時刻の見え方</summary>
@@ -28,6 +29,7 @@ public:
 		bool signLocked = false;       // 表示板を HATCH LOCKED にする
 		float signAlpha = 1.0f;        // 表示板の見え方 0..1（六角形が広がる前に消し、シャットダウンで外を映す壁が戻ったら LOCKED のまま出す）
 		bool inputEnabled = false;     // メニューの入力を受け付ける
+		float sunScale = 1.0f;         // 閉じたコクピットに漏れる外の光の倍率（帰着の真っ暗の間だけ 0。墨の黒から途切れずにつなぐ）
 	};
 
 	CockpitReveal();
@@ -36,9 +38,11 @@ public:
 	void Reset();           // 乗り込む前（Idle）に戻す
 	void StartBoot();       // 閉じ切った所から起動する
 	void StartShutdown();   // 起動し終えた所からシャットダウンする
+	void StartArrive();     // 真っ暗なコクピットから灯りを点ける（⑦。終わったら Off）
 	void Update(float deltaTime);
 
 	Phase GetPhase() const { return phase_; }
+	/// <summary>シャットダウン（または帰着）が終わった。持ち主はここから降りる</summary>
 	bool IsShutdownFinished() const { return phase_ == Phase::Off; }
 	State Evaluate() const;
 
@@ -82,4 +86,11 @@ private:
 	float lightsOffTime_ = 0.9f;       // 灯りが落ち始める
 	float lightsOffSeconds_ = 0.3f;
 	float shutdownEndTime_ = 1.3f;     // 終わり（持ち主が次へ進む）
+
+	// 調整値：帰着（⑦。墨が消えてからの秒）。チカチカの秒数は起動の lightsOnSeconds / signHideSeconds、
+	// 灯りが落ちる秒数はシャットダウンの lightsOffSeconds を使う
+	float arriveLightsOnTime_ = 0.4f;     // 真っ暗のあと灯りが点き始める（外の光もここから戻す）
+	float arriveSignTime_ = 0.7f;         // 表示板 HATCH LOCKED が出る
+	float arriveLightsDownTime_ = 1.5f;   // 灯りが待機の明るさへ落ち始める
+	float arriveEndTime_ = 1.9f;          // 終わり（Off にして持ち主が降り始める）
 };

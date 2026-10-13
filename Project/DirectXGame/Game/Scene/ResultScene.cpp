@@ -37,7 +37,8 @@ void ResultScene::Update() {
 
 	auto* actions = input_->GetActionMap();
 	if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
-		SceneManager::GetInstance()->ChangeScene("HUB");
+		// ポーズの「ステージセレクトに戻る」（⑩）と同じく、コクピットの起動から
+		SceneManager::GetInstance()->ChangeScene("STAGESELECT");
 		return;
 	}
 

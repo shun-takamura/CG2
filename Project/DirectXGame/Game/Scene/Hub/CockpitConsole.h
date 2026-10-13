@@ -31,6 +31,9 @@ public:
 	/// <summary>入力を読む（inputEnabled の間だけ）。screenSize はメニューの位置（マウスの当たり）に使う</summary>
 	Result Update(InputActionMap* actions, const UIPointer* pointer, const Vector2& screenSize, bool inputEnabled);
 
+	/// <summary>カーソルを item（Stage1 / BackToHub）の行へ動かす（デモモードの自動選択）。playSound でカーソルの音を鳴らす</summary>
+	void SelectItem(Result item, bool playSound);
+
 	/// <summary>
 	/// 積む（Flush は呼び出し側）。backgroundAlpha / menuTime / collapse は CockpitReveal::State の値、
 	/// time は回る計器用の経過秒。glow が false なら発光の層には積まない（トランジション中など）

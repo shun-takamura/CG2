@@ -8,6 +8,7 @@
 #include "PepperMacros.h"
 #include "BloomEffect.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <d3dcompiler.h>
@@ -316,10 +317,18 @@ void TextRenderer::DrawLayer(Layer layer, ID3D12PipelineState* pso, float target
 
 	if (instances.empty()) return;
 
-	// CPU 側のインスタンスを、この層の区画へ反映
-	const uint32_t n = static_cast<uint32_t>(instances.size());
-	const uint32_t base = kMaxInstances * static_cast<uint32_t>(layer);
+	// CPU 側のインスタンスを、この層の区画の「このフレームで書いた続き」へ反映
+	// （先頭へ書くと、同じフレームの前の Flush の分を GPU が描く前に上書きしてしまう）
+	uint32_t& written = layerWritten_[layer];
+	const uint32_t room = kMaxInstances - (std::min)(written, kMaxInstances);
+	const uint32_t n = (std::min)(static_cast<uint32_t>(instances.size()), room);
+	if (n == 0) {
+		instances.clear();
+		return;
+	}
+	const uint32_t base = kMaxInstances * static_cast<uint32_t>(layer) + written;
 	std::memcpy(instanceData_ + base, instances.data(), sizeof(GlyphInstance) * n);
+	written += n;
 
 	struct RootConstants { float width, height; uint32_t instanceBase, pad; } constants{
 		targetWidth, targetHeight, base, 0 };
@@ -337,6 +346,12 @@ void TextRenderer::DrawLayer(Layer layer, ID3D12PipelineState* pso, float target
 	cmd->DrawInstanced(4, n, 0, 0);
 
 	instances.clear();
+}
+
+void TextRenderer::BeginFrame()
+{
+	// 前のフレームの GPU の描画は Present の後の完了待ちで終わっているので、先頭から書き直してよい
+	layerWritten_.fill(0);
 }
 
 void TextRenderer::Flush()

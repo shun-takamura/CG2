@@ -3073,6 +3073,64 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 	}
 }
 
+bool StagePlayScene::UpdateAttract() {
+	AttractMode* attract = AttractMode::GetInstance();
+	if (!attract->IsEnabled()) {
+		attractPausing_ = false;
+		return false;
+	}
+	if (SceneManager::GetInstance()->IsTransitioning() || gameOverTriggered_) return false;
+
+	const float dt = dxCore_->GetDeltaTime();
+	if (!attractActed_) {
+		if (paused_) return false;   // 人が開いたポーズの間は数えない
+		attractTime_ += dt;
+		if (attractTime_ < attract->stageActionTime) return false;
+		attractActed_ = true;
+		// 1 周にステージ1 は 2 回入るので、ゲームオーバーとポーズを交互にする
+		if (attract->nextStageRun == AttractMode::StageRun::GameOver) {
+			attract->nextStageRun = AttractMode::StageRun::PauseToStageSelect;
+			// HP を 0 にして、いつもの死亡の流れ（羽根の着水 → ゲームオーバー）に任せる
+			if (player_) {
+				auto& hp = Gameplay::Of(player_).GetHP();
+				hp.TakeDamage(hp.currentHP);
+			}
+			return false;
+		}
+		attract->nextStageRun = AttractMode::StageRun::GameOver;
+		OpenPauseMenu();
+		attractPausing_ = true;
+		attractMenu_.Reset();
+		return true;
+	}
+
+	// デモモードが開いたポーズ：「ステージセレクトに戻る」→「はい」をカーソルが動くのを見せながら選ぶ
+	if (!attractPausing_ || !paused_) return false;
+	const bool confirmView = (pauseView_ == PauseView::ConfirmStageSelect);
+	const int target = confirmView ? 1 : 2;   // 確認は「はい」、メインは「ステージセレクトに戻る」
+	switch (attractMenu_.Advance(dt, attract->menuWait, attract->menuConfirmDelay)) {
+	case AttractMenuTimer::Step::MoveCursor:
+		if (pauseMenu_.GetSelectedIndex() != target) {
+			pauseMenu_.SetSelectedIndex(target);
+			SoundManager::GetInstance()->Play2DSound("se_ui_cursor");
+		}
+		return true;
+	case AttractMenuTimer::Step::Confirm:
+		pauseMenu_.SetSelectedIndex(target);
+		SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+		attractMenu_.Reset();
+		if (confirmView) {
+			attractPausing_ = false;
+			SceneManager::GetInstance()->ChangeScene("STAGESELECT");
+		} else {
+			SetPauseView(PauseView::ConfirmStageSelect);
+		}
+		return true;
+	default:
+		return false;   // 待っている間は人の入力も読む
+	}
+}
+
 void StagePlayScene::DrawPauseMenu() {
 	if (pauseDimSprite_) pauseDimSprite_->Draw();
 
@@ -3114,6 +3172,9 @@ void StagePlayScene::Update() {
 
 	auto* actions = input_->GetActionMap();
 	if (!actions) return;
+
+	// デモモード（展示用の自動進行）
+	if (UpdateAttract()) return;
 
 	// Pause アクションでポーズトグル。トグルしたフレームはメニュー入力を読まない
 	// （同じキーが MenuCancel 等に割り当てられていても二重に反応させないため）
