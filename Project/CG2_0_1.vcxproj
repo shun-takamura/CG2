@@ -152,6 +152,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\UIPointer.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubMechModel.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\AttractMode.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageSelectScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StagePlayScene.cpp" />
@@ -204,6 +206,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h" />
     <ClInclude Include="DirectXGame\Game\UI\UIPointer.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubMechModel.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.h" />
     <ClInclude Include="DirectXGame\Game\Scene\AttractMode.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageSelectScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StagePlayScene.h" />

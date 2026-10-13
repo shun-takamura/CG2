@@ -36,9 +36,9 @@ namespace SceneRoutes {
 		// ⑧ タイトル ↔ HUB：白フェード（色と長さは TitleScene / HubScene が直前に FadeTransition::SetNextFade で決める）
 		{ "TITLE",       "HUB",         { TransitionType::Fade,   TransitionType::Fade   } },
 		{ "HUB",         "TITLE",       { TransitionType::Fade,   TransitionType::Fade   } },
-		// ① HUB → ステージ選択：乗り込み（HUB が演じる）→ 起動（ステージ選択が演じる）。
-		// ①の OUT ができたら覆う側を TransitionManager::kCoverByScene に変える。それまでは仮にストライプ
-		{ "HUB",         "STAGESELECT", { TransitionType::Stripe, kStageSelectReveal } },
+		// ① HUB → ステージ選択：乗り込み（HUB が演じて真っ暗で ChangeScene）→ 起動（ステージ選択が演じる）。
+		// 覆う側の None は TransitionManager::kCoverByScene（このヘッダは BaseTransition.h しか include しないので None と書く）
+		{ "HUB",         "STAGESELECT", { TransitionType::None,   kStageSelectReveal } },
 		// ② ステージ選択 → HUB：UI のシャットダウン（ステージ選択が演じる）→ 機体から降りる。
 		// ②の OUT ができたら覆う側を kCoverByScene に変える。それまでは仮にストライプ
 		{ "STAGESELECT", "HUB",         { TransitionType::Stripe, kHubReveal } },
