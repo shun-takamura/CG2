@@ -20,7 +20,9 @@ AI が作ったコクピットの中身は取り除き、スクリプトで作�
 ハッチ（HubMech_Hatch、原点＝回転の軸。X 軸まわりに回して開け閉めする）に置き換える。
 """
 
+import json
 import math
+import struct
 import sys
 from pathlib import Path
 
@@ -751,7 +753,72 @@ def export_object(obj, path, reset_transform=False):
                               export_yup=True, export_apply=True, export_animations=False,
                               export_image_format="AUTO")
     obj.location, obj.rotation_euler = saved
+    flip_texcoord_v(path)
+    write_pbr_factors(path)
     print(f"[rig_hub_mech] exported {path}")
+
+
+def flip_texcoord_v(gltf_path):
+    """書き出した glTF の TEXCOORD_0 を v → 1 - v にする。
+    cook（tools/Python/cook_assets.py）は glTF の V を必ず反転するが、Blender の glTF の UV は
+    すでに左上が原点で正しい。そのままだとアトラスの島が別の場所を拾って迷彩のようになるので、
+    gen_terrain.py などと同じく「cook の反転の逆」を書いておく"""
+    gltf_path = Path(gltf_path)
+    gltf = json.loads(gltf_path.read_text(encoding="utf-8"))
+    accessor_ids = {prim["attributes"]["TEXCOORD_0"]
+                    for mesh in gltf.get("meshes", []) for prim in mesh["primitives"]
+                    if "TEXCOORD_0" in prim.get("attributes", {})}
+    if not accessor_ids:
+        return
+    bin_path = gltf_path.parent / gltf["buffers"][0]["uri"]
+    data = bytearray(bin_path.read_bytes())
+    for ai in accessor_ids:
+        acc = gltf["accessors"][ai]
+        assert acc["componentType"] == 5126 and acc["type"] == "VEC2", acc
+        view = gltf["bufferViews"][acc["bufferView"]]
+        assert view.get("buffer", 0) == 0
+        base = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+        stride = view.get("byteStride", 8)
+        for i in range(acc["count"]):
+            o = base + i * stride + 4
+            (v,) = struct.unpack_from("<f", data, o)
+            struct.pack_into("<f", data, o, 1.0 - v)
+        if "min" in acc and "max" in acc:
+            acc["min"][1], acc["max"][1] = 1.0 - acc["max"][1], 1.0 - acc["min"][1]
+    bin_path.write_bytes(bytes(data))
+    gltf_path.write_text(json.dumps(gltf, indent=2), encoding="utf-8")
+    print(f"[rig_hub_mech] flipped TEXCOORD_0 V for cook ({gltf_path.name})")
+
+
+def write_pbr_factors(gltf_path):
+    """metallicRoughnessTexture を持つ material に、テクスチャの中央値を metallicFactor / roughnessFactor として書く。
+    エンジンはこのテクスチャを読まず、cook は係数が無いと glTF 既定の 1.0（完全な金属）を .mat に入れるため、
+    Tripo の機体が暗く青灰色にくすむ（テクスチャの実際の金属度はほぼ 0）。アトラスの空き（G=B=0）は除く"""
+    import numpy as np
+    gltf_path = Path(gltf_path)
+    gltf = json.loads(gltf_path.read_text(encoding="utf-8"))
+    changed = False
+    for mat in gltf.get("materials", []):
+        pbr = mat.get("pbrMetallicRoughness", {})
+        tex = pbr.get("metallicRoughnessTexture")
+        if tex is None:
+            continue
+        uri = gltf["images"][gltf["textures"][tex["index"]]["source"]]["uri"]
+        img = bpy.data.images.load(str(gltf_path.parent / uri), check_existing=True)
+        px = np.empty(img.size[0] * img.size[1] * img.channels, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        px = px.reshape(-1, img.channels)
+        used = (px[:, 1] > 0.01) | (px[:, 2] > 0.01)
+        if not used.any():
+            continue
+        pbr["roughnessFactor"] = round(float(np.median(px[used, 1])), 3)
+        pbr["metallicFactor"] = round(float(np.median(px[used, 2])), 3)
+        mat["pbrMetallicRoughness"] = pbr
+        changed = True
+        print(f"[rig_hub_mech] {mat.get('name')}: metallicFactor={pbr['metallicFactor']} "
+              f"roughnessFactor={pbr['roughnessFactor']} (from {uri})")
+    if changed:
+        gltf_path.write_text(json.dumps(gltf, indent=2), encoding="utf-8")
 
 
 # ============================================================

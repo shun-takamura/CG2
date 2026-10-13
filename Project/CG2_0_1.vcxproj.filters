@@ -31,6 +31,9 @@
     <Filter Include="DirectXGame\Game\Scene">
       <UniqueIdentifier>{96a2741f-adae-5f57-a566-96a2fb35c76e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Hub">
+      <UniqueIdentifier>{3f1c8a52-7d4e-4b9a-9c61-2e8f5a0d7b13}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\Transition">
       <UniqueIdentifier>{c6c2f369-1f62-5fed-a8c7-6c3c9b8b9dd3}</UniqueIdentifier>
     </Filter>
@@ -116,6 +119,12 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubMechModel.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\AttractMode.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
@@ -262,6 +271,12 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h">
       <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubMechModel.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\AttractMode.h">
       <Filter>DirectXGame\Game\Scene</Filter>
