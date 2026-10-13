@@ -49,8 +49,8 @@ namespace SceneRoutes {
 		// ⑤⑥ リトライ（ゲームオーバーから / ポーズから）：羽根の飛翔
 		{ "GAMEOVER",    "STAGEPLAY",   { TransitionType::FeatherRise, TransitionType::FeatherRise } },
 		{ "STAGEPLAY",   "STAGEPLAY",   { TransitionType::FeatherRise, TransitionType::FeatherRise } },
-		// ポーズの「ステージセレクトに戻る」：ストライプで覆い、ステージ選択の IN で開く
-		{ "STAGEPLAY",   "STAGESELECT", { TransitionType::Stripe, kStageSelectReveal } },
+		// ポーズの「ステージセレクトに戻る」：墨で覆い（進行を捨てて戻る遷移。2026-10-14 ストライプから変更）、ステージ選択の IN で開く
+		{ "STAGEPLAY",   "STAGESELECT", { TransitionType::Ink,    kStageSelectReveal } },
 		{ "STAGEPLAY",   "TITLE",       { TransitionType::Stripe, TransitionType::Stripe } },
 		// ゲームオーバー・リザルトからはステージ選択へ戻る（⑩と同じくコクピットの起動で開く）。
 		// 進行を捨てる遷移は墨、リザルトからは黒フェード

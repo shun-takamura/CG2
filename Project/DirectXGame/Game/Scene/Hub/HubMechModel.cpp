@@ -38,6 +38,7 @@ void HubMechModel::Initialize(Object3DManager* object3DManager, DirectXCore* dxC
 	cockpit_->Initialize(object3DManager, dxCore, kModelDir, "HubMech_Cockpit.mesh", "HubMechCockpit");
 	hatch_ = std::make_unique<Object3DInstance>();
 	hatch_->Initialize(object3DManager, dxCore, kModelDir, "HubMech_Hatch.mesh", "HubMechHatch");
+	ApplyBodyMaterial();
 	Update();
 }
 
@@ -63,19 +64,38 @@ void HubMechModel::DrawBloom(DirectXCore* dxCore, float bloomScale, bool include
 	hatch_->DrawBloomPass(dxCore, bloomScale, includeAll);
 }
 
+void HubMechModel::ApplyBodyMaterial() {
+	if (!body_ || !overrideBodyMaterial_) return;
+	body_->SetRoughness(bodyRoughness_);
+	body_->SetMetallic(bodyMetallic_);
+}
+
 void HubMechModel::LoadTuning(const JsonValue& node) {
 	if (!node.IsObject()) return;
 	hatchOpenDegrees_ = static_cast<float>(node["hatchOpenDegrees"].AsDouble(hatchOpenDegrees_));
+	overrideBodyMaterial_ = node["overrideBodyMaterial"].AsBool(overrideBodyMaterial_);
+	bodyRoughness_ = static_cast<float>(node["bodyRoughness"].AsDouble(bodyRoughness_));
+	bodyMetallic_ = static_cast<float>(node["bodyMetallic"].AsDouble(bodyMetallic_));
+	ApplyBodyMaterial();
 }
 
 void HubMechModel::SaveTuning(JsonValue& node) const {
 	node = JsonValue::MakeObject();
 	node["hatchOpenDegrees"] = JsonValue(static_cast<double>(hatchOpenDegrees_));
+	node["overrideBodyMaterial"] = JsonValue(overrideBodyMaterial_);
+	node["bodyRoughness"] = JsonValue(static_cast<double>(bodyRoughness_));
+	node["bodyMetallic"] = JsonValue(static_cast<double>(bodyMetallic_));
 }
 
 void HubMechModel::OnImGui() {
 #ifdef _DEBUG
 	ImGui::DragFloat("Hatch Open (deg)", &hatchOpenDegrees_, 1.0f, -180.0f, 180.0f);
 	ImGui::Checkbox("Draw Body", &drawBody_);
+	ImGui::SeparatorText("Body Material");
+	bool changed = ImGui::Checkbox("Override (else cook value)", &overrideBodyMaterial_);
+	changed |= ImGui::SliderFloat("Roughness", &bodyRoughness_, 0.04f, 1.0f);
+	changed |= ImGui::SliderFloat("Metallic", &bodyMetallic_, 0.0f, 1.0f);
+	if (changed) ApplyBodyMaterial();
+	ImGui::TextDisabled("Override を外しても cook の値には戻らない（再起動で戻る）");
 #endif // _DEBUG
 }

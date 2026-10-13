@@ -34,11 +34,11 @@ void HubDisembarkSequence::ResetToDefaults() {
 		// 開口部をくぐって外へ
 		{ 3.5f, { 0.0f, 12.6f, 2.0f }, 360.0f, 8.0f, Ease::Linear, true },
 		// 手のひらを歩く（足元を見る）
-		{ 4.9f, { 0.0f, 12.2f, 3.4f }, 360.0f, 14.0f, Ease::Linear, true },
-		// 指先まで
-		{ 5.7f, { 0.0f, 12.1f, 5.4f }, 360.0f, 12.0f, Ease::Linear, true },
-		// 足場へ一段上がる
-		{ 6.4f, { 0.0f, 12.2f, 6.0f }, 360.0f, 2.0f, Ease::Linear, true },
+		{ 4.9f, { 0.0f, 12.2f, 2.7f }, 360.0f, 14.0f, Ease::Linear, true },
+		// 手のひらの先から足場へ渡る（足場の先は z 3.85。手のいちばん前は z 3.69）
+		{ 5.7f, { 0.0f, 12.2f, 3.9f }, 360.0f, 12.0f, Ease::Linear, true },
+		// 足場の上を歩く
+		{ 6.4f, { 0.0f, 12.2f, 5.2f }, 360.0f, 2.0f, Ease::Linear, true },
 		// 足場の上の待機の位置まで（位置は Start で待機の視点に合わせる）
 		{ 7.0f, { 0.0f, 12.2f, 6.6f }, 360.0f, 0.0f, Ease::Out, true },
 		// 振り返って機体を見る（位置と向きは Start で待機の視点に合わせる）
