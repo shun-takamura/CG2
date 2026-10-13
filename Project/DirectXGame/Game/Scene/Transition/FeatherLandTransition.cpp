@@ -406,7 +406,6 @@ FeatherLandTransition::WaterParamsForGPU FeatherLandTransition::WriteWaterParams
 	p.skyColor = s.skyColor;
 	p.waveNormalScale = s.waveNormalScale;
 	p.emergeCenter = hero_.landed ? ProjectToScreen(landingPoint_) : Vector2{ 0.5f, 0.5f };
-	if (hero_.landed) lastLandingScreenUV_ = p.emergeCenter;
 	p.emergeRadialBias = (std::max)(s.emergeRadialBias, 0.0f);
 	p.emergeNoise = s.emergeNoise;
 	p.lightDirection = Normalize(renderer_.GetSettings().lightDirection);

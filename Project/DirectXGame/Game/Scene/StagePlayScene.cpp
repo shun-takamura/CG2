@@ -3023,9 +3023,9 @@ void StagePlayScene::ClosePauseMenu() {
 void StagePlayScene::SetPauseView(PauseView view) {
 	pauseView_ = view;
 	if (view == PauseView::Main) {
-		pauseMenu_.SetItems({ "再開", "リトライ", "タイトルに戻る" });
+		pauseMenu_.SetItems({ "再開", "リトライ", "ステージセレクトに戻る", "タイトルに戻る" });
 	} else {
-		// 誤操作でタイトルへ飛ばないよう「いいえ」を既定にする
+		// 誤操作で戻ってしまわないよう「いいえ」を既定にする
 		pauseMenu_.SetItems({ "いいえ", "はい" });
 	}
 }
@@ -3050,22 +3050,26 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 		case 1: // リトライ
 			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			break;
-		case 2: // タイトルに戻る（確認を挟む）
+		case 2: // ステージセレクトに戻る（確認を挟む。開く側はステージ選択の起動＝18 番 ①の IN）
+			SetPauseView(PauseView::ConfirmStageSelect);
+			break;
+		case 3: // タイトルに戻る（確認を挟む）
 			SetPauseView(PauseView::ConfirmTitle);
 			break;
 		}
 		return;
 	}
 
-	// ConfirmTitle
+	// ConfirmStageSelect / ConfirmTitle
+	const bool toTitle = (pauseView_ == PauseView::ConfirmTitle);
 	if (result == VerticalMenu::Result::Canceled
 		|| (result == VerticalMenu::Result::Confirmed && index == 0)) {
 		SetPauseView(PauseView::Main);
-		pauseMenu_.SetSelectedIndex(2);
+		pauseMenu_.SetSelectedIndex(toTitle ? 3 : 2);
 		return;
 	}
 	if (result == VerticalMenu::Result::Confirmed && index == 1) {
-		SceneManager::GetInstance()->ChangeScene("TITLE");
+		SceneManager::GetInstance()->ChangeScene(toTitle ? "TITLE" : "STAGESELECT");
 	}
 }
 
@@ -3080,12 +3084,14 @@ void StagePlayScene::DrawPauseMenu() {
 	const Vector4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Vector4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
 
-	const char* heading = (pauseView_ == PauseView::Main) ? "PAUSE" : "タイトルに戻りますか？";
+	const char* heading = "PAUSE";
+	if (pauseView_ == PauseView::ConfirmStageSelect) heading = "ステージセレクトに戻りますか？";
+	if (pauseView_ == PauseView::ConfirmTitle) heading = "タイトルに戻りますか？";
 	const float headingScale = (pauseView_ == PauseView::Main) ? 2.5f : 1.6f;
 	const float headingW = tr->MeasureWidth(heading, headingScale);
 	tr->DrawText(heading, { (screenW - headingW) * 0.5f, screenH * 0.28f }, headingScale, white, 3.0f, black);
 
-	if (pauseView_ == PauseView::ConfirmTitle) {
+	if (pauseView_ != PauseView::Main) {
 		const char* note = "現在の進行状況は失われます";
 		const float noteScale = 0.9f;
 		const float noteW = tr->MeasureWidth(note, noteScale);

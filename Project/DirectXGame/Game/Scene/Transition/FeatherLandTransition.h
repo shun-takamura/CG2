@@ -181,12 +181,6 @@ public:
 
 	Settings& GetSettings() { return settings_; }
 
-	/// <summary>
-	/// 最後に大きい一枚が着地した所（画面 UV）。羽根の飛翔（リトライ）がここで羽根をよみがえらせる。
-	/// まだ一度も着地していなければ画面の中央やや下
-	/// </summary>
-	const Vector2& GetLastLandingScreenUV() const { return lastLandingScreenUV_; }
-
 	/// <summary>ImGui で調整</summary>
 	void OnImGui();
 
@@ -302,7 +296,6 @@ private:
 	float waterY_ = 0.0f;
 	bool waterPlaced_ = false;
 	Vector3 landingPoint_{};
-	Vector2 lastLandingScreenUV_ = { 0.5f, 0.6f };
 	// 着地後の小さな波（浮いた羽根の上下・水面にぽつぽつ）
 	int bobPulsesLeft_ = 0;
 	float nextBobPulseTime_ = 0.0f;

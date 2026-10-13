@@ -1,6 +1,5 @@
 #include "FeatherRiseTransition.h"
 #include "TransitionTuning.h"
-#include "FeatherLandTransition.h"
 #include "TransitionManager.h"
 #include "SceneManager.h"
 #include "DirectXCore.h"
@@ -87,14 +86,9 @@ void FeatherRiseTransition::OnStartCover() {
 	heroLifted_ = false;
 	water_.Reset();
 
-	// 着水で羽根が消えた所でよみがえらせる
-	if (auto* land = TransitionManager::GetInstance()->GetTransition<FeatherLandTransition>(TransitionType::FeatherLand)) {
-		originUV_ = land->GetLastLandingScreenUV();
-	}
-
 	const Settings& s = settings_;
 	hero_ = FlyingFeather{};
-	hero_.position = ScreenToWorld(originUV_, s.heroDepth);
+	hero_.position = ScreenToWorld(s.originUV, s.heroDepth);
 	hero_.baseBend = 0.3f;
 	hero_.look.size = s.heroSize;
 	hero_.look.bend = hero_.baseBend;
@@ -227,7 +221,7 @@ void FeatherRiseTransition::SpawnBurst() {
 	const Settings& s = settings_;
 	const Vector3 wind = WindDirection();
 	// 出す所：よみがえった一枚の画面の位置から burstOffsetX だけ左右へずらした所（奥行きは一枚と同じ）
-	const Vector3 burstCenter = ScreenToWorld({ originUV_.x + s.burstOffsetX, originUV_.y }, hero_.position.z);
+	const Vector3 burstCenter = ScreenToWorld({ s.originUV.x + s.burstOffsetX, s.originUV.y }, hero_.position.z);
 	for (int i = 0; i < s.burstCount && flying_.size() + 1 < FeatherRenderer::kMaxFeathers; ++i) {
 		FlyingFeather f{};
 		f.look.size = range(s.sizeMin, s.sizeMax) * 0.8f;
@@ -428,7 +422,7 @@ void FeatherRiseTransition::OnImGui() {
 	ImGui::DragFloat("Hero Depth", &s.heroDepth, 0.05f, 0.5f, 30.0f);
 	ImGui::DragFloat("Hero Size", &s.heroSize, 0.01f, 0.05f, 3.0f);
 	ImGui::DragFloat("Hero Lift Acceleration", &s.heroLiftAcceleration, 0.05f, 0.0f, 50.0f);
-	ImGui::Text("Origin (from FeatherLand): %.2f, %.2f", originUV_.x, originUV_.y);
+	ImGui::DragFloat2("Origin UV", &s.originUV.x, 0.005f, 0.0f, 1.0f);
 	ImGui::SeparatorText("Feather Look");
 	renderer_.OnImGui();
 	if (ImGui::Button("Preview (no scene change)")) {
