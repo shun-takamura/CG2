@@ -168,6 +168,25 @@ void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
     modelInstance_->DrawIdPass(dxCore);
 }
 
+void Object3DInstance::DrawBloomPass(DirectXCore* dxCore, float bloomScale, bool includeAll)
+{
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!modelInstance_) return;
+    if (!includeAll && !modelInstance_->HasEmissive()) return;
+
+    auto* cmd = dxCore->GetCommandList();
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(object3DManager_->GetBloomRootSignature());
+    cmd->SetPipelineState(object3DManager_->GetBloomPipelineState());
+    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    const float constants[Object3DManager::kBloomPassConstantCount] = { bloomScale, 0.0f, 0.0f, 0.0f };
+    cmd->SetGraphicsRoot32BitConstants(2, Object3DManager::kBloomPassConstantCount, constants, 0);
+
+    modelInstance_->DrawBloomPass(dxCore, includeAll);
+}
+
 void Object3DInstance::DrawShadowPass(DirectXCore* dxCore)
 {
 #ifdef _DEBUG

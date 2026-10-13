@@ -21,7 +21,7 @@ typedef struct Material {
 	float cloudReflection;      // PBR: 鏡面反射に映す遠景の雲の強さ（0=映さない。CloudSky.hlsli）
 
 	// ディゾルブ（Object3D/Dissolve.hlsli）。マスクは「ワールドの高さ」と「ワールド座標の 3D ノイズ」を混ぜてシェーダで作る
-	int32_t dissolveEnable;     // 0=無効（既定）
+	int32_t dissolveEnable;     // 0=無効（既定） / 1=高さ＋ノイズ / 2=画面座標の六角形（kDissolveHexScreen。下の欄の読み替えは Dissolve.hlsli）
 	float dissolveProgress;     // 見えている割合 0..1（0=全部消えている / 1=全部見えている）
 	float dissolveEdgeWidth;    // 境目の発光帯の幅（マスク値の単位）
 	float dissolveNoiseScale;   // ノイズの細かさ [1/m]
@@ -42,8 +42,15 @@ typedef struct Material {
 	Vector4 terrainTile;        // xyz = 層ごとのタイル長 [m]、w = 高さブレンドの幅
 	Vector4 terrainRoughness;   // xyz = 層ごとの粗さ、w = 岩の三平面投影の鋭さ
 	Vector4 terrainParams;      // x = 低い周波数の色ムラの強さ、y = 濡れた所を暗くする強さ、zw = 予備
-	Vector4 terrainPadding;
+	// 発光（全シェーダ共通）。rgb = 発光の色×強さ（ライティングのあとに足す。既定 0）、w は予備。
+	// 光らせる（ブルーム）には Object3DInstance::DrawBloomPass で発光 RT にも描く
+	Vector4 emissive;
 }Material;
+
+// Material::dissolveEnable の値
+inline constexpr int32_t kDissolveOff = 0;
+inline constexpr int32_t kDissolveWorld = 1;       // ワールドの高さ＋3D ノイズ（既定のディゾルブ）
+inline constexpr int32_t kDissolveHexScreen = 2;   // 画面座標の六角形が中心から晴れる
 // HLSL 側（Object3d*.PS.hlsl の Material）とレイアウトを合わせる。定数バッファは 256B 単位なので確保量は変わらない。
 // 末尾の視差は PBR / 地形の PS、地形の欄は地形の PS だけが宣言する（他の PS は手前までしか読まないので宣言しなくてよい）
 static_assert(sizeof(Material) == 256, "Material のレイアウトを変えたら Object3D の PS 側も合わせること");

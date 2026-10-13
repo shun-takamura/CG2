@@ -1,7 +1,6 @@
 #include "SceneFactory.h"
 #include "TitleScene.h"
 #include "HubScene.h"
-#include "StageSelectScene.h"
 #include "StagePlayScene.h"
 #include "ResultScene.h"
 #include "GameOverScene.h"
@@ -16,7 +15,8 @@ std::unique_ptr<Scene> SceneFactory::CreateScene(const std::string& sceneName) {
         return std::make_unique<HubScene>();
     }
     else if (sceneName == "STAGESELECT") {
-        return std::make_unique<StageSelectScene>();
+        // ステージ選択は HUB のコクピットの中（18_HubTransitions.md ①「C で決まったこと」）。起動から始める
+        return std::make_unique<HubScene>(HubScene::Entry::Cockpit);
     }
     else if (sceneName == "STAGEPLAY") {
         return std::make_unique<StagePlayScene>();

@@ -252,6 +252,53 @@ void ModelInstance::DrawShadowPass(DirectXCore* dxCore)
 	dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void ModelInstance::DrawBloomPass(DirectXCore* dxCore, bool includeAll)
+{
+	if (!indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
+	auto* cmd = dxCore->GetCommandList();
+	cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
+	cmd->IASetIndexBuffer(&indexBufferView_);
+	for (const auto& sm : submeshes_) {
+		if (sm.indexCount == 0) continue;
+		if (!includeAll && !sm.hasEmissive) continue;
+		cmd->SetGraphicsRootConstantBufferView(1, sm.materialResource->GetGPUVirtualAddress());
+		const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
+		cmd->SetGraphicsRootDescriptorTable(3, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
+		PEPPER_COUNT("DrawCall");
+		cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
+	}
+}
+
+int ModelInstance::SetEmissiveByMaterialName(const std::string& materialName, const Vector3& emissive, float textureWeight)
+{
+	int count = 0;
+	const bool on = emissive.x > 0.0f || emissive.y > 0.0f || emissive.z > 0.0f;
+	for (auto& sm : submeshes_) {
+		if (!sm.material || sm.matFilePath.find(materialName) == std::string::npos) continue;
+		sm.material->emissive = Vector4(emissive.x, emissive.y, emissive.z, textureWeight);
+		sm.hasEmissive = on;
+		++count;
+	}
+	return count;
+}
+
+void ModelInstance::ClearEmissive()
+{
+	for (auto& sm : submeshes_) {
+		if (!sm.material) continue;
+		sm.material->emissive = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+		sm.hasEmissive = false;
+	}
+}
+
+bool ModelInstance::HasEmissive() const
+{
+	for (const auto& sm : submeshes_) {
+		if (sm.hasEmissive) return true;
+	}
+	return false;
+}
+
 void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 {
 	const size_t sizeInBytes = useDirectStorage_
@@ -337,6 +384,7 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 		m->parallaxDepth = 0.0f;
 		m->parallaxMinLayers = 8.0f;
 		m->parallaxMaxLayers = 32.0f;
+		m->emissive = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 	}
 
 	// 後方互換: submesh[0] を既存メンバへ反映（GetMaterialPointer 等）

@@ -22,6 +22,27 @@ bool TextureManager::HasTexture(const std::string& filePath) const
     return textureDatas.contains(filePath);
 }
 
+void TextureManager::RegisterExternalTexture(const std::string& name, ID3D12Resource* resource, uint32_t srvIndex)
+{
+    TextureData& data = textureDatas[name];
+    data.resource = resource;
+    data.srvIndex = srvIndex;
+    data.srvHandleCPU = srvManager_->GetCPUDescriptorHandle(srvIndex);
+    data.srvHandleGPU = srvManager_->GetGPUDescriptorHandle(srvIndex);
+    data.loadState = TextureData::LoadState::GPUReady;
+    if (resource) {
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        data.metadata = {};
+        data.metadata.width = static_cast<size_t>(desc.Width);
+        data.metadata.height = desc.Height;
+        data.metadata.depth = 1;
+        data.metadata.arraySize = 1;
+        data.metadata.mipLevels = desc.MipLevels;
+        data.metadata.format = desc.Format;
+        data.metadata.dimension = DirectX::TEX_DIMENSION_TEXTURE2D;
+    }
+}
+
 void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     OutputDebugStringA(("CreateSolidColorTexture called: " + name + "\n").c_str());

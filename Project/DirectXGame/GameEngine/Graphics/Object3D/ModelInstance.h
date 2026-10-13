@@ -73,6 +73,9 @@ struct RenderSubmesh
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
 	Material* material = nullptr;    // materialResource を Map したポインタ
+
+	// material->emissive が 0 でないか（発光パスで描くかの判定。Map 先は書き込み専用なので CPU 側に持つ）
+	bool hasEmissive = false;
 };
 
 class ModelInstance
@@ -140,6 +143,18 @@ public:
 
 	// シャドウパス用：VBV/IBV をバインドして DrawIndexedInstanced するだけ（深度のみ）。
 	void DrawShadowPass(DirectXCore* dxCore);
+
+	// 発光パス用：submesh ごとにマテリアル（PS b0 = ルート[1]）とベースカラー（ルート[3]）を貼って描く。
+	// 発光している submesh だけ描く。includeAll なら全部（六角形のディゾルブの発光帯を光らせるとき）
+	void DrawBloomPass(DirectXCore* dxCore, bool includeAll);
+
+	// 部位の発光。.mat のパスに materialName を含む submesh 全部（空なら全部）に emissive を書く。書いた数を返す。
+	// textureWeight = 1 で発光にベースカラーのテクスチャを掛ける（文字を描いた板の文字だけを光らせる）
+	int SetEmissiveByMaterialName(const std::string& materialName, const Vector3& emissive, float textureWeight = 0.0f);
+	// 全 submesh の発光を 0 に戻す
+	void ClearEmissive();
+	// 発光している submesh があるか
+	bool HasEmissive() const;
 
 	const ModelData& GetModelData() const { return modelData_; }
 

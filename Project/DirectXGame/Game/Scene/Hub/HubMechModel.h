@@ -20,6 +20,15 @@ public:
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore);
 	void Update();
 	void Draw(DirectXCore* dxCore);
+	/// <summary>
+	/// 発光パス：コクピットとハッチの「光る分」を発光 RT に描く。
+	/// includeAll なら発光していない部位も描く（六角形のディゾルブの発光帯を光らせる間）
+	/// </summary>
+	void DrawBloom(DirectXCore* dxCore, float bloomScale, bool includeAll);
+
+	// コクピットの中の見た目（灯り・発光・六角形）を部位のマテリアルで変えるため（CockpitLighting）
+	Object3DInstance* GetCockpit() const { return cockpit_.get(); }
+	Object3DInstance* GetHatch() const { return hatch_.get(); }
 
 	/// <summary>ハッチの開き具合（1 = 開いて待っている、0 = 閉じ切り）</summary>
 	void SetHatchOpenRatio(float ratio) { hatchOpenRatio_ = ratio; }

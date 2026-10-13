@@ -90,6 +90,11 @@ public:
     // （PSO/RootSig/カスケード行列はパス側で設定済みの前提）
     void DrawShadowPass(class DirectXCore* dxCore);
 
+    // 発光パス用：ブルームの発光 RT に「光る分」（マテリアルの発光＋ディゾルブの発光帯）を書く。
+    // bloomScale はメイン描画の発光に掛ける倍率。includeAll なら発光していない submesh も描く
+    // （六角形のディゾルブの発光帯を光らせるとき）。RTV / DSV は呼び出し側（Game の発光パス）で設定済みの前提
+    void DrawBloomPass(class DirectXCore* dxCore, float bloomScale, bool includeAll = false);
+
     // 平面リフレクション用：鏡側が持つ CB（VS b1 = 鏡像 ViewProj / PS b2 = 鏡像カメラ位置）で描く。
     // 自身の transform CB は World だけ使うので、反射のために CB を増やさない。
     // （RootSig/ライト/シャドウは Object3DManager::DrawSetting 済みの前提）

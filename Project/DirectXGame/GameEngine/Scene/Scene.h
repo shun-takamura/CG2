@@ -138,6 +138,17 @@ public:
 	virtual bool HasExtraIdPassObjects() const { return false; }
 	virtual void DrawExtraIdPassObjects() {}
 
+	//====================
+	// 発光パス（ブルームの発光 RT に「光らせたい物だけ」を描く。Game の発光パスから呼ぶ）
+	//====================
+	/// <summary>
+	/// シーンが自分で光らせる物（Object3DInstance::DrawBloomPass で描く物）がある間 true。
+	/// エフェクト・文字の発光（TextRenderer の発光の層）が無くても発光パスが走る
+	/// </summary>
+	virtual bool HasBloomSources() const { return false; }
+	/// <summary>発光 RT に描く。RTV / DSV / ビューポートは設定済み。PSO とルートシグネチャは描く側が貼る</summary>
+	virtual void DrawBloomSources() {}
+
 	/// <summary>
 	/// 動的 Object3D をシャドウパスへ描画する。
 	/// シーンがメンバで直接持つ物（タイトルのロゴ等）も影を落とす場合は override して基底も呼ぶ。
