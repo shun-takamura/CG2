@@ -38,6 +38,8 @@ public:
 
 	/// <summary>機体の原点（足元の中央）。乗り込みのカメラのキーはこの原点からの相対で持つ</summary>
 	const Vector3& GetPosition() const { return position_; }
+	/// <summary>③ のリフトの降下で機体ごと下げる（16_StageStart.md）。反映は Update</summary>
+	void SetPosition(const Vector3& position) { position_ = position; }
 
 	// 機体の原点からの位置（エンジン座標。17 番 §5.1 の表）
 	static Vector3 GetCockpitAxis();      // コクピットの円柱の軸＝ハッチの回転の軸

@@ -437,6 +437,14 @@ void WaterSurface::AddRippleImpulse(const Vector3& position, float radius, float
 	rippleSimulation_->AddImpulse(position, radius, strength);
 }
 
+void WaterSurface::SetOctagonHole(const Vector3& center, float halfWidth, float chamfer)
+{
+	params_.holeEnabled = 1;
+	params_.holeCenter = { center.x, center.z };
+	params_.holeHalfWidth = halfWidth;
+	params_.holeChamfer = chamfer;
+}
+
 void WaterSurface::DispatchSimulation()
 {
 	rippleSimulation_->Dispatch();
@@ -466,6 +474,14 @@ void WaterSurface::OnImGui()
 	ImGui::DragFloat("Water Height", &params_.waterHeight, 0.01f, -100.0f, 100.0f);
 	ImGui::DragFloat("Water Depth", &params_.depth, 0.005f, 0.0f, 10.0f);
 	ImGui::DragFloat("Water Size", &size_, 1.0f, 1.0f, 5000.0f);
+	if (ImGui::TreeNode("Octagon Hole")) {
+		bool hole = params_.holeEnabled != 0;
+		if (ImGui::Checkbox("Enabled##Hole", &hole)) params_.holeEnabled = hole ? 1 : 0;
+		ImGui::DragFloat2("Center XZ##Hole", &params_.holeCenter.x, 0.1f);
+		ImGui::DragFloat("Half Width [m]##Hole", &params_.holeHalfWidth, 0.05f, 0.0f, 500.0f);
+		ImGui::DragFloat("Chamfer [m]##Hole", &params_.holeChamfer, 0.05f, 0.0f, 500.0f);
+		ImGui::TreePop();
+	}
 	ImGui::ColorEdit3("Water Color", &params_.waterColor.x);
 	ImGui::DragFloat3("Absorption", &params_.absorption.x, 0.05f, 0.0f, 50.0f);
 	ImGui::DragFloat("Fresnel F0", &params_.fresnelF0, 0.005f, 0.0f, 1.0f);

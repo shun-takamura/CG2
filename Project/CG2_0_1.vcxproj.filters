@@ -34,6 +34,9 @@
     <Filter Include="DirectXGame\Game\Scene\Hub">
       <UniqueIdentifier>{3f1c8a52-7d4e-4b9a-9c61-2e8f5a0d7b13}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\StageStart">
+      <UniqueIdentifier>{02d64872-e2e9-5978-9018-66f6901e0e11}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\Transition">
       <UniqueIdentifier>{c6c2f369-1f62-5fed-a8c7-6c3c9b8b9dd3}</UniqueIdentifier>
     </Filter>
@@ -125,6 +128,12 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubTemple.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
@@ -298,6 +307,12 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubTemple.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>

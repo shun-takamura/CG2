@@ -1636,4 +1636,6 @@ def main():
             render(preview_dir / f"temple_{name}.png")
 
 
-main()
+# gen_catapult.py が形状・テクスチャの関数を import して使い回す
+if __name__ == "__main__":
+    main()

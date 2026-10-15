@@ -84,7 +84,12 @@ cbuffer WaterParams : register(b0)
     float  gRiverShoreFade;      // 水際で反射ごと消えていく幅 [m]
     float  gReflectionRtWeight;  // 反射 RT（映す物）の重み。0 で空だけ
     float  gReflectionDistance;  // > 0 なら反射 RT も波で傾いた反射の向きで引く（映る物までの想定距離 [m]）。0 で従来
-    float3 gPadding6;
+    // ----- 八角形の穴（16_StageStart.md §2）。C++ の WaterSurface::Params の末尾と 1:1 -----
+    int    gHoleEnabled;         // 0 = 穴なし
+    float  gHoleHalfWidth;       // 正方形の半分の幅 H [m]
+    float  gHoleChamfer;         // 角を落とす量 C [m]
+    float2 gHoleCenter;          // 穴の中心（ワールド XZ）
+    float2 gPadding7;
 };
 
 struct DirectionalLight
@@ -334,6 +339,18 @@ PixelShaderOutput main(WaterVertexOutput input)
     // 1ピクセルが覆う水面の幅 [m]
     const float2 xz = input.worldPosition.xz;
     const float footprint = max(length(ddx(xz)), length(ddy(xz)));
+
+    // 八角形の穴：内側（SDF < 0）は描かない（下のリフト・縦穴が見える）
+    if (gHoleEnabled != 0)
+    {
+        const float2 p = abs(xz - gHoleCenter);
+        const float sdf = max(max(p.x - gHoleHalfWidth, p.y - gHoleHalfWidth),
+                              (p.x + p.y - (2.0f * gHoleHalfWidth - gHoleChamfer)) * 0.70710678f);
+        if (sdf < 0.0f)
+        {
+            discard;
+        }
+    }
 
     // 大河モード：川のマップの水深。描かない所は波の計算より先に落とす
     float riverDepth = 0.0f;

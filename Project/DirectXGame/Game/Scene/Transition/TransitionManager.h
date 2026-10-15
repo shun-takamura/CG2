@@ -36,7 +36,8 @@ public:
 
 	/// <summary>
 	/// 覆う側に指定すると、シーンが自分で覆い切った（演じ終えた）ものとして、覆い切った状態から始める。
-	/// シーンは演じ終えてから ChangeScene を呼ぶ。開く側が kRevealByScene なら、黒のまま差し替えて開かずに終わる。
+	/// シーンは演じ終えてから ChangeScene を呼ぶ。開く側が kRevealByScene なら、黒のまま差し替えて開かずに終わる
+	/// （ただし SceneManager::ChangeScene はこの組み合わせをここへ渡さず、暗転なしで差し替える。16_StageStart.md §4.2）。
 	/// kRevealByScene と同じ値（None ＝ その側はシーンが演じる）で、覆う側と開く側のどちらに書くかで区別する
 	/// </summary>
 	static constexpr TransitionType kCoverByScene = TransitionType::None;
