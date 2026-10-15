@@ -10,6 +10,7 @@
 #include "Hub/HatchSign.h"
 #include "Hub/CockpitLighting.h"
 #include "Hub/CockpitConsole.h"
+#include "Hub/HubLiftDescent.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
@@ -75,6 +76,12 @@ void HubScene::Initialize() {
 	temple_->AddReflectionTarget(mech_->GetBody());
 	temple_->AddReflectionTarget(mech_->GetCockpit());
 	temple_->AddReflectionTarget(mech_->GetHatch());
+	// ③ のリフト（16_StageStart.md F2）。固定台は降りる前から機体の両脚の下に見えている（16 番 §2.1）
+	stageGeometry_.Load();
+	liftDescent_ = std::make_unique<HubLiftDescent>();
+	liftDescent_->Initialize(object3DManager_, dxCore_, stageGeometry_);
+	temple_->AddReflectionTarget(liftDescent_->GetClamp(0));
+	temple_->AddReflectionTarget(liftDescent_->GetClamp(1));
 	// PBR の IBL（神殿を機体の胸の位置から撮ったもの）。無いと金属は真っ黒になる
 	object3DManager_->SetEnvironmentTexture(temple_->GetIblPath());
 	// 距離フォグはステージ（StageEnvironment）が点けたまま残るので、神殿では切る
@@ -94,6 +101,7 @@ void HubScene::Initialize() {
 	boarding_.Stop();
 	disembark_.Stop();
 	entrySequence_.Stop();
+	liftDescent_->Reset();
 	reveal_.Reset();
 	state_ = State::Waiting;
 	leaving_ = false;
@@ -151,6 +159,14 @@ void HubScene::EnterArrive() {
 	cockpitTime_ = 0.0f;
 }
 
+void HubScene::StartDescent() {
+	// ③ の OUT：コクピットの中の視点のまま、機体ごとリフトで縦穴を降りる（16_StageStart.md §0・F2）。
+	// 外が透けた全天周のモニターに縦穴が映っている扱い。ステージ選択の UI はたたんで消す
+	state_ = State::Descending;
+	liftDescent_->Start();
+	attractMenu_.Reset();
+}
+
 void HubScene::Update() {
 	// 覆われている間だけ止める。開いている間は演出を進める（入力は各状態で止める）
 	if (SceneManager::GetInstance()->IsTransitionCovering()) {
@@ -187,7 +203,14 @@ void HubScene::Update() {
 	case State::Disembarking:
 		UpdateDisembarking(dt);
 		break;
+	case State::Descending:
+		UpdateDescending(dt);
+		break;
 	}
+	// 降下していない間も ImGui のシークを見え方に反映する
+	if (state_ != State::Descending) liftDescent_->Update(0.0f);
+	// リフトが床の高さにある間は穴を開けない（機体の映り込みが消えるため。16 番 §2.1）
+	temple_->SetFloorHole(liftDescent_->IsHoleOpen(), stageGeometry_.octagonHalfWidth, stageGeometry_.octagonChamfer);
 
 	ApplyPose();
 	camera_->UpdateShake(dt);
@@ -291,9 +314,8 @@ void HubScene::UpdateCockpit(float dt) {
 
 	switch (result) {
 	case CockpitConsole::Result::Stage1:
-		// ③ ステージ選択 → ステージは未定（組み合わせ表でストライプを仮置き）
-		leaving_ = true;
-		SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
+		// ③ リフトで縦穴を降りてから StagePlay へ（UpdateDescending）
+		StartDescent();
 		break;
 	case CockpitConsole::Result::BackToHub:
 		reveal_.StartShutdown();   // ②の OUT
@@ -314,6 +336,26 @@ void HubScene::UpdateDisembarking(float dt) {
 		state_ = State::Waiting;
 		attractMenu_.Reset();   // デモモードはここで一周。また神殿を見せてから「搭乗」
 	}
+}
+
+void HubScene::UpdateDescending(float dt) {
+	// 降りている間は入力を読まない
+	liftDescent_->Update(dt);
+	if (liftDescent_->ConsumeReleaseImpact()) {
+		camera_->Shake(liftDescent_->GetReleaseShakeIntensity(), liftDescent_->GetReleaseShakeSeconds());
+	}
+	if (leaving_ || !descentChangesScene_ || !liftDescent_->ShouldChangeScene()) return;
+
+	// ③ の切れ目：縦穴の位相・速さ・灯りを StagePlay へ渡して差し替える（16 番 §4.2。今は同期ロード）。
+	// 組み合わせ表が覆う・開くともシーン（None / None）なら暗転せずに差し替わる。F3 ができるまではストライプ
+	StageStartHandoff handoff = liftDescent_->MakeHandoff();
+	const CockpitReveal::State st = reveal_.Evaluate();
+	handoff.cockpitLightLevel = st.lightLevel;
+	handoff.revealAmount = st.reveal;
+	handoff.sunScale = liftDescent_->GetSunScale();
+	StageStartHandoff::Store(handoff);
+	leaving_ = true;
+	SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 }
 
 void HubScene::Draw() {
@@ -343,6 +385,7 @@ void HubScene::Draw() {
 	object3DManager_->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
 	if (temple_) temple_->Draw(dxCore_);
+	if (liftDescent_) liftDescent_->Draw(dxCore_);
 	if (mech_) mech_->Draw(dxCore_);
 	// 鏡の床は不透明物の後（ルートシグネチャを替えるので、表示板の前に Object3D を貼り直す）
 	if (temple_) temple_->DrawFloor(*camera_);
@@ -361,6 +404,11 @@ void HubScene::Draw() {
 	} else if (state_ == State::Cockpit && console_ && reveal_.GetPhase() != CockpitReveal::Phase::Arriving) {
 		const CockpitReveal::State st = reveal_.Evaluate();
 		console_->Draw(screen, st.backgroundAlpha, st.menuTime, st.collapse, cockpitTime_, IsGlowAllowed());
+	} else if (state_ == State::Descending && console_ && liftDescent_->GetUiCollapse() < 1.0f) {
+		// ステージを決めたら UI をシャットダウンと同じ形でたたむ
+		const CockpitReveal::State st = reveal_.Evaluate();
+		console_->Draw(screen, st.backgroundAlpha, st.menuTime, (std::max)(st.collapse, liftDescent_->GetUiCollapse()),
+			cockpitTime_, IsGlowAllowed());
 	}
 	tr->Flush();
 }
@@ -374,6 +422,7 @@ void HubScene::DrawBloomSources() {
 		mech_->DrawBloom(dxCore_, cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
 	}
 	if (hatchSign_) hatchSign_->DrawBloom(dxCore_);
+	if (liftDescent_) liftDescent_->DrawBloom(dxCore_, 1.0f);
 }
 
 Camera* HubScene::GetCamera() {
@@ -381,8 +430,8 @@ Camera* HubScene::GetCamera() {
 }
 
 void HubScene::ApplyPose() {
-	// 視点とハッチ：降りる間（とそのシーク中）は降りる時間軸、コクピットの中は乗り込みの最後の姿勢、ほかは乗り込み
-	const bool cockpitView = state_ == State::Cockpit;
+	// 視点とハッチ：降りる間（とそのシーク中）は降りる時間軸、コクピットの中（③の降下も）は乗り込みの最後の姿勢、ほかは乗り込み
+	const bool cockpitView = state_ == State::Cockpit || state_ == State::Descending;
 	HubBoardingSequence::Pose pose{};
 	if (state_ == State::Disembarking || disembark_.IsPreviewing()) {
 		const HubDisembarkSequence::Pose d = disembark_.GetCurrentPose();
@@ -396,6 +445,8 @@ void HubScene::ApplyPose() {
 	}
 	const CockpitReveal::State st = reveal_.Evaluate();
 
+	// ③ の降下で機体ごと下がる（カメラ・表示板は機体の原点からの相対なので一緒に下がる）
+	mech_->SetPosition({ 0.0f, liftDescent_->GetMechY(), 0.0f });
 	const Vector3& origin = mech_->GetPosition();
 	camera_->SetFovY(DegToRad(fovYDegrees_));
 	camera_->SetTranslate({ origin.x + pose.eye.x, origin.y + pose.eye.y, origin.z + pose.eye.z });
@@ -408,7 +459,9 @@ void HubScene::ApplyPose() {
 	// ハッチが閉じるにつれて弱め、外が透ける（全天周囲モニターが外を映す）につれて戻す
 	const float revealAmount = cockpitView ? st.reveal : 0.0f;
 	const float minLight = boarding_.GetMinLightScale();
-	const float lightScale = cockpitView ? (minLight + (1.0f - minLight) * revealAmount) * st.sunScale : pose.lightScale;
+	// 縦穴の中では外の光を弱める（床より下へ行くほど）
+	const float lightScale = (cockpitView ? (minLight + (1.0f - minLight) * revealAmount) * st.sunScale : pose.lightScale)
+		* liftDescent_->GetSunScale();
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(kSunLightDirection);
 		lm->SetDirectionalLightColor(kSunLightColor);
@@ -449,6 +502,7 @@ void HubScene::LoadTuning() {
 	sunIntensity_ = static_cast<float>(root["sunIntensity"].AsDouble(sunIntensity_));
 	if (mech_) mech_->LoadTuning(root["mech"]);
 	if (temple_) temple_->LoadTuning(root["temple"]);
+	if (liftDescent_) liftDescent_->LoadTuning(root["liftDescent"]);
 	boarding_.LoadTuning(root["boarding"]);
 	disembark_.LoadTuning(root["disembark"]);
 	entrySequence_.LoadTuning(root["entry"]);
@@ -466,6 +520,7 @@ void HubScene::SaveTuning() const {
 	root["sunIntensity"] = JsonValue(static_cast<double>(sunIntensity_));
 	if (mech_) mech_->SaveTuning(root["mech"]);
 	if (temple_) temple_->SaveTuning(root["temple"]);
+	if (liftDescent_) liftDescent_->SaveTuning(root["liftDescent"]);
 	boarding_.SaveTuning(root["boarding"]);
 	disembark_.SaveTuning(root["disembark"]);
 	entrySequence_.SaveTuning(root["entry"]);
@@ -483,7 +538,7 @@ void HubScene::OnImGuiTuning() {
 	if (ImGui::Button("Reload Tuning")) LoadTuning();
 	ImGui::SameLine();
 	ImGui::TextDisabled("%s", kTuningPath);
-	static const char* kStateNames[] = { "Entering", "Waiting", "Boarding", "Cockpit", "Disembarking" };
+	static const char* kStateNames[] = { "Entering", "Waiting", "Boarding", "Cockpit", "Disembarking", "Descending" };
 	static const char* kEntryNames[] = { "Temple", "Cockpit", "Disembark" };
 	ImGui::Text("State: %s  (entry: %s)", kStateNames[static_cast<int>(state_)],
 		kEntryNames[static_cast<int>(entry_)]);
@@ -557,6 +612,21 @@ void HubScene::OnImGuiTuning() {
 			state_ = State::Waiting;
 		}
 		disembark_.OnImGui(boarding_.GetHomeKey(), boarding_.GetMinLightScale());
+	}
+	if (liftDescent_ && ImGui::CollapsingHeader("Lift Descent (16 F2 / 18-3 OUT)")) {
+		// 本番と同じくコクピットの中から降りる。Reset で床の高さのコクピットへ戻す
+		if (ImGui::Button("Play##Lift")) {
+			if (state_ != State::Cockpit) EnterCockpit();
+			StartDescent();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##Lift")) {
+			liftDescent_->Reset();
+			if (state_ == State::Descending) state_ = State::Cockpit;
+		}
+		ImGui::SameLine();
+		ImGui::Checkbox("Change Scene at End", &descentChangesScene_);
+		liftDescent_->OnImGui();
 	}
 	if (cockpitLighting_ && ImGui::CollapsingHeader("Cockpit Lighting / Hex")) {
 		cockpitLighting_->OnImGui();

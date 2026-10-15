@@ -143,6 +143,13 @@ void SceneManager::ChangeScene(const std::string& sceneName, TransitionType cove
 		return;
 	}
 
+	// 覆う側も開く側もシーンが演じる（③ リフトの縦穴。16_StageStart.md §4.2）：暗転させずにそのまま差し替える。
+	// ロードの間は前のシーンの最後の1枚が残る（同期ロード）。行き先のシーンは前のシーンの続きの見え方で始める取り決め
+	if (coverType == TransitionManager::kCoverByScene && revealType == TransitionManager::kRevealByScene) {
+		if (!nextScene_) ChangeSceneImmediate(sceneName);
+		return;
+	}
+
 	pendingSceneName_ = sceneName;
 	MarkSceneChange(SceneChangeTiming::Request);
 

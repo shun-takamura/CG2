@@ -43,6 +43,12 @@ public:
 	/// <summary>鏡の床。不透明物を描いた後に呼ぶ（ルートシグネチャを替えるので、後で Object3D を描くなら DrawSetting し直す）</summary>
 	void DrawFloor(const Camera& camera);
 
+	/// <summary>
+	/// 床に八角形の穴を開ける / 閉じる（③ のリフト。16_StageStart.md §2）。
+	/// 寸法は StageStartGeometry（halfWidth・chamfer）。リフトが床の高さにある間は開けないこと（機体の映り込みが消える）
+	/// </summary>
+	void SetFloorHole(bool open, float halfWidth, float chamfer);
+
 	/// <summary>神殿の IBL（無ければタイトルの空の IBL）。Object3DManager::SetEnvironmentTexture に渡す</summary>
 	const std::string& GetIblPath() const { return iblPath_; }
 

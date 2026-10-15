@@ -1,0 +1,81 @@
+{
+  "_comment": "gen_catapult.py が書き出す。手で直さず、スクリプトの定数を直して --export する（16_StageStart.md §2・§3）",
+  "octagon": {
+    "halfWidth": 10.0,
+    "chamfer": 1.0
+  },
+  "lift": {
+    "thickness": 1.2,
+    "rimWidth": 0.3
+  },
+  "shaft": {
+    "unitHeight": 8.0,
+    "topCollarDepth": 1.5,
+    "bandY": [
+      3.78,
+      4.22
+    ]
+  },
+  "catapult": {
+    "backWallZ": -14.0,
+    "ceilingY": 25.0,
+    "shaftBaseY": 26.0,
+    "railStartZ": 10.0,
+    "tunnelEndZ": 160.0,
+    "exitLightZ": 161.0,
+    "tunnelHalfWidth": 18.0,
+    "tunnelChamfer": [
+      7.0,
+      10.0
+    ],
+    "tunnelHeight": 25.0,
+    "exitFrameInset": 1.2,
+    "cableAnchors": [
+      [
+        3.0,
+        21.0,
+        -12.8
+      ],
+      [
+        -3.0,
+        21.0,
+        -12.8
+      ]
+    ],
+    "railX": [
+      -3.0,
+      3.0
+    ],
+    "grooveHalfWidth": 0.6,
+    "grooveDepth": 0.35,
+    "liftGrooveStartZ": -1.6,
+    "clamps": [
+      [
+        -3.0,
+        0.0,
+        1.2
+      ],
+      [
+        3.0,
+        0.0,
+        1.2
+      ]
+    ],
+    "neonMaterial": "Neon",
+    "lcd": {
+      "materials": [
+        "LcdLeft",
+        "LcdRight"
+      ],
+      "uPerMeterZ": [
+        0.02546296296296296,
+        -0.02546296296296296
+      ],
+      "tileMeters": 39.27272727272727,
+      "textures": {
+        "unable": "Resources/Models/Catapult/LcdLaunchUnable.dds",
+        "ready": "Resources/Models/Catapult/LcdLaunchReady.dds"
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@
 #include "Hub/HubDisembarkSequence.h"
 #include "Hub/HubEntrySequence.h"
 #include "Hub/CockpitReveal.h"
+#include "StageStart/StageStartGeometry.h"
 #include "AttractMode.h"
 #include "Vector2.h"
 #include <memory>
@@ -17,6 +18,7 @@ class HubTemple;
 class HatchSign;
 class CockpitLighting;
 class CockpitConsole;
+class HubLiftDescent;
 
 /// <summary>
 /// ハブシーン（神殿。17_HubScene.md）。**ステージ選択（コクピット）もこのシーンの中**（2026-10-13 統合。18 番 ①「C で決まったこと」）。
@@ -27,6 +29,7 @@ class CockpitConsole;
 ///   → コクピット（CockpitReveal の時間軸で、表示板 HatchSign が LOCKED → 六角形で外が透ける CockpitLighting
 ///      → ラジアルブラー → 文字のステージ選択 CockpitConsole。①の IN）
 ///   → 「HUB に戻る」でシャットダウン（②の OUT）→ 降りる（HubDisembarkSequence。②の IN）→ 待機
+///   → 「ステージ1」で機体ごと八角形のリフトで縦穴を降りる（HubLiftDescent。③の OUT、16_StageStart.md F2）→ StagePlay へ差し替え
 /// 入口：TITLE から＝待機／シーン名 STAGESELECT（ポーズの「ステージセレクトに戻る」⑩）＝コクピットの起動から／
 ///   別のシーンから HUB へ（⑦。今はステージからデバッグの F3）＝真っ暗なコクピットに灯りが点いて（CockpitReveal の帰着）から降りる。
 /// キャンセルで白フェードしてタイトルへ（18 番 ⑧）。ゲーム終了はタイトルの責務に一本化している。
@@ -64,6 +67,7 @@ private:
 		Boarding,    // 乗り込み
 		Cockpit,     // コクピット（起動・ステージ選択・シャットダウン）
 		Disembarking,  // 降りる（機体に背を向けて乗るときと同じ道を戻り、振り返って待機の視点へ）
+		Descending,  // ③ ステージを決めて、機体ごとリフトで縦穴を降りる（コクピットの中の視点のまま）
 	};
 
 	// タイトルへ戻る（白フェード）
@@ -76,6 +80,9 @@ private:
 	void UpdateCockpit(float dt);
 	void UpdateDisembarking(float dt);
 	void UpdateEntering(float dt);
+	void UpdateDescending(float dt);
+	// ③：ステージを決めてリフトの降下を始める
+	void StartDescent();
 
 	// 今の見え方をカメラ・ハッチ・光・コクピットへ反映する
 	void ApplyPose();
@@ -101,6 +108,11 @@ private:
 	std::unique_ptr<CockpitConsole> console_;
 	// 神殿（回廊と、手のひらの手前へ伸ばした足場もこの中。待機の視点は足場の上）
 	std::unique_ptr<HubTemple> temple_;
+	// ③ のリフト・固定台・縦穴（寸法は StageStartGeometry.json）
+	StageStartGeometry stageGeometry_;
+	std::unique_ptr<HubLiftDescent> liftDescent_;
+	// デバッグ：降下の最後に StagePlay へ差し替えるか（ImGui で切ると降り続けて調整できる）
+	bool descentChangesScene_ = true;
 	VerticalMenu menu_;
 	// デモモード（AttractMode）：待機の「搭乗」・ステージ選択の項目を自動で選ぶ
 	AttractMenuTimer attractMenu_;

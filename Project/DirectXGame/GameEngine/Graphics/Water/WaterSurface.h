@@ -119,7 +119,12 @@ public:
 		// 映る物までの想定距離 [m]。> 0 なら反射 RT も空と同じく「波で傾いた反射の向き」で引く
 		// （その向きへこの距離だけ進んだ点の鏡像を投影する）。大きいほど揺れが空に近づく。0 で従来（UV を distortion だけずらす）
 		float   reflectionDistance = 0.0f;
-		float   padding6[3]{};
+		// ----- 八角形の穴（SetOctagonHole で有効。16_StageStart.md §2 の HUB の床のリフト）。内側は描かない -----
+		int     holeEnabled = 0;                            // 0 = 穴なし（既定）
+		float   holeHalfWidth = 10.0f;                      // 正方形の半分の幅 [m]
+		float   holeChamfer = 1.0f;                         // 角を落とす量 [m]
+		Vector2 holeCenter{};                               // 穴の中心（ワールド XZ）
+		float   padding7[2]{};
 	};
 
 	/// <summary>川のマップとワールド座標の対応（RiverTerrain.json と同じ値）</summary>
@@ -222,6 +227,17 @@ public:
 	void SetRippleCenter(const Vector3& center) { params_.rippleCenter = { center.x, center.z }; }
 	/// <summary>映り込む空に遠景の雲を重ねる（null で外す）。Skybox と同じ CloudLayer を渡すこと</summary>
 	void SetCloudLayer(const CloudLayer* cloudLayer) { cloudLayer_ = cloudLayer; }
+
+	/// <summary>
+	/// 水面に八角形（正方形の角を落とした形）の穴を開ける。内側（SDF &lt; 0）のピクセルは描かない。
+	/// 判定は max(|x|−H, |z|−H, (|x|+|z|−(2H−C))/√2) &lt; 0（x, z は中心からの距離）
+	/// </summary>
+	/// <param name="center">穴の中心（ワールド座標。Y は無視）</param>
+	/// <param name="halfWidth">正方形の半分の幅 H [m]</param>
+	/// <param name="chamfer">角を落とす量 C [m]</param>
+	void SetOctagonHole(const Vector3& center, float halfWidth, float chamfer);
+	void ClearHole() { params_.holeEnabled = 0; }
+	bool HasHole() const { return params_.holeEnabled != 0; }
 
 	void OnImGui();
 

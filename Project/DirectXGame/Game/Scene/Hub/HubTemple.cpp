@@ -1,6 +1,7 @@
 #include "HubTemple.h"
 
 #include "Object3DInstance.h"
+#include "Camera.h"
 #include "ModelInstance.h"
 #include "Material.h"
 #include "TextureManager.h"
@@ -236,8 +237,18 @@ void HubTemple::AddReflectionTarget(Object3DInstance* target) {
 	reflection_->AddTarget(target);
 }
 
+void HubTemple::SetFloorHole(bool open, float halfWidth, float chamfer) {
+	if (open) {
+		floor_->SetOctagonHole({ 0.0f, 0.0f, 0.0f }, halfWidth, chamfer);
+	} else {
+		floor_->ClearHole();
+	}
+}
+
 void HubTemple::RenderReflection(const Camera& camera) {
 	if (!drawFloor_) return;
+	// 床より下（③ の縦穴の中）からは床の裏しか見えないので、映り込みも床も描かない
+	if (camera.GetTranslate().y < 0.0f) return;
 	reflection_->Render(camera);
 }
 
@@ -255,6 +266,7 @@ void HubTemple::Draw(DirectXCore* dxCore) {
 
 void HubTemple::DrawFloor(const Camera& camera) {
 	if (!drawFloor_) return;
+	if (camera.GetTranslate().y < 0.0f) return;
 	// 映らなかった所（反射 RT の α=0）は空ではなく神殿の IBL を引く
 	floor_->Draw(camera, iblPath_, reflection_.get());
 }
