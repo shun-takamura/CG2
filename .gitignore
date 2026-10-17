@@ -351,3 +351,10 @@ Project/tools/Python/ollama_sample.cpp
 .env
 # シェーダの事前コンパイル出力（compile_shaders.py が Resources/Shaders から生成する）
 Project/Resources/CompiledShaders/
+# Blender が上書き保存のときに作る控え
+*.blend1
+# 自機のモデル：組み上げた元の .blend は 177MB で GitHub に上げられない（rig_player_mech.py --src-blend の入力。手元で保管）
+Project/Assets/Models/Player/PlayerModel/PlayerModel.blend
+# 自機のモデル：前の作り方（穴を手で埋める）の途中のファイル。今の作り方では使わない
+Project/Assets/Models/PlayerMech/PlayerMech_edit.blend
+Project/Assets/Models/PlayerMech/PlayerMech_rig.blend
