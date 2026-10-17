@@ -1024,12 +1024,84 @@ WING_FIT = {
     "offset": (0.0, 0.0, 0.0),    # 自動で出した位置からのずれ [m]（新しい体の大きさで）
 }
 WING_BACK_SLAB = 0.04             # 背中の表面を測る範囲（Spine2 の高さ ± これ、|x| < これ）[最初のモデルの大きさ]
+# 羽根の収納・展開のアニメーション（2026-10-17 ユーザー決定）。収納した羽根は見えない（ディゾルブで消えている）。
+#   Deploy：たたんだ形から開き、手首から先が少し遅れてしなり、のびきったら一度羽ばたく（展開は付け根から現れるディゾルブと合わせる）
+#   Stow  ：開いた形からたたむ（収納は羽根の先から消えるディゾルブと合わせる）
+# ディゾルブの濃さはエンジンが同じ秒数で動かす（アニメーションには入れない）。
+# たたみ方（2026-10-17 ユーザーのスケッチ、上から見た図）：付け根からひじまでが後ろへ倒れ、ひじから先が折り返して
+# 付け根の横へ戻る（U 字。ポケットナイフのように閉じる）。手首は曲げない。上の羽根も下の羽根も同じ。
+# 各関節を Z 軸（上向き）まわりに回す。正の角度が後ろへ回る向き（右の翼は −Z、左は +Z）。ひじは逆向きに折り返す。
+# 両翼は背中の真ん中で重ねず、左右それぞれの側で閉じる（2026-10-17 ユーザーのスケッチ）。付け根を深く倒すほど下の羽根が、
+# ひじを深く折り返すほど上の羽根の先が真ん中を越えるので、越えない角度を探して決めた（上 60/−120：幅 1.03m、下 45/−115）
+WING_FOLD_DEG = {
+    "Upper": {"Arm": 60.0, "Fore": -120.0, "Hand": 0.0},
+    "Lower": {"Arm": 45.0, "Fore": -115.0},
+}
+WING_ANIM_FPS = 30
+# クリップ：秒数と、上の羽根（Upper）・下の羽根（Lower）の関節ごとのキー [(秒, 値)]。キーのあいだは単調な 3 次補間
+# （途中のキーは速さを保って通り抜け、向きが変わるキーと両端だけ速さが 0 になる）。値の種類は
+#   fold：たたみ具合（1＝WING_FOLD_DEG の角度、0＝開き切り）
+#   bend：Z 軸まわりに足す角度 [度]（正＝後ろへ、負＝前へ）。手首のしなりと、羽根全体を前後に振る羽ばたき
+# 展開（2026-10-17 ユーザーのスケッチ。上から見た図で下が後ろ。羽ばたきは上下ではなく前後）
+#   上の羽根（6 コマ）：たたみ → V 字 → 前腕がのびて先は少し前 → 手首から先が後ろへしなる → まっすぐ → 全体が前へ振れる → 戻る
+#   下の羽根（4 コマ）：たたみ → V 字 → のびて先が後ろへ → 全体が前へ振れる → 戻る
+WING_CLIPS = {
+    # 羽ばたきは開き切ってからではなく、展開しながら大きく（同日ユーザーのスケッチ 2・3 枚目）：
+    #   開きながら、まっすぐのまま後ろへ大きく（60°）下げる → 止まらずに全体が大きく前へ振れて先が前へ反る（弓なり）
+    #   → 開いた形に戻る。後ろで「ためる」とピタッと止まって見えたのでやめた（同日ユーザー指示）
+    "Deploy": {
+        "duration": 1.35,
+        "keys": {
+            "Upper": {
+                "Arm": {"fold": [(0.0, 1.0), (0.55, 0.0)],
+                        "bend": [(0.0, 0.0), (0.55, 60.0), (1.0, -45.0), (1.35, 0.0)]},
+                "Fore": {"fold": [(0.05, 1.0), (0.55, 0.0)],
+                         "bend": [(0.55, 0.0), (1.05, -20.0), (1.35, 0.0)]},
+                "Hand": {"bend": [(0.6, 0.0), (1.1, -25.0), (1.35, 0.0)]},
+            },
+            "Lower": {
+                "Arm": {"fold": [(0.0, 1.0), (0.55, 0.0)],
+                        "bend": [(0.0, 0.0), (0.55, 45.0), (1.0, -35.0), (1.35, 0.0)]},
+                "Fore": {"fold": [(0.05, 1.0), (0.55, 0.0)],
+                         "bend": [(0.55, 0.0), (1.05, -20.0), (1.35, 0.0)]},
+            },
+        },
+    },
+    "Stow": {
+        "duration": 1.0,
+        "keys": {
+            kind: {"Arm": {"fold": [(0.1, 0.0), (1.0, 1.0)]}, "Fore": {"fold": [(0.0, 0.0), (0.9, 1.0)]}}
+            for kind in ("Upper", "Lower")
+        },
+    },
+}
 
 
 def back_surface_y(points, center_z, half):
     """背中（+Y）の表面：Spine2 の高さのまわりの、真ん中あたりの頂点のいちばん後ろ（95%）"""
     slab = points[(np.abs(points[:, 2] - center_z) < half) & (np.abs(points[:, 0]) < half)]
     return float(np.percentile(slab[:, 1], 95)) if len(slab) else float(points[:, 1].max())
+
+
+def join_images(paths, out_path):
+    """同じ大きさの画像を横に並べて 1 枚にし、元の画像は消す"""
+    imgs = [bpy.data.images.load(str(p)) for p in paths]
+    w, h = imgs[0].size
+    strip = np.zeros((h, w * len(imgs), 4), dtype=np.float32)
+    for i, img in enumerate(imgs):
+        px = np.empty(w * h * 4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        strip[:, i * w:(i + 1) * w] = px.reshape(h, w, 4)
+    out = bpy.data.images.new(out_path.stem, w * len(imgs), h, alpha=True)
+    out.pixels.foreach_set(strip.ravel())
+    out.filepath_raw = str(out_path)
+    out.file_format = "PNG"
+    out.save()
+    for img in imgs + [out]:
+        bpy.data.images.remove(img)
+    for p in paths:
+        Path(p).unlink()
+    log(f"wrote {out_path}")
 
 
 def append_objects(blend_path, names):
@@ -1064,6 +1136,124 @@ def wing_material_factors(mesh):
                 sample = px[y, x]
                 return float(np.median(sample[:, 2])), float(np.median(sample[:, 1]))
     return 0.0, 0.5
+
+
+def smoothstep(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3.0 - 2.0 * x)
+
+
+def key_value(keys, t):
+    """[(秒, 値)] のキーの時刻 t での値。単調な 3 次エルミート補間（Fritsch–Carlson）：途中のキーは速さを保って
+    通り抜け、行き止まり（前後のキーより大きい／小さい）と両端は速さ 0。範囲の外は端の値"""
+    if t <= keys[0][0]:
+        return keys[0][1]
+    if t >= keys[-1][0]:
+        return keys[-1][1]
+    ts = [k[0] for k in keys]
+    vs = [k[1] for k in keys]
+    n = len(keys)
+    slopes = [(vs[i + 1] - vs[i]) / max(ts[i + 1] - ts[i], 1e-6) for i in range(n - 1)]
+    tangents = [0.0] * n
+    for i in range(1, n - 1):
+        if slopes[i - 1] * slopes[i] > 0.0:
+            # 調和平均：行き過ぎ（オーバーシュート）を出さない
+            tangents[i] = 2.0 / (1.0 / slopes[i - 1] + 1.0 / slopes[i])
+    for i in range(n - 1):
+        if t <= ts[i + 1]:
+            h = max(ts[i + 1] - ts[i], 1e-6)
+            x = (t - ts[i]) / h
+            h00 = 2 * x ** 3 - 3 * x ** 2 + 1
+            h10 = x ** 3 - 2 * x ** 2 + x
+            h01 = -2 * x ** 3 + 3 * x ** 2
+            h11 = x ** 3 - x ** 2
+            return h00 * vs[i] + h10 * h * tangents[i] + h01 * vs[i + 1] + h11 * h * tangents[i + 1]
+    return vs[-1]
+
+
+def wing_pose_at(clip, t):
+    """クリップの時刻 t [秒] での {上/下の羽根: {関節: (fold, bend)}}"""
+    pose = {}
+    for kind, links in WING_CLIPS[clip]["keys"].items():
+        pose[kind] = {link: tuple(key_value(ch[c], t) if c in ch else 0.0 for c in ("fold", "bend"))
+                      for link, ch in links.items()}
+    return pose
+
+
+def pose_wing_fold(wing_arm, pose):
+    """{上/下の羽根: {関節: (fold, bend)}} でポーズを付ける。付け根から順に、関節の頭のまわりに Z 軸で回す
+    （たたむ・しなる・前後に振る）。右と左は鏡写しなので向きを反転する"""
+    for pb in wing_arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    for side in ("Right", "Left"):
+        sign = -1.0 if side == "Right" else 1.0
+        for kind, links in WING_FOLD_DEG.items():
+            for link in ("Arm", "Fore", "Hand"):
+                if link not in links:
+                    continue
+                fold, bend = pose.get(kind, {}).get(link, (0.0, 0.0))
+                deg = (links[link] * fold + bend) * sign
+                if deg:
+                    rotate_pose_bone(wing_arm, f"{side}{kind}Wing_{link}",
+                                     Quaternion((0.0, 0.0, 1.0), np.radians(deg)))
+
+
+def render_clip_videos(wing_arm, cam, center, out_dir):
+    """クリップごとに、そのトラックだけを効かせて動画（mp4）を撮る（真上から・斜め後ろから）"""
+    sc = bpy.context.scene
+    saved = (sc.render.resolution_x, sc.render.resolution_y, sc.render.image_settings.file_format)
+    sc.render.resolution_x, sc.render.resolution_y = 960, 600
+    sc.render.image_settings.file_format = "FFMPEG"
+    sc.render.ffmpeg.format = "MPEG4"
+    sc.render.ffmpeg.codec = "H264"
+    sc.render.fps = WING_ANIM_FPS
+    tracks = wing_arm.animation_data.nla_tracks
+    for clip, spec in WING_CLIPS.items():
+        duration = spec["duration"]
+        for track in tracks:
+            track.mute = track.name != clip
+        sc.frame_start, sc.frame_end = 0, int(round(duration * WING_ANIM_FPS)) + 10   # 最後に少し止める
+        for view, loc in (("top", (0.0, 0.001, 3.0)), ("back", (0.0, 3.0, 0.33)), ("diag", (1.8, 2.4, 1.2))):
+            look(cam, uv3(loc), center, u(1.7))
+            sc.render.filepath = str(out_dir / f"clip_{clip}_{view}.mp4")
+            bpy.ops.render.render(animation=True)
+            log(f"wrote {sc.render.filepath}")
+    for track in tracks:
+        track.mute = True
+    sc.render.resolution_x, sc.render.resolution_y, sc.render.image_settings.file_format = saved
+
+
+def add_wing_clips(wing_arm):
+    """WING_CLIPS のクリップを毎コマのキーで焼き、NLA に並べる（glTF でクリップごとに書き出せるように）"""
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = wing_arm
+    bpy.ops.object.mode_set(mode="POSE")
+    wing_arm.animation_data_create()
+    chain = [pb for pb in wing_arm.pose.bones if pb.name.split("_")[-1] in ("Arm", "Fore", "Hand")]
+    for pb in wing_arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    for clip, spec in WING_CLIPS.items():
+        duration = spec["duration"]
+        action = bpy.data.actions.new(clip)
+        action.use_fake_user = True
+        wing_arm.animation_data.action = action
+        frames = int(round(duration * WING_ANIM_FPS))
+        for f in range(frames + 1):
+            pose_wing_fold(wing_arm, wing_pose_at(clip, f / WING_ANIM_FPS))
+            for pb in chain:
+                pb.keyframe_insert("rotation_quaternion", frame=f)
+                pb.keyframe_insert("location", frame=f)
+        track = wing_arm.animation_data.nla_tracks.new()
+        track.name = clip
+        track.strips.new(clip, 0, action)
+        track.mute = True   # 焼いている間・確認画像を撮る間は、ほかのクリップがポーズを上書きしないよう止める
+        wing_arm.animation_data.action = None
+        log(f"羽根のクリップ {clip}: {duration} 秒・{frames + 1} コマ")
+    for pb in wing_arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.scene.render.fps = WING_ANIM_FPS
 
 
 def rig_wings(glb_path, body_blend, preview_dir, save_path):
@@ -1110,6 +1300,7 @@ def rig_wings(glb_path, body_blend, preview_dir, save_path):
     for o in old_body.values():
         bpy.data.objects.remove(o, do_unlink=True)
     log(f"羽根のボーン: {len(wbones)} 本")
+    add_wing_clips(wing_arm)
 
     # 反射は元の羽根のまま。テクスチャは 2K・ファイル名は PlayerWings_BaseColor / _NormalMap
     PARTS_METALLIC, PARTS_ROUGHNESS = wing_material_factors(wing_mesh)
@@ -1127,14 +1318,27 @@ def rig_wings(glb_path, body_blend, preview_dir, save_path):
         for name, loc, ortho in views:
             look(cam, uv3(loc), center, u(ortho))
             render(preview_dir / f"{name}.png")
-        fold_test(wing_arm)
-        for name, loc, ortho in (("wings_fold_back", (0.0, 3.0, 0.33), 1.6), ("wings_fold_top", (0.0, 0.001, 3.0), 1.6)):
-            look(cam, uv3(loc), center, u(ortho))
-            render(preview_dir / f"{name}.png")
+        # クリップの途中のコマ（斜め後ろ・真上から）。コマの画像を横に並べて 1 枚にする
+        for clip, spec in WING_CLIPS.items():
+            duration = spec["duration"]
+            for view, loc in (("diag", (1.8, 2.4, 1.2)), ("top", (0.0, 0.001, 3.0))):
+                paths = []
+                for i in range(6):
+                    t = duration * i / 5
+                    pose_wing_fold(wing_arm, wing_pose_at(clip, t))
+                    look(cam, uv3(loc), center, u(1.7))
+                    path = preview_dir / f"_frame_{clip}_{view}_{i}.png"
+                    render(path)
+                    paths.append(path)
+                join_images(paths, preview_dir / f"clip_{clip}_{view}.png")
         for pb in wing_arm.pose.bones:
             pb.matrix_basis = Matrix()
         bpy.context.view_layer.update()
+        render_clip_videos(wing_arm, cam, center, preview_dir)
 
+    if wing_arm.animation_data:
+        for track in wing_arm.animation_data.nla_tracks:
+            track.mute = False
     # 新しい体を外して保存（画像は隣の textures/ に PNG）
     for o in (new_body, new_rig):
         bpy.data.objects.remove(o, do_unlink=True)
