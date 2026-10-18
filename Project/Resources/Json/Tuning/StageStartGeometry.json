@@ -17,7 +17,7 @@
     ]
   },
   "catapult": {
-    "backWallZ": -14.0,
+    "backWallZ": -32.0,
     "ceilingY": 25.0,
     "shaftBaseY": 26.0,
     "railStartZ": 10.0,
@@ -34,12 +34,12 @@
       [
         3.0,
         21.0,
-        -12.8
+        -30.8
       ],
       [
         -3.0,
         21.0,
-        -12.8
+        -30.8
       ]
     ],
     "railX": [

@@ -1,7 +1,7 @@
 #include "HubMechModel.h"
 
+#include "Cockpit/CockpitModel.h"
 #include "Object3DInstance.h"
-#include "MathUtility.h"
 #include "Json/JsonValue.h"
 
 #ifdef _DEBUG
@@ -11,33 +11,32 @@
 namespace {
 	// tools/BlenderPipeline/rig_hub_mech.py で書き出して cook したもの
 	constexpr const char* kModelDir = "Resources/Models/HubMech/Export";
-
-	// Blender の (x, y, z) はエンジンで (−x, z, −y)
-	// ハッチの原点＝回転の軸。Blender の (0, −1.165, 12.343)
-	const Vector3 kCockpitAxis = { 0.0f, 12.343f, 1.165f };
-	// 座った目はコクピットの軸から Blender で (0, 0.18, 0.20)
-	const Vector3 kSeatedEyeFromAxis = { 0.0f, 0.20f, -0.18f };
 }
 
 HubMechModel::HubMechModel() = default;
 HubMechModel::~HubMechModel() = default;
 
-Vector3 HubMechModel::GetCockpitAxis() {
-	return kCockpitAxis;
+Object3DInstance* HubMechModel::GetCockpit() const {
+	return cockpit_->GetCockpit();
 }
 
-Vector3 HubMechModel::GetSeatedEye() {
-	return { kCockpitAxis.x + kSeatedEyeFromAxis.x, kCockpitAxis.y + kSeatedEyeFromAxis.y,
-		kCockpitAxis.z + kSeatedEyeFromAxis.z };
+Object3DInstance* HubMechModel::GetHatch() const {
+	return cockpit_->GetHatch();
+}
+
+void HubMechModel::SetHatchOpenRatio(float ratio) {
+	cockpit_->SetHatchOpenRatio(ratio);
+}
+
+float HubMechModel::GetHatchOpenRatio() const {
+	return cockpit_->GetHatchOpenRatio();
 }
 
 void HubMechModel::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore) {
 	body_ = std::make_unique<Object3DInstance>();
 	body_->Initialize(object3DManager, dxCore, kModelDir, "HubMech.mesh", "HubMech");
-	cockpit_ = std::make_unique<Object3DInstance>();
-	cockpit_->Initialize(object3DManager, dxCore, kModelDir, "HubMech_Cockpit.mesh", "HubMechCockpit");
-	hatch_ = std::make_unique<Object3DInstance>();
-	hatch_->Initialize(object3DManager, dxCore, kModelDir, "HubMech_Hatch.mesh", "HubMechHatch");
+	cockpit_ = std::make_unique<CockpitModel>();
+	cockpit_->Initialize(object3DManager, dxCore);
 	ApplyBodyMaterial();
 	Update();
 }
@@ -45,23 +44,18 @@ void HubMechModel::Initialize(Object3DManager* object3DManager, DirectXCore* dxC
 void HubMechModel::Update() {
 	// 本体とコクピットは同じ位置・回転（機体は回さない。正面 +Z）
 	body_->SetTranslate(position_);
-	cockpit_->SetTranslate(position_);
-	hatch_->SetTranslate({ position_.x + kCockpitAxis.x, position_.y + kCockpitAxis.y, position_.z + kCockpitAxis.z });
-	hatch_->SetRotate({ DegToRad(hatchOpenDegrees_ * hatchOpenRatio_), 0.0f, 0.0f });
 	body_->Update();
+	cockpit_->SetPosition(position_);
 	cockpit_->Update();
-	hatch_->Update();
 }
 
 void HubMechModel::Draw(DirectXCore* dxCore) {
-	if (drawBody_) body_->Draw(dxCore);
+	if (drawBody_ && !bodyHidden_) body_->Draw(dxCore);
 	cockpit_->Draw(dxCore);
-	hatch_->Draw(dxCore);
 }
 
 void HubMechModel::DrawBloom(DirectXCore* dxCore, float bloomScale, bool includeAll) {
-	cockpit_->DrawBloomPass(dxCore, bloomScale, includeAll);
-	hatch_->DrawBloomPass(dxCore, bloomScale, includeAll);
+	cockpit_->DrawBloom(dxCore, bloomScale, includeAll);
 }
 
 void HubMechModel::ApplyBodyMaterial() {
@@ -72,7 +66,7 @@ void HubMechModel::ApplyBodyMaterial() {
 
 void HubMechModel::LoadTuning(const JsonValue& node) {
 	if (!node.IsObject()) return;
-	hatchOpenDegrees_ = static_cast<float>(node["hatchOpenDegrees"].AsDouble(hatchOpenDegrees_));
+	cockpit_->SetHatchOpenDegrees(static_cast<float>(node["hatchOpenDegrees"].AsDouble(cockpit_->GetHatchOpenDegrees())));
 	overrideBodyMaterial_ = node["overrideBodyMaterial"].AsBool(overrideBodyMaterial_);
 	bodyRoughness_ = static_cast<float>(node["bodyRoughness"].AsDouble(bodyRoughness_));
 	bodyMetallic_ = static_cast<float>(node["bodyMetallic"].AsDouble(bodyMetallic_));
@@ -81,7 +75,7 @@ void HubMechModel::LoadTuning(const JsonValue& node) {
 
 void HubMechModel::SaveTuning(JsonValue& node) const {
 	node = JsonValue::MakeObject();
-	node["hatchOpenDegrees"] = JsonValue(static_cast<double>(hatchOpenDegrees_));
+	node["hatchOpenDegrees"] = JsonValue(static_cast<double>(cockpit_->GetHatchOpenDegrees()));
 	node["overrideBodyMaterial"] = JsonValue(overrideBodyMaterial_);
 	node["bodyRoughness"] = JsonValue(static_cast<double>(bodyRoughness_));
 	node["bodyMetallic"] = JsonValue(static_cast<double>(bodyMetallic_));
@@ -89,7 +83,10 @@ void HubMechModel::SaveTuning(JsonValue& node) const {
 
 void HubMechModel::OnImGui() {
 #ifdef _DEBUG
-	ImGui::DragFloat("Hatch Open (deg)", &hatchOpenDegrees_, 1.0f, -180.0f, 180.0f);
+	float hatchOpenDegrees = cockpit_->GetHatchOpenDegrees();
+	if (ImGui::DragFloat("Hatch Open (deg)", &hatchOpenDegrees, 1.0f, -180.0f, 180.0f)) {
+		cockpit_->SetHatchOpenDegrees(hatchOpenDegrees);
+	}
 	ImGui::Checkbox("Draw Body", &drawBody_);
 	ImGui::SeparatorText("Body Material");
 	bool changed = ImGui::Checkbox("Override (else cook value)", &overrideBodyMaterial_);

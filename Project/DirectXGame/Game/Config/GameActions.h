@@ -17,6 +17,7 @@ enum class Action : int {
 	Ultimate,        // 装備中の必殺技を発動
 	LockCamButton,   // ターゲットカメラ / ロックオンカメラ切替（短押し・長押しはシーン側で判別）
 	Pause,           // ポーズメニュー
+	ViewToggle,      // スタート演出の一人称 ↔ 三人称（16_StageStart.md）
 	MenuConfirm,
 	MenuCancel,
 	MenuUp,
@@ -41,6 +42,7 @@ inline std::string_view GetActionName(Action a) {
 	case Action::Ultimate:       return "Ultimate";
 	case Action::LockCamButton:  return "LockCamButton";
 	case Action::Pause:          return "Pause";
+	case Action::ViewToggle:     return "ViewToggle";
 	case Action::MenuConfirm:    return "MenuConfirm";
 	case Action::MenuCancel:     return "MenuCancel";
 	case Action::MenuUp:         return "MenuUp";

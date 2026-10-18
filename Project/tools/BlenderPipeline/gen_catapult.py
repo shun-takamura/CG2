@@ -8,6 +8,9 @@
         --with-mech           プレビューに HUB 用の機体を読み込む（遅い）
         --only <名前,...>     プレビューの構図を選ぶ（shaft / drop / clamp / hall / exit / exit_side / tps / top）
         --save <パス.blend>   生成したものを .blend で保存
+        --ibl <パス.hdr>      リフトの上の機体の胸の高さからカタパルトの中を正距円筒で撮って IBL 用の .hdr にする
+                              （例: Assets/catapult_ibl.hdr）。ネオンと液晶がチェック未完了（赤ピンク）のものをこの名前で、
+                              完了（緑）のものを <名前>_ready.hdr で書く。明るさの倍率は 2 枚で同じ。--export なしで動く
 
 方針（2026-10-15 ユーザー決定）:
     - リフト・神殿の床の穴・縦穴の断面は同じ八角形（正方形の角を落とした形）。半分の幅 OCT_H、角を落とす量 OCT_C
@@ -63,7 +66,8 @@ SHAFT_BAND_Y = (3.78, 4.22)
 SHAFT_TOP_DEPTH = 1.5
 
 # カタパルトは後ろの壁から射出口まで同じ断面（2026-10-15 ユーザー指示で広間も射出路の延長にした）
-BACK_Z = -14.0           # 後ろの壁の内側
+# 2026-10-18 ユーザー指示で −14 → −32：三人称のカメラ（機体の後方・左下、z −26 あたり）が壁の中に埋まらないように
+BACK_Z = -32.0           # 後ろの壁の内側
 CEIL_T = 1.0             # 天井の厚さ。天井の上（y = TUN_H + CEIL_T）から縦穴が続く
 FLOOR_T = 0.5
 PIT_DEPTH = 3.0          # リフトが収まる穴の深さ
@@ -113,6 +117,13 @@ MAT_NAMES = ["Metal", "MetalDark", "Hazard", "Light", "Neon", "Gold", "Marble", 
 HUB_FLOOR_URI = "../HubTemple/HubFloor_BaseColor.png"
 GEOMETRY_JSON = Path("Resources/Json/Tuning/StageStartGeometry.json")
 CLEARANCE_MIN = 0.5      # 機体と壁の最小の隙間
+
+# IBL（2026-10-18 ユーザー決定：ネオン赤ピンク／緑の 2 枚、地下なので神殿の 0.45 より暗く）
+IBL_EYE = (0.0, 12.0, 0.0)   # リフトの停止位置の上、機体の胸の高さ（神殿の IBL と同じ）
+IBL_SIZE = (1024, 512)
+IBL_SAMPLES = 128
+IBL_MEAN = 0.25          # 赤ピンクの 1 枚の平均の明るさ（線形）。緑の 1 枚にも同じ倍率をかける
+NEON_EMISSION = {"unable": (1.0, 0.18, 0.42), "ready": (0.25, 1.0, 0.45)}
 
 LOG = "[gen_catapult]"
 SQRT2 = math.sqrt(2.0)
@@ -811,16 +822,87 @@ def setup_preview_lighting():
         scene.collection.objects.link(lamp)
 
 
+# ============================================================
+# IBL
+# ============================================================
+def set_launch_state(mats, tex, state):
+    """ネオンの発光色と液晶の文字を、チェック未完了（unable）／完了（ready）にする"""
+    neon = mats[MAT_NEON].node_tree.nodes["Principled BSDF"]
+    neon.inputs["Emission Color"].default_value = (*NEON_EMISSION[state], 1.0)
+    image = tex["LcdLaunchUnable" if state == "unable" else "LcdLaunchReady"]
+    for idx in (MAT_LCD_L, MAT_LCD_R):
+        for node in mats[idx].node_tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image is not None and node.image.name.startswith("LcdLaunch"):
+                node.image = image
+
+
+def render_ibl_raw(name):
+    """IBL_EYE から正距円筒で撮り、線形の RGBA（縦×横×4 を平らにしたもの）を返す"""
+    scene = bpy.context.scene
+    ht.setup_render(*IBL_SIZE, IBL_SAMPLES)
+    cam = scene.camera
+    if cam is None:
+        cam = bpy.data.objects.new("Camera", bpy.data.cameras.new("Camera"))
+        scene.collection.objects.link(cam)
+        scene.camera = cam
+    cam.data.type = "PANO"
+    cam.data.panorama_type = "EQUIRECTANGULAR"
+    cam.data.clip_end = 400.0
+    cam.location = Vector(ht.e2b(IBL_EYE))
+    # 神殿の IBL（gen_hub_temple.py の render_ibl）・タイトルの空と同じ向き
+    cam.rotation_euler = (math.radians(90.0), 0.0, 0.0)
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
+    scene.view_settings.exposure = 0.0
+    tmp = Path(bpy.app.tempdir) / f"{name}_raw.exr"
+    scene.render.image_settings.file_format = "OPEN_EXR"
+    scene.render.image_settings.color_depth = "32"
+    scene.render.filepath = str(tmp)
+    bpy.ops.render.render(write_still=True)
+    img = bpy.data.images.load(str(tmp))
+    px = np.empty(img.size[0] * img.size[1] * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    return px.reshape(-1, 4), img.size
+
+
+def save_hdr(px, size, path):
+    out = bpy.data.images.new(path.stem, width=size[0], height=size[1], alpha=False, float_buffer=True)
+    out.pixels.foreach_set(px.ravel())
+    out.filepath_raw = str(path.resolve())
+    out.file_format = "HDR"
+    out.save()
+    print(f"{LOG} wrote IBL {path}")
+
+
+def render_ibl(path, mats, tex):
+    """赤ピンク（path）と緑（<path>_ready.hdr）の 2 枚。倍率は赤ピンクの平均を IBL_MEAN にそろえる値で共通"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    weights = np.array([0.2126, 0.7152, 0.0722])
+    scale = None
+    for state, out in (("unable", path), ("ready", path.with_name(f"{path.stem}_ready{path.suffix}"))):
+        set_launch_state(mats, tex, state)
+        px, size = render_ibl_raw(out.stem)
+        mean = float((px[:, :3] @ weights).mean())
+        if scale is None:
+            scale = IBL_MEAN / max(mean, 1e-6)
+        px[:, :3] *= scale
+        print(f"{LOG} IBL {state} mean {mean:.4f} x{scale:.3f} -> {mean * scale:.4f}")
+        save_hdr(px, size, out)
+    set_launch_state(mats, tex, "unable")
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     export_dir = ht.arg_path(argv, "--export")
     preview_dir = ht.arg_path(argv, "--preview")
     save_path = ht.arg_path(argv, "--save")
+    ibl_path = ht.arg_path(argv, "--ibl")
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     check_clearance()
     tex_dir = export_dir if export_dir is not None else Path(bpy.app.tempdir) / "catapult_tex"
-    mats = make_materials(make_textures(tex_dir))
+    tex = make_textures(tex_dir)
+    mats = make_materials(tex)
     lift = build_lift(mats)
     unit = build_shaft_unit(mats)
     top = build_shaft_top(mats)
@@ -840,11 +922,16 @@ def main():
     if save_path is not None:
         save_path.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.wm.save_as_mainfile(filepath=str(save_path.resolve()))
-    if preview_dir is None:
+    if preview_dir is None and ibl_path is None:
         return
 
     preview_floor_texture(mats)
     setup_preview_lighting()
+    # IBL は機体を入れずに撮る（神殿と同じ）
+    if ibl_path is not None:
+        render_ibl(ibl_path, mats, tex)
+    if preview_dir is None:
+        return
     if "--with-mech" in argv:
         ht.import_mech()
     preview_dir.mkdir(parents=True, exist_ok=True)

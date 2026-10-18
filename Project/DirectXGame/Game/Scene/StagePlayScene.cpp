@@ -35,6 +35,7 @@
 #include "Particle/GPUParticleManager.h"
 #include "SpriteInstance.h"
 #include "LightManager.h"
+#include "StageStart/StageStartGeometry.h"
 #include "LogBuffer.h"
 #include "SessionLogger.h"
 #include "Components/SphereCollider.h"
@@ -625,6 +626,9 @@ void StagePlayScene::LoadTuningFromJson() {
 		precisionBlurMaxPx_       = static_cast<float>(pa["blurMaxPx"].AsDouble(precisionBlurMaxPx_));
 	}
 
+	// スタート演出（16_StageStart.md）
+	if (stageStart_) stageStart_->LoadTuning(root["stageStart"]);
+
 	// ----- phase（ステージ進行ステートマシン）-----
 	const JsonValue& ph = root["phase"];
 	if (ph.IsObject()) {
@@ -1074,6 +1078,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	phObj["seekMaxSec"]         = static_cast<double>(seekMaxSec_);
 	phObj["landingDurationSec"] = static_cast<double>(landingDuration_);
 	root["phase"] = std::move(phObj);
+
+	if (stageStart_) stageStart_->SaveTuning(root["stageStart"]);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -2153,12 +2159,14 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 
 	if (ImGui::CollapsingHeader("Stage Phase", ImGuiTreeNodeFlags_DefaultOpen)) {
-		static const char* kPhaseNames[] = { "Rail", "Landing", "Boss" };
+		static const char* kPhaseNames[] = { "Rail", "Landing", "Boss", "StageStart" };
 		ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.9f, 1.0f), "Phase: %s", kPhaseNames[(int)phase_]);
 		if (phase_ == Phase::Rail) {
 			ImGui::Text("Stage: %.1f / %.1f s", railStage_ ? railStage_->GetStageSeconds() : 0.0f, seekMaxSec_);
 		} else if (phase_ == Phase::Landing) {
 			ImGui::Text("Landing: %.1f / %.1f s", landingTimer_, landingDuration_);
+		} else if (phase_ == Phase::StageStart) {
+			ImGui::Text("Stage Start (16_StageStart.md)");
 		} else {
 			ImGui::Text("Boss: %s", (bossStage_ && bossStage_->IsBossAlive()) ? "alive" : "down");
 		}
@@ -2698,6 +2706,17 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 
 	// 末尾で一括保存（変更があれば即書き出し）
+	if (stageStart_ && ImGui::CollapsingHeader("Stage Start (16 F3 / 18-3 IN)")) {
+		stageStart_->OnImGui();
+		if (ImGui::Button("Play From Descent (Phase)")) {
+			stageStart_->BeginDescent(stageStart_->MakeDefaultHandoff());
+			phase_ = prevPhase_ = Phase::StageStart;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save Stage Start")) changed = true;
+		ImGui::TextDisabled("コクピットの灯りは Hub.json（HUB の Hub Tuning で保存）");
+	}
+
 	if (changed) SaveTuningToJson();
 #endif
 }
@@ -2722,6 +2741,8 @@ void StagePlayScene::Initialize() {
 	// StageEnvironment も同様（LoadTuningFromJson で root["sections"] を読む）。
 	// Skybox の紐付けは実体が出来てから Initialize() で行う。
 	stageEnv_ = std::make_unique<StageEnvironment>();
+	// スタート演出も同様（LoadTuningFromJson で root["stageStart"] を読む）
+	stageStart_ = std::make_unique<StageStartPart>();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	LoadTuningFromJson();
@@ -2777,6 +2798,16 @@ void StagePlayScene::Initialize() {
 	// 大河の水面。PSO 等はここで作り、川のデータは雲の中（loadStartSec）で別スレッドから読む
 	riverWater_ = std::make_unique<RiverWater>();
 	riverWater_->Initialize(dxCore_, srvManager_, object3DManager_, stageEnv_->GetCloudLayer());
+
+	// スタート演出（カタパルト。施設はワールドの離れた所に置く）。コクピットの灯りは HUB と同じ値（Hub.json）
+	stageStart_->Initialize(this, camera_.get(), object3DManager_, dxCore_, skinningComputeManager_, srvManager_);
+	{
+		constexpr const char* kHubTuningPath = "Resources/Json/Tuning/Hub.json";
+		if (std::filesystem::exists(kHubTuningPath)) {
+			const auto hub = JsonParser::ParseFile(kHubTuningPath);
+			if (hub.success) stageStart_->LoadCockpitTuning(hub.value["cockpitLighting"]);
+		}
+	}
 
 	phase_ = Phase::Rail;
 	prevPhase_ = Phase::Rail;
@@ -2865,6 +2896,31 @@ void StagePlayScene::Initialize() {
 		specialGauge_ = std::clamp(ckSpecialGauge, 0.0f, specialGaugeMax_);
 	}
 
+	// スタート演出。HUB から渡された値は必ずここで取って捨てる（リトライなどで古い値を拾わないように）。
+	// HUB から来たら③IN の降下から、HUB を通らずに来たら（リトライ・デバッグの直接開始）雲の上から（2026-10-18 ユーザー決定）。
+	// ボス戦からのリトライはスタート演出なし
+	{
+		StageStartHandoff handoff;
+		const bool fromHub = StageStartHandoff::Take(handoff);
+		// 射出口の向こうに見せる雲の上＝レールの t=0 のカメラ位置（雲の上の場面 S4 と同じ景色）
+		if (railStage_) stageStart_->SetSkyAnchor(railStage_->SampleCameraPathAtSec(0.0f));
+		if (phase_ != Phase::Boss) {
+			if (fromHub) {
+				stageStart_->BeginDescent(handoff);
+			}
+#ifdef _DEBUG
+			else if (stageStart_->GetDebugDescentWithoutHandoff()) {
+				stageStart_->BeginDescent(stageStart_->MakeDefaultHandoff());
+			}
+#endif
+			else {
+				stageStart_->BeginFromCloudTop();
+			}
+			phase_ = Phase::StageStart;
+			prevPhase_ = Phase::StageStart;
+		}
+	}
+
 	// --bench-hold <秒>：その秒へシークしてレールを止める（同じ画面のまま GPU 時間を測る用）
 	if (const std::wstring w = FindCommandLineValue(L"--bench-hold"); !w.empty()) {
 		benchHoldSec_ = static_cast<float>(std::wcstod(w.c_str(), nullptr));
@@ -2879,6 +2935,8 @@ void StagePlayScene::Finalize() {
 	if (dxCore_) {
 		dxCore_->WaitForGpu();
 	}
+	// スタート演出のポイントライト・共有のマテリアル（コクピット・液晶）を返す
+	if (stageStart_) stageStart_->Finalize();
 	// Object3DManager はシーンをまたいで生きているので、フォグを必ず切って返す
 	// （切らないと DemoScene 等に StagePlay の霧が残る）。
 	if (object3DManager_) object3DManager_->DisableFog();
@@ -3204,9 +3262,20 @@ void StagePlayScene::Update() {
 		case Phase::Rail:    phase_ = Phase::Landing; break;
 		case Phase::Landing: phase_ = Phase::Boss;    break;
 		case Phase::Boss:    phase_ = Phase::Rail;    break;
+		case Phase::StageStart:
+			if (stageStart_) stageStart_->Skip();
+			phase_ = Phase::Rail;
+			prevPhase_ = Phase::Rail;
+			break;
 		}
 	}
 #endif
+
+	// ----- スタート演出（③IN〜雲の上）。演出中はレール・自機の操作・HUD を動かさない -----
+	// 終わったフレームはそのまま下のレールへ進む（1 フレームでもカタパルトのカメラのまま描かないように）
+	if (phase_ == Phase::StageStart && UpdateStageStart()) {
+		return;
+	}
 
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
@@ -4358,6 +4427,10 @@ void StagePlayScene::Update() {
 }
 
 void StagePlayScene::Draw() {
+	if (phase_ == Phase::StageStart && stageStart_ && stageStart_->IsActive()) {
+		DrawStageStart();
+		return;
+	}
 	const bool drawBossWater = (phase_ == Phase::Boss && bossWater_);
 	// 波のシミュレーション（コンピュート）はシーン RT をバインドする前に回す
 	if (drawBossWater) bossWater_->DispatchSimulation();
@@ -4512,9 +4585,95 @@ void StagePlayScene::Draw() {
 	// Effect Editor のプレビューは Game::Draw がシーンに関係なく描く
 }
 
+bool StagePlayScene::UpdateStageStart() {
+	auto* actions = input_->GetActionMap();
+	// 同期ロードの直後の 1 フレームは dt が大きい（ロードの間 HUB の最後の 1 枚が止まっていた）ので、降下が飛ばないよう切り詰める
+	const float dt = (std::min)(GetScaledDeltaTime(TimeGroup::UI), 1.0f / 30.0f);
+	const Vector2 screen = { static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()) };
+	stageStart_->Update(actions, dt, screen);
+	if (!stageStart_->IsActive()) {
+		// 終わった（RestoreStageEnvironment 済み）。このフレームからレール
+		phase_ = Phase::Rail;
+		prevPhase_ = Phase::Rail;
+		return false;
+	}
+	camera_->UpdateShake(dt);
+	camera_->Update();
+	UpdateDebugCameraIfActive();
+	if (skybox_) skybox_->Update(dt);
+	// 射出口の向こうの雲（流れ・遠景の雲の視差）は雲の上の仮の目の位置で進める
+	if (stageEnv_ && stageStart_->DrawsCloudsThroughExit()) {
+		const Vector3 e = camera_->GetTranslate();
+		const Vector3 o = stageStart_->GetSkyViewOffset();
+		stageEnv_->UpdateClouds(dt, { e.x + o.x, e.y + o.y, e.z + o.z });
+	}
+	UpdateDynamicObjects();
+	UpdateDynamicAnimated(dt);
+	return true;
+}
+
+void StagePlayScene::DrawStageStart() {
+	auto* commandList = dxCore_->GetCommandList();
+	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
+	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
+	skyboxManager_->DrawSetting();
+	if (skybox_) skybox_->Draw(dxCore_);
+
+	auto normalDsv = dxCore_->GetDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
+	object3DManager_->DrawSetting();
+	LightManager::GetInstance()->BindLights(commandList);
+	// 施設とコクピット（一人称）／演出専用の機体（三人称）。ステージの物は離れた所にあり閉じた施設の中からは
+	// 見えないので描かない。ゲームの自機は SetPlayerHidden で隠している
+	stageStart_->Draw(dxCore_);
+	// 射出口の向こうの雲海：今のカメラを位置だけ雲の上へずらして描く。向き・画角は同じなので
+	// トンネルの壁の深度で雲が隠れ、射出口の穴からだけ見える（レイマーチは不透明物の深度で止まる）
+	if (stageEnv_ && camera_ && stageStart_->DrawsCloudsThroughExit()) {
+		Camera skyCamera = *camera_;
+		const Vector3 e = camera_->GetTranslate();
+		const Vector3 o = stageStart_->GetSkyViewOffset();
+		skyCamera.SetTranslate({ e.x + o.x, e.y + o.y, e.z + o.z });
+		skyCamera.Update();
+		stageEnv_->DrawRaymarchClouds(skyCamera, Game::GetPostEffect()->GetSceneRenderTarget());
+	}
+	DrawGlobalEffects();
+
+	spriteManager_->DrawSetting();
+	if (paused_) DrawPauseMenu();
+	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized()) tr->Flush();
+
+	LineRenderer::GetInstance()->SetCamera(camera_.get());
+	LineRenderer::GetInstance()->Draw();
+}
+
+bool StagePlayScene::HasBloomSources() const {
+	return phase_ == Phase::StageStart && stageStart_ && stageStart_->HasBloom();
+}
+
+void StagePlayScene::DrawBloomSources() {
+	if (stageStart_) stageStart_->DrawBloom(dxCore_);
+}
+
+void StagePlayScene::SetPlayerHidden(bool hidden) {
+	if (player_) player_->SetVisible(!hidden);
+}
+
+void StagePlayScene::RestoreStageEnvironment() {
+	SetPlayerHidden(false);
+	if (camera_) {
+		camera_->SetNearClip(cameraNearClip_);
+		camera_->SetFovY(baseFovY_);
+	}
+	// IBL は空の cubemap に、フォグ・平行光源・空は今のステージの時刻のセクションへ
+	if (skybox_ && object3DManager_) object3DManager_->SetEnvironmentTexture(skybox_->GetCubemapFilePath());
+	if (stageEnv_) stageEnv_->Reset(railStage_ ? railStage_->GetStageSeconds() : 0.0f);
+}
+
 void StagePlayScene::Seek(float seconds) {
 	// Boss/Landing 中に Rail タイムラインを Seek したら Rail へ戻す（ボス・地面・コントローラを掃除）。
 	if (phase_ != Phase::Rail) {
+		if (stageStart_) stageStart_->Skip();
 		if (bossStage_) bossStage_->Reset();
 		bossBattleActive_ = false;
 		phase_       = Phase::Rail;

@@ -34,6 +34,9 @@
     <Filter Include="DirectXGame\Game\Scene\Hub">
       <UniqueIdentifier>{3f1c8a52-7d4e-4b9a-9c61-2e8f5a0d7b13}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Cockpit">
+      <UniqueIdentifier>{819fddb1-34dc-4cec-a531-14ef0963c430}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\StageStart">
       <UniqueIdentifier>{02d64872-e2e9-5978-9018-66f6901e0e11}</UniqueIdentifier>
     </Filter>
@@ -135,6 +138,15 @@
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.cpp">
+      <Filter>DirectXGame\Game\Scene\Cockpit</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartPart.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
@@ -150,8 +162,8 @@
     <ClCompile Include="DirectXGame\Game\Scene\Hub\CockpitReveal.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\Game\Scene\Hub\CockpitLighting.cpp">
-      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    <ClCompile Include="DirectXGame\Game\Scene\Cockpit\CockpitLighting.cpp">
+      <Filter>DirectXGame\Game\Scene\Cockpit</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HatchSign.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
@@ -314,6 +326,15 @@
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.h">
+      <Filter>DirectXGame\Game\Scene\Cockpit</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartPart.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
@@ -329,8 +350,8 @@
     <ClInclude Include="DirectXGame\Game\Scene\Hub\CockpitReveal.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Scene\Hub\CockpitLighting.h">
-      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    <ClInclude Include="DirectXGame\Game\Scene\Cockpit\CockpitLighting.h">
+      <Filter>DirectXGame\Game\Scene\Cockpit</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HatchSign.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>

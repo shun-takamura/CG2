@@ -14,6 +14,7 @@
     "Ultimate":      [ "kb.F", "gp.R3" ],
     "LockCamButton": [ "kb.Tab", "gp.LB" ],
     "Pause":         [ "kb.Escape", "gp.Start" ],
+    "ViewToggle":    [ "kb.V", "gp.Back" ],
 
     // ----- メニュー -----
     "MenuConfirm":   [ "kb.Enter", "gp.A" ],

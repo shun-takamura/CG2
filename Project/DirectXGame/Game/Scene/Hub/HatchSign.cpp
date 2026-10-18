@@ -1,6 +1,6 @@
 #include "HatchSign.h"
 
-#include "HubMechModel.h"
+#include "Cockpit/CockpitModel.h"
 #include "CockpitReveal.h"
 #include "Object3DInstance.h"
 #include "ModelInstance.h"
@@ -132,7 +132,7 @@ void HatchSign::Update(float deltaTime, const Vector3& mechOrigin) {
 	time_ += deltaTime;
 	switchTime_ += deltaTime;
 	if (!board_) return;
-	const Vector3 eye = HubMechModel::GetSeatedEye();
+	const Vector3 eye = CockpitModel::GetSeatedEye();
 	board_->SetTranslate({ mechOrigin.x + eye.x + offsetFromEye_.x, mechOrigin.y + eye.y + offsetFromEye_.y,
 		mechOrigin.z + eye.z + offsetFromEye_.z });
 	board_->SetRotate({ DegToRad(rotationDegrees_.x), DegToRad(rotationDegrees_.y), DegToRad(rotationDegrees_.z) });

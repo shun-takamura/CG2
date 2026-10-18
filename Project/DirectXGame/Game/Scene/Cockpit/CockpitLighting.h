@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-class HubMechModel;
+class CockpitModel;
 class JsonValue;
 
 /// <summary>
@@ -14,7 +14,8 @@ class JsonValue;
 ///  - 灯り：緑のポイントライト（LightManager から借りる）と、光る部位（CP_Glow など）の発光。強さ level 0..1
 ///  - 外を映す：モニターの部位（壁・ハッチ）を画面座標の六角形のディゾルブで中心から晴らす。reveal 0..1
 /// 部位はマテリアルの名前（.mat のパスに含まれる文字）で選ぶ。ModelInstance はシーンをまたいで共有されるので、
-/// 毎フレーム書き直し、Finalize で発光とディゾルブを 0 に戻す。調整値は Hub.json の "cockpitLighting"。
+/// 毎フレーム書き直し、Finalize で発光とディゾルブを 0 に戻す。調整値は Hub.json の "cockpitLighting"
+/// （StagePlay のスタート演出も同じ値を読む。③の切れ目で灯りの見え方をそろえるため。16_StageStart.md §4.1）。
 /// </summary>
 class CockpitLighting {
 public:
@@ -22,13 +23,13 @@ public:
 	void ResetToDefaults();
 
 	void Initialize();
-	void Finalize(HubMechModel* mech);
+	void Finalize(CockpitModel* cockpit);
 
 	/// <summary>
 	/// 灯りの強さと外が透ける割合をマテリアル・ライトへ反映する（screenSize は六角形の中心と大きさに使う）。
 	/// signColor はハッチの表示板の色。followSign の部位と緑のポイントライトはこの色になる（LOCKED＝緑 / UNLOCK＝赤とピンク）
 	/// </summary>
-	void Apply(HubMechModel& mech, float level, float reveal, const Vector2& screenSize, const Vector3& signColor);
+	void Apply(CockpitModel& cockpit, float level, float reveal, const Vector2& screenSize, const Vector3& signColor);
 
 	/// <summary>発光 RT に描く物があるか（灯りが点いている・六角形が光っている）</summary>
 	bool HasBloom() const { return level_ > 0.0f || IsRevealing(); }
@@ -48,7 +49,7 @@ private:
 		bool followSign = true; // 表示板の色にする
 	};
 	struct Lamp {
-		Vector3 offset;         // コクピットの軸（HubMechModel::GetCockpitAxis）からの位置
+		Vector3 offset;         // コクピットの軸（CockpitModel::GetAxis）からの位置
 		float intensity = 1.0f;
 		float radius = 2.0f;
 		float decay = 2.0f;

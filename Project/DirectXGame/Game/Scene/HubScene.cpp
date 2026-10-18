@@ -8,7 +8,7 @@
 #include "Hub/HubMechModel.h"
 #include "Hub/HubTemple.h"
 #include "Hub/HatchSign.h"
-#include "Hub/CockpitLighting.h"
+#include "Cockpit/CockpitLighting.h"
 #include "Hub/CockpitConsole.h"
 #include "Hub/HubLiftDescent.h"
 #include "SceneManager.h"
@@ -130,7 +130,7 @@ void HubScene::Initialize() {
 void HubScene::Finalize() {
 	SoundManager::GetInstance()->Stop2DSound("bgm_title");
 	if (auto* blur = Game::GetPostEffect()->radialBlur) blur->SetEnabled(false);
-	if (cockpitLighting_) cockpitLighting_->Finalize(mech_.get());
+	if (cockpitLighting_) cockpitLighting_->Finalize(mech_ ? &mech_->GetCockpitModel() : nullptr);
 	if (hatchSign_) hatchSign_->Finalize();
 }
 
@@ -347,12 +347,25 @@ void HubScene::UpdateDescending(float dt) {
 	if (leaving_ || !descentChangesScene_ || !liftDescent_->ShouldChangeScene()) return;
 
 	// ③ の切れ目：縦穴の位相・速さ・灯りを StagePlay へ渡して差し替える（16 番 §4.2。今は同期ロード）。
-	// 組み合わせ表が覆う・開くともシーン（None / None）なら暗転せずに差し替わる。F3 ができるまではストライプ
+	// 組み合わせ表は覆う・開くともシーン（None / None）なので暗転せずに差し替わる。StagePlay は StageStartPart が続きを降りる（F3）
 	StageStartHandoff handoff = liftDescent_->MakeHandoff();
 	const CockpitReveal::State st = reveal_.Evaluate();
 	handoff.cockpitLightLevel = st.lightLevel;
 	handoff.revealAmount = st.reveal;
 	handoff.sunScale = liftDescent_->GetSunScale();
+	// 視点（コクピットの中の視点＝乗り込みの最後の姿勢）と光は今のフレームの値をそのまま渡す
+	const HubBoardingSequence::Pose pose = boarding_.Evaluate(boarding_.GetEndTime());
+	handoff.eyeOffset = pose.eye;
+	handoff.eyeYaw = pose.yaw;
+	handoff.eyePitch = pose.pitch;
+	handoff.fovY = DegToRad(fovYDegrees_);
+	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
+		const auto* light = lm->GetDirectionalLightData();
+		handoff.sunDirection = light->direction;
+		handoff.sunColor = light->color;
+		handoff.sunIntensity = light->intensity;
+	}
+	handoff.iblPath = object3DManager_->GetEnvironmentTexturePath();
 	StageStartHandoff::Store(handoff);
 	leaving_ = true;
 	SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
@@ -454,6 +467,16 @@ void HubScene::ApplyPose() {
 
 	mech_->SetHatchOpenRatio(pose.hatchOpenRatio);
 	mech_->Update();
+	// コクピットの中にいる間は本体を描かない（外が透けると全天周のモニターの左右に腕・脚が映り込むため）。
+	// 透ける前はコクピットの壁が覆っているので見た目は変わらない。降りる（Disembarking）のはシャットダウンで壁が戻った後。
+	// 床の映り込みからも外す（StagePlay の一人称も本体を描かないので、③ の切れ目の前後でそろう）
+	if (cockpitView != mech_->IsBodyHidden()) {
+		mech_->SetBodyHidden(cockpitView);
+		if (temple_) {
+			if (cockpitView) temple_->RemoveReflectionTarget(mech_->GetBody());
+			else temple_->AddReflectionTarget(mech_->GetBody());
+		}
+	}
 
 	// 平行光源の既定 intensity は 0 なので毎フレーム決める。
 	// ハッチが閉じるにつれて弱め、外が透ける（全天周囲モニターが外を映す）につれて戻す
@@ -472,7 +495,7 @@ void HubScene::ApplyPose() {
 	hatchSign_->SetLocked(cockpitView && st.signLocked);
 	hatchSign_->SetVisibility(cockpitView ? st.signAlpha : 1.0f);
 	// コクピットの灯り・光る部位（表示板と同じ色）・外を映す六角形
-	cockpitLighting_->Apply(*mech_, st.lightLevel, revealAmount, GetScreenSize(), hatchSign_->GetColor());
+	cockpitLighting_->Apply(mech_->GetCockpitModel(), st.lightLevel, revealAmount, GetScreenSize(), hatchSign_->GetColor());
 
 	// ラジアルブラー（背景を出す直前に上げ、文字を出すときに下げる）
 	if (auto* blur = Game::GetPostEffect()->radialBlur) {

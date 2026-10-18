@@ -9,6 +9,7 @@
 #include "BoneSocket.h"
 #include "RailStagePart.h"
 #include "BossStagePart.h"
+#include "StageStart/StageStartPart.h"
 #include "StageEnvironment.h"
 #include "VerticalMenu.h"
 #include "AttractMode.h"
@@ -39,12 +40,13 @@ class RiverWater;
 /// Rail 専用ロジック（レールカメラ駆動・Wave/敵スポーン・Seek再構築）は RailStagePart に切り出し、
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
-class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost {
+class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
 		Landing,    // 着地遷移（カメラ補間）
 		Boss,       // ボス戦3Dアクション
+		StageStart, // スタート演出（16_StageStart.md。Rail の前。名前の表の都合で最後に置く）
 	};
 
 	StagePlayScene();
@@ -63,6 +65,10 @@ public:
 	float GetSeekMaxSeconds() const override;
 
 	Camera* GetCamera() override;
+
+	// 発光パス（スタート演出の照明の帯・ネオン・コクピットの灯り）
+	bool HasBloomSources() const override;
+	void DrawBloomSources() override;
 
 	// Wave Editor 有効時、ビューポートへのプレハブドロップをウェーブエントリ追加として処理する。
 	// 戻り値 true でドロップを消費（通常の InstantiatePrefab を抑止）。Debug ビルドのみ機能。
@@ -148,6 +154,16 @@ private:
 		return GameScene::SpawnEnemyAt(prefabName, pos);
 	}
 	void ClearBossRuntimeState() override; // Enemy/Boss/Terrain タグ＋敵コントローラ掃除（定義は .cpp）
+
+	// ----- IStageStartHost 実装（private override。StageStartPart 経由のみ）-----
+	void SetPlayerHidden(bool hidden) override;
+	void RestoreStageEnvironment() override;
+
+	// スタート演出（③IN〜雲の上。16_StageStart.md）。StagePlayScene は IStageStartHost 経由でのみこれを操作する。
+	std::unique_ptr<StageStartPart> stageStart_;
+	// スタート演出の Update / Draw（演出中は true を返し、レール・HUD は動かさない）
+	bool UpdateStageStart();
+	void DrawStageStart();
 
 	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
 	// StagePlayScene は IBossStageHost 経由でのみこれを操作する。

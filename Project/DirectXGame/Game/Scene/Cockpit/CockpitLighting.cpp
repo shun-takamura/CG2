@@ -1,6 +1,6 @@
 #include "CockpitLighting.h"
 
-#include "HubMechModel.h"
+#include "CockpitModel.h"
 #include "Object3DInstance.h"
 #include "ModelInstance.h"
 #include "Material.h"
@@ -71,15 +71,15 @@ void CockpitLighting::Initialize() {
 	reveal_ = 0.0f;
 }
 
-void CockpitLighting::Finalize(HubMechModel* mech) {
+void CockpitLighting::Finalize(CockpitModel* cockpit) {
 	auto* lm = LightManager::GetInstance();
 	for (uint32_t& slot : lampSlots_) {
 		if (slot != kInvalidLightSlot) lm->ReleasePointLight(slot);
 		slot = kInvalidLightSlot;
 	}
 	// 共有のマテリアルを他のシーンへ持ち越さない
-	if (!mech) return;
-	for (Object3DInstance* part : { mech->GetCockpit(), mech->GetHatch() }) {
+	if (!cockpit) return;
+	for (Object3DInstance* part : { cockpit->GetCockpit(), cockpit->GetHatch() }) {
 		ModelInstance* model = part ? part->GetModelInstance() : nullptr;
 		if (!model) continue;
 		model->ClearEmissive();
@@ -89,15 +89,15 @@ void CockpitLighting::Finalize(HubMechModel* mech) {
 	}
 }
 
-void CockpitLighting::Apply(HubMechModel& mech, float level, float reveal, const Vector2& screenSize,
+void CockpitLighting::Apply(CockpitModel& cockpit, float level, float reveal, const Vector2& screenSize,
 	const Vector3& signColor) {
 	level_ = (std::max)(level, 0.0f);
 	reveal_ = std::clamp(reveal, 0.0f, 1.0f);
 
 	// 緑のポイントライト
 	auto* lm = LightManager::GetInstance();
-	const Vector3& origin = mech.GetPosition();
-	const Vector3 axis = HubMechModel::GetCockpitAxis();
+	const Vector3& origin = cockpit.GetPosition();
+	const Vector3 axis = CockpitModel::GetAxis();
 	for (uint32_t i = 0; i < kLampCount; ++i) {
 		const uint32_t slot = lampSlots_[i];
 		if (slot == kInvalidLightSlot) continue;
@@ -113,7 +113,7 @@ void CockpitLighting::Apply(HubMechModel& mech, float level, float reveal, const
 
 	// 六角形：画面の中心から、画面の高さに合わせた大きさで
 	const float cellPixels = hexCellPixels_ * (std::max)(screenSize.y, 1.0f) / 900.0f;
-	for (Object3DInstance* part : { mech.GetCockpit(), mech.GetHatch() }) {
+	for (Object3DInstance* part : { cockpit.GetCockpit(), cockpit.GetHatch() }) {
 		ModelInstance* model = part ? part->GetModelInstance() : nullptr;
 		if (!model) continue;
 
