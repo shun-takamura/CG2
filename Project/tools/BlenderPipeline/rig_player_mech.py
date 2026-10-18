@@ -16,6 +16,10 @@
         --finish <編集用.blend> 手で直した編集用の .blend を PlayerBody にまとめ直して --save（既定 PlayerMech_rig.blend）へ
         --mirror-left-arm <編集用.blend>  その .blend の右腕（Body_RightArm）を左腕の鏡写しに置き換えて上書き保存。
                                右腕のボーンも左腕の鏡写しの位置にする。ほかの手の修正は残る
+        --body-clips <体の .blend>  体（PlayerModel_rig.blend）にスタート演出の姿勢のクリップ（BODY_CLIPS）を付け、
+                               --preview で確認画像、--export <フォルダ> で PlayerModel.gltf を書き出す（.blend は上書きしない）
+        --export-wings <羽根の .blend>  羽根（PlayerWings_rig.blend）を Deploy / Stow のクリップごと --export <フォルダ> へ
+                               PlayerWings.gltf で書き出す
 
 流れ：--rig --save Assets/Models/PlayerMech/PlayerMech_edit.blend → Blender で穴を埋める・凹凸を付ける・マテリアルを塗る
       → --finish Assets/Models/PlayerMech/PlayerMech_edit.blend
@@ -46,6 +50,8 @@
 
 import colorsys
 import hashlib
+import json
+import struct
 import sys
 from pathlib import Path
 
@@ -1730,6 +1736,586 @@ def preview_pose(body, wings, out_dir, label, top=False):
 
 
 # ============================================================
+# 体のクリップ（--body-clips。2026-10-18 ユーザー決定：スタート演出に要る分だけ先に作る。Mixamo のリターゲットは後）
+#   Catapult：カタパルトで射出を待つ・射出するときの、膝を曲げた前傾。羽根は収納（見えない）
+#   Fly     ：射出の後、雲の上を飛ぶ姿勢。羽根は展開（羽根は別のモデルで、体の Spine2 に付ける）
+# 角度は右側で書き、左は x = 0 の鏡写しにする。向きはアーマチュアの空間（正面は -Y、+X がモデルの左、+Z が上）。
+# カタパルトではエンジンが体を HubMech と同じ 18m に拡大し、両足を固定台 (±3.0, 0, 1.2) に乗せる
+# → 1.694m の体では x ±0.282・前へ 0.113。足首の位置を IK で決め、足の裏は基本の姿勢のまま床に平らに置く
+# ============================================================
+BODY_ANIM_FPS = WING_ANIM_FPS
+CATAPULT_SCALE_HEIGHT = 18.0          # カタパルトでの全高 [m]（HubMech と同じ）
+CATAPULT_CLAMP = (3.0, 1.2)           # 固定台の中心 (|x|, 前) [m]（16 番 §2.1 の CatapultClamp）。足の中心をここへ
+BODY_HEIGHT = [1.694]                 # 体の全高 [m]（--body-clips で測り直す）
+# 姿勢。値の意味：
+#   hips  … 腰のずらし [m] と前傾 [度]      bend … X 軸まわり [度]（正＝前へ倒す、負＝起こす）
+#   arms  … 腕のボーンを向ける向き           legs … ik：足首を固定台の上に置く（knee＝ひざを出す側、toe_out＝つま先の開き [度]、
+#            heel_lift＝つま先を支点にかかとを上げる [度]）／ik でなければボーンを向ける向き
+#   ankle_lean … 足首を支点に、上体の形はそのまま体全体を前へ倒す [度]（2026-10-18 ユーザー）
+#   tilt  … 最後に腰のまわりで脚ごと前へ倒す [度]   sway … ループの小さな動き
+BODY_POSES = {
+    # 射出前（カタパルトで機体確認をしている間）：直立・動かない（2026-10-18 ユーザー）。足は固定台の上なので
+    # 肩幅より広く、腰を少し下げて脚をわずかにハの字に。腕は体の横へ下ろす
+    "Stand": {
+        # 足首は足の中心を固定台に合わせて前へ 6.7cm ずれ、基本の姿勢の背骨も上ほど後ろへ傾いているので、そのままだと
+        # 後ろへ反って見えた（2026-10-18 ユーザー）。足首から前へ倒し、腰の背骨を少し曲げて頭を足の真上へ
+        "hips": {"offset": (0.0, 0.0, -0.04), "lean": 0.0},
+        "bend": {"Spine": 3.0, "Spine1": 3.0},
+        "arms": {"Arm": (-0.12, 0.0, -1.0), "ForeArm": (-0.08, -0.12, -1.0)},
+        "legs": {"ik": True, "knee": (-0.1, -1.0, 0.0), "toe_out": 0.0},
+        "ankle_lean": 4.0,
+    },
+    # 射出が始まってから（エンジンを吹かす）の前傾。ロボットなので呼吸の動きは付けない（2026-10-18 ユーザー）
+    "Catapult": {
+        "hips": {"offset": (0.0, 0.06, -0.22), "lean": 12.0},
+        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 8.0, "Neck": -10.0, "Head": -18.0},
+        "arms": {"Arm": (-0.35, 0.35, -1.0), "ForeArm": (-0.1, -0.5, -1.0)},
+        # つま先はレールに平行（開くと固定台の爪からはみ出す。2026-10-18）
+        "legs": {"ik": True, "knee": (-0.35, -1.0, 0.0), "toe_out": 0.0},
+        "ankle_lean": 8.0,
+    },
+    # 切り離しの溜め：もう少し沈み、腕を後ろへ引く
+    "LaunchDip": {
+        "hips": {"offset": (0.0, 0.08, -0.29), "lean": 16.0},
+        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 8.0, "Neck": -14.0, "Head": -20.0},
+        "arms": {"Arm": (-0.3, 0.6, -1.0), "ForeArm": (-0.1, 0.0, -1.0)},
+        "legs": {"ik": True, "knee": (-0.35, -1.0, 0.0), "toe_out": 0.0},
+        "ankle_lean": 10.0,
+    },
+    # けり出し：かかとを上げてつま先で床をけり、脚を伸ばして体全体が前へ倒れる。腕は後ろへ振る
+    "LaunchPush": {
+        "hips": {"offset": (0.0, 0.0, 0.05), "lean": 10.0},
+        "bend": {"Spine": 4.0, "Spine1": 4.0, "Spine2": 4.0, "Neck": -18.0, "Head": -22.0},
+        "arms": {"Arm": (-0.25, 0.9, -0.5), "ForeArm": (-0.2, 0.8, -0.6)},
+        "legs": {"ik": True, "knee": (-0.2, -1.0, 0.0), "toe_out": 0.0, "heel_lift": 35.0},
+        "ankle_lean": 30.0,
+    },
+    "Fly": {
+        # 体全体を前へ傾ける（2026-10-18 ユーザー：上から吊られているように見える）
+        "tilt": 40.0,
+        "hips": {"offset": (0.0, 0.0, 0.0), "lean": 10.0},
+        "bend": {"Spine": 3.0, "Spine1": 3.0, "Spine2": 3.0, "Neck": -20.0, "Head": -25.0},
+        "arms": {"Arm": (-0.45, 0.3, -1.0), "ForeArm": (-0.25, -0.1, -1.0)},
+        "legs": {"ik": False,
+                 "Right": {"UpLeg": (-0.03, 0.15, -1.0), "Leg": (0.0, 0.35, -1.0), "Foot": (0.0, 0.25, -1.0)},
+                 "Left": {"UpLeg": (0.03, 0.30, -1.0), "Leg": (0.0, 0.95, -0.8), "Foot": (0.0, 0.8, -1.0)}},
+        "sway": {"spine": 1.0, "hips_z": 0.012, "arm": 3.0, "leg": 3.0},
+    },
+}
+# クリップ（エンジンでは PlayerModel_<名前>.anim）。pose＝その姿勢で sway のループ。
+# keys＝[(秒, 姿勢)] のあいだをつなぐ 1 回きりのクリップ（ボーンごとに位置を線形・回転を球面線形、キーのあいだは smoothstep）
+BODY_CLIPS = {
+    "Stand": {"duration": 1.0, "pose": "Stand"},                  # 機体確認の間の直立（ループ・動かない）
+    "Ignite": {"duration": 0.5, "keys": [(0.0, "Stand"), (0.5, "Catapult")]},   # 直立 → 前傾（1 回）
+    "Catapult": {"duration": 1.0, "pose": "Catapult"},            # 前傾の保持（ループ・動かない）
+    "Launch": {"duration": 0.9, "keys": [(0.0, "Catapult"), (0.15, "LaunchDip"),
+                                        (0.45, "LaunchPush"), (0.9, "Fly")]},   # 切り離しのジャンプ（1 回）
+    "Fly": {"duration": 2.0, "pose": "Fly"},                      # 雲の上（ループ）
+}
+
+
+def side_vec(v, side):
+    """右側で書いた向きを side の向きに（左は x を反転）"""
+    return Vector((v[0] if side == "Right" else -v[0], v[1], v[2]))
+
+
+def catapult_scale():
+    return CATAPULT_SCALE_HEIGHT / BODY_HEIGHT[0]
+
+
+def body_ankle_target(arm, side, heel_lift=0.0):
+    """カタパルトの固定台の上の足首の位置：足の中心が固定台の中心に来て、足の裏が床に着く所。
+    heel_lift のときは足の指の付け根（つま先のいちばん低い点）を支点にかかとを上げた所"""
+    fit = FOOT_FIT[side]
+    rest = arm.data.bones[MX + side + "Foot"].head_local
+    x = CATAPULT_CLAMP[0] / catapult_scale()
+    ankle = Vector((-x if side == "Right" else x, -CATAPULT_CLAMP[1] / catapult_scale() - fit["center_y"],
+                    rest.z + fit["drop"]))
+    if heel_lift:
+        ball = Vector(fit["ball"])
+        ankle = ankle + ball - Matrix.Rotation(np.radians(heel_lift), 3, "X") @ ball
+    return ankle
+
+
+def leg_ik(arm, side, ankle, knee_hint):
+    """2 本のボーン（UpLeg・Leg）の IK：足首を ankle に置き、ひざを knee_hint の側へ出す（届かなければ伸び切る）"""
+    up = arm.pose.bones[MX + side + "UpLeg"]
+    leg = arm.pose.bones[MX + side + "Leg"]
+    hip = up.head.copy()
+    l1, l2 = up.bone.length, leg.bone.length
+    axis = ankle - hip
+    d = min(axis.length, (l1 + l2) * 0.999)
+    axis.normalize()
+    a = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+    h = np.sqrt(max(l1 * l1 - a * a, 0.0))
+    hint = side_vec(knee_hint, side)
+    perp = (hint - axis * hint.dot(axis)).normalized()
+    knee = hip + axis * a + perp * h
+    pose_bone_toward(arm, up.name, knee - hip)
+    pose_bone_toward(arm, leg.name, hip + axis * d - knee)
+
+
+# 足の裏を床に着ける（2026-10-18 ユーザー：つま先が浮いている）。T ポーズの足はつま先上がり（先端で 9cm）なので、
+# 足首のまわりに前へ倒して足の裏の前と後ろの高さをそろえ、いちばん低い所が床に来るよう足首を下げる。
+# {side: {pitch：前へ倒す角度 [ラジアン]、drop：足首を上下にずらす量 [m]、center_y：倒した足の前後の中心（足首から）、
+#         ball：倒した足のつま先のいちばん低い点（足首から）}}。--body-clips でメッシュから測る
+FOOT_FIT = {side: {"pitch": 0.0, "drop": 0.0, "center_y": 0.0, "ball": (0.0, 0.0, 0.0)} for side in ("Right", "Left")}
+FOOT_SOLE_RANGE = (0.11, 0.06)   # 足の裏の後ろ（かかと）・前（つま先）として見る前後の幅 [m]
+
+
+def fit_feet(body, arm):
+    """足の部位の頂点（基本の姿勢）から FOOT_FIT を測る：かかと・つま先それぞれのいちばん低い点が同じ高さになる角度と、
+    倒した後のいちばん低い点を床（体のいちばん低い点）に合わせる足首のずらし"""
+    me = body.data
+    co = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    ground = float(co[:, 2].min())
+    scale = catapult_scale()
+    for side in ("Right", "Left"):
+        group = body.vertex_groups[MX + side + "Foot"].index
+        idx = [v.index for v in me.vertices if any(g.group == group and g.weight > 0.5 for g in v.groups)]
+        pts = co[idx] - np.array(arm.data.bones[MX + side + "Foot"].head_local)
+        back = pts[pts[:, 1] > pts[:, 1].max() - FOOT_SOLE_RANGE[0]]   # かかとの側（+Y が後ろ）
+        front = pts[pts[:, 1] < pts[:, 1].min() + FOOT_SOLE_RANGE[1]]
+        heel = back[np.argmin(back[:, 2])]
+        toe = front[np.argmin(front[:, 2])]
+        # X 軸まわりに a 回すと y' = y cos a − z sin a、z' = y sin a + z cos a。かかとと つま先の z' が等しくなる a
+        dy, dz = toe[1] - heel[1], toe[2] - heel[2]
+        pitch = float(np.arctan2(dz, -dy))
+        c, s = np.cos(pitch), np.sin(pitch)
+        ry = pts[:, 1] * c - pts[:, 2] * s
+        rz = pts[:, 1] * s + pts[:, 2] * c
+        head_z = arm.data.bones[MX + side + "Foot"].head_local.z
+        drop = ground - (head_z + float(rz.min()))
+        center_y = float(ry.min() + ry.max()) * 0.5
+        ball = (float(toe[0]), float(toe[1] * c - toe[2] * s), float(toe[1] * s + toe[2] * c))
+        FOOT_FIT[side] = {"pitch": pitch, "drop": drop, "center_y": center_y, "ball": ball}
+        log(f"{side} の足：前へ {np.degrees(pitch):.1f}° 倒し、足首を {drop * 100:+.1f}cm。カタパルトでの足の前後 "
+            f"{(-ry.max() + center_y) * scale + CATAPULT_CLAMP[1]:+.2f}〜{(-ry.min() + center_y) * scale + CATAPULT_CLAMP[1]:+.2f} m・"
+            f"幅 {float(np.ptp(pts[:, 0])) * scale:.2f} m（エンジンの z・x）")
+
+
+def foot_flat(arm, side, toe_out, heel_lift=0.0):
+    """足の裏を床に平らに置き（FOOT_FIT）、つま先を外へ toe_out 度開き、かかとを heel_lift 度上げる"""
+    pb = arm.pose.bones[MX + side + "Foot"]
+    yaw = np.radians(toe_out) * (-1.0 if side == "Right" else 1.0)
+    rest = pb.bone.matrix_local.to_3x3()
+    pitch = FOOT_FIT[side]["pitch"] + np.radians(heel_lift)
+    rot = Matrix.Rotation(yaw, 3, "Z") @ Matrix.Rotation(pitch, 3, "X") @ rest
+    pb.matrix = Matrix.Translation(pb.head.copy()) @ rot.to_4x4()
+    bpy.context.view_layer.update()
+
+
+def pose_body(arm, name, phase=0.0):
+    """BODY_POSES の姿勢 name を付ける（基本の姿勢から、親から順に）。phase はループの位置（0〜1、sway に使う）"""
+    spec = BODY_POSES[name]
+    wave = np.sin(2.0 * np.pi * phase)
+    sway = spec.get("sway", {})
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    x_axis = Vector((1.0, 0.0, 0.0))
+
+    hips = arm.pose.bones[MX + "Hips"]
+    offset = Vector(spec["hips"]["offset"]) + Vector((0.0, 0.0, sway.get("hips_z", 0.0) * wave))
+    hips.matrix = Matrix.Translation(offset) @ hips.matrix
+    bpy.context.view_layer.update()
+    rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(spec["hips"]["lean"])))
+    for bone, deg in spec["bend"].items():
+        if bone in ("Spine1", "Spine2"):
+            deg += sway.get("spine", 0.0) * wave * 0.5
+        rotate_pose_bone(arm, MX + bone, Quaternion(x_axis, np.radians(deg)))
+    for side in ("Right", "Left"):
+        for link in ("Arm", "ForeArm", "Hand"):
+            d = spec["arms"].get(link)
+            if d:
+                pose_bone_toward(arm, MX + side + link, side_vec(d, side))
+        if sway.get("arm"):
+            phase_sign = 1.0 if side == "Right" else -1.0
+            rotate_pose_bone(arm, MX + side + "Arm",
+                             Quaternion(x_axis, np.radians(sway["arm"] * wave * phase_sign)))
+
+    legs = spec["legs"]
+    if spec.get("ankle_lean"):
+        # 足首（両足の真ん中）を支点に、上体の形はそのまま体全体を前へ倒す。脚は下の IK で足首に戻す
+        pivot = (body_ankle_target(arm, "Right") + body_ankle_target(arm, "Left")) * 0.5
+        rot = Matrix.Rotation(np.radians(spec["ankle_lean"]), 4, "X")
+        hips.matrix = Matrix.Translation(pivot) @ rot @ Matrix.Translation(-pivot) @ hips.matrix
+        bpy.context.view_layer.update()
+    for side in ("Right", "Left"):
+        if legs["ik"]:
+            lift = legs.get("heel_lift", 0.0)
+            leg_ik(arm, side, body_ankle_target(arm, side, lift), legs["knee"])
+            foot_flat(arm, side, legs["toe_out"], lift)
+        else:
+            for link in ("UpLeg", "Leg", "Foot"):
+                pose_bone_toward(arm, MX + side + link, side_vec(legs[side][link], side))
+            if sway.get("leg"):
+                phase_sign = 1.0 if side == "Right" else -1.0
+                rotate_pose_bone(arm, MX + side + "UpLeg",
+                                 Quaternion(x_axis, np.radians(sway["leg"] * wave * phase_sign)))
+    if spec.get("tilt"):
+        rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(spec["tilt"])))
+
+
+def capture_pose(arm):
+    return {pb.name: pb.matrix_basis.decompose()[:2] for pb in arm.pose.bones}
+
+
+def apply_blend(arm, a, b, w):
+    for pb in arm.pose.bones:
+        (la, qa), (lb, qb) = a[pb.name], b[pb.name]
+        pb.matrix_basis = Matrix.LocRotScale(la.lerp(lb, w), qa.slerp(qb, w), None)
+    bpy.context.view_layer.update()
+
+
+def pose_clip(arm, clip, t, captured):
+    """クリップ clip の時刻 t [秒] の姿勢。captured は keys の姿勢を先に付けて取っておいたもの"""
+    spec = BODY_CLIPS[clip]
+    if "pose" in spec:
+        pose_body(arm, spec["pose"], t / spec["duration"])
+        return
+    keys = spec["keys"]
+    for (t0, p0), (t1, p1) in zip(keys, keys[1:]):
+        if t <= t1 or t1 == keys[-1][0]:
+            apply_blend(arm, captured[p0], captured[p1], smoothstep((t - t0) / max(t1 - t0, 1e-6)))
+            return
+
+
+def add_body_clips(arm):
+    """BODY_CLIPS を毎コマのキーで焼き、NLA に並べる。肩の装甲のボーンは回転コピーの拘束のまま
+    （glTF の書き出しはコマごとに拘束込みの姿勢を取るので、キーは打たない）"""
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="POSE")
+    arm.animation_data_create()
+    keyed = [pb for pb in arm.pose.bones if pb.name.startswith(MX)]
+    for pb in arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    captured = {}
+    for name in BODY_POSES:
+        pose_body(arm, name)
+        captured[name] = capture_pose(arm)
+    for clip, spec in BODY_CLIPS.items():
+        action = bpy.data.actions.new(clip)
+        action.use_fake_user = True
+        arm.animation_data.action = action
+        frames = int(round(spec["duration"] * BODY_ANIM_FPS))
+        for f in range(frames + 1):
+            pose_clip(arm, clip, f / BODY_ANIM_FPS, captured)
+            for pb in keyed:
+                pb.keyframe_insert("rotation_quaternion", frame=f)
+                pb.keyframe_insert("location", frame=f)
+        track = arm.animation_data.nla_tracks.new()
+        track.name = clip
+        track.strips.new(clip, 0, action)
+        track.mute = True
+        arm.animation_data.action = None
+        log(f"体のクリップ {clip}: {spec['duration']} 秒・{frames + 1} コマ")
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.scene.render.fps = BODY_ANIM_FPS
+    return captured
+
+
+def add_box(name, center, size, color):
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, vec=size, verts=bm.verts)
+    bmesh.ops.translate(bm, vec=center, verts=bm.verts)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    o.color = color
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
+def attach_wings(body_arm, wings_blend):
+    """確認用：羽根を体の Spine2 に付ける（基本の姿勢で位置を合わせてからボーンの子にする＝エンジンの BoneSocket と同じ）"""
+    got = append_objects(wings_blend, {"PlayerWings", "PlayerWingRig"})
+    wing_arm = got["PlayerWingRig"]
+    if wing_arm.animation_data:
+        for track in wing_arm.animation_data.nla_tracks:
+            track.mute = True
+    for pb in body_arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    world = wing_arm.matrix_world.copy()
+    wing_arm.parent = body_arm
+    wing_arm.parent_type = "BONE"
+    wing_arm.parent_bone = MX + "Spine2"
+    bpy.context.view_layer.update()
+    wing_arm.matrix_world = world
+    bpy.context.view_layer.update()
+    return list(got.values())
+
+
+# 確認用の固定台（gen_catapult.py の CatapultClamp と同じ寸法 [m、カタパルトの大きさ]）：溝の幅 1.2・長さ 5.2、
+# 足の前後の爪（幅 2.2・高さ 0.5、中心から 2.05〜2.45）
+PREVIEW_CLAMP = {"groove_w": 1.2, "half_len": 2.6, "jaw_w": 2.2, "jaw_h": 0.5, "jaw_z": (2.05, 2.45)}
+
+
+def preview_clamps(scale):
+    c = PREVIEW_CLAMP
+    objs = [add_box("PreviewFloor", (0.0, 0.0, -0.016), (2.0, 2.0, 0.01), (0.35, 0.35, 0.37, 1.0))]
+    for s in (-1, 1):
+        x, y = s * CATAPULT_CLAMP[0] / scale, -CATAPULT_CLAMP[1] / scale
+        objs.append(add_box(f"PreviewClamp{s}", (x, y, -0.0105), (c["groove_w"] / scale, 2 * c["half_len"] / scale, 0.002),
+                            (0.95, 0.75, 0.1, 1.0)))
+        for zs in (-1, 1):
+            mid = zs * sum(c["jaw_z"]) * 0.5
+            objs.append(add_box(f"PreviewJaw{s}{zs}", (x, y - mid / scale, -0.011 + c["jaw_h"] * 0.5 / scale),
+                                (c["jaw_w"] / scale, (c["jaw_z"][1] - c["jaw_z"][0]) / scale, c["jaw_h"] / scale),
+                                (0.15, 0.15, 0.17, 1.0)))
+    return objs
+
+
+def preview_body_clips(arm, body, wings_blend, captured, out_dir):
+    """姿勢ごとに正面・横・斜め後ろ・斜め前から（床の上の姿勢は床と固定台の目印、Fly は開いた羽根を付けて）と、
+    Launch のコマを横から並べた 1 枚"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cam = setup_render(1600, 1000)
+    sc = bpy.context.scene
+    sc.display.shading.color_type = "TEXTURE"
+    ground = preview_clamps(catapult_scale())
+    wings = attach_wings(arm, wings_blend) if wings_blend and wings_blend.exists() else []
+    views = [("front", (0.0, -4.0, 0.85)), ("side", (4.0, 0.0, 0.85)),
+             ("back_diag", (-2.6, 3.0, 2.0)), ("front_diag", (2.4, -3.0, 1.2))]
+    for name in BODY_POSES:
+        pose_body(arm, name)
+        flying = name == "Fly"
+        for o in wings:
+            o.hide_render = not flying
+        for o in ground:
+            o.hide_render = flying
+        center = Vector((0.0, 0.0, 0.85 if flying else 0.75))
+        for view, loc in views:
+            look(cam, Vector(loc), center, 3.4 if flying else 2.8)
+            render(out_dir / f"body_{name}_{view}.png")
+    # 1 回きりのクリップ：横から 7 コマ（羽根は収納＝見えない）
+    for o in wings:
+        o.hide_render = True
+    for o in ground:
+        o.hide_render = False
+    for clip in [c for c, spec in BODY_CLIPS.items() if "keys" in spec]:
+        duration = BODY_CLIPS[clip]["duration"]
+        paths = []
+        for i in range(7):
+            pose_clip(arm, clip, duration * i / 6, captured)
+            look(cam, Vector((4.0, -0.3, 0.8)), Vector((0.0, -0.3, 0.8)), 2.8)
+            path = out_dir / f"_{clip}_{i}.png"
+            render(path)
+            paths.append(path)
+        join_images(paths, out_dir / f"body_{clip}_side.png")
+    for o in wings + ground:
+        bpy.data.objects.remove(o, do_unlink=True)
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+
+
+def flip_texcoord_v(gltf_path):
+    """書き出した glTF の TEXCOORD_0 を v → 1 - v にする（rig_hub_mech.py と同じ。cook は glTF の V を必ず反転するが、
+    Blender の glTF の UV はすでに正しいので、cook の反転の逆を書いておく）"""
+    gltf = json.loads(gltf_path.read_text(encoding="utf-8"))
+    accessor_ids = {prim["attributes"]["TEXCOORD_0"]
+                    for mesh in gltf.get("meshes", []) for prim in mesh["primitives"]
+                    if "TEXCOORD_0" in prim.get("attributes", {})}
+    if not accessor_ids:
+        return
+    bin_path = gltf_path.parent / gltf["buffers"][0]["uri"]
+    data = bytearray(bin_path.read_bytes())
+    for ai in accessor_ids:
+        acc = gltf["accessors"][ai]
+        assert acc["componentType"] == 5126 and acc["type"] == "VEC2", acc
+        view = gltf["bufferViews"][acc["bufferView"]]
+        base = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+        stride = view.get("byteStride", 8)
+        v = np.frombuffer(data, dtype="<f4", count=acc["count"] * stride // 4, offset=base).copy()
+        v = v.reshape(acc["count"], stride // 4)
+        v[:, 1] = 1.0 - v[:, 1]
+        data[base:base + v.nbytes] = v.tobytes()
+        if "min" in acc and "max" in acc:
+            acc["min"][1], acc["max"][1] = 1.0 - acc["max"][1], 1.0 - acc["min"][1]
+    bin_path.write_bytes(bytes(data))
+    gltf_path.write_text(json.dumps(gltf, indent=2), encoding="utf-8")
+    log(f"TEXCOORD_0 の V を反転（{gltf_path.name}）")
+
+
+def export_skinned(objs, path):
+    """メッシュとアーマチュアを glTF（Separate）で。NLA のトラックごとにクリップを書き出し、
+    テクスチャは元の PNG（.blend の隣の textures/）をそのまま参照する"""
+    for o in bpy.data.objects:
+        if o.animation_data:
+            for track in o.animation_data.nla_tracks:
+                track.mute = False
+    bpy.context.scene.frame_set(0)
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bpy.ops.export_scene.gltf(filepath=str(path.resolve()), export_format="GLTF_SEPARATE", use_selection=True,
+                              export_yup=True, export_apply=False, export_animations=True,
+                              export_animation_mode="NLA_TRACKS", export_force_sampling=True,
+                              export_optimize_animation_size=False, export_keep_originals=True,
+                              export_image_format="AUTO")
+    flip_texcoord_v(path)
+    log(f"exported {path}")
+
+
+def body_clips(body_blend, wings_blend, preview_dir, export_dir):
+    bpy.ops.wm.open_mainfile(filepath=str(body_blend.resolve()))
+    arm, body = bpy.data.objects["PlayerBodyRig"], bpy.data.objects["PlayerBody"]
+    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
+        bpy.data.objects.remove(o, do_unlink=True)
+    BODY_HEIGHT[0] = float(world_vertices(body)[:, 2].max())
+    scale = CATAPULT_SCALE_HEIGHT / BODY_HEIGHT[0]
+    log(f"体の全高 {BODY_HEIGHT[0]:.3f} m → カタパルトでは {scale:.3f} 倍。固定台の中心はモデルの "
+        f"x ±{CATAPULT_CLAMP[0] / scale:.4f}・前 {CATAPULT_CLAMP[1] / scale:.4f}")
+    fit_feet(body, arm)
+    captured = add_body_clips(arm)
+    if preview_dir:
+        preview_body_clips(arm, body, wings_blend, captured, preview_dir)
+    pose_body(arm, "Catapult")
+    for side in ("Right", "Left"):
+        foot = arm.pose.bones[MX + side + "Foot"]
+        log(f"Catapult の {side} の足首 {tuple(round(c, 4) for c in foot.head)}"
+            f"（エンジンの座標 x {-foot.head.x:+.4f}・前 {-foot.head.y:+.4f}）")
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    if export_dir:
+        set_export_material(body_blend.parent)
+        export_skinned([body, arm], export_dir / "PlayerModel.gltf")
+
+
+# 材質の比較（2026-10-18 ユーザー：実機で反射が強すぎて表面がざらざらに見える）。Eevee・アンチエイリアス 1 サンプル
+# （エンジンと同じく画素ごとのちらつきが見える）で、空の映り込みと平行光源。胸から上を近くから撮る
+MATERIAL_TEST = {
+    "grid": {"roughness": (0.055, 0.25, 0.4), "metallic": (0.976, 0.7, 0.4)},
+    "normal": (1.0, 0.6, 0.3),            # 法線マップの強さ（2 枚目。金属度・粗さは --metal / --rough、既定は今の値）
+}
+
+
+def set_body_material(metallic, roughness, normal_strength):
+    for m in bpy.data.materials:
+        if not m.use_nodes or not m.name.startswith("tripo_mat"):
+            continue
+        for n in m.node_tree.nodes:
+            if n.type == "BSDF_PRINCIPLED":
+                n.inputs["Metallic"].default_value = metallic
+                n.inputs["Roughness"].default_value = roughness
+            elif n.type == "NORMAL_MAP":
+                n.inputs["Strength"].default_value = normal_strength
+
+
+# 書き出す体の材質（2026-10-18 ユーザー決定。--material-test の比較で決めた）。.blend の値（LowerLeg にそろえた
+# 金属度 0.976・粗さ 0.055）は実機で反射が強すぎて表面がざらざらに見えたので、粗さを上げ、法線マップを弱める。
+# エンジンに法線の強さの設定は無いので、平らに寄せた法線マップ <名前>Soft.png を textures/ に作って差し替える（元の PNG は残す）
+BODY_EXPORT_MATERIAL = {"metallic": 0.976, "roughness": 0.4, "normal_strength": 0.6}
+
+
+def soften_normal_maps(blend_dir, strength):
+    """体の法線マップを strength 倍に弱めた画像（xy を strength 倍して正規化）を書き、マテリアルの参照を差し替える"""
+    done = {}
+    for m in bpy.data.materials:
+        if not m.use_nodes:
+            continue
+        for n in m.node_tree.nodes:
+            if n.type != "TEX_IMAGE" or not n.image or "NormalMap" not in n.image.filepath:
+                continue
+            src = n.image
+            if src.name not in done:
+                w, h = src.size
+                px = np.empty(w * h * 4, dtype=np.float32)
+                src.pixels.foreach_get(px)
+                px = px.reshape(-1, 4)
+                v = px[:, :3] * 2.0 - 1.0
+                v[:, :2] *= strength
+                v /= np.linalg.norm(v, axis=1, keepdims=True)
+                px[:, :3] = v * 0.5 + 0.5
+                stem = Path(bpy.path.abspath(src.filepath)).stem + "Soft"
+                path = (blend_dir / PARTS_TEXTURE_DIR / f"{stem}.png").resolve()
+                img = bpy.data.images.new(stem, w, h, alpha=True, is_data=True)
+                img.pixels.foreach_set(px.ravel())
+                img.file_format = "PNG"
+                img.save(filepath=str(path))   # 引数なしの save() は作った画像を書かない
+                bpy.data.images.remove(img)
+                # 作った画像のままだと glTF の書き出しがファイルとして扱わず法線マップが抜けるので、PNG を読み込み直す
+                img = bpy.data.images.load(str(path))
+                img.colorspace_settings.name = "Non-Color"
+                img.filepath = bpy.path.relpath(str(path), start=str(blend_dir.resolve()))
+                done[src.name] = img
+                log(f"法線マップ {strength} 倍：{path.name}")
+            n.image = done[src.name]
+
+
+def set_export_material(blend_dir):
+    spec = BODY_EXPORT_MATERIAL
+    set_body_material(spec["metallic"], spec["roughness"], 1.0)
+    if spec["normal_strength"] != 1.0:
+        soften_normal_maps(blend_dir, spec["normal_strength"])
+
+
+def material_test(body_blend, out_dir, metal, rough):
+    bpy.ops.wm.open_mainfile(filepath=str(body_blend.resolve()))
+    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
+        bpy.data.objects.remove(o, do_unlink=True)
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_EEVEE_NEXT"
+    sc.eevee.taa_render_samples = 1
+    sc.render.resolution_x, sc.render.resolution_y = 640, 640
+    sc.view_settings.view_transform = "Standard"
+    world = bpy.data.worlds.new("Sky")
+    world.use_nodes = True
+    sky = world.node_tree.nodes.new("ShaderNodeTexSky")
+    sky.sky_type = "NISHITA"
+    sky.sun_elevation = np.radians(35.0)
+    world.node_tree.links.new(sky.outputs["Color"], world.node_tree.nodes["Background"].inputs["Color"])
+    world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.3
+    sc.world = world
+    sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
+    sun.data.energy = 3.0
+    sun.rotation_euler = (np.radians(50.0), 0.0, np.radians(30.0))
+    sc.collection.objects.link(sun)
+    cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
+    sc.collection.objects.link(cam)
+    sc.camera = cam
+    cam.data.lens = 50.0
+    cam.location = Vector((-0.55, -1.25, 1.55))
+    cam.rotation_euler = (Vector((0.0, 0.0, 1.38)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    g = MATERIAL_TEST["grid"]
+    for mi, metallic in enumerate(g["metallic"]):
+        paths = []
+        for ri, roughness in enumerate(g["roughness"]):
+            set_body_material(metallic, roughness, 1.0)
+            path = out_dir / f"_mat_{mi}_{ri}.png"
+            render(path)
+            paths.append(path)
+        join_images(paths, out_dir / f"mat_metal{metallic}_rough{'-'.join(str(r) for r in g['roughness'])}.png")
+    paths = []
+    for si, strength in enumerate(MATERIAL_TEST["normal"]):
+        set_body_material(metal, rough, strength)
+        path = out_dir / f"_nrm_{si}.png"
+        render(path)
+        paths.append(path)
+    join_images(paths, out_dir / f"normal_metal{metal}_rough{rough}_strength{'-'.join(str(s) for s in MATERIAL_TEST['normal'])}.png")
+
+
+def export_wings(wings_blend, export_dir):
+    bpy.ops.wm.open_mainfile(filepath=str(wings_blend.resolve()))
+    export_skinned([bpy.data.objects["PlayerWings"], bpy.data.objects["PlayerWingRig"]],
+                   export_dir / "PlayerWings.gltf")
+
+
+# ============================================================
 def arg_path(argv, name):
     return Path(argv[argv.index(name) + 1]) if name in argv else None
 
@@ -1746,6 +2332,23 @@ def main():
         bpy.ops.wm.open_mainfile(filepath=str(mirror_arm_path.resolve()))
         mirror_chain_in_edit("Body_LeftArm", "Body_RightArm", EDIT_CHAINS["Body_LeftArm"])
         save(mirror_arm_path)
+        return
+
+    export_dir = arg_path(argv, "--export")
+    clips_body = arg_path(argv, "--body-clips")
+    if clips_body:
+        wings_blend = arg_path(argv, "--wings-blend") or Path("Assets/Models/Player/PlayerWings/PlayerWings_rig.blend")
+        body_clips(clips_body, wings_blend, preview_dir, export_dir)
+        return
+    material_blend = arg_path(argv, "--material-test")
+    if material_blend:
+        metal = float(argv[argv.index("--metal") + 1]) if "--metal" in argv else PARTS_METALLIC
+        rough = float(argv[argv.index("--rough") + 1]) if "--rough" in argv else PARTS_ROUGHNESS
+        material_test(material_blend, preview_dir or Path("."), metal, rough)
+        return
+    wings_export = arg_path(argv, "--export-wings")
+    if wings_export:
+        export_wings(wings_export, export_dir or wings_export.parent)
         return
 
     finish_path = arg_path(argv, "--finish")

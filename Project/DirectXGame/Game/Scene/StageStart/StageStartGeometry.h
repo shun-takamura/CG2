@@ -1,5 +1,6 @@
 #pragma once
 #include "Vector3.h"
+#include "Vector4.h"
 #include <array>
 #include <string>
 
@@ -58,6 +59,16 @@ struct StageStartHandoff {
 	float cockpitLightLevel = 1.0f;   // コクピットの灯り（CockpitReveal の lightLevel）
 	float revealAmount = 1.0f;        // 外が透けている度合い（六角形が晴れた＝1）
 	float sunScale = 1.0f;            // 外の光の倍率（縦穴の中で弱めた後の値）
+
+	// 切れ目で見え方をそろえるための値（StagePlay はこの値で最初のフレームを描く）
+	Vector3 eyeOffset = { 0.0f, 0.0f, 0.0f };   // 目の位置（機体の原点＝リフトの上面の中心から）
+	float eyeYaw = 0.0f;              // [rad]
+	float eyePitch = 0.0f;            // [rad]
+	float fovY = 1.0472f;             // 縦の画角 [rad]
+	Vector3 sunDirection = { 0.0f, -1.0f, 0.0f };   // 平行光源（強さは縦穴の中で弱めた後の値）
+	Vector4 sunColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float sunIntensity = 0.0f;
+	std::string iblPath;              // 縦穴で使っている IBL（HUB の神殿のもの）
 
 	static void Store(const StageStartHandoff& handoff);
 	/// <summary>渡された値があれば out に入れて true（以後は空）</summary>

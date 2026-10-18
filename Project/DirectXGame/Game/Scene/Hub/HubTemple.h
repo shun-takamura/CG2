@@ -34,6 +34,8 @@ public:
 
 	/// <summary>床に映す物を足す（機体など）</summary>
 	void AddReflectionTarget(Object3DInstance* target);
+	/// <summary>床に映す物から外す（コクピットの中で機体の本体を隠している間など）</summary>
+	void RemoveReflectionTarget(Object3DInstance* target);
 	/// <summary>
 	/// 床の反射 RT を描く。シーン RT を貼る前に呼ぶ（呼んだ後は RTV/DSV が反射 RT のままなので貼り直すこと）
 	/// </summary>

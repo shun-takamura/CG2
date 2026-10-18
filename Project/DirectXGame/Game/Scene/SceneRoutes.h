@@ -40,9 +40,11 @@ namespace SceneRoutes {
 		// ①② HUB ↔ ステージ選択は同じ HubScene の中（シーンを切り替えない）。
 		// シーン名 STAGESELECT で始まった HubScene（⑩）からタイトルへ戻るときも白フェード
 		{ "STAGESELECT", "TITLE",       { TransitionType::Fade,   TransitionType::Fade   } },
-		// ③ ステージ選択 → ステージ：未定（ストライプを仮置き）。HubScene のシーン名は入口で HUB / STAGESELECT のどちらか
-		{ "HUB",         "STAGEPLAY",   { TransitionType::Stripe, TransitionType::Stripe } },
-		{ "STAGESELECT", "STAGEPLAY",   { TransitionType::Stripe, TransitionType::Stripe } },
+		// ③ ステージ選択 → ステージ：リフトで縦穴を降り、暗転せず同じ縦穴の StagePlay に差し替える（16_StageStart.md F2・F3）。
+		// 覆う・開くともシーン（None / None）なので SceneManager は ChangeSceneImmediate で差し替える。
+		// HubScene のシーン名は入口で HUB / STAGESELECT のどちらか
+		{ "HUB",         "STAGEPLAY",   { TransitionType::None,   TransitionType::None   } },
+		{ "STAGESELECT", "STAGEPLAY",   { TransitionType::None,   TransitionType::None   } },
 		// ⑨ ステージ → リザルト / ゲームオーバー（死亡は羽根の着水、15_SceneTransition.md T4）
 		{ "STAGEPLAY",   "RESULT",      { TransitionType::Stripe, TransitionType::Stripe } },
 		{ "STAGEPLAY",   "GAMEOVER",    { TransitionType::FeatherLand, TransitionType::FeatherLand } },

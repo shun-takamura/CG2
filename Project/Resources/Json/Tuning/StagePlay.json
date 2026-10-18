@@ -29,7 +29,7 @@
       "surfaceY": 0,
       "cameraMinY": 2,
       "cameraSoftness": 0.5,
-      "playerMargin": 0.3
+      "playerMargin": 0.30000001192092896
     },
     "lowPitch": {
       "enabled": true,
@@ -54,9 +54,9 @@
         1
       ],
       "lightDir": [
-        0.191,
-        -0.815,
-        0.547
+        0.19099999964237213,
+        -0.81499999761581421,
+        0.54699999094009399
       ],
       "lightColor": [
         1,
@@ -99,14 +99,14 @@
       ],
       "lightIntensity": 1.3999999761581421,
       "fogColor": [
-        0.699999988079071,
-        0.7799999713897705,
-        0.8999999761581421,
+        0.69999998807907104,
+        0.77999997138977051,
+        0.89999997615814209,
         1
       ],
       "fogNear": 150,
       "fogFar": 2500,
-      "fogDensity": 0.800000011920929
+      "fogDensity": 0.80000001192092896
     },
     {
       "name": "LowAltitude",
@@ -120,9 +120,9 @@
         1
       ],
       "lightDir": [
-        0.191,
-        -0.815,
-        0.547
+        0.19099999964237213,
+        -0.81499999761581421,
+        0.54699999094009399
       ],
       "lightColor": [
         1,
@@ -175,6 +175,98 @@
       "fogDensity": 1.2999999523162842
     }
   ],
+  "raymarchClouds": {
+    "enabled": true,
+    "opacity": 1,
+    "top": 850,
+    "bottom": 300,
+    "seaDepth": 160,
+    "bottomFade": 15,
+    "noiseFloor": 0.30000001192092896,
+    "shapeScale": 1800,
+    "shapeWind": [
+      6,
+      2
+    ],
+    "mokoScale": 500,
+    "mokoWeight": 0.55000001192092896,
+    "maskScale": 9000,
+    "maskWind": [
+      1,
+      -1
+    ],
+    "maskStrength": 0.40000000596046448,
+    "coverage": 0.2199999988079071,
+    "sharpness": 3,
+    "steps": 48,
+    "firstStep": 4,
+    "maxDistance": 20000,
+    "jitter": 0,
+    "traceSlope": 0.34999999403953552,
+    "traceEpsilon": 0.5,
+    "normalEps": 12,
+    "wrap": 0.30000001192092896,
+    "lightStep": 18,
+    "density": 1.2000000476837158,
+    "valley": 0.69999998807907104,
+    "valleyPow": 0.60000002384185791,
+    "ambient": 0.15000000596046448,
+    "litColor": [
+      1,
+      0.99000000953674316,
+      0.97000002861022949
+    ],
+    "shadowColor": [
+      0.30000001192092896,
+      0.37999999523162842,
+      0.55000001192092896
+    ],
+    "rimColor": [
+      1,
+      0.94999998807907104,
+      0.85000002384185791
+    ],
+    "rimIntensity": 0.15000000596046448,
+    "rimG": 0.60000002384185791,
+    "sunGlow": 0.30000001192092896,
+    "hazeStart": 3000,
+    "hazeEnd": 15000,
+    "hazeMax": 0.5,
+    "fadeStart": 14000,
+    "fadeEnd": 20000,
+    "shaftRadius": 60,
+    "shaftWallDepth": 80,
+    "capDepth": 60,
+    "shaftNoiseScale": 0.25,
+    "shaftWallBlend": 25,
+    "shaftDarkness": 0.60000002384185791,
+    "undersideBright": 0.44999998807907104,
+    "capTop": 60,
+    "capBottom": 10,
+    "floorDepth": 25,
+    "volumeZoneInner": 40,
+    "volumeZoneOuter": 120,
+    "volumeShaftBlend": 50,
+    "volumeShaftWeight": 0.20000000298023224,
+    "exitZoneInner": 0,
+    "exitZoneOuter": 100,
+    "volumeSteps": 48,
+    "volumeRange": 300,
+    "extinction": 0.014999999664723873,
+    "erosion": 0.5,
+    "erosionScale": 100,
+    "erosionSharp": 2,
+    "lightExtinction": 4,
+    "erosionWind": [
+      2,
+      1,
+      -1.5
+    ],
+    "powder": 6,
+    "ambientStrength": 0.15000000596046448,
+    "volumeLightStep": 25,
+    "resolutionScale": 0.5
+  },
   "skybox": {
     "tint": [
       1,
@@ -561,5 +653,127 @@
   "phase": {
     "seekMaxSec": 180,
     "landingDurationSec": 5
+  },
+  "stageStart": {
+    "origin": [
+      0,
+      -3000,
+      0
+    ],
+    "startUnitsAboveShaftBase": 2,
+    "brakeDistance": 14,
+    "defaultDescentSpeed": 4,
+    "arriveShakeIntensity": 0.029999999329447746,
+    "arriveShakeSeconds": 0.30000001192092896,
+    "settleSeconds": 0.60000002384185791,
+    "hallSunScale": 0,
+    "lampLevelInShaft": 1,
+    "catapultIblPath": "Resources/Cubemaps/catapult_ibl.dds",
+    "nearClip": 0.10000000149011612,
+    "cockpitSignColor": [
+      0.34999999403953552,
+      1,
+      0.64999997615814209
+    ],
+    "lcdScrollSpeed": 4,
+    "thirdPersonEye": [
+      -10,
+      1.5,
+      30
+    ],
+    "thirdPersonTarget": [
+      7,
+      4,
+      15
+    ],
+    "thirdPersonPassTarget": [
+      7,
+      2.5,
+      1.7999999523162842
+    ],
+    "thirdPersonFarTarget": [
+      0,
+      4,
+      0
+    ],
+    "thirdPersonFarDistance": 40,
+    "thirdPersonTargetLag": 0,
+    "exitDimNear": 0.30000001192092896,
+    "exitDimDistance": 60,
+    "cloudsThroughExit": true,
+    "skyAnchorOffset": [
+      0,
+      0,
+      0
+    ],
+    "thirdPersonFovDegrees": 60,
+    "mechScale": 10.625,
+    "debugDescentWithoutHandoff": false,
+    "facility": {
+      "lamps": [
+        {
+          "position": [
+            0,
+            21,
+            -6
+          ],
+          "intensity": 1.2000000476837158,
+          "radius": 32,
+          "decay": 1.5
+        },
+        {
+          "position": [
+            0,
+            21,
+            12
+          ],
+          "intensity": 1.2000000476837158,
+          "radius": 32,
+          "decay": 1.5
+        },
+        {
+          "position": [
+            0,
+            21,
+            40
+          ],
+          "intensity": 1,
+          "radius": 36,
+          "decay": 1.5
+        },
+        {
+          "position": [
+            0,
+            21,
+            80
+          ],
+          "intensity": 1,
+          "radius": 40,
+          "decay": 1.5
+        }
+      ],
+      "lampColor": [
+        0.85000002384185791,
+        0.89999997615814209,
+        1
+      ],
+      "unitsAboveLift": 40,
+      "lightEmissive": [
+        1,
+        0.97000002861022949,
+        0.89999997615814209
+      ],
+      "lightEmissiveScale": 3,
+      "exitLightScale": 6,
+      "exitOpenToSky": true,
+      "exitSkyBloom": 0.0099999997764825821,
+      "neonColor": [
+        1,
+        0.25,
+        0.44999998807907104
+      ],
+      "neonScale": 2,
+      "lcdEmissiveScale": 1.5
+    }
   }
 }

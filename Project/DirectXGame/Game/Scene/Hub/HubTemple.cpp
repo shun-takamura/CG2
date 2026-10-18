@@ -237,6 +237,10 @@ void HubTemple::AddReflectionTarget(Object3DInstance* target) {
 	reflection_->AddTarget(target);
 }
 
+void HubTemple::RemoveReflectionTarget(Object3DInstance* target) {
+	reflection_->RemoveTarget(target);
+}
+
 void HubTemple::SetFloorHole(bool open, float halfWidth, float chamfer) {
 	if (open) {
 		floor_->SetOctagonHole({ 0.0f, 0.0f, 0.0f }, halfWidth, chamfer);
