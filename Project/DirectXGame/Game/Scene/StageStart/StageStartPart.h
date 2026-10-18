@@ -9,9 +9,12 @@
 class Camera;
 class Object3DManager;
 class DirectXCore;
-class InputActionMap;
+class InputManager;
+struct ID3D12GraphicsCommandList;
 class JsonValue;
 class CatapultFacility;
+class LaunchChecklist;
+class LaunchControlBoard;
 class CockpitModel;
 class CockpitLighting;
 class SkinningComputeManager;
@@ -70,13 +73,17 @@ public:
 	void BeginDescent(const StageStartHandoff& handoff);
 	/// <summary>HUB を通らずに来た：雲の上から始める</summary>
 	void BeginFromCloudTop();
+	/// <summary>降下を飛ばし、カタパルトに着いて止まった所（機体確認の頭）から始める（デバッグ）</summary>
+	void BeginInspection(const StageStartHandoff& handoff);
 	/// <summary>途中で打ち切ってレールへ渡す（デバッグの F4・シーク）</summary>
 	void Skip() { if (active_) Finish(); }
 	/// <summary>HUB を通らずに降下から流すときの値（デバッグ。目の位置は座ったパイロットの目）</summary>
 	StageStartHandoff MakeDefaultHandoff() const;
 
-	void Update(InputActionMap* actions, float deltaTime, const Vector2& screenSize);
-	/// <summary>不透明物（Object3D の DrawSetting・BindLights の後）</summary>
+	void Update(InputManager* input, float deltaTime, const Vector2& screenSize);
+	/// <summary>表示板の中身を RenderTexture へ。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
+	void RenderBoardTexture(ID3D12GraphicsCommandList* commandList);
+	/// <summary>不透明物（Object3D の DrawSetting・BindLights の後）。表示板（半透明。一人称は宙に浮く板・三人称は立てたパネル）も最後に描く</summary>
 	void Draw(DirectXCore* dxCore);
 	bool HasBloom() const;
 	void DrawBloom(DirectXCore* dxCore);
@@ -102,12 +109,17 @@ public:
 	/// </summary>
 	Vector3 GetSkyViewOffset() const;
 
-	/// <summary>デバッグ：HUB を通らずに来たときも降下から流す（StagePlay.json、Debug ビルドだけ効く）</summary>
-	bool GetDebugDescentWithoutHandoff() const { return debugDescentWithoutHandoff_; }
+	/// <summary>デバッグ：HUB を通らずに来たとき（Debug の初期シーンなど）にどこから始めるか（StagePlay.json、Debug ビルドだけ効く）</summary>
+	enum class DebugStart { CloudTop, Descent, Inspection };
+	DebugStart GetDebugStart() const { return debugStart_; }
 
 private:
 	void Enter(State state);
 	void Finish();
+	// 機体確認（S1、F4）：項目を確認中 → 全部 CLEAR（カタパルトのネオンを点け直す）→ LAUNCH READY（SPACE でブースト）
+	enum class InspectionStep { Checking, PowerUp, Ready };
+	void UpdateInspection(InputManager* input, float deltaTime);
+	void UpdateBoard(float deltaTime, const Vector2& screenSize);
 	// 演出の間だけポイントライト（カタパルト・コクピット）を借りる
 	void AcquireLights();
 	void ReleaseLights();
@@ -134,6 +146,8 @@ private:
 	std::unique_ptr<CatapultFacility> facility_;
 	std::unique_ptr<CockpitModel> cockpit_;
 	std::unique_ptr<CockpitLighting> cockpitLighting_;
+	std::unique_ptr<LaunchChecklist> checklist_;
+	std::unique_ptr<LaunchControlBoard> board_;
 	// 三人称で映す機体（新モデルの体。ファイルが無ければ描かない）
 	std::unique_ptr<AnimatedModelInstance> mechModel_;
 	std::unique_ptr<AnimatedObject3DInstance> mech_;
@@ -143,6 +157,8 @@ private:
 	State state_ = State::Finished;
 	View view_ = View::FirstPerson;
 	float stateTime_ = 0.0f;
+	InspectionStep inspectionStep_ = InspectionStep::Checking;
+	float inspectionStepTime_ = 0.0f;
 	StageStartHandoff handoff_;
 	std::string currentIblPath_;
 	float lcdScroll_ = 0.0f;
@@ -172,6 +188,10 @@ private:
 	float lampLevelInShaft_ = 1.0f;               // 縦穴にいる間のカタパルトの灯り
 	// カタパルトの IBL（gen_catapult.py --ibl。チェック完了の緑は catapult_ibl_ready.dds＝F4 で差し替え）。無ければ縦穴の IBL のまま
 	std::string catapultIblPath_ = "Resources/Cubemaps/catapult_ibl.dds";
+	// 射出口までネオンが緑に点き切ったら替える（F4）。無ければ赤ピンクのまま
+	std::string catapultReadyIblPath_ = "Resources/Cubemaps/catapult_ibl_ready.dds";
+	float boardAppearDelay_ = 0.3f;               // 機体確認に入ってから表示板が出るまで [s]
+	float attractLaunchWait_ = 1.5f;              // デモモード：LAUNCH READY から SPACE を押すまで [s]
 	float nearClip_ = 0.1f;                       // コクピットの内装が近いので
 	Vector4 cockpitSignColor_ = { 0.35f, 1.0f, 0.65f, 1.0f };   // HATCH LOCKED の緑（HatchSign と同じ）
 	float lcdScrollSpeed_ = 4.0f;                 // 液晶の文字を流す速さ [m/s]
@@ -194,5 +214,6 @@ private:
 	float thirdPersonTargetLag_ = 0.0f;           // 注視点が機体を追う遅れ [s]（0 で遅れなし）
 	float thirdPersonFovDegrees_ = 60.0f;
 	float mechScale_ = 10.625f;                   // 新モデル（全高 1.694m）を HubMech と同じ 18m に。足の中心が固定台 (±3.0, 0, 1.2) に乗る
-	bool debugDescentWithoutHandoff_ = false;
+	// スタート演出を作っている間は機体確認の頭から（2026-10-19 ユーザー指示。作業が終わったら CloudTop に戻す）
+	DebugStart debugStart_ = DebugStart::Inspection;
 };

@@ -153,6 +153,9 @@ public:
 	int SetEmissiveByMaterialName(const std::string& materialName, const Vector3& emissive, float textureWeight = 0.0f);
 	// 全 submesh の発光を 0 に戻す
 	void ClearEmissive();
+	// 部位のベースカラーの差し替え。.mat のパスに materialName を含む submesh 全部に texturePath を貼る（読み込みもする）。
+	// 書いた数を返す（GPU の準備前・読めないテクスチャなら 0）。モデルはファイル名で共有なので、使い終わったら元へ戻すこと
+	int SetTextureByMaterialName(const std::string& materialName, const std::string& texturePath);
 	// 発光している submesh があるか
 	bool HasEmissive() const;
 

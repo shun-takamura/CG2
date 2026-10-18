@@ -159,6 +159,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartPart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubCameraTrack.cpp" />
@@ -225,6 +227,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartPart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubBoardingSequence.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubCameraTrack.h" />

@@ -147,6 +147,12 @@
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartPart.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
@@ -333,6 +339,12 @@
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartPart.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h">

@@ -15,6 +15,7 @@
     "LockCamButton": [ "kb.Tab", "gp.LB" ],
     "Pause":         [ "kb.Escape", "gp.Start" ],
     "ViewToggle":    [ "kb.V", "gp.Back" ],
+    "Launch":        [ "kb.Space", "gp.A" ],
 
     // ----- メニュー -----
     "MenuConfirm":   [ "kb.Enter", "gp.A" ],

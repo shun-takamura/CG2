@@ -2909,8 +2909,11 @@ void StagePlayScene::Initialize() {
 				stageStart_->BeginDescent(handoff);
 			}
 #ifdef _DEBUG
-			else if (stageStart_->GetDebugDescentWithoutHandoff()) {
+			else if (stageStart_->GetDebugStart() == StageStartPart::DebugStart::Descent) {
 				stageStart_->BeginDescent(stageStart_->MakeDefaultHandoff());
+			}
+			else if (stageStart_->GetDebugStart() == StageStartPart::DebugStart::Inspection) {
+				stageStart_->BeginInspection(stageStart_->MakeDefaultHandoff());
 			}
 #endif
 			else {
@@ -3142,6 +3145,8 @@ bool StagePlayScene::UpdateAttract() {
 	const float dt = dxCore_->GetDeltaTime();
 	if (!attractActed_) {
 		if (paused_) return false;   // 人が開いたポーズの間は数えない
+		// スタート演出の間は数えない（機体確認は StageStartPart が自動で進める。数えるとカタパルトの上で HP 0・ポーズになる）
+		if (phase_ == Phase::StageStart) return false;
 		attractTime_ += dt;
 		if (attractTime_ < attract->stageActionTime) return false;
 		attractActed_ = true;
@@ -4586,11 +4591,10 @@ void StagePlayScene::Draw() {
 }
 
 bool StagePlayScene::UpdateStageStart() {
-	auto* actions = input_->GetActionMap();
 	// 同期ロードの直後の 1 フレームは dt が大きい（ロードの間 HUB の最後の 1 枚が止まっていた）ので、降下が飛ばないよう切り詰める
 	const float dt = (std::min)(GetScaledDeltaTime(TimeGroup::UI), 1.0f / 30.0f);
 	const Vector2 screen = { static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()) };
-	stageStart_->Update(actions, dt, screen);
+	stageStart_->Update(input_, dt, screen);
 	if (!stageStart_->IsActive()) {
 		// 終わった（RestoreStageEnvironment 済み）。このフレームからレール
 		phase_ = Phase::Rail;
@@ -4614,6 +4618,16 @@ bool StagePlayScene::UpdateStageStart() {
 
 void StagePlayScene::DrawStageStart() {
 	auto* commandList = dxCore_->GetCommandList();
+	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
+	stageStart_->RenderBoardTexture(commandList);
+	{
+		const float w = static_cast<float>(dxCore_->GetSwapChainWidth());
+		const float h = static_cast<float>(dxCore_->GetSwapChainHeight());
+		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, w, h, 0.0f, 1.0f };
+		D3D12_RECT scissor{ 0, 0, static_cast<LONG>(w), static_cast<LONG>(h) };
+		commandList->RSSetViewports(1, &viewport);
+		commandList->RSSetScissorRects(1, &scissor);
+	}
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
 	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);

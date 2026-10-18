@@ -6,6 +6,7 @@
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Hub/CockpitReveal.h"
 #include <algorithm>
 #include <cmath>
 
@@ -34,6 +35,15 @@ namespace {
 		node.Push(JsonValue(static_cast<double>(v.y)));
 		node.Push(JsonValue(static_cast<double>(v.z)));
 		return node;
+	}
+
+	// .mat のパスに name を含む submesh の色（ベースカラーに掛ける）。消えたネオンの板を暗くする
+	void SetColorByMaterialName(Object3DInstance* object, const std::string& name, float gray) {
+		ModelInstance* model = object ? object->GetModelInstance() : nullptr;
+		if (!model) return;
+		for (const RenderSubmesh& sm : model->GetSubmeshes()) {
+			if (sm.material && sm.matFilePath.find(name) != std::string::npos) sm.material->color = { gray, gray, gray, 1.0f };
+		}
 	}
 
 	// .mat のパスに name を含む submesh の UV を U 方向へ u だけずらす
@@ -96,8 +106,52 @@ void CatapultFacility::Finalize() {
 		if (slot != kInvalidLightSlot) lm->ReleasePointLight(slot);
 		slot = kInvalidLightSlot;
 	}
-	// ModelInstance はファイル名で共有なので、ずらした UV を持ち越さない
+	// ModelInstance はファイル名で共有なので、ずらした UV・差し替えた液晶・暗くしたネオンを持ち越さない
 	for (const std::string& name : geometry_.lcdMaterials) SetUvOffsetU(lcd_.get(), name, 0.0f);
+	ResetLaunchState();
+	SetLcdTexture(geometry_.lcdTextureUnable);
+	SetColorByMaterialName(catapult_.get(), geometry_.neonMaterial, 1.0f);
+	SetColorByMaterialName(clamps_[0].get(), geometry_.neonMaterial, 1.0f);
+}
+
+void CatapultFacility::ResetLaunchState() {
+	readyPhase_ = ReadyPhase::Unable;
+	readyTime_ = 0.0f;
+}
+
+void CatapultFacility::BeginReadySequence() {
+	if (readyPhase_ != ReadyPhase::Unable) return;
+	readyPhase_ = ReadyPhase::Sweeping;
+	readyTime_ = 0.0f;
+}
+
+void CatapultFacility::AdvanceReadySequence(float deltaTime) {
+	if (readyPhase_ != ReadyPhase::Sweeping) return;
+	readyTime_ += deltaTime;
+	if (readyTime_ >= ReadySequenceSeconds()) readyPhase_ = ReadyPhase::Ready;
+}
+
+float CatapultFacility::ReadySequenceSeconds() const {
+	float farZ = neonSweepOriginZ_;
+	for (const float z : geometry_.neonRowZ) farZ = (std::max)(farZ, z);
+	const float sweep = neonSweepSpeed_ > 1e-3f ? (farZ - neonSweepOriginZ_) / neonSweepSpeed_ : 0.0f;
+	return neonOffSeconds_ + sweep + neonFlickerSeconds_;
+}
+
+float CatapultFacility::NeonLevelAt(float z) const {
+	if (readyPhase_ == ReadyPhase::Ready) return 1.0f;
+	const float delay = neonSweepSpeed_ > 1e-3f ? (std::max)(z - neonSweepOriginZ_, 0.0f) / neonSweepSpeed_ : 0.0f;
+	return CockpitReveal::Flicker(readyTime_ - neonOffSeconds_ - delay, neonFlickerSeconds_);
+}
+
+void CatapultFacility::SetLcdTexture(const std::string& path) {
+	if (!lcd_ || path.empty() || path == lcdTexture_) return;
+	ModelInstance* model = lcd_->GetModelInstance();
+	if (!model) return;
+	int count = 0;
+	for (const std::string& name : geometry_.lcdMaterials) count += model->SetTextureByMaterialName(name, path);
+	// GPU の準備前なら次のフレームで貼り直す
+	if (count > 0) lcdTexture_ = path;
 }
 
 Vector3 CatapultFacility::ToWorld(const Vector3& local) const {
@@ -155,9 +209,25 @@ void CatapultFacility::ApplyEmissive(float lcdScroll) {
 	// ModelInstance はファイル名で共有（縦穴の単位・固定台は HUB とも共有）なので毎フレーム書き直す
 	const Vector3 light = Scale(lightEmissive_, lightEmissiveScale_);
 	const Vector3 neon = Scale(neonColor_, neonScale_);
+	const Vector3 ready = Scale(readyNeonColor_, readyNeonScale_);
+	const bool unable = (readyPhase_ == ReadyPhase::Unable);
+	SetLcdTexture(unable ? geometry_.lcdTextureUnable : geometry_.lcdTextureReady);
+	// 発進不可なら赤ピンク。点け直し中は点き具合で 消えた（暗い地・発光なし）→ 緑
+	auto applyNeon = [&](Object3DInstance* object, const std::string& name, float level) {
+		ModelInstance* model = object ? object->GetModelInstance() : nullptr;
+		if (!model) return;
+		model->SetEmissiveByMaterialName(name, unable ? neon : Scale(ready, level));
+		SetColorByMaterialName(object, name, unable ? 1.0f : neonOffColor_ + (1.0f - neonOffColor_) * level);
+	};
 	if (ModelInstance* model = catapult_->GetModelInstance()) {
 		model->SetEmissiveByMaterialName(kLightMaterial, light);
-		model->SetEmissiveByMaterialName(geometry_.neonMaterial, neon);
+		if (geometry_.neonRowMaterials.empty()) {
+			// 列に分かれていない古い書き出し：全部を機体の位置の列と同じに
+			applyNeon(catapult_.get(), geometry_.neonMaterial, NeonLevelAt(neonSweepOriginZ_));
+		}
+		for (size_t i = 0; i < geometry_.neonRowMaterials.size(); ++i) {
+			applyNeon(catapult_.get(), geometry_.neonRowMaterials[i], NeonLevelAt(geometry_.neonRowZ[i]));
+		}
 	}
 	if (ModelInstance* model = exitLight_->GetModelInstance()) {
 		model->SetEmissiveByMaterialName(kLightMaterial, Scale(lightEmissive_, exitLightScale_ * exitLightLevel_));
@@ -165,9 +235,8 @@ void CatapultFacility::ApplyEmissive(float lcdScroll) {
 	if (!shaftUnits_.empty()) {
 		if (ModelInstance* model = shaftUnits_[0]->GetModelInstance()) model->SetEmissiveByMaterialName(kLightMaterial, light);
 	}
-	if (ModelInstance* model = clamps_[0]->GetModelInstance()) {
-		model->SetEmissiveByMaterialName(geometry_.neonMaterial, neon);
-	}
+	// 固定台は機体の足元なので最初に点く
+	applyNeon(clamps_[0].get(), geometry_.neonMaterial, NeonLevelAt(neonSweepOriginZ_));
 	if (ModelInstance* model = lcd_->GetModelInstance()) {
 		for (size_t i = 0; i < geometry_.lcdMaterials.size(); ++i) {
 			model->SetEmissiveByMaterialName(geometry_.lcdMaterials[i], { lcdEmissiveScale_, lcdEmissiveScale_, lcdEmissiveScale_ }, 1.0f);
@@ -222,6 +291,13 @@ void CatapultFacility::LoadTuning(const JsonValue& node) {
 	ReadVector3(node["neonColor"], neonColor_);
 	read("neonScale", neonScale_);
 	read("lcdEmissiveScale", lcdEmissiveScale_);
+	ReadVector3(node["readyNeonColor"], readyNeonColor_);
+	read("readyNeonScale", readyNeonScale_);
+	read("neonOffColor", neonOffColor_);
+	read("neonOffSeconds", neonOffSeconds_);
+	read("neonSweepOriginZ", neonSweepOriginZ_);
+	read("neonSweepSpeed", neonSweepSpeed_);
+	read("neonFlickerSeconds", neonFlickerSeconds_);
 }
 
 void CatapultFacility::SaveTuning(JsonValue& node) const {
@@ -249,6 +325,13 @@ void CatapultFacility::SaveTuning(JsonValue& node) const {
 	node["neonColor"] = MakeVector3(neonColor_);
 	write("neonScale", neonScale_);
 	write("lcdEmissiveScale", lcdEmissiveScale_);
+	node["readyNeonColor"] = MakeVector3(readyNeonColor_);
+	write("readyNeonScale", readyNeonScale_);
+	write("neonOffColor", neonOffColor_);
+	write("neonOffSeconds", neonOffSeconds_);
+	write("neonSweepOriginZ", neonSweepOriginZ_);
+	write("neonSweepSpeed", neonSweepSpeed_);
+	write("neonFlickerSeconds", neonFlickerSeconds_);
 }
 
 void CatapultFacility::OnImGui() {
@@ -275,6 +358,20 @@ void CatapultFacility::OnImGui() {
 	ImGui::ColorEdit3("Neon", &neonColor_.x);
 	ImGui::DragFloat("Neon Scale", &neonScale_, 0.05f, 0.0f, 20.0f);
 	ImGui::DragFloat("LCD Scale", &lcdEmissiveScale_, 0.05f, 0.0f, 20.0f);
+	ImGui::SeparatorText("Ready Sequence (F4)");
+	ImGui::Text("phase = %s  t = %.2f / %.2f s  rows = %zu",
+		readyPhase_ == ReadyPhase::Unable ? "Unable" : readyPhase_ == ReadyPhase::Sweeping ? "Sweeping" : "Ready",
+		readyTime_, ReadySequenceSeconds(), geometry_.neonRowMaterials.size());
+	if (ImGui::Button("Begin##ready")) { ResetLaunchState(); BeginReadySequence(); }
+	ImGui::SameLine();
+	if (ImGui::Button("Reset##ready")) ResetLaunchState();
+	ImGui::ColorEdit3("Ready Neon", &readyNeonColor_.x);
+	ImGui::DragFloat("Ready Neon Scale", &readyNeonScale_, 0.05f, 0.0f, 20.0f);
+	ImGui::DragFloat("Neon Off Color", &neonOffColor_, 0.005f, 0.0f, 1.0f);
+	ImGui::DragFloat("Neon Off (s)", &neonOffSeconds_, 0.01f, 0.0f, 3.0f);
+	ImGui::DragFloat("Sweep Origin Z (m)", &neonSweepOriginZ_, 0.5f, -32.0f, 160.0f);
+	ImGui::DragFloat("Sweep Speed (m/s)", &neonSweepSpeed_, 0.5f, 1.0f, 500.0f);
+	ImGui::DragFloat("Row Flicker (s)", &neonFlickerSeconds_, 0.01f, 0.0f, 2.0f);
 	ImGui::DragFloat("Units Above Lift (m)", &unitsAboveLift_, 0.5f, 0.0f,
 		geometry_.shaftUnitHeight * static_cast<float>(kMaxShaftUnits - 2));
 	ImGui::TextDisabled("寸法は %s（gen_catapult.py が書く。手で直さない）", StageStartGeometry::kPath);

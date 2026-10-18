@@ -6,7 +6,7 @@
 
 関連: [18_HubTransitions.md](18_HubTransitions.md)（③ リフトの降下）/ [17_HubScene.md](17_HubScene.md)（神殿・HubMech §5.1）/ [15_SceneTransition.md](15_SceneTransition.md)（仕組み・白フェード）/ [5_TitleScene.md](5_TitleScene.md)（扉の光芒 A-9）/ [11_LowAltitudeFlight.md](11_LowAltitudeFlight.md)（レール t=0 の雲海の上）/ [8_PlayerMotion.md](8_PlayerMotion.md)
 
-最終更新: 2026-10-18（**F3 のコード完了（ビルド・実機は未確認）**：§2.3 に StageStartPart・CatapultFacility・コクピットの共通化・③IN の降下・視点の切り替え・カタパルトの灯りと IBL。HUB を通らずに来たら雲の上から（§0 を変更）。その前　2026-10-15 **F2 完了（ビルド・実機確認済み）**：§2.2 に床の穴・リフトの降下・暗転しない差し替えの仕組み。その前　**F1 完了**：§2.1 にリフト・縦穴・カタパルトのモデルの数値と罠。その前　電磁カタパルトの雷・給電ワイヤーと切り離しを §3.2 に追加。**作り直し**。瞼 → 走って扉へ、の案は廃止し、カタパルト発進に決定。§0〜§6 を新しく書いた）
+最終更新: 2026-10-19（**F4 のコード完了（ビルド・実機は未確認）**：§2.4 に機体確認の項目（照準・スラスター・武装＋POWER CABLE の状態表示）、表示板 LAUNCH CONTROL（一人称は宙に浮く板・三人称は画面の UI）、全部 CLEAR で液晶をすぐ READY・ネオンを一度消して機体の位置から射出口へ緑で点け直す流れ、`Launch` アクション（SPACE）、デモモードの直し。その前　2026-10-18 **F3 完了（ビルド・実機確認済み）**：§2.3 に機体の姿勢の流れ（Stand → Ignite → Catapult）、三人称カメラ（目は固定・注視点は始め／真横／奥のキーで機体を追う、F5 は前進量を増やすだけ）、**射出口を空に開ける＋レールの t=0 の雲海を仮のカメラで描く**、HUB のコクピットの中では本体を隠す、を追記。その前　F3 のコード：§2.3 に StageStartPart・CatapultFacility・コクピットの共通化・③IN の降下・視点の切り替え・カタパルトの灯りと IBL。HUB を通らずに来たら雲の上から（§0 を変更）。その前　2026-10-15 **F2 完了（ビルド・実機確認済み）**：§2.2 に床の穴・リフトの降下・暗転しない差し替えの仕組み。その前　**F1 完了**：§2.1 にリフト・縦穴・カタパルトのモデルの数値と罠。その前　電磁カタパルトの雷・給電ワイヤーと切り離しを §3.2 に追加。**作り直し**。瞼 → 走って扉へ、の案は廃止し、カタパルト発進に決定。§0〜§6 を新しく書いた）
 
 ---
 
@@ -138,7 +138,7 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 
 ---
 
-### 2.3 F3 で作ったもの（2026-10-18。コードまで。**ビルド・実機は未確認**）
+### 2.3 F3 で作ったもの（2026-10-18。**ビルド・実機確認済み**。値は StagePlay.json に保存済み）
 
 **決まったこと（2026-10-18 ユーザー）**
 - **機体の姿勢**：射出前（機体確認の間）は**直立**、射出が始まる（エンジンを吹かす）ときに**前傾**へ移る。ロボットなので**呼吸の動きは付けない**。新モデルは**反射が強すぎて表面がざらざらに見える**ので反射を抑える（2026-10-18 実機。モデルのチャットで直す）
@@ -174,6 +174,57 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 - 機体確認の入力（決定キー）は仮。F4 で機体確認の項目と入力アクションに置き換える
 - `AnimatedObject3DInstance` を unique_ptr で持つ .cpp は `Primitive/PrimitiveMesh.h` を include する（暗黙のデストラクタが PrimitiveMesh の完全型を要る。無いと C2338 / C2027）
 
+**F3 の続き（2026-10-18、実機で詰めた）**
+- **機体の姿勢**：モデルのチャットが書き出し直したクリップ（`PlayerModel_Stand / Ignite / Catapult.anim`、呼吸なし。共有ノート player_model_export.md）を使う。降下・機体確認は `Stand`（ループ）→ `Enter(Launch)` で `Ignite`（0.5 秒・1 回）→ 止まったら `Catapult`（前傾の保持のループ）。最初と最後のコマを前後とそろえてあるのでフェードなし（`StageStartPart::PlayMechPose` / `UpdateMechPose`）。注意：`ReplaceAnimation` は呼ぶたびに .anim をファイルから読む（数十 KB）。カクつけば F5 で先読み
+- **機体の前進量 `mechTravel_`**（+Z、m）：機体・コクピット（一人称の目も）・固定台（`CatapultFacility::SetClampTravel`）がこの分だけ前へ出る。**F5 は発進でこの値を増やすだけでよい**
+- **三人称カメラ**：目 `thirdPersonEye` はカタパルトに固定（リフトの中心から）、注視点は機体から見た点を 3 つのキーで変える：始め（前進 0）`thirdPersonTarget` 見上げ → 真横（機体がカメラの z を通る＝前進量が目の z）`thirdPersonPassTarget` 足元 → 奥（真横から `thirdPersonFarDistance` 先）`thirdPersonFarTarget`。あいだは smoothstep。`thirdPersonTargetLag`（遅れ、既定 0。入れると機体が画面の進む側へずれる）。実機で詰めた値は StagePlay.json
+- ImGui（Stage Start → View）：`Preview Travel (m)`（保存しない。F5 の前に見送りの画角を確かめる）・`Pose: Stand / Ignite`
+- **射出口は空に開ける**（ユーザー決定。白い板＋ブルームだと機体が光に埋もれた）：施設の `exitOpenToSky`（既定 on）で `CatapultExitLight` を画面に描かない。奥に StagePlay の skybox が見える。穴のまわりは板を発光 RT にだけ弱く描いてにじませる（`exitSkyBloom` 0.15 倍）。白い板の版に戻すときのために、機体が近づくと板を弱める `exitDimNear` / `exitDimDistance` も残してある
+- **射出口の向こうの雲海**（一人称だと空だけでは水色の板に見えたため）：`StagePlayScene::DrawStageStart` で、カタパルトを描いた後に**今のカメラを位置だけずらした仮のカメラ**で雲のレイマーチ（`StageEnvironment::DrawRaymarchClouds`）を描く。ずらす量は「射出口の床の中心 → レールの t=0 のカメラ位置（`RailStagePart::SampleCameraPathAtSec(0)`）＋ `skyAnchorOffset`」（`StageStartPart::GetSkyViewOffset`）。向き・画角が同じなのでトンネルの壁の深度で雲が止まり、穴からだけ見える。雲の流れも同じ仮の目の位置で `UpdateClouds`。**射出口の向こうは雲の上の場面（S4）と同じ景色**なので、F5・F6 で飛び出す先とそろう。`cloudsThroughExit` で切れる
+- **HUB のコクピットの中では機体の本体を描かない**（全天周のモニターが外を映すと左右に腕・脚が映り込んだ。StagePlay の一人称も本体を描かないので切れ目でそろう）：`HubMechModel::SetBodyHidden`、`HubScene::ApplyPose` で `Cockpit` / `Descending` の間。その後 HUB の本体は新モデル＋胸の六角形のディゾルブに替わった（別セッション。17 番・18 番）
+- 実機：切れ目の見え方は気にならない。**差し替えの同期ロードでカクつく**のだけが目立つ → F7
+
+### 2.4 F4 で作ったもの（2026-10-19。ビルド・実機で流れは確認済み。表示板の直し（下の「実機で直したこと」）は**ビルド・実機は未確認**。値はコードの既定値で、StagePlay.json にはまだ保存していない）
+
+**決まったこと（2026-10-19 ユーザー）**
+- 項目は **3 つ**：**照準**（マウス／右スティックを動かす）・**スラスター**（W/A/S/D の 4 方向を 1 回ずつ）・**武装**（射撃）。**POWER CABLE** は操作しない行で、最初から黄色の「ON-LINE」。F5 の切り離しで赤の「PURGE」にする（`LaunchControlBoard::SetState` の `cablePurged`）
+- **翼は機械ではないので、翼にスラスターは付けない**。今の機体にスラスターが無いので、F4 では表示板のランプだけ反応する。**どこから噴かすか（背中・脚など）とエフェクトは F5 で決める**
+- 表示先：**一人称はコクピットの中の宙に浮く板**（HATCH の表示板と同じ作り）、**三人称はカタパルトの中に立てたパネル**（画面の左側に見える所。最初は画面の右側の UI にしたが、機体と重なったので 2026-10-19 に変更）
+- 3 つとも CLEAR → **液晶はパッと LAUNCH READY** に替わる → **ネオンは一度全部消え、機体の位置から射出口へ 1 列ずつ緑で点き直す**（固定台と機体より後ろの列は最初に点く）→ **奥まで点き切ったらブースト（エンジンを吹かす）の許可**＝表示板に LAUNCH READY と [SPACE] BOOST → SPACE で発進（Launch）。IBL は点き切ったときに `catapult_ibl_ready.dds` へ替える
+
+**モデル（`gen_catapult.py`）**
+- 斜めの面のネオンを**列ごとのマテリアル `NeonRow00`〜`NeonRow22`**（23 列、8m おき）に分けた。固定台は `Neon` のまま。中身は Neon と同じ（.mat も同じ）。`StageStartGeometry.json` の `catapult.neonRows`（`materials` と列の中心の `z`）に書く。書き出し → Catapult.gltf だけ cook。IBL は見た目が変わらないので撮り直していない。Catapult の描画は submesh 27（22 回増えた）
+- 使わなくなった `Resources/Models/Catapult/Catapult_Neon.mat` が残っている（害はない）
+
+**エンジン（ArcanaEngine への同期が要る）**
+- `ModelInstance::SetTextureByMaterialName(マテリアル名, テクスチャ)`：.mat のパスにその名前を含む submesh のベースカラーを差し替える（読み込みもする。GPU の準備前は 0 を返す）。液晶の LAUNCH UNABLE ↔ READY に使う
+
+**ゲーム（CG2_0_1.vcxproj と .filters に追記済み）**
+- 入力アクション `Launch`（SPACE／パッドの A。回避と同じキーだが機体確認の間しか読まない）。`GameActions.h`・`KeyConfig.cpp`・`keyconfig.default.json`
+- `Game/Scene/StageStart/LaunchChecklist.{h,cpp}`（新規）：項目の判定。照準＝マウスの移動量の合計（`aimDistancePx` 400px。2026-10-19 に 600 から）＋右スティック、スラスター＝W/A/S/D・左スティックの 4 方向、武装＝`Action::Fire` を `weaponShots`（1）回（2026-10-19 に 3 から）。**移動と照準は入力アクションを通さず直接読む**（ゲーム本体と同じ。Action はボタン入力だけ）。デモモードは `autoStartDelay`（1.2s）から `autoInterval`（0.9s）おきに 1 つずつ自動で進める（照準のゲージ・4 方向・射撃の数も途中を見せる）
+- `Game/Scene/StageStart/LaunchControlBoard.{h,cpp}`（新規）：表示板。中身は RenderTexture（940×720。項目名とゲージの列の空きを詰めて幅 1024 → 940、2026-10-19 に縦を 640 から少し大きく、主な文字も 1〜2 割大きく）に 1 回だけ描き、同じ絵を `logo_plane.mesh`（タイトル・HatchSign と共有）の板 2 枚に貼る（文字だけ光る）。一人称は座った目からの宙に浮く板（`offsetFromEye` (0.12, −0.15, 0.62)・幅 0.62m）、三人称はカタパルトの中に据え付けたパネル。**置き場所は三人称のカメラ（前進 0 の構え）から見た画面の位置と距離で決める**（2026-10-19 ユーザーのスケッチ：画面の左上に余白を残して UI、右に機体。`panelScreenAnchor` (−0.36, 0.40)・`panelDistance` 20m・幅は画面の割合 `panelScreenWidth` 0.385（距離と画角からワールドの幅を出す））。向きは**カメラの目の位置へ向けて** `panelAngleOffsetDegrees` (0, −10, 0) ずらす（ユーザーが選んだ斜めの見え方。`panelFaceEye` を切ると画面と平行）。カメラは固定なのでパネルは動かない。行：00 POWER CABLE / 01 AIM CONTROL（MOUSE・ゲージ）/ 02 THRUSTER（W A S D のランプ：押している間は白、済んだら緑）/ 03 WEAPON（L-CLICK・回数）。右の箱は未完了が赤の CHECK（点滅）、CLEAR は**白地**に暗い文字（チラついて変わる）。下の段は SYSTEM CHECK n/3（黄）→ COURSE CLEAR（点け直し中）→ LAUNCH READY（緑地）＋ [SPACE] BOOST（黄地・点滅）。各行に日本語の小さい操作説明
+- `CatapultFacility`：`ResetLaunchState` / `BeginReadySequence` / `AdvanceReadySequence` / `IsLaunchReady`。点け直しは 消える `neonOffSeconds`（0.4s）→ 列 z の点く時刻 = (z − `neonSweepOriginZ`(0)) / `neonSweepSpeed`(60m/s) で、`CockpitReveal::Flicker`（`neonFlickerSeconds` 0.25s）でチカチカして点く。消えている間はネオンの板の色を `neonOffColor`（0.06）まで暗くする（白の地が灯りで光って見えないように）。終わり（`Finalize`）で液晶のテクスチャ・ネオンの色を元に戻す（共有の ModelInstance）
+- `StageStartPart`：機体確認の中の段階 `Checking → PowerUp → Ready`。表示板は機体確認に入って `boardAppearDelay`（0.3s）で出て、それまで入力を読まない。Ready で `Action::Launch` → `Enter(Launch)`。**決定キー（Enter）で進む仮の作りは消した**。デモモードは Ready から `attractLaunchWait`（1.5s）で自動で発進。`Update` は `InputActionMap*` ではなく `InputManager*` を受け取る。IBL はネオンが点き切ったら `catapultReadyIblPath`
+- `StagePlayScene`：`DrawStageStart` の頭で表示板の RT を描く（その後ビューポートを戻す）。**デモモードの時間（`attractTime_`）をスタート演出の間は数えない**（数えるとカタパルトの上で HP 0・ポーズが走り、止まっていた）
+- 調整値は StagePlay.json の `"stageStart"` の `"checklist"` / `"board"` / `catapultReadyIblPath` / `boardAppearDelay` / `attractLaunchWait`、`"facility"` の `readyNeonColor` / `readyNeonScale` / `neonOffColor` / `neonOffSeconds` / `neonSweepOriginZ` / `neonSweepSpeed` / `neonFlickerSeconds`。ImGui は Stage Start の「Inspection (F4)」・Checklist（Clear All）・Launch Control Board（RT の中身の小さい絵）・Facility の「Ready Sequence (F4)」（Begin / Reset）と、上の「Restart Inspection」
+
+**実機で直したこと（2026-10-19）**
+- 一人称の板が小さくて読めない → 幅 0.42 → 0.62m、目の前 0.62m のやや右下へ
+- **ブルームで文字がつぶれた**（板全体を発光 RT に ×6 で書いていたので、白地・緑地・黄地の箱がにじんで文字が消えた。三人称の画面の UI も塗りの箱を光らせていて、さらにネオンのにじみが上から足された）→ 板の発光 RT の倍率 ×1.2・文字に足す明るさ 0.06、板の地の濃さ 0.85。三人称は画面の UI をやめてワールドのパネルにしたので、発光の層（`DrawTextGlow`）は使っていない
+- 三人称の画面の UI が機体と重なった → カタパルトに立てたパネルへ（上）。最初はカメラの目へ自動で向けたが、小さく（幅 5m・遠い）、ビルボードのようで不自然だった → 向きを固定・幅 10m・より左（画面の左側）へ
+- 向きを固定・幅 10m でもまだ小さく、画面の中ほどに見えた → 置き場所を画面の位置（左上）から計算する作りに（上）。幅 14m・−30° だと大きすぎて左が見切れた → 幅を画面の割合に、斜めを −10° に。それでも見切れて文字も小さかった（原因：カメラの目の位置へ向けると画面の端では透視で台形に歪む）→ 画面と平行に・幅 0.42・中心 (−0.48, 0.40)。見比べてユーザーは**目へ向けた斜めの角度（yaw −10°）の方を選んだ**ので戻し、見切れないよう中心を (−0.42, 0.40) に・パネルを縦長（1024×720）に・主な文字を大きく
+- **Debug の始め**：HUB を通らずに来たとき（Debug の初期シーン STAGEPLAY）の始め方を `debugStart`（`cloudTop` / `descent` / `inspection`）に。**スタート演出を作っている間の既定は `inspection`**（降下を飛ばしてカタパルトで止まった所＝機体確認の頭。`StageStartPart::BeginInspection`）。**作業が終わったら `cloudTop` に戻す**。ImGui の Stage Start の「Debug Start (no HUB)」。Release と HUB から来たときは効かない（それまでの `debugDescentWithoutHandoff` は廃止）
+
+罠・注意（F5 以降へ）：
+- **三人称のパネルは画面の左上＝機体の頭の前方の高い所（カタパルトの座標でおよそ x 7・y 12・z 10）にある**。発進で前へ走る機体の肩・頭と重なるかもしれないので、F5 で発進の頭にパネルを消す（チラついて消える等）か確かめる
+- 画面の UI にネオンのにじみをかぶせたくないときは、ポストエフェクトの後に描く口（`Scene::DrawAfterPostEffect`。崩壊の破片が使っている）がある。TextRenderer は深度を使わず出力も sRGB なので、そこで Flush できる
+- ネオンの色は `SetEmissiveByMaterialName` の部分一致で付けるので、**`"Neon"` は `NeonRow00`… にも当たる**。列ごとに付ける今のコードでは問題ないが、`neonMaterial` を全体にまとめて付け直すと点け直しが消える
+- 共有の ModelInstance（液晶・ネオンの色・表示板の板）は終わりに戻している。表示板の板は `logo_plane.mesh` で、テクスチャは使う側（タイトル・HatchSign・この板）が毎フレーム貼り直す前提
+- 表示板の文字（日本語）は `TextRenderer` がその場でアトラスに焼く。初めて出る字があるフレームは少し重いかもしれない
+- Launch に入ると表示板は Status::Launch（BOOST の黄地を点けたまま）で出し続ける。今は F5 が無いので次のフレームで消える
+- **表示板の UI は 2026-10-19 にユーザー OK**
+- 武装の確認で射撃しても弾は出ない（演出の間は自機を動かしていない）。弾やマズルの光を出すなら F5 と一緒に
+
 ## 3. カタパルト
 
 - 施設は Blender のスクリプトで作る（扉・神殿と同じ流儀。仮名 `gen_catapult.py`、**GUI から書き出さない**）。スケッチ：床の中央にレール、両側の壁に縦長のパネルが並び、天井に梁（給電ワイヤーを垂らすアームを付けるか決める）、先に射出口
@@ -183,9 +234,9 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 ### 3.1 機体確認（S1）
 
 - 表示板は**緑のネオン**（黄・赤を差し色に。参考画像の LAUNCH CONTROL の表示板）。C で作った `TextRenderer` の発光の層・発光パスを使う
-- 項目の例：照準（マウスを動かす）／スラスター（WASD → 翼のスラスターが動く）／武装（射撃キー）。**項目の数と中身は F4 で決める**
-- 各項目は操作すると CLEAR（白地）に変わる。全部 CLEAR → COURSE CLEAR / LAUNCH READY を出し、SPACE を受け付ける
-- 一人称のときはコクピットのコンソールに、三人称のときは画面の UI に出す（F4 で決める）
+- 項目（2026-10-19 決定、§2.4）：照準（マウス）／スラスター（W/A/S/D の 4 方向。翼には付けない。噴く場所とエフェクトは F5）／武装（射撃）＋ POWER CABLE ON-LINE（表示だけ）
+- 各項目は操作すると CLEAR（白地）に変わる。全部 CLEAR → COURSE CLEAR → カタパルトのネオンが機体の位置から射出口へ緑で点き直す → LAUNCH READY / [SPACE] BOOST で SPACE を受け付ける
+- 一人称のときはコクピットの中の宙に浮く板、三人称のときは画面の UI に出す（2026-10-19 決定）
 
 ### 3.2 発進（S2・S3）
 
@@ -254,8 +305,8 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 |---|---|---|---|
 | F1 [x] | **縦穴・リフト・カタパルトのモデル**（2026-10-15 完了。§2.1） | Blender のスクリプトで八角形のリフト（神殿の床と同じ高さに置く）・縦穴の繰り返しの板・カタパルトの施設・射出口。色と飾りを決める。cook まで | なし |
 | F2 [x] | **床の穴と③OUT**（2026-10-15 完了。ビルド・実機確認済み。§2.2。落ちる時間は F3 の後で調整） | `WaterSurface` に八角形の穴（エンジン）。HubScene でステージ決定 → リフトの降下 → 縦穴を降り続ける → StagePlay へ差し替え（同期ロード） | F1 |
-| F3 [x] | **コクピットの共通化と③IN・骨組み**（2026-10-18 コードまで。ビルド・実機は未確認。§2.3） | §4.1 のコクピットの部品を共通化。StagePlay にスタート演出の専用クラス（RailStagePart / BossStagePart と同じ流儀。StagePlayScene に直書きしない）。状態：降下 / 機体確認 / 発進 / 白 / 雲の上 / 終了。縦穴の続き → カタパルトで止まる。一人称 ↔ 三人称の切り替え | F1・F2 |
-| F4 [ ] | **機体確認と表示板** | §3.1。項目を決め、入力アクションを足し、操作で CLEAR になる。表示板の UI（緑のネオン） | F3 |
+| F3 [x] | **コクピットの共通化と③IN・骨組み**（2026-10-18 完了。ビルド・実機確認済み。§2.3） | §4.1 のコクピットの部品を共通化。StagePlay にスタート演出の専用クラス（RailStagePart / BossStagePart と同じ流儀。StagePlayScene に直書きしない）。状態：降下 / 機体確認 / 発進 / 白 / 雲の上 / 終了。縦穴の続き → カタパルトで止まる。一人称 ↔ 三人称の切り替え | F1・F2 |
+| F4 [x] | **機体確認と表示板**（2026-10-19 コードまで。ビルド・実機は未確認。§2.4） | §3.1。項目を決め、入力アクションを足し、操作で CLEAR になる。表示板の UI（緑のネオン） | F3 |
 | F5 [ ] | **発進** | §3.2。SPACE → **給電ワイヤーの切り離し** → スラスターのエフェクト・**電磁カタパルトの雷** → 加速 → 射出口の光 → 白。ワイヤーと雷が重ければ F5a（ワイヤー）/ F5b（雷・スラスター・加速・光）に分ける | F3・F4 |
 | F6 [ ] | **雲の上 → レールのカメラ・リトライ・デモモード** | §3.3。左上のカメラから回り込んでレールのカメラへ。リトライで飛ばす（18 番⑤）。デモモードで自動で進める | F5 |
 | F7 [ ] | **裏でのロード** | §4.2 の 2。StagePlay のロードを別スレッドで進め、差し替えのカクつきを消す | F2・F3（コンテスト後でもよい） |
@@ -268,11 +319,14 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 
 | 項目 | メモ |
 |---|---|
-| 機体確認の項目 | 数と中身（F4） |
+| 機体確認の項目 | 2026-10-19 決定：照準・スラスター・武装＋POWER CABLE（§2.4） |
+| スラスターの位置 | 翼には付けない。背中・脚など噴く場所とエフェクトは F5 |
 | カタパルトの色・飾り | 2026-10-15：まずグレー（§2.1）。外と合わなければ白と金。ネオンの板・断面（八角形）・液晶の帯はスケッチで決定（§2.1） |
 | 3,2,1 / GO の表示 | 入れるか。発進管制の音声の代わりに文字（COURSE CLEAR / LAUNCH）を出すか |
 | SE・BGM | 発進の音、BGM の切り替え |
 | 各段階の長さ | 実機で詰める |
 | 給電ワイヤー | 付け根は機体の後ろのカメラに映らない所（2026-10-15、§2.1）。本数・色・つなぐ場所（背中／足）は F5 |
 | 雷の形 | 射出台について走るか、レールに沿って先へ伸びるか（F5） |
-| 自機の発進の姿勢 | 前かがみなどのポーズを付けるか（8 番） |
+| 自機の発進の姿勢 | 2026-10-18：機体確認は直立（Stand）、発進で前傾へ（Ignite → Catapult）。切り離しは Launch（§2.3） |
+| 射出口の先 | 2026-10-18 に射出口を空に開けた（奥は雲の上の景色）。S3 の白フェードを挟むか、そのまま空へ飛び出して S4 につなぐか（F5） |
+| 差し替えのカクつき | ③ の同期ロードで止まる。F7（裏でのロード）で直す |

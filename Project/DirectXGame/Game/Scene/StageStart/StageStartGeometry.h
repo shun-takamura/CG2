@@ -3,6 +3,7 @@
 #include "Vector4.h"
 #include <array>
 #include <string>
+#include <vector>
 
 /// <summary>
 /// スタート演出（16_StageStart.md）のリフト・縦穴・カタパルトの寸法。
@@ -36,6 +37,10 @@ struct StageStartGeometry {
 	std::array<Vector3, 2> clamps = { Vector3{ -3.0f, 0.0f, 1.2f }, Vector3{ 3.0f, 0.0f, 1.2f } };
 	std::array<Vector3, 2> cableAnchors = { Vector3{ 3.0f, 21.0f, -12.8f }, Vector3{ -3.0f, 21.0f, -12.8f } };
 	std::string neonMaterial = "Neon";
+	// 斜めの面のネオンの列（機体確認の後に機体の位置から射出口へ 1 列ずつ点け直す。F4）。z は列の中心。
+	// 空なら列に分かれていない古い書き出し（全部 neonMaterial で光る）
+	std::vector<std::string> neonRowMaterials;
+	std::vector<float> neonRowZ;
 	std::array<std::string, 2> lcdMaterials = { "LcdLeft", "LcdRight" };
 	float lcdUPerMeterZ[2] = { 0.0254629f, -0.0254629f };
 	std::string lcdTextureUnable = "Resources/Models/Catapult/LcdLaunchUnable.dds";

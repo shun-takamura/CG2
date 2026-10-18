@@ -282,6 +282,23 @@ int ModelInstance::SetEmissiveByMaterialName(const std::string& materialName, co
 	return count;
 }
 
+int ModelInstance::SetTextureByMaterialName(const std::string& materialName, const std::string& texturePath)
+{
+	// GPU の準備で .mat のパスに上書きされるので、準備の後だけ受け付ける
+	if (loadState_ != LoadState::GPUReady) return 0;
+	auto* tm = TextureManager::GetInstance();
+	tm->LoadTexture(texturePath);
+	if (!tm->HasTexture(texturePath)) return 0;
+	int count = 0;
+	for (auto& sm : submeshes_) {
+		if (sm.matFilePath.find(materialName) == std::string::npos) continue;
+		sm.textureFilePath = texturePath;
+		++count;
+	}
+	if (!submeshes_.empty()) textureFilePath_ = submeshes_[0].textureFilePath;
+	return count;
+}
+
 void ModelInstance::ClearEmissive()
 {
 	for (auto& sm : submeshes_) {

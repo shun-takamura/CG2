@@ -669,6 +669,9 @@
     "hallSunScale": 0,
     "lampLevelInShaft": 1,
     "catapultIblPath": "Resources/Cubemaps/catapult_ibl.dds",
+    "catapultReadyIblPath": "Resources/Cubemaps/catapult_ibl_ready.dds",
+    "boardAppearDelay": 0.30000001192092896,
+    "attractLaunchWait": 1.5,
     "nearClip": 0.10000000149011612,
     "cockpitSignColor": [
       0.34999999403953552,
@@ -708,7 +711,7 @@
     ],
     "thirdPersonFovDegrees": 60,
     "mechScale": 10.625,
-    "debugDescentWithoutHandoff": false,
+    "debugStart": "inspection",
     "facility": {
       "lamps": [
         {
@@ -773,7 +776,80 @@
         0.44999998807907104
       ],
       "neonScale": 2,
-      "lcdEmissiveScale": 1.5
+      "lcdEmissiveScale": 1.5,
+      "readyNeonColor": [
+        0.25,
+        1,
+        0.44999998807907104
+      ],
+      "readyNeonScale": 2,
+      "neonOffColor": 0.059999998658895493,
+      "neonOffSeconds": 0.40000000596046448,
+      "neonSweepOriginZ": 0,
+      "neonSweepSpeed": 60,
+      "neonFlickerSeconds": 0.25
+    },
+    "checklist": {
+      "aimDistancePx": 400,
+      "aimStickSpeed": 900,
+      "stickThreshold": 0.5,
+      "weaponShots": 1,
+      "autoStartDelay": 1.2000000476837158,
+      "autoInterval": 0.89999997615814209
+    },
+    "board": {
+      "offsetFromEye": [
+        0.11999999731779099,
+        -0.15000000596046448,
+        0.62000000476837158
+      ],
+      "rotationDegrees": [
+        10,
+        8,
+        0
+      ],
+      "width": 0.62000000476837158,
+      "panelScreenAnchor": [
+        -0.36000001430511475,
+        0.40000000596046448,
+        0
+      ],
+      "panelDistance": 20,
+      "panelFaceEye": true,
+      "panelScreenWidth": 0.38499999046325684,
+      "panelAngleOffsetDegrees": [
+        0,
+        -10,
+        0
+      ],
+      "emissive": 0.059999998658895493,
+      "bloomScale": 1.2000000476837158,
+      "appearSeconds": 0.34999999403953552,
+      "backgroundAlpha": 0.85000002384185791,
+      "green": [
+        0.34999999403953552,
+        1,
+        0.60000002384185791,
+        1
+      ],
+      "dimGreen": [
+        0.11999999731779099,
+        0.44999998807907104,
+        0.25,
+        1
+      ],
+      "yellow": [
+        1,
+        0.81999999284744263,
+        0.20000000298023224,
+        1
+      ],
+      "red": [
+        1,
+        0.25,
+        0.37999999523162842,
+        1
+      ]
     }
   }
 }
