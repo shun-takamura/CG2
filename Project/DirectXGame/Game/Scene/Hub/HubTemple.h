@@ -13,6 +13,7 @@ class Camera;
 class JsonValue;
 class WaterSurface;
 class WaterReflection;
+class AnimatedObject3DInstance;
 
 /// <summary>
 /// HUB の神殿（17_HubScene.md §2 / H1・H2）。パルテナの神殿に寄せた虹色の聖堂と、金の天球儀の輪。
@@ -36,6 +37,11 @@ public:
 	void AddReflectionTarget(Object3DInstance* target);
 	/// <summary>床に映す物から外す（コクピットの中で機体の本体を隠している間など）</summary>
 	void RemoveReflectionTarget(Object3DInstance* target);
+	/// <summary>
+	/// アニメーションする物（機体の本体＝自機の新モデル）を床に映す。外す口は無いので、隠すときは
+	/// AnimatedObject3DInstance::SetVisible(false)（映り込みの描画も表示フラグを見る）
+	/// </summary>
+	void AddReflectionTarget(AnimatedObject3DInstance* target);
 	/// <summary>
 	/// 床の反射 RT を描く。シーン RT を貼る前に呼ぶ（呼んだ後は RTV/DSV が反射 RT のままなので貼り直すこと）
 	/// </summary>

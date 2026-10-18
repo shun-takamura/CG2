@@ -237,6 +237,10 @@ void HubTemple::AddReflectionTarget(Object3DInstance* target) {
 	reflection_->AddTarget(target);
 }
 
+void HubTemple::AddReflectionTarget(AnimatedObject3DInstance* target) {
+	reflection_->AddTarget(target);
+}
+
 void HubTemple::RemoveReflectionTarget(Object3DInstance* target) {
 	reflection_->RemoveTarget(target);
 }

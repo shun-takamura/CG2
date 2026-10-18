@@ -1,13 +1,14 @@
 #pragma once
 #include "HubCameraTrack.h"
+#include "HubMechModel.h"
 #include "Vector3.h"
 
 class JsonValue;
 
 /// <summary>
 /// 乗り込み（18_HubTransitions.md ①の OUT）のタイムライン。
-/// 回廊 → 手のひら → 開口部 → 振り返って座る → 正面を向いたままハッチが降りて閉じるまでを、
-/// 時刻から一人称のカメラ・ハッチの開き具合・外の光の強さに変える（描画と、そのあとのコクピットは持ち主の HubScene がする）。
+/// 機体が手を差し出す → 足場 → 手のひら → 胸の装甲が光って開いた入口 → 振り返って座る → 装甲が閉じ、
+/// 正面を向いたままハッチが降りて閉じるまでを、時刻から一人称のカメラ・機体の腕と胸の入口・ハッチの開き具合・外の光の強さに変える（描画と、そのあとのコクピットは持ち主の HubScene がする）。
 /// 時刻 0 の姿勢は HUB の待機の視点を兼ねる（降りる HubDisembarkSequence もここへ戻ってくる）。
 /// 調整値は Hub.json の "boarding"（ImGui の「Hub Tuning」でシークしながら詰める）。
 /// </summary>
@@ -20,6 +21,7 @@ public:
 		float pitch = 0.0f;   // ラジアン
 		float hatchOpenRatio = 1.0f;  // 1 = 開いている、0 = 閉じ切り
 		float lightScale = 1.0f;      // 外の光の強さの倍率（隙間が狭まると暗くなる）
+		HubMechModel::Pose mech;      // 機体の腕（手を差し出す）と胸の入口
 	};
 
 	HubBoardingSequence();
@@ -71,6 +73,11 @@ private:
 
 	// 調整値（Hub.json の "boarding"）
 	HubCameraTrack track_;
+	float offerStartTime_ = 0.0f;      // 機体が手を差し出し始める（Offer のクリップ 1.6 秒。待機＝時刻 0 は直立）
+	float chestOpenStartTime_ = 2.6f;  // 胸の装甲が開き始める
+	float chestOpenEndTime_ = 3.6f;    // 開き切る
+	float chestCloseStartTime_ = 6.8f; // 座った後、閉じ始める
+	float chestCloseEndTime_ = 7.6f;   // 閉じ切る（このあとハッチが降りる）
 	float sitTime_ = 5.2f;             // 座った瞬間（揺れ）
 	float sitShakeIntensity_ = 0.025f;
 	float sitShakeSeconds_ = 0.25f;

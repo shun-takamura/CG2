@@ -8,8 +8,8 @@ namespace {
 	constexpr const char* kModelDir = "Resources/Models/HubMech/Export";
 
 	// Blender の (x, y, z) はエンジンで (−x, z, −y)
-	// ハッチの原点＝回転の軸。Blender の (0, −1.165, 12.343)
-	const Vector3 kCockpitAxis = { 0.0f, 12.343f, 1.165f };
+	// ハッチの原点＝回転の軸。Blender の (0, −0.465, 12.343)。2026-10-18 自機の新モデルの胸に収めるため 0.7m 後ろへ（17 番 §5.1）
+	const Vector3 kCockpitAxis = { 0.0f, 12.343f, 0.465f };
 	// 座った目はコクピットの軸から Blender で (0, 0.18, 0.20)
 	const Vector3 kSeatedEyeFromAxis = { 0.0f, 0.20f, -0.18f };
 }

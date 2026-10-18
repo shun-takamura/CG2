@@ -92,6 +92,13 @@ public:
     // シャドウパス用：Skinning 済み VBV/IBV をバインドして深度のみ描画。
     void DrawShadowPass(DirectXCore* dxCore, const SkinCluster& skinCluster);
 
+    // 発光パス用（ModelInstance::DrawBloomPass のスキニング版）：Skinning 済み VBV で、発光している部位と
+    // drawSubmesh[i] が 0 でない部位（ディゾルブの縁を光らせる部位）を描く。RootSig / PSO / Transformation CB は呼び出し側
+    void DrawBloomPassSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster, const std::vector<uint8_t>& drawSubmesh);
+
+    // 部位ごとのマテリアル（ディゾルブ・発光を部位で変えるため）。material は書き込み専用のメモリなので読まない
+    std::vector<RenderSubmesh>& GetSubmeshes() { return submeshes_; }
+
     const ModelData& GetModelData() const { return modelData_; }
     const Animation& GetAnimation() const { return animation_; }
     /// <summary>モデル空間の包む球（バインドポーズ）。IsValid() が false なら大きさ不明</summary>

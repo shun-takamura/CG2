@@ -68,7 +68,7 @@ void HubScene::Initialize() {
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, kSkyboxPath);
 	mech_ = std::make_unique<HubMechModel>();
-	mech_->Initialize(object3DManager_, dxCore_);
+	mech_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
 
 	// 神殿（回廊・足場・輪・扉・鏡の床）。機体も床に映す
 	temple_ = std::make_unique<HubTemple>();
@@ -448,9 +448,9 @@ void HubScene::ApplyPose() {
 	HubBoardingSequence::Pose pose{};
 	if (state_ == State::Disembarking || disembark_.IsPreviewing()) {
 		const HubDisembarkSequence::Pose d = disembark_.GetCurrentPose();
-		pose = { d.eye, d.yaw, d.pitch, d.hatchOpenRatio, d.lightScale };
+		pose = { d.eye, d.yaw, d.pitch, d.hatchOpenRatio, d.lightScale, d.mech };
 	} else if (state_ == State::Entering || entrySequence_.IsPreviewing()) {
-		// ハッチは開いて待っている・外の光はそのまま
+		// ハッチは開いて待っている・外の光はそのまま・機体は直立（Offer の時刻 0）
 		const HubEntrySequence::Pose e = entrySequence_.GetCurrentPose();
 		pose = { e.eye, e.yaw, e.pitch, 1.0f, 1.0f };
 	} else {
@@ -466,17 +466,12 @@ void HubScene::ApplyPose() {
 	camera_->SetRotate({ pose.pitch, pose.yaw, 0.0f });
 
 	mech_->SetHatchOpenRatio(pose.hatchOpenRatio);
-	mech_->Update();
+	mech_->SetPose(pose.mech);
 	// コクピットの中にいる間は本体を描かない（外が透けると全天周のモニターの左右に腕・脚が映り込むため）。
 	// 透ける前はコクピットの壁が覆っているので見た目は変わらない。降りる（Disembarking）のはシャットダウンで壁が戻った後。
-	// 床の映り込みからも外す（StagePlay の一人称も本体を描かないので、③ の切れ目の前後でそろう）
-	if (cockpitView != mech_->IsBodyHidden()) {
-		mech_->SetBodyHidden(cockpitView);
-		if (temple_) {
-			if (cockpitView) temple_->RemoveReflectionTarget(mech_->GetBody());
-			else temple_->AddReflectionTarget(mech_->GetBody());
-		}
-	}
+	// 床の映り込みにも出ない（本体の表示フラグを映り込みも見る。StagePlay の一人称も本体を描かないので、③ の切れ目の前後でそろう）
+	mech_->SetBodyHidden(cockpitView);
+	mech_->Update();
 
 	// 平行光源の既定 intensity は 0 なので毎フレーム決める。
 	// ハッチが閉じるにつれて弱め、外が透ける（全天周囲モニターが外を映す）につれて戻す

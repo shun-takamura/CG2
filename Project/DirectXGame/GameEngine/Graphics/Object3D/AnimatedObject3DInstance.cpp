@@ -444,6 +444,48 @@ void AnimatedObject3DInstance::DrawShadowPass(DirectXCore* dxCore)
     animatedModelInstance_->DrawShadowPass(dxCore, skinCluster_);
 }
 
+void AnimatedObject3DInstance::DrawBloomPass(DirectXCore* dxCore, float bloomScale)
+{
+    if (!visible_) return;
+#ifdef _DEBUG
+    if (!visibleInEditor_) return;
+#endif
+    if (!animatedModelInstance_ || !hasSkinCluster_ || !object3DManager_) return;
+
+    auto* cmd = dxCore->GetCommandList();
+    cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmd->SetGraphicsRootSignature(object3DManager_->GetBloomRootSignature());
+    cmd->SetPipelineState(object3DManager_->GetBloomPipelineState());
+    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    const float constants[Object3DManager::kBloomPassConstantCount] = { bloomScale, 0.0f, 0.0f, 0.0f };
+    cmd->SetGraphicsRoot32BitConstants(2, Object3DManager::kBloomPassConstantCount, constants, 0);
+
+    animatedModelInstance_->DrawBloomPassSkinning(dxCore, skinCluster_, dissolveSubmeshes_);
+}
+
+void AnimatedObject3DInstance::SetDissolveSphere(const DissolveSphere& dissolve, const std::string& textureKeyword)
+{
+    if (!animatedModelInstance_) return;
+    auto& submeshes = animatedModelInstance_->GetSubmeshes();
+    dissolveSubmeshes_.resize(submeshes.size(), 0);
+    for (size_t i = 0; i < submeshes.size(); ++i) {
+        RenderSubmesh& sm = submeshes[i];
+        if (!sm.material) continue;
+        if (!textureKeyword.empty() && sm.textureFilePath.find(textureKeyword) == std::string::npos) continue;
+        ::SetDissolveSphere(*sm.material, dissolve);
+        dissolveSubmeshes_[i] = 1;
+    }
+}
+
+void AnimatedObject3DInstance::ClearDissolve()
+{
+    if (!animatedModelInstance_) return;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (sm.material) sm.material->dissolveEnable = kDissolveOff;
+    }
+    dissolveSubmeshes_.clear();
+}
+
 void AnimatedObject3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
