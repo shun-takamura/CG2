@@ -1,6 +1,9 @@
 #include "StageStartPart.h"
 
 #include "StageStart/CatapultFacility.h"
+#include "StageStart/LaunchChecklist.h"
+#include "StageStart/LaunchControlBoard.h"
+#include "AttractMode.h"
 #include "Cockpit/CockpitModel.h"
 #include "Cockpit/CockpitLighting.h"
 #include "Camera.h"
@@ -14,6 +17,7 @@
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "InputAction.h"
+#include "InputManager.h"
 #include "Config/GameActions.h"
 #include "Json/JsonValue.h"
 #include <algorithm>
@@ -58,6 +62,17 @@ namespace {
 		return { a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
 	}
 
+	constexpr const char* kDebugStartNames[] = { "cloudTop", "descent", "inspection" };
+
+	const char* InspectionStepName(int step) {
+		switch (step) {
+		case 0: return "Checking";
+		case 1: return "PowerUp";
+		case 2: return "Ready";
+		}
+		return "";
+	}
+
 	const char* StateName(StageStartPart::State state) {
 		switch (state) {
 		case StageStartPart::State::Descent:    return "Descent";
@@ -75,7 +90,9 @@ namespace {
 StageStartPart::StageStartPart()
 	: facility_(std::make_unique<CatapultFacility>()),
 	  cockpit_(std::make_unique<CockpitModel>()),
-	  cockpitLighting_(std::make_unique<CockpitLighting>()) {
+	  cockpitLighting_(std::make_unique<CockpitLighting>()),
+	  checklist_(std::make_unique<LaunchChecklist>()),
+	  board_(std::make_unique<LaunchControlBoard>()) {
 }
 StageStartPart::~StageStartPart() = default;
 
@@ -90,6 +107,8 @@ void StageStartPart::Initialize(IStageStartHost* host, Camera* camera, Object3DM
 	facility_->SetOrigin(origin_);
 	cockpit_->Initialize(object3DManager, dxCore);
 	cockpit_->SetHatchOpenRatio(0.0f);   // 閉じ切り（外は全天周のモニターに映っている扱い）
+	board_->Initialize(object3DManager, dxCore, srvManager);
+	checklist_->Reset();
 	// 三人称の機体。クリップが複数あるので既定のアニメは付かない → 直立（Stand）を差す
 	if (AssetLocator::GetInstance()->Exists(std::string(kMechDir) + "/" + kMechFile)) {
 		mechModel_ = std::make_unique<AnimatedModelInstance>();
@@ -103,12 +122,15 @@ void StageStartPart::Initialize(IStageStartHost* host, Camera* camera, Object3DM
 	if (!catapultIblPath_.empty() && !AssetLocator::GetInstance()->Exists(catapultIblPath_)) catapultIblPath_.clear();
 	// 降下の途中（天井を抜けたとき）で読むとカクつくので、ここで読んでおく
 	if (!catapultIblPath_.empty()) TextureManager::GetInstance()->LoadTexture(catapultIblPath_);
+	if (!catapultReadyIblPath_.empty() && !AssetLocator::GetInstance()->Exists(catapultReadyIblPath_)) catapultReadyIblPath_.clear();
+	if (!catapultReadyIblPath_.empty()) TextureManager::GetInstance()->LoadTexture(catapultReadyIblPath_);
 	active_ = false;
 	state_ = State::Finished;
 }
 
 void StageStartPart::Finalize() {
 	ReleaseLights();
+	board_->Finalize();
 	active_ = false;
 }
 
@@ -160,6 +182,8 @@ void StageStartPart::BeginDescent(const StageStartHandoff& handoff) {
 	PlayMechPose(MechPose::Stand);
 	arrived_ = false;
 	currentIblPath_.clear();
+	facility_->ResetLaunchState();
+	checklist_->Reset();
 
 	// 始めの高さ：カタパルトの縦穴の枠（下の端 y = base + H·k）でも、リフトの上面が枠の境目から shaftPhase 上にある所。
 	// HUB と同じ位相なので、切れ目で壁の板と光の帯の見え方がずれない
@@ -184,9 +208,21 @@ void StageStartPart::BeginFromCloudTop() {
 	Enter(State::CloudTop);
 }
 
+void StageStartPart::BeginInspection(const StageStartHandoff& handoff) {
+	BeginDescent(handoff);
+	facility_->SetLiftY(0.0f);
+	arrived_ = true;
+	Enter(State::Inspection);
+}
+
 void StageStartPart::Enter(State state) {
 	state_ = state;
 	stateTime_ = 0.0f;
+	if (state == State::Inspection) {
+		checklist_->Reset();
+		inspectionStep_ = InspectionStep::Checking;
+		inspectionStepTime_ = 0.0f;
+	}
 	// 発進（エンジンを吹かす）で前傾へ
 	if (state == State::Launch) PlayMechPose(MechPose::Ignite);
 }
@@ -240,17 +276,76 @@ void StageStartPart::UpdateDescent(float deltaTime) {
 	}
 }
 
-void StageStartPart::Update(InputActionMap* actions, float deltaTime, const Vector2& screenSize) {
+void StageStartPart::UpdateInspection(InputManager* input, float deltaTime) {
+	const bool attract = AttractMode::GetInstance()->IsEnabled();
+	inspectionStepTime_ += deltaTime;
+	switch (inspectionStep_) {
+	case InspectionStep::Checking:
+		// 表示板が出てから受け付ける
+		checklist_->Update(stateTime_ >= boardAppearDelay_ ? input : nullptr, deltaTime, attract && stateTime_ >= boardAppearDelay_);
+		if (checklist_->IsAllClear()) {
+			// 液晶はすぐ LAUNCH READY、ネオンは一度消えて機体の位置から射出口へ緑で点け直す
+			facility_->BeginReadySequence();
+			inspectionStep_ = InspectionStep::PowerUp;
+			inspectionStepTime_ = 0.0f;
+		}
+		break;
+	case InspectionStep::PowerUp:
+		checklist_->Update(nullptr, deltaTime, false);
+		facility_->AdvanceReadySequence(deltaTime);
+		if (facility_->IsLaunchReady()) {
+			inspectionStep_ = InspectionStep::Ready;
+			inspectionStepTime_ = 0.0f;
+		}
+		break;
+	case InspectionStep::Ready: {
+		checklist_->Update(nullptr, deltaTime, false);
+		InputActionMap* actions = input ? input->GetActionMap() : nullptr;
+		const bool launch = (actions && actions->IsTriggered(static_cast<int>(Action::Launch)))
+			|| (attract && inspectionStepTime_ >= attractLaunchWait_);
+		if (launch) Enter(State::Launch);
+		break;
+	}
+	}
+}
+
+void StageStartPart::UpdateBoard(float deltaTime, const Vector2& screenSize) {
+	LaunchControlBoard::Status status = LaunchControlBoard::Status::Checking;
+	float appear = -1.0f;
+	if (state_ == State::Inspection) {
+		appear = stateTime_ - boardAppearDelay_;
+		switch (inspectionStep_) {
+		case InspectionStep::Checking: status = LaunchControlBoard::Status::Checking; break;
+		case InspectionStep::PowerUp:  status = LaunchControlBoard::Status::PowerUp;  break;
+		case InspectionStep::Ready:    status = LaunchControlBoard::Status::Ready;    break;
+		}
+	} else if (state_ == State::Launch) {
+		// 発進（F5）の間も出しておく（給電ワイヤーの PURGE は F5 で）
+		appear = 10.0f;
+		status = LaunchControlBoard::Status::Launch;
+	}
+	board_->SetState(checklist_.get(), status, state_ == State::Launch ? stateTime_ : inspectionStepTime_, appear, false);
+	const Vector3 liftOrigin = facility_->ToWorld({ 0.0f, facility_->GetLiftY(), 0.0f });
+	// 三人称のパネルはカメラの始めの構え（前進 0）から見た画面の位置に置く（発進で向きが変わっても動かない）
+	const Vector3 eye = { liftOrigin.x + thirdPersonEye_.x, liftOrigin.y + thirdPersonEye_.y, liftOrigin.z + thirdPersonEye_.z };
+	const Vector3 target = { liftOrigin.x + thirdPersonTarget_.x, liftOrigin.y + thirdPersonTarget_.y,
+		liftOrigin.z + thirdPersonTarget_.z };
+	const float aspect = screenSize.y > 1.0f ? screenSize.x / screenSize.y : 16.0f / 9.0f;
+	board_->Update(deltaTime, { liftOrigin.x, liftOrigin.y, liftOrigin.z + MechTravel() }, eye, target,
+		DegToRad(thirdPersonFovDegrees_), aspect);
+}
+
+void StageStartPart::Update(InputManager* input, float deltaTime, const Vector2& screenSize) {
 	if (!active_) return;
 	stateTime_ += deltaTime;
+	InputActionMap* actions = input ? input->GetActionMap() : nullptr;
 
 	switch (state_) {
 	case State::Descent:
 		UpdateDescent(deltaTime);
 		break;
 	case State::Inspection:
-		// 機体確認の中身は F4。今は決定キーで先へ（仮）
-		if (actions && actions->IsTriggered(static_cast<int>(Action::MenuConfirm))) Enter(State::Launch);
+		UpdateInspection(input, deltaTime);
 		break;
 	case State::Launch:     // F5
 		Enter(State::WhiteOut);
@@ -275,6 +370,7 @@ void StageStartPart::Update(InputActionMap* actions, float deltaTime, const Vect
 	ApplyCamera(deltaTime);
 	ApplyLighting(screenSize);
 	UpdateMechPose(deltaTime);
+	UpdateBoard(deltaTime, screenSize);
 }
 
 void StageStartPart::ApplyCamera(float deltaTime) {
@@ -362,7 +458,9 @@ void StageStartPart::ApplyLighting(const Vector2& screenSize) {
 	// 目がカタパルトの天井より下へ出たら IBL をカタパルトのものへ（縦穴の中は HUB と同じ IBL で切れ目をそろえる）
 	const float eyeY = liftY + handoff_.eyeOffset.y;
 	const bool inHall = eyeY < geometry_.catapultCeilingY && !catapultIblPath_.empty();
-	SetEnvironmentTexture(inHall ? catapultIblPath_ : handoff_.iblPath);
+	// 射出口までネオンが緑に点き切ったら緑の IBL（2 枚は明るさの倍率が同じなので跳ねない）
+	const std::string& hallIbl = (facility_->IsLaunchReady() && !catapultReadyIblPath_.empty()) ? catapultReadyIblPath_ : catapultIblPath_;
+	SetEnvironmentTexture(inHall ? hallIbl : handoff_.iblPath);
 
 	facility_->Update(state_ == State::Descent && !arrived_ ? lampLevelInShaft_ : 1.0f, lcdScroll_);
 
@@ -388,10 +486,18 @@ void StageStartPart::Draw(DirectXCore* dxCore) {
 	facility_->Draw(dxCore);
 	if (view_ == View::FirstPerson) {
 		cockpit_->Draw(dxCore);
-	} else if (mech_) {
+		// 宙に浮く表示板は半透明なので最後に
+		board_->Draw(dxCore, true);
+	} else {
+		// カタパルトに立てたパネル（半透明）。機体のスキニングはルートシグネチャを替えるので、その前に描く
+		board_->Draw(dxCore, false);
 		// スキニングの CS とルートシグネチャの切り替えは Draw の中でする。最後に描く
-		mech_->Draw(dxCore);
+		if (mech_) mech_->Draw(dxCore);
 	}
+}
+
+void StageStartPart::RenderBoardTexture(ID3D12GraphicsCommandList* commandList) {
+	if (active_) board_->RenderBoardTexture(commandList);
 }
 
 bool StageStartPart::HasBloom() const {
@@ -404,6 +510,7 @@ void StageStartPart::DrawBloom(DirectXCore* dxCore) {
 	if (view_ == View::FirstPerson && cockpitLighting_->HasBloom()) {
 		cockpit_->DrawBloom(dxCore, cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
 	}
+	board_->DrawBloom(dxCore, view_ == View::FirstPerson);
 }
 
 void StageStartPart::LoadTuning(const JsonValue& node) {
@@ -421,6 +528,9 @@ void StageStartPart::LoadTuning(const JsonValue& node) {
 	read("hallSunScale", hallSunScale_);
 	read("lampLevelInShaft", lampLevelInShaft_);
 	catapultIblPath_ = node["catapultIblPath"].AsString(catapultIblPath_);
+	catapultReadyIblPath_ = node["catapultReadyIblPath"].AsString(catapultReadyIblPath_);
+	read("boardAppearDelay", boardAppearDelay_);
+	read("attractLaunchWait", attractLaunchWait_);
 	read("nearClip", nearClip_);
 	Vector3 sign = { cockpitSignColor_.x, cockpitSignColor_.y, cockpitSignColor_.z };
 	ReadVector3(node["cockpitSignColor"], sign);
@@ -438,9 +548,16 @@ void StageStartPart::LoadTuning(const JsonValue& node) {
 	ReadVector3(node["skyAnchorOffset"], skyAnchorOffset_);
 	read("thirdPersonFovDegrees", thirdPersonFovDegrees_);
 	read("mechScale", mechScale_);
-	debugDescentWithoutHandoff_ = node["debugDescentWithoutHandoff"].AsBool(debugDescentWithoutHandoff_);
+	{
+		const std::string start = node["debugStart"].AsString(kDebugStartNames[static_cast<int>(debugStart_)]);
+		for (int i = 0; i < 3; ++i) {
+			if (start == kDebugStartNames[i]) debugStart_ = static_cast<DebugStart>(i);
+		}
+	}
 	facility_->LoadTuning(node["facility"]);
 	facility_->SetOrigin(origin_);
+	checklist_->LoadTuning(node["checklist"]);
+	board_->LoadTuning(node["board"]);
 }
 
 void StageStartPart::SaveTuning(JsonValue& node) const {
@@ -458,6 +575,9 @@ void StageStartPart::SaveTuning(JsonValue& node) const {
 	write("hallSunScale", hallSunScale_);
 	write("lampLevelInShaft", lampLevelInShaft_);
 	node["catapultIblPath"] = JsonValue(catapultIblPath_);
+	node["catapultReadyIblPath"] = JsonValue(catapultReadyIblPath_);
+	write("boardAppearDelay", boardAppearDelay_);
+	write("attractLaunchWait", attractLaunchWait_);
 	write("nearClip", nearClip_);
 	node["cockpitSignColor"] = MakeVector3({ cockpitSignColor_.x, cockpitSignColor_.y, cockpitSignColor_.z });
 	write("lcdScrollSpeed", lcdScrollSpeed_);
@@ -473,8 +593,10 @@ void StageStartPart::SaveTuning(JsonValue& node) const {
 	node["skyAnchorOffset"] = MakeVector3(skyAnchorOffset_);
 	write("thirdPersonFovDegrees", thirdPersonFovDegrees_);
 	write("mechScale", mechScale_);
-	node["debugDescentWithoutHandoff"] = JsonValue(debugDescentWithoutHandoff_);
+	node["debugStart"] = JsonValue(std::string(kDebugStartNames[static_cast<int>(debugStart_)]));
 	facility_->SaveTuning(node["facility"]);
+	checklist_->SaveTuning(node["checklist"]);
+	board_->SaveTuning(node["board"]);
 }
 
 void StageStartPart::LoadCockpitTuning(const JsonValue& node) {
@@ -488,6 +610,9 @@ void StageStartPart::OnImGui() {
 	if (state_ == State::Descent) {
 		ImGui::Text("descent: start %.2f m  cruise %.2f s  brake %.2f s", startLiftY_, cruiseSeconds_, brakeSeconds_);
 	}
+	if (state_ == State::Inspection) {
+		ImGui::Text("inspection: %s (%.2f s)", InspectionStepName(static_cast<int>(inspectionStep_)), inspectionStepTime_);
+	}
 	ImGui::Text("handoff: phase %.2f m  speed %.2f m/s  ibl %s", handoff_.shaftPhase, handoff_.descentSpeed, handoff_.iblPath.c_str());
 	// 降下から流すボタンは StagePlay 側（フェーズも一緒に切り替えるため）
 	if (ImGui::Button("Next State") && active_) {
@@ -497,7 +622,16 @@ void StageStartPart::OnImGui() {
 		default: break;
 		}
 	}
-	ImGui::Checkbox("Descent Without Handoff (Debug start)", &debugDescentWithoutHandoff_);
+	ImGui::SameLine();
+	// 機体確認をやり直す（項目・ネオン・液晶・IBL を発進不可へ）
+	if (ImGui::Button("Restart Inspection") && active_ && state_ != State::Descent) {
+		facility_->ResetLaunchState();
+		Enter(State::Inspection);
+	}
+	{
+		int start = static_cast<int>(debugStart_);
+		if (ImGui::Combo("Debug Start (no HUB)", &start, kDebugStartNames, 3)) debugStart_ = static_cast<DebugStart>(start);
+	}
 
 	ImGui::SeparatorText("Descent");
 	if (ImGui::DragFloat3("Origin", &origin_.x, 1.0f)) facility_->SetOrigin(origin_);
@@ -543,6 +677,12 @@ void StageStartPart::OnImGui() {
 	ImGui::DragFloat("3rd FovY (deg)", &thirdPersonFovDegrees_, 0.1f, 10.0f, 120.0f);
 	ImGui::DragFloat("Mech Scale", &mechScale_, 0.01f, 0.01f, 100.0f);
 
+	ImGui::SeparatorText("Inspection (F4)");
+	ImGui::DragFloat("Board Appear Delay (s)", &boardAppearDelay_, 0.01f, 0.0f, 5.0f);
+	ImGui::DragFloat("Attract Launch Wait (s)", &attractLaunchWait_, 0.01f, 0.0f, 10.0f);
+	ImGui::Text("Ready IBL: %s", catapultReadyIblPath_.empty() ? "(none)" : catapultReadyIblPath_.c_str());
+	if (ImGui::CollapsingHeader("Checklist")) checklist_->OnImGui();
+	if (ImGui::CollapsingHeader("Launch Control Board")) board_->OnImGui();
 	if (ImGui::CollapsingHeader("Facility")) facility_->OnImGui();
 	if (ImGui::CollapsingHeader("Cockpit Lighting (Hub.json)")) cockpitLighting_->OnImGui();
 #endif // _DEBUG

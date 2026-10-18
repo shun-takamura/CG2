@@ -59,6 +59,17 @@ bool StageStartGeometry::Load(const std::string& path) {
 		ReadVector3(anchorNode[i], cableAnchors[i]);
 	}
 	neonMaterial = catapult["neonMaterial"].AsString(neonMaterial);
+	const JsonValue& neonRows = catapult["neonRows"];
+	const JsonValue& rowMaterials = neonRows["materials"];
+	const JsonValue& rowZ = neonRows["z"];
+	if (rowMaterials.IsArray() && rowZ.IsArray() && rowMaterials.Size() == rowZ.Size()) {
+		neonRowMaterials.clear();
+		neonRowZ.clear();
+		for (size_t i = 0; i < rowMaterials.Size(); ++i) {
+			neonRowMaterials.push_back(rowMaterials[i].AsString(""));
+			neonRowZ.push_back(static_cast<float>(rowZ[i].AsDouble(0.0)));
+		}
+	}
 
 	const JsonValue& lcd = catapult["lcd"];
 	const JsonValue& lcdMaterialNode = lcd["materials"];

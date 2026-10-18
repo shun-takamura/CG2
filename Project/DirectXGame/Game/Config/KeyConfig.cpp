@@ -117,6 +117,10 @@ void KeyConfig::ApplyHardcodedDefaults(InputActionMap& map) {
 	Set(map, Action::ViewToggle,
 		PhysicalBinding::Keyboard(DIK_V),
 		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_BACK));
+	// 回避（Dodge）と同じキーだが、機体確認の間しか読まないのでぶつからない
+	Set(map, Action::Launch,
+		PhysicalBinding::Keyboard(DIK_SPACE),
+		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_A));
 
 	// ===== メニュー =====
 	Set(map, Action::MenuConfirm,

@@ -49,6 +49,20 @@ public:
 	/// <summary>カタパルトの原点からの位置をワールドへ</summary>
 	Vector3 ToWorld(const Vector3& local) const;
 
+	/// <summary>発進の可否の見た目を「発進不可」（ネオン赤ピンク・液晶 LAUNCH UNABLE）に戻す（演出の始め）</summary>
+	void ResetLaunchState();
+	/// <summary>
+	/// 機体確認が済んだ（F4、2026-10-19 ユーザー決定）：液晶はすぐ LAUNCH READY に替え、ネオンは一度全部消してから
+	/// 機体の位置から射出口へ 1 列ずつ緑で点け直す。固定台と機体より後ろの列は最初に点く
+	/// </summary>
+	void BeginReadySequence();
+	/// <summary>点け直しを進める（Update の前に呼ぶ）</summary>
+	void AdvanceReadySequence(float deltaTime);
+	/// <summary>射出口まで点き切った（ブーストの許可を出してよい）</summary>
+	bool IsLaunchReady() const { return readyPhase_ == ReadyPhase::Ready; }
+	/// <summary>点け直しの最中か済んだ（液晶はもう READY）</summary>
+	bool IsReadySequenceStarted() const { return readyPhase_ != ReadyPhase::Unable; }
+
 	/// <summary>
 	/// 灯りの強さ 0..1（ポイントライト）。lcdScroll は液晶の文字を流した量 [m]（進行方向へ）
 	/// </summary>
@@ -71,14 +85,24 @@ private:
 	};
 	static constexpr uint32_t kLampCount = 4;
 
+	enum class ReadyPhase { Unable, Sweeping, Ready };
+
 	void PlaceShaftUnits();
 	void ApplyEmissive(float lcdScroll);
+	// ネオンの列 / 固定台の点き具合 0..1（発進不可の間は使わない）
+	float NeonLevelAt(float z) const;
+	// 点け直しで最後の列が点き切る時刻
+	float ReadySequenceSeconds() const;
+	void SetLcdTexture(const std::string& path);
 
 	StageStartGeometry geometry_;
 	Vector3 origin_ = { 0.0f, 0.0f, 0.0f };
 	float liftY_ = 0.0f;
 	float clampTravel_ = 0.0f;
 	float exitLightLevel_ = 1.0f;
+	ReadyPhase readyPhase_ = ReadyPhase::Unable;
+	float readyTime_ = 0.0f;
+	std::string lcdTexture_;   // 今の液晶のテクスチャ（毎フレーム貼り直さないように）
 
 	std::unique_ptr<Object3DInstance> catapult_;
 	std::unique_ptr<Object3DInstance> lcd_;
@@ -100,5 +124,13 @@ private:
 	float exitSkyBloom_ = 0.15f;                      // 空に開けているときの穴のにじみ（板のブルームの倍率）
 	Vector3 neonColor_ = { 1.0f, 0.25f, 0.45f };      // ネオン（チェック未完了＝赤ピンク。F4 で緑へ）
 	float neonScale_ = 2.0f;
+	// 機体確認が済んだ後の点け直し（F4）
+	Vector3 readyNeonColor_ = { 0.25f, 1.0f, 0.45f };  // 緑（catapult_ibl_ready.dds と同じ色）
+	float readyNeonScale_ = 2.0f;
+	float neonOffColor_ = 0.06f;                       // 消えている間のネオンの板の色（白の地を暗くする）
+	float neonOffSeconds_ = 0.4f;                      // 全部消えている間
+	float neonSweepOriginZ_ = 0.0f;                    // ここ（機体の位置）より後ろの列は固定台と一緒に最初に点く
+	float neonSweepSpeed_ = 60.0f;                     // 点いていく速さ [m/s]（射出口まで約 2.5 秒）
+	float neonFlickerSeconds_ = 0.25f;                 // 1 列が蛍光灯のようにチカチカして点き切るまで
 	float lcdEmissiveScale_ = 1.5f;                   // 液晶の文字（ベースカラーを掛けて文字だけ光らせる）
 };

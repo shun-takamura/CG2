@@ -33,7 +33,8 @@
                          uvTransform で U をずらして流す。左右で符号が逆）。原点は Catapult と同じ
     CatapultClamp      … 両脚の下の固定台（溝にはまる台車、上面 y=0）。原点＝足の中心の上面、(±RAIL_X, 0, CLAMP_Z) に 2 つ
     CatapultExitLight  … 射出口の奥の光る板（`Light` だけ。ID マスクの光芒・白フェードに使う）。原点は Catapult と同じ
-マテリアル: Metal / MetalDark / Hazard / Light / Neon / Gold / Marble / HubFloor / LcdLeft / LcdRight
+マテリアル: Metal / MetalDark / Hazard / Light / Neon / Gold / Marble / HubFloor / LcdLeft / LcdRight /
+            NeonRow00〜（斜めの面のネオンの列ごと。機体確認の後に 1 列ずつ点け直すため。固定台は Neon）
 （全部に法線マップを付ける＝PSO が submesh[0] で決まる罠の対策。平らなものは Gold_NormalMap を共有）
 """
 
@@ -88,6 +89,19 @@ TUN_NEON_DZ = (-1.8, 1.8)    # 区画の中心からの z のずれ
 TUN_NEON_W = 1.4             # 板の幅（z）
 TUN_NEON_FRONT_INSET = 0.8   # 前の辺を両端から詰める量
 TUN_NEON_MARGIN = (0.5, 0.8) # 斜めの面の両端（液晶の側・遠い側）から空ける量
+
+
+def _neon_row_z():
+    """ネオンの板の列の z（板の中心）。8m の区画ごとに 2 枚を並べ、並びの順に一つ飛ばし（2026-10-15 ユーザー指示で半分の数に）"""
+    frames = list(np.arange(BACK_Z + TUN_FRAME_STEP * 0.5, TUN_END_Z - 2.0, TUN_FRAME_STEP))
+    centers = [(fa + fb) * 0.5 for fa, fb in zip(frames[:-1], frames[1:])]
+    return [float(c + dz) for c in centers for dz in TUN_NEON_DZ][::2]
+
+
+# 列ごとにマテリアルを分ける（2026-10-19 F4 ユーザー決定：機体確認が済んだら、機体の位置から射出口へ 1 列ずつ緑で点け直す。
+# エンジンはマテリアル名で列の発光を変える）。名前と z は StageStartGeometry.json の catapult.neonRows
+NEON_ROW_Z = _neon_row_z()
+NEON_ROW_NAMES = [f"NeonRow{k:02d}" for k in range(len(NEON_ROW_Z))]
 # 左右の縦の壁の液晶の帯（黒い液晶の地にドットの文字。LAUNCH UNABLE＝赤ピンク / LAUNCH READY＝緑（2026-10-15 ユーザー指示で OK から変更）、進行方向へ流す）
 LCD_LIP = 0.25           # 液晶を壁に埋め込んで見せる上下の縁の幅・張り出し
 LCD_Y = (TUN_KY + LCD_LIP, TUN_H - TUN_KY - LCD_LIP)   # 4.5m（2026-10-15 ユーザー指示で 3m の 1.5 倍）
@@ -111,9 +125,12 @@ CLAMP_JAW_HX = 1.1       # 足の前後の爪の半分の幅（溝より広く�
 CLAMP_JAW_H = 0.5
 CABLE_ANCHORS = [(3.0, 21.0, BACK_Z + 1.2), (-3.0, 21.0, BACK_Z + 1.2)]
 
-MAT_NAMES = ["Metal", "MetalDark", "Hazard", "Light", "Neon", "Gold", "Marble", "HubFloor", "LcdLeft", "LcdRight"]
+_BASE_MAT_NAMES = ["Metal", "MetalDark", "Hazard", "Light", "Neon", "Gold", "Marble", "HubFloor", "LcdLeft", "LcdRight"]
 (MAT_METAL, MAT_DARK, MAT_HAZARD, MAT_LIGHT, MAT_NEON, MAT_GOLD, MAT_MARBLE, MAT_FLOOR,
- MAT_LCD_L, MAT_LCD_R) = range(len(MAT_NAMES))
+ MAT_LCD_L, MAT_LCD_R) = range(len(_BASE_MAT_NAMES))
+# 斜めの面のネオンの列（固定台の状態の光は Neon のまま）
+MAT_NEON_ROW0 = len(_BASE_MAT_NAMES)
+MAT_NAMES = _BASE_MAT_NAMES + NEON_ROW_NAMES
 HUB_FLOOR_URI = "../HubTemple/HubFloor_BaseColor.png"
 GEOMETRY_JSON = Path("Resources/Json/Tuning/StageStartGeometry.json")
 CLEARANCE_MIN = 0.5      # 機体と壁の最小の隙間
@@ -479,10 +496,7 @@ def build_details(mb):
     for sx in (-1.0, 1.0):
         for z in np.arange(OCT_H + 3.0, z1 - 2.0, 4.0):
             aabb(mb, (sx * 8.0 - 0.25, 0.0, z - 0.4), (sx * 8.0 + 0.25, 0.06, z + 0.4), MAT_LIGHT)
-    # 斜めの面 4 つのネオンの板。8m の区画ごとに 2 枚を並べ、並びの順に一つ飛ばし（2026-10-15 ユーザー指示で半分の数に）
-    frames = list(np.arange(z0 + TUN_FRAME_STEP * 0.5, z1 - 2.0, TUN_FRAME_STEP))
-    centers = [(fa + fb) * 0.5 for fa, fb in zip(frames[:-1], frames[1:])]
-    panel_z = [c + dz for c in centers for dz in TUN_NEON_DZ][::2]
+    # 斜めの面 4 つのネオンの板（列 k の 4 枚は NeonRow{k}）
     sec = section(0.0)
     mid_c = np.array([0.0, TUN_H * 0.5])
     for i in (1, 3, 5, 7):
@@ -494,10 +508,10 @@ def build_details(mb):
             n = -n
         p_near = near + t * TUN_NEON_MARGIN[0]
         p_far = far - t * TUN_NEON_MARGIN[1]
-        for z in panel_z:
+        for k, z in enumerate(NEON_ROW_Z):
             # 面とほぼ同じ高さに置いて埋め込みに見せる（2026-10-15 ユーザー指示）。暗い縁 → ネオンの面の順に 5mm ずつ
             neon_panel(mb, p_near, p_far, n, z, 0.08, -0.05, 0.005, MAT_DARK)
-            neon_panel(mb, p_near, p_far, n, z, 0.0, -0.05, 0.01, MAT_NEON)
+            neon_panel(mb, p_near, p_far, n, z, 0.0, -0.05, 0.01, MAT_NEON_ROW0 + k)
     # 射出口の枠（断面と同じ八角形。射出路より内へ張り出す）
     rot = lambda pts: pts[1:] + pts[:1]  # noqa: E731  床の辺を除いた並び
     band_xy(mb, rot(section(-EXIT_FRAME_IN)), rot(section(0.0)), z1 - 2.0, z1, MAT_DARK, closed=False)
@@ -723,6 +737,10 @@ def make_materials(tex):
         "LcdLeft": ht.textured_material("LcdLeft", tex["LcdLaunchUnable"], flat, 0.2, emission=3.0),
         "LcdRight": ht.textured_material("LcdRight", tex["LcdLaunchUnable"], flat, 0.2, emission=3.0),
     }
+    for name in NEON_ROW_NAMES:
+        row = neon.copy()
+        row.name = name
+        mats[name] = row
     return [mats[n] for n in MAT_NAMES]
 
 
@@ -773,6 +791,7 @@ def write_geometry_json():
             "liftGrooveStartZ": GROOVE_LIFT_Z0,
             "clamps": [[-RAIL_X, 0.0, CLAMP_Z], [RAIL_X, 0.0, CLAMP_Z]],
             "neonMaterial": "Neon",
+            "neonRows": {"materials": NEON_ROW_NAMES, "z": [round(z, 4) for z in NEON_ROW_Z]},
             "lcd": {"materials": ["LcdLeft", "LcdRight"], "uPerMeterZ": [1.0 / LCD_TILE_M, -1.0 / LCD_TILE_M],
                     "tileMeters": LCD_TILE_M,
                     "textures": {"unable": "Resources/Models/Catapult/LcdLaunchUnable.dds",
@@ -827,8 +846,9 @@ def setup_preview_lighting():
 # ============================================================
 def set_launch_state(mats, tex, state):
     """ネオンの発光色と液晶の文字を、チェック未完了（unable）／完了（ready）にする"""
-    neon = mats[MAT_NEON].node_tree.nodes["Principled BSDF"]
-    neon.inputs["Emission Color"].default_value = (*NEON_EMISSION[state], 1.0)
+    for idx in [MAT_NEON] + list(range(MAT_NEON_ROW0, len(MAT_NAMES))):
+        neon = mats[idx].node_tree.nodes["Principled BSDF"]
+        neon.inputs["Emission Color"].default_value = (*NEON_EMISSION[state], 1.0)
     image = tex["LcdLaunchUnable" if state == "unable" else "LcdLaunchReady"]
     for idx in (MAT_LCD_L, MAT_LCD_R):
         for node in mats[idx].node_tree.nodes:
