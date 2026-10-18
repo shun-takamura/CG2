@@ -51,6 +51,39 @@ typedef struct Material {
 inline constexpr int32_t kDissolveOff = 0;
 inline constexpr int32_t kDissolveWorld = 1;       // ワールドの高さ＋3D ノイズ（既定のディゾルブ）
 inline constexpr int32_t kDissolveHexScreen = 2;   // 画面座標の六角形が中心から晴れる
+inline constexpr int32_t kDissolveSphereHole = 3;  // 点からの距離：半径の内側が消える（胸の装甲に入口を開ける）
+inline constexpr int32_t kDissolveSphereGrow = 4;  // 点からの距離：半径の内側だけが見える（羽根を付け根から出す・先から消す）
+inline constexpr int32_t kDissolveHexHole = 5;     // ワールドの六角形（+Z を向いた面）：中心から順にマスごと消える（胸の装甲に入口を開ける）
+
+// 点からの距離のディゾルブ（kDissolveSphereHole / Grow / kDissolveHexHole）の設定。Material の空いている欄を読み替えて渡す（Dissolve.hlsli）
+struct DissolveSphere {
+	int32_t mode = kDissolveSphereHole;
+	Vector3 center = { 0.0f, 0.0f, 0.0f };   // 中心（ワールド）
+	float radius = 0.0f;                     // 半径 [m]
+	float stretchY = 1.0f;                   // 縦の伸び（1=球）
+	float edgeWidth = 0.15f;                 // 光る縁の幅 [m]（残る側に付く）
+	Vector3 edgeColor = { 1.0f, 1.0f, 1.0f };// 光る縁の色（1 を超えてよい。発光パスでブルームに乗る）
+	float noiseScale = 2.0f;                 // 縁のゆらぎの細かさ [1/m]
+	float noiseAmplitude = 0.0f;             // 縁のゆらぎの振れ幅 [m]
+	// kDissolveHexHole だけ（noise* の代わりに使う。edgeWidth は光る帯の幅）
+	float cellSize = 0.35f;                  // 六角形の大きさ [m]
+	float cellJitter = 0.3f;                 // マスごとのばらつき [m]
+};
+
+inline void SetDissolveSphere(Material& m, const DissolveSphere& d)
+{
+	m.dissolveEnable = d.mode;
+	m.dissolveHeightMin = d.center.x;
+	m.dissolveHeightMax = d.center.y;
+	m.dissolvePadding = d.center.z;
+	m.dissolveProgress = d.radius;
+	m.dissolvePadding2 = d.stretchY;
+	m.dissolveEdgeWidth = d.edgeWidth;
+	m.dissolveEdgeColor = d.edgeColor;
+	const bool hex = d.mode == kDissolveHexHole;
+	m.dissolveNoiseScale = hex ? d.cellSize : d.noiseScale;
+	m.dissolveNoiseWeight = hex ? d.cellJitter : d.noiseAmplitude;
+}
 // HLSL 側（Object3d*.PS.hlsl の Material）とレイアウトを合わせる。定数バッファは 256B 単位なので確保量は変わらない。
 // 末尾の視差は PBR / 地形の PS、地形の欄は地形の PS だけが宣言する（他の PS は手前までしか読まないので宣言しなくてよい）
 static_assert(sizeof(Material) == 256, "Material のレイアウトを変えたら Object3D の PS 側も合わせること");

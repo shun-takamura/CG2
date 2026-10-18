@@ -95,6 +95,9 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     // DispatchSkinning で立てる。シャドウパス先行Dispatchとメイン描画の二重実行を防ぐ。
     bool skinningDispatchedThisFrame_ = false;
 
+    // 部位ごとに、ディゾルブの縁を発光パスで光らせるか（SetDissolveSphere で立てる。DrawBloomPass が見る）
+    std::vector<uint8_t> dissolveSubmeshes_;
+
 #ifdef USE_IMGUI
     // デバッグ描画用
     bool showSkeleton_ = false;
@@ -150,6 +153,15 @@ public:
     /// 現在のマテリアルカラーを取得（SetModel 前は白を返す）。
     /// </summary>
     Vector4 GetMaterialColor() const;
+
+    /// <summary>
+    /// 点からの距離のディゾルブ（Material.h の DissolveSphere。胸の装甲に入口を開ける・羽根を付け根から出す等）を
+    /// 部位にかける。textureKeyword が空なら全部の部位、空でなければベースカラーのテクスチャのパスにその語を含む部位だけ
+    /// （例 "Chest_"）。縁はディゾルブをかけた部位を DrawBloomPass で発光 RT にも描くと光る。毎フレーム呼んでよい
+    /// </summary>
+    void SetDissolveSphere(const DissolveSphere& dissolve, const std::string& textureKeyword = "");
+    /// <summary>ディゾルブを全部の部位で切る</summary>
+    void ClearDissolve();
 
     //==============================
     // アニメーション制御
@@ -250,6 +262,12 @@ public:
     // シャドウパス用：transform を b0 にバインドし、Skinning 済み VBV で深度を書く。
     // スキニングのDispatchは事前に済んでいる前提（DispatchDynamicAnimatedSkinning）。
     void DrawShadowPass(DirectXCore* dxCore);
+
+    /// <summary>
+    /// 発光パス（Object3DInstance::DrawBloomPass のスキニング版）：発光している部位と、ディゾルブをかけている部位
+    /// （縁が光る）だけを発光 RT に描く。メイン描画（スキニングの Dispatch）の後に呼ぶ
+    /// </summary>
+    void DrawBloomPass(DirectXCore* dxCore, float bloomScale);
 
     /// <summary>
     /// 水面の反射 RT へ描く（WaterReflection::Render から呼ばれる）。Object3DInstance::DrawReflection と同じく

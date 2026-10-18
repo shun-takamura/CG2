@@ -1,5 +1,6 @@
 #include "HubDisembarkSequence.h"
 
+#include "Cockpit/CockpitModel.h"
 #include "Json/JsonValue.h"
 #include <algorithm>
 
@@ -24,19 +25,21 @@ HubDisembarkSequence::HubDisembarkSequence() {
 
 void HubDisembarkSequence::ResetToDefaults() {
 	using Ease = HubCameraTrack::Ease;
+	const Vector3 seat = CockpitModel::GetSeatedEye();
 	// 機体の原点からの相対（正面 +Z）。座った目は外（+Z）を向いているので、そのまま前へ歩けば機体に背を向けて出られる
 	track_.SetKeys({
 		// 座ったまま正面を向いてハッチが開くのを待つ（見上げない）
-		{ 0.0f, { 0.0f, 12.543f, 0.985f }, 360.0f, 0.0f, Ease::Linear, false },
-		{ 2.2f, { 0.0f, 12.543f, 0.985f }, 360.0f, 0.0f, Ease::Linear, false },
+		{ 0.0f, seat, 360.0f, 0.0f, Ease::Linear, false },
+		{ 2.2f, seat, 360.0f, 0.0f, Ease::Linear, false },
 		// 立ち上がる
-		{ 2.7f, { 0.0f, 12.75f, 1.25f }, 360.0f, 5.0f, Ease::InOut, false },
-		// 開口部をくぐって外へ
-		{ 3.5f, { 0.0f, 12.6f, 2.0f }, 360.0f, 8.0f, Ease::Linear, true },
-		// 手のひらを歩く（足元を見る）
-		{ 4.9f, { 0.0f, 12.2f, 2.7f }, 360.0f, 14.0f, Ease::Linear, true },
-		// 手のひらの先から足場へ渡る（足場の先は z 3.85。手のいちばん前は z 3.69）
-		{ 5.7f, { 0.0f, 12.2f, 3.9f }, 360.0f, 12.0f, Ease::Linear, true },
+		{ 2.7f, { seat.x, 12.75f, seat.z + 0.27f }, 360.0f, 5.0f, Ease::InOut, false },
+		// 入口（z 1.565）をくぐり、光って開いた胸の装甲の外へ
+		{ 3.5f, { 0.0f, 12.7f, 1.7f }, 360.0f, 8.0f, Ease::Linear, true },
+		// 差し出した手のひら（上面 11.0m・z 2.2〜3.8）を歩く（足元を見る）
+		{ 4.3f, { 0.0f, 12.6f, 2.9f }, 360.0f, 14.0f, Ease::Linear, true },
+		{ 5.1f, { 0.0f, 12.6f, 3.6f }, 360.0f, 14.0f, Ease::Linear, true },
+		// 手のひらから足場（上面 10.6m・先 z 3.85）へ降りる
+		{ 5.7f, { 0.0f, 12.2f, 4.2f }, 360.0f, 12.0f, Ease::Linear, true },
 		// 足場の上を歩く
 		{ 6.4f, { 0.0f, 12.2f, 5.2f }, 360.0f, 2.0f, Ease::Linear, true },
 		// 足場の上の待機の位置まで（位置は Start で待機の視点に合わせる）
@@ -46,9 +49,14 @@ void HubDisembarkSequence::ResetToDefaults() {
 	});
 	track_.SetBob(0.04f, 1.8f);
 	hatchStartTime_ = 0.2f;
+	chestOpenStartTime_ = 1.6f;
+	chestOpenEndTime_ = 2.6f;
+	chestCloseStartTime_ = 4.6f;
+	chestCloseEndTime_ = 5.4f;
+	retractStartTime_ = 7.0f;
 	hatchOpenTime_ = 2.0f;
 	lightDimStartRatio_ = 0.4f;
-	endTime_ = 8.3f;
+	endTime_ = 8.5f;   // 手を戻し終える（Retract 7.0〜8.4 秒）まで
 }
 
 void HubDisembarkSequence::MatchHome(const HubCameraTrack::Key& home) {
@@ -97,6 +105,18 @@ HubDisembarkSequence::Pose HubDisembarkSequence::Evaluate(float time) const {
 	// 外の光：隙間が広がると戻る（乗り込みと同じ式）
 	const float dimStart = (std::max)(lightDimStartRatio_, 1e-4f);
 	pose.lightScale = minLightScale_ + (1.0f - minLightScale_) * SmoothStep01(pose.hatchOpenRatio / dimStart);
+
+	// 機体：差し出した手のまま（Offer の最後のコマ）→ 振り返る間に戻す。胸の装甲は出る間だけ開く
+	if (time < retractStartTime_) {
+		pose.mech.arm = HubMechModel::ArmClip::Offer;
+		pose.mech.armTime = 1e6f;
+	} else {
+		pose.mech.arm = HubMechModel::ArmClip::Retract;
+		pose.mech.armTime = time - retractStartTime_;
+	}
+	const float open = SmoothStep01((time - chestOpenStartTime_) / (std::max)(chestOpenEndTime_ - chestOpenStartTime_, 1e-4f));
+	const float close = SmoothStep01((time - chestCloseStartTime_) / (std::max)(chestCloseEndTime_ - chestCloseStartTime_, 1e-4f));
+	pose.mech.chestOpen = open * (1.0f - close);
 	return pose;
 }
 
@@ -108,6 +128,11 @@ void HubDisembarkSequence::LoadTuning(const JsonValue& node) {
 	readFloat("hatchStartTime", hatchStartTime_);
 	readFloat("hatchOpenTime", hatchOpenTime_);
 	readFloat("lightDimStartRatio", lightDimStartRatio_);
+	readFloat("chestOpenStartTime", chestOpenStartTime_);
+	readFloat("chestOpenEndTime", chestOpenEndTime_);
+	readFloat("chestCloseStartTime", chestCloseStartTime_);
+	readFloat("chestCloseEndTime", chestCloseEndTime_);
+	readFloat("retractStartTime", retractStartTime_);
 	readFloat("endTime", endTime_);
 	track_.LoadTuning(node);
 }
@@ -117,6 +142,11 @@ void HubDisembarkSequence::SaveTuning(JsonValue& node) const {
 	node["hatchStartTime"] = JsonValue(static_cast<double>(hatchStartTime_));
 	node["hatchOpenTime"] = JsonValue(static_cast<double>(hatchOpenTime_));
 	node["lightDimStartRatio"] = JsonValue(static_cast<double>(lightDimStartRatio_));
+	node["chestOpenStartTime"] = JsonValue(static_cast<double>(chestOpenStartTime_));
+	node["chestOpenEndTime"] = JsonValue(static_cast<double>(chestOpenEndTime_));
+	node["chestCloseStartTime"] = JsonValue(static_cast<double>(chestCloseStartTime_));
+	node["chestCloseEndTime"] = JsonValue(static_cast<double>(chestCloseEndTime_));
+	node["retractStartTime"] = JsonValue(static_cast<double>(retractStartTime_));
 	node["endTime"] = JsonValue(static_cast<double>(endTime_));
 	track_.SaveTuning(node);
 }
@@ -138,6 +168,11 @@ void HubDisembarkSequence::OnImGui(const HubCameraTrack::Key& home, float minLig
 	ImGui::DragFloat("Hatch Start", &hatchStartTime_, 0.01f, 0.0f, 30.0f);
 	ImGui::DragFloat("Hatch Open", &hatchOpenTime_, 0.01f, 0.0f, 30.0f);
 	ImGui::DragFloat("Light Dim Start Ratio", &lightDimStartRatio_, 0.01f, 0.01f, 1.0f);
+	ImGui::DragFloat("Chest Open Start", &chestOpenStartTime_, 0.01f, 0.0f, 30.0f);
+	ImGui::DragFloat("Chest Open End", &chestOpenEndTime_, 0.01f, 0.0f, 30.0f);
+	ImGui::DragFloat("Chest Close Start", &chestCloseStartTime_, 0.01f, 0.0f, 30.0f);
+	ImGui::DragFloat("Chest Close End", &chestCloseEndTime_, 0.01f, 0.0f, 30.0f);
+	ImGui::DragFloat("Retract Start (hand)", &retractStartTime_, 0.01f, 0.0f, 30.0f);
 	ImGui::DragFloat("End (to waiting)", &endTime_, 0.01f, 0.0f, 30.0f);
 	ImGui::TextDisabled("Last 2 keys' eye and the last key's yaw/pitch follow the waiting view (boarding key 0).");
 

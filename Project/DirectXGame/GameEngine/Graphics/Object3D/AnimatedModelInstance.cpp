@@ -173,6 +173,25 @@ void AnimatedModelInstance::DrawIdPass(DirectXCore* dxCore, const SkinCluster& s
     dxCore->GetCommandList()->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
 
+void AnimatedModelInstance::DrawBloomPassSkinning(DirectXCore* dxCore, const SkinCluster& skinCluster,
+    const std::vector<uint8_t>& drawSubmesh)
+{
+    auto* cmd = dxCore->GetCommandList();
+    cmd->IASetVertexBuffers(0, 1, &skinCluster.skinnedVertexBufferView);
+    cmd->IASetIndexBuffer(&indexBufferView_);
+    for (size_t i = 0; i < submeshes_.size(); ++i) {
+        const RenderSubmesh& sm = submeshes_[i];
+        if (sm.indexCount == 0) continue;
+        const bool dissolve = i < drawSubmesh.size() && drawSubmesh[i] != 0;
+        if (!dissolve && !sm.hasEmissive) continue;
+        cmd->SetGraphicsRootConstantBufferView(1, sm.materialResource->GetGPUVirtualAddress());
+        const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
+        cmd->SetGraphicsRootDescriptorTable(3, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
+        PEPPER_COUNT("DrawCall");
+        cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
+    }
+}
+
 void AnimatedModelInstance::DrawShadowPass(DirectXCore* dxCore, const SkinCluster& skinCluster)
 {
     // スキニング済みVBVで深度のみ描画（PSO/RootSig/カスケードはパス側で設定済み）

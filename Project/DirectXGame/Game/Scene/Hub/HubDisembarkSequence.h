@@ -1,5 +1,6 @@
 #pragma once
 #include "HubCameraTrack.h"
+#include "HubMechModel.h"
 #include "Vector3.h"
 
 class JsonValue;
@@ -8,6 +9,8 @@ class JsonValue;
 /// 降りる（18_HubTransitions.md ②の IN）のタイムライン。逆再生にはしない（後ろ向きに歩くことになるため）。
 /// 座ったまま正面を向いてハッチが開く → 立ち上がる → 機体に背を向けたまま乗るときと同じ道（開口部 → 手のひら → 足場）を
 /// 前向きに歩いて待機の位置まで戻る → 振り返って機体を見る（＝待機の視点）。
+/// 2026-10-18 機体は差し出した手のまま始まり、ハッチが開いた後に胸の装甲が光って開き、手のひらへ出たら閉じ、
+/// 振り返る間に手を戻す（Retract）。
 /// 最後の 2 つのキー（歩き終わり・振り返り）は待機の視点（乗り込みのキー 0）に合わせて Start で上書きする。
 /// 調整値は Hub.json の "disembark"。
 /// </summary>
@@ -20,6 +23,7 @@ public:
 		float pitch = 0.0f;   // ラジアン
 		float hatchOpenRatio = 0.0f;  // 1 = 開いている、0 = 閉じ切り
 		float lightScale = 1.0f;      // 外の光の強さの倍率（隙間が広がると明るくなる）
+		HubMechModel::Pose mech;      // 機体の腕と胸の入口
 	};
 
 	HubDisembarkSequence();
@@ -60,5 +64,10 @@ private:
 	float hatchStartTime_ = 0.2f;     // ハッチが開き始める
 	float hatchOpenTime_ = 2.0f;      // 開き切る
 	float lightDimStartRatio_ = 0.4f; // ハッチの開き具合がこれを超えるまで外の光を弱めておく
+	float chestOpenStartTime_ = 1.6f; // 胸の装甲が開き始める
+	float chestOpenEndTime_ = 2.6f;   // 開き切る
+	float chestCloseStartTime_ = 4.6f;// 手のひらへ出た後、閉じ始める
+	float chestCloseEndTime_ = 5.4f;  // 閉じ切る
+	float retractStartTime_ = 7.0f;   // 手を戻し始める（Retract のクリップ 1.4 秒。振り返る間）
 	float endTime_ = 8.3f;            // 終わり（待機へ）
 };

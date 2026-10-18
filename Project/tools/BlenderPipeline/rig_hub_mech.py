@@ -7,6 +7,7 @@
         --save <パス.blend>    結果を .blend で保存
         --export <フォルダ>    HubMech / HubMech_Cockpit / HubMech_Hatch の glTF とテクスチャ(PNG)を書き出す
                                （例: Assets/Models/HubMech/Export → cook_assets.py で Resources へ）
+        --cockpit-only         --export でコクピットとハッチだけ書き出す（本体とテクスチャは書き出さない）
 
 HUB の機体は二本足で立ったまま、右手（モデルの右＝ -X 側）の手のひらを胸の開口部の下の縁へ差し出し、
 パイロットが手のひらを伝ってコクピットへ入れる形（17_HubScene.md §5 ①、18_HubTransitions.md ①）。
@@ -344,6 +345,11 @@ def bake_pose(mesh, arm):
 # 円柱の上の点は (x, -r·cosφ, r·sinφ)。φ は前方向から上へ測った角度（度）。
 # ============================================================
 COCKPIT_CENTER = Vector((0.0, -0.059, 0.625))   # 円柱の軸の中央（元のモデルの座標。開口部の中央・前面から半径ぶん奥）
+# 2026-10-18 HUB の機体を自機の新モデル（PlayerModel、拡大 10.625）に替えたので、コクピットは新モデルの胸に合わせる：
+# 胸の装甲の前面が左右の端・下で引っ込んでいるので後ろへ 0.7m 下げる（エンジンの軸 z 1.165→0.465。0.5m だと左右の端の円盤の角が 0.17m 出た）。
+# 内枠と裏の箱は古い HubMech の AI の開口部用で、新モデルの胸から突き出るので作らない（17_HubScene.md §5.1）
+COCKPIT_BACK_M = 0.7
+COCKPIT_BEZEL = False
 CP_R = 1.10                  # 円柱の半径（直径 2.2m）
 CP_HALF_LEN = 1.00           # 円柱の半分の長さ（幅 2.0m）
 SHELL_T = 0.04               # 外殻の厚み
@@ -580,6 +586,9 @@ def build_bezel(mb):
             back.append(bk)
         mb.slab_grid(front, back, "BZ_Navy")
 
+    if not COCKPIT_BEZEL:
+        build_seals(mb)
+        return
     W, H, A = BEZEL_HALF_W, BEZEL_HALF_H, APERTURE_HALF_W
     strip(-W, -A, lambda x: -H, lambda x: H)                                   # 左
     strip(A, W, lambda x: -H, lambda x: H)                                     # 右
@@ -605,7 +614,12 @@ def build_bezel(mb):
         inner = [[Vector((x, bezel_y(z, BEZEL_T), z)) for x in xs] for z in zs]
         outer = [[Vector((x, -math.sqrt(max(CP_R ** 2 - z * z, 0.0)), z)) for x in xs] for z in zs]
         mb.slab_grid(inner, outer, "CP_Frame")
-        # 目隠し：外殻の外・ハッチの内側の半径で、出入り口の左右の縁に沿う帯
+    build_seals(mb)
+
+
+def build_seals(mb):
+    """目隠し：外殻の外・ハッチの内側の半径で、出入り口の左右の縁に沿う帯"""
+    for sx in (-1.0, 1.0):
         x0, x1 = sx * (APERTURE_HALF_W - SEAL_W), sx * (APERTURE_HALF_W + 0.02)
         phi_bottom = math.degrees(math.asin(BEZEL_HOLE_BOTTOM / HATCH_R_IN))
         mb.cyl_panel(CP_R + SHELL_T * 0.5 + 0.002, HATCH_R_IN - 0.004, phi_bottom, APERTURE_PHI,
@@ -709,7 +723,7 @@ def build_hatch(mats):
 
 def place_cockpit_parts(cockpit, hatch, scale):
     """コクピットのローカル（m）を、拡大後の本体の座標へ置く"""
-    center = COCKPIT_CENTER * scale
+    center = COCKPIT_CENTER * scale + Vector((0.0, COCKPIT_BACK_M, 0.0))
     cockpit.location = center
     hatch.location = center
     return center
@@ -901,6 +915,7 @@ def main():
     preview_dir = arg_path(argv, "--preview")
     save_path = arg_path(argv, "--save")
     export_dir = arg_path(argv, "--export")
+    cockpit_only = "--cockpit-only" in argv
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     meshes = import_source(src.resolve())
@@ -937,8 +952,9 @@ def main():
     if export_dir is not None:
         export_dir = export_dir.resolve()
         export_dir.mkdir(parents=True, exist_ok=True)
-        save_textures_as_png(export_dir)
-        export_object(mesh, export_dir / "HubMech.gltf")
+        if not cockpit_only:
+            save_textures_as_png(export_dir)
+            export_object(mesh, export_dir / "HubMech.gltf")
         export_object(cockpit, export_dir / "HubMech_Cockpit.gltf")
         set_hatch_open(hatch, 0.0)
         export_object(hatch, export_dir / "HubMech_Hatch.gltf", reset_transform=True)

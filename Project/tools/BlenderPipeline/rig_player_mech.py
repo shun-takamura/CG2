@@ -1811,7 +1811,24 @@ BODY_CLIPS = {
     "Launch": {"duration": 0.9, "keys": [(0.0, "Catapult"), (0.15, "LaunchDip"),
                                         (0.45, "LaunchPush"), (0.9, "Fly")]},   # 切り離しのジャンプ（1 回）
     "Fly": {"duration": 2.0, "pose": "Fly"},                      # 雲の上（ループ）
+    # HUB の乗り込み（2026-10-18 ユーザー）：「搭乗」で直立から右手を胸の前へ差し出し、パイロットが手のひらを伝って胸へ入る
+    "Offer": {"duration": 1.6, "keys": [(0.0, "Stand"), (1.6, "Offer")]},       # 直立 → 手を差し出す（1 回）
+    "OfferHold": {"duration": 1.0, "pose": "Offer"},              # 差し出したまま（ループ・動かない。降りるの始まり）
+    "Retract": {"duration": 1.4, "keys": [(0.0, "Offer"), (1.4, "Stand")]},     # 手を戻して直立へ（1 回）
 }
+
+# HUB で右手を差し出す姿勢（18_HubTransitions.md ①）。値はエンジンの座標 [m]（機体の原点から、正面 +Z。
+# HUB の機体の大きさはカタパルトと同じ 18m）。Blender のアーマチュアの空間へは (x, y, z) → (−x, −z, y) / 拡大率
+HUB_OFFER = {
+    "palm": (0.0, 11.0, 3.0),        # 手のひらの上面の中心。足場（上面 10.6・先 z 3.85、gen_hub_temple.py）の先で 0.4m 上（ユーザー：もう少し上）
+    "fingers": (-1.0, 0.0, 0.3),     # 指先の向き。体の内側（右手は +X 側なので −X）へ、少し前へ
+    "elbow": (1.0, -0.6, 0.2),       # ひじを出す側（外・下）
+    "clavicle": 0.0,                 # 鎖骨（Shoulder）を前へ回す [度]。届かないときに足す
+}
+# 基本の姿勢（T ポーズ）の手のひらの向き（アーマチュアの空間）。手のひらは下（下から撮って確かめた。頂点の薄い向きは
+# 親指に引かれて 27° 傾くので使わない）
+HAND_REST_PALM_NORMAL = (0.0, 0.0, -1.0)
+BODY_POSES["Offer"] = {**BODY_POSES["Stand"], "arm_ik": HUB_OFFER}
 
 
 def side_vec(v, side):
@@ -1957,6 +1974,89 @@ def pose_body(arm, name, phase=0.0):
                                  Quaternion(x_axis, np.radians(sway["leg"] * wave * phase_sign)))
     if spec.get("tilt"):
         rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(spec["tilt"])))
+    if spec.get("arm_ik"):
+        arm_ik(arm, "Right", spec["arm_ik"])
+
+
+def engine_to_arm(v, scale=1.0):
+    """エンジンの座標（正面 +Z）→ アーマチュアの空間（正面 −Y）"""
+    return Vector((-v[0], -v[2], v[1])) / scale
+
+
+# 手の頂点（基本の姿勢、手首から）と、手の長さの向き・手のひらの向き（--body-clips で測る）
+HAND_REST = {}
+
+
+def measure_hand(body, arm, side):
+    me = body.data
+    group = body.vertex_groups[MX + side + "Hand"].index
+    co = np.array([tuple(v.co) for v in me.vertices
+                   if any(g.group == group and g.weight > 0.5 for g in v.groups)])
+    bone = arm.data.bones[MX + side + "Hand"]
+    pts = co - np.array(bone.head_local)
+    length = (bone.tail_local - bone.head_local).normalized()
+    normal = Vector(HAND_REST_PALM_NORMAL)
+    normal = (normal - length * normal.dot(length)).normalized()
+    HAND_REST[side] = {"pts": pts, "length": length, "normal": normal}
+    log(f"{side} の手：頂点 {len(pts)}・長さの向き {tuple(round(c, 3) for c in length)}・"
+        f"手のひらの向き {tuple(round(c, 3) for c in normal)}")
+
+
+def frame3(forward, up):
+    """forward を X、up を Z にする正規直交の行列（列がそれぞれの軸）"""
+    x = forward.normalized()
+    z = (up - x * up.dot(x)).normalized()
+    y = z.cross(x)
+    return Matrix((x, y, z)).transposed()
+
+
+def arm_ik(arm, side, spec):
+    """手のひらの上面の中心を spec["palm"] に置き、手のひらを上へ・指先を spec["fingers"] へ向ける。
+    腕は 2 本のボーン（Arm・ForeArm）の IK（届かなければ伸び切る＝ログの「届かない」を見て clavicle を足す）"""
+    scale = catapult_scale()
+    info = HAND_REST[side]
+    up = Vector((0.0, 0.0, 1.0))
+    fingers = engine_to_arm(spec["fingers"])
+    fingers = (fingers - up * fingers.dot(up)).normalized()
+    rot = frame3(fingers, up) @ frame3(info["length"], info["normal"]).transposed()   # 手のひらの向き → 上
+    pts = np.array([tuple(rot @ Vector(p)) for p in info["pts"]])
+    # 手のひらの上面＝回した頂点の中心から、手のひらの向きに厚みの半分
+    center = pts.mean(0)
+    half = float(np.ptp(np.array([Vector(p).dot(info["normal"]) for p in info["pts"]]))) * 0.5
+    wrist = engine_to_arm(spec["palm"], scale) - Vector((center[0], center[1], center[2] + half))
+
+    if spec.get("clavicle"):
+        sign = 1.0 if side == "Right" else -1.0
+        rotate_pose_bone(arm, MX + side + "Shoulder",
+                         Quaternion(Vector((0.0, 0.0, 1.0)), np.radians(spec["clavicle"]) * sign))
+    up_arm = arm.pose.bones[MX + side + "Arm"]
+    fore = arm.pose.bones[MX + side + "ForeArm"]
+    shoulder = up_arm.head.copy()
+    l1, l2 = up_arm.bone.length, fore.bone.length
+    axis = wrist - shoulder
+    reach = axis.length
+    d = min(reach, (l1 + l2) * 0.999)
+    axis.normalize()
+    a = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+    h = np.sqrt(max(l1 * l1 - a * a, 0.0))
+    hint = engine_to_arm(spec["elbow"])
+    perp = (hint - axis * hint.dot(axis)).normalized()
+    elbow = shoulder + axis * a + perp * h
+    pose_bone_toward(arm, up_arm.name, elbow - shoulder)
+    pose_bone_toward(arm, fore.name, shoulder + axis * d - elbow)
+    hand = arm.pose.bones[MX + side + "Hand"]
+    hand.matrix = Matrix.Translation(hand.head.copy()) @ (rot @ hand.bone.matrix_local.to_3x3()).to_4x4()
+    bpy.context.view_layer.update()
+
+    def eng(p):
+        return f"({-p[0] * scale:+.2f}, {p[2] * scale:+.2f}, {-p[1] * scale:+.2f})"
+    short = reach - (l1 + l2)
+    world = pts + np.array(hand.head)
+    log(f"手を差し出す（{side}）：肩→手首 {reach * scale:.2f} m／腕の長さ {(l1 + l2) * scale:.2f} m"
+        f"{'（届かない ' + format(short * scale, '.2f') + ' m）' if short > 0 else ''}・ひじ {eng(elbow)}・"
+        f"手の範囲（エンジン）x {-world[:, 0].max() * scale:+.2f}〜{-world[:, 0].min() * scale:+.2f}・"
+        f"y {world[:, 2].min() * scale:+.2f}〜{world[:, 2].max() * scale:+.2f}・"
+        f"z {-world[:, 1].max() * scale:+.2f}〜{-world[:, 1].min() * scale:+.2f}")
 
 
 def capture_pose(arm):
@@ -2074,6 +2174,21 @@ def preview_clamps(scale):
     return objs
 
 
+def preview_hub_marks(scale):
+    """確認用：HUB の足場（gen_hub_temple.py の BRIDGE_*：上面 10.6・半幅 1.2・先 z 3.85）とコクピットの円柱
+    （rig_hub_mech.py：軸 (0, 12.343, 0.465)・半径 1.1・幅 2.0）。エンジンの座標 [m] から"""
+    top, half_w, z_end, z_far = 10.605, 1.2, 3.85, 9.0
+    c = engine_to_arm((0.0, top - 0.15, (z_end + z_far) * 0.5), scale)
+    objs = [add_box("PreviewBridge", c, Vector((2 * half_w, z_far - z_end, 0.3)) / scale, (0.8, 0.78, 0.72, 1.0))]
+    bpy.ops.mesh.primitive_cylinder_add(radius=1.1 / scale, depth=2.0 / scale,
+                                        location=engine_to_arm((0.0, 12.343, 0.465), scale), rotation=(0.0, np.pi / 2, 0.0))
+    cyl = bpy.context.active_object
+    cyl.name = "PreviewCockpit"
+    cyl.color = (0.1, 0.8, 0.4, 1.0)
+    objs.append(cyl)
+    return objs
+
+
 def preview_body_clips(arm, body, wings_blend, captured, out_dir):
     """姿勢ごとに正面・横・斜め後ろ・斜め前から（床の上の姿勢は床と固定台の目印、Fly は開いた羽根を付けて）と、
     Launch のコマを横から並べた 1 枚"""
@@ -2085,6 +2200,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
     wings = attach_wings(arm, wings_blend) if wings_blend and wings_blend.exists() else []
     views = [("front", (0.0, -4.0, 0.85)), ("side", (4.0, 0.0, 0.85)),
              ("back_diag", (-2.6, 3.0, 2.0)), ("front_diag", (2.4, -3.0, 1.2))]
+    hub = preview_hub_marks(catapult_scale())
     for name in BODY_POSES:
         pose_body(arm, name)
         flying = name == "Fly"
@@ -2092,10 +2208,27 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
             o.hide_render = not flying
         for o in ground:
             o.hide_render = flying
+        for o in hub:
+            o.hide_render = name != "Offer"
         center = Vector((0.0, 0.0, 0.85 if flying else 0.75))
         for view, loc in views:
             look(cam, Vector(loc), center, 3.4 if flying else 2.8)
             render(out_dir / f"body_{name}_{view}.png")
+        if name == "Offer":
+            # 手のまわりを近くから（斜め前・横・足場の上の待機の視点＝エンジンの (0, 12.2, 6.6) から）
+            s = catapult_scale()
+            palm = engine_to_arm(HUB_OFFER["palm"], s)
+            for view, loc in [("hand_diag", palm + Vector((-0.35, -0.45, 0.25))), ("hand_side", palm + Vector((-0.6, 0.05, 0.05)))]:
+                look(cam, loc, palm + Vector((0.0, 0.05, 0.05)), 0.9)
+                render(out_dir / f"body_{name}_{view}.png")
+            cam.data.type = "PERSP"
+            cam.data.lens = 24.0
+            cam.location = engine_to_arm((0.0, 12.2, 6.6), s)
+            cam.rotation_euler = (engine_to_arm((0.0, 11.0, 2.0), s) - cam.location).to_track_quat("-Z", "Y").to_euler()
+            render(out_dir / f"body_{name}_eye.png")
+            cam.data.type = "ORTHO"
+    for o in hub:
+        o.hide_render = True
     # 1 回きりのクリップ：横から 7 コマ（羽根は収納＝見えない）
     for o in wings:
         o.hide_render = True
@@ -2111,7 +2244,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
             render(path)
             paths.append(path)
         join_images(paths, out_dir / f"body_{clip}_side.png")
-    for o in wings + ground:
+    for o in wings + ground + hub:
         bpy.data.objects.remove(o, do_unlink=True)
     for pb in arm.pose.bones:
         pb.matrix_basis = Matrix()
@@ -2178,6 +2311,7 @@ def body_clips(body_blend, wings_blend, preview_dir, export_dir):
     log(f"体の全高 {BODY_HEIGHT[0]:.3f} m → カタパルトでは {scale:.3f} 倍。固定台の中心はモデルの "
         f"x ±{CATAPULT_CLAMP[0] / scale:.4f}・前 {CATAPULT_CLAMP[1] / scale:.4f}")
     fit_feet(body, arm)
+    measure_hand(body, arm, "Right")
     captured = add_body_clips(arm)
     if preview_dir:
         preview_body_clips(arm, body, wings_blend, captured, preview_dir)
