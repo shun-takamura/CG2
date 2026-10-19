@@ -31,7 +31,8 @@ public:
 	enum class Status {
 		Checking,   // 項目を確認中
 		PowerUp,    // 全部 CLEAR：カタパルトのネオンを点け直している
-		Ready,      // 射出口まで点いた：SPACE でブースト
+		Charging,   // 射出口まで点いた：カタパルトを充電中（F5）
+		Ready,      // 充電済み（CHARGED）：SPACE の長押しはタコメーター（LaunchTachometer）に出す
 		Launch,     // 発進（F5）
 	};
 
@@ -58,6 +59,16 @@ public:
 	void DrawBloom(DirectXCore* dxCore, bool firstPerson);
 
 	bool IsShown() const { return checklist_ && appearTime_ >= 0.0f; }
+
+	/// <summary>
+	/// 三人称のパネルを置く：カメラ（eye → target、画角 fovY・aspect）の画面の anchor（端が ±1、上が +）に見える向きへ
+	/// distance 進んだ所。幅は画面の幅の screenWidth 倍、高さは幅 × heightPerWidth。
+	/// faceEye で目の位置へ向ける（false で画面と平行）、そこから angleOffsetDegrees（ピッチ・ヨー・ロール）ずらす。
+	/// 板は logo_plane.mesh（2 × 1、表が −Z）。タコメーター（LaunchTachometer）も使う
+	/// </summary>
+	static void PlaceOnScreen(Object3DInstance& panel, const Vector2& anchor, float distance, bool faceEye,
+		const Vector3& angleOffsetDegrees, float screenWidth, float heightPerWidth,
+		const Vector3& eye, const Vector3& target, float fovY, float aspect);
 
 	void LoadTuning(const JsonValue& node);
 	void SaveTuning(JsonValue& node) const;
@@ -89,8 +100,8 @@ private:
 	float time_ = 0.0f;
 
 	// 調整値
-	Vector3 offsetFromEye_ = { 0.12f, -0.15f, 0.62f };  // 一人称：座った目からの板の位置（エンジン座標、正面 +Z）
-	Vector3 rotationDegrees_ = { 10.0f, 8.0f, 0.0f };    // 一人称：目の方へ少し向ける
+	Vector3 offsetFromEye_ = { -0.24f, -0.15f, 0.62f }; // 一人称：座った目からの板の位置（エンジン座標、正面 +Z）。2026-10-19 左へ（右にタコメーター）
+	Vector3 rotationDegrees_ = { 10.0f, -14.0f, 0.0f };    // 一人称：目の方へ少し向ける
 	float width_ = 0.62f;                                 // 一人称：板の幅 [m]（高さは kHeight / kWidth 倍）
 	Vector2 panelScreenAnchor_ = { -0.36f, 0.40f };      // 三人称：パネルの中心が来る画面の位置（端が ±1、上が +）。左上に余白を残す
 	float panelDistance_ = 20.0f;                         // 三人称：カメラからの距離 [m]

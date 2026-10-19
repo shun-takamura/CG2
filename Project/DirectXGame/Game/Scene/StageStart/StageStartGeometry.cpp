@@ -54,6 +54,10 @@ bool StageStartGeometry::Load(const std::string& path) {
 	for (size_t i = 0; i < clamps.size() && clampNode.IsArray() && i < clampNode.Size(); ++i) {
 		ReadVector3(clampNode[i], clamps[i]);
 	}
+	ReadFloatPair(catapult["railX"], railX);
+	ReadFloat(catapult["grooveHalfWidth"], grooveHalfWidth);
+	ReadFloat(catapult["grooveDepth"], grooveDepth);
+	ReadFloat(catapult["liftGrooveStartZ"], liftGrooveStartZ);
 	const JsonValue& anchorNode = catapult["cableAnchors"];
 	for (size_t i = 0; i < cableAnchors.size() && anchorNode.IsArray() && i < anchorNode.Size(); ++i) {
 		ReadVector3(anchorNode[i], cableAnchors[i]);

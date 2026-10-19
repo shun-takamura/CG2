@@ -7,10 +7,9 @@
 #include "imgui.h"
 #endif
 
-void RadialBlurEffect::Initialize(
+void RadialBlurEffect::InitializeDepth(
 	DirectXCore* dxCore,
-	ID3D12RootSignature* /*copyRootSignature*/,
-	ID3D12RootSignature* effectRootSignature,
+	ID3D12RootSignature* outlineRootSignature,
 	const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 )
 {
@@ -21,7 +20,7 @@ void RadialBlurEffect::Initialize(
 	assert(psBlob);
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = basePsoDesc;
-	psoDesc.pRootSignature = effectRootSignature;
+	psoDesc.pRootSignature = outlineRootSignature;
 	psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
 
 	HRESULT hr = dxCore->GetDevice()->CreateGraphicsPipelineState(
@@ -41,6 +40,7 @@ void RadialBlurEffect::UpdateConstantBuffer()
 	cb.center[1] = centerArray_[1];
 	cb.blurWidth = blurWidth_;
 	cb.numSamples = numSamples_;
+	cb.depthThreshold = depthThreshold_;
 	memcpy(constantBufferMappedPtr_, &cb, sizeof(cb));
 }
 
@@ -50,6 +50,7 @@ void RadialBlurEffect::ShowImGui()
 	ImGui::SliderFloat2("Center##RadialBlur", centerArray_, 0.0f, 1.0f);
 	ImGui::SliderFloat("Blur Width##RadialBlur", &blurWidth_, 0.0f, 0.1f, "%.4f");
 	ImGui::SliderInt("Num Samples##RadialBlur", &numSamples_, 1, 32);
+	ImGui::SliderFloat("Depth Threshold##RadialBlur", &depthThreshold_, 0.0f, 1.0f, "%.5f");
 #endif
 }
 
@@ -59,6 +60,14 @@ void RadialBlurEffect::ResetParams()
 	centerArray_[1] = 0.5f;
 	blurWidth_ = 0.01f;
 	numSamples_ = 10;
+	depthThreshold_ = 0.0f;
+}
+
+float RadialBlurEffect::DepthAtDistance(float distance, float nearClip, float farClip)
+{
+	// MakePerspectiveFovMatrix（z' = f/(f-n)·z − n·f/(f-n)、w = z）の深度
+	if (distance <= nearClip || farClip <= nearClip) return 0.0f;
+	return farClip / (farClip - nearClip) * (1.0f - nearClip / distance);
 }
 
 void RadialBlurEffect::SetCenter(float x, float y)

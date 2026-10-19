@@ -3,14 +3,25 @@
 #include "TextureManager.h"
 #include "MathUtility.h"
 #include "PepperMacros.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstring>
 
 void PrimitiveMesh::Initialize(const MeshData& meshData) {
     CreateVertexResource(meshData);
     CreateIndexResource(meshData);
     CreateTransformResource();
     CreateMaterialResource();
+}
+
+void PrimitiveMesh::UpdateVertices(const MeshVertex* vertices, uint32_t count) {
+    if (!vertexResource_ || !vertices || vertexCount_ == 0) return;
+    const uint32_t n = (std::min)(count, vertexCount_);
+    MeshVertex* vertexData = nullptr;
+    if (FAILED(vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData)))) return;
+    std::memcpy(vertexData, vertices, sizeof(MeshVertex) * n);
+    vertexResource_->Unmap(0, nullptr);
 }
 
 void PrimitiveMesh::Update(Camera* camera) {

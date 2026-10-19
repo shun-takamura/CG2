@@ -16,6 +16,7 @@
     "Pause":         [ "kb.Escape", "gp.Start" ],
     "ViewToggle":    [ "kb.V", "gp.Back" ],
     "Launch":        [ "kb.Space", "gp.A" ],
+    "SkipIntro":     [ "kb.LShift", "gp.Y" ],
 
     // ----- メニュー -----
     "MenuConfirm":   [ "kb.Enter", "gp.A" ],

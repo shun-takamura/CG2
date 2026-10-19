@@ -2905,7 +2905,11 @@ void StagePlayScene::Initialize() {
 		// 射出口の向こうに見せる雲の上＝レールの t=0 のカメラ位置（雲の上の場面 S4 と同じ景色）
 		if (railStage_) stageStart_->SetSkyAnchor(railStage_->SampleCameraPathAtSec(0.0f));
 		if (phase_ != Phase::Boss) {
-			if (fromHub) {
+			if (fromHub && handoff.skipToCloudTop) {
+				// HUB の降下中にスキップした：雲の上から（白フェードが開く）
+				stageStart_->BeginFromCloudTop();
+			}
+			else if (fromHub) {
 				stageStart_->BeginDescent(handoff);
 			}
 #ifdef _DEBUG
@@ -3278,6 +3282,8 @@ void StagePlayScene::Update() {
 
 	// ----- スタート演出（③IN〜雲の上）。演出中はレール・自機の操作・HUD を動かさない -----
 	// 終わったフレームはそのまま下のレールへ進む（1 フレームでもカタパルトのカメラのまま描かないように）
+	// スキップの白フェードは演出が終わった後（レール）まで続くので、段階に関係なく進める
+	if (stageStart_) stageStart_->UpdateOverlay((std::min)(GetScaledDeltaTime(TimeGroup::UI), 1.0f / 30.0f));
 	if (phase_ == Phase::StageStart && UpdateStageStart()) {
 		return;
 	}
@@ -4583,6 +4589,12 @@ void StagePlayScene::Draw() {
 		}
 	}
 
+	// スタート演出をスキップした白フェードの開き（レールの最初の数フレーム）
+	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized() && stageStart_) {
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		tr->Flush();
+	}
+
 	// DebugDraw（スプライン可視化など）の出力
 	LineRenderer::GetInstance()->SetCamera(camera_.get());
 	LineRenderer::GetInstance()->Draw();
@@ -4604,6 +4616,10 @@ bool StagePlayScene::UpdateStageStart() {
 	camera_->UpdateShake(dt);
 	camera_->Update();
 	UpdateDebugCameraIfActive();
+	// 施設・コクピット・機体などの行列は、このフレームのカメラができてから作る
+	stageStart_->LateUpdate(dt, screen);
+	// スラスターの噴射（EffectManager）。演出の間もエフェクトを進める
+	UpdateGlobalEffects(camera_.get(), dxCore_->GetDeltaTime());
 	if (skybox_) skybox_->Update(dt);
 	// 射出口の向こうの雲（流れ・遠景の雲の視差）は雲の上の仮の目の位置で進める
 	if (stageEnv_ && stageStart_->DrawsCloudsThroughExit()) {
@@ -4654,6 +4670,11 @@ void StagePlayScene::DrawStageStart() {
 	DrawGlobalEffects();
 
 	spriteManager_->DrawSetting();
+	// 一人称で射出口に近づくまぶしさ（ポーズメニューより下に）
+	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized()) {
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		tr->Flush();
+	}
 	if (paused_) DrawPauseMenu();
 	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized()) tr->Flush();
 

@@ -36,6 +36,8 @@ class HubLiftDescent;
 /// 神殿（17 番 H1・H2）は HubTemple（天球儀の聖堂・鏡の大理石の床）。丸窓から見える空はタイトルの空。
 /// 調整値は Resources/Json/Tuning/Hub.json（ImGui の「Hub Tuning」で保存 / 読み直し）。
 /// </summary>
+class StageStartSkip;
+
 class HubScene : public GameScene {
 public:
 	enum class Entry {
@@ -122,6 +124,8 @@ private:
 	float cockpitTime_ = 0.0f;
 	// ステージへ向かう（ChangeScene を呼んだ）。以後は入力を読まない
 	bool leaving_ = false;
+	// リフトの降下中の LSHIFT 長押しで雲の上へスキップ（16 番 F5）
+	std::unique_ptr<StageStartSkip> skip_;
 
 	// 調整値（Hub.json）
 	float whiteFadeSeconds_ = 0.8f;   // タイトルへ戻る白フェードの、白くなるまで

@@ -121,6 +121,9 @@ void KeyConfig::ApplyHardcodedDefaults(InputActionMap& map) {
 	Set(map, Action::Launch,
 		PhysicalBinding::Keyboard(DIK_SPACE),
 		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_A));
+	Set(map, Action::SkipIntro,
+		PhysicalBinding::Keyboard(DIK_LSHIFT),
+		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_Y));
 
 	// ===== メニュー =====
 	Set(map, Action::MenuConfirm,

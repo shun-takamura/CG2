@@ -153,6 +153,24 @@
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\MechThrusters.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLaunch.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchCable.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
@@ -345,6 +363,24 @@
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\MechThrusters.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLaunch.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchCable.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEntrySequence.h">

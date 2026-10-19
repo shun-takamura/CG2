@@ -19,6 +19,7 @@ enum class Action : int {
 	Pause,           // ポーズメニュー
 	ViewToggle,      // スタート演出の一人称 ↔ 三人称（16_StageStart.md）
 	Launch,          // スタート演出の発進（機体確認が済んで LAUNCH READY のときだけ受け付ける。16_StageStart.md）
+	SkipIntro,       // スタート演出のスキップ（長押しで雲の上へ。HUB の降下・StagePlay の降下と機体確認の間。16_StageStart.md）
 	MenuConfirm,
 	MenuCancel,
 	MenuUp,
@@ -45,6 +46,7 @@ inline std::string_view GetActionName(Action a) {
 	case Action::Pause:          return "Pause";
 	case Action::ViewToggle:     return "ViewToggle";
 	case Action::Launch:         return "Launch";
+	case Action::SkipIntro:      return "SkipIntro";
 	case Action::MenuConfirm:    return "MenuConfirm";
 	case Action::MenuCancel:     return "MenuCancel";
 	case Action::MenuUp:         return "MenuUp";

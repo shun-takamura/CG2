@@ -23,6 +23,11 @@ public:
     // 初期化（MeshDataを受け取ってGPUバッファ化）
     void Initialize(const MeshData& meshData);
 
+    // 頂点の中身だけ書き換える（ひも・雷など毎フレーム形が変わるもの用）。頂点数とインデックスは Initialize のまま。
+    // count が Initialize の頂点数を超えた分は捨てる。バッファは 1 本なので、同じフレームに違う形で 2 回は描けない
+    // （DirectXCore はフレームの終わりに GPU を待つので、次のフレームの Update で書き換えてよい）
+    void UpdateVertices(const MeshVertex* vertices, uint32_t count);
+
     // 毎フレーム更新（WVP行列計算）
     // 旧版: dxCore のグローバル時間で UV スクロールが進む
     void Update(Camera* camera);

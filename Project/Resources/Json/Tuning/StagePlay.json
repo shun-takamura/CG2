@@ -383,7 +383,7 @@
     "gaugeMaxGouman": 100,
     "gaugeMaxDisruptor": 120,
     "cooldown": 30,
-    "equipped": 1,
+    "equipped": 0,
     "disruptorCharge": 2.5,
     "disruptorSlash": 1.5,
     "disruptorCollapse": 4,
@@ -539,7 +539,7 @@
     "disruptorFragSatBoost": 1.6000000238418579,
     "disruptorFragSpin": 6,
     "disruptorFragMinScale": 0.75,
-    "disruptorFractureSeed": 2248631235,
+    "disruptorFractureSeed": 3282247032,
     "disruptorFractureSeedLock": false,
     "disruptorCellCount": 512,
     "disruptorBreakFreeze": 0,
@@ -672,6 +672,11 @@
     "catapultReadyIblPath": "Resources/Cubemaps/catapult_ibl_ready.dds",
     "boardAppearDelay": 0.30000001192092896,
     "attractLaunchWait": 1.5,
+    "launchPanelHideDelay": 0.15000000596046448,
+    "kickLeadSeconds": 0.44999998807907104,
+    "clampStopBeforeExit": 2,
+    "firstPersonAfterExitSeconds": 1.0,
+    "thirdPersonAfterExitSeconds": 1.7999999523162842,
     "nearClip": 0.10000000149011612,
     "cockpitSignColor": [
       0.34999999403953552,
@@ -711,7 +716,7 @@
     ],
     "thirdPersonFovDegrees": 60,
     "mechScale": 10.625,
-    "debugStart": "inspection",
+    "debugStart": "cloudTop",
     "facility": {
       "lamps": [
         {
@@ -799,13 +804,13 @@
     },
     "board": {
       "offsetFromEye": [
-        0.11999999731779099,
+        -0.23999999463558197,
         -0.15000000596046448,
         0.62000000476837158
       ],
       "rotationDegrees": [
         10,
-        8,
+        -14,
         0
       ],
       "width": 0.62000000476837158,
@@ -850,6 +855,214 @@
         0.37999999523162842,
         1
       ]
+    },
+    "cable": {
+      "anchorIndex": 0,
+      "attachBone": "mixamorig:Spine2",
+      "attachOffset": [
+        0,
+        1.6000000238418579,
+        -1.3999999761581421
+      ],
+      "radius": 0.34000000357627869,
+      "slack": 1.1200000047683716,
+      "stretchSlack": 1.0199999809265137,
+      "thinMin": 0.55000001192092896,
+      "gravity": 14,
+      "damping": 0.98500001430511475,
+      "stiffness": 0.60000002384185791,
+      "iterations": 24,
+      "substeps": 2,
+      "maxSpeed": 140,
+      "retractLength": 7,
+      "retractSeconds": 2.2000000476837158,
+      "retractDelay": 0.30000001192092896,
+      "purgeDamping": 0.99500000476837158,
+      "bendStiffness": 0.25,
+      "bendRest": 0.97000002861022949,
+      "waveKick": 20,
+      "waveKickHalfWaves": 4,
+      "waveForce": 90,
+      "waveFrequency": 1.6000000238418579,
+      "waveCount": 2.5,
+      "waveUpRatio": 1,
+      "waveFadeSeconds": 2.2000000476837158,
+      "sweepForce": 70,
+      "sweepDelay": 0.10000000149011612,
+      "sweepSeconds": 1.6000000238418579,
+      "sweepCenter": 0.55000001192092896,
+      "sweepWidth": 0.34999999403953552,
+      "sweepKeepOut": 4,
+      "purgeKick": [
+        0,
+        8,
+        -10
+      ],
+      "floorFriction": 0.60000002384185791,
+      "plugPoints": 2,
+      "plugScale": 1.4500000476837158,
+      "color": [
+        0.62000000476837158,
+        0.05000000074505806,
+        0.05000000074505806,
+        1
+      ],
+      "plugColor": [
+        0.15999999642372131,
+        0.15999999642372131,
+        0.18000000715255737,
+        1
+      ],
+      "skyLight": [
+        0.55000001192092896,
+        0.60000002384185791,
+        0.69999998807907104
+      ],
+      "groundLight": [
+        0.11999999731779099,
+        0.11999999731779099,
+        0.14000000059604645
+      ],
+      "keyDirection": [
+        0.30000001192092896,
+        1,
+        0.40000000596046448
+      ],
+      "keyIntensity": 0.69999998807907104,
+      "specularIntensity": 0.44999998807907104,
+      "specularPower": 24
+    },
+    "launch": {
+      "chargeSeconds": 2,
+      "thrustRiseSeconds": 1.7999999523162842,
+      "thrustFallSeconds": 1,
+      "thrustRiseCurve": 1.2999999523162842,
+      "idleRpm": 900,
+      "maxRpm": 12000,
+      "redZone": 0.85000002384185791,
+      "rpmJitter": 120,
+      "launchSeconds": 2.5999999046325684,
+      "launchExponent": 2.2000000476837158,
+      "cablePurgeRatio": 0.69999998807907104,
+      "launchShakeIntensity": 0.11999999731779099,
+      "launchShakeSeconds": 0.5
+    },
+    "tachometer": {
+      "offsetFromEye": [
+        0.27000001072883606,
+        -0.17000000178813934,
+        0.62000000476837158
+      ],
+      "rotationDegrees": [
+        10,
+        18,
+        0
+      ],
+      "width": 0.36000001430511475,
+      "panelScreenAnchor": [
+        0.62000000476837158,
+        -0.5,
+        0
+      ],
+      "panelDistance": 3,
+      "panelFaceEye": true,
+      "panelScreenWidth": 0.20000000298023224,
+      "panelAngleOffsetDegrees": [
+        0,
+        10,
+        0
+      ],
+      "emissive": 0.059999998658895493,
+      "bloomScale": 1.2000000476837158,
+      "appearSeconds": 0.34999999403953552,
+      "backgroundAlpha": 0.85000002384185791,
+      "segmentCount": 36,
+      "sweepDegrees": 270,
+      "yellowFrom": 0.64999997615814209,
+      "green": [
+        0.34999999403953552,
+        1,
+        0.60000002384185791,
+        1
+      ],
+      "dimGreen": [
+        0.11999999731779099,
+        0.44999998807907104,
+        0.25,
+        1
+      ],
+      "yellow": [
+        1,
+        0.81999999284744263,
+        0.20000000298023224,
+        1
+      ],
+      "red": [
+        1,
+        0.25,
+        0.37999999523162842,
+        1
+      ]
+    },
+    "thrusters": {
+      "smallEffect": "Thruster_S",
+      "mediumEffect": "Thruster_M",
+      "largeEffect": "Thruster_L",
+      "smallBelow": 0.34000000357627869,
+      "mediumBelow": 0.67000001668930054,
+      "neutralLevel": 1,
+      "backLeft": {
+        "bone": "mixamorig:Spine2",
+        "offset": [
+          -1.2999999523162842,
+          0.60000002384185791,
+          -2.2000000476837158
+        ],
+        "rotationDegrees": [
+          70,
+          0,
+          0
+        ]
+      },
+      "backRight": {
+        "bone": "mixamorig:Spine2",
+        "offset": [
+          1.2999999523162842,
+          0.60000002384185791,
+          -2.2000000476837158
+        ],
+        "rotationDegrees": [
+          70,
+          0,
+          0
+        ]
+      },
+      "calfLeft": {
+        "bone": "mixamorig:LeftFoot",
+        "offset": [
+          0,
+          1.5,
+          -1.6000000238418579
+        ],
+        "rotationDegrees": [
+          60,
+          0,
+          0
+        ]
+      },
+      "calfRight": {
+        "bone": "mixamorig:RightFoot",
+        "offset": [
+          0,
+          1.5,
+          -1.6000000238418579
+        ],
+        "rotationDegrees": [
+          60,
+          0,
+          0
+        ]
+      }
     }
   }
 }
