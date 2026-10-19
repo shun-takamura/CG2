@@ -160,7 +160,7 @@ void AnimatedObject3DInstance::Update(float deltaTime)
         }
     }
 
-    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_);
+    Matrix4x4 worldMatrix = hasWorldOverride_ ? worldOverride_ : MakeAffineMatrix(transform_);
 
     // Skinning用Boneがないモデルの場合、rootJointのskeletonSpaceMatrixを掛ける
     // ノードアニメーションを反映するため
@@ -506,28 +506,48 @@ void AnimatedObject3DInstance::CreateCameraResource(DirectXCore* dxCore)
     cameraData_->padding = 0.0f;
 }
 
+// 部位（submesh）ごとにマテリアルを持つので、全部の部位に書く（部位 0 だけだと、部位が複数のモデルは一部しか変わらない）
 void AnimatedObject3DInstance::SetUseEnvironmentMap(bool use)
 {
     if (!animatedModelInstance_) return;
-    Material* mat = animatedModelInstance_->GetMaterialPointer();
-    if (!mat) return;
-    mat->useEnvironmentMap = use ? 1 : 0;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (sm.material) sm.material->useEnvironmentMap = use ? 1 : 0;
+    }
 }
 
 void AnimatedObject3DInstance::SetEnvironmentCoefficient(float coef)
 {
     if (!animatedModelInstance_) return;
-    Material* mat = animatedModelInstance_->GetMaterialPointer();
-    if (!mat) return;
-    mat->environmentCoefficient = coef;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (sm.material) sm.material->environmentCoefficient = coef;
+    }
 }
 
 void AnimatedObject3DInstance::SetMaterialColor(const Vector4& color)
 {
     if (!animatedModelInstance_) return;
-    Material* mat = animatedModelInstance_->GetMaterialPointer();
-    if (!mat) return;
-    mat->color = color;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (sm.material) sm.material->color = color;
+    }
+}
+
+void AnimatedObject3DInstance::SetEmissive(const Vector3& emissive)
+{
+    emissive_ = emissive;
+    if (!animatedModelInstance_) return;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (sm.material) sm.material->emissive = { emissive.x, emissive.y, emissive.z, 0.0f };
+    }
+}
+
+void AnimatedObject3DInstance::SetMetallicRoughness(float metallic, float roughness)
+{
+    if (!animatedModelInstance_) return;
+    for (RenderSubmesh& sm : animatedModelInstance_->GetSubmeshes()) {
+        if (!sm.material) continue;
+        sm.material->metallic = metallic;
+        sm.material->roughness = roughness;
+    }
 }
 
 Vector4 AnimatedObject3DInstance::GetMaterialColor() const

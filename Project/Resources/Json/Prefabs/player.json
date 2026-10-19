@@ -1,8 +1,8 @@
 {
   "kind": "Animated",
   "model": {
-    "dir": "Resources/Models/Animated/Walk",
-    "file": "walk.mesh",
+    "dir": "Resources/Models/Player/PlayerModel",
+    "file": "PlayerModel.mesh",
     "animated": true
   },
   "tag": "Player",

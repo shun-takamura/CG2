@@ -162,6 +162,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\MechThrusters.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.cpp" />
@@ -236,6 +238,8 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchChecklist.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchControlBoard.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\MechThrusters.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.h" />

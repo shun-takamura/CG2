@@ -544,7 +544,7 @@ void StageStartPart::UpdateOverlay(float deltaTime) {
 }
 
 void StageStartPart::JumpToCloudTop() {
-	// 演出の物を止めて雲の上へ（今は雲の上の場面が無いので、次の Update でそのままレールへ渡る。F6）
+	// 演出の物を止めて雲の上へ（次の Update でカタパルトを片付け、白が開くとレールの上の雲の上の場面）
 	thrusters_->StopAll();
 	lightning_->Reset();
 	glare_ = 0.0f;
@@ -589,11 +589,13 @@ void StageStartPart::Update(InputManager* input, float deltaTime, const Vector2&
 			Enter(State::WhiteOut);
 		}
 		break;
-	case State::WhiteOut:   // F5
+	case State::WhiteOut:   // F5：パッと切り替える区切り
 		Enter(State::CloudTop);
 		break;
-	case State::CloudTop:   // F6
+	case State::CloudTop:
+		// カタパルトを片付けてステージの環境へ戻し、雲の上の場面（レールの上で回り込むカメラ・羽根の展開）を始める（F6）
 		Finish();
+		if (host_) host_->BeginCloudTop();
 		return;
 	case State::Finished:
 		return;

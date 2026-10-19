@@ -39,12 +39,16 @@ public:
 	virtual void SetPlayerHidden(bool hidden) = 0;
 	// スタート演出を終えてレールへ渡す：フォグ・空・平行光源・IBL・カメラのクリップ面・自機の表示をステージの値に戻す
 	virtual void RestoreStageEnvironment() = 0;
+	// 雲の上の場面（S4、F6）を始める：RestoreStageEnvironment の後に呼ぶ。レールを t=0 から進めながら、
+	// ゲームの自機を右上前方から見るカメラで回り込んでレールのカメラへ合流させ、羽根を展開する（CloudTopIntro / PlayerWingUnit）
+	virtual void BeginCloudTop() = 0;
 };
 
 /// <summary>
 /// StagePlayScene のスタート演出（16_StageStart.md、カタパルト発進）を所有するコンポーネント。
 /// 段階：降下（③IN：HUB から渡された縦穴の位相・速さの続きを降り、カタパルトの階で減速して止まる）
 ///   → 機体確認（S1、F4）→ 発進（S2、F5）→ 白（S3、F5）→ 雲の上（S4、F6）→ 終了（レールへ渡す）。
+/// 雲の上の場面はレールのフェーズで演じる（カタパルトを片付けてから IStageStartHost::BeginCloudTop。中身は CloudTopIntro）。
 /// HUB を通らずに来たとき（リトライ・デバッグの直接開始）は雲の上から始める（2026-10-18 ユーザー決定）。
 /// 視点：一人称は機体を描かずコクピットの内装と灯りだけ（§4.1）、三人称は自機を機体の右下前方の床近くから見上げる
 /// （2026-10-18 ユーザー決定。参考はアニメのカタパルト発進。発進では機体を追って見送る＝F5）。

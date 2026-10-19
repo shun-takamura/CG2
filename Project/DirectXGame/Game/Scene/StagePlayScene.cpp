@@ -36,6 +36,8 @@
 #include "SpriteInstance.h"
 #include "LightManager.h"
 #include "StageStart/StageStartGeometry.h"
+#include "StageStart/CloudTopIntro.h"
+#include "StageStart/PlayerWingUnit.h"
 #include "LogBuffer.h"
 #include "SessionLogger.h"
 #include "Components/SphereCollider.h"
@@ -84,6 +86,8 @@ namespace {
 	// 雲海の縦穴（降下の線）を拾う秒の範囲。急降下 idx17→23（51〜69 秒）の雲の層を上下にはみ出して覆う
 	constexpr float kCloudShaftStartSec = 48.0f;
 	constexpr float kCloudShaftEndSec = 66.0f;
+	// 雲の流れの向き（自機の最初の進行方向）を取る：レールの 0 秒からこの秒までの向き
+	constexpr float kCloudFlowDirectionSampleSec = 5.0f;
 
 	// 起動引数 "--key 値" の値を返す（無ければ空）。計測用（tools/Python/run_cloud_bench.py）
 	std::wstring FindCommandLineValue(const wchar_t* key) {
@@ -143,6 +147,13 @@ void StagePlayScene::LoadTuningFromJson() {
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
 	attackMoveSpeedScale_ = static_cast<float>(
 		root["player"]["attackMoveSpeedScale"].AsDouble(attackMoveSpeedScale_));
+	if (const JsonValue& look = root["player"]["look"]; look.IsObject()) {
+		playerLook_.environmentCoefficient = static_cast<float>(look["environmentCoefficient"].AsDouble(playerLook_.environmentCoefficient));
+		playerLook_.overrideMaterial = look["overrideMaterial"].AsBool(playerLook_.overrideMaterial);
+		playerLook_.metallic = static_cast<float>(look["metallic"].AsDouble(playerLook_.metallic));
+		playerLook_.roughness = static_cast<float>(look["roughness"].AsDouble(playerLook_.roughness));
+		playerLook_.baseGlow = static_cast<float>(look["baseGlow"].AsDouble(playerLook_.baseGlow));
+	}
 	enemyShotLeadRate_ = static_cast<float>(
 		root["enemyShot"]["leadRate"].AsDouble(enemyShotLeadRate_));
 
@@ -223,6 +234,12 @@ void StagePlayScene::LoadTuningFromJson() {
 		shootLockoutDuration_         = static_cast<float>(dmg["shootLockoutDuration"].AsDouble(shootLockoutDuration_));
 		damageBlinkFrequency_         = static_cast<float>(dmg["blinkFrequency"].AsDouble(damageBlinkFrequency_));
 		damageBlinkAlpha_             = static_cast<float>(dmg["blinkAlpha"].AsDouble(damageBlinkAlpha_));
+		auto readGlow = [](const JsonValue& a, Vector3& v) {
+			if (!a.IsArray() || a.Size() < 3) return;
+			v = { static_cast<float>(a[0].AsDouble(v.x)), static_cast<float>(a[1].AsDouble(v.y)), static_cast<float>(a[2].AsDouble(v.z)) };
+		};
+		readGlow(dmg["blinkEmissive"], damageBlinkEmissive_);
+		readGlow(dmg["dodgeBlinkEmissive"], dodgeBlinkEmissive_);
 		damageCameraShakeIntensity_   = static_cast<float>(dmg["cameraShakeIntensity"].AsDouble(damageCameraShakeIntensity_));
 		damageCameraShakeDuration_    = static_cast<float>(dmg["cameraShakeDuration"].AsDouble(damageCameraShakeDuration_));
 	}
@@ -628,6 +645,8 @@ void StagePlayScene::LoadTuningFromJson() {
 
 	// スタート演出（16_StageStart.md）
 	if (stageStart_) stageStart_->LoadTuning(root["stageStart"]);
+	if (cloudTopIntro_) cloudTopIntro_->LoadTuning(root["cloudTopIntro"]);
+	if (playerWings_) playerWings_->LoadTuning(root["playerWings"]);
 
 	// ----- phase（ステージ進行ステートマシン）-----
 	const JsonValue& ph = root["phase"];
@@ -656,6 +675,15 @@ void StagePlayScene::SaveTuningToJson() const {
 	playerObj["clipMargin"]  = std::move(marArr);
 	playerObj["smoothTime"]  = static_cast<double>(playerSmoothTime_);
 	playerObj["attackMoveSpeedScale"] = static_cast<double>(attackMoveSpeedScale_);
+	{
+		JsonValue look = JsonValue::MakeObject();
+		look["environmentCoefficient"] = static_cast<double>(playerLook_.environmentCoefficient);
+		look["overrideMaterial"] = JsonValue(playerLook_.overrideMaterial);
+		look["metallic"] = static_cast<double>(playerLook_.metallic);
+		look["roughness"] = static_cast<double>(playerLook_.roughness);
+		look["baseGlow"] = static_cast<double>(playerLook_.baseGlow);
+		playerObj["look"] = std::move(look);
+	}
 	root["player"] = std::move(playerObj);
 	JsonValue enemyShotObj = JsonValue::MakeObject();
 	enemyShotObj["leadRate"] = static_cast<double>(enemyShotLeadRate_);
@@ -720,6 +748,15 @@ void StagePlayScene::SaveTuningToJson() const {
 	dmgObj["shootLockoutDuration"]  = static_cast<double>(shootLockoutDuration_);
 	dmgObj["blinkFrequency"]        = static_cast<double>(damageBlinkFrequency_);
 	dmgObj["blinkAlpha"]            = static_cast<double>(damageBlinkAlpha_);
+	auto writeGlow = [](const Vector3& v) {
+		JsonValue a = JsonValue::MakeArray();
+		a.Push(JsonValue(static_cast<double>(v.x)));
+		a.Push(JsonValue(static_cast<double>(v.y)));
+		a.Push(JsonValue(static_cast<double>(v.z)));
+		return a;
+	};
+	dmgObj["blinkEmissive"]         = writeGlow(damageBlinkEmissive_);
+	dmgObj["dodgeBlinkEmissive"]    = writeGlow(dodgeBlinkEmissive_);
 	dmgObj["cameraShakeIntensity"]  = static_cast<double>(damageCameraShakeIntensity_);
 	dmgObj["cameraShakeDuration"]   = static_cast<double>(damageCameraShakeDuration_);
 	root["damage"] = std::move(dmgObj);
@@ -1080,6 +1117,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	root["phase"] = std::move(phObj);
 
 	if (stageStart_) stageStart_->SaveTuning(root["stageStart"]);
+	if (cloudTopIntro_) cloudTopIntro_->SaveTuning(root["cloudTopIntro"]);
+	if (playerWings_) playerWings_->SaveTuning(root["playerWings"]);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -1282,14 +1321,21 @@ void StagePlayScene::SpawnJustDodgeClones()
 		const std::string dir  = (slash == std::string::npos) ? std::string()  : full.substr(0, slash);
 		const std::string file = (slash == std::string::npos) ? full           : full.substr(slash + 1);
 
-		const size_t prev = object3DInstances_.size();
-		AddDynamicObject(dir, file, ppos);
-		if (object3DInstances_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
-		Object3DInstance* clone = object3DInstances_.back().get();
+		// 分身は自機と同じ新モデル（スキニング）。2026-10-19：自機を新モデルにしたのに分身が古い人型（walk.mesh）のままだった
+		const size_t prev = dynamicAnimated_.size();
+		AddDynamicAnimated(dir, file, ppos);
+		if (dynamicAnimated_.size() != prev + 1) continue; // 生成失敗時は視覚なしで継続
+		AnimatedObject3DInstance* clone = dynamicAnimated_.back().get();
 		if (!clone) continue;
 		Gameplay::Of(clone).GetCollider().enabled = false; // 当たり判定なし
+		// 自機と同じ姿勢・向き（クリップが複数あるモデルは既定のアニメが付かないので差す）
+		clone->PlayAnimation(kJdClonePoseClip, 0.0f);
+		clone->SetLoop(false);
+		clone->SetAnimationTime(1.0e3f);
+		clone->SetRotate(player_->GetRotate());
+		clone->SetScale(player_->GetScale());
 		clone->SetMaterialColor(jdCloneColor_); // 半透明色（alpha<1 で半透明）
-		clone->Update(); // 初フレームの CB を確定（原点描画バグ回避）
+		clone->Update(0.0f); // 初フレームの CB を確定（原点描画バグ回避）
 		AddHighlight(clone); // 分身はグレースケール対象外（色つきのまま）にする
 		jdClones_[i] = clone;
 	}
@@ -1732,8 +1778,8 @@ void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector
 			t->y = ppos.y + dirOff[i].y;
 			t->z = ppos.z + dirOff[i].z;
 		}
-		// ImGui で色を編集中でもライブ反映するため毎フレーム適用（clones は Object3DInstance）
-		static_cast<Object3DInstance*>(jdClones_[i])->SetMaterialColor(jdCloneColor_);
+		// ImGui で色を編集中でもライブ反映するため毎フレーム適用（clones は AnimatedObject3DInstance）
+		static_cast<AnimatedObject3DInstance*>(jdClones_[i])->SetMaterialColor(jdCloneColor_);
 	}
 
 	// 集合アニメ完了 → 分身を消してプレイヤーを戻す
@@ -2134,6 +2180,18 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Smooth Time (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Attack Move Scale", &attackMoveSpeedScale_, 0.01f, 0.0f, 1.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SeparatorText("Look (material)");
+		ImGui::SliderFloat("Environment (IBL) Coefficient##look", &playerLook_.environmentCoefficient, 0.0f, 2.0f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Checkbox("Override Metallic / Roughness##look", &playerLook_.overrideMaterial);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("切ると .mat の値（体は金属度 0.976・粗さ 0.4）。切り替えは再起動で戻る");
+		ImGui::SliderFloat("Metallic##look", &playerLook_.metallic, 0.0f, 1.0f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SliderFloat("Roughness##look", &playerLook_.roughness, 0.0f, 1.0f);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::SliderFloat("Base Glow (fill)##look", &playerLook_.baseGlow, 0.0f, 0.5f);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Enemy Shot Lead Rate", &enemyShotLeadRate_, 0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
@@ -2591,6 +2649,10 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Blink Alpha", &damageBlinkAlpha_, 0.02f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit3("Damage Blink Glow", &damageBlinkEmissive_.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::ColorEdit3("Dodge Blink Glow", &dodgeBlinkEmissive_.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Shake Intensity", &damageCameraShakeIntensity_, 0.02f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Shake Duration (s)", &damageCameraShakeDuration_, 0.02f, 0.0f, 2.0f, "%.2f");
@@ -2716,6 +2778,23 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::Button("Save Stage Start")) changed = true;
 		ImGui::TextDisabled("コクピットの灯りは Hub.json（HUB の Hub Tuning で保存）");
 	}
+	if (cloudTopIntro_ && ImGui::CollapsingHeader("Cloud Top Intro (16 F6)")) {
+		// レールを t=0 に戻し、HUB を通らずに来たときと同じ雲の上から流す
+		if (ImGui::Button("Play From Cloud Top")) {
+			Seek(0.0f);
+			if (stageStart_) {
+				stageStart_->BeginFromCloudTop();
+				phase_ = prevPhase_ = Phase::StageStart;
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save Cloud Top")) changed = true;
+		cloudTopIntro_->OnImGui();
+		if (playerWings_ && ImGui::TreeNode("Player Wings")) {
+			playerWings_->OnImGui();
+			ImGui::TreePop();
+		}
+	}
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -2743,6 +2822,8 @@ void StagePlayScene::Initialize() {
 	stageEnv_ = std::make_unique<StageEnvironment>();
 	// スタート演出も同様（LoadTuningFromJson で root["stageStart"] を読む）
 	stageStart_ = std::make_unique<StageStartPart>();
+	cloudTopIntro_ = std::make_unique<CloudTopIntro>();
+	playerWings_ = std::make_unique<PlayerWingUnit>();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	LoadTuningFromJson();
@@ -2801,6 +2882,8 @@ void StagePlayScene::Initialize() {
 
 	// スタート演出（カタパルト。施設はワールドの離れた所に置く）。コクピットの灯りは HUB と同じ値（Hub.json）
 	stageStart_->Initialize(this, camera_.get(), object3DManager_, dxCore_, skinningComputeManager_, srvManager_);
+	// 自機の羽根（雲の上で展開し、レールの間は付けたまま。ボス戦では収納）
+	playerWings_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
 	{
 		constexpr const char* kHubTuningPath = "Resources/Json/Tuning/Hub.json";
 		if (std::filesystem::exists(kHubTuningPath)) {
@@ -2927,6 +3010,9 @@ void StagePlayScene::Initialize() {
 			prevPhase_ = Phase::StageStart;
 		}
 	}
+
+	// 自機の姿勢（ボス戦からのリトライは Stand）
+	ApplyPlayerPose();
 
 	// --bench-hold <秒>：その秒へシークしてレールを止める（同じ画面のまま GPU 時間を測る用）
 	if (const std::wstring w = FindCommandLineValue(L"--bench-hold"); !w.empty()) {
@@ -3150,7 +3236,8 @@ bool StagePlayScene::UpdateAttract() {
 	if (!attractActed_) {
 		if (paused_) return false;   // 人が開いたポーズの間は数えない
 		// スタート演出の間は数えない（機体確認は StageStartPart が自動で進める。数えるとカタパルトの上で HP 0・ポーズになる）
-		if (phase_ == Phase::StageStart) return false;
+		// 雲の上の回り込み（操作を受け付ける前）も数えない
+		if (phase_ == Phase::StageStart || IsCloudTopIntroActive()) return false;
 		attractTime_ += dt;
 		if (attractTime_ < attract->stageActionTime) return false;
 		attractActed_ = true;
@@ -3287,6 +3374,9 @@ void StagePlayScene::Update() {
 	if (phase_ == Phase::StageStart && UpdateStageStart()) {
 		return;
 	}
+	// 雲の上の回り込みの間は操作を受け付けない（16 番 §1。レールは t=0 から進める）。バインドの無い入力マップ＝何も押されていない
+	static InputActionMap kNoInput;
+	if (IsCloudTopIntroActive()) actions = &kNoInput;
 
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
@@ -3327,6 +3417,9 @@ void StagePlayScene::Update() {
 			lockedEnemy_     = nullptr;
 			jdCounterTarget_ = nullptr;
 			if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
+			// 地上のボス戦は直立・羽根は収納（先から消える）
+			ApplyPlayerPose();
+			if (playerWings_) playerWings_->Stow();
 			SoundManager::GetInstance()->Stop2DSound("bgm_stage");
 			SoundManager::GetInstance()->Play2DSoundLooped("bgm_boss", 0.5f);
 			bossHpRatio_ = 1.0f;
@@ -3340,6 +3433,7 @@ void StagePlayScene::Update() {
 		} else if (prevPhase_ == Phase::Boss) {
 			bossBattleActive_ = false;           // 空を平常時へ戻す
 			if (bossStage_) bossStage_->Reset(); // ボス・地面・コントローラを破棄
+			ApplyPlayerPose();
 		}
 		prevPhase_ = phase_;
 	}
@@ -3398,8 +3492,8 @@ void StagePlayScene::Update() {
 		moveDelta.x = std::clamp(moveDelta.x, -1.0f, 1.0f);
 		moveDelta.y = std::clamp(moveDelta.y, -1.0f, 1.0f);
 
-		// 必殺技発動中は入力ロック（移動・慣性をゼロ化）
-		if (specialActive_) {
+		// 必殺技発動中・雲の上の回り込みの間は入力ロック（移動・慣性をゼロ化）
+		if (specialActive_ || IsCloudTopIntroActive()) {
 			moveDelta = { 0.0f, 0.0f };
 			playerVelocity_ = { 0.0f, 0.0f };
 		}
@@ -3827,6 +3921,10 @@ void StagePlayScene::Update() {
 			// 必殺技発動中の引き（最優先）
 			ApplySpecialCamera(worldPos);
 		}
+		// 雲の上の場面：レールのカメラ（自機はこの前に置いた）を、自機の右上前方から回り込むカメラで上書きする（F6）
+		if (cloudTopIntro_ && cloudTopIntro_->IsActive()) {
+			cloudTopIntro_->Apply(camera_.get(), worldPos, (std::min)(GetScaledDeltaTime(), 1.0f / 30.0f));
+		}
 		} // end else（Rail/Landing の camera-local 配置）
 	}
 
@@ -3893,6 +3991,18 @@ void StagePlayScene::Update() {
 		weapon_->Update();
 	}
 
+	// 自機の照らし方（IBL を切って平行光源で）と点滅の発光
+	ApplyPlayerLook();
+
+	// 自機の羽根を Spine2 に付ける（スケルトンが更新された後）。デバッグで演出を飛ばしてレールへ来たとき（F4・シーク）は開いた形で付ける
+	if (playerWings_) {
+		if (phase_ == Phase::Rail && !IsCloudTopIntroActive() && playerWings_->GetState() == PlayerWingUnit::State::Hidden) {
+			playerWings_->ShowDeployed();
+		}
+		playerWings_->SetBlinkGlow(playerBlinkGlow_);
+		playerWings_->Update(player_, GetScaledDeltaTime());
+	}
+
 #ifdef _DEBUG
 
 	DrawDynamicSplinesDebug();
@@ -3915,7 +4025,8 @@ void StagePlayScene::Update() {
 	// これで発射方向＝カメラ forward になり、狙いはカメラを向けて中央に捉える方式になる。
 	// ResetToCenter で位置を中央にした上で Update(入力なし) を呼ぶ＝スプライトの描画位置/サイズ/色を反映。
 	// （Update を呼ばないと position_ は中央でもスプライト側が STG 最終位置のまま残る）
-	if (reticle_ && phase_ == Phase::Boss) {
+	if (reticle_ && (phase_ == Phase::Boss || IsCloudTopIntroActive())) {
+		// 雲の上の回り込みの間も中央（操作を受け付けない。終わったら中央から動かせる）
 		reticle_->ResetToCenter();
 		reticle_->Update(false, Vector2{ 0.0f, 0.0f }, false, nullptr, GetScaledDeltaTime(TimeGroup::Player));
 	} else
@@ -4124,6 +4235,12 @@ void StagePlayScene::Update() {
 			// 必殺技中はレティクル追従を止め、正面（+Z）でどっしり構える。
 			// （きょろきょろ防止＋発射時に向きが崩れるのを防ぐ。大技を構えて撃つ演出）
 			player_->SetRotate(specialFirmFacing_);
+		} else if (IsCloudTopIntroActive()) {
+			// 雲の上の回り込みの間はレールの前を向く（カメラが回り込むので、レティクルの向きは使わない）。
+			// 照準の追従は回り込みが終わったフレームにレールのカメラから取り直す
+			const Vector3& railRotate = cloudTopIntro_->GetRailRotate();
+			player_->SetRotate({ railRotate.x, railRotate.y, 0.0f });
+			aimInitialized_ = false;
 		} else if (phase_ == Phase::Boss) {
 			// ボス戦：レティクル追従ではなく移動入力方向／ジャスト回避中は攻撃元方向を向く。
 			// yaw は移動ブランチで bossFacingYaw_ に更新済み（pitch/roll は 0＝地上を走る通常キャラ）。
@@ -4415,7 +4532,10 @@ void StagePlayScene::Update() {
 
 	// Wave発火・敵コントローラ/移動更新・キル記録（STG専用。Landing/Boss突入後は発火しない）。
 	if (phase_ == Phase::Rail && railStage_) {
+		// 雲の上の回り込みの間も、敵の出現位置はレールのカメラで決める
+		if (cloudTopIntro_) cloudTopIntro_->UseRailPose(camera_.get());
 		railStage_->UpdateWaveAndEnemies(worldDt);
+		if (cloudTopIntro_) cloudTopIntro_->UseIntroPose(camera_.get());
 	}
 
 	// LightningRuntime テスト：Active なら毎フレ Update。始終点はテストパネル側で更新済み
@@ -4479,6 +4599,8 @@ void StagePlayScene::Draw() {
 		weapon_->Draw(dxCore_);
 	}
 	DrawDynamicAnimated();
+	// 自機の羽根（Spine2 に付けたスキニングのモデル）
+	if (playerWings_) playerWings_->Draw(dxCore_);
 
 	// ボス戦の床（石畳＋水面）。不透明物の後・Primitive（半透明の弾など）の前。
 	// 水面は深度を書くので、後から描く物は水面の上に出る。Primitive は自前でルートシグネチャを貼り直す
@@ -4552,7 +4674,7 @@ void StagePlayScene::Draw() {
 	// スプライト
 	spriteManager_->DrawSetting();
 	DrawDynamicSprites();
-	if (reticle_) reticle_->Draw();
+	if (reticle_ && !IsCloudTopIntroActive()) reticle_->Draw();
 
 	DrawBossHpBarUI();
 
@@ -4683,11 +4805,14 @@ void StagePlayScene::DrawStageStart() {
 }
 
 bool StagePlayScene::HasBloomSources() const {
-	return phase_ == Phase::StageStart && stageStart_ && stageStart_->HasBloom();
+	return (phase_ == Phase::StageStart && stageStart_ && stageStart_->HasBloom())
+		|| (playerWings_ && playerWings_->HasBloom());
 }
 
 void StagePlayScene::DrawBloomSources() {
 	if (stageStart_) stageStart_->DrawBloom(dxCore_);
+	// 羽根のディゾルブの縁（雲の上の展開・ボス戦の収納）
+	if (playerWings_) playerWings_->DrawBloom(dxCore_);
 }
 
 void StagePlayScene::SetPlayerHidden(bool hidden) {
@@ -4705,7 +4830,48 @@ void StagePlayScene::RestoreStageEnvironment() {
 	if (stageEnv_) stageEnv_->Reset(railStage_ ? railStage_->GetStageSeconds() : 0.0f);
 }
 
+void StagePlayScene::BeginCloudTop() {
+	// 雲の上（S4、F6）：レールは t=0 から進める。自機は飛ぶ姿勢で、羽根はたたんだ形から付け根から現れて開く。
+	// カメラは自機の右上前方からレールのカメラへ回り込み、その間は操作を受け付けない
+	ApplyPlayerPose();
+	if (cloudTopIntro_) {
+		cloudTopIntro_->Begin();
+		if (playerWings_) playerWings_->Deploy(cloudTopIntro_->GetWingDeployDelay());
+	}
+	aimInitialized_ = false;
+	if (reticle_) reticle_->ResetToCenter();
+}
+
+void StagePlayScene::ApplyPlayerLook() {
+	if (!player_) return;
+	player_->SetEnvironmentCoefficient(playerLook_.environmentCoefficient);
+	if (playerLook_.overrideMaterial) player_->SetMetallicRoughness(playerLook_.metallic, playerLook_.roughness);
+	const float g = playerLook_.baseGlow;
+	player_->SetEmissive({ g + playerBlinkGlow_.x, g + playerBlinkGlow_.y, g + playerBlinkGlow_.z });
+}
+
+bool StagePlayScene::IsCloudTopIntroActive() const {
+	return cloudTopIntro_ && cloudTopIntro_->IsActive();
+}
+
+void StagePlayScene::ApplyPlayerPose() {
+	if (!player_) return;
+	// 自機の新モデルのクリップ（rig_player_mech.py --body-clips）。player.json のモデルを替えたらここも合わせる
+	constexpr const char* kStandClip = "Resources/Models/Player/PlayerModel/PlayerModel_Stand.anim";
+	constexpr const char* kLaunchClip = "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim";
+	if (phase_ == Phase::Boss) {
+		player_->PlayAnimation(kStandClip, 0.0f);
+		player_->SetLoop(true);
+	} else {
+		// 射出口のけり出しの最後のコマ＝飛ぶ姿勢で止める（スタート演出の機体と同じ姿勢のまま渡す。Fly は使わない＝2026-10-19 ユーザー決定）
+		player_->PlayAnimation(kLaunchClip, 0.0f);
+		player_->SetLoop(false);
+		player_->SetAnimationTime(1.0e3f);
+	}
+}
+
 void StagePlayScene::Seek(float seconds) {
+	if (cloudTopIntro_) cloudTopIntro_->Cancel();
 	// Boss/Landing 中に Rail タイムラインを Seek したら Rail へ戻す（ボス・地面・コントローラを掃除）。
 	if (phase_ != Phase::Rail) {
 		if (stageStart_) stageStart_->Skip();
@@ -4746,6 +4912,10 @@ void StagePlayScene::RebuildCloudShaft() {
 		shaftPath.push_back(railStage_->SampleCameraPathAtSec(sec));
 	}
 	stageEnv_->GetCloudRaymarcher()->SetShaftPath(shaftPath);
+	// 雲の流れの向き＝自機の最初の進行方向（レール t=0 から少し先への向き）。雲はこの逆へ流れる
+	const Vector3 a = railStage_->SampleCameraPathAtSec(0.0f);
+	const Vector3 b = railStage_->SampleCameraPathAtSec(kCloudFlowDirectionSampleSec);
+	stageEnv_->SetCloudFlowDirection({ b.x - a.x, b.z - a.z });
 }
 
 // IRailStageHost::EnsureCameraPathSpline() の実装。
@@ -4940,6 +5110,8 @@ void StagePlayScene::OnAfterSceneLoad() {
 			player_->SetName("Player");
 		}
 	}
+	// 新モデルはクリップが複数あり既定のアニメが付かない（T ポーズになる）ので姿勢を差す
+	ApplyPlayerPose();
 
 	// dynamicSplines_ を作り直したので、レールカメラの走行スプラインを取り直す。
 	// これを忘れると解放済みのスプラインを指したまま走る（Auto Reload で毎回踏む）。
@@ -5008,23 +5180,28 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	const bool specialInv = specialActive_ && specialInvincible_;                // 必殺技発動中（後隙除く）：完全無敵
 	const bool invincible = justInv || dodgeInv || dmgInv || specialInv;
 
+	// 色のコマは発光を足して色を付ける（色を掛ける作りだと、青い自機の新モデルに赤を掛けてもほぼ黒になり、
+	// 被弾が白のコマ＝自機の青だけに見えた。2026-10-19 実機）。半透明は今まで通り色の α
 	const float blinkFreq = damageBlinkFrequency_;
+	const Vector3 noGlow = { 0.0f, 0.0f, 0.0f };
 	if (justInv) {
 		// ジャスト回避中は無敵だが点滅させない（ソリッド表示）
 		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		playerBlinkGlow_ = noGlow;
 	} else if (dodgeInv) {
-		// 回避（〜ジャスト窓〜回避無敵）：水色／白の点滅
+		// 回避（〜ジャスト窓〜回避無敵）：水色／素の点滅
 		float phase = std::fmod(dodgeTimer_ * blinkFreq, 1.0f);
-		if (phase < 0.5f) player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
-		else              player_->SetMaterialColor({ 0.4f, 0.8f, 1.0f, damageBlinkAlpha_ });
+		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
+		playerBlinkGlow_ = phase < 0.5f ? noGlow : dodgeBlinkEmissive_;
 	} else if (dmgInv) {
-		// 被弾無敵：赤／白の点滅
+		// 被弾無敵：赤／素の点滅
 		float phase = std::fmod(playerInvincibilityTimer_ * blinkFreq, 1.0f);
-		if (phase < 0.5f) player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
-		else              player_->SetMaterialColor({ 1.0f, 0.3f, 0.3f, damageBlinkAlpha_ });
+		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, damageBlinkAlpha_ });
+		playerBlinkGlow_ = phase < 0.5f ? noGlow : damageBlinkEmissive_;
 	} else if (wasInvincible_) {
 		// 無敵終了直後に通常色へ戻す（1度だけ）
 		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		playerBlinkGlow_ = noGlow;
 	}
 	wasInvincible_ = invincible;
 

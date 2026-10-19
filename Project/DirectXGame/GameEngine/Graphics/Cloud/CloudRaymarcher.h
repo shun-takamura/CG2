@@ -117,6 +117,11 @@ public:
 
 	/// <summary>風のスクロールを進める。毎フレーム</summary>
 	void Update(float deltaTime);
+	/// <summary>
+	/// Params の風に足す風 [m/s]（XZ。保存しない）。大きい形・もこもこ・マスクを同じだけ流す。
+	/// 使う側が毎フレーム決める（例：自機の進む向きと逆へ流して飛んでいる感じを出す）
+	/// </summary>
+	void SetExtraWind(const Vector2& wind) { extraWind_ = wind; }
 
 	/// <summary>
 	/// 雲を描いてシーンに重ねる。不透明物（と水面）の後、半透明の前に呼ぶ。
@@ -203,5 +208,6 @@ private:
 	Vector2 shapeOffset_{};
 	Vector2 mokoOffset_{};
 	Vector2 maskOffset_{};
+	Vector2 extraWind_{};   // SetExtraWind（保存しない）
 	float time_ = 0.0f;
 };
