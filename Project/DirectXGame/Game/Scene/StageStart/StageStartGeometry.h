@@ -35,6 +35,11 @@ struct StageStartGeometry {
 	float catapultTunnelEndZ = 160.0f;
 	float catapultExitLightZ = 161.0f;
 	std::array<Vector3, 2> clamps = { Vector3{ -3.0f, 0.0f, 1.2f }, Vector3{ 3.0f, 0.0f, 1.2f } };
+	// 両脚の下の 2 本の溝（底にレールと給電の光の線。電磁カタパルトの雷はここに走らせる）
+	float railX[2] = { -3.0f, 3.0f };
+	float grooveHalfWidth = 0.6f;
+	float grooveDepth = 0.35f;
+	float liftGrooveStartZ = -1.6f;   // リフトの上の溝の始まり（足の後ろ）
 	std::array<Vector3, 2> cableAnchors = { Vector3{ 3.0f, 21.0f, -12.8f }, Vector3{ -3.0f, 21.0f, -12.8f } };
 	std::string neonMaterial = "Neon";
 	// 斜めの面のネオンの列（機体確認の後に機体の位置から射出口へ 1 列ずつ点け直す。F4）。z は列の中心。
@@ -74,6 +79,7 @@ struct StageStartHandoff {
 	Vector4 sunColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float sunIntensity = 0.0f;
 	std::string iblPath;              // 縦穴で使っている IBL（HUB の神殿のもの）
+	bool skipToCloudTop = false;      // HUB の降下中にスキップした（StagePlay は雲の上から。白フェードで差し替える）
 
 	static void Store(const StageStartHandoff& handoff);
 	/// <summary>渡された値があれば out に入れて true（以後は空）</summary>

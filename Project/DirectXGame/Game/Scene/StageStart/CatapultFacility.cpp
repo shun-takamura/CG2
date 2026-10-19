@@ -138,6 +138,15 @@ float CatapultFacility::ReadySequenceSeconds() const {
 	return neonOffSeconds_ + sweep + neonFlickerSeconds_;
 }
 
+float CatapultFacility::GetSweepFrontZ() const {
+	switch (readyPhase_) {
+	case ReadyPhase::Unable: return -1.0e9f;
+	case ReadyPhase::Ready:  return geometry_.catapultTunnelEndZ;
+	default: break;
+	}
+	return neonSweepOriginZ_ + (std::max)(readyTime_ - neonOffSeconds_, 0.0f) * neonSweepSpeed_;
+}
+
 float CatapultFacility::NeonLevelAt(float z) const {
 	if (readyPhase_ == ReadyPhase::Ready) return 1.0f;
 	const float delay = neonSweepSpeed_ > 1e-3f ? (std::max)(z - neonSweepOriginZ_, 0.0f) / neonSweepSpeed_ : 0.0f;

@@ -432,11 +432,12 @@ def build_shaft_top(mats):
 # カタパルト
 # ============================================================
 def build_groove_inside(mb, xc, z0, z1):
-    """溝の底のレールと給電の光の線（雷はここから固定台へ走らせる想定）"""
+    """溝の底のレールと給電の線（雷はここから固定台へ走らせる）。
+    2026-10-19 F5：線を光らせると電磁カタパルトの雷が見えにくかったので、照明（Light）から暗い鋼に替えた"""
     aabb(mb, (xc - 0.1, -GROOVE_D, z0), (xc + 0.1, -GROOVE_D + 0.15, z1), MAT_METAL)
     for sx in (-1.0, 1.0):
         x = xc + sx * 0.35
-        aabb(mb, (x - 0.04, -GROOVE_D, z0), (x + 0.04, -GROOVE_D + 0.01, z1), MAT_LIGHT)
+        aabb(mb, (x - 0.04, -GROOVE_D, z0), (x + 0.04, -GROOVE_D + 0.01, z1), MAT_DARK)
 
 
 def section_outer(inner):

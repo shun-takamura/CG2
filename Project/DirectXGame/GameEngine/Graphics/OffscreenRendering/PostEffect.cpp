@@ -462,7 +462,14 @@ void PostEffect::InitializeEffects()
 	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
 	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
 	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
-	radialBlur = static_cast<RadialBlurEffect*>(registerEffect(std::make_unique<RadialBlurEffect>()));
+	// RadialBlur は深度のマスクを読むので outline 用 RootSignature（並び順はここのまま）
+	{
+		auto rb = std::make_unique<RadialBlurEffect>();
+		rb->InitializeDepth(dxCore_, outlineRootSignature_.Get(), basePsoDesc_);
+		radialBlur = rb.get();
+		effectOrder_.push_back(radialBlur);
+		effectOwners_.push_back(std::move(rb));
+	}
 	colorInvert = static_cast<ColorInvertEffect*>(registerEffect(std::make_unique<ColorInvertEffect>()));
 	precisionBlur = static_cast<PrecisionBlurEffect*>(registerEffect(std::make_unique<PrecisionBlurEffect>()));
 

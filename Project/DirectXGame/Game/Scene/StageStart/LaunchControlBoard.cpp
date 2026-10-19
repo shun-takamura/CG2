@@ -89,8 +89,8 @@ LaunchControlBoard::LaunchControlBoard() {
 LaunchControlBoard::~LaunchControlBoard() = default;
 
 void LaunchControlBoard::ResetToDefaults() {
-	offsetFromEye_ = { 0.12f, -0.15f, 0.62f };
-	rotationDegrees_ = { 10.0f, 8.0f, 0.0f };
+	offsetFromEye_ = { -0.24f, -0.15f, 0.62f };
+	rotationDegrees_ = { 10.0f, -14.0f, 0.0f };
 	width_ = 0.62f;
 	panelScreenAnchor_ = { -0.36f, 0.40f };
 	panelDistance_ = 20.0f;
@@ -159,30 +159,34 @@ void LaunchControlBoard::Update(float deltaTime, const Vector3& mechOrigin, cons
 	board_->SetScale({ width_ * 0.5f, width_ * kAspect * 0.5f, 1.0f });
 	board_->Update();
 
-	// 据え付けたパネル：三人称のカメラの基底（左手系。right = up × forward、up = forward × right）から、
-	// 画面の panelScreenAnchor に見える向きへ panelDistance 進んだ所に置く
-	const Vector3 f = Normalize(Vector3{ thirdPersonTarget.x - thirdPersonEye.x, thirdPersonTarget.y - thirdPersonEye.y,
-		thirdPersonTarget.z - thirdPersonEye.z });
+	// 据え付けたパネル：三人称のカメラの画面の panelScreenAnchor に見える所
+	PlaceOnScreen(*panel_, panelScreenAnchor_, panelDistance_, panelFaceEye_, panelAngleOffsetDegrees_, panelScreenWidth_, kAspect,
+		thirdPersonEye, thirdPersonTarget, fovY, aspect);
+	panel_->Update();
+	ApplyMaterial();
+}
+
+void LaunchControlBoard::PlaceOnScreen(Object3DInstance& panel, const Vector2& anchor, float distance, bool faceEye,
+	const Vector3& angleOffsetDegrees, float screenWidth, float heightPerWidth,
+	const Vector3& eye, const Vector3& target, float fovY, float aspect) {
+	// カメラの基底（左手系。right = up × forward、up = forward × right）から、画面の anchor に見える向きへ distance 進んだ所
+	const Vector3 f = Normalize(Vector3{ target.x - eye.x, target.y - eye.y, target.z - eye.z });
 	const Vector3 r = Normalize(Vector3{ f.z, 0.0f, -f.x });
 	const Vector3 u = { f.y * r.z - f.z * r.y, f.z * r.x - f.x * r.z, f.x * r.y - f.y * r.x };
 	const float tanV = std::tan(fovY * 0.5f);
-	const float sx = panelScreenAnchor_.x * tanV * aspect;
-	const float sy = panelScreenAnchor_.y * tanV;
+	const float sx = anchor.x * tanV * aspect;
+	const float sy = anchor.y * tanV;
 	const Vector3 dir = Normalize(Vector3{ f.x + r.x * sx + u.x * sy, f.y + r.y * sx + u.y * sy, f.z + r.z * sx + u.z * sy });
-	panel_->SetTranslate({ thirdPersonEye.x + dir.x * panelDistance_, thirdPersonEye.y + dir.y * panelDistance_,
-		thirdPersonEye.z + dir.z * panelDistance_ });
+	panel.SetTranslate({ eye.x + dir.x * distance, eye.y + dir.y * distance, eye.z + dir.z * distance });
 	// 板ポリの表 -Z をカメラの側へ。yaw 0 が +Z・pitch は正が下向き（StageStartPart::ApplyCamera と同じ）。
 	// 目へ向けるなら板からカメラへの向き（-dir）、画面と平行ならカメラの前（f）を使う。そこから少しずらす
-	const Vector3& face = panelFaceEye_ ? dir : f;
+	const Vector3& face = faceEye ? dir : f;
 	const float yaw = std::atan2(face.x, face.z);
 	const float pitch = -std::atan2(face.y, std::sqrt(face.x * face.x + face.z * face.z));
-	panel_->SetRotate({ pitch + DegToRad(panelAngleOffsetDegrees_.x), yaw + DegToRad(panelAngleOffsetDegrees_.y),
-		DegToRad(panelAngleOffsetDegrees_.z) });
+	panel.SetRotate({ pitch + DegToRad(angleOffsetDegrees.x), yaw + DegToRad(angleOffsetDegrees.y), DegToRad(angleOffsetDegrees.z) });
 	// 画面の幅（その距離で 2·tanH·距離）に対する割合からワールドの幅を出す
-	const float panelWidth = panelScreenWidth_ * 2.0f * tanV * aspect * panelDistance_;
-	panel_->SetScale({ panelWidth * 0.5f, panelWidth * kAspect * 0.5f, 1.0f });
-	panel_->Update();
-	ApplyMaterial();
+	const float width = screenWidth * 2.0f * tanV * aspect * distance;
+	panel.SetScale({ width * 0.5f, width * heightPerWidth * 0.5f, 1.0f });
 }
 
 void LaunchControlBoard::ApplyMaterial() {
@@ -213,12 +217,17 @@ void LaunchControlBoard::RenderBoardTexture(ID3D12GraphicsCommandList* commandLi
 
 void LaunchControlBoard::Draw(DirectXCore* dxCore, bool firstPerson) {
 	Object3DInstance* target = firstPerson ? board_.get() : panel_.get();
-	if (target && IsShown()) target->Draw(dxCore);
+	if (!target || !IsShown()) return;
+	// 板のモデルはタコメーターと共有なので、描く直前にこの板の絵を貼る（テクスチャは描くときに引かれる）
+	if (ModelInstance* model = target->GetModelInstance(); model && model->IsGPUReady()) model->SetTextureFilePath(kTextureName);
+	target->Draw(dxCore);
 }
 
 void LaunchControlBoard::DrawBloom(DirectXCore* dxCore, bool firstPerson) {
 	Object3DInstance* target = firstPerson ? board_.get() : panel_.get();
-	if (target && IsShown()) target->DrawBloomPass(dxCore, bloomScale_);
+	if (!target || !IsShown()) return;
+	if (ModelInstance* model = target->GetModelInstance(); model && model->IsGPUReady()) model->SetTextureFilePath(kTextureName);
+	target->DrawBloomPass(dxCore, bloomScale_);
 }
 
 // ---------------------------------------------------------------- 積む（RenderTexture のピクセル）
@@ -294,10 +303,11 @@ void LaunchControlBoard::DrawContents() {
 		// 行の区切り（点線）
 		for (float x = kPad; x < right; x += 14.0f) Rect(x, y + kRowHeight - 4.0f, 7.0f, 1.5f, dimGreen_);
 	};
-	auto keyHint = [&](const char* key, float x, float y) {
-		const float w = TextRenderer::GetInstance()->MeasureWidth(key, 0.55f) + 20.0f;
-		Frame(x, y, w, 30.0f, 1.5f, yellow_);
-		Text(key, x + 10.0f, y + 4.0f, 0.55f, yellow_);
+	auto keyHint = [&](const char* key, float x, float y, float size = 0.55f) {
+		const float w = TextRenderer::GetInstance()->MeasureWidth(key, size) + 20.0f;
+		const float h = kGlyphHeight * size + 12.0f;
+		Frame(x, y, w, h, 1.5f, yellow_);
+		Text(key, x + 10.0f, y + 6.0f, size, yellow_);
 		return w;
 	};
 	const float statusX = right - kStatusW;
@@ -359,11 +369,15 @@ void LaunchControlBoard::DrawContents() {
 	{
 		const float y = rowY(3);
 		rowFrame(3, "03", "WEAPON", "左クリック / RT で射撃");
-		keyHint("L-CLICK", kWidgetX, y + 8.0f);
+		// L-CLICK を大きくし、撃った数のランプはその右に横に並べる（2026-10-19 ユーザー：縦に並べると小さくて読めない）
+		constexpr float kHintSize = 0.8f;
+		const float hintY = y + 26.0f;
+		const float hintW = keyHint("L-CLICK", kWidgetX, hintY, kHintSize);
+		const float lampSize = kGlyphHeight * kHintSize + 12.0f;
 		for (int i = 0; i < c.GetWeaponShots(); ++i) {
-			const float x = kWidgetX + static_cast<float>(i) * 30.0f;
-			if (i < c.GetWeaponCount()) Rect(x, y + 62.0f, 20.0f, 16.0f, green_);
-			else Frame(x, y + 62.0f, 20.0f, 16.0f, 1.5f, dimGreen_);
+			const float x = kWidgetX + hintW + 16.0f + static_cast<float>(i) * (lampSize + 8.0f);
+			if (i < c.GetWeaponCount()) Rect(x, hintY, lampSize, lampSize, green_);
+			else Frame(x, hintY, lampSize, lampSize, 2.0f, dimGreen_);
 		}
 		DrawStatusBox(statusX, statusY(3), kStatusW, kStatusH, c.IsCleared(LaunchChecklist::Item::Weapon),
 			c.TimeSinceCleared(LaunchChecklist::Item::Weapon));
@@ -392,19 +406,35 @@ void LaunchControlBoard::DrawContents() {
 		Text(power, kWidth * 0.5f - 170.0f, fy + 10.0f + kGlyphHeight * kFooterSize * 1.15f + 8.0f, 0.6f, WithAlpha(dimGreen_, on));
 		break;
 	}
+	case Status::Charging:
 	case Status::Ready:
 	case Status::Launch: {
-		// LAUNCH READY と、ブーストの許可（SPACE）
-		const float on = CockpitReveal::Flicker(statusTime_, 0.3f);
+		// LAUNCH READY と、カタパルトの充電（2026-10-19 ユーザー：ゲージは出さず、済んだら CHARGED と出すだけ）。
+		// SPACE の長押しはタコメーターの方に出す
+		const float on = status_ == Status::Charging ? CockpitReveal::Flicker(statusTime_, 0.3f) : 1.0f;
 		Rect(kPad, fy + 8.0f, kWidth * 0.5f - kPad, footerH - 16.0f, WithAlpha(green_, 0.9f * on));
 		TextCentered("LAUNCH READY", kPad + (kWidth * 0.5f - kPad) * 0.5f, fy + (footerH - kGlyphHeight * kFooterSize) * 0.5f, kFooterSize,
 			WithAlpha(kInk, on));
 		const float boxX = kWidth * 0.5f + 20.0f;
 		const float boxW = right - boxX;
-		const float blink = status_ == Status::Launch ? 1.0f : Blink(time_, 1.6f);
-		Rect(boxX, fy + 8.0f, boxW, footerH - 16.0f, WithAlpha(yellow_, blink * on));
-		TextCentered(status_ == Status::Launch ? "BOOST" : "[SPACE] BOOST", boxX + boxW * 0.5f,
-			fy + (footerH - kGlyphHeight * kFooterSize * 0.9f) * 0.5f, kFooterSize * 0.9f, WithAlpha(kInk, on));
+		const float boxH = footerH - 16.0f;
+		const float textSize = kFooterSize * 0.9f;
+		const float textY = fy + (footerH - kGlyphHeight * textSize) * 0.5f;
+		if (status_ == Status::Charging) {
+			// 充電中：黄の枠と文字が点滅し、点が流れる
+			const float blink = Blink(time_, 1.6f) * on;
+			Frame(boxX, fy + 8.0f, boxW, boxH, 2.0f, WithAlpha(yellow_, blink));
+			const int dots = static_cast<int>(std::fmod(statusTime_ * 4.0f, 4.0f));
+			std::string charging = "CHARGING";
+			charging.append(static_cast<size_t>(dots), '.');
+			Text(charging, boxX + boxW * 0.5f - TextRenderer::GetInstance()->MeasureWidth("CHARGING", textSize) * 0.5f, textY,
+				textSize, WithAlpha(yellow_, blink));
+		} else {
+			// 充電済み：チラついて黄地の CHARGED に変わる
+			const float lit = status_ == Status::Ready ? CockpitReveal::Flicker(statusTime_, 0.3f) : 1.0f;
+			Rect(boxX, fy + 8.0f, boxW, boxH, WithAlpha(yellow_, lit));
+			TextCentered("CHARGED", boxX + boxW * 0.5f, textY, textSize, WithAlpha(kInk, lit));
+		}
 		break;
 	}
 	}

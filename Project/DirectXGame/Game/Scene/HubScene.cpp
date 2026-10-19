@@ -11,6 +11,7 @@
 #include "Cockpit/CockpitLighting.h"
 #include "Hub/CockpitConsole.h"
 #include "Hub/HubLiftDescent.h"
+#include "StageStart/StageStartSkip.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
 #include "InputManager.h"
@@ -164,6 +165,8 @@ void HubScene::StartDescent() {
 	// 外が透けた全天周のモニターに縦穴が映っている扱い。ステージ選択の UI はたたんで消す
 	state_ = State::Descending;
 	liftDescent_->Start();
+	if (!skip_) skip_ = std::make_unique<StageStartSkip>();
+	skip_->Reset();
 	attractMenu_.Reset();
 }
 
@@ -339,10 +342,25 @@ void HubScene::UpdateDisembarking(float dt) {
 }
 
 void HubScene::UpdateDescending(float dt) {
-	// 降りている間は入力を読まない
+	// 降りている間はスキップ（LSHIFT 長押し）だけ読む
 	liftDescent_->Update(dt);
 	if (liftDescent_->ConsumeReleaseImpact()) {
 		camera_->Shake(liftDescent_->GetReleaseShakeIntensity(), liftDescent_->GetReleaseShakeSeconds());
+	}
+	if (!leaving_ && skip_ && !AttractMode::GetInstance()->IsEnabled()) {
+		auto* actions = input_ ? input_->GetActionMap() : nullptr;
+		if (skip_->Update(dt, actions && actions->IsPressed(static_cast<int>(Action::SkipIntro)))) {
+			// 雲の上から始めるよう印を付けて、白フェードで StagePlay へ（2026-10-19 ユーザー）
+			StageStartHandoff handoff = liftDescent_->MakeHandoff();
+			handoff.skipToCloudTop = true;
+			StageStartHandoff::Store(handoff);
+			leaving_ = true;
+			if (auto* fade = TransitionManager::GetInstance()->GetTransition<FadeTransition>(TransitionType::Fade)) {
+				fade->SetNextFade({ 1.0f, 1.0f, 1.0f }, whiteFadeSeconds_, whiteHoldSeconds_);
+			}
+			SceneManager::GetInstance()->ChangeScene("STAGEPLAY", TransitionType::Fade, TransitionType::Fade);
+			return;
+		}
 	}
 	if (leaving_ || !descentChangesScene_ || !liftDescent_->ShouldChangeScene()) return;
 
@@ -423,6 +441,8 @@ void HubScene::Draw() {
 		console_->Draw(screen, st.backgroundAlpha, st.menuTime, (std::max)(st.collapse, liftDescent_->GetUiCollapse()),
 			cockpitTime_, IsGlowAllowed());
 	}
+	// スキップの案内（左上）
+	if (state_ == State::Descending && skip_ && !leaving_ && !AttractMode::GetInstance()->IsEnabled()) skip_->Draw(screen.x);
 	tr->Flush();
 }
 

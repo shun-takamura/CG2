@@ -60,6 +60,11 @@ public:
 	void AdvanceReadySequence(float deltaTime);
 	/// <summary>射出口まで点き切った（ブーストの許可を出してよい）</summary>
 	bool IsLaunchReady() const { return readyPhase_ == ReadyPhase::Ready; }
+	/// <summary>
+	/// 点け直しの先頭の z（カタパルトの原点から）。消えている間は始まりの z、点き切ったら射出口。
+	/// 電磁カタパルトの雷をネオンと一緒に伸ばすのに使う（F5）。発進不可の間は負の大きな値
+	/// </summary>
+	float GetSweepFrontZ() const;
 	/// <summary>点け直しの最中か済んだ（液晶はもう READY）</summary>
 	bool IsReadySequenceStarted() const { return readyPhase_ != ReadyPhase::Unable; }
 
