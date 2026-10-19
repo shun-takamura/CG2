@@ -6,6 +6,10 @@
         --preview <フォルダ>  確認用 PNG（全天の展開図＋水平方向の見え方）を書き出す
         --ibl                 映り込み（IBL）専用版にする：地平線より下を石っぽい暖色の灰色にする
                               （例: --ibl --export Assets/title_clear_sky_ibl.hdr）
+        --ground R,G,B        --ibl の地平線より下の色（線形）を変える。既定は IBL_GROUND_COLOR
+        --ground-blend Z      --ibl の地平線から地面の色へ移る幅（sin 仰角）。既定は IBL_GROUND_BLEND_Z
+                              雲海の上（StagePlay の 0 秒〜）用の IBL：下は日の当たった雲の白
+                              （例: --ibl --ground 0.78,0.8,0.84 --ground-blend 0.05 --export Assets/stage_cloudtop_ibl.hdr）
 
 HDR → cubemap DDS は既存の tools/Python/convert_hdr_to_dds.py（Assets/ 直下の *.hdr を変換）で行う。
 
@@ -186,6 +190,11 @@ def main():
     export_path = Path(argv[argv.index("--export") + 1]) if "--export" in argv else None
     preview_dir = Path(argv[argv.index("--preview") + 1]) if "--preview" in argv else None
     ibl = "--ibl" in argv
+    global IBL_GROUND_COLOR, IBL_GROUND_BLEND_Z
+    if "--ground" in argv:
+        IBL_GROUND_COLOR = tuple(float(v) for v in argv[argv.index("--ground") + 1].split(","))
+    if "--ground-blend" in argv:
+        IBL_GROUND_BLEND_Z = float(argv[argv.index("--ground-blend") + 1])
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     setup_panorama()

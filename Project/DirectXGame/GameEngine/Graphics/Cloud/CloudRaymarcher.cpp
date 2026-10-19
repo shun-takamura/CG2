@@ -249,10 +249,13 @@ void CloudRaymarcher::Update(float deltaTime)
 		offset.x = Wrap01(offset.x - wind.x / scale * deltaTime);
 		offset.y = Wrap01(offset.y - wind.y / scale * deltaTime);
 	};
-	scroll(shapeOffset_, params_.shapeWind, (std::max)(params_.shapeScale, 1.0f));
+	// 足す風（SetExtraWind）は大きい形・もこもこ・マスクを同じだけ流す＝雲の場全体が形を保ったまま動く
+	const Vector2 shapeWind = { params_.shapeWind.x + extraWind_.x, params_.shapeWind.y + extraWind_.y };
+	const Vector2 maskWind = { params_.maskWind.x + extraWind_.x, params_.maskWind.y + extraWind_.y };
+	scroll(shapeOffset_, shapeWind, (std::max)(params_.shapeScale, 1.0f));
 	// もこもこは大きい形と同じ風で流す（こぶだけが雲の上を滑って見えないように）
-	scroll(mokoOffset_, params_.shapeWind, (std::max)(params_.mokoScale, 1.0f));
-	scroll(maskOffset_, params_.maskWind, (std::max)(params_.maskScale, 1.0f));
+	scroll(mokoOffset_, shapeWind, (std::max)(params_.mokoScale, 1.0f));
+	scroll(maskOffset_, maskWind, (std::max)(params_.maskScale, 1.0f));
 	// 3D ノイズは時間×風で直接ずらす（周期が無いので折り返せない）。長時間で精度が落ちないよう 1 時間で戻す
 	if (time_ > 3600.0f) time_ -= 3600.0f;
 }

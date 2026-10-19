@@ -7,6 +7,7 @@
 #include "MathUtility.h"
 #include "Object3DManager.h"
 #include "Skybox.h"
+#include "TextureManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -113,6 +114,11 @@ void StageEnvironment::Initialize(Skybox* skybox, Object3DManager* object3DManag
 	object3DManager_ = object3DManager;
 	onCubemapChanged_ = std::move(onCubemapChanged);
 	skyIndex_ = -1;
+	iblPath_.clear();
+	// IBL は道中で切り替えるので先に読んでおく（SetEnvironmentTexture は読み込まない。途中で読むとカクつく）
+	for (const StageSection& s : sections_) {
+		if (!s.iblPath.empty()) TextureManager::GetInstance()->LoadTexture(s.iblPath);
+	}
 }
 
 StageEnvironment::StageEnvironment() = default;
@@ -140,7 +146,21 @@ void StageEnvironment::InitializeRaymarchClouds(DirectXCore* dxCore, SRVManager*
 
 void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition) {
 	if (cloudLayer_) cloudLayer_->Update(deltaTime, eyePosition);
-	if (raymarcher_) raymarcher_->Update(deltaTime);
+	if (raymarcher_) {
+		// 自機の進む向きと逆へ流す。降下の前に止める
+		const float span = cloudFlow_.fadeEndSec - cloudFlow_.fadeStartSec;
+		const float fade = span > 1e-3f
+			? 1.0f - std::clamp((stageSec_ - cloudFlow_.fadeStartSec) / span, 0.0f, 1.0f)
+			: (stageSec_ < cloudFlow_.fadeEndSec ? 1.0f : 0.0f);
+		const float s = cloudFlow_.speed * fade;
+		raymarcher_->SetExtraWind({ -cloudFlowForward_.x * s, -cloudFlowForward_.y * s });
+		raymarcher_->Update(deltaTime);
+	}
+}
+
+void StageEnvironment::SetCloudFlowDirection(const Vector2& forwardXZ) {
+	const float len = std::sqrt(forwardXZ.x * forwardXZ.x + forwardXZ.y * forwardXZ.y);
+	if (len > 1e-4f) cloudFlowForward_ = { forwardXZ.x / len, forwardXZ.y / len };
 }
 
 void StageEnvironment::DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget) {
@@ -175,6 +195,22 @@ int StageEnvironment::FindSkyIndex(float stageSec) const {
 		else break;
 	}
 	return idx;
+}
+
+std::string StageEnvironment::ResolveIblPath(int index) const {
+	for (int i = index; i >= 0; --i) {
+		if (!sections_[i].iblPath.empty()) return sections_[i].iblPath;
+		if (!sections_[i].skyboxPath.empty()) return sections_[i].skyboxPath;
+	}
+	return skybox_ ? skybox_->GetCubemapFilePath() : std::string();
+}
+
+void StageEnvironment::ApplyIbl(int index, bool force) {
+	const std::string path = ResolveIblPath(index);
+	if (path.empty() || (!force && path == iblPath_)) return;
+	TextureManager::GetInstance()->LoadTexture(path);
+	iblPath_ = path;
+	if (onCubemapChanged_) onCubemapChanged_(path);
 }
 
 const std::string* StageEnvironment::ResolveCubemapPath(int index) const {
@@ -246,6 +282,7 @@ void StageEnvironment::ApplyValues(const StageEnvValues& v, bool applyTint) {
 }
 
 void StageEnvironment::Update(float stageSec, bool applyTint) {
+	stageSec_ = stageSec;
 	if (sections_.empty()) return;   // セクション未定義なら従来どおり何もしない
 
 	const int sky = FindSkyIndex(stageSec);
@@ -259,9 +296,10 @@ void StageEnvironment::Update(float stageSec, bool applyTint) {
 			} else {
 				skybox_->SetCubemap(*path);
 			}
-			if (onCubemapChanged_) onCubemapChanged_(*path);
 		}
 		skyIndex_ = sky;
+		// 環境マップは空と別に持てる（iblPath）
+		ApplyIbl(sky, false);
 	}
 
 	// 値が変わった時（区間の切り替えの補間中・ImGui で区間の値を変えた時）だけ書き込む。
@@ -275,15 +313,17 @@ void StageEnvironment::Update(float stageSec, bool applyTint) {
 }
 
 void StageEnvironment::Reset(float stageSec) {
+	stageSec_ = stageSec;
 	if (sections_.empty()) return;
 
 	const int sky = FindSkyIndex(stageSec);
 	const std::string* path = ResolveCubemapPath(sky);
 	if (path && skybox_ && *path != skybox_->GetCubemapFilePath()) {
 		skybox_->SetCubemap(*path);   // Seek 中はクロスフェードしない（色の確認にならないため）
-		if (onCubemapChanged_) onCubemapChanged_(*path);
 	}
 	skyIndex_ = sky;
+	// 演出（スタート演出のカタパルト等）が環境マップを替えた後に呼ばれるので、同じでも貼り直す
+	ApplyIbl(sky, true);
 
 	Evaluate(stageSec, current_);
 	ApplyValues(current_, true);
@@ -294,6 +334,11 @@ void StageEnvironment::LoadFromJson(const JsonValue& root) {
 	if (root["raymarchClouds"].IsObject()) {
 		if (!raymarcher_) raymarcher_ = std::make_unique<CloudRaymarcher>();
 		raymarcher_->LoadFromJson(root["raymarchClouds"]);
+	}
+	if (const JsonValue& flow = root["cloudFlow"]; flow.IsObject()) {
+		cloudFlow_.speed = static_cast<float>(flow["speed"].AsDouble(cloudFlow_.speed));
+		cloudFlow_.fadeStartSec = static_cast<float>(flow["fadeStartSec"].AsDouble(cloudFlow_.fadeStartSec));
+		cloudFlow_.fadeEndSec = static_cast<float>(flow["fadeEndSec"].AsDouble(cloudFlow_.fadeEndSec));
 	}
 
 	const JsonValue& arr = root["sections"];
@@ -309,6 +354,7 @@ void StageEnvironment::LoadFromJson(const JsonValue& root) {
 		s.startSec = static_cast<float>(o["startSec"].AsDouble(s.startSec));
 		s.blendSec = static_cast<float>(o["blendSec"].AsDouble(s.blendSec));
 		if (o["skyboxPath"].IsString()) s.skyboxPath = o["skyboxPath"].AsString();
+		if (o["iblPath"].IsString()) s.iblPath = o["iblPath"].AsString();
 		s.skyboxTint = ReadVec4(o["skyboxTint"], s.skyboxTint);
 
 		s.lightDir = ReadVec3(o["lightDir"], s.lightDir);
@@ -336,6 +382,7 @@ void StageEnvironment::SaveToJson(JsonValue& root) const {
 		o["startSec"] = static_cast<double>(s.startSec);
 		o["blendSec"] = static_cast<double>(s.blendSec);
 		o["skyboxPath"] = JsonValue(s.skyboxPath);
+		o["iblPath"] = JsonValue(s.iblPath);
 		o["skyboxTint"] = WriteVec4(s.skyboxTint);
 
 		o["lightDir"] = WriteVec3(s.lightDir);
@@ -355,6 +402,13 @@ void StageEnvironment::SaveToJson(JsonValue& root) const {
 		JsonValue clouds;
 		raymarcher_->SaveToJson(clouds);
 		root["raymarchClouds"] = std::move(clouds);
+	}
+	{
+		JsonValue flow = JsonValue::MakeObject();
+		flow["speed"] = static_cast<double>(cloudFlow_.speed);
+		flow["fadeStartSec"] = static_cast<double>(cloudFlow_.fadeStartSec);
+		flow["fadeEndSec"] = static_cast<double>(cloudFlow_.fadeEndSec);
+		root["cloudFlow"] = std::move(flow);
 	}
 }
 
@@ -444,6 +498,27 @@ void StageEnvironment::OnImGuiTuning(bool& changed, const std::function<void(flo
 		changed = true;
 	}
 	ImGui::TextDisabled("（空欄 = 前のセクションの空を引き継ぐ）");
+	{
+		static const char* kIbls[] = {
+			"",   // = 前のセクションを引き継ぐ（空を替えたセクションでは空と同じ）
+			"Resources/Cubemaps/stage_white_ibl.dds",
+			"Resources/Cubemaps/stage_cloudtop_ibl.dds",
+			"Resources/Cubemaps/title_clear_sky_ibl.dds",
+			"Resources/Cubemaps/title_clear_sky.dds",
+			"Resources/Cubemaps/hub_temple_ibl.dds",
+		};
+		int iblSel = 0;
+		for (int k = 0; k < IM_ARRAYSIZE(kIbls); ++k) {
+			if (s.iblPath == kIbls[k]) { iblSel = k; break; }
+		}
+		if (ImGui::Combo("IBL", &iblSel, kIbls, IM_ARRAYSIZE(kIbls))) {
+			s.iblPath = kIbls[iblSel];
+			skyIndex_ = -1;
+			changed = true;
+		}
+		ImGui::TextDisabled("（映り込み専用。空欄 = 引き継ぐ。雲の上は下を雲の白にした stage_cloudtop_ibl）");
+		ImGui::Text("now IBL: %s", iblPath_.c_str());
+	}
 	ImGui::ColorEdit4("Tint", &s.skyboxTint.x);
 	if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
@@ -475,5 +550,10 @@ void StageEnvironment::OnImGuiClouds() {
 void StageEnvironment::OnImGuiRaymarchClouds() {
 	if (!raymarcher_ || !ImGui::CollapsingHeader("Raymarch Clouds")) return;
 	ImGui::TextDisabled("雲海（ゼノブレ式＋入口・出口は B'）。ステージの Save で Tuning/StagePlay.json に保存");
+	ImGui::SeparatorText("Flow (against player forward)");
+	ImGui::DragFloat("Flow Speed [m/s]", &cloudFlow_.speed, 0.5f, 0.0f, 500.0f);
+	ImGui::DragFloat("Flow Fade Start (s)", &cloudFlow_.fadeStartSec, 0.1f, 0.0f, 300.0f);
+	ImGui::DragFloat("Flow Fade End (s)", &cloudFlow_.fadeEndSec, 0.1f, 0.0f, 300.0f);
+	ImGui::Text("forward (%.2f, %.2f)  now stage %.1f s", cloudFlowForward_.x, cloudFlowForward_.y, stageSec_);
 	raymarcher_->OnImGui();
 }

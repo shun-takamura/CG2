@@ -156,6 +156,12 @@
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.cpp">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
@@ -366,6 +372,12 @@
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartSkip.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.h">
+      <Filter>DirectXGame\Game\Scene\StageStart</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.h">

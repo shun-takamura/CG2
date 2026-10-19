@@ -1,4 +1,5 @@
 #pragma once
+#include "Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
 
@@ -29,6 +30,9 @@ struct StageSection {
 	float       blendSec = 3.0f;   // 「このセクションの開始境界」を跨ぐのにかける秒
 
 	std::string skyboxPath;        // 空文字なら Cubemap は切り替えず前のセクションを引き継ぐ
+	// 映り込み（IBL）専用の Cubemap。空文字なら前のセクションを引き継ぐ（空を替えたセクションでは空と同じ）。
+	// 背景の空は水平線より下も濃い青なので、雲の上では下を雲の白にした IBL を使う（2026-10-19。gen_title_sky.py --ibl --ground）
+	std::string iblPath;
 	Vector4     skyboxTint{ 1.0f, 1.0f, 1.0f, 1.0f };
 
 	Vector3 lightDir{ 0.3f, -1.0f, 0.4f };
@@ -120,6 +124,8 @@ public:
 	/// クロスフェードを挟むと巻き戻しでの色確認にならないので Cubemap も即差し替える。
 	/// </summary>
 	void Reset(float stageSec);
+	/// <summary>今のセクションの IBL（空なら空と同じ。セクションが無ければ空文字）</summary>
+	const std::string& GetCurrentIblPath() const { return iblPath_; }
 
 	bool HasSections() const { return !sections_.empty(); }
 	/// <summary>遠景の雲（InitializeClouds 前は null）。大河の水面に映る空へ重ねるのに使う</summary>
@@ -135,6 +141,12 @@ public:
 	/// <summary>雲海のパラメータ（ステージの Save で root["raymarchClouds"] に保存される）</summary>
 	void OnImGuiRaymarchClouds();
 
+	/// <summary>
+	/// 雲海を流す向き（XZ。自機の進む向き＝レール t=0 の進行方向）。雲はこの逆へ cloudFlow の速さで流れる。
+	/// レールは雲の上ではほとんど進まないので、流さないと止まって見える（2026-10-19 ユーザー）
+	/// </summary>
+	void SetCloudFlowDirection(const Vector2& forwardXZ);
+
 	void LoadFromJson(const JsonValue& root);   // root["sections"]
 	void SaveToJson(JsonValue& root) const;
 
@@ -147,6 +159,10 @@ private:
 	void Evaluate(float stageSec, StageEnvValues& out) const;
 	// index から遡って最初に見つかる非空の skyboxPath（空セクションは前を引き継ぐ）。
 	const std::string* ResolveCubemapPath(int index) const;
+	// index から遡って最初に見つかる iblPath。先に空を替えたセクションに当たったらその空
+	std::string ResolveIblPath(int index) const;
+	// IBL を index のセクションのものにする（force なら同じでも貼り直す）
+	void ApplyIbl(int index, bool force);
 	void ApplyValues(const StageEnvValues& v, bool applyTint);
 
 	Skybox* skybox_ = nullptr;
@@ -155,8 +171,18 @@ private:
 	std::unique_ptr<CloudLayer> cloudLayer_;
 	std::unique_ptr<CloudRaymarcher> raymarcher_;
 
+	// 雲の流れ（root["cloudFlow"]）。ステージの fadeStartSec〜fadeEndSec で 0 へ（縦穴の降下の前に止める）
+	struct CloudFlow {
+		float speed = 60.0f;          // [m/s]
+		float fadeStartSec = 40.0f;
+		float fadeEndSec = 48.0f;
+	} cloudFlow_;
+	Vector2 cloudFlowForward_{ 0.0f, 1.0f };
+	float stageSec_ = 0.0f;   // Update / Reset で受け取った今のステージ秒（雲の流れの強さ）
+
 	std::vector<StageSection> sections_;
 	int            skyIndex_ = -1;   // 今 Skybox に載っているセクション（BlendTo の再発火防止）
+	std::string    iblPath_;          // 今の環境マップ（IBL）
 	StageEnvValues current_{};
 
 	int selected_ = -1;   // ImGui 一覧の選択行

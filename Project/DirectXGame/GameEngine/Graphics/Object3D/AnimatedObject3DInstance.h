@@ -59,6 +59,10 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     Transform cameraTransform_;
     // Update で求めたワールド行列（CPU 側の控え。転送用の CB は書き込み専用メモリなので読まない）
     Matrix4x4 worldMatrix_ = MakeIdentity4x4();
+    // hasWorldOverride_ が true の間は transform_ ではなく worldOverride_ を使う（ボーンのソケットに付ける物など）
+    bool hasWorldOverride_ = false;
+    Matrix4x4 worldOverride_ = MakeIdentity4x4();
+    Vector3 emissive_ = { 0.0f, 0.0f, 0.0f };   // SetEmissive の控え（GPU の Material は書き込み専用なので読まない）
 
     std::string textureFilePath_;
     std::string modelFileName_;
@@ -137,6 +141,9 @@ public:
     void SetScale(const Vector3& scale) { transform_.scale = scale; }
     void SetRotate(const Vector3& rotate) { transform_.rotate = rotate; }
     void SetTranslate(const Vector3& translate) { transform_.translate = translate; }
+    /// <summary>ワールド行列を直接与える（Object3DInstance と同じ。BoneSocket::World() をそのまま渡す等）。解除するまで transform_ は使わない</summary>
+    void SetWorldMatrixOverride(const Matrix4x4& m) { worldOverride_ = m; hasWorldOverride_ = true; }
+    void ClearWorldMatrixOverride() { hasWorldOverride_ = false; }
 
     // Material関連
     void SetUseEnvironmentMap(bool use);
@@ -153,6 +160,16 @@ public:
     /// 現在のマテリアルカラーを取得（SetModel 前は白を返す）。
     /// </summary>
     Vector4 GetMaterialColor() const;
+
+    /// <summary>
+    /// 発光（Material::emissive の rgb。ライティングの後に足す）を全部の部位に書く。被弾の点滅など、
+    /// 色を掛けると暗いテクスチャでは色が出ないときに使う。ブルームには載らない（発光パスは描かない）
+    /// </summary>
+    void SetEmissive(const Vector3& emissive);
+    /// <summary>PBR の金属度・粗さを全部の部位に書く（.mat の値を上書きする）</summary>
+    void SetMetallicRoughness(float metallic, float roughness);
+    /// <summary>最後に SetEmissive した値（既定 0）</summary>
+    const Vector3& GetEmissive() const { return emissive_; }
 
     /// <summary>
     /// 点からの距離のディゾルブ（Material.h の DissolveSphere。胸の装甲に入口を開ける・羽根を付け根から出す等）を
@@ -214,7 +231,7 @@ public:
     /// モデル本体の worldMatrix をそのまま返す。Update 後に呼ぶこと。
     /// </summary>
     Matrix4x4 GetJointWorldMatrix(const std::string& jointName) const {
-        Matrix4x4 world = MakeAffineMatrix(transform_);
+        Matrix4x4 world = hasWorldOverride_ ? worldOverride_ : MakeAffineMatrix(transform_);
         if (!hasSkeleton_) return world;
         auto it = skeleton_.jointMap.find(jointName);
         if (it == skeleton_.jointMap.end()) return world;

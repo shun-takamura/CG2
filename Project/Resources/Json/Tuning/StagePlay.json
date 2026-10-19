@@ -14,10 +14,17 @@
       0.10000000149011612
     ],
     "smoothTime": 0.25,
-    "attackMoveSpeedScale": 0.60000002384185791
+    "attackMoveSpeedScale": 0.60000002384185791,
+    "look": {
+      "environmentCoefficient": 0.5,
+      "overrideMaterial": false,
+      "metallic": 0.5,
+      "roughness": 0.42500001192092896,
+      "baseGlow": 0
+    }
   },
   "enemyShot": {
-    "leadRate": 0.34999999403953552
+    "leadRate": 0
   },
   "camera": {
     "speed": 0.0055555556900799274,
@@ -47,6 +54,7 @@
       "startSec": 0,
       "blendSec": 4,
       "skyboxPath": "Resources/Cubemaps/title_clear_sky.dds",
+      "iblPath": "Resources/Cubemaps/stage_cloudtop_ibl.dds",
       "skyboxTint": [
         1,
         1,
@@ -80,6 +88,7 @@
       "startSec": 54,
       "blendSec": 6,
       "skyboxPath": "",
+      "iblPath": "",
       "skyboxTint": [
         1,
         1,
@@ -113,6 +122,7 @@
       "startSec": 66,
       "blendSec": 6,
       "skyboxPath": "",
+      "iblPath": "Resources/Cubemaps/title_clear_sky_ibl.dds",
       "skyboxTint": [
         1,
         1,
@@ -146,6 +156,7 @@
       "startSec": 120,
       "blendSec": 6,
       "skyboxPath": "Resources/Cubemaps/rogland_clear_night_4k.dds",
+      "iblPath": "",
       "skyboxTint": [
         0.81999999284744263,
         0.86000001430511475,
@@ -267,6 +278,11 @@
     "volumeLightStep": 25,
     "resolutionScale": 0.5
   },
+  "cloudFlow": {
+    "speed": 60,
+    "fadeStartSec": 40,
+    "fadeEndSec": 48
+  },
   "skybox": {
     "tint": [
       1,
@@ -312,6 +328,16 @@
     "shootLockoutDuration": 0.5,
     "blinkFrequency": 12,
     "blinkAlpha": 0.5,
+    "blinkEmissive": [
+      0.89999997615814209,
+      0.079999998211860657,
+      0.05000000074505806
+    ],
+    "dodgeBlinkEmissive": [
+      0.15000000596046448,
+      0.55000001192092896,
+      0.89999997615814209
+    ],
     "cameraShakeIntensity": 0.11999999731779099,
     "cameraShakeDuration": 0.25
   },
@@ -361,10 +387,10 @@
       0
     ],
     "clonePaths": [
-      "Resources/Models/Animated/Walk/walk.mesh",
-      "Resources/Models/Animated/Walk/walk.mesh",
-      "Resources/Models/Animated/Walk/walk.mesh",
-      "Resources/Models/Animated/Walk/walk.mesh"
+      "Resources/Models/Player/PlayerModel/PlayerModel.mesh",
+      "Resources/Models/Player/PlayerModel/PlayerModel.mesh",
+      "Resources/Models/Player/PlayerModel/PlayerModel.mesh",
+      "Resources/Models/Player/PlayerModel/PlayerModel.mesh"
     ],
     "cloneColor": [
       0.40000000596046448,
@@ -675,8 +701,18 @@
     "launchPanelHideDelay": 0.15000000596046448,
     "kickLeadSeconds": 0.44999998807907104,
     "clampStopBeforeExit": 2,
-    "firstPersonAfterExitSeconds": 1.0,
+    "firstPersonAfterExitSeconds": 1,
     "thirdPersonAfterExitSeconds": 1.7999999523162842,
+    "fovKickDegrees": 15,
+    "radialBlurMax": 0.039999999105930328,
+    "radialBlurThirdPerson": false,
+    "radialBlurMaskDistance": 6,
+    "glareDistance": 80,
+    "glareMax": 0.75,
+    "glareAdaptSeconds": 0.60000002384185791,
+    "skipFadeIn": 0.34999999403953552,
+    "skipFadeHold": 0.15000000596046448,
+    "skipFadeOut": 0.60000002384185791,
     "nearClip": 0.10000000149011612,
     "cockpitSignColor": [
       0.34999999403953552,
@@ -1063,6 +1099,81 @@
           0
         ]
       }
+    },
+    "lightning": {
+      "sweepRate": 220,
+      "sweepTail": 10,
+      "sweepWidth": 0.30000001192092896,
+      "runRate": 140,
+      "runThrustBoost": 1.5,
+      "runLengthMin": 4,
+      "runLengthMax": 14,
+      "runWidth": 0.2199999988079071,
+      "idleArcHeight": 1.5,
+      "jagMax": 0.69999998807907104,
+      "idleRate": 160,
+      "idleThrustBoost": 2,
+      "idleNearBias": 1.2999999523162842,
+      "idleWidth": 0.2199999988079071,
+      "chargeClampRate": 120,
+      "launchClampRate": 260,
+      "launchWidth": 0.40000000596046448,
+      "launchBrightness": 2,
+      "trailRate": 200,
+      "trailLength": 40,
+      "jag": 0.18000000715255737,
+      "afterFadeSeconds": 0.34999999403953552,
+      "jitterSeconds": 0.035000000149011612,
+      "coreColor": [
+        0.85000002384185791,
+        0.93000000715255737,
+        1,
+        1
+      ],
+      "glowColor": [
+        0.30000001192092896,
+        0.55000001192092896,
+        1,
+        1
+      ],
+      "bloomIntensity": 2.5
     }
+  },
+  "cloudTopIntro": {
+    "holdSeconds": 0.60000002384185791,
+    "orbitSeconds": 3,
+    "startAzimuthDeg": 35,
+    "startElevationDeg": 20,
+    "startDistance": 6,
+    "startFovDeg": 50,
+    "orbitRight": true,
+    "focusHeight": 0.89999997615814209,
+    "lookBlendStart": 0.55000001192092896,
+    "wingDeployDelay": 0.20000000298023224
+  },
+  "playerWings": {
+    "dissolveInSeconds": 1,
+    "dissolveOutSeconds": 0.80000001192092896,
+    "radiusMax": 1.3999999761581421,
+    "rootOffset": [
+      0,
+      0,
+      0
+    ],
+    "edgeWidth": 0.059999998658895493,
+    "edgeColor": [
+      1.6000000238418579,
+      2.2000000476837158,
+      3
+    ],
+    "noiseScale": 9,
+    "noiseAmplitude": 0.05000000074505806,
+    "bloomScale": 1,
+    "environmentCoefficient": 0.30000001192092896,
+    "overrideMaterial": true,
+    "metallic": 0,
+    "roughness": 0.60000002384185791,
+    "baseGlow": 0.079999998211860657,
+    "albedoGain": 3.2000000476837158
   }
 }

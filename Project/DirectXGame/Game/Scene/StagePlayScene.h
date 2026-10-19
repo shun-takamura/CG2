@@ -33,6 +33,8 @@ class RailStagePart;
 class BossStagePart;
 class BossArenaWater;
 class RiverWater;
+class CloudTopIntro;
+class PlayerWingUnit;
 
 /// <summary>
 /// ステージプレイシーン
@@ -158,12 +160,19 @@ private:
 	// ----- IStageStartHost 実装（private override。StageStartPart 経由のみ）-----
 	void SetPlayerHidden(bool hidden) override;
 	void RestoreStageEnvironment() override;
+	void BeginCloudTop() override;
 
 	// スタート演出（③IN〜雲の上。16_StageStart.md）。StagePlayScene は IStageStartHost 経由でのみこれを操作する。
 	std::unique_ptr<StageStartPart> stageStart_;
 	// スタート演出の Update / Draw（演出中は true を返し、レール・HUD は動かさない）
 	bool UpdateStageStart();
 	void DrawStageStart();
+	// 雲の上の場面（S4、16_StageStart.md F6）：自機の右上前方からレールのカメラへ回り込むカメラ（この間は操作を止める）と、自機の羽根
+	std::unique_ptr<CloudTopIntro> cloudTopIntro_;
+	std::unique_ptr<PlayerWingUnit> playerWings_;
+	bool IsCloudTopIntroActive() const;
+	// 自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦は Stand
+	void ApplyPlayerPose();
 
 	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
 	// StagePlayScene は IBossStageHost 経由でのみこれを操作する。
@@ -318,7 +327,7 @@ public:
 	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
 	/// 将来の回避実装などからも参照する。
 	/// </summary>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_; }
+	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_ || IsCloudTopIntroActive(); }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -397,14 +406,16 @@ private:
 	bool       jdSelecting_ = false;               // 分身プレビュー表示中（方向入力待ち）
 	CounterDir jdChosen_    = CounterDir::None;     // 確定した派生方向（Phase2 で参照）
 	IImGuiEditable* jdCounterTarget_ = nullptr;    // カウンター対象敵（ジャストした攻撃の発生元）
-	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（Object3D。index=CounterDir-1）
-	// 各方向の分身モデルパス（あとで派生モーション初期ポーズの非アニメ.meshに差し替えやすいよう方向ごとに持つ）
+	std::vector<IImGuiEditable*> jdClones_;        // 分身ビジュアル（AnimatedObject3D。index=CounterDir-1）
+	// 各方向の分身モデルパス（スキニングのモデル。方向ごとに持つ）。2026-10-19 自機と同じ新モデルに
 	std::string jdClonePath_[4] = {
-		"Resources/Models/Animated/Walk/walk.mesh", // Up
-		"Resources/Models/Animated/Walk/walk.mesh", // Right
-		"Resources/Models/Animated/Walk/walk.mesh", // Down
-		"Resources/Models/Animated/Walk/walk.mesh", // Left
+		"Resources/Models/Player/PlayerModel/PlayerModel.mesh", // Up
+		"Resources/Models/Player/PlayerModel/PlayerModel.mesh", // Right
+		"Resources/Models/Player/PlayerModel/PlayerModel.mesh", // Down
+		"Resources/Models/Player/PlayerModel/PlayerModel.mesh", // Left
 	};
+	// 分身の姿勢＝自機と同じ飛ぶ姿勢（Launch の最後のコマ。ApplyPlayerPose と同じ）
+	static constexpr const char* kJdClonePoseClip = "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim";
 	float   jdCloneOffset_     = 4.0f;             // 分身の表示オフセット距離（画面平面 units）
 	Vector4 jdCloneColor_{ 0.4f, 0.8f, 1.0f, 0.45f }; // 分身の半透明色
 	float   jdSpreadTimer_     = 0.0f;            // 分裂アニメ経過（中心→各方向へ広がる）
@@ -591,6 +602,25 @@ private:
 	float shootLockoutDuration_ = 0.5f;         // 被弾後の射撃禁止秒数（ImGui調整可）
 	float damageBlinkFrequency_ = 12.0f;        // 点滅周波数 [Hz]
 	float damageBlinkAlpha_ = 0.5f;             // 点滅時の半透明値
+	// 点滅の色のコマに足す発光（色を掛けると青い新モデルでは色が出ないため。2026-10-19）
+	Vector3 damageBlinkEmissive_{ 0.9f, 0.08f, 0.05f };   // 被弾：赤
+	Vector3 dodgeBlinkEmissive_{ 0.15f, 0.55f, 0.9f };    // 回避無敵：水色
+	Vector3 playerBlinkGlow_{ 0.0f, 0.0f, 0.0f };          // 今の点滅の発光（ApplyPlayerLook が下地に足す。羽根にも渡す）
+	// 自機の照らし方（root["player"]["look"]）。2026-10-19 ユーザー：空の IBL（水平線より下も濃い青）で体の金と羽根が青くつぶれる
+	// → IBL を切り、平行光源（雲の上は白）で照らす。金属度 0.976 のままだと IBL なしでは拡散が無く黒くなるので下げ、
+	// 影の側が真っ黒にならないよう弱い白の下地（発光で足す）を付ける
+	// → 雲の上の IBL を下が雲の白の物（stage_cloudtop_ibl）にしたので、既定は IBL 1・モデルの元の質感・下地なしに戻した。
+	//   上書き（overrideMaterial）と下地は調整用に残す
+	// → 2026-10-19 ユーザー：体の IBL は 0.5 くらい
+	struct PlayerLook {
+		float environmentCoefficient = 0.5f;
+		bool  overrideMaterial = false;   // true で metallic / roughness を全部の部位に上書き
+		float metallic = 0.5f;
+		float roughness = 0.4f;
+		float baseGlow = 0.0f;
+	} playerLook_;
+	// 毎フレーム：自機の IBL・金属度・粗さ・発光（下地＋点滅）を書く
+	void ApplyPlayerLook();
 	float damageCameraShakeIntensity_ = 0.12f;  // 被弾シェイクの強度
 	float damageCameraShakeDuration_ = 0.25f;   // 被弾シェイクの継続秒
 
