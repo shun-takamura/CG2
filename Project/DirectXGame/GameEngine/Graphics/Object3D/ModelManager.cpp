@@ -11,6 +11,8 @@ void ModelManager::Initialize(DirectXCore* dxCore)
 
 void ModelManager::LoadModel(const std::string& directoryPath, const std::string& filePath)
 {
+	if (loadObserver_) loadObserver_(directoryPath, filePath);
+
 	// ============================================
 	// エントリの取得 or 作成（オーナー権の決定）
 	// ============================================

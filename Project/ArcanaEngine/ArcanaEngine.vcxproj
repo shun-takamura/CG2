@@ -66,6 +66,7 @@
   <ItemGroup>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedMeshCache.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.cpp" />
@@ -105,6 +106,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Math\MathUtility.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Math\Frustum.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Scene\Scene.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Scene\ScenePreloader.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\IImGuiEditable.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\HierarchyWindow.cpp" />
     <ClCompile Include="..\DirectXGame\ImGUIManager\InspectorWindow.cpp" />
@@ -229,6 +231,7 @@
   <ItemGroup>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedObject3DInstance.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedMeshCache.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\Animation.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BaseFilterEffect.h" />
@@ -296,6 +299,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Math\Vector2Int.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\AbstractSceneFactory.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\ISceneRunner.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Scene\ScenePreloader.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\IImGuiEditable.h" />
     <ClInclude Include="..\DirectXGame\ImGUIManager\HierarchyWindow.h" />

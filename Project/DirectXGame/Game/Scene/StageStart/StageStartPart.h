@@ -77,6 +77,9 @@ public:
 
 	void Initialize(IStageStartHost* host, Camera* camera, Object3DManager* object3DManager, DirectXCore* dxCore,
 		SkinningComputeManager* skinningComputeManager, SRVManager* srvManager);
+	/// <summary>三人称で映す機体を作る（重いので StagePlay が後回しの段で呼ぶ。2 回目以降は何もしない）</summary>
+	void InitializeMech(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager,
+		DirectXCore* dxCore, SRVManager* srvManager);
 	void Finalize();
 
 	/// <summary>③IN：HUB から渡された値で降下の続きから始める</summary>

@@ -1,4 +1,7 @@
 #include "GameScene.h"
+#include "Profiling/LoadProfiler.h"
+#include "SessionLogger.h"
+#include <format>
 #include "Components/Gameplay.h"
 #include "SoundManager.h"
 #include "Enemy/EnemyController.h"
@@ -1315,70 +1318,122 @@ void GameScene::CollectSceneData(SceneData& out) const {
 }
 
 void GameScene::ApplySceneData(const SceneData& data) {
-	for (const auto& d : data.entities) {
-		if (ShouldSkipOnLoad(d)) continue;
+	for (int i = 0; i < kSceneKindCount; ++i) { sceneKindCount_[i] = 0; sceneKindMs_[i] = 0.0; }
+	for (const auto& d : data.entities) ApplySceneEntity(d);
+	LogSceneEntityStats();
+}
 
-		switch (d.kind) {
-		case SceneEntityDesc::Kind::Object3D: {
-			AddDynamicObject(d.dir, d.file, d.translate);
-			if (object3DInstances_.empty()) break;
-			auto& back = object3DInstances_.back();
-			back->SetName(d.name);
-			Gameplay::Of(back).SetTag(d.tag);
-			back->SetScale(d.scale);
-			back->SetRotate(d.rotate);
-			break;
-		}
-		case SceneEntityDesc::Kind::AnimatedObject3D: {
-			AddDynamicAnimated(d.dir, d.file, d.translate);
-			if (dynamicAnimated_.empty()) break;
-			auto& back = dynamicAnimated_.back();
-			back->SetName(d.name);
-			Gameplay::Of(back).SetTag(d.tag);
-			back->SetScale(d.scale);
-			back->SetRotate(d.rotate);
-			break;
-		}
-		case SceneEntityDesc::Kind::Primitive: {
-			AddDynamicPrimitive(d.primitiveType, d.translate);
-			if (dynamicPrimitives_.empty()) break;
-			auto& back = dynamicPrimitives_.back();
-			back->SetName(d.name);
-			Gameplay::Of(back).SetTag(d.tag);
-			back->SetScale(d.scale);
-			back->SetRotate(d.rotate);
-			if (!d.texture.empty()) back->SetTexture(d.texture);
-			break;
-		}
-		case SceneEntityDesc::Kind::Sprite: {
-			AddDynamicSprite(d.texture, d.spritePos.x, d.spritePos.y);
-			if (dynamicSprites_.empty()) break;
-			auto& back = dynamicSprites_.back();
-			back->SetName(d.name);
-			Gameplay::Of(back).SetTag(d.tag);
-			break;
-		}
-		case SceneEntityDesc::Kind::Spline: {
-			AddDynamicSpline(static_cast<int>(d.tag));
-			if (dynamicSplines_.empty()) break;
-			auto& back = dynamicSplines_.back();
-			back->SetName(d.name);
-			back->MutablePoints().clear();
-			for (const auto& p : d.points) back->AddPoint(p);
-			break;
-		}
-		case SceneEntityDesc::Kind::Prefab: {
-			// プレハブから作り直すことで HP/弾パラメータ等の属性ごと復元する。
-			// タグはプレハブ定義が持つので JSON 側では上書きしない。
-			if (IImGuiEditable* back = InstantiatePrefab(d.prefabName, d.translate)) {
-				back->SetName(d.name);
-				back->SetScale(d.scale);
-				back->SetRotate(d.rotate);
-			}
-			break;
-		}
-		}
+void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
+	if (ShouldSkipOnLoad(d)) return;
+
+	const double entityStart = LoadProfiler::NowMs();
+	const int kindIndex = static_cast<int>(d.kind);
+	switch (d.kind) {
+	case SceneEntityDesc::Kind::Object3D: {
+		AddDynamicObject(d.dir, d.file, d.translate);
+		if (object3DInstances_.empty()) break;
+		auto& back = object3DInstances_.back();
+		back->SetName(d.name);
+		Gameplay::Of(back).SetTag(d.tag);
+		back->SetScale(d.scale);
+		back->SetRotate(d.rotate);
+		break;
 	}
+	case SceneEntityDesc::Kind::AnimatedObject3D: {
+		AddDynamicAnimated(d.dir, d.file, d.translate);
+		if (dynamicAnimated_.empty()) break;
+		auto& back = dynamicAnimated_.back();
+		back->SetName(d.name);
+		Gameplay::Of(back).SetTag(d.tag);
+		back->SetScale(d.scale);
+		back->SetRotate(d.rotate);
+		break;
+	}
+	case SceneEntityDesc::Kind::Primitive: {
+		AddDynamicPrimitive(d.primitiveType, d.translate);
+		if (dynamicPrimitives_.empty()) break;
+		auto& back = dynamicPrimitives_.back();
+		back->SetName(d.name);
+		Gameplay::Of(back).SetTag(d.tag);
+		back->SetScale(d.scale);
+		back->SetRotate(d.rotate);
+		if (!d.texture.empty()) back->SetTexture(d.texture);
+		break;
+	}
+	case SceneEntityDesc::Kind::Sprite: {
+		AddDynamicSprite(d.texture, d.spritePos.x, d.spritePos.y);
+		if (dynamicSprites_.empty()) break;
+		auto& back = dynamicSprites_.back();
+		back->SetName(d.name);
+		Gameplay::Of(back).SetTag(d.tag);
+		break;
+	}
+	case SceneEntityDesc::Kind::Spline: {
+		AddDynamicSpline(static_cast<int>(d.tag));
+		if (dynamicSplines_.empty()) break;
+		auto& back = dynamicSplines_.back();
+		back->SetName(d.name);
+		back->MutablePoints().clear();
+		for (const auto& p : d.points) back->AddPoint(p);
+		break;
+	}
+	case SceneEntityDesc::Kind::Prefab: {
+		// プレハブから作り直すことで HP/弾パラメータ等の属性ごと復元する。
+		// タグはプレハブ定義が持つので JSON 側では上書きしない。
+		if (IImGuiEditable* back = InstantiatePrefab(d.prefabName, d.translate)) {
+			back->SetName(d.name);
+			back->SetScale(d.scale);
+			back->SetRotate(d.rotate);
+		}
+		break;
+	}
+	}
+	if (kindIndex >= 0 && kindIndex < kSceneKindCount) {
+		++sceneKindCount_[kindIndex];
+		sceneKindMs_[kindIndex] += LoadProfiler::NowMs() - entityStart;
+	}
+}
+
+void GameScene::LogSceneEntityStats() {
+	// 種類ごとの数と時間（シーン切り替えの重さの内訳。16 番 F7）
+	static constexpr const char* kKindNames[kSceneKindCount] = { "object3d", "animated", "primitive", "sprite", "spline", "prefab" };
+	std::string line = "LOAD kind=scene_entities";
+	for (int i = 0; i < kSceneKindCount; ++i) {
+		line += std::format(" {}={}/{:.2f}ms", kKindNames[i], sceneKindCount_[i], sceneKindMs_[i]);
+	}
+	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info, line);
+}
+
+bool GameScene::BeginSceneLoadFromJson(const std::string& filePath) {
+	pendingSceneData_ = SceneData{};
+	pendingSceneIndex_ = 0;
+	sceneLoadPending_ = false;
+	std::string error;
+	if (!SceneSerializer::ReadFile(filePath, pendingSceneData_, &error)) {
+		LogBuffer::Instance().Add(
+			"Scene load FAILED: " + filePath + " (" + error + ")", LogBuffer::Level::Error);
+		return false;
+	}
+	ClearDynamicEntities();
+	OnBeforeSceneLoad();
+	for (int i = 0; i < kSceneKindCount; ++i) { sceneKindCount_[i] = 0; sceneKindMs_[i] = 0.0; }
+	sceneLoadPending_ = true;
+	return true;
+}
+
+bool GameScene::ApplySceneLoadStep(double budgetMs) {
+	if (!sceneLoadPending_) return true;
+	const double start = LoadProfiler::NowMs();
+	const auto& entities = pendingSceneData_.entities;
+	while (pendingSceneIndex_ < entities.size()) {
+		ApplySceneEntity(entities[pendingSceneIndex_++]);
+		if (LoadProfiler::NowMs() - start >= budgetMs) break;
+	}
+	if (pendingSceneIndex_ < entities.size()) return false;
+	LogSceneEntityStats();
+	pendingSceneData_ = SceneData{};
+	sceneLoadPending_ = false;
+	return true;
 }
 
 bool GameScene::SaveSceneToJson(const std::string& filePath) {
@@ -1400,18 +1455,28 @@ std::string GameScene::SerializeSceneToString() const {
 bool GameScene::LoadSceneFromJson(const std::string& filePath) {
 	// 先に読み切る。パースに失敗した時点で return するので、
 	// 書き込み途中のファイルを掴んでも現在のシーンは壊れない。
+	auto* lp = LoadProfiler::GetInstance();
 	SceneData data;
 	std::string error;
-	if (!SceneSerializer::ReadFile(filePath, data, &error)) {
+	lp->BeginPhase("SceneJson/Read");
+	const bool read = SceneSerializer::ReadFile(filePath, data, &error);
+	lp->EndPhase("SceneJson/Read");
+	if (!read) {
 		LogBuffer::Instance().Add(
 			"Scene load FAILED: " + filePath + " (" + error + ")", LogBuffer::Level::Error);
 		return false;
 	}
 
+	lp->BeginPhase("SceneJson/Clear");
 	ClearDynamicEntities();
 	OnBeforeSceneLoad();
+	lp->EndPhase("SceneJson/Clear");
+	lp->BeginPhase("SceneJson/Apply");
 	ApplySceneData(data);
+	lp->EndPhase("SceneJson/Apply");
+	lp->BeginPhase("SceneJson/AfterLoad");
 	OnAfterSceneLoad();
+	lp->EndPhase("SceneJson/AfterLoad");
 
 	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
 	return true;

@@ -100,7 +100,7 @@ void LaunchChecklist::UpdateAuto(float deltaTime) {
 
 	const float thruster = progress(1);
 	for (int i = 0; i < kThrusterDirCount; ++i) {
-		const float on = static_cast<float>(i + 1) / kThrusterDirCount;
+		const float on = static_cast<float>(i + 1) / static_cast<float>(kThrusterDirCount);
 		thrusterDone_[i] = thruster >= on;
 		thrusterHeld_[i] = thruster >= on - 0.25f && thruster < on + 0.1f;
 	}

@@ -6,7 +6,7 @@
 
 関連: [18_HubTransitions.md](18_HubTransitions.md)（③ リフトの降下）/ [17_HubScene.md](17_HubScene.md)（神殿・HubMech §5.1）/ [15_SceneTransition.md](15_SceneTransition.md)（仕組み・白フェード）/ [5_TitleScene.md](5_TitleScene.md)（扉の光芒 A-9）/ [11_LowAltitudeFlight.md](11_LowAltitudeFlight.md)（レール t=0 の雲海の上）/ [8_PlayerMotion.md](8_PlayerMotion.md)
 
-最終更新: 2026-10-19（**F6 のコード完了（ビルド・実機は未確認）**：§2.6 に雲の上の回り込みカメラ（右上前方 → 右側を回ってレールのカメラへ）、ゲームの自機を新モデルに、羽根の展開（Deploy＋付け根からのディゾルブ）、ボス戦で収納、リトライ・デモモードの確認。その前　**F5 完了（ビルド・実機確認済み）**：§2.5 に給電ケーブル（ゴムひも・螺旋のうねり）、充電と SPACE（スラスターの出力）・タコメーター、スラスター 4 基（ポイント制）、電磁カタパルトの雷、けり出し、射出口のまぶしさ・画角・ラジアルブラー（深度のマスク）、LSHIFT 長押しのスキップ。その前　**F4 完了（ビルド・実機確認済み）**：§2.4 に機体確認の項目（照準・スラスター・武装＋POWER CABLE の状態表示）、表示板 LAUNCH CONTROL（一人称は宙に浮く板・三人称は画面の UI）、全部 CLEAR で液晶をすぐ READY・ネオンを一度消して機体の位置から射出口へ緑で点け直す流れ、`Launch` アクション（SPACE）、デモモードの直し。その前　2026-10-18 **F3 完了（ビルド・実機確認済み）**：§2.3 に機体の姿勢の流れ（Stand → Ignite → Catapult）、三人称カメラ（目は固定・注視点は始め／真横／奥のキーで機体を追う、F5 は前進量を増やすだけ）、**射出口を空に開ける＋レールの t=0 の雲海を仮のカメラで描く**、HUB のコクピットの中では本体を隠す、を追記。その前　F3 のコード：§2.3 に StageStartPart・CatapultFacility・コクピットの共通化・③IN の降下・視点の切り替え・カタパルトの灯りと IBL。HUB を通らずに来たら雲の上から（§0 を変更）。その前　2026-10-15 **F2 完了（ビルド・実機確認済み）**：§2.2 に床の穴・リフトの降下・暗転しない差し替えの仕組み。その前　**F1 完了**：§2.1 にリフト・縦穴・カタパルトのモデルの数値と罠。その前　電磁カタパルトの雷・給電ワイヤーと切り離しを §3.2 に追加。**作り直し**。瞼 → 走って扉へ、の案は廃止し、カタパルト発進に決定。§0〜§6 を新しく書いた）
+最終更新: 2026-10-20（**F7 完了（ビルド・実機確認済み、ユーザー OK）**：差し替えの停止 447 → 51 ms。§2.8 に段階ごとの値・ScenePreloader・AnimatedMeshCache・後回しの初期化・罠。その前　**F7 段階A のコード**：§2.8 に測った値（Development 447 ms）・計測の区間・シェーダのキャッシュ・ScenePreloader（記録したマニフェストで降下中に先読み、終わるまで降り続ける）・罠。その前　2026-10-19（**F6 完了（ビルド・実機確認済み、ユーザー OK）**：§2.6 に。実機で詰めた雲の流れ・分身の新モデル化・点滅・**質感の解き方（IBL を景色に合わせる・羽根の材質）**も §2.6。その前　F6 のコード：雲の上の回り込みカメラ（右上前方 → 右側を回ってレールのカメラへ）、ゲームの自機を新モデルに、羽根の展開（Deploy＋付け根からのディゾルブ）、ボス戦で収納、リトライ・デモモードの確認。その前　**F5 完了（ビルド・実機確認済み）**：§2.5 に給電ケーブル（ゴムひも・螺旋のうねり）、充電と SPACE（スラスターの出力）・タコメーター、スラスター 4 基（ポイント制）、電磁カタパルトの雷、けり出し、射出口のまぶしさ・画角・ラジアルブラー（深度のマスク）、LSHIFT 長押しのスキップ。その前　**F4 完了（ビルド・実機確認済み）**：§2.4 に機体確認の項目（照準・スラスター・武装＋POWER CABLE の状態表示）、表示板 LAUNCH CONTROL（一人称は宙に浮く板・三人称は画面の UI）、全部 CLEAR で液晶をすぐ READY・ネオンを一度消して機体の位置から射出口へ緑で点け直す流れ、`Launch` アクション（SPACE）、デモモードの直し。その前　2026-10-18 **F3 完了（ビルド・実機確認済み）**：§2.3 に機体の姿勢の流れ（Stand → Ignite → Catapult）、三人称カメラ（目は固定・注視点は始め／真横／奥のキーで機体を追う、F5 は前進量を増やすだけ）、**射出口を空に開ける＋レールの t=0 の雲海を仮のカメラで描く**、HUB のコクピットの中では本体を隠す、を追記。その前　F3 のコード：§2.3 に StageStartPart・CatapultFacility・コクピットの共通化・③IN の降下・視点の切り替え・カタパルトの灯りと IBL。HUB を通らずに来たら雲の上から（§0 を変更）。その前　2026-10-15 **F2 完了（ビルド・実機確認済み）**：§2.2 に床の穴・リフトの降下・暗転しない差し替えの仕組み。その前　**F1 完了**：§2.1 にリフト・縦穴・カタパルトのモデルの数値と罠。その前　電磁カタパルトの雷・給電ワイヤーと切り離しを §3.2 に追加。**作り直し**。瞼 → 走って扉へ、の案は廃止し、カタパルト発進に決定。§0〜§6 を新しく書いた）
 
 ---
 
@@ -272,7 +272,7 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 - 雲の上の場面は F6。今は CloudTop に入った次のフレームでレールへ渡る（スキップの白フェードはレールに入っても開き切るまで StageStartPart が描く）
 - WhiteOut は「パッと切り替える」区切りとして残っている（今は 1 フレームで CloudTop へ）
 
-### 2.6 F6 で作ったもの（2026-10-19。**コードまで。ビルド・実機は未確認**。値は StagePlay.json の "cloudTopIntro" / "playerWings"（未保存＝コードの既定値））
+### 2.6 F6 で作ったもの（2026-10-19。**ビルド・実機確認済み、ユーザー OK**。値はコードの既定値と StagePlay.json の "cloudTopIntro" / "playerWings" / "player.look" / "cloudFlow" / セクションの "iblPath"）
 
 **決まったこと（2026-10-19 ユーザー）**
 - 雲の上の最初のカメラは**機体から見て右上前方**（スケッチ。§0・§3.3 の「左上」から変更）→ **機体の右側を回り込んで**レールの t=0 のカメラへ
@@ -299,7 +299,19 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 - 自機の大きさ（walk.mesh とほぼ同じ 1.69m）と飛ぶ姿勢（40° 前傾）がレールで見やすいか。Launch の最後のコマの Hips のずれでコライダーと見た目がずれていないか
 - ボス戦の Stand と羽根の収納
 
-**F6 の続き（2026-10-19、ビルド・実機を見て。コードまで・再確認は未）**
+**質感の解き方（まとめ。2026-10-19 F6 で決着。雲の上・道中で PBR の物の色がおかしいときはまずここを読む）**
+
+| 症状 | 原因 | 解き方（決定） |
+|---|---|---|
+| 金・白・羽根が青くつぶれる | **IBL が景色と合っていない**。背景用の空（title_clear_sky.dds）は水平線より下も濃い青なのに、雲の上では下は白い雲。金属は「視線を反射した向き」を映すので、上から見ると天頂の濃い青、下から見ると下の青を映す | **映り込み専用の IBL を景色に合わせて作る**（タイトルの title_clear_sky_ibl と同じ考え方）。`gen_title_sky.py --ibl --ground 0.78,0.8,0.84 --ground-blend 0.05` → `stage_cloudtop_ibl.dds`（下が雲の白）。セクションに**背景の空と別の `iblPath`**（0 秒＝cloudtop、66 秒＝title_clear_sky_ibl、120 秒は夜空を引き継ぐ） |
+| IBL を切る／下げると暗い・平行光源を上げると質感が悪い | 金属（金属度 0.976）は IBL の映り込みが見た目のほとんど。IBL なしでは拡散が無く黒い。平行光源を上げると他の物も明るくなり、ハイライトだけ立つ | **光を足して直さない**。体は IBL を残して 0.5（`player.look.environmentCoefficient`）・質感は .mat のまま |
+| IBL を白一色にすると金属感が消え、黒い関節が真っ白 | 金属は映った物がそのまま色になる。一色の IBL は濃淡が無い | 白一色は不採用（`stage_white_ibl.dds` は ImGui の候補に残しただけ） |
+| 羽根だけ青い・暗い | 羽根のテクスチャは平均 0.5 の灰色で、金属度 0.45 だと空を鏡のように映す | **羽根だけ環境光を受けにくく**：金属度 0（上書き）・粗さ 0.6・環境光 0.3。明るさは**地の色の倍率 `albedoGain` 3.2**（テクスチャの色×倍率。陰影と模様が残る。PBR の albedo は飽和させていない）＋**少しだけ下地の発光 0.08**（発光は光の向きもテクスチャも関係なく同じ白を足すので、上げすぎると陰影・模様が平らになる） |
+| 被弾の赤点滅が青く見える | 点滅が色を**掛ける**作り。青い新モデルに赤を掛けるとほぼ黒になり、白のコマ（素の青）だけが見えた。しかも部位 0 しか変えていなかった | 色のコマは**発光を足す**（被弾＝赤・回避無敵＝水色、`damage.blinkEmissive` / `dodgeBlinkEmissive`）。色・発光・環境マップ・金属度の設定は**全部の部位**に（エンジン） |
+
+調整場所：StagePlay Tuning → Player の「Look (material)」（体）、Cloud Top Intro (16 F6) → Player Wings（羽根）、Stage Environment のセクションの「IBL」。
+
+**F6 の続き（2026-10-19、ビルド・実機を見て直した経過。結論は上の表）**
 - **雲が止まって見えて、自機が静止したまま羽根を開いて始まるように見えた** → 雲海を**自機の最初の進行方向と逆へ流す**（ユーザー指示）。エンジンの `CloudRaymarcher::SetExtraWind`（Params の風に足す。大きい形・もこもこ・マスクを同じだけ流す＝形を保ったまま動く）。`StageEnvironment` の `"cloudFlow"`（speed 60m/s、ステージ fadeStartSec 40〜fadeEndSec 48 秒で 0 へ＝縦穴の降下の前に止める）と `SetCloudFlowDirection`（StagePlayScene の `RebuildCloudShaft` でレールの 0 秒 → 5 秒の XZ の向き）。ImGui は Raymarch Clouds の「Flow」。カタパルトの射出口から見える雲も同じく流れる。遠景の雲（CloudLayer）と 3D ノイズの侵食（erosionWind×時間）は流していない
 - **被弾のときに古い人型（walk.mesh）が出た**＝ジャスト回避の分身（水色の半透明）が walk.mesh のままだった → 分身を `AddDynamicAnimated` の新モデルに（自機と同じ Launch の最後のコマ・向き・大きさ）。`jdClonePath_` の既定と StagePlay.json の `clonePaths` を PlayerModel に
 - 同時に**点滅（SetMaterialColor）が部位 0 しか変えていなかった**のを直した（エンジン：`AnimatedObject3DInstance` の `SetMaterialColor` / `SetEnvironmentCoefficient` / `SetUseEnvironmentMap` を全部の部位に。新モデルは 12 部位）
@@ -327,6 +339,135 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 - 羽根の発光（縁）はディゾルブの間だけ。`HasBloomSources` はその間 true になる
 - 新モデルはクリップが複数あり既定のアニメが付かない → player_ を作り直したら `ApplyPlayerPose` を呼ぶ（呼ばないと T ポーズ）
 - debugStart は cloudTop のまま
+
+### 2.7 ゲーム中の自機のスラスター（2026-10-20。**コードまで・ビルド未確認**。値はコードの既定値と StagePlay.json の "playerThrusters"）
+
+**決まったこと（2026-10-20 ユーザー）**
+- カタパルト（§2.5）と**同じ 4 基・同じポイント制**をゲーム中の自機（player_）にも付ける。ゲームでは W が「画面の上へ」だが、**割り当てはカタパルトと同じ**（W＝背中 2 基 +1、S＝全基 −1、A＝右 2 基 +1・左 2 基 −1、D＝その逆）
+- **ボス戦も同じ**ように噴かす（地上で向きや動きが違うので、ボス戦をちゃんと作るときにスラスターも一緒に直す）
+
+**作り**（新しいファイルなし）
+- `MechThrusters` をそのまま使う。`Preset::Player`（コンストラクタの引数）で既定値を変える：エフェクトは `PlayerThruster_S/M/L`、ずらしは演出の機体の 1/10.625、`followBody` on
+- `followBody`：ずらしと噴く向きを機体の回転（`GetRotate`、インスタンスの世界行列と同じ作り方）で回す。噴く向きは「ずらしの角度で回した -Y → 機体の回転」の向きへ、エフェクトの -Y を最短の回転で向けたオイラー角（筒は Y まわりに対称なのでロールは問わない）。カタパルトは off のまま（今までと同じ）
+- `FromMoveAxis(x, y)`：移動の量（WASD＋左スティック、-1..1）の各軸が `moveThreshold`（0.3）を越えたらその向きを押したとみなして `FromMove` へ
+- エフェクト `Resources/Json/Effects/PlayerThruster_S/M/L.json`：Thruster_S/M/L の筒の半径・長さ・ずらし・噴き出し口の光の大きさを 0.12 倍（scratchpad の gen_player_thrusters.py 相当）。見え方は EffectEditor で直す
+- `StagePlayScene`：`playerThrusters_` を値のメンバーで持つ（Initialize の前に LoadTuningFromJson が読むため。Initialize は触っていない）。移動の入力（必殺技・回り込みの間は 0）を `playerMoveInput_` に覚え、羽根の Update の後で `Update`。**自機を描かない間（スタート演出・ジャスト回避の分身）は止める**。雲の上の回り込みの間は入力 0＝ニュートラル（全基が中）。リトライ・シーン切り替えは Finalize の `EffectManager::StopAll` で止まる。デモモードは入力が無いのでニュートラル
+- ImGui（StagePlay Tuning）：**Player Thrusters**（今の入力・噴いている大きさ・しきい値・Follow Body・ずらしと角度）。Save で StagePlay.json の "playerThrusters" に書く
+
+**実機で見てほしい所**
+- 大きさ（0.12 倍）と付く位置（背中 ±0.12m・後ろ 0.21m、ふくらはぎ 後ろ 0.15m）。体に埋もれていないか
+- レールで機体が向きを変えたときに噴く向きが付いてくるか（後ろ下へ）
+- ボス戦の Stand の姿勢での見え方
+
+### 2.8 F7 裏でのロード（2026-10-20 完了。**ビルド・実機確認済み、ユーザー OK「ほぼ気づかなくなった」**）
+
+**測った値（差し替えで画面が止まっていた時間。`profile.log` の `LOAD kind=scene_change`）**
+
+| 構成 | 止まった時間 | うち Initialize | CPU が動いていた時間 | 備考 |
+|---|---|---|---|---|
+| Debug（2026-10-20_001415） | 2,647 ms | 2,546 ms | 2,391 ms | FS・デバッグレイヤー。シェーダの実行時コンパイルが約 1.3 s（WaterSurface.PS を 3 回 ≈1.0 s、CloudRaymarch.PS ≈0.3 s。ログの時刻から） |
+| Development（2026-10-20_001557） | **447 ms** | 433 ms | **188 ms** | pack＋DirectStorage・.cso。残りの約 260 ms は待ち（ファイル・DirectStorage・転送） |
+
+- Debug の起動は StagePlay から始まるので、HUB → StagePlay の時はテクスチャ・モデルがもう読まれている。タイトル → HUB → StagePlay（Development）が本番と同じ「初めて読む」状態
+- 内訳を見るための区間を入れた（下の「計測」）
+
+**段階A の後（2026-10-20 実機。Development、タイトル → HUB → 降下）**：止まる時間 410 → **305 ms**（まだ一瞬カクつく）。先読みは 235 ms（シェーダ 8・テクスチャ 37・モデル 13）で降下中に終わり、差し替えのシェーダは全部キャッシュ。残りの内訳（ms）：
+
+| 区間 | 段階A の前（114639） | 段階A の後（120823） |
+|---|---|---|
+| StagePlay/StageStart | 86 | 60 |
+| StagePlay/PlayerWings | 64 | 57 |
+| StagePlay/SceneJson | 97 | 71 |
+| SceneLoad/DStorageWait | 62 | 21 |
+| StagePlay/RaymarchClouds | 12 | 2 |
+| そのほかの区間の合計 | 約 50 | 約 25 |
+| 最初のフレームの描画 | 10 | 31 |
+
+残りは**アニメーションするモデルを作る 3 区間**（カタパルトの機体・羽根・自機・分身）。かかった時間のわりに CPU が少なく、リソースの作成が多い形 → 次の 2 つを直した（2026-10-20、コードまで・ビルド未確認）：
+- **`AnimatedObject3DInstance::Initialize` が骨のデバッグ表示の球を関節の数だけ作っていた**（球 1 つに GPU バッファ 4 つ。`USE_IMGUI` は Development でも定義されるので、表示を付けなくても毎回）→ 表示を付けた最初のフレームに作る（`EnsureDebugSpheres`。エンジン、ArcanaEngine への同期が要る）
+- マニフェストを読むたびに上書きしていた（雲の上から始めた時と HUB から来た時で読む物が違い、最後の方だけ残る）→ 今のファイルに無い物だけ足す。作り直すときはファイルを消す
+- **その後（2026-10-20 実機、Development、121951）**：止まる時間 305 → **183 ms**（Initialize 130・最初のフレームの描画 32・残り）。PlayerWings 57 → 6、StageStart 60 → 29、SceneJson 71 → 42、DStorageWait 21 のまま、そのほかの区間は合わせて約 25。デバッグの球が大きかった
+- まだ 183 ms（60 fps で約 11 フレーム）止まる。残りはアニメーションするモデルの作成（StageStart・SceneJson の自機と分身）と、その頂点・スキンを DirectStorage で読む待ち（DStorageWait）、最初のフレームの描画 → **段階B**（アニメーションするモデルのデータのキャッシュと先読み）で減らせる見込み
+
+**決まったこと（2026-10-20 ユーザー）**
+- 雲抜け中のストリーミング（11 番 L9）でも裏で読むので、今ここで裏で読む仕組みを作る
+- 何を読むかは手で書かず、**シーンを読んだときに実際に読まれた物を記録して（マニフェスト）先読みに使う**
+- HUB は先読みが終わるまで縦穴を降り続け、終わったフレームで差し替える（位相はそのフレームの値を `StageStartHandoff` で渡す）。待つのは `changeSceneTime` から `maxPreloadWait`（10 秒）まで。過ぎたら同期ロードで差し替える
+
+**作り（段階A）**
+- 計測：`StagePlayScene::Initialize` を `LOAD_PHASE("StagePlay/…")` で 13 区間（Tuning / Disruptor / SkyEnv / RailStage / RaymarchClouds / BossStage / BossWater / RiverWater / StageStart / PlayerWings / UI / SceneJson / PlayerWeapon）に区切った。`SceneManager::LoadCurrentScene`（即時切り替えとトランジションの 2 か所の読み込みを 1 つにまとめた）が、読み込みの間に閉じた区間を `LOAD kind=scene_phase scene=… name=… wall_ms= cpu_ms=` で、シェーダの取得を `LOAD kind=scene_shaders loaded= cache_hits= load_ms=` で profile.log に出す。`SceneLoad/PreloadRemainder`（先読みの残り）・`SceneLoad/DStorageWait`（バッチの待ち）も出る。区間の外（ハンドオフ・`ApplyPlayerPose` など）は `SceneLoad:STAGEPLAY` との差
+- **シェーダのキャッシュ**（エンジン）：`DirectXCore::LoadShaderBlob` が「.hlsl のパス｜プロファイル」でバイナリを持ち、シーンをまたいで使い回す（mutex つき）。Debug は .hlsl の更新時刻が変わったらコンパイルし直す。作り直した古い blob は終了まで持つ（呼び出し側が持ち続けていても壊れない）。累計 `GetShaderLoadStats`
+- **`ScenePreloader`**（エンジン・新規 `GameEngine/Scene/ScenePreloader.{h,cpp}`、シングルトン）：
+  - 記録：Debug で `SceneManager::LoadCurrentScene` がシーンの Initialize を `BeginRecording` / `EndRecording` で囲む。`TextureManager::LoadTexture(Linear)`・`ModelManager::LoadModel`・`DirectXCore::LoadShaderBlob` の「読んだら知らせる」関数（`SetLoadObserver` / `SetShaderLoadObserver`）で集め、`Resources/Json/Preload/<シーン名>.json` に書く（手で直さない）。**マニフェストが無いシーンは先読みしない＝今までどおり同期**。一度 Debug で StagePlay を読むと作られる
+  - 先読み：①別スレッドでシェーダ（キャッシュへ）・テクスチャの CPU フェーズ → ②メインで 1 フレーム 3 ms までテクスチャの GPU フェーズ（DirectStorage 経路は登録だけして `SubmitWithFence` で待たずに送り、fence が終わった物から仕上げ）→ ③テクスチャが全部そろってから別スレッドでモデルの CPU フェーズ（`ModelManager::PreloadCPU`）→ ④メインで 1 フレーム 3 ms まで `FlushGPUUpload`。終わると `LOAD kind=preload scene= shaders= textures= models= wall_ms=`
+  - `CompleteNow`：残りを今すぐ全部済ませる。**`SceneManager::LoadCurrentScene` の最初で必ず呼ぶ**（スキップの白フェードなど、先読みの途中で差し替わる道でも壊れない）
+- `DStorageManager::SubmitWithFence` / `IsFenceComplete`（エンジン）：待たない送出。L9 でもこれを使う
+- `TextureManager`（エンジン）：状態 `GPUPending`（DirectStorage へ送ったが完了を待っていない）、`BeginTextureGPUAsync` / `FinishTextureGPU`。DirectStorage 経路の GPU フェーズを「リソースの作成・登録・SRV」と「完了後のバリア」に分けた（同期の `LoadTextureGPU` も同じ部品を使う）。`GPUPending` の物を `LoadTextureGPU` すると DirectStorage を待ってから仕上げる
+- `ModelManager::GetPendingGPUCount`（エンジン）
+- ゲーム：`SceneManager::PreloadScene` / `IsPreloading`、毎フレーム `ScenePreloader::Update`、Finalize で先にスレッドを止める。`HubScene::StartDescent` で `PreloadScene("STAGEPLAY")`、`UpdateDescending` は先読みの途中なら差し替えを待つ。`HubLiftDescent` に `maxPreloadWait`（Hub.json の "liftDescent"、ImGui の Lift Descent）
+
+**案C'：StagePlay の初期化を ③IN の降下のフレームに分ける（2026-10-20 ユーザー決定「一旦 C' をやって、気になったら B も」。コードまで・ビルド未確認。ゲーム側だけ）**
+- 段階B（アニメーションするモデルのメッシュのキャッシュ `AnimatedMeshCache` と先読み）と比べて決めた。B は 183 → 100 ms 前後の見込みで、エンジン全体に効き L9 にも使える。C' は ③IN にしか効かないが 183 → 50 ms 前後の見込み。B は C' の後、気になったらやる（HubMech・StageStart の機体・自機が同じ PlayerModel なので、B なら StageStart の分も消える）
+- `StagePlayScene::Initialize`：HUB から降下の続きで来たとき（`fromHub` かつスキップでない・ボス戦からのリトライでない・`--bench-hold` なし）だけ、Disruptor / BossStage / BossWater / RiverWater / PlayerWings / UI（暗幕・ボスの HP・レティクル）/ SceneJson（配置・自機・武器・HP の UI）/ PlayerPose（射出口の向こうの雲の上の位置を取り直す＋`ApplyPlayerPose`）を `deferredInit_` に積み、降下中に 1 フレーム 4 ms まで（最低 1 段）進める。それ以外の始まり方は Initialize の中で全部済ませる（今までと同じ順番）。`StageStartHandoff::Take` は Initialize の最初へ移した
+- 降下（`StageStartPart::State::Descent`）以外の段階へ進んだら残りを全部済ませる。ポーズ・シーク・調整の画面（StagePlay Tuning）・`BeginCloudTop`・`RestoreStageEnvironment`（降下中の LSHIFT スキップ）でも先に済ませる
+- profile.log：`LOAD kind=deferred_step scene=STAGEPLAY name= frame= wall_ms=`（段ごと）と `LOAD kind=deferred_init frames= wall_ms=`（終わり。途中で済ませたら completed_early=1）
+- Debug では後回しの段で読んだ物も先読みのマニフェストに足す（段ごとに `BeginRecording` / `EndRecording`）
+- 罠・注意：
+  - 1 つの段は途中で切れないので、**SceneJson（約 40 ms）の段のフレームはその分だけ伸びる**（183 ms 止まるよりは短い。気になれば B で減らす）。後回しの段はシーンのバッチの外なので、DirectStorage を 1 件ずつ待つ
+  - 後回しの間は `player_`・`bossStage_`・`reticle_` などが null。降下中に動く所（`UpdateStageStart` / `DrawStageStart` / `HasBloomSources` / `DrawAfterPostEffect` / `SetPlayerHidden`）は null を見ている。**降下中に新しく何かを動かすときは null を見るか、`CompleteDeferredInit` を先に呼ぶ**
+  - Debug で「StagePlay Tuning」の窓を開いたままだと、毎フレーム済ませるので後回しにならない（測るときは閉じる）
+  - 配置（SceneJson）がレールを本物に差し替えるので、射出口の向こうの雲の位置（`SetSkyAnchor`）は最後の段で取り直す
+
+**C' の実機（2026-10-20、Development、123408）**：差し替えのフレームは **79 ms**（Initialize 62・うち StageStart 30）。降下中の 6 フレームに分けた残りは PlayerWings 31 / UI 13 / SceneJson 45 / PlayerPose 7 ms（1 つの段は途中で切れないので、そのフレームが伸びる）。最初の描画は 8 ms（前の 30 ms は描画ではなく、まとめて読んだ後始末がそのフレームに乗っていた）。ユーザー：「だいぶ良くなったがまだカクつくのは分かる。ゲーム中に起こるとうざい」→ 段階B
+
+**段階B：アニメーションするモデルのキャッシュと先読み（2026-10-20 ユーザー OK。コードまで・ビルド未確認。エンジン）**
+- 残りの重さはどれも**アニメーションするモデルの読み直し**だった：インスタンスごとに .mesh / .skel / .anim / .mat を読み、頂点・インデックス・影響度のバッファを作って DirectStorage を待つ。HUB の機体・カタパルトの機体・ゲームの自機は**同じ PlayerModel**、分身は walk.mesh を複数。`ReplaceAnimation` は呼ぶたびに .anim をファイルから読む
+- 新規 `GameEngine/Graphics/Object3D/AnimatedMeshCache.{h,cpp}`（シングルトン。ArcanaEngine.vcxproj と .filters に追記済み）：.mesh のパスをキーに `AnimatedMeshData`（頂点・インデックス・影響度の GPU バッファ、骨の木・逆バインド行列・関節名、部位の表、包む球、既定の .anim、FS 経路は CPU の頂点とスキン）を共有。.anim のクリップもパスでキャッシュ（`GetAnimation`）。`AnimatedModelInstance::LoadModelV2` と .skel / .anim / .mat を読む関数はここへ移した
+- `AnimatedModelInstance`：.mesh 経路は `AnimatedMeshCache::Acquire` → `AttachSharedMesh` で共有の物を写し、マテリアルの CB・テクスチャだけインスタンスごとに作る。`GetModelData()` は共有の `modelData` を返す（assimp 経路は今までどおり自分の `modelData_`）。`ReplaceAnimation` はキャッシュから
+- `CreateSkinCluster`：DirectStorage 経路で共有の影響度バッファがあればそれを使う（パレット・スキニングの出力・SRV はインスタンスごと）。CPU 経路（FS・Debug）の影響度は骨の並びに合わせて詰めるので今までどおりインスタンスごと
+- `ScenePreloader`：マニフェストに `animatedModels`（dir / file）と `animations`（.anim のパス）を足した（記録は `AnimatedMeshCache` の `SetLoadObserver` / `SetAnimationObserver`）。別スレッドで `LoadCPU`・クリップの読み込み、メインでテクスチャと同じバッチで `CreateGPU(wait=false)` → fence の後に `FinishGPU`（インデックスのバリア）→ `Insert`。もうキャッシュにある物（HUB で読んだ PlayerModel など）は飛ばす
+- `Framework` の終わりで `AnimatedMeshCache::Finalize`（DirectXCore より先にバッファを手放す）
+- C' の UI の段を UI（暗幕・ボスの HP）と Reticle に分けた（合わせて 13 ms だった）
+- 罠・注意：
+  - **一度読んだアニメーションするモデルは終了まで VRAM に残る**（テクスチャ・静的モデルと同じ扱いになった。今までは使うインスタンスと一緒に消えていた）
+  - 共有のバッファは書き換えない（頂点を直接いじる処理を足すなら、インスタンス側に複製を持つ）
+  - マニフェストが古くてファイルが無いメッシュは、先読みでは読まずに飛ばす（`LoadCPU` が nullptr）。`Acquire` で読めなければ `AnimatedModelInstance` が assert
+
+**段階B の実機（2026-10-20、Development、125856・130041。マニフェストは Debug で一度降りて書き足した）**：差し替えのフレーム **53〜62 ms**（StageStart 19〜22 ms・最初の描画 8 ms ほか）。後回しの段は PlayerWings 24 → **4 ms**（先読み済み）・UI 4〜5・Reticle 5・**SceneJson 31 ms**・PlayerPose 0.4 ms。先読みは `animated_models=1`（羽根。PlayerModel は HUB で読み済み）・`animations=4`。最初の同期ロード（447 ms）から、**止まるのは差し替えの約 55 ms と降下中の SceneJson の 31 ms の 2 か所**になった
+- 次：StageStart（`StageStart/Geometry / Facility / Cockpit / Board / CableTachoLightning / Mech`）と SceneJson（`SceneJson/Read / Clear / Apply / AfterLoad`、`LOAD kind=scene_entities` に種類ごとの数と ms）の中に計測の区間を入れた（後回しの段の中で閉じた区間は `LOAD kind=deferred_phase` で出る）。`StagePlay/StageStartBegin`（降下の始まり）も足した。測ってから (a) StageStart の重い所を直す・(b) 配置を何フレームかに分けて作る、を決める
+
+**内訳（2026-10-20、Development、134454）**：差し替え 63 ms＝StagePlay/StageStart 24（Mech 9・CableTachoLightning 6・Facility 5・Board 1・Cockpit 1）＋Initialize の残り約 10＋同じフレームで走った後回しの段 6＋最初の Update 6・描画 8＋HUB の Finalize 2。SceneJson 37 ms＝Read 2.8＋**Apply 19.6（Plane 11 個で 17.9＝1 個 1.6 ms）**＋AfterLoad 12.9（自機・UI・雲の縦穴）。Plane が重いのは 1 個ごとに小さな GPU バッファを 4 つ `CreateCommittedResource` するため
+
+**(a)(b)（2026-10-20 ユーザー OK。コードまで・ビルド未確認。ゲーム側だけ）**
+- (a) SceneJson の段を SceneJsonRead（読む・消す）→ SceneJsonApply（1 フレーム 4 ms まで数個ずつ作る。終わるまで同じ段を毎フレーム呼ぶ）→ SceneJsonPlayer（自機の貼り直し・武器）→ SceneJsonRail（レール・雲の縦穴）→ SceneJsonUI（HP・ゲージ）に分けた。`GameScene` に `BeginSceneLoadFromJson` / `ApplySceneLoadStep` / `ApplySceneEntity` を足し（`LoadSceneFromJson` と同じ順）、`StagePlayScene::OnAfterSceneLoad` を 3 つの関数に分けた（エディタの読み込みは今までどおり 3 つを続けて呼ぶ）。後回しの段は `std::function<bool()>`（false＝次のフレームにもう一度）
+- (b) カタパルトの機体（三人称でしか映らない、9 ms）を `StageStartPart::InitializeMech` に分け、後回しの最初の段にした（`mech_` は元から null を見ている。後から作ったときは今の姿勢 `mechPose_` を差す）。ケーブル・タコメーター・雷（6 ms）は使う所が多いので今は分けていない
+- 差し替えのフレーム（Initialize と同じフレーム）では後回しの段を進めない（`deferredInitSkipFrame_`）
+- (c) 小さな GPU バッファを大きなヒープから切り出す（`CreateBufferResource`）はエンジン全体に効くが大きいので別の作業（14 番に書く）
+
+**最終（2026-10-20、Development、135926）**：差し替えで止まるのは **51 ms**（Initialize 40・最初の描画 8・HUB の Finalize 2）。始めは 447 ms（Debug は 2.6 s）。降下中の後回しは 16 フレームに分かれ、1 フレームの最大は 9.8 ms（カタパルトの機体）、SceneJsonApply は 3〜9 ms × 8 フレーム、合計 98 ms。先読みは降下中に 264 ms で終わる（シェーダ 8・テクスチャ 55・静的モデル 13・アニメのモデル 1・.anim 4）
+
+| 段階 | 差し替えで止まる時間（Development） |
+|---|---|
+| 同期ロード（F7 の前） | 447 ms |
+| A：シェーダのキャッシュ＋ScenePreloader（テクスチャ・静的モデル） | 305 ms |
+| ＋骨のデバッグの球を表示時に作る | 183 ms |
+| ＋C'：降下に要らない初期化を後回し | 79 ms（降下中に 31〜45 ms の山） |
+| ＋B：AnimatedMeshCache（アニメのモデルの共有と先読み・.anim のキャッシュ） | 55 ms（降下中に 31 ms の山） |
+| ＋(a)(b)：SceneJson を数個ずつ・機体を後回し・差し替えのフレームで段を進めない | **51 ms**（降下中は 1 フレーム 10 ms まで） |
+
+残り（やるなら別の作業）：差し替えの 51 ms の中身は StageStart（ケーブル・タコメーター・雷 6 ms、施設 5 ms）と Initialize の小物。小さな GPU バッファの作成（`CreateCommittedResource`）を軽くする (c) は別のタスクとして提案済み
+
+新規 `GameEngine/Graphics/Object3D/AnimatedMeshCache.{h,cpp}`・`GameEngine/Graphics/Object3D/AnimatedModelInstance.{h,cpp}`・`GameEngine/Graphics/Object3D/SkinCluster.cpp`・`GameEngine/Framework.cpp`・`GameEngine/Graphics/Object3D/AnimatedObject3DInstance.{h,cpp}`・`GameEngine/Core/DirectXCore.{h,cpp}`・`GameEngine/Core/DStorageManager.{h,cpp}`・`GameEngine/Graphics/TextureManager.{h,cpp}`・`GameEngine/Graphics/Object3D/ModelManager.{h,cpp}`・新規 `GameEngine/Scene/ScenePreloader.{h,cpp}`（ArcanaEngine.vcxproj と .filters に追記済み）
+
+罠・注意：
+- **先読みの途中の物をシーンの Initialize が同期で読むと壊れる**（テクスチャは CPU フェーズ中のエントリがあると `LoadTextureCPU` が素通りし、`LoadTextureGPU` が CPUReady でないと assert）。だからシーンを読む前に `CompleteNow`。モデルの CPU フェーズをテクスチャの後にしているのも同じ理由（モデルの GPU フェーズが `LoadTexture` を呼ぶ。HUB の `Scene::ProcessAsyncLoads` も 1 フレーム 1 件 `FlushGPUUpload` するので、先に積むと勝手に GPU フェーズが走る）
+- **DirectStorage へ待たずに送ったテクスチャは、完了するまで COMMON → GENERIC_READ のバリアを積まない**（転送とグラフィックスキューが重なる）。グラフィックスキューで fence を Wait する手もあるが、その分 GPU が止まるので使わない
+- WIC（png）のデコードはスレッドごとに COM の初期化が要る（先読みのスレッドで `CoInitializeEx`）
+- Debug で先読みのスレッドがシェーダをコンパイルしている間（1 本 最大 0.3 s）、メインがシェーダを取りに来るとキャッシュの mutex で待つ（HUB の降下中は取りに来ないはず）
+- マニフェストは Debug で最後に読んだときの中身。`--scene-json` で別の配置を読むとそれで上書きされる
+- **アニメーションするモデル（`AnimatedModelInstance`）はキャッシュが無く、インスタンスごとに .mesh / .skel / .anim を読み直す**ので先読みに入っていない（段階B）。PSO の作成も入っていない（段階C）
+
+**段階B・C（測ってから決める）**：B＝アニメーションするモデルの CPU のデータのキャッシュ＋先読み（PlayerWings / StageStart / PlayerWeapon が重ければ）。C＝PSO が重ければパイプラインのキャッシュか別スレッドでの作成
 
 ## 3. カタパルト
 
@@ -411,8 +552,8 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 | F3 [x] | **コクピットの共通化と③IN・骨組み**（2026-10-18 完了。ビルド・実機確認済み。§2.3） | §4.1 のコクピットの部品を共通化。StagePlay にスタート演出の専用クラス（RailStagePart / BossStagePart と同じ流儀。StagePlayScene に直書きしない）。状態：降下 / 機体確認 / 発進 / 白 / 雲の上 / 終了。縦穴の続き → カタパルトで止まる。一人称 ↔ 三人称の切り替え | F1・F2 |
 | F4 [x] | **機体確認と表示板**（2026-10-19 完了。ビルド・実機確認済み。§2.4） | §3.1。項目を決め、入力アクションを足し、操作で CLEAR になる。表示板の UI（緑のネオン） | F3 |
 | F5 [x] | **発進**（2026-10-19 完了。ビルド・実機確認済み。§2.5。白は「まぶしさ」に、LSHIFT 長押しのスキップも） | §3.2。SPACE → **給電ワイヤーの切り離し** → スラスターのエフェクト・**電磁カタパルトの雷** → 加速 → 射出口の光 → 白。ワイヤーと雷が重ければ F5a（ワイヤー）/ F5b（雷・スラスター・加速・光）に分ける | F3・F4 |
-| F6 [x] | **雲の上 → レールのカメラ・リトライ・デモモード**（2026-10-19 コード完了。**ビルド・実機は未確認**。§2.6） | §3.3。**機体から見て右上前方**のカメラ（2026-10-19 スケッチ、§2.5）から回り込んでレールのカメラへ。リトライで飛ばす（18 番⑤）。デモモードで自動で進める | F5 |
-| F7 [ ] | **裏でのロード** | §4.2 の 2。StagePlay のロードを別スレッドで進め、差し替えのカクつきを消す | F2・F3（コンテスト後でもよい） |
+| F6 [x] | **雲の上 → レールのカメラ・リトライ・デモモード**（2026-10-19 完了。ビルド・実機確認済み、ユーザー OK。§2.6。質感の解き方も §2.6） | §3.3。**機体から見て右上前方**のカメラ（2026-10-19 スケッチ、§2.5）から回り込んでレールのカメラへ。リトライで飛ばす（18 番⑤）。デモモードで自動で進める | F5 |
+| F7 [x] | **裏でのロード**（2026-10-20 完了。ビルド・実機確認済み、ユーザー OK。§2.8。差し替えの停止 447 → 51 ms） | §4.2 の 2。StagePlay のロードを別スレッドで進め、差し替えのカクつきを消す | F2・F3（コンテスト後でもよい） |
 
 調整値（降下の速さ・加速・カメラのキー・各段階の長さ）はシーンの調整値 JSON＋ImGui で持ち、ハードコードしない。
 
@@ -432,6 +573,6 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 | 雷の形 | 2026-10-19：ネオンと一緒に溝に沿って伸び、溝全体で放電、射出中は足元（§2.5） |
 | 自機の発進の姿勢 | 2026-10-18：機体確認は直立（Stand）、発進で前傾へ（Ignite → Catapult）。切り離しは Launch（§2.3） |
 | 射出口の先 | 2026-10-19：一人称は近づくほどまぶしく → 抜けたら白が引いて空 → パッと雲の上、三人称は見送ってパッと切り替え（§2.5） |
-| 差し替えのカクつき | ③ の同期ロードで止まる。F7（裏でのロード）で直す |
+| 差し替えのカクつき | 2026-10-20 F7 で 447 → 51 ms、ユーザー OK（§2.8） |
 | 回り込みの間の HUD | 2026-10-19：レティクルだけ消している。HP・スコアなどは出たまま。消すかは実機で |
 | ジャスト回避の分身のモデル | 自機は新モデルにしたが、分身は walk.mesh のまま（§2.6 の罠） |

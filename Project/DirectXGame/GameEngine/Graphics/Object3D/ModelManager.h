@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <map>
 #include <memory>
 #include <iostream>
@@ -28,7 +29,10 @@ class ModelManager
 
 	// CPU 完了 → GPU アップロード待ちのキー一覧
 	std::vector<std::string> pendingGPU_;
-	std::mutex gpuQueueMutex_;
+	mutable std::mutex gpuQueueMutex_;
+
+	// LoadModel が呼ばれたら知らせる先（シーンの読み込みの記録用。空なら何もしない）
+	std::function<void(const std::string& directoryPath, const std::string& filePath)> loadObserver_;
 
 public:
 
@@ -77,6 +81,14 @@ public:
 	/// CPU 完了済みモデルの GPU リソースを毎フレーム maxItems 件分作成（メインスレッドから呼ぶ）
 	/// </summary>
 	void FlushGPUUpload(DirectXCore* dxCore, int maxItems = 1);
+
+	/// <summary>GPU アップロード待ちの件数（スレッド安全）</summary>
+	size_t GetPendingGPUCount() const { std::lock_guard<std::mutex> lock(gpuQueueMutex_); return pendingGPU_.size(); }
+
+	/// <summary>LoadModel が呼ばれるたびに知らせる（キャッシュに当たっても）。空の関数で外す</summary>
+	void SetLoadObserver(std::function<void(const std::string& directoryPath, const std::string& filePath)> observer) {
+		loadObserver_ = std::move(observer);
+	}
 
 };
 

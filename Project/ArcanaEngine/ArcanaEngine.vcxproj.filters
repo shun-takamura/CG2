@@ -114,6 +114,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedMeshCache.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
     </ClCompile>
@@ -229,6 +232,9 @@
       <Filter>DirectXGame\GameEngine\Math</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Scene\Scene.cpp">
+      <Filter>DirectXGame\GameEngine\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Scene\ScenePreloader.cpp">
       <Filter>DirectXGame\GameEngine\Scene</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\ImGUIManager\IImGuiEditable.cpp">
@@ -506,6 +512,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\BoneSocket.h">
       <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedMeshCache.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Object3D\AnimatedModelInstance.h">
       <Filter>DirectXGame\GameEngine\Graphics\Object3D</Filter>
     </ClInclude>
@@ -705,6 +714,9 @@
       <Filter>DirectXGame\GameEngine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\ISceneRunner.h">
+      <Filter>DirectXGame\GameEngine\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Scene\ScenePreloader.h">
       <Filter>DirectXGame\GameEngine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Scene\Scene.h">

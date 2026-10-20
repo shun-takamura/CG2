@@ -504,98 +504,28 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
         auto it = textureDatas.find(filePath);
         if (it == textureDatas.end()) return;
         if (it->second.loadState == TextureData::LoadState::GPUReady) return;
-        assert(it->second.loadState == TextureData::LoadState::CPUReady
-               && "LoadTextureGPU called before LoadTextureCPU");
         data = &it->second;
+        assert((data->loadState == TextureData::LoadState::CPUReady
+                || data->loadState == TextureData::LoadState::GPUPending)
+               && "LoadTextureGPU called before LoadTextureCPU");
     }
     // ※ unordered_map は要素を挿入してもポインタ無効化しないため
     //   ロック外で data を経由して触ってよい（同じエントリへは他から触らない契約）
+
+    // 裏の先読みが DirectStorage へ送ったまま：そこまでの転送を待って仕上げる
+    if (data->loadState == TextureData::LoadState::GPUPending) {
+        DStorageManager::GetInstance()->SubmitAndWait();
+        FinishDirectStorageTexture(*data);
+        return;
+    }
 
     assert(srvManager_->CanAllocate());
 
     // --- DirectStorage 経路: pack ファイルから VRAM へ直接転送 ---
     if (data->useDirectStorage) {
-        // 1. ID3D12Resource を COMMON state で作成
-        //    （DirectStorage は新 barrier-layout モデル前提のため COMMON が必須。
-        //     既存の SpriteManager::CreateTextureResource は COPY_DEST 初期化なので使えない）
-        D3D12_RESOURCE_DESC desc{};
-        desc.Width = static_cast<UINT>(data->metadata.width);
-        desc.Height = static_cast<UINT>(data->metadata.height);
-        desc.MipLevels = static_cast<UINT16>(data->metadata.mipLevels);
-        desc.DepthOrArraySize = static_cast<UINT16>(data->metadata.arraySize);
-        desc.Format = data->metadata.format;
-        desc.SampleDesc.Count = 1;
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-        desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-        D3D12_HEAP_PROPERTIES heap{};
-        heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-        HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
-            &heap, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr, IID_PPV_ARGS(&data->resource));
-        assert(SUCCEEDED(hr));
-
-        // GPU検証エラー等でリソースを特定できるよう名前を付ける（DStorage経路）
-        data->resource->SetName(std::wstring(filePath.begin(), filePath.end()).c_str());
-
-        // 2. DirectStorage で payload を全 subresource に転送
-        //    pack ファイル側で D3D12 placed-footprint レイアウト (行256B/開始512B 整列)
-        //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエストにまとめられる。
-        //    GDeflate 圧縮されているなら CompressionFormat を付ける版を使う。
-        auto* ds = DStorageManager::GetInstance();
-        if (data->dsCompressed) {
-            ds->EnqueueMultipleSubresourcesCompressed(
-                ds->GetPackFile(),
-                data->dsPayloadOffset,
-                data->dsPayloadSize,
-                data->dsUncompressedSize,
-                data->resource.Get(),
-                0);
-        } else {
-            ds->EnqueueMultipleSubresources(
-                ds->GetPackFile(),
-                data->dsPayloadOffset,
-                data->dsPayloadSize,
-                data->resource.Get(),
-                0);
-        }
-        ds->SubmitAndWait();
-
-        // 3. メインコマンドリストで COMMON → GENERIC_READ に遷移
-        D3D12_RESOURCE_BARRIER barrier{};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource = data->resource.Get();
-        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-        dxCore_->GetCommandList()->ResourceBarrier(1, &barrier);
-
-        // 4. SRV 作成
-        data->srvIndex = srvManager_->Allocate();
-        if (data->metadata.IsCubemap()) {
-            srvManager_->CreateSRVForCubemap(
-                data->srvIndex, data->resource.Get(),
-                data->metadata.format,
-                static_cast<UINT>(data->metadata.mipLevels));
-        } else if (data->metadata.arraySize > 1) {
-            // 地形の層など（Texture2DArray）。Texture2D の SRV だと 1 枚目しか見えない
-            srvManager_->CreateSRVForTexture2DArray(
-                data->srvIndex, data->resource.Get(),
-                data->metadata.format,
-                static_cast<UINT>(data->metadata.mipLevels),
-                static_cast<UINT>(data->metadata.arraySize));
-        } else {
-            srvManager_->CreateSRVForTexture2D(
-                data->srvIndex, data->resource.Get(),
-                data->metadata.format,
-                static_cast<UINT>(data->metadata.mipLevels));
-        }
-
-        data->loadState = TextureData::LoadState::GPUReady;
+        CreateDirectStorageTexture(*data, filePath);
+        DStorageManager::GetInstance()->SubmitAndWait();
+        FinishDirectStorageTexture(*data);
         return;
     }
 
@@ -635,6 +565,127 @@ void TextureManager::LoadTextureGPU(const std::string& filePath)
     data->loadState = TextureData::LoadState::GPUReady;
 }
 
+void TextureManager::CreateDirectStorageTexture(TextureData& data, const std::string& filePath)
+{
+    // 1. ID3D12Resource を COMMON state で作成
+    //    （DirectStorage は新 barrier-layout モデル前提のため COMMON が必須。
+    //     既存の SpriteManager::CreateTextureResource は COPY_DEST 初期化なので使えない）
+    D3D12_RESOURCE_DESC desc{};
+    desc.Width = static_cast<UINT>(data.metadata.width);
+    desc.Height = static_cast<UINT>(data.metadata.height);
+    desc.MipLevels = static_cast<UINT16>(data.metadata.mipLevels);
+    desc.DepthOrArraySize = static_cast<UINT16>(data.metadata.arraySize);
+    desc.Format = data.metadata.format;
+    desc.SampleDesc.Count = 1;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    D3D12_HEAP_PROPERTIES heap{};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(
+        &heap, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr, IID_PPV_ARGS(&data.resource));
+    assert(SUCCEEDED(hr));
+
+    // GPU検証エラー等でリソースを特定できるよう名前を付ける（DStorage経路）
+    data.resource->SetName(std::wstring(filePath.begin(), filePath.end()).c_str());
+
+    // 2. DirectStorage で payload を全 subresource に転送（送出は呼び出し側）
+    //    pack ファイル側で D3D12 placed-footprint レイアウト (行256B/開始512B 整列)
+    //    に変換済みなので、MULTIPLE_SUBRESOURCES で 1 リクエストにまとめられる。
+    //    GDeflate 圧縮されているなら CompressionFormat を付ける版を使う。
+    auto* ds = DStorageManager::GetInstance();
+    if (data.dsCompressed) {
+        ds->EnqueueMultipleSubresourcesCompressed(
+            ds->GetPackFile(),
+            data.dsPayloadOffset,
+            data.dsPayloadSize,
+            data.dsUncompressedSize,
+            data.resource.Get(),
+            0);
+    } else {
+        ds->EnqueueMultipleSubresources(
+            ds->GetPackFile(),
+            data.dsPayloadOffset,
+            data.dsPayloadSize,
+            data.resource.Get(),
+            0);
+    }
+
+    // 3. SRV 作成（ディスクリプタを書くだけなので転送の完了を待たなくてよい）
+    data.srvIndex = srvManager_->Allocate();
+    if (data.metadata.IsCubemap()) {
+        srvManager_->CreateSRVForCubemap(
+            data.srvIndex, data.resource.Get(),
+            data.metadata.format,
+            static_cast<UINT>(data.metadata.mipLevels));
+    } else if (data.metadata.arraySize > 1) {
+        // 地形の層など（Texture2DArray）。Texture2D の SRV だと 1 枚目しか見えない
+        srvManager_->CreateSRVForTexture2DArray(
+            data.srvIndex, data.resource.Get(),
+            data.metadata.format,
+            static_cast<UINT>(data.metadata.mipLevels),
+            static_cast<UINT>(data.metadata.arraySize));
+    } else {
+        srvManager_->CreateSRVForTexture2D(
+            data.srvIndex, data.resource.Get(),
+            data.metadata.format,
+            static_cast<UINT>(data.metadata.mipLevels));
+    }
+
+    data.loadState = TextureData::LoadState::GPUPending;
+}
+
+void TextureManager::FinishDirectStorageTexture(TextureData& data)
+{
+    // 転送が終わってから、メインコマンドリストで COMMON → GENERIC_READ に遷移する。
+    // 転送の途中でバリアを積むと、DirectStorage の書き込みとグラフィックスキューの読み出しが重なる
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = data.resource.Get();
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    dxCore_->GetCommandList()->ResourceBarrier(1, &barrier);
+
+    data.loadState = TextureData::LoadState::GPUReady;
+}
+
+bool TextureManager::BeginTextureGPUAsync(const std::string& filePath)
+{
+    TextureData* data = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        auto it = textureDatas.find(filePath);
+        if (it == textureDatas.end()) return false;
+        if (it->second.loadState != TextureData::LoadState::CPUReady) return false;
+        data = &it->second;
+    }
+    if (!data->useDirectStorage) {
+        LoadTextureGPU(filePath);
+        return false;
+    }
+    assert(srvManager_->CanAllocate());
+    CreateDirectStorageTexture(*data, filePath);
+    return true;
+}
+
+void TextureManager::FinishTextureGPU(const std::string& filePath)
+{
+    TextureData* data = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(textureDatasMutex_);
+        auto it = textureDatas.find(filePath);
+        if (it == textureDatas.end() || it->second.loadState != TextureData::LoadState::GPUPending) return;
+        data = &it->second;
+    }
+    FinishDirectStorageTexture(*data);
+}
+
 bool TextureManager::IsCPUReady(const std::string& filePath) const
 {
     std::lock_guard<std::mutex> lock(textureDatasMutex_);
@@ -657,6 +708,7 @@ bool TextureManager::IsGPUReady(const std::string& filePath) const
 
 void TextureManager::LoadTexture(const std::string& filePath)
 {
+    if (loadObserver_) loadObserver_(filePath, false);
     OutputDebugStringA(("LoadTexture called: " + filePath + "\n").c_str());
     if (IsGPUReady(filePath)) {
         OutputDebugStringA("  -> Already exists, skipping\n");
@@ -671,6 +723,7 @@ void TextureManager::LoadTexture(const std::string& filePath)
 
 void TextureManager::LoadTextureLinear(const std::string& filePath)
 {
+    if (loadObserver_) loadObserver_(filePath, true);
     if (IsGPUReady(filePath)) return;
     LoadTextureCPU(filePath, true);
     LoadTextureGPU(filePath);

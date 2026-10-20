@@ -1,0 +1,130 @@
+{
+  "name": "PlayerThruster_S",
+  "totalDuration": 30.0,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Plume",
+      "meshType": 4,
+      "cylinderParams": {
+        "topRadius": 0.054,
+        "bottomRadius": 0.0144,
+        "height": 0.3,
+        "divisions": 24,
+        "topColor": [
+          0.45,
+          0.8,
+          1.0,
+          0.9
+        ],
+        "bottomColor": [
+          0.2,
+          0.45,
+          1.0,
+          0.0
+        ],
+        "startAngle": 0.0,
+        "endAngle": 6.2831853
+      },
+      "offset": [
+        0.0,
+        -0.15,
+        0.0
+      ],
+      "startTime": 0.0,
+      "lifetime": 30.0,
+      "texturePath": "Resources/Textures/Effect/gradationLine.dds",
+      "blendMode": 2,
+      "billboardMode": "None",
+      "depthWrite": false,
+      "cullBackface": false,
+      "uvAutoScroll": true,
+      "uvScrollSpeed": [
+        1.7,
+        0.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    },
+    {
+      "displayName": "Plume",
+      "meshType": 4,
+      "cylinderParams": {
+        "topRadius": 0.0288,
+        "bottomRadius": 0.006,
+        "height": 0.144,
+        "divisions": 24,
+        "topColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "bottomColor": [
+          0.6,
+          0.9,
+          1.0,
+          0.0
+        ],
+        "startAngle": 0.0,
+        "endAngle": 6.2831853
+      },
+      "offset": [
+        0.0,
+        -0.072,
+        0.0
+      ],
+      "startTime": 0.0,
+      "lifetime": 30.0,
+      "texturePath": "Resources/Textures/Effect/gradationLine.dds",
+      "blendMode": 2,
+      "billboardMode": "None",
+      "depthWrite": false,
+      "cullBackface": false,
+      "uvAutoScroll": true,
+      "uvScrollSpeed": [
+        -2.3,
+        0.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.9500000000000002
+    },
+    {
+      "displayName": "NozzleGlow",
+      "meshType": 0,
+      "startTime": 0.0,
+      "lifetime": 30.0,
+      "startScale": [
+        0.168,
+        0.168,
+        1.0
+      ],
+      "endScale": [
+        0.168,
+        0.168,
+        1.0
+      ],
+      "startColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.85
+      ],
+      "endColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.85
+      ],
+      "texturePath": "Resources/Textures/Effect/circle.dds",
+      "blendMode": 2,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": []
+}

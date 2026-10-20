@@ -165,6 +165,8 @@ void HubScene::StartDescent() {
 	// 外が透けた全天周のモニターに縦穴が映っている扱い。ステージ選択の UI はたたんで消す
 	state_ = State::Descending;
 	liftDescent_->Start();
+	// 降りている間に StagePlay のアセットを裏で読んでおく（16 番 F7）。差し替えは読み終えてから
+	SceneManager::GetInstance()->PreloadScene("STAGEPLAY");
 	if (!skip_) skip_ = std::make_unique<StageStartSkip>();
 	skip_->Reset();
 	attractMenu_.Reset();
@@ -363,8 +365,11 @@ void HubScene::UpdateDescending(float dt) {
 		}
 	}
 	if (leaving_ || !descentChangesScene_ || !liftDescent_->ShouldChangeScene()) return;
+	// 裏の先読みが終わるまで降り続ける（縦穴は何周でも降りられる。位相は差し替えるフレームの値を渡す）。
+	// 待ちすぎたら諦めて差し替える（残りはシーンを読む前に同期で済ませる）
+	if (SceneManager::GetInstance()->IsPreloading() && !liftDescent_->IsPreloadWaitOver()) return;
 
-	// ③ の切れ目：縦穴の位相・速さ・灯りを StagePlay へ渡して差し替える（16 番 §4.2。今は同期ロード）。
+	// ③ の切れ目：縦穴の位相・速さ・灯りを StagePlay へ渡して差し替える（16 番 §4.2。アセットは降下中に先読み済み）。
 	// 組み合わせ表は覆う・開くともシーン（None / None）なので暗転せずに差し替わる。StagePlay は StageStartPart が続きを降りる（F3）
 	StageStartHandoff handoff = liftDescent_->MakeHandoff();
 	const CockpitReveal::State st = reveal_.Evaluate();

@@ -70,7 +70,10 @@
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <filesystem>
+#include <format>
 #include "Cloud/CloudRaymarcher.h"
+#include "Profiling/LoadProfiler.h"
+#include "ScenePreloader.h"
 #include <shellapi.h> // CommandLineToArgvW（計測用の起動引数）
 #include <cwchar>
 
@@ -647,6 +650,7 @@ void StagePlayScene::LoadTuningFromJson() {
 	if (stageStart_) stageStart_->LoadTuning(root["stageStart"]);
 	if (cloudTopIntro_) cloudTopIntro_->LoadTuning(root["cloudTopIntro"]);
 	if (playerWings_) playerWings_->LoadTuning(root["playerWings"]);
+	playerThrusters_.LoadTuning(root["playerThrusters"]);
 
 	// ----- phase（ステージ進行ステートマシン）-----
 	const JsonValue& ph = root["phase"];
@@ -1119,6 +1123,7 @@ void StagePlayScene::SaveTuningToJson() const {
 	if (stageStart_) stageStart_->SaveTuning(root["stageStart"]);
 	if (cloudTopIntro_) cloudTopIntro_->SaveTuning(root["cloudTopIntro"]);
 	if (playerWings_) playerWings_->SaveTuning(root["playerWings"]);
+	playerThrusters_.SaveTuning(root["playerThrusters"]);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -2167,6 +2172,8 @@ void StagePlayScene::ApplyPrecisionCamera(const Vector3& playerWorldPos)
 
 void StagePlayScene::OnImGuiTuning() {
 #ifdef _DEBUG
+	// 調整の画面はボス戦・大河・自機などを全部触るので、開いたら後回しの初期化を済ませる
+	CompleteDeferredInit();
 	bool changed = false;
 	ImGui::TextDisabled("Auto-saved to: %s", kStagePlayTuningPath);
 
@@ -2201,6 +2208,12 @@ void StagePlayScene::OnImGuiTuning() {
 
 		// シーン停止中（エディタ Pause）のみレティクル追従を止めてこの向きで固定（確認用）
 		ImGui::DragFloat3("Paused Facing (rad)", &fixedPlayerFacing_.x, 0.01f);
+	}
+
+	// 自機のスラスター（カタパルトと同じポイント制。エフェクトは PlayerThruster_S/M/L）
+	if (ImGui::CollapsingHeader("Player Thrusters")) {
+		ImGui::Text("Move Input: (%.2f, %.2f)", playerMoveInput_.x, playerMoveInput_.y);
+		playerThrusters_.OnImGui();
 	}
 
 	// 武器（ソケット追従）の設定は Hierarchy でプレイヤーを選択 → Inspector の "Weapon" セクションへ移設。
@@ -2826,7 +2839,23 @@ void StagePlayScene::Initialize() {
 	playerWings_ = std::make_unique<PlayerWingUnit>();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
-	LoadTuningFromJson();
+	// 区間 StagePlay/* は差し替えの重さの内訳（SceneManager が profile.log の scene_phase 行に出す）
+	{
+		LOAD_PHASE("StagePlay/Tuning");
+		LoadTuningFromJson();
+	}
+
+	// HUB から渡された値は必ずここで取って捨てる（リトライなどで古い値を拾わないように）
+	StageStartHandoff handoff;
+	const bool fromHub = StageStartHandoff::Take(handoff);
+	// HUB の降下の続き（③IN）から始めるときは、降下に要らない物の初期化を降下中のフレームへ回す（16 番 F7 C'）
+	const bool deferRest = fromHub && !handoff.skipToCloudTop && !bossRetryRequested
+		&& FindCommandLineValue(L"--bench-hold").empty();
+	deferredInit_.clear();
+	deferredInitNext_ = 0;
+	deferredInitActive_ = false;
+	deferredInitFrames_ = 0;
+	deferredInitWallMs_ = 0.0;
 
 	camera_ = std::make_unique<Camera>();
 	camera_->SetTranslate({ 0.0f, 0.0f, -20.0f });
@@ -2837,12 +2866,10 @@ void StagePlayScene::Initialize() {
 	object3DManager_->SetDefaultCamera(camera_.get());
 	baseFovY_ = camera_->GetFovY();   // 精密射撃モードのズーム基準（通常時 FovY）
 
-	// ディスラプター崩壊の破片レンダラ（キャプチャ反転の 3D 片＝飛び散って断裂線へ縮小消滅）
-	disruptorShards_ = std::make_unique<DisruptorShardRenderer>();
-	disruptorShards_->Initialize(dxCore_, PrimitivePipeline::GetInstance()->GetSRVManager(), kDisruptorShardCap_);
 	skyboxManager_->SetDefaultCamera(camera_.get());
 
 	// Skybox 生成（平常時の空。LoadTuningFromJson 後なので保存値が反映される）
+	LoadProfiler::GetInstance()->BeginPhase("StagePlay/SkyEnv");
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxManager_, dxCore_, defaultSkyboxPath_);
 	skybox_->SetColor(skyboxTint_);  // 保存済みの常時着色を適用
@@ -2854,13 +2881,18 @@ void StagePlayScene::Initialize() {
 	});
 	stageEnv_->InitializeClouds(dxCore_);
 	stageEnv_->Reset(0.0f);   // ステージ先頭のセクションを即時適用（セクション0件なら無効果）
+	LoadProfiler::GetInstance()->EndPhase("StagePlay/SkyEnv");
 
 	// STG（Rail）専用ロジック一式の初期化（レールカメラ用スプライン・向きキー・Wave定義ロード）。
 	// LoadTuningFromJson() で読み込み済みの speed/rotKeys を使ってセットアップする。
-	railStage_->Initialize(this, camera_.get());
+	{
+		LOAD_PHASE("StagePlay/RailStage");
+		railStage_->Initialize(this, camera_.get());
+	}
 
 	// 雲海のレイマーチ。降下の縦穴はシーン読み込みでレールが本物に差し替わった後に RebuildCloudShaft で拾い直す
 	{
+		LOAD_PHASE("StagePlay/RaymarchClouds");
 		stageEnv_->InitializeRaymarchClouds(dxCore_, srvManager_,
 			WindowsApplication::kClientWidth, WindowsApplication::kClientHeight, {});
 		RebuildCloudShaft();
@@ -2870,20 +2902,11 @@ void StagePlayScene::Initialize() {
 		}
 	}
 
-	// Boss（ボス戦）専用ロジックの初期化。突入までは何もスポーンしない（Enter で生成）。
-	bossStage_ = std::make_unique<BossStagePart>();
-	bossStage_->Initialize(this, camera_.get());
-	// ボス戦の床。PSO 等はここで作っておき、ボス戦突入時にカクつかせない
-	bossWater_ = std::make_unique<BossArenaWater>();
-	bossWater_->Initialize(dxCore_, srvManager_, object3DManager_);
-	// 大河の水面。PSO 等はここで作り、川のデータは雲の中（loadStartSec）で別スレッドから読む
-	riverWater_ = std::make_unique<RiverWater>();
-	riverWater_->Initialize(dxCore_, srvManager_, object3DManager_, stageEnv_->GetCloudLayer());
-
 	// スタート演出（カタパルト。施設はワールドの離れた所に置く）。コクピットの灯りは HUB と同じ値（Hub.json）
-	stageStart_->Initialize(this, camera_.get(), object3DManager_, dxCore_, skinningComputeManager_, srvManager_);
-	// 自機の羽根（雲の上で展開し、レールの間は付けたまま。ボス戦では収納）
-	playerWings_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
+	{
+		LOAD_PHASE("StagePlay/StageStart");
+		stageStart_->Initialize(this, camera_.get(), object3DManager_, dxCore_, skinningComputeManager_, srvManager_);
+	}
 	{
 		constexpr const char* kHubTuningPath = "Resources/Json/Tuning/Hub.json";
 		if (std::filesystem::exists(kHubTuningPath)) {
@@ -2897,28 +2920,68 @@ void StagePlayScene::Initialize() {
 	landingTimer_ = 0.0f;
 	paused_ = false;
 	SoundManager::GetInstance()->Play2DSoundLooped("bgm_stage", 0.5f);
-	if (spriteManager_) {
-		pauseDimSprite_ = std::make_unique<SpriteInstance>();
-		pauseDimSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "PauseDim");
-		pauseDimSprite_->SetPosition({ 0.0f, 0.0f });
-		pauseDimSprite_->SetSize({ static_cast<float>(WindowsApplication::kClientWidth),
-			static_cast<float>(WindowsApplication::kClientHeight) });
-		pauseDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
-		pauseDimSprite_->Update();
-	}
-	CreateBossHpBarUI();
 
-	// レティクル
-	reticle_ = std::make_unique<Reticle>();
-	reticle_->Initialize(spriteManager_);
-	// JSON から読み込んだ外側オフセット範囲・サイズ範囲を Reticle に初期反映
-	reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
-	reticle_->SetOuterSizeClamp(reticleOuterSizeMinPx_, reticleOuterSizeMaxPx_);
-	reticleBaseStickSpeed_ = reticle_->GetStickSpeed();   // 精密射撃モードの感度低下の基準
-
-	// 前回保存したシーン配置があれば自動ロード（先にやって、Player が含まれていれば再生成しない）
-	bool sceneLoaded = false;
-	{
+	// ここから下は降下に要らない物。並びは今までの Initialize と同じ（後の段は前の段の結果を使う）
+	// 三人称で映すカタパルトの機体（一人称の降下では映らない。止まってから V で三人称にできる）
+	deferredInit_.push_back({ "StageStart/Mech", [this]() {
+		stageStart_->InitializeMech(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
+		return true;
+	} });
+	// ディスラプター崩壊の破片レンダラ（キャプチャ反転の 3D 片＝飛び散って断裂線へ縮小消滅）
+	deferredInit_.push_back({ "StagePlay/Disruptor", [this]() {
+		disruptorShards_ = std::make_unique<DisruptorShardRenderer>();
+		disruptorShards_->Initialize(dxCore_, PrimitivePipeline::GetInstance()->GetSRVManager(), kDisruptorShardCap_);
+		return true;
+	} });
+	// Boss（ボス戦）専用ロジックの初期化。突入までは何もスポーンしない（Enter で生成）。
+	deferredInit_.push_back({ "StagePlay/BossStage", [this]() {
+		bossStage_ = std::make_unique<BossStagePart>();
+		bossStage_->Initialize(this, camera_.get());
+		return true;
+	} });
+	// ボス戦の床。PSO 等はここで作っておき、ボス戦突入時にカクつかせない
+	deferredInit_.push_back({ "StagePlay/BossWater", [this]() {
+		bossWater_ = std::make_unique<BossArenaWater>();
+		bossWater_->Initialize(dxCore_, srvManager_, object3DManager_);
+		return true;
+	} });
+	// 大河の水面。PSO 等はここで作り、川のデータは雲の中（loadStartSec）で別スレッドから読む
+	deferredInit_.push_back({ "StagePlay/RiverWater", [this]() {
+		riverWater_ = std::make_unique<RiverWater>();
+		riverWater_->Initialize(dxCore_, srvManager_, object3DManager_, stageEnv_->GetCloudLayer());
+		return true;
+	} });
+	// 自機の羽根（雲の上で展開し、レールの間は付けたまま。ボス戦では収納）
+	deferredInit_.push_back({ "StagePlay/PlayerWings", [this]() {
+		playerWings_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
+		return true;
+	} });
+	deferredInit_.push_back({ "StagePlay/UI", [this]() {
+		if (spriteManager_) {
+			pauseDimSprite_ = std::make_unique<SpriteInstance>();
+			pauseDimSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "PauseDim");
+			pauseDimSprite_->SetPosition({ 0.0f, 0.0f });
+			pauseDimSprite_->SetSize({ static_cast<float>(WindowsApplication::kClientWidth),
+				static_cast<float>(WindowsApplication::kClientHeight) });
+			pauseDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
+			pauseDimSprite_->Update();
+		}
+		CreateBossHpBarUI();
+		return true;
+	} });
+	// レティクル（UI と合わせると 1 フレームで 13 ms かかっていたので分ける）
+	deferredInit_.push_back({ "StagePlay/Reticle", [this]() {
+		reticle_ = std::make_unique<Reticle>();
+		reticle_->Initialize(spriteManager_);
+		// JSON から読み込んだ外側オフセット範囲・サイズ範囲を Reticle に初期反映
+		reticle_->SetLockOnSizeClampOutside(reticleOuterMinPx_, reticleOuterMaxPx_);
+		reticle_->SetOuterSizeClamp(reticleOuterSizeMinPx_, reticleOuterSizeMaxPx_);
+		reticleBaseStickSpeed_ = reticle_->GetStickSpeed();   // 精密射撃モードの感度低下の基準
+		return true;
+	} });
+	// 配置（StagePlay.json）：読む → 数個ずつ作る → 自機と武器 → レールと雲の縦穴 → HP の UI（後回しのときは別々のフレーム）
+	deferredInit_.push_back({ "StagePlay/SceneJsonRead", [this]() {
+		deferredSceneLoaded_ = false;
 		std::string autoLoadPath = "Resources/Json/Scenes/StagePlay.json";
 		// --scene-json <パス>：配置を差し替えて起動（板の雲を N 枚に増やした計測用シーンなど）。パスは ASCII 前提
 		if (const std::wstring w = FindCommandLineValue(L"--scene-json"); !w.empty()) {
@@ -2926,65 +2989,74 @@ void StagePlayScene::Initialize() {
 			for (wchar_t c : w) autoLoadPath.push_back(static_cast<char>(c));
 		}
 		if (std::filesystem::exists(autoLoadPath)) {
-			sceneLoaded = LoadSceneFromJson(autoLoadPath);
+			deferredSceneLoaded_ = BeginSceneLoadFromJson(autoLoadPath);
 		}
-	}
-
-	// auto-load で Player が復元されていなければデフォルトのプレイヤープレハブを生成
-	if (!player_) {
-		InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
-		if (!dynamicAnimated_.empty()) {
-			player_ = dynamicAnimated_.back().get();
-			player_->SetName("Player");
+		return true;
+	} });
+	deferredInit_.push_back({ "StagePlay/SceneJsonApply", [this]() {
+		constexpr double kSceneApplyBudgetMs = 4.0;
+		return ApplySceneLoadStep(kSceneApplyBudgetMs);
+	} });
+	deferredInit_.push_back({ "StagePlay/SceneJsonPlayer", [this]() {
+		// 配置を読んだときは OnAfterSceneLoad と同じ（自機を貼り直す）。読めなかったときは既定の自機のプレハブ
+		if (deferredSceneLoaded_) RelinkPlayerAfterSceneLoad();
+		if (!player_) {
+			InstantiatePrefab("player", { 0.0f, 0.0f, 0.0f });
+			if (!dynamicAnimated_.empty()) {
+				player_ = dynamicAnimated_.back().get();
+				player_->SetName("Player");
+			}
 		}
-	}
 
-	// 武器（ボーンソケット追従）：構成は player の WeaponParams コンポーネント（プレハブ由来）から読む。
-	// プレハブに weapon ブロックが無ければ既定値をコンポーネントへ seed し、Inspector で編集→
-	// プレイヤーの "Save as Prefab" で player.json に永続化できるようにする（リロードで初期化されない）。
-	if (player_) {
-		WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
-		if (wp.modelFile.empty()) {
-			wp.enabled         = true;
-			wp.bone            = "mixamorig:RightHand";
-			// 仮：手から突き出す細長い刃（playerBullet=0.5角の立方体を scale.z=6 で約3units の刃に）。
-			wp.offsetScale     = { 0.3f, 0.3f, 6.0f };
-			wp.offsetRotate    = { 0.0f, 0.0f, 0.0f };
-			wp.offsetTranslate = { 0.0f, 0.0f, 1.5f };
-			wp.modelDir        = "Resources/Models/Player/Bullet";
-			wp.modelFile       = "playerBullet.mesh";
+		// 武器（ボーンソケット追従）：構成は player の WeaponParams コンポーネント（プレハブ由来）から読む。
+		// プレハブに weapon ブロックが無ければ既定値をコンポーネントへ seed し、Inspector で編集→
+		// プレイヤーの "Save as Prefab" で player.json に永続化できるようにする（リロードで初期化されない）。
+		if (player_) {
+			WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
+			if (wp.modelFile.empty()) {
+				wp.enabled         = true;
+				wp.bone            = "mixamorig:RightHand";
+				// 仮：手から突き出す細長い刃（playerBullet=0.5角の立方体を scale.z=6 で約3units の刃に）。
+				wp.offsetScale     = { 0.3f, 0.3f, 6.0f };
+				wp.offsetRotate    = { 0.0f, 0.0f, 0.0f };
+				wp.offsetTranslate = { 0.0f, 0.0f, 1.5f };
+				wp.modelDir        = "Resources/Models/Player/Bullet";
+				wp.modelFile       = "playerBullet.mesh";
+			}
+			weapon_ = std::make_unique<Object3DInstance>();
+			weapon_->Initialize(object3DManager_, dxCore_, wp.modelDir, wp.modelFile, "Weapon");
+			weapon_->SetCamera(camera_.get());
 		}
-		weapon_ = std::make_unique<Object3DInstance>();
-		weapon_->Initialize(object3DManager_, dxCore_, wp.modelDir, wp.modelFile, "Weapon");
-		weapon_->SetCamera(camera_.get());
-	}
-
-	// UI 初期化（auto-load した場合は LoadSceneFromJson 内で建て直し済みなので二重生成しない）
-	if (!sceneLoaded) {
-		InitializeHPBarUI();
-		InitializeSpecialGaugeUI();
-	}
-	// プレイヤーの HP を有効化（auto-load 時は UI 建て直しが Player 生成前に走るためここで明示する）
-	if (player_) {
-		Gameplay::Of(player_).GetHP().enabled = true;
-	}
-
+		return true;
+	} });
+	deferredInit_.push_back({ "StagePlay/SceneJsonRail", [this]() {
+		if (deferredSceneLoaded_) RebindRailAfterSceneLoad();
+		return true;
+	} });
+	deferredInit_.push_back({ "StagePlay/SceneJsonUI", [this]() {
+		// HP・ゲージの UI（配置を読んだときは OnAfterSceneLoad と同じ。読めなかったときも作る）
+		RebuildUiAfterSceneLoad();
+		return true;
+	} });
 	// 「ボス戦からリトライ」：Rail/Landing を飛ばしてボス戦開始時点のHP・必殺技ゲージへ復元する。
 	// prevPhase_ は Phase::Rail のまま（上で設定済み）なので、Update() 初回のフェーズ遷移エッジ検出で
-	// bossStage_->Enter() が自動的に走る。
-	if (bossRetryRequested && haveBossCheckpoint && player_) {
-		phase_ = Phase::Boss;
-		HP& hp = Gameplay::Of(player_).GetHP();
-		hp.currentHP = std::clamp(ckPlayerHP, 0, hp.maxHP);
-		specialGauge_ = std::clamp(ckSpecialGauge, 0.0f, specialGaugeMax_);
+	// bossStage_->Enter() が自動的に走る。（後回しにするのは HUB から来たときだけなのでここは必ず Initialize の中）
+	if (bossRetryRequested && haveBossCheckpoint) {
+		deferredInit_.push_back({ "StagePlay/BossRetry", [this, ckPlayerHP, ckSpecialGauge]() {
+			if (!player_) return true;
+			phase_ = Phase::Boss;
+			HP& hp = Gameplay::Of(player_).GetHP();
+			hp.currentHP = std::clamp(ckPlayerHP, 0, hp.maxHP);
+			specialGauge_ = std::clamp(ckSpecialGauge, 0.0f, specialGaugeMax_);
+			return true;
+		} });
 	}
+	if (!deferRest) CompleteDeferredInit();
 
-	// スタート演出。HUB から渡された値は必ずここで取って捨てる（リトライなどで古い値を拾わないように）。
-	// HUB から来たら③IN の降下から、HUB を通らずに来たら（リトライ・デバッグの直接開始）雲の上から（2026-10-18 ユーザー決定）。
-	// ボス戦からのリトライはスタート演出なし
+	// スタート演出。HUB から来たら③IN の降下から、HUB を通らずに来たら（リトライ・デバッグの直接開始）雲の上から
+	// （2026-10-18 ユーザー決定）。ボス戦からのリトライはスタート演出なし
 	{
-		StageStartHandoff handoff;
-		const bool fromHub = StageStartHandoff::Take(handoff);
+		LOAD_PHASE("StagePlay/StageStartBegin");
 		// 射出口の向こうに見せる雲の上＝レールの t=0 のカメラ位置（雲の上の場面 S4 と同じ景色）
 		if (railStage_) stageStart_->SetSkyAnchor(railStage_->SampleCameraPathAtSec(0.0f));
 		if (phase_ != Phase::Boss) {
@@ -3012,12 +3084,79 @@ void StagePlayScene::Initialize() {
 	}
 
 	// 自機の姿勢（ボス戦からのリトライは Stand）
-	ApplyPlayerPose();
+	if (deferRest) {
+		// 配置（SceneJson）がレールを本物に差し替えるので、射出口の向こうの雲の上の位置も取り直す
+		deferredInit_.push_back({ "StagePlay/PlayerPose", [this]() {
+			if (railStage_ && stageStart_) stageStart_->SetSkyAnchor(railStage_->SampleCameraPathAtSec(0.0f));
+			ApplyPlayerPose();
+			return true;
+		} });
+		deferredInitActive_ = true;
+		deferredInitSkipFrame_ = true;
+	}
+	else {
+		ApplyPlayerPose();
+	}
 
 	// --bench-hold <秒>：その秒へシークしてレールを止める（同じ画面のまま GPU 時間を測る用）
 	if (const std::wstring w = FindCommandLineValue(L"--bench-hold"); !w.empty()) {
 		benchHoldSec_ = static_cast<float>(std::wcstod(w.c_str(), nullptr));
 		Seek(benchHoldSec_);
+	}
+}
+
+void StagePlayScene::RunDeferredInitStep() {
+	const DeferredInitStep& step = deferredInit_[deferredInitNext_];
+	const double start = LoadProfiler::NowMs();
+	const size_t phaseBegin = LoadProfiler::GetInstance()->GetPhases().size();
+#ifdef _DEBUG
+	// 降下中のフレームで読んだ物も先読みのマニフェストに足す（Initialize の外なので SceneManager の記録に入らない）
+	if (deferredInitActive_) ScenePreloader::GetInstance()->BeginRecording();
+#endif
+	bool stepDone = true;
+	{
+		LOAD_PHASE(step.name);
+		stepDone = step.run();
+	}
+	if (stepDone) ++deferredInitNext_;
+#ifdef _DEBUG
+	if (deferredInitActive_) ScenePreloader::GetInstance()->EndRecording("STAGEPLAY");
+#endif
+	const double ms = LoadProfiler::NowMs() - start;
+	if (deferredInitActive_) {
+		deferredInitWallMs_ += ms;
+		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+			std::format("LOAD kind=deferred_step scene=STAGEPLAY name={} frame={} wall_ms={:.2f}", step.name, deferredInitFrames_, ms));
+		// 段の中で閉じた区間（SceneJson/* など。段そのものの区間は上の行と同じなので除く）
+		const auto& phases = LoadProfiler::GetInstance()->GetPhases();
+		for (size_t i = phaseBegin; i < phases.size(); ++i) {
+			if (phases[i].name == step.name) continue;
+			SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+				std::format("LOAD kind=deferred_phase scene=STAGEPLAY step={} name={} wall_ms={:.2f}", step.name, phases[i].name, phases[i].wallMs));
+		}
+	}
+}
+
+void StagePlayScene::UpdateDeferredInit(double budgetMs) {
+	const double start = LoadProfiler::NowMs();
+	do {
+		RunDeferredInitStep();
+	} while (HasDeferredInit() && LoadProfiler::NowMs() - start < budgetMs);
+	++deferredInitFrames_;
+	if (!HasDeferredInit() && deferredInitActive_) {
+		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+			std::format("LOAD kind=deferred_init scene=STAGEPLAY frames={} wall_ms={:.2f}", deferredInitFrames_, deferredInitWallMs_));
+		deferredInitActive_ = false;
+	}
+}
+
+void StagePlayScene::CompleteDeferredInit() {
+	if (!HasDeferredInit()) return;
+	while (HasDeferredInit()) RunDeferredInitStep();
+	if (deferredInitActive_) {
+		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+			std::format("LOAD kind=deferred_init scene=STAGEPLAY frames={} wall_ms={:.2f} completed_early=1", deferredInitFrames_, deferredInitWallMs_));
+		deferredInitActive_ = false;
 	}
 }
 
@@ -3161,6 +3300,7 @@ void StagePlayScene::DrawBossHpBarUI() {
 }
 
 void StagePlayScene::OpenPauseMenu() {
+	CompleteDeferredInit();   // ポーズメニューの暗幕・レティクルなどを使う
 	paused_ = true;
 	SetPauseView(PauseView::Main);
 	if (pauseDimSprite_) pauseDimSprite_->Update();
@@ -3367,6 +3507,19 @@ void StagePlayScene::Update() {
 	}
 #endif
 
+	// 後回しにした初期化：③IN の降下の間だけ少しずつ進め、それ以外の段階へ進んだら残りを全部済ませる
+	if (HasDeferredInit()) {
+		constexpr double kDeferredInitBudgetMs = 4.0;
+		if (deferredInitSkipFrame_) {
+			// 差し替えのフレームは Initialize の分だけで重いので、段は次のフレームから
+			deferredInitSkipFrame_ = false;
+		} else if (phase_ == Phase::StageStart && stageStart_ && stageStart_->GetState() == StageStartPart::State::Descent) {
+			UpdateDeferredInit(kDeferredInitBudgetMs);
+		} else {
+			CompleteDeferredInit();
+		}
+	}
+
 	// ----- スタート演出（③IN〜雲の上）。演出中はレール・自機の操作・HUD を動かさない -----
 	// 終わったフレームはそのまま下のレールへ進む（1 フレームでもカタパルトのカメラのまま描かないように）
 	// スキップの白フェードは演出が終わった後（レール）まで続くので、段階に関係なく進める
@@ -3497,6 +3650,7 @@ void StagePlayScene::Update() {
 			moveDelta = { 0.0f, 0.0f };
 			playerVelocity_ = { 0.0f, 0.0f };
 		}
+		playerMoveInput_ = moveDelta;   // スラスターの強弱（ボス戦も同じ。2026-10-20 ユーザー：ボス戦を作るときに合わせて直す）
 
 		// ===== ボス戦：地上ワールド移動＋フリールック/ロックオン/ターゲットの3モードカメラ =====
 		if (phase_ == Phase::Boss && bossStage_) {
@@ -4001,6 +4155,13 @@ void StagePlayScene::Update() {
 		}
 		playerWings_->SetBlinkGlow(playerBlinkGlow_);
 		playerWings_->Update(player_, GetScaledDeltaTime());
+	}
+
+	// 自機のスラスター（スケルトンが更新された後）。自機を描かない間（スタート演出・ジャスト回避の分身）は止める
+	if (player_ && player_->GetVisible()) {
+		playerThrusters_.Update(player_, playerThrusters_.FromMoveAxis(playerMoveInput_.x, playerMoveInput_.y));
+	} else {
+		playerThrusters_.StopAll();
 	}
 
 #ifdef _DEBUG
@@ -4820,6 +4981,8 @@ void StagePlayScene::SetPlayerHidden(bool hidden) {
 }
 
 void StagePlayScene::RestoreStageEnvironment() {
+	// 降下中に LSHIFT でスキップすると、後回しの初期化が残ったままここ（演出の終わり）へ来る
+	CompleteDeferredInit();
 	SetPlayerHidden(false);
 	if (camera_) {
 		camera_->SetNearClip(cameraNearClip_);
@@ -4833,6 +4996,7 @@ void StagePlayScene::RestoreStageEnvironment() {
 void StagePlayScene::BeginCloudTop() {
 	// 雲の上（S4、F6）：レールは t=0 から進める。自機は飛ぶ姿勢で、羽根はたたんだ形から付け根から現れて開く。
 	// カメラは自機の右上前方からレールのカメラへ回り込み、その間は操作を受け付けない
+	CompleteDeferredInit();   // 自機・羽根・レティクルを使う
 	ApplyPlayerPose();
 	if (cloudTopIntro_) {
 		cloudTopIntro_->Begin();
@@ -4871,6 +5035,7 @@ void StagePlayScene::ApplyPlayerPose() {
 }
 
 void StagePlayScene::Seek(float seconds) {
+	CompleteDeferredInit();
 	if (cloudTopIntro_) cloudTopIntro_->Cancel();
 	// Boss/Landing 中に Rail タイムラインを Seek したら Rail へ戻す（ボス・地面・コントローラを掃除）。
 	if (phase_ != Phase::Rail) {
@@ -5094,6 +5259,12 @@ void StagePlayScene::OnBeforeSceneLoad() {
 }
 
 void StagePlayScene::OnAfterSceneLoad() {
+	RelinkPlayerAfterSceneLoad();
+	RebindRailAfterSceneLoad();
+	RebuildUiAfterSceneLoad();
+}
+
+void StagePlayScene::RelinkPlayerAfterSceneLoad() {
 	// 復元されたエンティティから player_ を貼り直す
 	for (const auto& a : dynamicAnimated_) {
 		if (a && Gameplay::Of(a).GetTag() == EntityTag::Player) {
@@ -5112,13 +5283,17 @@ void StagePlayScene::OnAfterSceneLoad() {
 	}
 	// 新モデルはクリップが複数あり既定のアニメが付かない（T ポーズになる）ので姿勢を差す
 	ApplyPlayerPose();
+}
 
+void StagePlayScene::RebindRailAfterSceneLoad() {
 	// dynamicSplines_ を作り直したので、レールカメラの走行スプラインを取り直す。
 	// これを忘れると解放済みのスプラインを指したまま走る（Auto Reload で毎回踏む）。
 	if (railStage_) railStage_->RebindCameraPath();
 	// 雲海の縦穴もレールから拾い直す（ここより前はレールが既定の仮の形で、穴が降下ルートとずれる）
 	RebuildCloudShaft();
+}
 
+void StagePlayScene::RebuildUiAfterSceneLoad() {
 	// dynamicSprites_ を全削除したので UI スプライトを建て直す（生ポインタの dangling 回避）
 	InitializeHPBarUI();
 	InitializeSpecialGaugeUI();

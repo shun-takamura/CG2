@@ -199,6 +199,7 @@ void HubLiftDescent::LoadTuning(const JsonValue& node) {
 	read("accelSeconds", accelSeconds_);
 	read("descentSpeed", descentSpeed_);
 	read("changeSceneTime", changeSceneTime_);
+	read("maxPreloadWait", maxPreloadWait_);
 	read("holeOpenDepth", holeOpenDepth_);
 	read("restOffsetY", restOffsetY_);
 	read("sunFadeDepth", sunFadeDepth_);
@@ -223,6 +224,7 @@ void HubLiftDescent::SaveTuning(JsonValue& node) const {
 	write("accelSeconds", accelSeconds_);
 	write("descentSpeed", descentSpeed_);
 	write("changeSceneTime", changeSceneTime_);
+	write("maxPreloadWait", maxPreloadWait_);
 	write("holeOpenDepth", holeOpenDepth_);
 	write("restOffsetY", restOffsetY_);
 	write("sunFadeDepth", sunFadeDepth_);
@@ -256,6 +258,7 @@ void HubLiftDescent::OnImGui() {
 	ImGui::DragFloat("Accel (s)", &accelSeconds_, 0.01f, 0.05f, 10.0f);
 	ImGui::DragFloat("Descent Speed (m/s)", &descentSpeed_, 0.05f, 0.1f, 50.0f);
 	ImGui::DragFloat("Change Scene Time (s)", &changeSceneTime_, 0.05f, 0.5f, 60.0f);
+	ImGui::DragFloat("Max Preload Wait (s)", &maxPreloadWait_, 0.1f, 0.0f, 60.0f);
 	ImGui::DragFloat("Release Shake", &releaseShakeIntensity_, 0.005f, 0.0f, 1.0f);
 	ImGui::DragFloat("Release Shake (s)", &releaseShakeSeconds_, 0.01f, 0.0f, 3.0f);
 

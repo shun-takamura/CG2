@@ -66,7 +66,11 @@ SkinCluster CreateSkinCluster(
         MakeIdentity4x4);
 
     // ===== influence Resource =====
-    if (useDS) {
+    if (useDS && model->GetSharedInfluenceResource()) {
+        // 同じメッシュのインスタンスで共有（AnimatedMeshCache が読み込み済み。骨の並びに依らない）
+        skinCluster.influenceResource = model->GetSharedInfluenceResource();
+        skinCluster.mappedInfluence = {};
+    } else if (useDS) {
         // pack 内 .mesh の skin セクションを DStorage で DEFAULT heap に直接ロード。
         // .mesh の skin レイアウトは VertexInfluence と一致 (jointIndices[4], weights[4])。
         const size_t infBytes = sizeof(VertexInfluence) * numVertices;

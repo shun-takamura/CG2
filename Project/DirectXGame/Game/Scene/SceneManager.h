@@ -83,6 +83,14 @@ public:
 	void ChangeSceneImmediate(const std::string& sceneName);
 
 	/// <summary>
+	/// 次のシーンのアセットを裏で読み始める（ScenePreloader）。終わるまで今のシーンは動いたまま。
+	/// 読み終わる前に ChangeScene しても、シーンを読む前に残りを済ませるので壊れない（その分だけ止まる）
+	/// </summary>
+	void PreloadScene(const std::string& sceneName);
+	/// <summary>PreloadScene の先読みの途中か</summary>
+	bool IsPreloading() const;
+
+	/// <summary>
 	/// シーンファクトリーのセッター
 	/// </summary>
 	void SetSceneFactory(AbstractSceneFactory* sceneFactory) { sceneFactory_ = sceneFactory; }
@@ -146,6 +154,8 @@ private:
 
 	void SetupScene(Scene* scene);
 	void ExecuteSceneChange();
+	// currentScene_ の Initialize（DStorage バッチ・計測・読み込みの内訳のログ込み）
+	void LoadCurrentScene();
 
 	// シーン切り替え1回分の計測（決定 → 最初のフレームが画面に出るまで）
 	struct SceneChangeTiming {

@@ -30,6 +30,7 @@
 #include "InputManager.h"
 #include "Config/GameActions.h"
 #include "Json/JsonValue.h"
+#include "Profiling/LoadProfiler.h"
 #include <algorithm>
 #include <cmath>
 
@@ -119,28 +120,33 @@ void StageStartPart::Initialize(IStageStartHost* host, Camera* camera, Object3DM
 	host_ = host;
 	camera_ = camera;
 	object3DManager_ = object3DManager;
+	// 区間 StageStart/* は差し替えの重さの内訳（16 番 F7。profile.log の scene_phase 行）
+	auto* lp = LoadProfiler::GetInstance();
+	lp->BeginPhase("StageStart/Geometry");
 	geometry_.Load();
+	lp->EndPhase("StageStart/Geometry");
 
+	lp->BeginPhase("StageStart/Facility");
 	facility_->Initialize(object3DManager, dxCore, geometry_);
 	facility_->SetOrigin(origin_);
+	lp->EndPhase("StageStart/Facility");
+	lp->BeginPhase("StageStart/Cockpit");
 	cockpit_->Initialize(object3DManager, dxCore);
 	cockpit_->SetHatchOpenRatio(0.0f);   // 閉じ切り（外は全天周のモニターに映っている扱い）
+	lp->EndPhase("StageStart/Cockpit");
+	lp->BeginPhase("StageStart/Board");
 	board_->Initialize(object3DManager, dxCore, srvManager);
+	lp->EndPhase("StageStart/Board");
+	lp->BeginPhase("StageStart/CableTachoLightning");
 	cable_->Initialize();
 	tachometer_->Initialize(object3DManager, dxCore, srvManager);
 	launch_->SetExitTravel(geometry_.catapultTunnelEndZ);
 	launch_->Reset();
 	lightning_->Initialize(geometry_);
 	checklist_->Reset();
-	// 三人称の機体。クリップが複数あるので既定のアニメは付かない → 直立（Stand）を差す
-	if (AssetLocator::GetInstance()->Exists(std::string(kMechDir) + "/" + kMechFile)) {
-		mechModel_ = std::make_unique<AnimatedModelInstance>();
-		mechModel_->Initialize(ModelManager::GetInstance()->GetModelCore(), kMechDir, kMechFile);
-		mech_ = std::make_unique<AnimatedObject3DInstance>();
-		mech_->Initialize(object3DManager, skinningComputeManager, dxCore, srvManager, mechModel_.get(), "StageStartMech");
-		PlayMechPose(MechPose::Stand);
-		mech_->SetVisible(false);
-	}
+	lp->EndPhase("StageStart/CableTachoLightning");
+	// 三人称の機体は InitializeMech（StagePlay が後回しの段で呼ぶ。一人称の降下では映らない）
+	(void)skinningComputeManager;
 	// カタパルトの IBL（gen_catapult.py --ibl）。配布物では pack の中にしか無いので AssetLocator で確かめる
 	if (!catapultIblPath_.empty() && !AssetLocator::GetInstance()->Exists(catapultIblPath_)) catapultIblPath_.clear();
 	// 降下の途中（天井を抜けたとき）で読むとカクつくので、ここで読んでおく
@@ -148,7 +154,21 @@ void StageStartPart::Initialize(IStageStartHost* host, Camera* camera, Object3DM
 	if (!catapultReadyIblPath_.empty() && !AssetLocator::GetInstance()->Exists(catapultReadyIblPath_)) catapultReadyIblPath_.clear();
 	if (!catapultReadyIblPath_.empty()) TextureManager::GetInstance()->LoadTexture(catapultReadyIblPath_);
 	active_ = false;
+	// ここまでで閉じていない時間（IBL の読み込みなど）は StagePlay/StageStart との差
 	state_ = State::Finished;
+}
+
+void StageStartPart::InitializeMech(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager,
+	DirectXCore* dxCore, SRVManager* srvManager) {
+	if (mech_) return;
+	// 三人称の機体。クリップが複数あるので既定のアニメは付かない → 今の姿勢（Begin* が決めた mechPose_）を差す
+	if (!AssetLocator::GetInstance()->Exists(std::string(kMechDir) + "/" + kMechFile)) return;
+	mechModel_ = std::make_unique<AnimatedModelInstance>();
+	mechModel_->Initialize(ModelManager::GetInstance()->GetModelCore(), kMechDir, kMechFile);
+	mech_ = std::make_unique<AnimatedObject3DInstance>();
+	mech_->Initialize(object3DManager, skinningComputeManager, dxCore, srvManager, mechModel_.get(), "StageStartMech");
+	PlayMechPose(mechPose_);
+	mech_->SetVisible(active_ && view_ == View::ThirdPerson);
 }
 
 void StageStartPart::Finalize() {

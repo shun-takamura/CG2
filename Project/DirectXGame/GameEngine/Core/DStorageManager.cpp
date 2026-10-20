@@ -241,6 +241,22 @@ void DStorageManager::SubmitAndWait()
 	}
 }
 
+uint64_t DStorageManager::SubmitWithFence()
+{
+	if (!initialized_) return 0;
+
+	++fenceValue_;
+	queue_->EnqueueSignal(fence_.Get(), fenceValue_);
+	if (!inBatch_) queue_->Submit();
+	return fenceValue_;
+}
+
+bool DStorageManager::IsFenceComplete(uint64_t fenceValue) const
+{
+	if (!initialized_ || fenceValue == 0) return true;
+	return fence_->GetCompletedValue() >= fenceValue;
+}
+
 void DStorageManager::EndBatchAndWait()
 {
 	inBatch_ = false;

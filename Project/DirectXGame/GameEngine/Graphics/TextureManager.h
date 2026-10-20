@@ -3,6 +3,7 @@
 #include "DirectXTex.h"
 #include <wrl.h>
 #include <d3d12.h>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include "SpriteManager.h"
@@ -17,7 +18,8 @@ private:
 	// 既存のprivateセクションのTextureData構造体を修正:
 	struct TextureData {
 		// CPU/GPU 二段ロードの状態。Unloaded → CPUReady → GPUReady と遷移する。
-		enum class LoadState { Unloaded, CPUReady, GPUReady };
+		// GPUPending は DirectStorage へ送ったが転送の完了を待っていない（BeginTextureGPUAsync → FinishTextureGPU の間）
+		enum class LoadState { Unloaded, CPUReady, GPUPending, GPUReady };
 		LoadState loadState = LoadState::Unloaded;
 
 		DirectX::TexMetadata metadata;
@@ -76,6 +78,13 @@ private:
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
 
+	// LoadTexture / LoadTextureLinear が呼ばれたら知らせる先（シーンの読み込みの記録用。空なら何もしない）
+	std::function<void(const std::string& filePath, bool linear)> loadObserver_;
+
+	// DirectStorage 経路の GPU フェーズ（リソースの作成・転送の登録・SRV）と、転送が終わった後の仕上げ（バリア）
+	void CreateDirectStorageTexture(TextureData& data, const std::string& filePath);
+	void FinishDirectStorageTexture(TextureData& data);
+
 public:
 
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore, SRVManager* srvManager);
@@ -100,9 +109,21 @@ public:
 	/// </summary>
 	void LoadTextureGPU(const std::string& filePath);
 
+	/// <summary>
+	/// GPU フェーズを待たずに始める（メインスレッド専用。事前に LoadTextureCPU）。
+	/// DirectStorage 経路なら転送を登録して true を返す：呼び出し側が DStorageManager::SubmitWithFence で送り、
+	/// fence が終わってから FinishTextureGPU を呼ぶ。それ以外の経路はその場で GPUReady まで進めて false
+	/// </summary>
+	bool BeginTextureGPUAsync(const std::string& filePath);
+	/// <summary>BeginTextureGPUAsync の転送が終わった後の仕上げ（バリアを積んで GPUReady に）。メインスレッド専用</summary>
+	void FinishTextureGPU(const std::string& filePath);
+
 	// 非同期ロードの状態クエリ
 	bool IsCPUReady(const std::string& filePath) const;
 	bool IsGPUReady(const std::string& filePath) const;
+
+	/// <summary>LoadTexture / LoadTextureLinear が呼ばれるたびに知らせる（キャッシュに当たっても）。空の関数で外す</summary>
+	void SetLoadObserver(std::function<void(const std::string& filePath, bool linear)> observer) { loadObserver_ = std::move(observer); }
 
 	/// <summary>
 	/// 動的テクスチャを作成（カメラ映像など毎フレーム更新するテクスチャ用）

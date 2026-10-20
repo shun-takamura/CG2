@@ -10,6 +10,7 @@
 #include "RailStagePart.h"
 #include "BossStagePart.h"
 #include "StageStart/StageStartPart.h"
+#include "StageStart/MechThrusters.h"
 #include "StageEnvironment.h"
 #include "VerticalMenu.h"
 #include "AttractMode.h"
@@ -170,6 +171,10 @@ private:
 	// 雲の上の場面（S4、16_StageStart.md F6）：自機の右上前方からレールのカメラへ回り込むカメラ（この間は操作を止める）と、自機の羽根
 	std::unique_ptr<CloudTopIntro> cloudTopIntro_;
 	std::unique_ptr<PlayerWingUnit> playerWings_;
+	// 自機のスラスター 4 基（カタパルトと同じ部品・同じポイント制。16_StageStart.md §2.7）。
+	// 値で持つのは Initialize の前に LoadTuningFromJson が読むため。playerMoveInput_ はそのフレームの移動の入力（-1..1）
+	MechThrusters playerThrusters_{ MechThrusters::Preset::Player };
+	Vector2 playerMoveInput_{ 0.0f, 0.0f };
 	bool IsCloudTopIntroActive() const;
 	// 自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦は Stand
 	void ApplyPlayerPose();
@@ -561,6 +566,31 @@ private:
 	bool paused_ = false;
 	// トランジション中も最初の1回だけ Update を通したか（カメラ・空・物体の行列を一度書くため）
 	bool firstUpdateDone_ = false;
+
+	// ----- 初期化の後回し（16 番 F7 C'）-----
+	// HUB の降下の続き（③IN）から始めるときは、降下に要らない物（ボス戦・大河・羽根・UI・配置・自機など）の初期化を
+	// 降下中のフレームへ回す（差し替えのフレームで止まる時間を短くする）。それ以外の始まり方は Initialize の中で全部済ませる
+	struct DeferredInitStep {
+		const char* name;
+		std::function<bool()> run;  // true＝この段は終わり。false なら次のフレームにもう一度呼ぶ（配置を数個ずつ作る段）
+	};
+	std::vector<DeferredInitStep> deferredInit_;
+	size_t deferredInitNext_ = 0;
+	bool   deferredInitActive_ = false;  // 降下中のフレームで進めている（ログを出す）
+	int    deferredInitFrames_ = 0;
+	double deferredInitWallMs_ = 0.0;
+	bool HasDeferredInit() const { return deferredInitNext_ < deferredInit_.size(); }
+	// 1 フレームに budgetMs まで進める（最低 1 段）
+	void UpdateDeferredInit(double budgetMs);
+	// 残りを今すぐ全部済ませる（降下以外の段階へ進む・ポーズ・シーク・調整の画面の前に）
+	void CompleteDeferredInit();
+	void RunDeferredInitStep();
+	bool deferredInitSkipFrame_ = false;  // 差し替えのフレーム（Initialize と同じフレーム）では段を進めない
+	bool deferredSceneLoaded_ = false;    // 後回しの段で配置を読んだか（UI の建て直しの判定）
+	// OnAfterSceneLoad の中身。後回しの段では別々のフレームで呼ぶ
+	void RelinkPlayerAfterSceneLoad();
+	void RebindRailAfterSceneLoad();
+	void RebuildUiAfterSceneLoad();
 	PauseView pauseView_ = PauseView::Main;
 	VerticalMenu pauseMenu_;
 	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため dynamicSprites_ 外で所有）
