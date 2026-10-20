@@ -59,6 +59,11 @@ public:
 	// バッチ送出 + 同期で完了まで待つ
 	void SubmitAndWait();
 
+	// 待たずに送る：ここまでの Enqueue の後に fence の Signal を積んで送出し、その fence 値を返す。
+	// 終わったかは IsFenceComplete で見る（裏での先読み・ストリーミング用）。バッチ中は送出だけ EndBatchAndWait に任せる
+	uint64_t SubmitWithFence();
+	bool IsFenceComplete(uint64_t fenceValue) const;
+
 	// バッチモード:
 	//   BeginBatch() を呼ぶと以降の Submit / SubmitAndWait は no-op になり、
 	//   Enqueue だけが蓄積される。EndBatchAndWait() でまとめて 1 回だけ Submit + Wait。

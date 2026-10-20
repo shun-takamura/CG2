@@ -1,0 +1,330 @@
+{
+  "scene": "STAGEPLAY",
+  "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
+  "shaders": [
+    {
+      "path": "Resources/Shaders/Disruptor/DisruptorShard.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Disruptor/DisruptorShard.PS.hlsl",
+      "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/PostEffect/Common/PostProcess.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Cloud/CloudRaymarch.PS.hlsl",
+      "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Cloud/CloudComposite.PS.hlsl",
+      "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Water/RippleSimulation.CS.hlsl",
+      "profile": "cs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Water/WaterSurface.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Water/WaterSurface.PS.hlsl",
+      "profile": "ps_6_0"
+    }
+  ],
+  "textures": [
+    {
+      "path": "Resources/Cubemaps/title_clear_sky.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/white1x1.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Cubemaps/stage_cloudtop_ibl.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Cubemaps/title_clear_sky_ibl.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_noise.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_moko_height.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Terrain/Flagstone_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/Flagstone_Height.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/LcdLaunchUnable.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Chest_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Chest_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Leg_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Leg_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/LowerLeg_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/LowerLeg_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Thigh_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Thigh_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/LowerBack_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/LowerBack_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Shoulder_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Shoulder_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/UpperArm_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/UpperArm_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Forearm_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Forearm_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Hand_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Hand_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Head_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerModel/textures/Head_NormalMapSoft.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Cubemaps/catapult_ibl.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Cubemaps/catapult_ibl_ready.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerWings/textures/PlayerWings_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerWings/textures/PlayerWings_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/reticle_center.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/reticle_outside.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Effect/smoke_00.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Metal_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Metal_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/MetalDark_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/MetalDark_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Hazard_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Gold_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Light_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Neon_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/HubFloor_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/NormalMapTest/RockyDirt_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/NormalMapTest/RockyDirt_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/RiverTerrain_Splat.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/RiverTerrain_Tint.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/Terrain/TerrainLayers_Color.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/NormalMapTexture/Terrain/TerrainLayers_Normal.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/CanyonTerrain_Splat.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/CanyonTerrain_Tint.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/Bullet/playerBullet.dds",
+      "linear": false
+    }
+  ],
+  "models": [
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "Catapult.mesh"
+    },
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "CatapultLcd.mesh"
+    },
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "CatapultExitLight.mesh"
+    },
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "StartLift.mesh"
+    },
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "CatapultClamp.mesh"
+    },
+    {
+      "dir": "Resources/Models/Catapult",
+      "file": "StartShaftUnit.mesh"
+    },
+    {
+      "dir": "Resources/Models/HubMech/Export",
+      "file": "HubMech_Cockpit.mesh"
+    },
+    {
+      "dir": "Resources/Models/HubMech/Export",
+      "file": "HubMech_Hatch.mesh"
+    },
+    {
+      "dir": "Resources/Models/TitleLogo",
+      "file": "logo_plane.mesh"
+    },
+    {
+      "dir": "Resources/Models/NormalMapTest",
+      "file": "NormalMapTest.mesh"
+    },
+    {
+      "dir": "Resources/Models/RiverTerrain",
+      "file": "RiverTerrain.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonTerrain",
+      "file": "CanyonTerrain.mesh"
+    },
+    {
+      "dir": "Resources/Models/Player/Bullet",
+      "file": "playerBullet.mesh"
+    }
+  ],
+  "animatedModels": [
+    {
+      "dir": "Resources/Models/Player/PlayerModel",
+      "file": "PlayerModel.mesh"
+    },
+    {
+      "dir": "Resources/Models/Player/PlayerWings",
+      "file": "PlayerWings.mesh"
+    }
+  ],
+  "animations": [
+    "Resources/Models/Player/PlayerModel/PlayerModel.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_Stand.anim",
+    "Resources/Models/Player/PlayerWings/PlayerWings.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim"
+  ]
+}

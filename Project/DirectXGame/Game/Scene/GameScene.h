@@ -144,8 +144,30 @@ protected:
 	/// <summary>SceneData → 全コンテナ。ShouldSkipOnLoad で除外できる。</summary>
 	void ApplySceneData(const SceneData& data);
 
+	//====================
+	// 配置を何フレームかに分けて読む（StagePlay の③IN の降下。16 番 F7）。
+	// LoadSceneFromJson と同じ順（読む → 消す → OnBeforeSceneLoad → 作る）で、OnAfterSceneLoad は呼び出し側が呼ぶ
+	//====================
+	/// <summary>読んで、今の動的エンティティを消すところまで。読めなければ false（何も消さない）</summary>
+	bool BeginSceneLoadFromJson(const std::string& filePath);
+	/// <summary>エンティティを budgetMs まで作る（最低 1 個）。全部作り終えたら true</summary>
+	bool ApplySceneLoadStep(double budgetMs);
+	bool IsSceneLoadPending() const { return sceneLoadPending_; }
+
 	/// <summary>動的エンティティを全て deferredDeletes_ へ退避してコンテナを空にする。</summary>
 	void ClearDynamicEntities();
+
+private:
+	// エンティティ 1 個を作る（ApplySceneData / ApplySceneLoadStep の中身）。種類ごとの数と時間を足す
+	void ApplySceneEntity(const SceneEntityDesc& d);
+	void LogSceneEntityStats();
+	static constexpr int kSceneKindCount = 6;
+	int    sceneKindCount_[kSceneKindCount] = {};
+	double sceneKindMs_[kSceneKindCount] = {};
+	SceneData pendingSceneData_;
+	size_t pendingSceneIndex_ = 0;
+	bool sceneLoadPending_ = false;
+protected:
 
 	//====================
 	// 弾 / 近接 / 敵の更新（派生シーンの Update から呼ぶ）

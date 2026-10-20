@@ -30,6 +30,7 @@
 #include "TextureManager.h"
 #include <random>
 #include "ModelManager.h"
+#include "AnimatedMeshCache.h"
 #include "SRVManager.h"
 #include "ParticleManager.h"
 #include "TextRenderer.h"
@@ -637,6 +638,7 @@ void Framework::Finalize() {
 	TextRenderer::GetInstance()->Finalize();
 
 	// DirectXCoreよりも先に解放
+	AnimatedMeshCache::GetInstance()->Finalize();
 	TextureManager::GetInstance()->Finalize();
 	LightManager::GetInstance()->Finalize();
 

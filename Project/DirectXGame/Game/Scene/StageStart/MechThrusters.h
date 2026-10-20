@@ -17,6 +17,8 @@ class JsonValue;
 /// 各基は機体のボーンの位置＋ずらし（ワールドの向き・m。機体は +Z を向いて回さない）に置き、噴く向きはオイラー角（度）で持つ。
 /// エフェクトのローカルは噴き出し口が原点・噴射が -Y。大きさが変わったら今のを止めて別のを再生する。
 /// 調整値は StagePlay.json の "stageStart" → "thrusters"。
+/// ゲーム中の自機（大きさ 1・向きが変わる）も同じ部品を使う（StagePlay.json の "playerThrusters"、エフェクトは PlayerThruster_S/M/L）。
+/// そのときは followBody で、ずらしと噴く向きを機体の回転（GetRotate）で回す。
 /// </summary>
 class MechThrusters {
 public:
@@ -24,7 +26,10 @@ public:
 	enum Index { kBackLeft, kBackRight, kCalfLeft, kCalfRight, kCount };
 	using Sizes = std::array<Size, kCount>;
 
-	MechThrusters();
+	/// <summary>既定値の組（JSON に無いときに使う）。Catapult＝演出の 10.625 倍の機体、Player＝ゲームの自機（大きさ 1・向きに合わせる）</summary>
+	enum class Preset { Catapult, Player };
+
+	explicit MechThrusters(Preset preset = Preset::Catapult);
 	~MechThrusters();
 
 	/// <summary>全部止める（演出の終わり・一人称に切り替えたとき）</summary>
@@ -34,6 +39,8 @@ public:
 
 	/// <summary>移動の入力から大きさを決める（機体確認・ゲーム中の移動。ポイント制、上のコメント）</summary>
 	Sizes FromMove(bool up, bool left, bool down, bool right) const;
+	/// <summary>移動の量（x 右・y 上、-1..1）から。各軸が moveThreshold を越えたらその向きを押したとみなす（ゲーム中の WASD・左スティック）</summary>
+	Sizes FromMoveAxis(float x, float y) const;
 	/// <summary>出力 0..1 から全部同じ大きさ（射出の SPACE。0 でも小から）</summary>
 	Sizes FromThrust(float thrust) const;
 	static Sizes All(Size size) { return { size, size, size, size }; }
@@ -61,4 +68,6 @@ private:
 	float smallBelow_ = 0.34f;    // 射出の出力がこれ未満で小
 	float mediumBelow_ = 0.67f;   // これ未満で中、以上で大
 	int neutralLevel_ = 1;        // 移動のニュートラルのポイント（0 小 / 1 中 / 2 大）
+	float moveThreshold_ = 0.3f;  // FromMoveAxis で押したとみなす移動の量
+	bool followBody_ = false;     // ずらし・噴く向きを機体の回転で回す（カタパルトの機体は回さないので false）
 };

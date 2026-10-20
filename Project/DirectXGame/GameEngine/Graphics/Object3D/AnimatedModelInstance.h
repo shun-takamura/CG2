@@ -5,6 +5,7 @@
 #include "VertexData.h"
 #include "Material.h"
 #include <fstream>
+#include <memory>
 #include <cassert>
 #include "TextureManager.h"
 #include "MathUtility.h"
@@ -21,6 +22,7 @@
 #include "ModelInstance.h"
 
 struct SkinCluster;
+struct AnimatedMeshData;
 class SRVManager;
 
 class AnimatedModelInstance
@@ -33,6 +35,9 @@ class AnimatedModelInstance
     std::string matFilePath_;        // submesh が参照する .mat パス（GPU material 反映用）
     std::string animationPath_;   // 現在ロード中の .anim パス（空＝モデル付属のデフォルト）
 
+    // .mesh 経路は AnimatedMeshCache の共有データ（頂点・インデックス・影響度のバッファ、骨、部位の表）を指す。
+    // modelData_ は assimp 経路だけが使う（.mesh 経路は mesh_->modelData）
+    std::shared_ptr<const AnimatedMeshData> mesh_;
     ModelData modelData_;
     Animation animation_;
 
@@ -99,7 +104,7 @@ public:
     // 部位ごとのマテリアル（ディゾルブ・発光を部位で変えるため）。material は書き込み専用のメモリなので読まない
     std::vector<RenderSubmesh>& GetSubmeshes() { return submeshes_; }
 
-    const ModelData& GetModelData() const { return modelData_; }
+    const ModelData& GetModelData() const;
     const Animation& GetAnimation() const { return animation_; }
     /// <summary>モデル空間の包む球（バインドポーズ）。IsValid() が false なら大きさ不明</summary>
     const BoundingSphere& GetBoundingSphere() const { return bounds_; }
@@ -139,6 +144,8 @@ public:
     uint32_t GetSkinFileOffset() const { return skinFileOffset_; }
     bool HasSkinning() const { return hasSkinning_; }
     ID3D12Resource* GetVertexResource() const { return vertexResource_.Get(); }
+    /// <summary>DirectStorage 経路で AnimatedMeshCache が持つ共有の影響度バッファ（無ければ nullptr＝SkinCluster が作る）</summary>
+    ID3D12Resource* GetSharedInfluenceResource() const;
     const std::vector<Matrix4x4>& GetJointInverseBindMatrices() const {
         return jointInverseBindMatrices_;
     }
@@ -152,6 +159,6 @@ private:
     Node ReadNode(aiNode* node);
     void LoadModel(const std::string& directoryPath, const std::string& filename);
 
-    // Cooker が出力した .mesh + .skel + .mat + .anim をまとめて読む新経路
-    void LoadModelV2(const std::string& directoryPath, const std::string& filename);
+    // Cooker が出力した .mesh + .skel + .mat + .anim は AnimatedMeshCache が読む。共有データをこのインスタンスへ写す
+    void AttachSharedMesh(std::shared_ptr<const AnimatedMeshData> mesh);
 };

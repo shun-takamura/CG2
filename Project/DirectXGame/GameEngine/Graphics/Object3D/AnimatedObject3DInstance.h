@@ -109,6 +109,8 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     Vector4 jointLineColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
     float   jointSphereRadius_ = 0.025f;
     std::vector<std::unique_ptr<PrimitiveMesh>> debugSpheres_;
+    // debugSpheres_ を関節の数だけ用意する（骨の表示を付けた最初のフレームに作る）
+    void EnsureDebugSpheres();
 #endif
 
     //==============================

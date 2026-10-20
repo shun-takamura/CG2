@@ -525,6 +525,41 @@ namespace {
 
 IDxcBlob* DirectXCore::LoadShaderBlob(const std::wstring& hlslPath, const wchar_t* profile)
 {
+    // 同じシェーダを複数の部品が使う（WaterSurface はボス戦の床・大河・神殿の床）ので、
+    // 一度得たバイナリを使い回してシーン切り替えのコンパイル待ちを減らす
+    if (shaderLoadObserver_) shaderLoadObserver_(hlslPath, profile);
+
+    const std::wstring key = hlslPath + L"|" + profile;
+#ifdef _DEBUG
+    std::error_code ec;
+    const std::filesystem::file_time_type hlslTime = std::filesystem::last_write_time(hlslPath, ec);
+#else
+    const std::filesystem::file_time_type hlslTime{};
+#endif
+    std::lock_guard<std::mutex> lock(shaderCacheMutex_);
+    if (auto it = shaderCache_.find(key); it != shaderCache_.end() && it->second.hlslTime == hlslTime) {
+        ++shaderStats_.cacheHits;
+        return it->second.blob.Get();
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+    IDxcBlob* blob = LoadShaderBlobUncached(hlslPath, profile);
+    shaderStats_.loadMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    ++shaderStats_.loadCount;
+
+    if (!blob) return nullptr;
+
+    // 取得した参照はキャッシュへ移す（今までどおり呼び出し側は Release しない）。
+    // 作り直したときの古い blob は、呼び出し側が持ち続けているかもしれないので手放さずに退避する
+    ShaderCacheEntry& entry = shaderCache_[key];
+    if (entry.blob) retiredShaderBlobs_.push_back(std::move(entry.blob));
+    entry.blob.Attach(blob);
+    entry.hlslTime = hlslTime;
+    return blob;
+}
+
+IDxcBlob* DirectXCore::LoadShaderBlobUncached(const std::wstring& hlslPath, const wchar_t* profile)
+{
     // 事前コンパイル済み .cso を読む。無ければ空の blob を返す
     auto tryLoadCso = [this](const std::wstring& hlsl) -> IDxcBlob* {
         const std::wstring csoPath = ToCompiledShaderPath(hlsl);

@@ -4,6 +4,7 @@
 #include "SkinCluster.h"
 #include "AssetLocator.h"
 #include "DStorageManager.h"
+#include "AnimatedMeshCache.h"
 #include "PepperMacros.h"
 
 // テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
@@ -25,8 +26,9 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
     // 拡張子で分岐: .mesh は Cooker 出力の 4 分割形式、その他は assimp 互換経路
     std::filesystem::path p(filename);
     if (p.extension() == ".mesh") {
-        LoadModelV2(directoryPath, filename);
-        // animation_ は LoadModelV2 内で .anim から読み込まれる
+        // 同じメッシュはインスタンスをまたいで共有（初めてならここで読む。ScenePreloader が先に読んでいればすぐ返る）
+        AttachSharedMesh(AnimatedMeshCache::GetInstance()->Acquire(directoryPath, filename, modelCore_->GetDXCore()));
+        assert(mesh_ && "failed to load .mesh");
     } else {
         LoadModel(directoryPath, filename);
         animation_ = LoadAnimationFile(directoryPath, filename);
@@ -41,16 +43,16 @@ void AnimatedModelInstance::Initialize(ModelCore* modelCore, const std::string& 
         sm.indexStart = 0;
         sm.indexCount = indexCount_;
         sm.matFilePath = matFilePath_;
-        sm.textureFilePath = modelData_.materialData.textureFilePath;
-        sm.normalMapFilePath = modelData_.materialData.normalMapFilePath;
+        sm.textureFilePath = GetModelData().materialData.textureFilePath;
+        sm.normalMapFilePath = GetModelData().materialData.normalMapFilePath;
         submeshes_.push_back(std::move(sm));
     }
 
-    // 頂点データ作成
-    CreateVertexData(modelCore_->GetDXCore());
-
-    // インデックスデータ作成
-    CreateIndexData(modelCore_->GetDXCore());
+    // 頂点・インデックスのバッファ（.mesh 経路は共有のバッファを AttachSharedMesh で受け取り済み）
+    if (!mesh_) {
+        CreateVertexData(modelCore_->GetDXCore());
+        CreateIndexData(modelCore_->GetDXCore());
+    }
 
     // マテリアルデータ作成（submesh 数ぶんの Material CBV を作る）
     CreateMaterialData(modelCore_->GetDXCore());
@@ -439,344 +441,50 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
     assert(!modelData_.indices.empty() && "indices is empty!");
 }
 
-// =====================================================================
-// .mesh / .skel / .mat / .anim 統合ローダー（Cooker v2 形式）
-// =====================================================================
-
-namespace {
-
-// .mat から base_color テクスチャパスを取り出すヘルパー
-std::string ReadMatBaseColorPath_V2(const std::string& matPath)
+const ModelData& AnimatedModelInstance::GetModelData() const
 {
-    auto h = AssetLocator::GetInstance()->Open(matPath);
-    if (!h.IsValid()) return {};
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "MATL", 4) != 0) return {};
-    uint32_t version = 0;
-    h.Read(&version, 4);
-    // base_color_path は version 直後で全バージョン共通オフセット。v1〜v5 を許容
-    if (version < 1 || version > 5) return {};
-    char path[256]{};
-    h.Read(path, 256);
-    return std::string(path);
+    return mesh_ ? mesh_->modelData : modelData_;
 }
 
-// .mat v3 から normal_map_path を取り出すヘルパー（固定オフセット 308）
-std::string ReadMatNormalMapPath_V2(const std::string& matPath)
+ID3D12Resource* AnimatedModelInstance::GetSharedInfluenceResource() const
 {
-    auto h = AssetLocator::GetInstance()->Open(matPath);
-    if (!h.IsValid()) return {};
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "MATL", 4) != 0) return {};
-    uint32_t version = 0;
-    h.Read(&version, 4);
-    if (version < 3) return {};  // v3 から normal_map_path
-    h.Seek(308);
-    char path[256]{};
-    h.Read(path, 256);
-    return std::string(path);
+    return mesh_ ? mesh_->influenceResource.Get() : nullptr;
 }
 
-// .skel の Joint 1 個ぶん（172 バイト）
-struct SkelJoint {
-    char       name[64];
-    int32_t    parent_index;
-    Matrix4x4  inverse_bind_matrix;
-    Vector3    bind_translation;
-    Vector4    bind_rotation;
-    Vector3    bind_scale;
-};
-
-// .skel を読んでフラットなジョイント配列を返す。失敗時は空。
-std::vector<SkelJoint> ReadSkelFile(const std::string& skelPath)
+void AnimatedModelInstance::AttachSharedMesh(std::shared_ptr<const AnimatedMeshData> mesh)
 {
-    std::vector<SkelJoint> joints;
-    auto h = AssetLocator::GetInstance()->Open(skelPath);
-    if (!h.IsValid()) return joints;
+    mesh_ = std::move(mesh);
+    if (!mesh_) return;
+    const AnimatedMeshData& m = *mesh_;
 
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "SKEL", 4) != 0) return joints;
-    uint32_t version = 0, jointCount = 0, reserved = 0;
-    h.Read(&version, 4);
-    h.Read(&jointCount, 4);
-    h.Read(&reserved, 4);
-    if (version != 1) return joints;
-
-    joints.resize(jointCount);
-    h.Read(joints.data(), static_cast<size_t>(jointCount) * sizeof(SkelJoint));
-    return joints;
-}
-
-// フラットなジョイント配列から Node 階層を組み立てる。
-// .skel はトポロジカル順序（親 index < 自 index）と仮定する。
-Node BuildNodeTreeFromSkel(const std::vector<SkelJoint>& joints)
-{
-    if (joints.empty()) {
-        Node empty;
-        empty.localMatrix = MakeIdentity4x4();
-        return empty;
-    }
-
-    // まず全 Node を作って中身を埋める
-    std::vector<Node> tempNodes(joints.size());
-    for (size_t i = 0; i < joints.size(); ++i) {
-        const auto& j = joints[i];
-        tempNodes[i].name = std::string(j.name);
-        tempNodes[i].transform.translate = j.bind_translation;
-        tempNodes[i].transform.rotate = { j.bind_rotation.x, j.bind_rotation.y,
-                                          j.bind_rotation.z, j.bind_rotation.w };
-        tempNodes[i].transform.scale = j.bind_scale;
-        tempNodes[i].localMatrix = MakeAffineMatrix(
-            tempNodes[i].transform.scale,
-            tempNodes[i].transform.rotate,
-            tempNodes[i].transform.translate);
-    }
-
-    // 逆順（大きい index = 子側）から親の children へ移す
-    // → トポロジカル順序を仮定すれば、ある index を処理するときその子は既に
-    //   自分の中に集約済みになっている
-    int rootIdx = -1;
-    for (int i = static_cast<int>(joints.size()) - 1; i >= 0; --i) {
-        int parent = joints[i].parent_index;
-        if (parent < 0) {
-            rootIdx = i;
-        } else {
-            tempNodes[parent].children.push_back(std::move(tempNodes[i]));
-        }
-    }
-
-    if (rootIdx < 0) rootIdx = 0; // フォールバック
-    return std::move(tempNodes[rootIdx]);
-}
-
-// .anim を読んで Animation を構築する
-Animation ReadAnimFile(const std::string& animPath)
-{
-    Animation anim{};
-    anim.duration = 0.0f;
-    auto h = AssetLocator::GetInstance()->Open(animPath);
-    if (!h.IsValid()) return anim;
-
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "ANIM", 4) != 0) return anim;
-    uint32_t version = 0, channelCount = 0, channelsOffset = 0, reserved = 0;
-    float duration = 0.0f;
-    h.Read(&version, 4);
-    h.Read(&duration, 4);
-    h.Read(&channelCount, 4);
-    h.Read(&channelsOffset, 4);
-    h.Read(&reserved, 4);
-    if (version != 1) return anim;
-
-    anim.duration = duration;
-
-    // Channel テーブルを全部読み込む
-    struct ChannelHeader {
-        char     joint_name[64];
-        uint32_t t_count, r_count, s_count;
-        uint32_t t_offset, r_offset, s_offset;
-    };
-    std::vector<ChannelHeader> channelHeaders(channelCount);
-    h.Seek(channelsOffset);
-    h.Read(channelHeaders.data(), static_cast<size_t>(channelCount) * sizeof(ChannelHeader));
-
-    // 各チャンネルのキーフレームを読み込む
-    for (const auto& ch : channelHeaders) {
-        std::string jointName(ch.joint_name);
-        NodeAnimation& na = anim.nodeAnimations[jointName];
-
-        na.translate.keyframes.resize(ch.t_count);
-        h.Seek(ch.t_offset);
-        for (uint32_t i = 0; i < ch.t_count; ++i) {
-            float t; Vector3 v;
-            h.Read(&t, 4);
-            h.Read(&v, sizeof(Vector3));
-            na.translate.keyframes[i] = { t, v };
-        }
-        na.rotate.keyframes.resize(ch.r_count);
-        h.Seek(ch.r_offset);
-        for (uint32_t i = 0; i < ch.r_count; ++i) {
-            float t; float q[4];
-            h.Read(&t, 4);
-            h.Read(q, sizeof(q));
-            na.rotate.keyframes[i] = { t, Quaternion(q[0], q[1], q[2], q[3]) };
-        }
-        na.scale.keyframes.resize(ch.s_count);
-        h.Seek(ch.s_offset);
-        for (uint32_t i = 0; i < ch.s_count; ++i) {
-            float t; Vector3 v;
-            h.Read(&t, 4);
-            h.Read(&v, sizeof(Vector3));
-            na.scale.keyframes[i] = { t, v };
-        }
-    }
-    return anim;
-}
-
-} // anonymous namespace
-
-void AnimatedModelInstance::LoadModelV2(const std::string& directoryPath, const std::string& filename)
-{
-    const std::string meshPath = directoryPath + "/" + filename;
-    auto h = AssetLocator::GetInstance()->Open(meshPath);
-    assert(h.IsValid() && "failed to open .mesh file");
-
-    char magic[4]{};
-    h.Read(magic, 4);
-    assert(std::memcmp(magic, "MESH", 4) == 0);
-
-    uint32_t version = 0, flags = 0;
-    uint32_t vertexCount = 0, indexCount = 0, submeshCount = 0;
-    uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
-    h.Read(&version, 4);
-    h.Read(&flags, 4);
-    h.Read(&vertexCount, 4);
-    h.Read(&indexCount, 4);
-    h.Read(&submeshCount, 4);
-    h.Read(&vertexOffset, 4);
-    h.Read(&indexOffset, 4);
-    h.Read(&skinOffset, 4);
-    h.Read(&submeshOffset, 4);
-    assert((version == 3 || version == 4) && "expected .mesh v3 / v4");
-
-    char skeletonPathBuf[256]{};
-    h.Read(skeletonPathBuf, 256);
-    std::string skeletonPath(skeletonPathBuf);
-
-    // v4 はヘッダ末尾に包む球（バインドポーズ）。データの位置は各 offset で引くので v3 と同じ読み方で済む
-    if (version >= 4) {
-        float sphere[4]{};
-        h.Read(sphere, sizeof(sphere));
-        bounds_.center = { sphere[0], sphere[1], sphere[2] };
-        bounds_.radius = sphere[3];
-    }
-
-    const bool hasSkinning = (flags & 0x1) != 0;
-
-    // GPU フェーズ / SkinCluster で使うメタ情報を保持
-    meshFilePath_     = meshPath;
-    vertexFileOffset_ = vertexOffset;
-    vertexCount_      = vertexCount;
-    indexFileOffset_  = indexOffset;
-    indexCount_       = indexCount;
-    skinFileOffset_   = skinOffset;
-    hasSkinning_      = hasSkinning;
-
-    // pack モード + DStorage 利用可能なら CPU 経由をスキップして VRAM 直行
-    auto* loc = AssetLocator::GetInstance();
-    auto* ds  = DStorageManager::GetInstance();
-    useDirectStorage_ = loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile();
-
-    if (!useDirectStorage_) {
-        // --- 頂点 ---
-        modelData_.vertices.resize(vertexCount);
-        h.ReadAt(vertexOffset, modelData_.vertices.data(),
-                 static_cast<size_t>(vertexCount) * sizeof(VertexData));
-
-        // --- インデックス ---
-        modelData_.indices.resize(indexCount);
-        h.ReadAt(indexOffset, modelData_.indices.data(),
-                 static_cast<size_t>(indexCount) * sizeof(uint32_t));
-    }
-
-    // --- .skel を読んで rootNode を構築 ---
-    std::vector<SkelJoint> skelJoints;
-    if (!skeletonPath.empty()) {
-        skelJoints = ReadSkelFile(skeletonPath);
-    }
-    modelData_.rootNode = BuildNodeTreeFromSkel(skelJoints);
-    if (skelJoints.empty()) {
-        modelData_.rootNode.localMatrix = MakeIdentity4x4();
-    }
-
-    // .skel の Inverse Bind Pose Matrix と名前を joint-index 順で保持
-    // （DStorage 経路では SkinCluster がここから直接拾い、skel-index → skeleton-index
-    //   の remap を組み立てる）
-    jointInverseBindMatrices_.clear();
-    jointInverseBindMatrices_.reserve(skelJoints.size());
-    jointNames_.clear();
-    jointNames_.reserve(skelJoints.size());
-    for (const auto& j : skelJoints) {
-        jointInverseBindMatrices_.push_back(j.inverse_bind_matrix);
-        jointNames_.emplace_back(j.name);
-    }
-
-    // --- スキニングデータを per-vertex から per-joint (skinClusterData) に展開 ---
-    // DStorage 経路ではこの中間表現は不要（SkinCluster が pack の skin セクションを直接読む）
-    if (!useDirectStorage_ && hasSkinning && !skelJoints.empty()) {
-        // 一頂点あたり (joint_indices[4], weights[4]) = 32 バイト
-        struct SkinVertex {
-            uint32_t joint_indices[4];
-            float    weights[4];
-        };
-        std::vector<SkinVertex> skinData(vertexCount);
-        h.ReadAt(skinOffset, skinData.data(),
-                 static_cast<size_t>(vertexCount) * sizeof(SkinVertex));
-
-        for (uint32_t v = 0; v < vertexCount; ++v) {
-            for (int k = 0; k < 4; ++k) {
-                float w = skinData[v].weights[k];
-                if (w <= 0.0f) continue;
-                uint32_t jointIdx = skinData[v].joint_indices[k];
-                if (jointIdx >= skelJoints.size()) continue;
-                const std::string jointName(skelJoints[jointIdx].name);
-                auto& jwd = modelData_.skinClusterData[jointName];
-                jwd.inverseBindPoseMatrix = skelJoints[jointIdx].inverse_bind_matrix;
-                jwd.vertexWeights.push_back({ w, v });
-            }
-        }
-    }
-
-    // --- 全 submesh を読み、部位別マテリアルとして保持する ---
-    if (submeshCount > 0) {
-        h.Seek(submeshOffset);
-        submeshes_.clear();
-        submeshes_.reserve(submeshCount);
-        for (uint32_t i = 0; i < submeshCount; ++i) {
-            uint32_t idxStart = 0, idxCount = 0;
-            h.Read(&idxStart, 4);
-            h.Read(&idxCount, 4);
-            char matPath[256]{};
-            h.Read(matPath, 256);
-
-            RenderSubmesh sm;
-            sm.indexStart = idxStart;
-            sm.indexCount = idxCount;
-            sm.matFilePath = std::string(matPath);
-            sm.textureFilePath = ReadMatBaseColorPath_V2(sm.matFilePath);
-            sm.normalMapFilePath = ReadMatNormalMapPath_V2(sm.matFilePath);
-            submeshes_.push_back(std::move(sm));
-        }
-
-        // 後方互換: submesh[0] を既存メンバへ反映
-        matFilePath_ = submeshes_[0].matFilePath;
-        modelData_.materialData.textureFilePath = submeshes_[0].textureFilePath;
-        modelData_.materialData.normalMapFilePath = submeshes_[0].normalMapFilePath;
-    }
-
-    // --- 同階層の .anim を探して読み込む（あれば）---
-    // 注意: pack モードでの hash 一致のため、forward slash で組み立てる
-    // （filesystem::path::string() は Windows でバックスラッシュを返すため使えない）
-    std::filesystem::path animPath =
-        std::filesystem::path(directoryPath) /
-        (std::filesystem::path(filename).stem().string() + ".anim");
-    std::string animPathStr = animPath.generic_string();
-    if (AssetLocator::GetInstance()->Exists(animPathStr)) {
-        animation_ = ReadAnimFile(animPathStr);
-        animationPath_ = animPathStr;
-    }
-
-    assert(indexCount_ > 0 && "indexCount is 0!");
+    animation_        = m.animation;
+    animationPath_    = m.animationPath;
+    submeshes_        = m.submeshes;     // マテリアルの CB は Initialize がインスタンスごとに作る
+    matFilePath_      = m.matFilePath;
+    useDirectStorage_ = m.useDirectStorage;
+    meshFilePath_     = m.meshFilePath;
+    vertexFileOffset_ = m.vertexFileOffset;
+    vertexCount_      = m.vertexCount;
+    indexFileOffset_  = m.indexFileOffset;
+    indexCount_       = m.indexCount;
+    skinFileOffset_   = m.skinFileOffset;
+    hasSkinning_      = m.hasSkinning;
+    bounds_           = m.bounds;
+    jointInverseBindMatrices_ = m.jointInverseBindMatrices;
+    jointNames_       = m.jointNames;
+    vertexResource_   = m.vertexResource;
+    indexResource_    = m.indexResource;
+    vertexBufferView_ = m.vertexBufferView;
+    indexBufferView_  = m.indexBufferView;
+    textureFilePath_  = m.modelData.materialData.textureFilePath;
+    normalMapFilePath_ = m.modelData.materialData.normalMapFilePath;
 }
 
 void AnimatedModelInstance::ReplaceAnimation(const std::string& animPath)
 {
-    if (animPath.empty()) return;
-    if (!AssetLocator::GetInstance()->Exists(animPath)) return;
-    animation_ = ReadAnimFile(animPath);
+    // クリップはパスでキャッシュする（呼ぶたびにファイルを読むと、姿勢を切り替えるフレームがカクつく）
+    auto clip = AnimatedMeshCache::GetInstance()->GetAnimation(animPath);
+    if (!clip) return;
+    animation_ = *clip;
     animationPath_ = animPath;
 }

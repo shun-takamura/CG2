@@ -5,7 +5,11 @@
 #include <cstdint>
 #include <cassert>
 #include <chrono>
+#include <filesystem>
 #include <functional>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -210,7 +214,22 @@ public:
 	/// </summary>
 	/// <param name="hlslPath">Resources/Shaders/... の .hlsl パス</param>
 	/// <param name="profile">vs_6_0 / ps_6_0 / cs_6_0 など</param>
+	/// 一度得たバイナリは「パス＋プロファイル」でキャッシュし、シーンをまたいで使い回す（返す blob はキャッシュが持つ。
+	/// 呼び出し側は Release しない）。Debug は .hlsl の更新時刻が変わっていればコンパイルし直す（#include 先だけの変更は再起動まで反映されない）
 	IDxcBlob* LoadShaderBlob(const std::wstring& hlslPath, const wchar_t* profile);
+
+	/// シェーダ取得の累計（シーン切り替えの内訳の計測用。差分で使う）
+	struct ShaderLoadStats {
+		uint32_t loadCount = 0;  // コンパイル or .cso の読み込みをした回数
+		uint32_t cacheHits = 0;  // キャッシュで済んだ回数
+		double   loadMs = 0.0;   // loadCount の合計時間
+	};
+	ShaderLoadStats GetShaderLoadStats() const { return shaderStats_; }
+
+	/// LoadShaderBlob が呼ばれるたびに知らせる（キャッシュに当たっても。シーンの読み込みの記録用）。空の関数で外す
+	void SetShaderLoadObserver(std::function<void(const std::wstring& hlslPath, const wchar_t* profile)> observer) {
+		shaderLoadObserver_ = std::move(observer);
+	}
 
 	/// <summary>
 	/// .hlsl をその場で DXC コンパイルする。通常は LoadShaderBlob を使うこと。
@@ -227,6 +246,9 @@ public:
 		bool shaderVicible);
 
 private:
+	// キャッシュを通さない本体（Debug は実行時コンパイル、それ以外は .cso）
+	IDxcBlob* LoadShaderBlobUncached(const std::wstring& hlslPath, const wchar_t* profile);
+
 	void CreateFactory();
 	void CreateDevice();
 	void CreateCommandObjects();
@@ -262,6 +284,17 @@ private:
 	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_ = nullptr;
 	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_ = nullptr;
 	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_ = nullptr;
+
+	// LoadShaderBlob のキャッシュ（キー＝.hlsl のパス | プロファイル）
+	struct ShaderCacheEntry {
+		Microsoft::WRL::ComPtr<IDxcBlob> blob;
+		std::filesystem::file_time_type hlslTime{}; // Debug の作り直し判定用
+	};
+	std::unordered_map<std::wstring, ShaderCacheEntry> shaderCache_;
+	std::vector<Microsoft::WRL::ComPtr<IDxcBlob>> retiredShaderBlobs_; // Debug で作り直した古い blob（終了まで持つ）
+	std::mutex shaderCacheMutex_;
+	ShaderLoadStats shaderStats_;
+	std::function<void(const std::wstring& hlslPath, const wchar_t* profile)> shaderLoadObserver_;
 
 	// デルタタイム
 	std::chrono::steady_clock::time_point lastFrameTime_;

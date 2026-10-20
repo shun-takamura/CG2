@@ -48,6 +48,8 @@ public:
 	float GetSunScale() const;
 	/// <summary>StagePlay へ差し替える時刻を過ぎた</summary>
 	bool ShouldChangeScene() const { return playing_ && time_ >= changeSceneTime_; }
+	/// <summary>差し替えの時刻から maxPreloadWait 秒たった（裏の先読みを待つのをやめて同期ロードで差し替える）</summary>
+	bool IsPreloadWaitOver() const { return playing_ && time_ >= changeSceneTime_ + maxPreloadWait_; }
 	/// <summary>リフトが切り離された瞬間（1 回だけ true）。カメラを揺らす</summary>
 	bool ConsumeReleaseImpact();
 	float GetReleaseShakeIntensity() const { return releaseShakeIntensity_; }
@@ -95,7 +97,8 @@ private:
 	float releaseTime_ = 1.0f;            // リフトが切り離されて動き出す時刻
 	float accelSeconds_ = 2.5f;           // 動き出してから一定の速さになるまで（ゆっくり動き出す）
 	float descentSpeed_ = 4.0f;           // 一定の速さ [m/s]
-	float changeSceneTime_ = 8.0f;        // StagePlay へ差し替える時刻（同期ロード。ロードの間は最後の 1 枚が残る）
+	float changeSceneTime_ = 8.0f;        // StagePlay へ差し替える時刻（裏の先読みが終わっていなければ、終わるまで降り続ける）
+	float maxPreloadWait_ = 10.0f;        // 先読みを待つのは changeSceneTime からこの秒まで。過ぎたら同期ロードで差し替える
 	float holeOpenDepth_ = 0.01f;         // これだけ下がったら床に穴を開ける [m]
 	float restOffsetY_ = -0.002f;         // 床の高さにある間、リフトを少し沈めて床と重ねない（上面のちらつき）
 	float sunFadeDepth_ = 12.0f;          // この深さまでに外の光を shaftSunScale まで弱める [m]

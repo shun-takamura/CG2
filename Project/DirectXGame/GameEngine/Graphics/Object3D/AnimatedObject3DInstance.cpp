@@ -58,23 +58,26 @@ void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
             animatedModelInstance_);
         hasSkinCluster_ = true;
     }
+    // 骨のデバッグ表示の球は表示を付けたときに作る（EnsureDebugSpheres）。
+    // 関節ごとに GPU バッファを 4 つ作るので、ここで作るとシーンの読み込みが数十 ms 重くなっていた（16 番 F7）
+}
 
 #ifdef USE_IMGUI
-    // デバッグ描画用の球メッシュをJoint数分準備
-    if (hasSkeleton_) {
-        debugSpheres_.resize(skeleton_.joints.size());
-        for (size_t i = 0; i < skeleton_.joints.size(); ++i) {
-            debugSpheres_[i] = std::make_unique<PrimitiveMesh>();
-            MeshData sphereMesh = PrimitiveGenerator::CreateSphere(jointSphereRadius_, 8);
-            debugSpheres_[i]->Initialize(sphereMesh);
-            debugSpheres_[i]->SetBlendMode(PrimitivePipeline::kBlendModeNone);
-            debugSpheres_[i]->SetDepthWrite(true);
-            debugSpheres_[i]->SetTexture("Resources/Textures/white1x1.dds");
-        }
+void AnimatedObject3DInstance::EnsureDebugSpheres()
+{
+    if (debugSpheres_.size() == skeleton_.joints.size()) return;
+    debugSpheres_.clear();
+    debugSpheres_.resize(skeleton_.joints.size());
+    for (size_t i = 0; i < skeleton_.joints.size(); ++i) {
+        debugSpheres_[i] = std::make_unique<PrimitiveMesh>();
+        MeshData sphereMesh = PrimitiveGenerator::CreateSphere(jointSphereRadius_, 8);
+        debugSpheres_[i]->Initialize(sphereMesh);
+        debugSpheres_[i]->SetBlendMode(PrimitivePipeline::kBlendModeNone);
+        debugSpheres_[i]->SetDepthWrite(true);
+        debugSpheres_[i]->SetTexture("Resources/Textures/white1x1.dds");
     }
-#endif
-
 }
+#endif
 
 void AnimatedObject3DInstance::PlayAnimation(const std::string& animPath, float fadeTime)
 {
@@ -393,6 +396,7 @@ void AnimatedObject3DInstance::DrawIdPass(DirectXCore* dxCore)
 void AnimatedObject3DInstance::DrawSkeletonDebug(DirectXCore* dxCore)
 {
     if (!showSkeleton_ || !hasSkeleton_ || !camera_) return;
+    EnsureDebugSpheres();
 
     // Skinning時はメッシュのworldMatrix = transform_由来のworldMatrix なので
     // Joint位置も skeletonSpaceMatrix * worldMatrix で求める

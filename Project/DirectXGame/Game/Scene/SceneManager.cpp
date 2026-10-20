@@ -10,6 +10,7 @@
 #include "PepperMacros.h"
 #include "DirectXCore.h"
 #include "Profiling/LoadProfiler.h"
+#include "ScenePreloader.h"
 #include "Log.h"
 #include <cassert>
 #include <format>
@@ -42,9 +43,12 @@ void SceneManager::Initialize(
 
 	// トランジションマネージャーの初期化
 	TransitionManager::GetInstance()->Initialize(spriteManager, dxCore);
+	ScenePreloader::GetInstance()->Initialize(dxCore);
 }
 
 void SceneManager::Finalize() {
+	// 裏の読み込みスレッドを先に止める（各マネージャーより前に）
+	ScenePreloader::GetInstance()->Finalize();
 	TransitionManager::GetInstance()->Finalize();
 
 	if (currentScene_) {
@@ -61,6 +65,9 @@ void SceneManager::Update() {
 	// トランジションの更新
 	TransitionManager::GetInstance()->Update();
 
+	// 次のシーンの裏での先読み（GPU フェーズを少しずつ）
+	ScenePreloader::GetInstance()->Update();
+
 	// 即時切り替えのシーンがあれば処理
 	if (nextScene_) {
 		MarkSceneChange(SceneChangeTiming::ChangeBegin);
@@ -72,19 +79,7 @@ void SceneManager::Update() {
 		MarkSceneChange(SceneChangeTiming::Created);
 		currentScene_ = std::move(nextScene_);
 		SetupScene(currentScene_.get());
-		// シーン読み込みは DStorage バッチで囲む（ロード時間を SceneLoad:<名前> として計測）
-		{
-			LOAD_PHASE("SceneLoad:" + currentSceneName_);
-			DStorageManager::GetInstance()->BeginBatch();
-			currentScene_->Initialize();
-			DStorageManager::GetInstance()->EndBatchAndWait();
-			// 計測中だけ GPU 転送の完了まで区間に含める（FS も DStorage と同条件で比べるため）
-			if (dxCore_ && LoadProfiler::GetInstance()->IsMeasurementMode()) dxCore_->FlushCommandList();
-		}
-		MarkSceneChange(SceneChangeTiming::Initialized);
-#ifdef _DEBUG
-		ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
-#endif
+		LoadCurrentScene();
 	}
 
 	// 現在のシーンを更新
@@ -209,21 +204,69 @@ void SceneManager::ExecuteSceneChange() {
 	MarkSceneChange(SceneChangeTiming::Created);
 
 	SetupScene(currentScene_.get());
+	LoadCurrentScene();
+
+	pendingSceneName_.clear();
+}
+
+void SceneManager::PreloadScene(const std::string& sceneName) {
+	ScenePreloader::GetInstance()->Begin(sceneName);
+}
+
+bool SceneManager::IsPreloading() const {
+	return ScenePreloader::GetInstance()->IsBusy();
+}
+
+void SceneManager::LoadCurrentScene() {
+	LoadProfiler* lp = LoadProfiler::GetInstance();
+	const size_t phaseBegin = lp->GetPhases().size();
+
+	// 先読みの途中なら残りを済ませる（裏のスレッドが CPU フェーズの途中の物を同期ロードで触らないように）
+	{
+		LOAD_PHASE("SceneLoad/PreloadRemainder");
+		ScenePreloader::GetInstance()->CompleteNow();
+	}
+
+	const DirectXCore::ShaderLoadStats shaderBegin = dxCore_ ? dxCore_->GetShaderLoadStats() : DirectXCore::ShaderLoadStats{};
+
 	// シーン読み込みは DStorage バッチで囲む（ロード時間を SceneLoad:<名前> として計測）
 	{
 		LOAD_PHASE("SceneLoad:" + currentSceneName_);
 		DStorageManager::GetInstance()->BeginBatch();
+#ifdef _DEBUG
+		// 読まれた物を記録して先読みのマニフェストにする（Resources/Json/Preload/<シーン名>.json）
+		ScenePreloader::GetInstance()->BeginRecording();
+#endif
 		currentScene_->Initialize();
-		DStorageManager::GetInstance()->EndBatchAndWait();
+#ifdef _DEBUG
+		ScenePreloader::GetInstance()->EndRecording(currentSceneName_);
+#endif
+		{
+			LOAD_PHASE("SceneLoad/DStorageWait");
+			DStorageManager::GetInstance()->EndBatchAndWait();
+		}
 		// 計測中だけ GPU 転送の完了まで区間に含める（FS も DStorage と同条件で比べるため）
-		if (dxCore_ && LoadProfiler::GetInstance()->IsMeasurementMode()) dxCore_->FlushCommandList();
+		if (dxCore_ && lp->IsMeasurementMode()) dxCore_->FlushCommandList();
 	}
 	MarkSceneChange(SceneChangeTiming::Initialized);
+
+	// 読み込みの内訳（シーンの Initialize が LOAD_PHASE で区切った区間）を profile.log へ。区間は閉じた順に並ぶ
+	const auto& phases = lp->GetPhases();
+	for (size_t i = phaseBegin; i < phases.size(); ++i) {
+		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+			std::format("LOAD kind=scene_phase scene={} name={} wall_ms={:.2f} cpu_ms={:.2f}",
+				currentSceneName_, phases[i].name, phases[i].wallMs, phases[i].cpuMs));
+	}
+	if (dxCore_) {
+		const DirectXCore::ShaderLoadStats s = dxCore_->GetShaderLoadStats();
+		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+			std::format("LOAD kind=scene_shaders scene={} loaded={} cache_hits={} load_ms={:.2f}",
+				currentSceneName_, s.loadCount - shaderBegin.loadCount, s.cacheHits - shaderBegin.cacheHits,
+				s.loadMs - shaderBegin.loadMs));
+	}
 #ifdef _DEBUG
 	ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
 #endif
-
-	pendingSceneName_.clear();
 }
 
 void SceneManager::MarkSceneChange(SceneChangeTiming::Mark mark) {
