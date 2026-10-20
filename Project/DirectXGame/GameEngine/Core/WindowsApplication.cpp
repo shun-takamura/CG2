@@ -1,5 +1,8 @@
 #include "WindowsApplication.h"
 
+#include <algorithm>
+#include <cmath>
+
 #ifdef USE_IMGUI
 
 #include "imgui_impl_win32.h"
@@ -24,6 +27,24 @@ LRESULT WindowsApplication::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARA
 
     if (msg == WM_DESTROY) {
         PostQuitMessage(0);
+        return 0;
+    }
+
+    // Alt+Enter / F11：枠なしフルスクリーンの切り替え（押しっぱなしのリピートは無視）
+    if (self) {
+        const WORD keyFlags = HIWORD(lparam);
+        const bool repeat = (keyFlags & KF_REPEAT) != 0;
+        if (msg == WM_SYSKEYDOWN && wparam == VK_RETURN && (keyFlags & KF_ALTDOWN) && !repeat) {
+            self->ToggleFullscreen();
+            return 0;
+        }
+        if (msg == WM_KEYDOWN && wparam == VK_F11 && !repeat) {
+            self->ToggleFullscreen();
+            return 0;
+        }
+    }
+    // Alt+Enter のあとに来る WM_SYSCHAR を DefWindowProc に渡すと警告音が鳴るので捨てる
+    if (msg == WM_SYSCHAR && wparam == VK_RETURN) {
         return 0;
     }
 
@@ -117,6 +138,47 @@ bool WindowsApplication::ConsumePendingResize(int32_t& width, int32_t& height) {
     clientHeight_ = pendingHeight_;
     pendingResize_ = false;
     return true;
+}
+
+WindowsApplication::OutputRect WindowsApplication::ComputeOutputRect(int32_t clientWidth, int32_t clientHeight) {
+    OutputRect rect;
+    if (clientWidth <= 0 || clientHeight <= 0) return rect;
+
+    // 縦横どちらかがぴったり収まる倍率。余った方向に黒帯が付く
+    const float scale = (std::min)(
+        static_cast<float>(clientWidth) / static_cast<float>(kClientWidth),
+        static_cast<float>(clientHeight) / static_cast<float>(kClientHeight));
+    rect.width = std::round(static_cast<float>(kClientWidth) * scale);
+    rect.height = std::round(static_cast<float>(kClientHeight) * scale);
+    // 端をピクセルの境目にそろえる（半端な位置だと拡大の絵がにじむ）
+    rect.x = std::floor((static_cast<float>(clientWidth) - rect.width) * 0.5f);
+    rect.y = std::floor((static_cast<float>(clientHeight) - rect.height) * 0.5f);
+    return rect;
+}
+
+void WindowsApplication::SetFullscreen(bool fullscreen) {
+    if (!hwnd_ || fullscreen == fullscreen_) return;
+
+    if (fullscreen) {
+        // 戻すときのために今のスタイルと位置（最大化していたかも含む）を覚える
+        windowedStyle_ = GetWindowLong(hwnd_, GWL_STYLE);
+        windowedPlacement_.length = sizeof(WINDOWPLACEMENT);
+        GetWindowPlacement(hwnd_, &windowedPlacement_);
+
+        // 今ウィンドウがいるモニターいっぱいに、枠なしで広げる
+        MONITORINFO monitorInfo{ sizeof(MONITORINFO) };
+        GetMonitorInfo(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &monitorInfo);
+        const RECT& m = monitorInfo.rcMonitor;
+        SetWindowLong(hwnd_, GWL_STYLE, (windowedStyle_ & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
+        SetWindowPos(hwnd_, HWND_TOP, m.left, m.top, m.right - m.left, m.bottom - m.top,
+            SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    } else {
+        SetWindowLong(hwnd_, GWL_STYLE, windowedStyle_);
+        SetWindowPlacement(hwnd_, &windowedPlacement_);
+        SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+    fullscreen_ = fullscreen;
 }
 
 void WindowsApplication::Finalize(){

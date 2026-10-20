@@ -1,6 +1,5 @@
 #pragma once
 #include "GameScene.h"
-#include "AttractMode.h"
 #include <memory>
 #include <vector>
 
@@ -33,6 +32,4 @@ private:
 	std::unique_ptr<Camera> camera_;
 	std::vector<Option> options_;
 	int selectedIndex_ = 0;
-	// デモモード：「シューティングからリトライ」を自動で選ぶ
-	AttractMenuTimer attractMenu_;
 };

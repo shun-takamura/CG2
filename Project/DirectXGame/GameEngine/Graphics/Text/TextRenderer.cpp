@@ -357,9 +357,9 @@ void TextRenderer::BeginFrame()
 void TextRenderer::Flush()
 {
 	if (!dxCore_) return;
-	// 画面サイズは毎回最新化（Resize 追従）
+	// 文字は内部解像度のシーン RT に描くので、ウィンドウの大きさではなく内部解像度で射影する
 	DrawLayer(kLayerScreen, pipelineState_.Get(),
-		static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
 }
 
 void TextRenderer::FlushGlow()
@@ -367,7 +367,7 @@ void TextRenderer::FlushGlow()
 	if (!dxCore_) return;
 	// 発光 RT は画面と同じ大きさ
 	DrawLayer(kLayerGlow, glowPipelineState_.Get(),
-		static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
 }
 
 void TextRenderer::BeginOffscreen(float width, float height)

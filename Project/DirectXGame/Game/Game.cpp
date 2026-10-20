@@ -347,6 +347,10 @@ void Game::Initialize() {
 					for (const wchar_t* c = argv[i + 1]; *c; ++c) startScene.push_back(static_cast<char>(*c));
 				}
 			}
+			// --fullscreen：枠なしフルスクリーンで起動（展示用）。起動後も Alt+Enter / F11 で切り替えられる
+			for (int i = 1; i < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--fullscreen") == 0) winApp_->SetFullscreen(true);
+			}
 			::LocalFree(argv);
 		}
 		SceneManager::GetInstance()->ChangeSceneImmediate(startScene);
@@ -450,8 +454,8 @@ void Game::Draw() {
 		auto* cmd = dxCore_->GetCommandList();
 		auto rtv = postEffect_->GetSceneRenderTarget()->GetRTVHandle();
 		cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
-		const float width = static_cast<float>(dxCore_->GetSwapChainWidth());
-		const float height = static_cast<float>(dxCore_->GetSwapChainHeight());
+		const float width = static_cast<float>(dxCore_->GetRenderWidth());
+		const float height = static_cast<float>(dxCore_->GetRenderHeight());
 		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, width, height, 0.0f, 1.0f };
 		D3D12_RECT scissor{ 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
 		cmd->RSSetViewports(1, &viewport);

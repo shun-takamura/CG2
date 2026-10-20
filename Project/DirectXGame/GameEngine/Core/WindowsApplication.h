@@ -11,6 +11,16 @@ public:
     static const int32_t kClientWidth = 1600;
     static const int32_t kClientHeight = 900;
 
+    // 内部解像度の絵をウィンドウ（スワップチェーン）の中に 16:9 のまま最大に収めた枠。
+    // 余った所は黒帯になる。単位はクライアント（＝スワップチェーン）のピクセル。
+    struct OutputRect {
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = static_cast<float>(kClientWidth);
+        float height = static_cast<float>(kClientHeight);
+    };
+    static OutputRect ComputeOutputRect(int32_t clientWidth, int32_t clientHeight);
+
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
     /// <summary>
@@ -45,6 +55,14 @@ public:
     // 主にメインループで dxCore_->Resize() を呼ぶトリガに使う。
     bool ConsumePendingResize(int32_t& width, int32_t& height);
 
+    // 枠なしフルスクリーン（WS_POPUP でモニターいっぱい）とウィンドウの切り替え。
+    // DXGI の排他フルスクリーンは使わない（Alt+Enter は DirectXCore で DXGI から外してある）。
+    // 大きさが変わると WM_SIZE → ConsumePendingResize の流れでスワップチェーンが作り直される。
+    // Alt+Enter と F11 でも切り替わる（WindowProc）。
+    void SetFullscreen(bool fullscreen);
+    void ToggleFullscreen() { SetFullscreen(!fullscreen_); }
+    bool IsFullscreen() const { return fullscreen_; }
+
 private:
     HWND hwnd_ = nullptr;
     WNDCLASS wc_{};
@@ -56,5 +74,10 @@ private:
     bool pendingResize_ = false;
     int32_t pendingWidth_ = kClientWidth;
     int32_t pendingHeight_ = kClientHeight;
+
+    // 枠なしフルスクリーン中か。ウィンドウに戻すときのスタイルと位置（最大化も含む）を覚えておく
+    bool fullscreen_ = false;
+    LONG windowedStyle_ = 0;
+    WINDOWPLACEMENT windowedPlacement_{ sizeof(WINDOWPLACEMENT) };
 };
 

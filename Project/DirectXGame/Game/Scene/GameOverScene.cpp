@@ -52,28 +52,9 @@ void GameOverScene::Update() {
 		selectedIndex_ = (selectedIndex_ + static_cast<int>(options_.size()) - 1) % static_cast<int>(options_.size());
 	}
 
-	bool confirmed = actions->IsTriggered(static_cast<int>(Action::MenuConfirm));
-
-	// デモモード：少し見せてから「シューティングからリトライ」を選ぶ（次のステージ1はポーズでステージ選択へ戻る）
-	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
-		int retryIndex = 0;
-		for (int i = 0; i < static_cast<int>(options_.size()); ++i) {
-			if (options_[i] == Option::RailRetry) retryIndex = i;
-		}
-		const AttractMenuTimer::Step step =
-			attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->gameOverWait, attract->menuConfirmDelay);
-		if (step == AttractMenuTimer::Step::MoveCursor) {
-			selectedIndex_ = retryIndex;
-		} else if (step == AttractMenuTimer::Step::Confirm && !confirmed) {
-			selectedIndex_ = retryIndex;
-			confirmed = true;
-		}
-	} else {
-		attractMenu_.Reset();
-	}
+	const bool confirmed = actions->IsTriggered(static_cast<int>(Action::MenuConfirm));
 
 	if (confirmed) {
-		attractMenu_.Reset();
 		switch (options_[selectedIndex_]) {
 		case Option::BossRetry:
 			BossRetryState::GetInstance()->RequestBossRetry();
@@ -109,8 +90,8 @@ void GameOverScene::Draw() {
 
 	const float scale = 1.5f;
 	const float lineHeight = 60.0f;
-	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
+	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
 
 	const float totalHeight = lineHeight * static_cast<float>(options_.size());
 	float y = (screenH - totalHeight) * 0.5f;

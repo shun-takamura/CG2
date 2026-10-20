@@ -1,21 +1,16 @@
 #pragma once
 
 /// <summary>
-/// デモモード（展示用の自動進行）。F8 で開始・終了する（Game::Update）。Release の exe でも使える。
-/// 有効な間、タイトルは一定間隔で Press → スタートと自動で進んで HUB に入り、HUB から下の一周を繰り返す（18_HubTransitions.md「デモモード」）：
-///   HUB「搭乗」→ 乗り込み → ステージ選択「ステージ1」→ 3 秒でゲームオーバー → 「シューティングからリトライ」
-///   → ステージ1 で 3 秒でポーズ →「ステージセレクトに戻る」→「はい」→ ステージ選択「HUB に戻る」→ 降りて HUB
+/// デモモード（展示用の自動進行）。F8 で開始・終了する（Game::Update）。**Release の exe は起動したときから有効**。
+/// 有効な間、タイトルは一定間隔で Press → スタートと自動で進んで HUB に入り、「搭乗」→ 乗り込み → ステージ選択から下の一周を繰り返す
+/// （18_HubTransitions.md「デモモード」）：
+///   ステージ選択「ステージ1」→ 降下 → 機体確認 → 射出 → 雲の上 → 2 秒遊ぶ → ポーズ「ステージセレクトに戻る」→「はい」→ ステージ選択
+///   1 周ごとに一人称と三人称を交互にする（三人称の周はカタパルトに着いてから視点を切り替える。StageStartPart）
 /// 人がボタンを押せば普通に進む。シーンをまたいで状態を保つのでシングルトン。
 /// 待ち時間は実時間（スロー・一時停止の影響を受けない）で、トランジションの最中は数えない。
 /// </summary>
 class AttractMode {
 public:
-	/// <summary>ステージ1 で自動でやること（1 周に 2 回入るので交互にする）</summary>
-	enum class StageRun {
-		GameOver,            // 始まって stageActionTime 秒で HP を 0 にする → ゲームオーバー
-		PauseToStageSelect,  // 始まって stageActionTime 秒でポーズ →「ステージセレクトに戻る」→「はい」
-	};
-
 	static AttractMode* GetInstance();
 
 	bool IsEnabled() const { return enabled_; }
@@ -34,13 +29,13 @@ public:
 	float hubWait = 2.5f;             // HUB の待機：「搭乗」を選ぶまで（神殿を見せる）
 	float menuWait = 1.0f;            // ステージ選択・ポーズ：選べるようになってからカーソルを動かすまで
 	float menuConfirmDelay = 0.7f;    // カーソルを動かしてから決定するまで（全部のメニュー共通）
-	float stageActionTime = 3.0f;     // ステージ1：始まってからゲームオーバー / ポーズまで
-	float gameOverWait = 1.5f;        // ゲームオーバー：カーソルを動かすまで
+	float stageActionTime = 2.0f;     // ステージ1：操作を受け付けてからポーズを開くまで
 
-	StageRun nextStageRun = StageRun::GameOver;
+	/// <summary>今の周のスタート演出を三人称で見せるか（ポーズでステージ選択へ戻るたびに入れ替える。最初の周は一人称）</summary>
+	bool thirdPersonLap = false;
 
 private:
-	AttractMode() = default;
+	AttractMode();
 	bool enabled_ = false;
 };
 

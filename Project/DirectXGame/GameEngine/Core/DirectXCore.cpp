@@ -95,18 +95,10 @@ void DirectXCore::BeginDraw() {
 
     commandList_->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
-    // ビューポート・シザー設定（Swapchain への描画用なのでウィンドウ実サイズに追従）
-    D3D12_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(swapChainWidth_);
-    viewport.Height = static_cast<float>(swapChainHeight_);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    commandList_->RSSetViewports(1, &viewport);
-
-    D3D12_RECT scissorRect{};
-    scissorRect.right = swapChainWidth_;
-    scissorRect.bottom = swapChainHeight_;
-    commandList_->RSSetScissorRects(1, &scissorRect);
+    // 16:9 の枠の外は黒帯になるので、毎フレーム黒で消してから枠の中に描く
+    const float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    commandList_->ClearRenderTargetView(rtvHandle, black, 0, nullptr);
+    SetOutputViewport(commandList_.Get());
 
     // クリア処理
     //float clearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
@@ -203,17 +195,29 @@ void DirectXCore::RestoreSwapchainRenderTarget(ID3D12GraphicsCommandList* comman
     rtvHandle.ptr += frameIndex_ * rtvDescriptorSize_;
 
     commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+    SetOutputViewport(commandList);
+}
+
+void DirectXCore::SetOutputViewport(ID3D12GraphicsCommandList* commandList)
+{
+    // 内部解像度の絵を 16:9 のまま収めた枠。Debug の ImGui は描くときに自分でビューポートを
+    // 画面全体へ張り直すので、この枠に縛られない
+    const WindowsApplication::OutputRect rect = GetOutputRect();
 
     D3D12_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(swapChainWidth_);
-    viewport.Height = static_cast<float>(swapChainHeight_);
+    viewport.TopLeftX = rect.x;
+    viewport.TopLeftY = rect.y;
+    viewport.Width = rect.width;
+    viewport.Height = rect.height;
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     commandList->RSSetViewports(1, &viewport);
 
     D3D12_RECT scissorRect{};
-    scissorRect.right = swapChainWidth_;
-    scissorRect.bottom = swapChainHeight_;
+    scissorRect.left = static_cast<LONG>(rect.x);
+    scissorRect.top = static_cast<LONG>(rect.y);
+    scissorRect.right = static_cast<LONG>(rect.x + rect.width);
+    scissorRect.bottom = static_cast<LONG>(rect.y + rect.height);
     commandList->RSSetScissorRects(1, &scissorRect);
 }
 
@@ -822,6 +826,10 @@ void DirectXCore::CreateSwapChain(HWND hwnd, int32_t width, int32_t height) {
         &swapChain1
     );
     assert(SUCCEEDED(hr));
+
+    // DXGI 標準の Alt+Enter（排他フルスクリーン）を止める。フルスクリーンは
+    // WindowsApplication の枠なしウィンドウで行い、Alt+Enter もそちらで受ける
+    factory_->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
     // IDXGISwapChain1 → IDXGISwapChain4 へ昇格してメンバ変数に格納
     hr = swapChain1.As(&swapChain_);
