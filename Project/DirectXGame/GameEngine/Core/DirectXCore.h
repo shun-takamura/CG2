@@ -113,9 +113,20 @@ public:
 	/// </summary>
 	void Resize(int32_t width, int32_t height);
 
-	// 現在の Swapchain サイズ（ウィンドウのクライアント領域に追従）
+	// 現在の Swapchain サイズ（ウィンドウのクライアント領域に追従）。
+	// ゲームの UI・文字の配置には使わない（GetRenderWidth/Height を使う）
 	int32_t GetSwapChainWidth() const { return swapChainWidth_; }
 	int32_t GetSwapChainHeight() const { return swapChainHeight_; }
+
+	// ゲームの内部解像度（1600×900 固定）。シーンの RT・UI・文字の座標はすべてこの大きさ。
+	// ウィンドウの大きさが変わっても変わらない
+	static int32_t GetRenderWidth() { return WindowsApplication::kClientWidth; }
+	static int32_t GetRenderHeight() { return WindowsApplication::kClientHeight; }
+
+	// スワップチェーンの中で内部解像度の絵を出す 16:9 の枠（外は黒帯）
+	WindowsApplication::OutputRect GetOutputRect() const {
+		return WindowsApplication::ComputeOutputRect(swapChainWidth_, swapChainHeight_);
+	}
 
 	// DSVハンドルの取得
 	D3D12_CPU_DESCRIPTOR_HANDLE GetDsvHandle() const {
@@ -260,6 +271,9 @@ private:
 	// FPS固定用
 	void InitializeFixFPS();
 	void UpdateFixFPS();
+
+	// スワップチェーンへの描画のビューポート・シザーを 16:9 の枠に合わせる
+	void SetOutputViewport(ID3D12GraphicsCommandList* commandList);
 
 	// 前回フレームの時刻
 	std::chrono::steady_clock::time_point reference_;

@@ -7,7 +7,7 @@ class InputManager;
 /// <summary>
 /// UI 用のマウスの状態（ゲーム画面のピクセル座標）。各シーンが毎フレーム1回作って UI に渡す。
 /// Debug は ImGui のビューポート窓に描いているので、窓の中の位置をゲーム画面の解像度へ換算する。
-/// Release はスワップチェーン直書きなので、ウィンドウのクライアント座標をそのまま使う。
+/// Release はスワップチェーンに 16:9 の枠（外は黒帯）で出すので、クライアント座標から黒帯を引いて換算する（MouseInput::GetRenderPosition）。
 /// </summary>
 struct UIPointer {
 	bool valid = false;       // マウスがゲーム画面の上にある

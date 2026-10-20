@@ -354,12 +354,22 @@ void StageStartPart::UpdateDescent(float deltaTime) {
 }
 
 void StageStartPart::UpdateInspection(InputManager* input, float deltaTime) {
-	const bool attract = AttractMode::GetInstance()->IsEnabled();
+	const AttractMode* attractMode = AttractMode::GetInstance();
+	const bool attract = attractMode->IsEnabled();
+	// デモモードの三人称の周：カタパルトに着いたら視点を切り替えてから機体確認を進める（降下 → 切り替え → 機体確認）
+	float attractCheckStart = boardAppearDelay_;
+	if (attract && attractMode->thirdPersonLap) {
+		if (view_ == View::FirstPerson && stateTime_ >= attractViewSwitchDelay_) {
+			view_ = View::ThirdPerson;
+			smoothedTargetValid_ = false;
+		}
+		attractCheckStart = attractViewSwitchDelay_ + boardAppearDelay_;
+	}
 	inspectionStepTime_ += deltaTime;
 	switch (inspectionStep_) {
 	case InspectionStep::Checking:
 		// 表示板が出てから受け付ける
-		checklist_->Update(stateTime_ >= boardAppearDelay_ ? input : nullptr, deltaTime, attract && stateTime_ >= boardAppearDelay_);
+		checklist_->Update(stateTime_ >= boardAppearDelay_ ? input : nullptr, deltaTime, attract && stateTime_ >= attractCheckStart);
 		if (checklist_->IsAllClear() && !holdChecking_) {
 			// 液晶はすぐ LAUNCH READY、ネオンは一度消えて機体の位置から射出口へ緑で点け直す
 			facility_->BeginReadySequence();
@@ -848,6 +858,7 @@ void StageStartPart::LoadTuning(const JsonValue& node) {
 	catapultReadyIblPath_ = node["catapultReadyIblPath"].AsString(catapultReadyIblPath_);
 	read("boardAppearDelay", boardAppearDelay_);
 	read("attractLaunchWait", attractLaunchWait_);
+	read("attractViewSwitchDelay", attractViewSwitchDelay_);
 	read("launchPanelHideDelay", launchPanelHideDelay_);
 	read("kickLeadSeconds", kickLeadSeconds_);
 	read("clampStopBeforeExit", clampStopBeforeExit_);
@@ -915,6 +926,7 @@ void StageStartPart::SaveTuning(JsonValue& node) const {
 	node["catapultReadyIblPath"] = JsonValue(catapultReadyIblPath_);
 	write("boardAppearDelay", boardAppearDelay_);
 	write("attractLaunchWait", attractLaunchWait_);
+	write("attractViewSwitchDelay", attractViewSwitchDelay_);
 	write("launchPanelHideDelay", launchPanelHideDelay_);
 	write("kickLeadSeconds", kickLeadSeconds_);
 	write("clampStopBeforeExit", clampStopBeforeExit_);
@@ -1072,6 +1084,7 @@ void StageStartPart::OnImGui() {
 	ImGui::Checkbox("Hold Checking (stay after all clear)", &holdChecking_);
 	ImGui::DragFloat("Board Appear Delay (s)", &boardAppearDelay_, 0.01f, 0.0f, 5.0f);
 	ImGui::DragFloat("Attract Launch Wait (s)", &attractLaunchWait_, 0.01f, 0.0f, 10.0f);
+	ImGui::DragFloat("Attract View Switch Delay (s)", &attractViewSwitchDelay_, 0.01f, 0.0f, 10.0f);
 	ImGui::Text("Ready IBL: %s", catapultReadyIblPath_.empty() ? "(none)" : catapultReadyIblPath_.c_str());
 	if (ImGui::CollapsingHeader("Checklist")) checklist_->OnImGui();
 	if (ImGui::CollapsingHeader("Launch Control Board")) board_->OnImGui();

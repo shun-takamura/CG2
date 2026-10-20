@@ -444,8 +444,8 @@ void TitleScene::UpdateInput() {
 			return;
 		}
 		// キャンセルは無視する（ロゴは消えているので戻る先が無い）
-		menu_.SetPosition({ static_cast<float>(dxCore_->GetSwapChainWidth()) * 0.5f,
-			static_cast<float>(dxCore_->GetSwapChainHeight()) * menuHeightRatio_ });
+		menu_.SetPosition({ static_cast<float>(dxCore_->GetRenderWidth()) * 0.5f,
+			static_cast<float>(dxCore_->GetRenderHeight()) * menuHeightRatio_ });
 		const VerticalMenu::Result result = menu_.Update(actionMap, &pointer);
 		if (result != VerticalMenu::Result::Confirmed) return;
 		switch (menu_.GetSelectedIndex()) {
@@ -921,8 +921,8 @@ void TitleScene::Draw() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
+	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
 
 	if (phase_ == Phase::Ready) {
 		menu_.SetPosition({ screenW * 0.5f, screenH * menuHeightRatio_ });
@@ -1011,9 +1011,7 @@ void TitleScene::OnImGuiTuning() {
 			ImGui::DragFloat("Menu Wait (s)", &attract->menuWait, 0.05f, 0.0f, 10.0f);
 			ImGui::DragFloat("Menu Confirm Delay (s)", &attract->menuConfirmDelay, 0.05f, 0.0f, 10.0f);
 			ImGui::DragFloat("Stage Action Time (s)", &attract->stageActionTime, 0.1f, 0.0f, 60.0f);
-			ImGui::DragFloat("GameOver Wait (s)", &attract->gameOverWait, 0.1f, 0.0f, 30.0f);
-			ImGui::Text("Next stage run: %s",
-				attract->nextStageRun == AttractMode::StageRun::GameOver ? "GameOver" : "Pause -> StageSelect");
+			ImGui::Checkbox("Third Person Lap", &attract->thirdPersonLap);
 		}
 		if (ImGui::CollapsingHeader("Enter (6)")) {
 			ImGui::DragFloat("Open (s)", &enterOpenSeconds_, 0.05f, 0.0f, 10.0f);

@@ -7,9 +7,16 @@ AttractMode* AttractMode::GetInstance() {
 	return &instance;
 }
 
+AttractMode::AttractMode() {
+	// 展示用の Release の exe は起動したときからデモモード（Development は NDEBUG と USE_PEPPER の両方を持つので除く）
+#if defined(NDEBUG) && !defined(USE_PEPPER)
+	SetEnabled(true);
+#endif
+}
+
 void AttractMode::SetEnabled(bool enabled) {
-	// 始めるたびに、ステージ1 の 1 回目はゲームオーバーから
-	if (enabled && !enabled_) nextStageRun = StageRun::GameOver;
+	// 始めるたびに、最初の周は一人称から
+	if (enabled && !enabled_) thirdPersonLap = false;
 	enabled_ = enabled;
 }
 

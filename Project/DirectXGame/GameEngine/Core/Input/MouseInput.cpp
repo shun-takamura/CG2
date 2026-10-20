@@ -90,6 +90,22 @@ void MouseInput::Update() {
 	ScreenToClient(winApp_->GetHwnd(), &clientPosition_);
 }
 
+bool MouseInput::GetRenderPosition(float& x, float& y) const {
+	const float renderW = static_cast<float>(WindowsApplication::kClientWidth);
+	const float renderH = static_cast<float>(WindowsApplication::kClientHeight);
+	x = static_cast<float>(clientPosition_.x);
+	y = static_cast<float>(clientPosition_.y);
+	if (!winApp_) return false;
+
+	// クライアントの大きさ＝スワップチェーンの大きさなので、描画側（DirectXCore::GetOutputRect）と同じ枠になる
+	const WindowsApplication::OutputRect rect =
+		WindowsApplication::ComputeOutputRect(winApp_->GetClientWidth(), winApp_->GetClientHeight());
+	if (rect.width <= 0.0f || rect.height <= 0.0f) return false;
+	x = (x - rect.x) * (renderW / rect.width);
+	y = (y - rect.y) * (renderH / rect.height);
+	return x >= 0.0f && y >= 0.0f && x < renderW && y < renderH;
+}
+
 void MouseInput::ApplyReplay(LONG dx, LONG dy, LONG wheel, int btnMask) {
 	// 前フレームの状態を保存（Triggered/Released 判定のため、通常 Update と同じ順序）
 	previousState_ = currentState_;

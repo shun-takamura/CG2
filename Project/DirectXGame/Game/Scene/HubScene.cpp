@@ -136,7 +136,7 @@ void HubScene::Finalize() {
 }
 
 Vector2 HubScene::GetScreenSize() const {
-	return { static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()) };
+	return { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
 }
 
 bool HubScene::IsGlowAllowed() const {
@@ -296,10 +296,9 @@ void HubScene::UpdateCockpit(float dt) {
 	const UIPointer pointer = UIPointer::FromInput(input_);
 	CockpitConsole::Result result = console_->Update(actions, &pointer, GetScreenSize(), inputEnabled);
 
-	// デモモード：乗り込んで来たら「ステージ1」、ポーズから来たら「HUB に戻る」を選ぶ
+	// デモモード：乗り込んで来ても、ポーズから戻って来ても「ステージ1」を選ぶ（ステージ選択から下を繰り返す）
 	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled() && inputEnabled) {
-		const CockpitConsole::Result pick = cockpitFromBoarding_
-			? CockpitConsole::Result::Stage1 : CockpitConsole::Result::BackToHub;
+		const CockpitConsole::Result pick = CockpitConsole::Result::Stage1;
 		switch (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->menuWait, attract->menuConfirmDelay)) {
 		case AttractMenuTimer::Step::MoveCursor:
 			console_->SelectItem(pick, true);

@@ -3322,8 +3322,8 @@ void StagePlayScene::SetPauseView(PauseView view) {
 }
 
 void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
-	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetSwapChainWidth()) * 0.5f,
-		static_cast<float>(dxCore_->GetSwapChainHeight()) * 0.58f });
+	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetRenderWidth()) * 0.5f,
+		static_cast<float>(dxCore_->GetRenderHeight()) * 0.58f });
 	const UIPointer pointer = UIPointer::FromInput(input_);
 	const VerticalMenu::Result result = pauseMenu_.Update(actions, &pointer);
 	const int index = pauseMenu_.GetSelectedIndex();
@@ -3381,17 +3381,7 @@ bool StagePlayScene::UpdateAttract() {
 		attractTime_ += dt;
 		if (attractTime_ < attract->stageActionTime) return false;
 		attractActed_ = true;
-		// 1 周にステージ1 は 2 回入るので、ゲームオーバーとポーズを交互にする
-		if (attract->nextStageRun == AttractMode::StageRun::GameOver) {
-			attract->nextStageRun = AttractMode::StageRun::PauseToStageSelect;
-			// HP を 0 にして、いつもの死亡の流れ（羽根の着水 → ゲームオーバー）に任せる
-			if (player_) {
-				auto& hp = Gameplay::Of(player_).GetHP();
-				hp.TakeDamage(hp.currentHP);
-			}
-			return false;
-		}
-		attract->nextStageRun = AttractMode::StageRun::GameOver;
+		// 少し遊んだらポーズ →「ステージセレクトに戻る」→「はい」で一周の終わり
 		OpenPauseMenu();
 		attractPausing_ = true;
 		attractMenu_.Reset();
@@ -3415,6 +3405,8 @@ bool StagePlayScene::UpdateAttract() {
 		attractMenu_.Reset();
 		if (confirmView) {
 			attractPausing_ = false;
+			// 次の周は視点を入れ替える（一人称 ↔ 三人称）
+			attract->thirdPersonLap = !attract->thirdPersonLap;
 			SceneManager::GetInstance()->ChangeScene("STAGESELECT");
 		} else {
 			SetPauseView(PauseView::ConfirmStageSelect);
@@ -3431,8 +3423,8 @@ void StagePlayScene::DrawPauseMenu() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
+	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
 	const Vector4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Vector4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
 
@@ -4211,11 +4203,10 @@ void StagePlayScene::Update() {
 			}
 		}
 #else
-		// Release ビルドはスワップチェーン直書き＝マウス座標がそのままクライアント
+		// Release ビルド：クライアント座標から黒帯を引いて内部解像度へ換算（枠の外でもレティクル側で端に止まる）
 		auto* m = input_->GetMouse();
 		if (m) {
-			mouseClient.x = static_cast<float>(m->GetClientX());
-			mouseClient.y = static_cast<float>(m->GetClientY());
+			m->GetRenderPosition(mouseClient.x, mouseClient.y);
 			mouseHovered = true;
 			mouseMoved = (m->GetDeltaX() != 0) || (m->GetDeltaY() != 0);
 		}
@@ -4855,7 +4846,7 @@ void StagePlayScene::Draw() {
 			std::snprintf(numBuf, sizeof(numBuf), "%d", rawScore);
 
 			const char* labelStr = "SCORE";
-			const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
+			const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
 
 			const float labelW = tr->MeasureWidth(labelStr, scoreLabelScale_);
 			const float numW   = tr->MeasureWidth(numBuf, scoreNumberScale_);
@@ -4874,7 +4865,7 @@ void StagePlayScene::Draw() {
 
 	// スタート演出をスキップした白フェードの開き（レールの最初の数フレーム）
 	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized() && stageStart_) {
-		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
 		tr->Flush();
 	}
 
@@ -4888,7 +4879,7 @@ void StagePlayScene::Draw() {
 bool StagePlayScene::UpdateStageStart() {
 	// 同期ロードの直後の 1 フレームは dt が大きい（ロードの間 HUB の最後の 1 枚が止まっていた）ので、降下が飛ばないよう切り詰める
 	const float dt = (std::min)(GetScaledDeltaTime(TimeGroup::UI), 1.0f / 30.0f);
-	const Vector2 screen = { static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()) };
+	const Vector2 screen = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
 	stageStart_->Update(input_, dt, screen);
 	if (!stageStart_->IsActive()) {
 		// 終わった（RestoreStageEnvironment 済み）。このフレームからレール
@@ -4920,8 +4911,8 @@ void StagePlayScene::DrawStageStart() {
 	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
 	stageStart_->RenderBoardTexture(commandList);
 	{
-		const float w = static_cast<float>(dxCore_->GetSwapChainWidth());
-		const float h = static_cast<float>(dxCore_->GetSwapChainHeight());
+		const float w = static_cast<float>(dxCore_->GetRenderWidth());
+		const float h = static_cast<float>(dxCore_->GetRenderHeight());
 		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, w, h, 0.0f, 1.0f };
 		D3D12_RECT scissor{ 0, 0, static_cast<LONG>(w), static_cast<LONG>(h) };
 		commandList->RSSetViewports(1, &viewport);
@@ -4955,7 +4946,7 @@ void StagePlayScene::DrawStageStart() {
 	spriteManager_->DrawSetting();
 	// 一人称で射出口に近づくまぶしさ（ポーズメニューより下に）
 	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized()) {
-		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetSwapChainWidth()), static_cast<float>(dxCore_->GetSwapChainHeight()));
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
 		tr->Flush();
 	}
 	if (paused_) DrawPauseMenu();

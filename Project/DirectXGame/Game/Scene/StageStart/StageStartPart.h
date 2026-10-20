@@ -248,6 +248,8 @@ private:
 	std::string catapultReadyIblPath_ = "Resources/Cubemaps/catapult_ibl_ready.dds";
 	float boardAppearDelay_ = 0.3f;               // 機体確認に入ってから表示板が出るまで [s]
 	float attractLaunchWait_ = 1.5f;              // デモモード：充電が済んでから SPACE を押し始めるまで [s]（押し続けて射出）
+	// デモモードの三人称の周：機体確認に入ってから三人称へ切り替えるまで [s]。機体確認は切り替えてから boardAppearDelay_ 後に自動で進める
+	float attractViewSwitchDelay_ = 0.8f;
 	// 射出口を出てから白（一人称）／切り替え（三人称）までの見送り [s]（2026-10-19 ユーザー：出たら即遷移だと
 	// 三人称でケーブルが見られず、一人称も空へ飛び出す爽快感が出ない）
 	float firstPersonAfterExitSeconds_ = 1.0f;   // 白が引いて空が見えてから切り替える

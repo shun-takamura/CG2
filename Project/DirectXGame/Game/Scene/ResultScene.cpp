@@ -51,8 +51,8 @@ void ResultScene::Draw() {
 
 	const float scale = 1.5f;
 	const float lineHeight = 60.0f;
-	const float screenW = static_cast<float>(dxCore_->GetSwapChainWidth());
-	const float screenH = static_cast<float>(dxCore_->GetSwapChainHeight());
+	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
+	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
 
 	char scoreBuf[32];
 	std::snprintf(scoreBuf, sizeof(scoreBuf), "SCORE: %d", score_);
