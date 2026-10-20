@@ -6,7 +6,7 @@
 #include "EditorDropPayload.h"  // ModelDropPayload / SpriteDropPayload / AnimatedDropPayload 等
 #include "ImGuiManager.h"       // アクティブシーンはホストフック経由で取る
 #include "Scene.h"
-#include "WindowsApplication.h"  // kClientWidth / kClientHeight
+#include "WindowsApplication.h"  // kUIWidth / kUIHeight
 #include "Camera.h"
 #include "Matrix4x4.h"
 #include "Vector3.h"
@@ -146,8 +146,8 @@ void ViewportWindow::OnDraw() {
                 ImVec2 mouse = ImGui::GetMousePos();
                 float relX = (mouse.x - imageScreenPos_.x) / imageScreenSize_.x;
                 float relY = (mouse.y - imageScreenPos_.y) / imageScreenSize_.y;
-                float clientX = relX * static_cast<float>(WindowsApplication::kClientWidth);
-                float clientY = relY * static_cast<float>(WindowsApplication::kClientHeight);
+                float clientX = relX * static_cast<float>(WindowsApplication::kUIWidth);
+                float clientY = relY * static_cast<float>(WindowsApplication::kUIHeight);
                 scene->AddDynamicSprite(p->texturePath, clientX, clientY);
             }
         }

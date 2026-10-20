@@ -36,6 +36,9 @@ public:
 		uint32_t height
 	);
 
+	// 発光 RT の大きさが変わったときに縮小段を作り直す（描画解像度の変更用。SRV の番号は変わらない）
+	void Resize(uint32_t width, uint32_t height);
+
 	// Base 経由でも呼べるようダミー実装（未使用）
 	void Initialize(
 		DirectXCore* /*dxCore*/,

@@ -545,9 +545,9 @@ void StageStartPart::DrawScreenOverlay(float screenWidth, float screenHeight) {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 	if (active_ && glare_ > 0.0f) tr->DrawRect({ 0.0f, 0.0f }, { screenWidth, screenHeight }, { 1.0f, 1.0f, 1.0f, glare_ });
-	// スキップの案内（右上。白フェードを始めたら消す）
-	if (active_ && skipFadeTime_ < 0.0f && (state_ == State::Descent || state_ == State::Inspection)
-		&& !AttractMode::GetInstance()->IsEnabled()) {
+	// スキップの案内（右上。白フェードを始めたら消す）。デモモードでも「スキップできる」ことを見せるため出す
+	// （長押しの判定はデモ中は止めたまま＝Update）
+	if (active_ && skipFadeTime_ < 0.0f && (state_ == State::Descent || state_ == State::Inspection)) {
 		skip_->Draw(screenWidth);
 	}
 	const float white = SkipWhiteAlpha();

@@ -6,18 +6,22 @@
 class WindowsApplication{
 public:
 
-    // ゲーム内部の描画解像度。エディタの Viewport やオフスクリーンRTは常にこのサイズ。
-    // ウィンドウ実サイズとは別物。
-    static const int32_t kClientWidth = 1600;
-    static const int32_t kClientHeight = 900;
+    // UI の仮想解像度。スプライト・文字・マウスの座標はすべてこの大きさ（16:9）で書く。
+    // 描画解像度（DirectXCore::GetRenderWidth）やウィンドウの大きさが変わっても変わらない
+    static constexpr int32_t kUIWidth = 1600;
+    static constexpr int32_t kUIHeight = 900;
 
-    // 内部解像度の絵をウィンドウ（スワップチェーン）の中に 16:9 のまま最大に収めた枠。
+    // 起動時のウィンドウのクライアント領域の大きさ
+    static constexpr int32_t kClientWidth = kUIWidth;
+    static constexpr int32_t kClientHeight = kUIHeight;
+
+    // ゲームの絵をウィンドウ（スワップチェーン）の中に 16:9 のまま最大に収めた枠。
     // 余った所は黒帯になる。単位はクライアント（＝スワップチェーン）のピクセル。
     struct OutputRect {
         float x = 0.0f;
         float y = 0.0f;
-        float width = static_cast<float>(kClientWidth);
-        float height = static_cast<float>(kClientHeight);
+        float width = static_cast<float>(kUIWidth);
+        float height = static_cast<float>(kUIHeight);
     };
     static OutputRect ComputeOutputRect(int32_t clientWidth, int32_t clientHeight);
 

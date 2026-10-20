@@ -136,7 +136,7 @@ void HubScene::Finalize() {
 }
 
 Vector2 HubScene::GetScreenSize() const {
-	return { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	return { static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()) };
 }
 
 bool HubScene::IsGlowAllowed() const {
@@ -401,10 +401,12 @@ void HubScene::Draw() {
 	// 鏡の床に映す物を反射 RT へ（これも RT を切り替えるので、シーンの RT を描き始める前に）
 	if (temple_) temple_->RenderReflection(*camera_);
 
-	// シーンの RT とビューポートを戻す
+	// シーンの RT とビューポートを戻す（シーン RT は描画解像度）
+	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, renderSize.x, renderSize.y, 0.0f, 1.0f };
+	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(renderSize.x), static_cast<LONG>(renderSize.y) };
+	// メニュー・コンソールの配置は UI の仮想解像度
 	const Vector2 screen = GetScreenSize();
-	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, screen.x, screen.y, 0.0f, 1.0f };
-	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(screen.x), static_cast<LONG>(screen.y) };
 	commandList->RSSetViewports(1, &viewport);
 	commandList->RSSetScissorRects(1, &scissor);
 
@@ -445,8 +447,8 @@ void HubScene::Draw() {
 		console_->Draw(screen, st.backgroundAlpha, st.menuTime, (std::max)(st.collapse, liftDescent_->GetUiCollapse()),
 			cockpitTime_, IsGlowAllowed());
 	}
-	// スキップの案内（左上）
-	if (state_ == State::Descending && skip_ && !leaving_ && !AttractMode::GetInstance()->IsEnabled()) skip_->Draw(screen.x);
+	// スキップの案内（左上）。デモモードでも「スキップできる」ことを見せるため出す（長押しの判定はデモ中は止めたまま）
+	if (state_ == State::Descending && skip_ && !leaving_) skip_->Draw(screen.x);
 	tr->Flush();
 }
 
@@ -514,7 +516,9 @@ void HubScene::ApplyPose() {
 	hatchSign_->SetLocked(cockpitView && st.signLocked);
 	hatchSign_->SetVisibility(cockpitView ? st.signAlpha : 1.0f);
 	// コクピットの灯り・光る部位（表示板と同じ色）・外を映す六角形
-	cockpitLighting_->Apply(mech_->GetCockpitModel(), st.lightLevel, revealAmount, GetScreenSize(), hatchSign_->GetColor());
+	// 六角形のディゾルブはシェーダの SV_Position（描画解像度のピクセル）で並べるので、描画解像度を渡す
+	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	cockpitLighting_->Apply(mech_->GetCockpitModel(), st.lightLevel, revealAmount, renderSize, hatchSign_->GetColor());
 
 	// ラジアルブラー（背景を出す直前に上げ、文字を出すときに下げる）
 	if (auto* blur = Game::GetPostEffect()->radialBlur) {

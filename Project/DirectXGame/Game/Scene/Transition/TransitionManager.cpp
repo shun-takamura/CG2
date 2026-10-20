@@ -37,10 +37,10 @@ void TransitionManager::Initialize(SpriteManager* spriteManager, DirectXCore* dx
 	// 以前は 1280x720 が既定値だったため、1600x900 のウィンドウでは
 	// 画面の右下がフェードで覆われないバグになっていた。
 	if (screenWidth <= 0.0f) {
-		screenWidth = static_cast<float>(WindowsApplication::kClientWidth);
+		screenWidth = static_cast<float>(WindowsApplication::kUIWidth);
 	}
 	if (screenHeight <= 0.0f) {
-		screenHeight = static_cast<float>(WindowsApplication::kClientHeight);
+		screenHeight = static_cast<float>(WindowsApplication::kUIHeight);
 	}
 
 	screenWidth_ = screenWidth;

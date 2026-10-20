@@ -38,6 +38,18 @@ void BloomEffect::InitializeBloom(
 	}
 }
 
+void BloomEffect::Resize(uint32_t width, uint32_t height)
+{
+	uint32_t w = width;
+	uint32_t h = height;
+	for (auto& level : levels_) {
+		w = (std::max)(w / 2, 1u);
+		h = (std::max)(h / 2, 1u);
+		if (level.ping) level.ping->Resize(w, h);
+		if (level.pong) level.pong->Resize(w, h);
+	}
+}
+
 void BloomEffect::CreateRootSignature(DirectXCore* dxCore)
 {
 	// t0..t4 を1枚ずつのテーブルで持つ（縮小段の SRV は連番とは限らないため）

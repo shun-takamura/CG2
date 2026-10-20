@@ -38,8 +38,8 @@ void Reticle::Initialize(SpriteManager* spriteManager, const std::string& textur
 
 void Reticle::ResetToCenter() {
 	position_ = {
-		static_cast<float>(WindowsApplication::kClientWidth) * 0.5f,
-		static_cast<float>(WindowsApplication::kClientHeight) * 0.5f,
+		static_cast<float>(WindowsApplication::kUIWidth) * 0.5f,
+		static_cast<float>(WindowsApplication::kUIHeight) * 0.5f,
 	};
 }
 
@@ -64,8 +64,8 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 	}
 
 	// 中心が画面外に出ないようにクランプ
-	const float maxX = static_cast<float>(WindowsApplication::kClientWidth);
-	const float maxY = static_cast<float>(WindowsApplication::kClientHeight);
+	const float maxX = static_cast<float>(WindowsApplication::kUIWidth);
+	const float maxY = static_cast<float>(WindowsApplication::kUIHeight);
 	position_.x = std::clamp(position_.x, 0.0f, maxX);
 	position_.y = std::clamp(position_.y, 0.0f, maxY);
 

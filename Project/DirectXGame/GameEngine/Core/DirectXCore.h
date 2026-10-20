@@ -109,21 +109,39 @@ public:
 	/// <summary>
 	/// WM_SIZE 経由で受け取った新クライアントサイズに合わせて Swapchain と RTV を作り直す。
 	/// 内部で GPU 完了待機を行うため、フレーム描画コマンドを積んでいない安全なタイミングで呼ぶこと。
-	/// 深度バッファとオフスクリーンRT（PostEffect等）は更新しない（ゲーム解像度は固定）。
+	/// 深度バッファとオフスクリーンRT（PostEffect等）は更新しない（描画解像度はウィンドウと別）。
 	/// </summary>
 	void Resize(int32_t width, int32_t height);
 
 	// 現在の Swapchain サイズ（ウィンドウのクライアント領域に追従）。
-	// ゲームの UI・文字の配置には使わない（GetRenderWidth/Height を使う）
+	// ゲームの UI・文字の配置には使わない（GetUIWidth/Height を使う）
 	int32_t GetSwapChainWidth() const { return swapChainWidth_; }
 	int32_t GetSwapChainHeight() const { return swapChainHeight_; }
 
-	// ゲームの内部解像度（1600×900 固定）。シーンの RT・UI・文字の座標はすべてこの大きさ。
-	// ウィンドウの大きさが変わっても変わらない
-	static int32_t GetRenderWidth() { return WindowsApplication::kClientWidth; }
-	static int32_t GetRenderHeight() { return WindowsApplication::kClientHeight; }
+	// UI の仮想解像度（1600×900 固定）。スプライト・文字・マウスの座標はすべてこの大きさ。
+	// 描画解像度やウィンドウの大きさが変わっても変わらない
+	static constexpr int32_t GetUIWidth() { return WindowsApplication::kUIWidth; }
+	static constexpr int32_t GetUIHeight() { return WindowsApplication::kUIHeight; }
 
-	// スワップチェーンの中で内部解像度の絵を出す 16:9 の枠（外は黒帯）
+	// 描画解像度（3D・ポストエフェクトの RT と深度バッファの大きさ。16:9）。
+	// シーン RT のビューポートと、SV_Position を使うシェーダに渡す画面の大きさはこちら。
+	// UI はこの RT に UI の仮想解像度の射影で描くので、ビューポートを全面に張れば同じ配置で拡大される
+	int32_t GetRenderWidth() const { return renderWidth_; }
+	int32_t GetRenderHeight() const { return renderHeight_; }
+
+	/// <summary>
+	/// 描画解像度の変更を予約する（オプション画面などから呼ぶ）。16:9 に丸める（高さは幅から決める）。
+	/// 実際の作り直しは次の ApplyPendingRenderResolution で行う
+	/// </summary>
+	void RequestRenderResolution(int32_t width, int32_t height);
+
+	/// <summary>
+	/// 予約された描画解像度があれば、GPU の完了を待って深度バッファ（と深度の SRV）を作り直し true を返す。
+	/// シーン RT など深度以外の作り直しは呼び出し側（Game）が行う。フレームの頭（描画コマンドを積む前）で呼ぶこと
+	/// </summary>
+	bool ApplyPendingRenderResolution();
+
+	// スワップチェーンの中でゲームの絵を出す 16:9 の枠（外は黒帯）
 	WindowsApplication::OutputRect GetOutputRect() const {
 		return WindowsApplication::ComputeOutputRect(swapChainWidth_, swapChainHeight_);
 	}
@@ -339,5 +357,14 @@ private:
 	// 現在の Swapchain サイズ。Resize() で書き換わる。
 	int32_t swapChainWidth_ = WindowsApplication::kClientWidth;
 	int32_t swapChainHeight_ = WindowsApplication::kClientHeight;
+
+	// 描画解像度。既定は UI の仮想解像度と同じ（ゲームが起動時に RequestRenderResolution で変える）
+	int32_t renderWidth_ = WindowsApplication::kUIWidth;
+	int32_t renderHeight_ = WindowsApplication::kUIHeight;
+	bool pendingRenderResolution_ = false;
+	int32_t pendingRenderWidth_ = 0;
+	int32_t pendingRenderHeight_ = 0;
+	// 深度の SRV を作り直すときに使う（RegisterDepthSRV で覚える）
+	SRVManager* depthSrvManager_ = nullptr;
 
 };

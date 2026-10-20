@@ -101,8 +101,8 @@ void SpriteInstance::Update()
     Matrix4x4 viewMatrix = MakeIdentity4x4();
     Matrix4x4 projectionMatrix = MakeOrthographicMatrix(
         0.0f, 0.0f,
-        WindowsApplication::kClientWidth,
-        WindowsApplication::kClientHeight,
+        WindowsApplication::kUIWidth,
+        WindowsApplication::kUIHeight,
         0.0f, 100.0f
     );
     Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));

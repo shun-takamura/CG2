@@ -146,10 +146,10 @@ WindowsApplication::OutputRect WindowsApplication::ComputeOutputRect(int32_t cli
 
     // 縦横どちらかがぴったり収まる倍率。余った方向に黒帯が付く
     const float scale = (std::min)(
-        static_cast<float>(clientWidth) / static_cast<float>(kClientWidth),
-        static_cast<float>(clientHeight) / static_cast<float>(kClientHeight));
-    rect.width = std::round(static_cast<float>(kClientWidth) * scale);
-    rect.height = std::round(static_cast<float>(kClientHeight) * scale);
+        static_cast<float>(clientWidth) / static_cast<float>(kUIWidth),
+        static_cast<float>(clientHeight) / static_cast<float>(kUIHeight));
+    rect.width = std::round(static_cast<float>(kUIWidth) * scale);
+    rect.height = std::round(static_cast<float>(kUIHeight) * scale);
     // 端をピクセルの境目にそろえる（半端な位置だと拡大の絵がにじむ）
     rect.x = std::floor((static_cast<float>(clientWidth) - rect.width) * 0.5f);
     rect.y = std::floor((static_cast<float>(clientHeight) - rect.height) * 0.5f);

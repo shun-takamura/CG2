@@ -17,8 +17,8 @@ public:
     /// <param name="selected">選択中のオブジェクト（Sprite想定）</param>
     /// <param name="imagePos">ゲーム画像のスクリーン上の左上位置</param>
     /// <param name="imageSize">ゲーム画像のスクリーン上のサイズ</param>
-    /// <param name="clientWidth">ゲーム解像度の幅（kClientWidth）</param>
-    /// <param name="clientHeight">ゲーム解像度の高さ（kClientHeight）</param>
+    /// <param name="clientWidth">UI の仮想解像度の幅（kUIWidth）</param>
+    /// <param name="clientHeight">UI の仮想解像度の高さ（kUIHeight）</param>
     void Draw(IImGuiEditable* selected,
               ImVec2 imagePos, ImVec2 imageSize,
               float clientWidth, float clientHeight);

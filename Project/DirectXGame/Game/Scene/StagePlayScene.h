@@ -907,7 +907,7 @@ private:
 	float disruptorCollapseRevealTimer_ = 0.0f;
 
 	// 照準（中央支点・1点置き・角度自由）。スクリーン空間、深度無視。
-	// 線は画面中央 (kClientWidth/2, kClientHeight/2) を支点に角度 θ だけで決まる。0=横一閃(水平)。
+	// 線は画面中央 (kUIWidth/2, kUIHeight/2) を支点に角度 θ だけで決まる。0=横一閃(水平)。
 	float disruptorAimAngle_     = 0.0f;   // 切断線の角度(rad)。チャージ中はレティクルへライブ追従
 	bool  disruptorAimConfirmed_ = false;  // 射撃ボタンで角度を確定したか
 	float disruptorLineWidthPx_  = 40.0f;  // (Step4) スクリーン空間の線への距離しきい値(px, 半幅)。可視化太さにも流用

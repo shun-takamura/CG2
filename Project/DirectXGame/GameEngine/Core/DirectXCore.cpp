@@ -45,9 +45,9 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
     // 4. スワップチェイン生成
     CreateSwapChain(hwnd, width, height);
 
-    // 5. RTV / DSV の作成
+    // 5. RTV / DSV の作成（深度は描画解像度。ウィンドウの大きさとは別）
     CreateRenderTargets();
-    CreateDepthStencilView(width, height);
+    CreateDepthStencilView(renderWidth_, renderHeight_);
 
     // 6. フェンスとイベント生成
     CreateFenceObjects();
@@ -279,7 +279,7 @@ void DirectXCore::Resize(int32_t width, int32_t height) {
     swapChainHeight_ = height;
 
     // 深度バッファ・オフスクリーンRT・ゲーム用ビューポートは触らない。
-    // ゲームは固定 1600×900 で描き、Debug ビルドでは ImGui::Image が
+    // ゲームは描画解像度（GetRenderWidth）で描き、Debug ビルドでは ImGui::Image が
     // viewportRenderTexture をウィンドウサイズに合わせて拡縮表示する。
 }
 
@@ -864,12 +864,16 @@ void DirectXCore::CreateRenderTargets() {
 }
 
 void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
-    // DSVヒープ作成
-    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
-    dsvHeapDesc.NumDescriptors = 2;
-    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-    HRESULT hr = device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_));
-    assert(SUCCEEDED(hr));
+    // DSVヒープ作成（描画解像度の変更で作り直すときはヒープを使い回す）
+    HRESULT hr = S_OK;
+    if (!dsvHeap_) {
+        D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
+        dsvHeapDesc.NumDescriptors = 2;
+        dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        hr = device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_));
+        assert(SUCCEEDED(hr));
+    }
+    depthStencilBuffer_.Reset();
 
     // 深度バッファ（SRV対応のためTYPELESSで作成）
     D3D12_RESOURCE_DESC desc{};
@@ -923,7 +927,11 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
 void DirectXCore::RegisterDepthSRV(SRVManager* srvManager)
 {
     assert(srvManager);
-    depthSrvIndex_ = srvManager->Allocate();
+    // 2 回目以降（描画解像度の変更）は同じ番号に作り直す
+    if (depthSrvManager_ != srvManager) {
+        depthSrvIndex_ = srvManager->Allocate();
+        depthSrvManager_ = srvManager;
+    }
 
     // depthをR24_UNORM_X8_TYPELESSとしてSRV化（深度値のみ読み出す）
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -937,6 +945,32 @@ void DirectXCore::RegisterDepthSRV(SRVManager* srvManager)
         &srvDesc,
         srvManager->GetCPUDescriptorHandle(depthSrvIndex_)
     );
+}
+
+void DirectXCore::RequestRenderResolution(int32_t width, int32_t height)
+{
+    // 16:9 に丸める（UI の仮想解像度と縦横比をそろえないと UI が伸びる）。高さは幅から決め直し、幅は 2 の倍数に
+    (void)height;
+    width = (std::clamp)(width, 320, 7680) & ~1;
+    pendingRenderWidth_ = width;
+    pendingRenderHeight_ = width * WindowsApplication::kUIHeight / WindowsApplication::kUIWidth;
+    pendingRenderResolution_ = true;
+}
+
+bool DirectXCore::ApplyPendingRenderResolution()
+{
+    if (!pendingRenderResolution_) return false;
+    pendingRenderResolution_ = false;
+    if (pendingRenderWidth_ == renderWidth_ && pendingRenderHeight_ == renderHeight_) return false;
+
+    // 古い深度を使うコマンドが GPU に残っていないことを確かめてから作り直す
+    WaitForGpu();
+    renderWidth_ = pendingRenderWidth_;
+    renderHeight_ = pendingRenderHeight_;
+    CreateDepthStencilView(renderWidth_, renderHeight_);
+    if (depthSrvManager_) RegisterDepthSRV(depthSrvManager_);
+    Log(std::format("[DirectXCore] render resolution {}x{}\n", renderWidth_, renderHeight_));
+    return true;
 }
 
 void DirectXCore::TransitionDepthState(ID3D12GraphicsCommandList* commandList, D3D12_RESOURCE_STATES afterState)

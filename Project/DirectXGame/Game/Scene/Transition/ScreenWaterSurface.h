@@ -121,7 +121,8 @@ public:
 	static constexpr DXGI_FORMAT kSceneFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
 private:
-	void CreateCopyTexture();
+	// シーン RT（描画解像度）をそのまま CopyResource するので、同じ大きさで作る。大きさが変われば作り直す
+	void CreateCopyTexture(uint32_t width, uint32_t height);
 	void ApplyRippleSettings();
 
 	DirectXCore* dxCore_ = nullptr;
@@ -133,6 +134,8 @@ private:
 
 	// シーン RT のコピー先（PS で読む）
 	Microsoft::WRL::ComPtr<ID3D12Resource> sceneCopy_;
+	uint32_t sceneCopyWidth_ = 0;
+	uint32_t sceneCopyHeight_ = 0;
 	uint32_t sceneCopySrvIndex_ = UINT32_MAX;
 
 	Settings settings_;

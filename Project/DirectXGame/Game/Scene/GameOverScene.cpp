@@ -90,8 +90,8 @@ void GameOverScene::Draw() {
 
 	const float scale = 1.5f;
 	const float lineHeight = 60.0f;
-	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
-	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
+	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
+	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
 
 	const float totalHeight = lineHeight * static_cast<float>(options_.size());
 	float y = (screenH - totalHeight) * 0.5f;

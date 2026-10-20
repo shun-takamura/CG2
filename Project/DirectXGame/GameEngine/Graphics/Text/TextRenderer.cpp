@@ -357,17 +357,18 @@ void TextRenderer::BeginFrame()
 void TextRenderer::Flush()
 {
 	if (!dxCore_) return;
-	// 文字は内部解像度のシーン RT に描くので、ウィンドウの大きさではなく内部解像度で射影する
+	// 文字の座標は UI の仮想解像度。シーン RT（描画解像度）にはビューポート全面で描くので、
+	// 射影を仮想解像度にしておけば描画解像度が変わっても同じ配置・同じ大きさになる
 	DrawLayer(kLayerScreen, pipelineState_.Get(),
-		static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
+		static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 }
 
 void TextRenderer::FlushGlow()
 {
 	if (!dxCore_) return;
-	// 発光 RT は画面と同じ大きさ
+	// 発光 RT も同じ（座標は UI の仮想解像度で射影し、ビューポートは RT 全面）
 	DrawLayer(kLayerGlow, glowPipelineState_.Get(),
-		static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
+		static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 }
 
 void TextRenderer::BeginOffscreen(float width, float height)

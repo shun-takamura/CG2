@@ -293,8 +293,9 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	// デバッグ時に別視点の反射を作れば、その視点での見え方が水面に焼き付く
 	params_.reflectionViewProj = reflectionReady ? reflection->GetSourceViewProjection() : camera.GetViewProjectionMatrix();
 	params_.shadingEye = reflectionReady ? reflection->GetSourceEyePosition() : camPos;
-	params_.screenSize = { static_cast<float>(WindowsApplication::kClientWidth),
-		static_cast<float>(WindowsApplication::kClientHeight) };
+	// シェーダは SV_Position をこれで割って画面の UV にするので、描画解像度を渡す
+	params_.screenSize = { static_cast<float>(dxCore_->GetRenderWidth()),
+		static_cast<float>(dxCore_->GetRenderHeight()) };
 	params_.hasReflection = (reflectionReady && reflection->HasContent()) ? 1 : 0;
 	params_.simCenter = rippleSimulation_->GetCenter();
 	params_.simSize = rippleSimulation_->GetSettings().simSize;

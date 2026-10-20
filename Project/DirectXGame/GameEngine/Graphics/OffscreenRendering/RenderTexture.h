@@ -50,6 +50,12 @@ public:
 	void EndRender(ID3D12GraphicsCommandList* commandList);
 
 	/// <summary>
+	/// 大きさを変えて作り直す（描画解像度の変更用）。SRV の番号はそのまま使い回すので、
+	/// 番号を覚えている側は何もしなくてよい。GPU が古いリソースを使い終わってから呼ぶこと
+	/// </summary>
+	void Resize(uint32_t width, uint32_t height);
+
+	/// <summary>
 	/// 終了処理
 	/// </summary>
 	void Finalize();

@@ -106,6 +106,8 @@ private:
 	static constexpr uint32_t kCameraCBOffset = 256;
 
 	void CreateDepthBuffer(uint32_t width, uint32_t height);
+	// 描画解像度 × 倍率の大きさ。描画解像度が変わっていたら RT と深度を作り直す
+	void FitToRenderResolution();
 	/// <param name="view">本編カメラの View。null ならエフェクトは描かない</param>
 	void RenderInternal(const Matrix4x4& viewProjection, const Vector3& eyePosition, const Matrix4x4* view);
 
@@ -114,6 +116,7 @@ private:
 	Object3DManager* object3DManager_ = nullptr;
 
 	std::unique_ptr<RenderTexture> renderTexture_;
+	float resolutionScale_ = 1.0f;
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthBuffer_;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
 
