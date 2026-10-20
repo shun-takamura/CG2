@@ -444,8 +444,8 @@ void TitleScene::UpdateInput() {
 			return;
 		}
 		// キャンセルは無視する（ロゴは消えているので戻る先が無い）
-		menu_.SetPosition({ static_cast<float>(dxCore_->GetRenderWidth()) * 0.5f,
-			static_cast<float>(dxCore_->GetRenderHeight()) * menuHeightRatio_ });
+		menu_.SetPosition({ static_cast<float>(dxCore_->GetUIWidth()) * 0.5f,
+			static_cast<float>(dxCore_->GetUIHeight()) * menuHeightRatio_ });
 		const VerticalMenu::Result result = menu_.Update(actionMap, &pointer);
 		if (result != VerticalMenu::Result::Confirmed) return;
 		switch (menu_.GetSelectedIndex()) {
@@ -485,8 +485,8 @@ bool TitleScene::PickWaterPoint(Vector3& out) const {
 	const float clientY = pointer.position.y;
 
 	// 描画しているカメラの逆行列で、近い面と遠い面の点に戻してレイにする（NDC の z は 0..1）
-	const float ndcX = clientX / static_cast<float>(WindowsApplication::kClientWidth) * 2.0f - 1.0f;
-	const float ndcY = 1.0f - clientY / static_cast<float>(WindowsApplication::kClientHeight) * 2.0f;
+	const float ndcX = clientX / static_cast<float>(WindowsApplication::kUIWidth) * 2.0f - 1.0f;
+	const float ndcY = 1.0f - clientY / static_cast<float>(WindowsApplication::kUIHeight) * 2.0f;
 	const Matrix4x4 inverseViewProjection = Inverse(camera_->GetViewProjectionMatrix());
 	const Vector3 nearPoint = TransformCoordinate({ ndcX, ndcY, 0.0f }, inverseViewProjection);
 	const Vector3 farPoint = TransformCoordinate({ ndcX, ndcY, 1.0f }, inverseViewProjection);
@@ -921,8 +921,8 @@ void TitleScene::Draw() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
-	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
+	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
+	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
 
 	if (phase_ == Phase::Ready) {
 		menu_.SetPosition({ screenW * 0.5f, screenH * menuHeightRatio_ });

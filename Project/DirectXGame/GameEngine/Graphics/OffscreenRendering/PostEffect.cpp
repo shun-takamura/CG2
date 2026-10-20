@@ -67,6 +67,18 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	InitializeEffects();
 }
 
+void PostEffect::Resize(uint32_t width, uint32_t height)
+{
+	if (width == 0 || height == 0 || (width == width_ && height == height_)) return;
+	width_ = width;
+	height_ = height;
+	for (RenderTexture* rt : { renderTextureA_.get(), renderTextureB_.get(), idMaskRT_.get(),
+		distortionRT_.get(), bloomRT_.get(), captureRT_.get() }) {
+		if (rt) rt->Resize(width, height);
+	}
+	if (bloom) bloom->Resize(width, height);
+}
+
 // ===================================================================
 // ルートシグネチャ作成
 // ===================================================================

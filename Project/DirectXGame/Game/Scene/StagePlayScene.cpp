@@ -2893,8 +2893,10 @@ void StagePlayScene::Initialize() {
 	// 雲海のレイマーチ。降下の縦穴はシーン読み込みでレールが本物に差し替わった後に RebuildCloudShaft で拾い直す
 	{
 		LOAD_PHASE("StagePlay/RaymarchClouds");
+		// 雲の RT は描画解像度ではなく UI の仮想解像度（1600×900）× 倍率で作る。
+		// 描画解像度を上げても雲の重さは据え置き（合成は UV で引くので RT の大きさが違っても合う）
 		stageEnv_->InitializeRaymarchClouds(dxCore_, srvManager_,
-			WindowsApplication::kClientWidth, WindowsApplication::kClientHeight, {});
+			WindowsApplication::kUIWidth, WindowsApplication::kUIHeight, {});
 		RebuildCloudShaft();
 		// --no-raymarch-clouds：雲海なしで起動（run_cloud_bench.py で雲あり/なしを比べる用）
 		if (std::wstring(::GetCommandLineW()).find(L"--no-raymarch-clouds") != std::wstring::npos) {
@@ -2961,8 +2963,8 @@ void StagePlayScene::Initialize() {
 			pauseDimSprite_ = std::make_unique<SpriteInstance>();
 			pauseDimSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "PauseDim");
 			pauseDimSprite_->SetPosition({ 0.0f, 0.0f });
-			pauseDimSprite_->SetSize({ static_cast<float>(WindowsApplication::kClientWidth),
-				static_cast<float>(WindowsApplication::kClientHeight) });
+			pauseDimSprite_->SetSize({ static_cast<float>(WindowsApplication::kUIWidth),
+				static_cast<float>(WindowsApplication::kUIHeight) });
 			pauseDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
 			pauseDimSprite_->Update();
 		}
@@ -3263,7 +3265,7 @@ void StagePlayScene::UpdateBossHpBarUI(float dt) {
 
 	const float w = bossHpBarWidth_;
 	const float h = bossHpBarHeight_;
-	const float left = (static_cast<float>(WindowsApplication::kClientWidth) - w) * 0.5f;
+	const float left = (static_cast<float>(WindowsApplication::kUIWidth) - w) * 0.5f;
 	const float top = bossHpBarPosY_;
 	constexpr float kFrame = 3.0f;
 
@@ -3295,7 +3297,7 @@ void StagePlayScene::DrawBossHpBarUI() {
 	// ラベルは下のスコア表示と同じ Flush でまとめて描く
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
-	const float left = (static_cast<float>(WindowsApplication::kClientWidth) - bossHpBarWidth_) * 0.5f;
+	const float left = (static_cast<float>(WindowsApplication::kUIWidth) - bossHpBarWidth_) * 0.5f;
 	tr->DrawText("BOSS", { left, bossHpBarPosY_ - 34.0f }, 0.9f, { 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 }
 
@@ -3322,8 +3324,8 @@ void StagePlayScene::SetPauseView(PauseView view) {
 }
 
 void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
-	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetRenderWidth()) * 0.5f,
-		static_cast<float>(dxCore_->GetRenderHeight()) * 0.58f });
+	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetUIWidth()) * 0.5f,
+		static_cast<float>(dxCore_->GetUIHeight()) * 0.58f });
 	const UIPointer pointer = UIPointer::FromInput(input_);
 	const VerticalMenu::Result result = pauseMenu_.Update(actions, &pointer);
 	const int index = pauseMenu_.GetSelectedIndex();
@@ -3423,8 +3425,8 @@ void StagePlayScene::DrawPauseMenu() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized()) return;
 
-	const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
-	const float screenH = static_cast<float>(dxCore_->GetRenderHeight());
+	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
+	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
 	const Vector4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Vector4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
 
@@ -4196,8 +4198,8 @@ void StagePlayScene::Update() {
 			ImVec2 ms = ImGui::GetMousePos();
 			if (is.x > 0.0f && is.y > 0.0f) {
 				mouseHovered = true;
-				mouseClient.x = (ms.x - ip.x) * (static_cast<float>(WindowsApplication::kClientWidth) / is.x);
-				mouseClient.y = (ms.y - ip.y) * (static_cast<float>(WindowsApplication::kClientHeight) / is.y);
+				mouseClient.x = (ms.x - ip.x) * (static_cast<float>(WindowsApplication::kUIWidth) / is.x);
+				mouseClient.y = (ms.y - ip.y) * (static_cast<float>(WindowsApplication::kUIHeight) / is.y);
 				ImVec2 d = ImGui::GetIO().MouseDelta;
 				mouseMoved = (d.x != 0.0f) || (d.y != 0.0f);
 			}
@@ -4206,7 +4208,7 @@ void StagePlayScene::Update() {
 		// Release ビルド：クライアント座標から黒帯を引いて内部解像度へ換算（枠の外でもレティクル側で端に止まる）
 		auto* m = input_->GetMouse();
 		if (m) {
-			m->GetRenderPosition(mouseClient.x, mouseClient.y);
+			m->GetUIPosition(mouseClient.x, mouseClient.y);
 			mouseHovered = true;
 			mouseMoved = (m->GetDeltaX() != 0) || (m->GetDeltaY() != 0);
 		}
@@ -4220,8 +4222,8 @@ void StagePlayScene::Update() {
 	// ----- 照準ターゲット計算（プレイヤー回転 + 発射方向の元） -----
 	if (player_ && reticle_ && camera_) {
 		const Vector2 rp = reticle_->GetPosition();
-		const float ndcX = (rp.x / float(WindowsApplication::kClientWidth)) * 2.0f - 1.0f;
-		const float ndcY = 1.0f - (rp.y / float(WindowsApplication::kClientHeight)) * 2.0f;
+		const float ndcX = (rp.x / float(WindowsApplication::kUIWidth)) * 2.0f - 1.0f;
+		const float ndcY = 1.0f - (rp.y / float(WindowsApplication::kUIHeight)) * 2.0f;
 		const Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
 		const Vector3 farWorld = TransformCoordinate(Vector3{ ndcX, ndcY, 1.0f }, invVP);
 		const Vector3 camPos = camera_->GetTranslate();
@@ -4257,15 +4259,15 @@ void StagePlayScene::Update() {
 			if (ww <= 1e-4f) return false; // カメラ後方
 			const float ndcX = wx / ww;
 			const float ndcY = wy / ww;
-			outPx.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(WindowsApplication::kClientWidth);
-			outPx.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(WindowsApplication::kClientHeight);
+			outPx.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(WindowsApplication::kUIWidth);
+			outPx.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(WindowsApplication::kUIHeight);
 			outClipW = ww;
 			return true;
 		};
 
 		const Matrix4x4& projMat = camera_->GetProjectionMatrix();
 		const float invTanHalfFovY = projMat.m[1][1];
-		const float clientH = static_cast<float>(WindowsApplication::kClientHeight);
+		const float clientH = static_cast<float>(WindowsApplication::kUIHeight);
 
 		auto checkEnemy = [&](IImGuiEditable* e, const Vector3& pos) {
 			if (!e) return;
@@ -4412,7 +4414,7 @@ void StagePlayScene::Update() {
 			const Matrix4x4& proj = camera_->GetProjectionMatrix();
 			const float invTanHalfFovY = proj.m[1][1];
 			const float pixelRadius = (distToEnemy > 1e-4f)
-				? (hitEnemyRadius * static_cast<float>(WindowsApplication::kClientHeight)
+				? (hitEnemyRadius * static_cast<float>(WindowsApplication::kUIHeight)
 					* invTanHalfFovY * 0.5f / distToEnemy)
 				: 0.0f;
 			// レティクルは外周マージン付きで少し大きめに（敵を囲む見た目に）
@@ -4846,7 +4848,7 @@ void StagePlayScene::Draw() {
 			std::snprintf(numBuf, sizeof(numBuf), "%d", rawScore);
 
 			const char* labelStr = "SCORE";
-			const float screenW = static_cast<float>(dxCore_->GetRenderWidth());
+			const float screenW = static_cast<float>(dxCore_->GetUIWidth());
 
 			const float labelW = tr->MeasureWidth(labelStr, scoreLabelScale_);
 			const float numW   = tr->MeasureWidth(numBuf, scoreNumberScale_);
@@ -4865,7 +4867,7 @@ void StagePlayScene::Draw() {
 
 	// スタート演出をスキップした白フェードの開き（レールの最初の数フレーム）
 	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized() && stageStart_) {
-		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 		tr->Flush();
 	}
 
@@ -4879,7 +4881,7 @@ void StagePlayScene::Draw() {
 bool StagePlayScene::UpdateStageStart() {
 	// 同期ロードの直後の 1 フレームは dt が大きい（ロードの間 HUB の最後の 1 枚が止まっていた）ので、降下が飛ばないよう切り詰める
 	const float dt = (std::min)(GetScaledDeltaTime(TimeGroup::UI), 1.0f / 30.0f);
-	const Vector2 screen = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	const Vector2 screen = { static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()) };
 	stageStart_->Update(input_, dt, screen);
 	if (!stageStart_->IsActive()) {
 		// 終わった（RestoreStageEnvironment 済み）。このフレームからレール
@@ -4891,7 +4893,8 @@ bool StagePlayScene::UpdateStageStart() {
 	camera_->Update();
 	UpdateDebugCameraIfActive();
 	// 施設・コクピット・機体などの行列は、このフレームのカメラができてから作る
-	stageStart_->LateUpdate(dt, screen);
+	// コクピットの六角形のディゾルブはシェーダの SV_Position（描画解像度のピクセル）で並べるので、描画解像度を渡す
+	stageStart_->LateUpdate(dt, { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) });
 	// スラスターの噴射（EffectManager）。演出の間もエフェクトを進める
 	UpdateGlobalEffects(camera_.get(), dxCore_->GetDeltaTime());
 	if (skybox_) skybox_->Update(dt);
@@ -4911,6 +4914,7 @@ void StagePlayScene::DrawStageStart() {
 	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
 	stageStart_->RenderBoardTexture(commandList);
 	{
+		// シーン RT は描画解像度
 		const float w = static_cast<float>(dxCore_->GetRenderWidth());
 		const float h = static_cast<float>(dxCore_->GetRenderHeight());
 		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, w, h, 0.0f, 1.0f };
@@ -4946,7 +4950,7 @@ void StagePlayScene::DrawStageStart() {
 	spriteManager_->DrawSetting();
 	// 一人称で射出口に近づくまぶしさ（ポーズメニューより下に）
 	if (TextRenderer* tr = TextRenderer::GetInstance(); tr->IsInitialized()) {
-		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()));
+		stageStart_->DrawScreenOverlay(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 		tr->Flush();
 	}
 	if (paused_) DrawPauseMenu();
@@ -5891,8 +5895,8 @@ void StagePlayScene::UpdateDisruptorMove(InputActionMap* actions, float realDt) 
 }
 
 float StagePlayScene::DisruptorAngleFromReticle() const {
-	const float cx = static_cast<float>(WindowsApplication::kClientWidth)  * 0.5f;
-	const float cy = static_cast<float>(WindowsApplication::kClientHeight) * 0.5f;
+	const float cx = static_cast<float>(WindowsApplication::kUIWidth)  * 0.5f;
+	const float cy = static_cast<float>(WindowsApplication::kUIHeight) * 0.5f;
 	const Vector2 rp = reticle_ ? reticle_->GetPosition() : Vector2{ cx, cy };
 	const float dx = rp.x - cx;
 	const float dy = rp.y - cy;
@@ -5913,8 +5917,8 @@ void StagePlayScene::DrawDisruptorAimLine() {
 		return;
 	}
 
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float w = static_cast<float>(WindowsApplication::kUIWidth);
+	const float h = static_cast<float>(WindowsApplication::kUIHeight);
 	const float cx = w * 0.5f;
 	const float cy = h * 0.5f;
 	// スクリーン端まで延ばすため対角長を半径に取り、中央±方向の2端点を作る
@@ -5953,8 +5957,8 @@ void StagePlayScene::DrawDisruptorAimLine() {
 void StagePlayScene::ExecuteDisruptorSlash() {
 	if (!camera_) return;
 
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float w = static_cast<float>(WindowsApplication::kUIWidth);
+	const float h = static_cast<float>(WindowsApplication::kUIHeight);
 	const float cx = w * 0.5f;
 	const float cy = h * 0.5f;
 	const float dirX = std::cos(disruptorAimAngle_);
@@ -6061,7 +6065,7 @@ void StagePlayScene::ExecuteDisruptorSlash() {
 	{
 		const float fovY    = camera_->GetFovY();
 		const float tanHalf = std::tan(fovY * 0.5f);
-		const float clientH = static_cast<float>(WindowsApplication::kClientHeight);
+		const float clientH = static_cast<float>(WindowsApplication::kUIHeight);
 		disruptorRiftBakedHalfWidth_ = (clientH > 1.0f)
 			? (disruptorLineWidthPx_ * tanHalf * depth * 2.0f / clientH)
 			: (disruptorLineWidthPx_ * 0.01f);
@@ -6288,8 +6292,8 @@ void StagePlayScene::BuildDisruptorCellMeshesAndUpload() {
 
 	// 割れ順（F3）：切断線をスクリーンUV→aspect空間へ射影し、各セル重心の垂直距離 breakDist と
 	// 全画面を覆う最大垂直距離 maxDist を確定する（F1 の割れ順プレビューと同じ式＝確認した順序と一致）。
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float w = static_cast<float>(WindowsApplication::kUIWidth);
+	const float h = static_cast<float>(WindowsApplication::kUIHeight);
 	const float aspect = (h > 1.0f) ? (w / h) : (16.0f / 9.0f);
 	Vector2 cutA{ 0.0f, 0.5f }, cutB{ 1.0f, 0.5f };
 	if (disruptorCutWorldValid_) {
@@ -6510,8 +6514,8 @@ void StagePlayScene::DrawAfterPostEffect(ID3D12GraphicsCommandList* /*commandLis
 void StagePlayScene::BuildDisruptorCells() {
 	disruptorCells_.clear();
 	const int n = std::clamp(disruptorCellCount_, 1, 2000);
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float w = static_cast<float>(WindowsApplication::kUIWidth);
+	const float h = static_cast<float>(WindowsApplication::kUIHeight);
 	const float aspect = (h > 1.0f) ? (w / h) : (16.0f / 9.0f);
 
 	// 種点（アスペクト補正空間 [0,aspect]×[0,1] ＝セルが正方形寄りになる）
@@ -6593,8 +6597,8 @@ void StagePlayScene::DrawDisruptorCellBordersDebug() {
 	if (disruptorCells_.empty()) BuildDisruptorCells();
 	if (disruptorCells_.empty()) return;
 
-	const float w = static_cast<float>(WindowsApplication::kClientWidth);
-	const float h = static_cast<float>(WindowsApplication::kClientHeight);
+	const float w = static_cast<float>(WindowsApplication::kUIWidth);
+	const float h = static_cast<float>(WindowsApplication::kUIHeight);
 	const float aspect = (h > 1.0f) ? (w / h) : (16.0f / 9.0f);
 
 	// 切断線（無効時は水平線 y=0.5）をスクリーンUVへ

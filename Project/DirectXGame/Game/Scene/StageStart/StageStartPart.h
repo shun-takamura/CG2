@@ -100,7 +100,8 @@ public:
 	/// Object3DInstance::Update はその時のカメラで WVP を作るので、先に作ると 1 フレーム前のカメラになり、
 	/// 射出で速く進むと一人称のコクピット（椅子）が前へずれて見えた（2026-10-19 実機）
 	/// </summary>
-	void LateUpdate(float deltaTime, const Vector2& screenSize);
+	/// renderSize は描画解像度（DirectXCore::GetRenderWidth/Height。コクピットの六角形のディゾルブが画面のピクセルで並べるため）
+	void LateUpdate(float deltaTime, const Vector2& renderSize);
 	/// <summary>表示板の中身を RenderTexture へ。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
 	void RenderBoardTexture(ID3D12GraphicsCommandList* commandList);
 	/// <summary>

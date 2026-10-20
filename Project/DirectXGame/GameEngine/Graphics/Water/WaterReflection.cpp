@@ -30,9 +30,9 @@ void WaterReflection::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 	srvManager_ = srvManager;
 	object3DManager_ = object3DManager;
 
-	const float scale = std::clamp(resolutionScale, 0.25f, 1.0f);
-	const uint32_t width = static_cast<uint32_t>(WindowsApplication::kClientWidth * scale);
-	const uint32_t height = static_cast<uint32_t>(WindowsApplication::kClientHeight * scale);
+	resolutionScale_ = std::clamp(resolutionScale, 0.25f, 1.0f);
+	const uint32_t width = static_cast<uint32_t>(dxCore_->GetRenderWidth() * resolutionScale_);
+	const uint32_t height = static_cast<uint32_t>(dxCore_->GetRenderHeight() * resolutionScale_);
 
 	// α=0 のクリアが「何も映っていない（空を映す）」の印になる
 	const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -51,15 +51,30 @@ void WaterReflection::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 	*cameraData_ = CameraForGPU{};
 }
 
+void WaterReflection::FitToRenderResolution()
+{
+	if (!renderTexture_) return;
+	const uint32_t width = static_cast<uint32_t>(dxCore_->GetRenderWidth() * resolutionScale_);
+	const uint32_t height = static_cast<uint32_t>(dxCore_->GetRenderHeight() * resolutionScale_);
+	if (width == renderTexture_->GetWidth() && height == renderTexture_->GetHeight()) return;
+	// 前のフレームの GPU 作業は EndDraw で待ち終わっているので、ここで作り直してよい
+	renderTexture_->Resize(width, height);
+	CreateDepthBuffer(width, height);
+}
+
 void WaterReflection::CreateDepthBuffer(uint32_t width, uint32_t height)
 {
 	ID3D12Device* device = dxCore_->GetDevice();
 
-	D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
-	heapDesc.NumDescriptors = 1;
-	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-	HRESULT hr = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsvHeap_));
-	assert(SUCCEEDED(hr));
+	HRESULT hr = S_OK;
+	if (!dsvHeap_) {
+		D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
+		heapDesc.NumDescriptors = 1;
+		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		hr = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsvHeap_));
+		assert(SUCCEEDED(hr));
+	}
+	depthBuffer_.Reset();
 
 	D3D12_RESOURCE_DESC desc{};
 	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -126,6 +141,7 @@ void WaterReflection::Render(const Matrix4x4& viewProjection, const Vector3& eye
 void WaterReflection::RenderInternal(const Matrix4x4& viewProjection, const Vector3& eyePosition, const Matrix4x4* view)
 {
 	PEPPER_SCOPE("WaterReflection::Render");
+	FitToRenderResolution();
 
 	// パスを飛ばすフレームでも、水面の空・フレネルはこの視点で計算するので先に保持する
 	sourceViewProjection_ = viewProjection;
@@ -204,15 +220,15 @@ void WaterReflection::RenderInternal(const Matrix4x4& viewProjection, const Vect
 	srvReady_ = true;
 	hasContent_ = hasVisible || drawEffects;
 
-	// シーン RT は本体解像度なので、ビューポートを戻して返す
+	// シーン RT は描画解像度なので、ビューポートを戻して返す
 	D3D12_VIEWPORT viewport{};
-	viewport.Width = static_cast<float>(WindowsApplication::kClientWidth);
-	viewport.Height = static_cast<float>(WindowsApplication::kClientHeight);
+	viewport.Width = static_cast<float>(dxCore_->GetRenderWidth());
+	viewport.Height = static_cast<float>(dxCore_->GetRenderHeight());
 	viewport.MaxDepth = 1.0f;
 	cmd->RSSetViewports(1, &viewport);
 	D3D12_RECT scissor{ 0, 0,
-		static_cast<LONG>(WindowsApplication::kClientWidth),
-		static_cast<LONG>(WindowsApplication::kClientHeight) };
+		static_cast<LONG>(dxCore_->GetRenderWidth()),
+		static_cast<LONG>(dxCore_->GetRenderHeight()) };
 	cmd->RSSetScissorRects(1, &scissor);
 }
 

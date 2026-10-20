@@ -6,7 +6,7 @@
 Camera::Camera()
 	: transform_({ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} })
 	, horizontalFovY_(0.45f)
-	, aspectRatio_(float(WindowsApplication::kClientWidth) / float(WindowsApplication::kClientHeight))
+	, aspectRatio_(float(WindowsApplication::kUIWidth) / float(WindowsApplication::kUIHeight))
 	, nearClip_(0.1f)
 	, farClip_(100.0f)
 	, worldMatrix_(MakeAffineMatrix(transform_))

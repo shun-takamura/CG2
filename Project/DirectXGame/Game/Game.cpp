@@ -285,6 +285,34 @@ void Game::Initialize() {
 	// 基底クラスの初期化処理
 	Framework::Initialize();
 
+	// 描画解像度（3D・ポストエフェクトの RT と深度）。UI は 1600×900 の仮想座標のまま、この RT に拡大して描かれる。
+	// 既定はフル HD。--render-res <幅>x<高さ> で変えられる（16:9 に丸める）。
+	// シーンや PostEffect を作る前にここで確定させる（後から変えるときは RequestRenderResolution → Game::Update で作り直し）
+	{
+		int32_t renderWidth = kDefaultRenderWidth;
+		int32_t renderHeight = kDefaultRenderHeight;
+		int argc = 0;
+		LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+		if (argv) {
+			for (int i = 1; i + 1 < argc; ++i) {
+				if (std::wcscmp(argv[i], L"--render-res") != 0) continue;
+				// "<幅>x<高さ>" を読む
+				wchar_t* end = nullptr;
+				const long w = std::wcstol(argv[i + 1], &end, 10);
+				if (end && (*end == L'x' || *end == L'X')) {
+					const long h = std::wcstol(end + 1, nullptr, 10);
+					if (w > 0 && h > 0) {
+						renderWidth = static_cast<int32_t>(w);
+						renderHeight = static_cast<int32_t>(h);
+					}
+				}
+			}
+			::LocalFree(argv);
+		}
+		dxCore_->RequestRenderResolution(renderWidth, renderHeight);
+		dxCore_->ApplyPendingRenderResolution();
+	}
+
 #ifdef _DEBUG
 	// エンジン標準パネルの生成後に、ゲーム対応のウィンドウ／パネルを追加登録する。
 	// （エンジンから見えないゲーム型に触るものはすべてここに集約する）
@@ -359,8 +387,8 @@ void Game::Initialize() {
 	// PostEffect初期化（RenderTextureも内部で作成される）
 	postEffect_ = std::make_unique<PostEffect>();
 	postEffect_->Initialize(dxCore_.get(), srvManager_.get(),
-		WindowsApplication::kClientWidth,
-		WindowsApplication::kClientHeight);
+		dxCore_->GetRenderWidth(),
+		dxCore_->GetRenderHeight());
 
 	// バッチ終了 - DStorage の全リクエストをここで 1 回だけ Submit + Wait
 	DStorageManager::GetInstance()->EndBatchAndWait();
@@ -372,8 +400,8 @@ void Game::Initialize() {
 	// シーンの空きをわかりやすくする水色背景（透明だとPostEffect結果と区別しづらいため）
 	const float viewportClearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
 	viewportRenderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
-		WindowsApplication::kClientWidth,
-		WindowsApplication::kClientHeight,
+		dxCore_->GetRenderWidth(),
+		dxCore_->GetRenderHeight(),
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
 		viewportClearColor);
 
@@ -383,6 +411,18 @@ void Game::Initialize() {
 }
 
 void Game::Update() {
+	// 描画解像度の変更（オプション画面などの RequestRenderResolution）をフレームの頭で反映する。
+	// 深度は DirectXCore が作り直すので、シーン RT など Game が持つ物をここで合わせる。
+	// 水面の反射・トランジションの水面など、シーンが持つ RT は描くときに自分で合わせる
+	if (dxCore_->ApplyPendingRenderResolution()) {
+		const uint32_t width = static_cast<uint32_t>(dxCore_->GetRenderWidth());
+		const uint32_t height = static_cast<uint32_t>(dxCore_->GetRenderHeight());
+		if (postEffect_) postEffect_->Resize(width, height);
+#ifdef _DEBUG
+		if (viewportRenderTexture_) viewportRenderTexture_->Resize(width, height);
+#endif
+	}
+
 	// 基底クラスの更新処理
 	Framework::Update();
 
@@ -478,13 +518,13 @@ void Game::Draw() {
 			cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
 
 			D3D12_VIEWPORT vp{};
-			vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
-			vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
+			vp.Width = static_cast<float>(dxCore_->GetRenderWidth());
+			vp.Height = static_cast<float>(dxCore_->GetRenderHeight());
 			vp.MaxDepth = 1.0f;
 			cmd->RSSetViewports(1, &vp);
 			D3D12_RECT sc{ 0, 0,
-				static_cast<LONG>(WindowsApplication::kClientWidth),
-				static_cast<LONG>(WindowsApplication::kClientHeight) };
+				static_cast<LONG>(dxCore_->GetRenderWidth()),
+				static_cast<LONG>(dxCore_->GetRenderHeight()) };
 			cmd->RSSetScissorRects(1, &sc);
 
 			srvManager_->PreDraw();
@@ -517,13 +557,13 @@ void Game::Draw() {
 		cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
 
 		D3D12_VIEWPORT vp{};
-		vp.Width = static_cast<float>(WindowsApplication::kClientWidth);
-		vp.Height = static_cast<float>(WindowsApplication::kClientHeight);
+		vp.Width = static_cast<float>(dxCore_->GetRenderWidth());
+		vp.Height = static_cast<float>(dxCore_->GetRenderHeight());
 		vp.MaxDepth = 1.0f;
 		cmd->RSSetViewports(1, &vp);
 		D3D12_RECT sc{ 0, 0,
-			static_cast<LONG>(WindowsApplication::kClientWidth),
-			static_cast<LONG>(WindowsApplication::kClientHeight) };
+			static_cast<LONG>(dxCore_->GetRenderWidth()),
+			static_cast<LONG>(dxCore_->GetRenderHeight()) };
 		cmd->RSSetScissorRects(1, &sc);
 
 		srvManager_->PreDraw();

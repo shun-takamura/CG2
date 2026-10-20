@@ -47,6 +47,15 @@ public:
 		const float sceneClearColor[4] = nullptr);
 
 	/// <summary>
+	/// 中の RT（シーン・ID・歪み・Bloom・キャプチャ）を描画解像度に合わせて作り直す。
+	/// SRV の番号は変わらない。GPU が古い RT を使い終わってから（フレームの頭で）呼ぶこと
+	/// </summary>
+	void Resize(uint32_t width, uint32_t height);
+
+	uint32_t GetWidth() const { return width_; }
+	uint32_t GetHeight() const { return height_; }
+
+	/// <summary>
 	/// シーン描画の開始
 	/// </summary>
 	void BeginSceneRender(ID3D12GraphicsCommandList* commandList, D3D12_CPU_DESCRIPTOR_HANDLE* dsvHandle = nullptr);

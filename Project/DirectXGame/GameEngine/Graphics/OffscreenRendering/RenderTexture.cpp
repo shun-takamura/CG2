@@ -112,6 +112,22 @@ void RenderTexture::CreateRTV()
 	);
 }
 
+void RenderTexture::Resize(uint32_t width, uint32_t height)
+{
+	if (!dxCore_ || width == 0 || height == 0) return;
+	if (width == width_ && height == height_ && resource_) return;
+	width_ = width;
+	height_ = height;
+	resource_.Reset();
+	CreateResource();
+	CreateRTV();
+	if (srvIndex_ == UINT32_MAX) {
+		CreateSRV();
+	} else {
+		srvManager_->CreateSRVForTexture2D(srvIndex_, resource_.Get(), format_, 1);
+	}
+}
+
 void RenderTexture::CreateSRV()
 {
 	// SRVManagerからインデックスを確保

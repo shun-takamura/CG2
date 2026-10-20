@@ -65,6 +65,10 @@ public:
 
 private:
 
+	// 起動時の描画解像度（UI の仮想解像度 1600×900 とは別。--render-res で上書き）
+	static constexpr int32_t kDefaultRenderWidth = 1920;
+	static constexpr int32_t kDefaultRenderHeight = 1080;
+
 	static Game* instance_;
 
 	// ポストエフェクト（RenderTextureも内部で管理）

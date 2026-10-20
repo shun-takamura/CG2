@@ -440,9 +440,9 @@ void Framework::Initialize() {
 	//=========================
 	// ViewportとScissor
 	//=========================
-	// ビューポート
-	viewport_.Width = WindowsApplication::kClientWidth;
-	viewport_.Height = WindowsApplication::kClientHeight;
+	// ビューポート（描画解像度。ゲームが後から変える場合は DirectXCore::GetRenderWidth を正とする）
+	viewport_.Width = static_cast<float>(dxCore_->GetRenderWidth());
+	viewport_.Height = static_cast<float>(dxCore_->GetRenderHeight());
 	viewport_.TopLeftX = 0;
 	viewport_.TopLeftY = 0;
 	viewport_.MinDepth = 0.0f;
@@ -450,9 +450,9 @@ void Framework::Initialize() {
 
 	// シザー矩形
 	scissorRect_.left = 0;
-	scissorRect_.right = WindowsApplication::kClientWidth;
+	scissorRect_.right = dxCore_->GetRenderWidth();
 	scissorRect_.top = 0;
-	scissorRect_.bottom = WindowsApplication::kClientHeight;
+	scissorRect_.bottom = dxCore_->GetRenderHeight();
 }
 
 void Framework::Update() {

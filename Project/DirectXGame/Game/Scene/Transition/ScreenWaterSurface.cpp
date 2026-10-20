@@ -32,7 +32,7 @@ void ScreenWaterSurface::Initialize(DirectXCore* dxCore, SRVManager* srvManager,
 	screenHeight_ = screenHeight;
 	assert(dxCore_ && srvManager_);
 
-	CreateCopyTexture();
+	CreateCopyTexture(static_cast<uint32_t>(dxCore_->GetRenderWidth()), static_cast<uint32_t>(dxCore_->GetRenderHeight()));
 	ripple_.Initialize(dxCore_, srvManager_);
 	ApplyRippleSettings();
 }
@@ -45,11 +45,15 @@ void ScreenWaterSurface::Finalize() {
 	sceneCopy_.Reset();
 }
 
-void ScreenWaterSurface::CreateCopyTexture() {
+void ScreenWaterSurface::CreateCopyTexture(uint32_t width, uint32_t height) {
+	sceneCopy_.Reset();
+	sceneCopyWidth_ = width;
+	sceneCopyHeight_ = height;
+
 	D3D12_RESOURCE_DESC desc{};
 	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	desc.Width = static_cast<UINT64>(screenWidth_);
-	desc.Height = static_cast<UINT>(screenHeight_);
+	desc.Width = static_cast<UINT64>(width);
+	desc.Height = static_cast<UINT>(height);
 	desc.DepthOrArraySize = 1;
 	desc.MipLevels = 1;
 	desc.Format = kSceneFormat;
@@ -64,7 +68,7 @@ void ScreenWaterSurface::CreateCopyTexture() {
 	assert(SUCCEEDED(hr));
 	sceneCopy_->SetName(L"ScreenWaterSurface_SceneCopy");
 
-	sceneCopySrvIndex_ = srvManager_->Allocate();
+	if (sceneCopySrvIndex_ == UINT32_MAX) sceneCopySrvIndex_ = srvManager_->Allocate();
 	srvManager_->CreateSRVForTexture2D(sceneCopySrvIndex_, sceneCopy_.Get(), kSceneFormat, 1);
 }
 
@@ -113,6 +117,10 @@ void ScreenWaterSurface::Update(float deltaTime) {
 }
 
 void ScreenWaterSurface::BeginDraw(ID3D12GraphicsCommandList* cmd, RenderTexture* sceneTarget, bool captureScene) {
+	// 描画解像度が変わっていたら写しを作り直す（前のフレームの GPU 作業は EndDraw で待ち終わっている）
+	if (sceneTarget->GetWidth() != sceneCopyWidth_ || sceneTarget->GetHeight() != sceneCopyHeight_) {
+		CreateCopyTexture(sceneTarget->GetWidth(), sceneTarget->GetHeight());
+	}
 	if (captureScene) {
 		Barrier(cmd, sceneTarget->GetResource(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		Barrier(cmd, sceneCopy_.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);

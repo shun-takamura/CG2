@@ -127,11 +127,11 @@ public:
 	const POINT& GetClientPosition() const { return clientPosition_; }
 
 	/// <summary>
-	/// マウスの位置をゲームの内部解像度（1600×900）の座標で取得する。
+	/// マウスの位置を UI の仮想解像度（1600×900）の座標で取得する（描画解像度には関係しない）。
 	/// クライアント座標から黒帯ぶんを引き、16:9 の枠の大きさから換算する（最大化・フルスクリーン対応）。
 	/// 戻り値：枠（ゲーム画面）の中にあれば true。外でも x/y は換算した値が入る
 	/// </summary>
-	bool GetRenderPosition(float& x, float& y) const;
+	bool GetUIPosition(float& x, float& y) const;
 
 private:
 	WindowsApplication* winApp_ = nullptr;

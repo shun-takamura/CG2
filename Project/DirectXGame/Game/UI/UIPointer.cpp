@@ -16,8 +16,8 @@ UIPointer UIPointer::FromInput(InputManager* input) {
 	if (!mouse) return pointer;
 
 #ifdef _DEBUG
-	const float width = static_cast<float>(WindowsApplication::kClientWidth);
-	const float height = static_cast<float>(WindowsApplication::kClientHeight);
+	const float width = static_cast<float>(WindowsApplication::kUIWidth);
+	const float height = static_cast<float>(WindowsApplication::kUIHeight);
 	auto* vp = ImGuiManager::Instance().GetViewportWindow();
 	if (!vp || !vp->IsHovered()) return pointer;
 	const ImVec2 imagePos = vp->GetImageScreenPos();
@@ -30,7 +30,7 @@ UIPointer UIPointer::FromInput(InputManager* input) {
 	pointer.moved = (delta.x != 0.0f) || (delta.y != 0.0f);
 #else
 	// クライアント座標 → 黒帯を引く → 内部解像度へ換算（最大化・フルスクリーンでもずれない）
-	if (!mouse->GetRenderPosition(pointer.position.x, pointer.position.y)) {
+	if (!mouse->GetUIPosition(pointer.position.x, pointer.position.y)) {
 		return pointer;
 	}
 	pointer.moved = (mouse->GetDeltaX() != 0) || (mouse->GetDeltaY() != 0);

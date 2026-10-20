@@ -514,8 +514,8 @@ void ImGuiManager::EndFrame() {
             // 2D（Sprite）ギズモが優先（GetEditable2DPosition がnullptrでなければ）
             if (selectedObject_->GetEditable2DPosition()) {
                 spriteGizmo_.Draw(selectedObject_, imgPos, imgSize,
-                    (float)WindowsApplication::kClientWidth,
-                    (float)WindowsApplication::kClientHeight);
+                    (float)WindowsApplication::kUIWidth,
+                    (float)WindowsApplication::kUIHeight);
             }
             // 3Dギズモ（Translate がnullptrでなければ、かつカメラがあれば）
             else if (selectedObject_->GetEditableTranslate() && camera_) {

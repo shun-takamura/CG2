@@ -91,6 +91,7 @@ private:
 	void EnterCockpit();
 	// ⑦：閉じたコクピットの真っ暗から灯りを点け、終わったら降りる
 	void EnterArrive();
+	// UI の仮想解像度（メニュー・コンソールの配置用。描画解像度ではない）
 	Vector2 GetScreenSize() const;
 	// 発光（コクピットの部位・表示板・UI の文字）を出してよいか（トランジションの上に光が乗らないよう、遷移中は出さない）
 	bool IsGlowAllowed() const;
