@@ -467,7 +467,8 @@ void AnimatedObject3DInstance::DrawBloomPass(DirectXCore* dxCore, float bloomSca
     animatedModelInstance_->DrawBloomPassSkinning(dxCore, skinCluster_, dissolveSubmeshes_);
 }
 
-void AnimatedObject3DInstance::SetDissolveSphere(const DissolveSphere& dissolve, const std::string& textureKeyword)
+template <class Write>
+void AnimatedObject3DInstance::ApplyDissolveToSubmeshes(const std::string& textureKeyword, Write&& write)
 {
     if (!animatedModelInstance_) return;
     auto& submeshes = animatedModelInstance_->GetSubmeshes();
@@ -476,9 +477,24 @@ void AnimatedObject3DInstance::SetDissolveSphere(const DissolveSphere& dissolve,
         RenderSubmesh& sm = submeshes[i];
         if (!sm.material) continue;
         if (!textureKeyword.empty() && sm.textureFilePath.find(textureKeyword) == std::string::npos) continue;
-        ::SetDissolveSphere(*sm.material, dissolve);
+        write(*sm.material);
         dissolveSubmeshes_[i] = 1;
     }
+}
+
+void AnimatedObject3DInstance::SetDissolveSphere(const DissolveSphere& dissolve, const std::string& textureKeyword)
+{
+    ApplyDissolveToSubmeshes(textureKeyword, [&dissolve](Material& m) { ::SetDissolveSphere(m, dissolve); });
+}
+
+void AnimatedObject3DInstance::SetDissolvePlane(const DissolvePlane& dissolve, const std::string& textureKeyword)
+{
+    ApplyDissolveToSubmeshes(textureKeyword, [&dissolve](Material& m) { ::SetDissolvePlane(m, dissolve); });
+}
+
+void AnimatedObject3DInstance::SetDissolveNoise(const DissolveNoise& dissolve, const std::string& textureKeyword)
+{
+    ApplyDissolveToSubmeshes(textureKeyword, [&dissolve](Material& m) { ::SetDissolveNoise(m, dissolve); });
 }
 
 void AnimatedObject3DInstance::ClearDissolve()

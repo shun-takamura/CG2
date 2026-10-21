@@ -2,6 +2,7 @@
 #include "BoneSocket.h"
 #include "Vector3.h"
 #include <memory>
+#include <vector>
 
 class Object3DManager;
 class SkinningComputeManager;
@@ -16,11 +17,12 @@ class AnimatedObject3DInstance;
 /// 収納中は見えない（2026-10-17 ユーザー決定）。展開は付け根から現れ（Deploy＋点からの距離のディゾルブ kDissolveSphereGrow で
 /// Spine2 を中心に半径を広げる）、収納は先から消える（半径を縮める）。ディゾルブの縁は発光パスに描いて光らせる。
 /// 雲の上（16_StageStart.md S4、F6）で展開し、レールの間は付けたまま。地上のボス戦では収納する。
+/// シューティングの死亡演出では開いた形のまま焼け落ちる（Burn。ノイズのディゾルブでまだらに欠け、縁はオレンジ。19 番 §1.1）。
 /// 調整値は StagePlay.json の "playerWings"。
 /// </summary>
 class PlayerWingUnit {
 public:
-	enum class State { Hidden, Deploying, Deployed, Stowing };
+	enum class State { Hidden, Deploying, Deployed, Stowing, Burning };
 
 	PlayerWingUnit();
 	~PlayerWingUnit();
@@ -33,11 +35,15 @@ public:
 	void Deploy(float delay = 0.0f);
 	/// <summary>たたみながら先から消える</summary>
 	void Stow();
+	/// <summary>開いた形のまま seconds 秒で焼け落ちる（死亡演出）。焼け切ったら Hidden</summary>
+	void Burn(float seconds);
 	/// <summary>すぐ見えなくする</summary>
 	void Hide();
 	/// <summary>すぐ開いた形で見せる（デバッグ）</summary>
 	void ShowDeployed();
 	State GetState() const { return state_; }
+	/// <summary>羽根の関節のワールド位置を out に入れる（焼け落ちの粒子を出す所）。見えていなければ空</summary>
+	void CollectJointPositions(std::vector<Vector3>& out) const;
 	/// <summary>体の点滅の発光（被弾・回避無敵）。羽根の下地に足す</summary>
 	void SetBlinkGlow(const Vector3& glow) { blinkGlow_ = glow; }
 
@@ -55,6 +61,7 @@ public:
 private:
 	bool IsDrawn() const;
 	void ApplyDissolve(float radiusRatio);
+	void ApplyBurn(float progress);
 
 	std::unique_ptr<AnimatedModelInstance> model_;
 	std::unique_ptr<AnimatedObject3DInstance> wings_;
@@ -64,6 +71,7 @@ private:
 	State state_ = State::Hidden;
 	float stateTime_ = 0.0f;
 	float delay_ = 0.0f;          // Deploy の待ち（残り）
+	float burnSeconds_ = 1.6f;    // Burn で受け取った長さ
 	bool dissolving_ = false;     // このフレームにディゾルブをかけている（縁を光らせる）
 
 	// 調整値
@@ -92,4 +100,11 @@ private:
 	// → それでも暗いので下地（発光）を少し足す（2026-10-19 ユーザー指示）。上げすぎると陰影と模様が平らになる
 	float baseGlow_ = 0.08f;
 	Vector3 blinkGlow_ = { 0.0f, 0.0f, 0.0f };
+
+	// 焼け落ち（死亡演出。19 番 §1.1）。縁の色は PlayerFeatherBurn.json の dissolveEdgeColor とそろえる
+	Vector3 burnEdgeColor_ = { 1.0f, 0.45f, 0.08f };
+	float burnEdgeIntensity_ = 3.0f;    // 縁の色に掛ける（1 を超えてブルームに乗る）
+	float burnEdgeWidth_ = 0.15f;       // 縁の幅（ノイズ値 0..1 の単位）
+	float burnNoiseScale_ = 3.0f;       // ノイズの細かさ（体の大きさ 1 のとき）[1/m]
+	float burnGlow_ = 0.25f;            // 燃えている間に下地へ足すオレンジ（焼け始めから強まる）
 };

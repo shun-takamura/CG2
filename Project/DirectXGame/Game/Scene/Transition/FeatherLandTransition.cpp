@@ -53,6 +53,10 @@ void FeatherLandTransition::Initialize(SpriteManager* spriteManager, DirectXCore
 	*waterParamsData_ = WaterParamsForGPU{};
 
 	renderer_.Initialize(dxCore_, srvManager);
+	// 縁は死亡演出の羽根の焼け落ちと同じオレンジ（19 番 §1.3。PlayerFeatherBurn.json の dissolveEdgeColor とそろえる）。
+	// よみがえり（FeatherRise）は別の renderer_ なので青白のまま
+	renderer_.GetSettings().edgeColor = { 1.0f, 0.45f, 0.08f };
+	renderer_.GetSettings().edgeWidth = 0.12f;
 	falling_.reserve(FeatherRenderer::kMaxFeathers);
 	drawList_.reserve(FeatherRenderer::kMaxFeathers);
 }
@@ -168,6 +172,7 @@ void FeatherLandTransition::SpawnFeather() {
 	f.look.cup = range(0.05f, 0.15f);
 	f.look.texture = static_cast<uint32_t>(unit(random_) * FeatherRenderer::kTextureCount) % FeatherRenderer::kTextureCount;
 	f.look.noiseOffset = unit(random_);
+	f.burnDelay = unit(random_) * (std::max)(s.rainBurnStagger, 0.0f);
 	// 奥の羽根は少し暗く（奥行きが読めるように）
 	f.look.brightness = 1.0f - 0.25f * (depth - s.nearDepth) / (std::max)(s.farDepth - s.nearDepth, 0.01f);
 	falling_.push_back(f);
@@ -185,7 +190,11 @@ void FeatherLandTransition::UpdateFeathers(float dt) {
 		f.look.position = { f.origin.x + f.swayAmplitude * std::sin(f.swayPhase), f.origin.y, f.origin.z };
 		f.look.rotation = { f.baseRotation.x, f.baseRotation.y, f.baseRotation.z + s.swayTilt * std::cos(f.swayPhase) };
 		f.look.bend = f.baseBend + s.flutter * std::sin(f.flutterPhase);
-		f.look.alpha = rainAlpha;
+		// 薄れる代わりに焼けて消える（死亡演出の羽根と同じオレンジの縁。19 番 §1.3）。
+		// 遅れを足した幅で割るので、雨の濃さが 0 になる時にはどの羽根も焼け切っている
+		const float stagger = (std::max)(s.rainBurnStagger, 0.0f);
+		f.look.alpha = 1.0f;
+		f.look.dissolve = std::clamp((1.0f - rainAlpha) * (1.0f + stagger) - f.burnDelay, 0.0f, 1.0f);
 	}
 	// 一度画面に入ってから外へ出た羽根は捨てる（画面に投影して見る。カメラが追って下がっても傾いても同じ判定）
 	bool anyOnScreen = false;
@@ -451,6 +460,7 @@ void FeatherLandTransition::OnImGui() {
 	ImGui::DragFloat("Rain Time [s]", &s.rainTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Rain Fade Start [s]", &s.rainFadeStart, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Rain Fade Time [s]", &s.rainFadeTime, 0.01f, 0.01f, 10.0f);
+	ImGui::SliderFloat("Rain Burn Stagger", &s.rainBurnStagger, 0.0f, 1.0f);
 	ImGui::DragFloat("Hero Spawn Time [s]", &s.heroSpawnTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Follow Start Time [s]", &s.followStartTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Min Cover Time [s]", &s.minCoverTime, 0.01f, 0.1f, 10.0f);
