@@ -11,6 +11,7 @@
 #include "BossStagePart.h"
 #include "StageStart/StageStartPart.h"
 #include "StageStart/MechThrusters.h"
+#include "PlayerDeath/PlayerDeathPart.h"
 #include "StageEnvironment.h"
 #include "VerticalMenu.h"
 #include "AttractMode.h"
@@ -43,7 +44,8 @@ class PlayerWingUnit;
 /// Rail 専用ロジック（レールカメラ駆動・Wave/敵スポーン・Seek再構築）は RailStagePart に切り出し、
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
-class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost {
+class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
+	private IPlayerDeathHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -176,6 +178,18 @@ private:
 	MechThrusters playerThrusters_{ MechThrusters::Preset::Player };
 	Vector2 playerMoveInput_{ 0.0f, 0.0f };
 	bool IsCloudTopIntroActive() const;
+
+	// ----- IPlayerDeathHost 実装（private override。PlayerDeathPart 経由のみ）-----
+	void BurnPlayerWings(float seconds) override;
+	void CollectWingBurnPoints(std::vector<Vector3>& out) override;
+	void FinishPlayerDeath() override;
+	// 自機の死亡演出（19_GameOverAndDifficulty.md §1）。HP0 → 演出 → GAMEOVER。StagePlayScene は IPlayerDeathHost 経由でのみ操作される
+	std::unique_ptr<PlayerDeathPart> playerDeath_;
+	// 死亡演出の間（操作を受け付けない・被弾しない・射撃しない）
+	bool IsPlayerDying() const { return playerDeath_ && playerDeath_->IsActive(); }
+	// 死亡演出を始める（preview＝調整用。終わってもゲームオーバーへ行かない）
+	void BeginPlayerDeath(bool preview);
+
 	// 自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦は Stand
 	void ApplyPlayerPose();
 

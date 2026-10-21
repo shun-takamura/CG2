@@ -174,6 +174,25 @@ float DissolveHexWorld(float3 worldPosition, float3 center, float radius, float 
     return saturate(glow) * saturate(radius / width);
 }
 
+// 高さの面（ワールドの水平面）。面より下が消え、面を上げていくと下から上へほどける（死亡演出のエーテル化、
+// 19_GameOverAndDifficulty.md §1）。ワールド座標なので体の別の部位とも、水面の映り込みともつながる。返り値は光る強さ（0..1）
+//   height   : 面の高さ（ワールド Y）[m]
+//   edgeWidth: 光る縁の幅 [m]（面の上の残る側に付く）
+//   noiseScale / noiseAmplitude : 縁のゆらぎの細かさ [1/m] と振れ幅 [m]
+float DissolveRise(float3 worldPosition, float height, float edgeWidth, float noiseScale, float noiseAmplitude)
+{
+    float width = max(edgeWidth, 1e-4f);
+    float3 p = worldPosition * noiseScale;
+    float noise = DissolveValueNoise(p) * 0.65f + DissolveValueNoise(p * 2.03f + 17.1f) * 0.35f;
+    // 面からの高さ（負なら消える）
+    float above = worldPosition.y + (noise - 0.5f) * 2.0f * noiseAmplitude - height;
+    if (above < 0.0f)
+    {
+        discard;
+    }
+    return 1.0f - saturate(above / width);
+}
+
 #ifndef DISSOLVE_NO_MATERIAL
 // マテリアルの値でディゾルブする。無効なら 0。
 // dissolveEnable = 2（六角形）のとき、欄はこう読み替える：
@@ -185,6 +204,8 @@ float DissolveHexWorld(float3 worldPosition, float3 center, float radius, float 
 //   dissolvePadding2 = 縦の伸び / dissolveEdgeWidth = 縁の幅 [m] / dissolveNoiseScale, Weight = ゆらぎの細かさ・振れ幅 [m]
 // dissolveEnable = 5（ワールドの六角形・内側が消える）のとき：中心・半径・縦の伸びは 3/4 と同じ /
 //   dissolveEdgeWidth = 光る帯の幅 [m] / dissolveNoiseScale = 六角形の大きさ [m] / dissolveNoiseWeight = マスごとのばらつき [m]
+// dissolveEnable = 6（高さの面・下が消える。C++ の SetDissolvePlane）のとき：
+//   dissolveProgress = 面の高さ [m] / dissolveEdgeWidth = 縁の幅 [m] / dissolveNoiseScale, Weight = ゆらぎの細かさ・振れ幅 [m]
 float ApplyDissolve(float3 worldPosition, float2 screenPosition)
 {
     if (gMaterial.dissolveEnable == 0)
@@ -209,6 +230,11 @@ float ApplyDissolve(float3 worldPosition, float2 screenPosition)
         return DissolveHexWorld(worldPosition,
             float3(gMaterial.dissolveHeightMin, gMaterial.dissolveHeightMax, gMaterial.dissolvePadding),
             gMaterial.dissolveProgress, gMaterial.dissolvePadding2, gMaterial.dissolveEdgeWidth,
+            gMaterial.dissolveNoiseScale, gMaterial.dissolveNoiseWeight);
+    }
+    if (gMaterial.dissolveEnable == 6)
+    {
+        return DissolveRise(worldPosition, gMaterial.dissolveProgress, gMaterial.dissolveEdgeWidth,
             gMaterial.dissolveNoiseScale, gMaterial.dissolveNoiseWeight);
     }
     return DissolveClip(worldPosition, gMaterial.dissolveProgress, gMaterial.dissolveEdgeWidth,

@@ -101,6 +101,9 @@ class AnimatedObject3DInstance : public IImGuiEditable {
 
     // 部位ごとに、ディゾルブの縁を発光パスで光らせるか（SetDissolveSphere で立てる。DrawBloomPass が見る）
     std::vector<uint8_t> dissolveSubmeshes_;
+    // textureKeyword に合う部位のマテリアルに write を当て、dissolveSubmeshes_ に印を付ける（SetDissolveSphere / Plane の共通部分）
+    template <class Write>
+    void ApplyDissolveToSubmeshes(const std::string& textureKeyword, Write&& write);
 
 #ifdef USE_IMGUI
     // デバッグ描画用
@@ -179,6 +182,16 @@ public:
     /// （例 "Chest_"）。縁はディゾルブをかけた部位を DrawBloomPass で発光 RT にも描くと光る。毎フレーム呼んでよい
     /// </summary>
     void SetDissolveSphere(const DissolveSphere& dissolve, const std::string& textureKeyword = "");
+    /// <summary>
+    /// 高さの面のディゾルブ（Material.h の DissolvePlane、kDissolveRise）を部位にかける。面より下が消え、面を上げると下から上へほどける
+    /// （死亡演出のエーテル化）。textureKeyword・縁の光らせ方・毎フレーム呼んでよいのは SetDissolveSphere と同じ
+    /// </summary>
+    void SetDissolvePlane(const DissolvePlane& dissolve, const std::string& textureKeyword = "");
+    /// <summary>
+    /// ノイズだけのディゾルブ（Material.h の DissolveNoise）を部位にかける。場所の順番なしにまだらに欠ける（羽根の焼け落ち）。
+    /// textureKeyword・縁の光らせ方・毎フレーム呼んでよいのは SetDissolveSphere と同じ
+    /// </summary>
+    void SetDissolveNoise(const DissolveNoise& dissolve, const std::string& textureKeyword = "");
     /// <summary>ディゾルブを全部の部位で切る</summary>
     void ClearDissolve();
 

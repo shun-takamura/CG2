@@ -28,6 +28,7 @@ public:
 		float rainTime = 1.2f;           // 雨を降らせる長さ
 		float rainFadeStart = 1.5f;      // 大きい一枚だけにするため、残っている雨を薄くし始める時刻
 		float rainFadeTime = 0.6f;       // 雨が消え切るまで（minCoverTime より前に消え切るように）
+		float rainBurnStagger = 0.4f;    // 雨はオレンジの縁のディゾルブで焼けて消える。羽根ごとに焼け始めをずらす幅（0..1。19 番 §1.3）
 		float heroSpawnTime = 0.3f;      // 大きい一枚が現れる時刻
 		float followStartTime = 0.9f;    // カメラが大きい一枚を追い始める時刻
 		float minCoverTime = 2.2f;       // これを過ぎた最初の振れの端で覆い終わる（そこでロード）
@@ -105,6 +106,7 @@ public:
 			v("rainTime", rainTime);
 			v("rainFadeStart", rainFadeStart);
 			v("rainFadeTime", rainFadeTime);
+			v("rainBurnStagger", rainBurnStagger);
 			v("heroSpawnTime", heroSpawnTime);
 			v("followStartTime", followStartTime);
 			v("minCoverTime", minCoverTime);
@@ -208,6 +210,7 @@ private:
 		float flutterPhase;
 		float baseBend;          // しなりの中心の反り
 		bool seen;               // 一度でも画面に入ったか（入ってから外へ出たら捨てる）
+		float burnDelay;         // 焼け始めの遅れ（0..rainBurnStagger）
 		FeatherRenderer::Feather look;
 	};
 

@@ -73,10 +73,10 @@ def profile_for(path: Path):
 
 
 def newest_include_mtime():
-    """hlsli のどれかが更新されていたら全部コンパイルし直すための基準時刻。"""
-    if not INCLUDE_DIR.is_dir():
-        return 0.0
-    times = [p.stat().st_mtime for p in INCLUDE_DIR.rglob("*.hlsli")]
+    """hlsli のどれかが更新されていたら全部コンパイルし直すための基準時刻。
+    hlsli は各フォルダに置かれている（Object3D/Dissolve.hlsli・Cloud/CloudSky.hlsli など）ので、
+    INCLUDE_DIR ではなく SHADER_DIR の下を全部見る（INCLUDE_DIR だけだと hlsli を直しても .cso が作り直されなかった）。"""
+    times = [p.stat().st_mtime for p in SHADER_DIR.rglob("*.hlsli")]
     return max(times) if times else 0.0
 
 

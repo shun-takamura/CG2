@@ -651,6 +651,8 @@ void StagePlayScene::LoadTuningFromJson() {
 	if (cloudTopIntro_) cloudTopIntro_->LoadTuning(root["cloudTopIntro"]);
 	if (playerWings_) playerWings_->LoadTuning(root["playerWings"]);
 	playerThrusters_.LoadTuning(root["playerThrusters"]);
+	// 死亡演出（19_GameOverAndDifficulty.md §1）
+	if (playerDeath_) playerDeath_->LoadTuning(root["playerDeath"]);
 
 	// ----- phase（ステージ進行ステートマシン）-----
 	const JsonValue& ph = root["phase"];
@@ -1124,6 +1126,7 @@ void StagePlayScene::SaveTuningToJson() const {
 	if (cloudTopIntro_) cloudTopIntro_->SaveTuning(root["cloudTopIntro"]);
 	if (playerWings_) playerWings_->SaveTuning(root["playerWings"]);
 	playerThrusters_.SaveTuning(root["playerThrusters"]);
+	if (playerDeath_) playerDeath_->SaveTuning(root["playerDeath"]);
 
 	std::filesystem::path p(kStagePlayTuningPath);
 	if (p.has_parent_path()) {
@@ -2808,6 +2811,15 @@ void StagePlayScene::OnImGuiTuning() {
 			ImGui::TreePop();
 		}
 	}
+	if (playerDeath_ && ImGui::CollapsingHeader("Player Death (19 G1)")) {
+		// 調整用：HP は減らさず、終わってもゲームオーバーへ行かない（自機を元に戻す）。種類はいまのフェーズで決まる
+		if (ImGui::Button("Preview Death")) BeginPlayerDeath(true);
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) playerDeath_->Cancel();
+		ImGui::SameLine();
+		if (ImGui::Button("Save Player Death")) changed = true;
+		playerDeath_->OnImGui();
+	}
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -2837,6 +2849,7 @@ void StagePlayScene::Initialize() {
 	stageStart_ = std::make_unique<StageStartPart>();
 	cloudTopIntro_ = std::make_unique<CloudTopIntro>();
 	playerWings_ = std::make_unique<PlayerWingUnit>();
+	playerDeath_ = std::make_unique<PlayerDeathPart>();
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	// 区間 StagePlay/* は差し替えの重さの内訳（SceneManager が profile.log の scene_phase 行に出す）
@@ -2956,6 +2969,11 @@ void StagePlayScene::Initialize() {
 	// 自機の羽根（雲の上で展開し、レールの間は付けたまま。ボス戦では収納）
 	deferredInit_.push_back({ "StagePlay/PlayerWings", [this]() {
 		playerWings_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
+		return true;
+	} });
+	// 死亡演出の昇る糸のメッシュ
+	deferredInit_.push_back({ "StagePlay/PlayerDeath", [this]() {
+		playerDeath_->Initialize(this);
 		return true;
 	} });
 	deferredInit_.push_back({ "StagePlay/UI", [this]() {
@@ -3176,6 +3194,7 @@ void StagePlayScene::Finalize() {
 	if (object3DManager_) object3DManager_->DisableFog();
 	// 雲も同じ理由で外す（CloudLayer は stageEnv_ と一緒に消える）
 	if (stageEnv_) stageEnv_->Finalize();
+	if (playerDeath_) playerDeath_->Finalize();
 	// EffectManager は全シーン共通で、Update するのはステージ等の一部のシーンだけ。残すと次のシーン
 	// （ゲームオーバー等）で止まったまま描かれ、ボスの攻撃の歪み（Distortion）が画面に掛かり続ける
 	if (auto* em = EffectManager::GetInstance()) em->StopAll();
@@ -3523,13 +3542,14 @@ void StagePlayScene::Update() {
 	}
 	// 雲の上の回り込みの間は操作を受け付けない（16 番 §1。レールは t=0 から進める）。バインドの無い入力マップ＝何も押されていない
 	static InputActionMap kNoInput;
-	if (IsCloudTopIntroActive()) actions = &kNoInput;
+	if (IsCloudTopIntroActive() || IsPlayerDying()) actions = &kNoInput;
 
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
 		// SeekMax 到達で Landing へ自動遷移（このフレームはレール位置を直前ポーズで凍結）
-		// --bench-hold 中はレールを進めない（dt=0 なら位置も時刻も止まる）
-		const float railDt = (benchHoldSec_ >= 0.0f) ? 0.0f : GetScaledDeltaTime();
+		// --bench-hold 中はレールを進めない（dt=0 なら位置も時刻も止まる）。
+		// 死亡演出の間も止める（19 番 G2。次のウェーブも来ない。ワールドに残る粒が後ろへ流れて見えない）
+		const float railDt = (benchHoldSec_ >= 0.0f || IsPlayerDying()) ? 0.0f : GetScaledDeltaTime();
 		if (railStage_->UpdateCamera(actions, railDt, seekMaxSec_)) {
 			phase_ = Phase::Landing;
 			landingTimer_ = 0.0f;
@@ -3639,8 +3659,8 @@ void StagePlayScene::Update() {
 		moveDelta.x = std::clamp(moveDelta.x, -1.0f, 1.0f);
 		moveDelta.y = std::clamp(moveDelta.y, -1.0f, 1.0f);
 
-		// 必殺技発動中・雲の上の回り込みの間は入力ロック（移動・慣性をゼロ化）
-		if (specialActive_ || IsCloudTopIntroActive()) {
+		// 必殺技発動中・雲の上の回り込み・死亡演出の間は入力ロック（移動・慣性をゼロ化）
+		if (specialActive_ || IsCloudTopIntroActive() || IsPlayerDying()) {
 			moveDelta = { 0.0f, 0.0f };
 			playerVelocity_ = { 0.0f, 0.0f };
 		}
@@ -4073,6 +4093,12 @@ void StagePlayScene::Update() {
 		if (cloudTopIntro_ && cloudTopIntro_->IsActive()) {
 			cloudTopIntro_->Apply(camera_.get(), worldPos, (std::min)(GetScaledDeltaTime(), 1.0f / 30.0f));
 		}
+		// 死亡演出（19 番 G2）：レールの姿勢から自機へ寄り、昇る糸を追って見上げる。自機はカメラ基準で置くので、置いた後で上書きする
+		// （先に動かすと自機もカメラについて動き、寄れない）
+		if (IsPlayerDying()) {
+			playerDeath_->ApplyCamera(*camera_);
+			camera_->Update();
+		}
 		} // end else（Rail/Landing の camera-local 配置）
 	}
 
@@ -4143,8 +4169,10 @@ void StagePlayScene::Update() {
 	ApplyPlayerLook();
 
 	// 自機の羽根を Spine2 に付ける（スケルトンが更新された後）。デバッグで演出を飛ばしてレールへ来たとき（F4・シーク）は開いた形で付ける
+	// （死亡演出で隠した羽根は出し直さない）
 	if (playerWings_) {
-		if (phase_ == Phase::Rail && !IsCloudTopIntroActive() && playerWings_->GetState() == PlayerWingUnit::State::Hidden) {
+		if (phase_ == Phase::Rail && !IsCloudTopIntroActive() && !IsPlayerDying()
+			&& playerWings_->GetState() == PlayerWingUnit::State::Hidden) {
 			playerWings_->ShowDeployed();
 		}
 		playerWings_->SetBlinkGlow(playerBlinkGlow_);
@@ -4157,6 +4185,10 @@ void StagePlayScene::Update() {
 	} else {
 		playerThrusters_.StopAll();
 	}
+
+	// 死亡演出（スケルトンが更新された後。関節の位置からほどける高さと糸の根元を決める）。
+	// ジャスト回避のワールドスローに引きずられないよう Player グループで進める
+	if (playerDeath_) playerDeath_->Update(GetScaledDeltaTime(TimeGroup::Player));
 
 #ifdef _DEBUG
 
@@ -4389,6 +4421,8 @@ void StagePlayScene::Update() {
 			// 必殺技中はレティクル追従を止め、正面（+Z）でどっしり構える。
 			// （きょろきょろ防止＋発射時に向きが崩れるのを防ぐ。大技を構えて撃つ演出）
 			player_->SetRotate(specialFirmFacing_);
+		} else if (IsPlayerDying()) {
+			// 死亡演出の間は向きを止める（カメラが寄って見上げると、画面基準のレティクルの向きがつられて動くため）
 		} else if (IsCloudTopIntroActive()) {
 			// 雲の上の回り込みの間はレールの前を向く（カメラが回り込むので、レティクルの向きは使わない）。
 			// 照準の追従は回り込みが終わったフレームにレールのカメラから取り直す
@@ -4469,7 +4503,8 @@ void StagePlayScene::Update() {
 	// ----- 射撃・チャージシステム -----
 	// 必殺技発動中は射撃・チャージを完全に止める（ディスラプターのチャージ中は World がスロー＝
 	// gameFrozen にならないため、specialActive_ を明示的に除外しないと点の決定 Fire で弾が出てしまう）。
-	if (!gameFrozen && !specialActive_) {
+	// 死亡演出の間も止める（入力なしでもチャージは「押していない時間」で進んでしまうため）
+	if (!gameFrozen && !specialActive_ && !IsPlayerDying()) {
 		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
 		fireTimer_ -= dtP;
 		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
@@ -4773,6 +4808,9 @@ void StagePlayScene::Draw() {
 
 	DrawDynamicPrimitives();
 
+	// 死亡演出の昇る糸（加算・半透明。PrimitivePipeline に切り替える）
+	if (playerDeath_ && camera_) playerDeath_->Draw(camera_.get());
+
 	// LightningRuntime テスト描画
 	if (lightningTest_ && lightningTest_->IsActive()) {
 		lightningTest_->Draw();
@@ -4962,13 +5000,43 @@ void StagePlayScene::DrawStageStart() {
 
 bool StagePlayScene::HasBloomSources() const {
 	return (phase_ == Phase::StageStart && stageStart_ && stageStart_->HasBloom())
-		|| (playerWings_ && playerWings_->HasBloom());
+		|| (playerWings_ && playerWings_->HasBloom())
+		|| (playerDeath_ && playerDeath_->HasBloom());
 }
 
 void StagePlayScene::DrawBloomSources() {
 	if (stageStart_) stageStart_->DrawBloom(dxCore_);
 	// 羽根のディゾルブの縁（雲の上の展開・ボス戦の収納）
 	if (playerWings_) playerWings_->DrawBloom(dxCore_);
+	// 死亡演出：自機がほどける縁・昇る糸
+	if (playerDeath_) playerDeath_->DrawBloom(dxCore_);
+}
+
+void StagePlayScene::BurnPlayerWings(float seconds) {
+	if (playerWings_) playerWings_->Burn(seconds);
+}
+
+void StagePlayScene::CollectWingBurnPoints(std::vector<Vector3>& out) {
+	if (playerWings_) {
+		playerWings_->CollectJointPositions(out);
+	} else {
+		out.clear();
+	}
+}
+
+void StagePlayScene::FinishPlayerDeath() {
+	SceneManager::GetInstance()->ChangeScene("GAMEOVER");
+}
+
+void StagePlayScene::BeginPlayerDeath(bool preview) {
+	if (!player_ || !playerDeath_) return;
+	// 被弾・回避の点滅を止めて素の見た目から光らせる
+	playerInvincibilityTimer_ = 0.0f;
+	playerBlinkGlow_ = { 0.0f, 0.0f, 0.0f };
+	player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	// 羽根があるのはレールの間だけ（着地の遷移で収納する）
+	const PlayerDeathPart::Kind kind = phase_ == Phase::Rail ? PlayerDeathPart::Kind::Rail : PlayerDeathPart::Kind::Boss;
+	playerDeath_->Begin(kind, player_, preview);
 }
 
 void StagePlayScene::SetPlayerHidden(bool hidden) {
@@ -5006,7 +5074,9 @@ void StagePlayScene::ApplyPlayerLook() {
 	player_->SetEnvironmentCoefficient(playerLook_.environmentCoefficient);
 	if (playerLook_.overrideMaterial) player_->SetMetallicRoughness(playerLook_.metallic, playerLook_.roughness);
 	const float g = playerLook_.baseGlow;
-	player_->SetEmissive({ g + playerBlinkGlow_.x, g + playerBlinkGlow_.y, g + playerBlinkGlow_.z });
+	// 死亡演出のエーテルの光も下地に足す
+	const Vector3 death = playerDeath_ ? playerDeath_->GetBodyGlow() : Vector3{ 0.0f, 0.0f, 0.0f };
+	player_->SetEmissive({ g + playerBlinkGlow_.x + death.x, g + playerBlinkGlow_.y + death.y, g + playerBlinkGlow_.z + death.z });
 }
 
 bool StagePlayScene::IsCloudTopIntroActive() const {
@@ -5032,6 +5102,7 @@ void StagePlayScene::ApplyPlayerPose() {
 void StagePlayScene::Seek(float seconds) {
 	CompleteDeferredInit();
 	if (cloudTopIntro_) cloudTopIntro_->Cancel();
+	if (playerDeath_) playerDeath_->Cancel();
 	// Boss/Landing 中に Rail タイムラインを Seek したら Rail へ戻す（ボス・地面・コントローラを掃除）。
 	if (phase_ != Phase::Rail) {
 		if (stageStart_) stageStart_->Skip();
@@ -5354,7 +5425,10 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// 被弾が白のコマ＝自機の青だけに見えた。2026-10-19 実機）。半透明は今まで通り色の α
 	const float blinkFreq = damageBlinkFrequency_;
 	const Vector3 noGlow = { 0.0f, 0.0f, 0.0f };
-	if (justInv) {
+	if (IsPlayerDying()) {
+		// 死亡演出の間は点滅させない（エーテルの光は ApplyPlayerLook が足す）
+		playerBlinkGlow_ = noGlow;
+	} else if (justInv) {
 		// ジャスト回避中は無敵だが点滅させない（ソリッド表示）
 		player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 		playerBlinkGlow_ = noGlow;
@@ -5377,8 +5451,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 
 	// ----- 敵攻撃との接触判定（敵弾＋突進）-----
 	// ジャスト回避中は完全スルー。それ以外は、回避ジャスト窓内の接触＝ジャスト回避成立、
-	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。
-	if (!justInv) {
+	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。死亡演出の間は当たらない。
+	if (!justInv && !IsPlayerDying()) {
 		const Vector3 playerPos = player_->GetTranslate();
 		const float playerR = Gameplay::Of(player_).GetCollider().radius;
 
@@ -5492,12 +5566,17 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 
 	UpdateHPBarUI();
 
-	// HP=0 でゲームオーバー画面へ（リトライ方法はGameOverSceneで選択）
+	// HP=0 で死亡演出（19_GameOverAndDifficulty.md §1）→ 終わったらゲームオーバー画面へ（FinishPlayerDeath。リトライ方法はGameOverSceneで選択）
 	if (Gameplay::Of(player_).GetHP().IsDead() && !gameOverTriggered_) {
 		gameOverTriggered_ = true;
 		SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 			"GAMEOVER reason=player_dead x=" + std::to_string(playerInputOffset_.x) + " y=" + std::to_string(playerInputOffset_.y));
-		SceneManager::GetInstance()->ChangeScene("GAMEOVER");
+		// 調整用の演出（preview）中に死んだら、本番の演出で始め直す
+		if (playerDeath_) {
+			BeginPlayerDeath(false);
+		} else {
+			SceneManager::GetInstance()->ChangeScene("GAMEOVER");
+		}
 	}
 }
 

@@ -53,6 +53,7 @@ namespace {
 		case PlayerWingUnit::State::Deploying: return "Deploying";
 		case PlayerWingUnit::State::Deployed:  return "Deployed";
 		case PlayerWingUnit::State::Stowing:   return "Stowing";
+		case PlayerWingUnit::State::Burning:   return "Burning";
 		}
 		return "";
 	}
@@ -89,6 +90,27 @@ void PlayerWingUnit::Stow() {
 	stateTime_ = 0.0f;
 	wings_->PlayAnimation(kStowClip, 0.0f);
 	wings_->SetLoop(false);
+}
+
+void PlayerWingUnit::Burn(float seconds) {
+	if (!wings_ || state_ == State::Hidden || state_ == State::Burning) return;
+	// 開いた形のまま焼く（展開・収納の途中なら、そのコマで止めて焼く）
+	wings_->Pause();
+	state_ = State::Burning;
+	stateTime_ = 0.0f;
+	delay_ = 0.0f;
+	burnSeconds_ = (std::max)(seconds, 0.01f);
+}
+
+void PlayerWingUnit::CollectJointPositions(std::vector<Vector3>& out) const {
+	out.clear();
+	if (!IsDrawn() || !wings_->HasSkeleton()) return;
+	const Skeleton& skeleton = wings_->GetSkeleton();
+	out.reserve(skeleton.joints.size());
+	for (const Joint& joint : skeleton.joints) {
+		const Matrix4x4 m = wings_->GetJointWorldMatrix(joint.name);
+		out.push_back({ m.m[3][0], m.m[3][1], m.m[3][2] });
+	}
 }
 
 void PlayerWingUnit::Hide() {
@@ -137,6 +159,18 @@ void PlayerWingUnit::ApplyDissolve(float radiusRatio) {
 	dissolving_ = true;
 }
 
+void PlayerWingUnit::ApplyBurn(float progress) {
+	const float s = body_ ? body_->GetScale().x : 1.0f;
+	DissolveNoise d{};
+	d.progress = progress;
+	d.edgeWidth = burnEdgeWidth_;
+	d.edgeColor = { burnEdgeColor_.x * burnEdgeIntensity_, burnEdgeColor_.y * burnEdgeIntensity_,
+		burnEdgeColor_.z * burnEdgeIntensity_ };
+	d.noiseScale = s > 1e-4f ? burnNoiseScale_ / s : burnNoiseScale_;
+	wings_->SetDissolveNoise(d);
+	dissolving_ = true;
+}
+
 void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 	body_ = body;
 	if (!wings_) return;
@@ -146,6 +180,7 @@ void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 	}
 
 	float radiusRatio = 1.0f;
+	float burnProgress = -1.0f;   // 0 以上なら焼け落ちの見えている割合
 	switch (state_) {
 	case State::Deploying:
 		if (delay_ > 0.0f) {
@@ -164,6 +199,14 @@ void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 		stateTime_ += deltaTime;
 		radiusRatio = dissolveOutSeconds_ > 1e-3f ? 1.0f - SmoothStep01(stateTime_ / dissolveOutSeconds_) : 0.0f;
 		if (radiusRatio <= 0.0f) {
+			Hide();
+			return;
+		}
+		break;
+	case State::Burning:
+		stateTime_ += deltaTime;
+		burnProgress = 1.0f - SmoothStep01(stateTime_ / burnSeconds_);
+		if (burnProgress <= 0.0f) {
 			Hide();
 			return;
 		}
@@ -187,8 +230,15 @@ void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 		const Vector4 c = body->GetMaterialColor();
 		wings_->SetMaterialColor({ c.x * albedoGain_, c.y * albedoGain_, c.z * albedoGain_, c.w });
 	}
-	wings_->SetEmissive({ baseGlow_ + blinkGlow_.x, baseGlow_ + blinkGlow_.y, baseGlow_ + blinkGlow_.z });
-	ApplyDissolve(radiusRatio);
+	// 燃えている間は下地にオレンジを足す（焼け始めから強まる）
+	const float glowK = burnProgress >= 0.0f ? burnGlow_ * (std::min)((1.0f - burnProgress) * 4.0f, 1.0f) : 0.0f;
+	wings_->SetEmissive({ baseGlow_ + blinkGlow_.x + burnEdgeColor_.x * glowK, baseGlow_ + blinkGlow_.y + burnEdgeColor_.y * glowK,
+		baseGlow_ + blinkGlow_.z + burnEdgeColor_.z * glowK });
+	if (burnProgress >= 0.0f) {
+		ApplyBurn(burnProgress);
+	} else {
+		ApplyDissolve(radiusRatio);
+	}
 	wings_->Update(deltaTime);
 }
 
@@ -226,6 +276,11 @@ void PlayerWingUnit::LoadTuning(const JsonValue& node) {
 	read("roughness", roughness_);
 	read("baseGlow", baseGlow_);
 	read("albedoGain", albedoGain_);
+	ReadVector3(node["burnEdgeColor"], burnEdgeColor_);
+	read("burnEdgeIntensity", burnEdgeIntensity_);
+	read("burnEdgeWidth", burnEdgeWidth_);
+	read("burnNoiseScale", burnNoiseScale_);
+	read("burnGlow", burnGlow_);
 }
 
 void PlayerWingUnit::SaveTuning(JsonValue& node) const {
@@ -248,6 +303,11 @@ void PlayerWingUnit::SaveTuning(JsonValue& node) const {
 	write("roughness", roughness_);
 	write("baseGlow", baseGlow_);
 	write("albedoGain", albedoGain_);
+	node["burnEdgeColor"] = MakeVector3(burnEdgeColor_);
+	write("burnEdgeIntensity", burnEdgeIntensity_);
+	write("burnEdgeWidth", burnEdgeWidth_);
+	write("burnNoiseScale", burnNoiseScale_);
+	write("burnGlow", burnGlow_);
 }
 
 void PlayerWingUnit::OnImGui() {
@@ -275,5 +335,12 @@ void PlayerWingUnit::OnImGui() {
 	ImGui::SliderFloat("Roughness", &roughness_, 0.0f, 1.0f);
 	ImGui::SliderFloat("Albedo Gain", &albedoGain_, 0.5f, 6.0f);
 	ImGui::SliderFloat("Base Glow (fill)", &baseGlow_, 0.0f, 0.5f);
+	ImGui::TextDisabled("Burn (death, 19 G2)");
+	if (ImGui::Button("Burn")) Burn(1.6f);
+	ImGui::ColorEdit3("Burn Edge Color", &burnEdgeColor_.x, ImGuiColorEditFlags_Float);
+	ImGui::DragFloat("Burn Edge Intensity", &burnEdgeIntensity_, 0.05f, 0.0f, 20.0f);
+	ImGui::DragFloat("Burn Edge Width (noise)", &burnEdgeWidth_, 0.005f, 0.001f, 1.0f);
+	ImGui::DragFloat("Burn Noise Scale (1/m, scale 1)", &burnNoiseScale_, 0.05f, 0.0f, 50.0f);
+	ImGui::DragFloat("Burn Glow", &burnGlow_, 0.01f, 0.0f, 2.0f);
 #endif
 }

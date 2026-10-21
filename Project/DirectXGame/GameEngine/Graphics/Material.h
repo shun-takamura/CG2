@@ -54,6 +54,7 @@ inline constexpr int32_t kDissolveHexScreen = 2;   // 画面座標の六角形�
 inline constexpr int32_t kDissolveSphereHole = 3;  // 点からの距離：半径の内側が消える（胸の装甲に入口を開ける）
 inline constexpr int32_t kDissolveSphereGrow = 4;  // 点からの距離：半径の内側だけが見える（羽根を付け根から出す・先から消す）
 inline constexpr int32_t kDissolveHexHole = 5;     // ワールドの六角形（+Z を向いた面）：中心から順にマスごと消える（胸の装甲に入口を開ける）
+inline constexpr int32_t kDissolveRise = 6;        // 高さの面：面より下が消える。面を上げると下から上へほどける（死亡演出のエーテル化）
 
 // 点からの距離のディゾルブ（kDissolveSphereHole / Grow / kDissolveHexHole）の設定。Material の空いている欄を読み替えて渡す（Dissolve.hlsli）
 struct DissolveSphere {
@@ -83,6 +84,45 @@ inline void SetDissolveSphere(Material& m, const DissolveSphere& d)
 	const bool hex = d.mode == kDissolveHexHole;
 	m.dissolveNoiseScale = hex ? d.cellSize : d.noiseScale;
 	m.dissolveNoiseWeight = hex ? d.cellJitter : d.noiseAmplitude;
+}
+
+// ワールド座標のノイズだけのディゾルブ（kDissolveWorld を高さ抜きで使う）。場所の順番なしにまだらに欠ける（羽根の焼け落ち）
+struct DissolveNoise {
+	float progress = 1.0f;                   // 見えている割合 0..1（0=全部消えた / 1=全部見えている）
+	float edgeWidth = 0.1f;                  // 光る縁の幅（ノイズ値 0..1 の単位）
+	Vector3 edgeColor = { 1.0f, 1.0f, 1.0f };// 光る縁の色（1 を超えてよい。発光パスでブルームに乗る）
+	float noiseScale = 4.0f;                 // ノイズの細かさ [1/m]
+};
+
+inline void SetDissolveNoise(Material& m, const DissolveNoise& d)
+{
+	m.dissolveEnable = kDissolveWorld;
+	m.dissolveProgress = d.progress;
+	m.dissolveEdgeWidth = d.edgeWidth;
+	m.dissolveEdgeColor = d.edgeColor;
+	m.dissolveNoiseScale = d.noiseScale;
+	m.dissolveHeightMin = 0.0f;
+	m.dissolveHeightMax = 1.0f;
+	m.dissolveNoiseWeight = 1.0f;
+}
+
+// 高さの面のディゾルブ（kDissolveRise）の設定。面はワールドの水平面で、面より下が消える（Dissolve.hlsli の DissolveRise）
+struct DissolvePlane {
+	float height = 0.0f;                     // 面の高さ（ワールド Y）[m]
+	float edgeWidth = 0.1f;                  // 光る縁の幅 [m]（面の上の残る側に付く）
+	Vector3 edgeColor = { 1.0f, 1.0f, 1.0f };// 光る縁の色（1 を超えてよい。発光パスでブルームに乗る）
+	float noiseScale = 4.0f;                 // 縁のゆらぎの細かさ [1/m]
+	float noiseAmplitude = 0.05f;            // 縁のゆらぎの振れ幅 [m]
+};
+
+inline void SetDissolvePlane(Material& m, const DissolvePlane& d)
+{
+	m.dissolveEnable = kDissolveRise;
+	m.dissolveProgress = d.height;
+	m.dissolveEdgeWidth = d.edgeWidth;
+	m.dissolveEdgeColor = d.edgeColor;
+	m.dissolveNoiseScale = d.noiseScale;
+	m.dissolveNoiseWeight = d.noiseAmplitude;
 }
 // HLSL 側（Object3d*.PS.hlsl の Material）とレイアウトを合わせる。定数バッファは 256B 単位なので確保量は変わらない。
 // 末尾の視差は PBR / 地形の PS、地形の欄は地形の PS だけが宣言する（他の PS は手前までしか読まないので宣言しなくてよい）

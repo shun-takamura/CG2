@@ -1,0 +1,21 @@
+{
+  "name": "PlayerEtherLight",
+  "totalDuration": 3.2,
+  "loop": false,
+  "primitives": [],
+  "particles": [],
+  "lights": [
+    {
+      "displayName": "EtherLight",
+      "kind": "Point",
+      "offset": [0, 1.0, 0],
+      "startTime": 0,
+      "lifetime": 3.2,
+      "color": [1, 1, 1, 1],
+      "startIntensity": 6,
+      "endIntensity": 0,
+      "range": 6
+    }
+  ],
+  "sounds": []
+}
