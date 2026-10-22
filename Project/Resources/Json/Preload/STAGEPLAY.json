@@ -33,6 +33,10 @@
     {
       "path": "Resources/Shaders/Water/WaterSurface.PS.hlsl",
       "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Cloud/CloudTemporal.PS.hlsl",
+      "profile": "ps_6_0"
     }
   ],
   "textures": [
@@ -255,6 +259,34 @@
     {
       "path": "Resources/Models/Player/Bullet/playerBullet.dds",
       "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_noise_grad.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_moko_grad.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_moko_soft.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_moko_soft_grad.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_noise16.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/Cloud/cloud_moko_soft16.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Enemy/enemy.dds",
+      "linear": false
     }
   ],
   "models": [
@@ -309,6 +341,10 @@
     {
       "dir": "Resources/Models/Player/Bullet",
       "file": "playerBullet.mesh"
+    },
+    {
+      "dir": "Resources/Models/Enemy",
+      "file": "enemy.mesh"
     }
   ],
   "animatedModels": [

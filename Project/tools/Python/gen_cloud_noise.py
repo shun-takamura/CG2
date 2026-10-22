@@ -28,6 +28,14 @@ Assets/ に PNG を置くと cook_assets.py が BC7_SRGB で上書きするの�
 高さの比較は数テクセル離れた位置どうしなので、8bit の段差が筋にならない。
 
     py tools\Python\gen_cloud_noise.py --moko --no-dds --preview moko.png   # 見た目だけ確認
+
+--grad を付けると、形（cloud_noise の R）ともこもこの高さの「傾き」を焼いて
+Resources/Textures/Cloud/cloud_noise_grad.dds / cloud_moko_grad.dds に出力する（R16G16_FLOAT・ミップ付き・無圧縮）。
+雲海のレイマーチ（CloudRaymarch.hlsli）が上面の法線に使う。高さを差分して法線を取ると、バイリニア補間の折れ目と
+BC4 の量子化の段差を拾って等高線のような縞が出たため。値は UV 1 あたりの変化量（R = d/du、G = d/dv）。
+形・もこもこと同じ --size / --seed / --recipe で焼くこと（高さと傾きが別物になると陰影がずれる）。
+
+    py tools\Python\gen_cloud_noise.py --grad
     py tools\Python\gen_cloud_noise.py --moko --recipe large --tile 2 --no-dds --preview moko_large.png
 """
 import argparse
@@ -43,6 +51,15 @@ from PIL import Image
 TEXCONV = Path("externals/texconv/Texconv.exe")
 OUTPUT = Path("Resources/Textures/Cloud/cloud_noise.dds")
 MOKO_OUTPUT = Path("Resources/Textures/Cloud/cloud_moko_height.dds")
+SHAPE_GRAD_OUTPUT = Path("Resources/Textures/Cloud/cloud_noise_grad.dds")
+MOKO_GRAD_OUTPUT = Path("Resources/Textures/Cloud/cloud_moko_grad.dds")
+# レシピごとの出力名（既定の large_soft はタイトルの遠景の雲が使う名前のまま）
+MOKO_OUTPUT_BY_RECIPE = {"large_soft_smooth": Path("Resources/Textures/Cloud/cloud_moko_soft.dds")}
+SHAPE16_OUTPUT = Path("Resources/Textures/Cloud/cloud_noise16.dds")
+MOKO16_OUTPUT = Path("Resources/Textures/Cloud/cloud_moko16.dds")
+MOKO16_OUTPUT_BY_RECIPE = {"large_soft_smooth": Path("Resources/Textures/Cloud/cloud_moko_soft16.dds")}
+MOKO_GRAD_OUTPUT_BY_RECIPE = {"large_soft_smooth": Path("Resources/Textures/Cloud/cloud_moko_soft_grad.dds")}
+DXGI_FORMAT_R16G16_FLOAT = 34
 
 # もこもこのレシピ。octaves = (セルの周期, 重み)。周期が大きいほど粒が小さい
 #   radius … ドームの半径（セル単位）。1 を超えると隣と大きく重なって粒が潰れる
@@ -72,6 +89,9 @@ MOKO_RECIPES = {
     # 両方（控えめ）。こぶの丸みを少し残す
     "large_soft": dict(octaves=((4, 1.0), (8, 0.6), (16, 0.3), (32, 0.12)),
                        radius=0.9, jitter=0.6, smooth=4.0, warp=0.35, lobe=0.2, billow=0.25),
+    # large_soft のドームを縁で傾き 0 の断面に。雲海のレイマーチ用（cloud_moko_soft.dds）。半球だと谷で縞が出た
+    "large_soft_smooth": dict(octaves=((4, 1.0), (8, 0.6), (16, 0.3), (32, 0.12)),
+                              radius=0.9, jitter=0.6, smooth=4.0, warp=0.35, lobe=0.2, billow=0.25, profile=1.25),
 }
 
 BILLOW_SOFTNESS = 0.12    # billow の折れ目の丸め幅（Perlin の値はおおよそ ±0.7）
@@ -205,7 +225,8 @@ def domes(size, period, recipe, rng, warp_x, warp_y):
                 edge = np.clip((np.hypot(vx, vy) / r - 0.4) / 0.5, 0.0, 1.0)
                 r = r * (1.0 + lobe * wave * edge * edge * (3.0 - 2.0 * edge))
             d = np.hypot(vx, vy) / r
-            acc += np.exp(smooth * np.sqrt(np.clip(1.0 - d * d, 0.0, 1.0)))
+            # 断面 (1 − d²)^profile。0.5 は半球（縁で傾きが無限大＝輪の線が出て、雲海の谷で縞になった）、1 以上は縁で傾き 0
+            acc += np.exp(smooth * np.clip(1.0 - d * d, 0.0, 1.0) ** recipe.get("profile", 0.5))
     # 9 近傍すべてが 0 のとき 0 になるよう log(9) を引く
     return np.log(acc / 9.0) / smooth
 
@@ -301,6 +322,99 @@ def to_png(shape, mask, path):
     Image.fromarray(rgb, "RGB").save(path)
 
 
+def gradient_uv(height):
+    """周期境界の中心差分。UV 1 あたりの変化量 (d/du, d/dv)。u = 列（x）、v = 行（y）"""
+    size = height.shape[0]
+    du = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5 * size
+    dv = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5 * size
+    return du, dv
+
+
+def write_dds_rg16f(path, du, dv):
+    """R16G16_FLOAT の DDS（DX10 ヘッダ・ミップ付き）を書く。ミップは 2x2 平均（傾きの平均＝平均した高さの傾き）"""
+    levels = []
+    a, b = du.astype(np.float32), dv.astype(np.float32)
+    while True:
+        levels.append(np.stack([a, b], axis=-1).astype(np.float16))
+        if a.shape[0] == 1:
+            break
+        a = 0.25 * (a[0::2, 0::2] + a[1::2, 0::2] + a[0::2, 1::2] + a[1::2, 1::2])
+        b = 0.25 * (b[0::2, 0::2] + b[1::2, 0::2] + b[0::2, 1::2] + b[1::2, 1::2])
+    size = du.shape[0]
+    flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000 | 0x8   # CAPS|HEIGHT|WIDTH|PIXELFORMAT|MIPMAPCOUNT|PITCH
+    header = np.zeros(31, dtype=np.uint32)
+    header[0] = 124
+    header[1] = flags
+    header[2] = size                       # height
+    header[3] = size                       # width
+    header[4] = size * 4                   # pitch（1 行のバイト数）
+    header[6] = len(levels)                # mip 数
+    header[18] = 32                        # DDS_PIXELFORMAT.size
+    header[19] = 0x4                       # DDPF_FOURCC
+    header[20] = int.from_bytes(b"DX10", "little")
+    header[26] = 0x1000 | 0x8 | 0x400000   # TEXTURE|COMPLEX|MIPMAP
+    dx10 = np.array([DXGI_FORMAT_R16G16_FLOAT, 3, 0, 1, 0], dtype=np.uint32)  # TEXTURE2D・配列 1
+    with open(path, "wb") as f:
+        f.write(b"DDS ")
+        f.write(header.tobytes())
+        f.write(dx10.tobytes())
+        for level in levels:
+            f.write(level.tobytes())
+
+
+def write_dds_unorm16(path, channels):
+    """R16_UNORM（1ch）/ R16G16_UNORM（2ch）の DDS（DX10 ヘッダ・ミップ付き・無圧縮）を書く。値は 0..1。
+    雲海のレイマーチは高さ = 最高点 − 深さ×補正値÷ノイズ で、谷ではノイズの 1 段が数 m の段差に拡大される。
+    BC4/BC5（8 ビット相当）だと段々の高さが等高線の縞になったので、16 ビットで持つ"""
+    fmt = {1: 56, 2: 35}[len(channels)]  # DXGI_FORMAT_R16_UNORM / R16G16_UNORM
+    chans = [c.astype(np.float64) for c in channels]
+    levels = []
+    while True:
+        levels.append(np.stack([np.round(np.clip(c, 0, 1) * 65535) for c in chans], axis=-1).astype(np.uint16))
+        if chans[0].shape[0] == 1:
+            break
+        chans = [0.25 * (c[0::2, 0::2] + c[1::2, 0::2] + c[0::2, 1::2] + c[1::2, 1::2]) for c in chans]
+    size = channels[0].shape[0]
+    header = np.zeros(31, dtype=np.uint32)
+    header[0] = 124
+    header[1] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000 | 0x8
+    header[2] = size
+    header[3] = size
+    header[4] = size * 2 * len(channels)
+    header[6] = len(levels)
+    header[18] = 32
+    header[19] = 0x4
+    header[20] = int.from_bytes(b"DX10", "little")
+    header[26] = 0x1000 | 0x8 | 0x400000
+    dx10 = np.array([fmt, 3, 0, 1, 0], dtype=np.uint32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(b"DDS ")
+        f.write(header.tobytes())
+        f.write(dx10.tobytes())
+        for level in levels:
+            f.write(level.tobytes())
+    print(f"wrote {path} ({size}x{size}, {'R16' if len(channels) == 1 else 'R16G16'}_UNORM, mips {len(levels)})")
+
+
+def write_unorm16(size, seed, recipe):
+    shape, mask = build(size, seed)
+    write_dds_unorm16(SHAPE16_OUTPUT, [shape, mask])
+    moko = build_moko(size, seed, MOKO_RECIPES[recipe])
+    write_dds_unorm16(MOKO16_OUTPUT_BY_RECIPE.get(recipe, MOKO16_OUTPUT), [moko])
+
+
+def write_gradients(size, seed, recipe):
+    shape, _ = build(size, seed)
+    moko = build_moko(size, seed, MOKO_RECIPES[recipe])
+    moko_grad = MOKO_GRAD_OUTPUT_BY_RECIPE.get(recipe, MOKO_GRAD_OUTPUT)
+    for height, path in ((shape, SHAPE_GRAD_OUTPUT), (moko, moko_grad)):
+        du, dv = gradient_uv(height)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_dds_rg16f(path, du, dv)
+        print(f"wrote {path} ({size}x{size}, R16G16_FLOAT, |grad| max {np.hypot(du, dv).max():.1f} /UV)")
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--size", type=int, default=512)
@@ -310,13 +424,22 @@ def main(argv):
     parser.add_argument("--recipe", default="large_soft", choices=sorted(MOKO_RECIPES), help="--moko のレシピ")
     parser.add_argument("--tile", type=int, default=3, help="--moko のプレビューで、雲の形1枚の間にもこもこを何回繰り返すか")
     parser.add_argument("--no-dds", action="store_true", help="DDS を書かずにプレビューだけ作る")
+    parser.add_argument("--grad", action="store_true", help="形ともこもこの傾き（法線用）を焼く")
+    parser.add_argument("--unorm16", action="store_true", help="形/マスクともこもこを 16 ビット無圧縮で焼く（雲海のレイマーチ用。段差の縞対策）")
     args = parser.parse_args(argv)
+
+    if args.unorm16:
+        write_unorm16(args.size, args.seed, args.recipe)
+        return 0
+    if args.grad:
+        write_gradients(args.size, args.seed, args.recipe)
+        return 0
 
     if not args.no_dds and not TEXCONV.exists():
         print(f"[ERROR] {TEXCONV} が見つかりません（Project/ をカレントにして実行してください）")
         return 1
 
-    output = MOKO_OUTPUT if args.moko else OUTPUT
+    output = MOKO_OUTPUT_BY_RECIPE.get(args.recipe, MOKO_OUTPUT) if args.moko else OUTPUT
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp:
