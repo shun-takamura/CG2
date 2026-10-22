@@ -30,7 +30,7 @@ import gen_cloud_noise as gen  # noqa: E402
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 TUNING_PATH = PROJECT_DIR / "Resources" / "Json" / "Tuning" / "StagePlay.json"
 SCENE_PATH = PROJECT_DIR / "Resources" / "Json" / "Scenes" / "StagePlay.json"
-CACHE_PATH = Path(tempfile.gettempdir()) / "preview_cloud_raymarch_noise.npz"
+CACHE_PATH = Path(tempfile.gettempdir()) / "preview_cloud_raymarch_noise_soft.npz"
 
 # CloudRaymarcher::Params の既定値（ゼノブレ式の面で使う分だけ）
 DEFAULTS = dict(
@@ -39,7 +39,7 @@ DEFAULTS = dict(
     steps=48, firstStep=4.0, maxDistance=20000.0, probeLength=30.0,
     normalEps=12.0, wrap=0.3, lightStep=18.0, density=1.2, valley=0.7, valleyPow=0.6, ambient=0.15,
     litColor=[1.0, 0.99, 0.97], shadowColor=[0.30, 0.38, 0.55],
-    traceSlope=0.35, traceEpsilon=0.5,
+    traceSlope=0.35, traceEpsilon=0.5, xeno=0.0, hv=0.0, accumulate=1.0, refStep=60.0, sunElevation=0.0, detailScale=500.0, detailWeight=0.0, softDistance=3000.0, lightTaps=2.0, grazingMin=0.05, grazingPower=1.0, traceRefine=0.0, detailFadeStart=600.0, detailFadeEnd=2500.0, detailFadeLod=2.0, mokoLodBias=0.0, mokoNormal=1.0, mokoHeight=0.0, linearHeight=0.0, mokoValleyLow=0.0, mokoValleyHigh=0.0,
     shaftRadius=60.0, shaftWallDepth=80.0, shaftWallBlend=25.0, shaftDarkness=0.6, undersideBright=0.45,
     capTop=60.0, capBottom=10.0, floorDepth=25.0, exitZoneInner=0.0, exitZoneOuter=100.0, capDepth=60.0, shaftNoiseScale=0.25, volume=1.0,
     volumeZoneInner=40.0, volumeZoneOuter=120.0, volumeSteps=48, volumeRange=300.0, volumeShaftWeight=0.2, extinction=0.015,
@@ -50,6 +50,8 @@ DEFAULTS = dict(
 SUN_DIRECTION = np.array([-0.191, 0.815, -0.547])
 # 空の水平線より下の色（線形）。タイトルの青空 cubemap は下半分も濃い青なので、透けると雲が青く見える
 SKY_BELOW = [0.20, 0.42, 0.80]
+# もこもこの陰影の強さの基準にするノイズの値（ノイズ 0.3〜1 の真ん中あたり）。シェーダの kMokoNoiseRef と同じ
+MOKO_NOISE_REF = 0.65
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +64,7 @@ def load_noise():
         return d["shape"], d["mask"], d["moko"]
     print("ノイズを生成中（初回のみ）...", flush=True)
     shape, mask = gen.build(512, 1)
-    moko = gen.build_moko(512, 1, gen.MOKO_RECIPES["large_soft"])
+    moko = gen.build_moko(512, 1, gen.MOKO_RECIPES["large_soft_smooth"])  # cloud_moko_soft.dds と同じ
     np.savez(CACHE_PATH, shape=shape, mask=mask, moko=moko)
     return shape, mask, moko
 
@@ -97,13 +99,18 @@ class Noise:
     def __init__(self, pixel_angle):
         shape, mask, moko = load_noise()
         self.levels = {"shape": pyramid(shape), "mask": pyramid(mask), "moko": pyramid(moko)}
+        # 傾き（gen_cloud_noise.py --grad と同じ中心差分。UV 1 あたり）。法線はこれを読む
+        for name, height in (("shape", shape), ("moko", moko)):
+            du, dv = gen.gradient_uv(height)
+            self.levels[name + "_du"] = pyramid(du)
+            self.levels[name + "_dv"] = pyramid(dv)
         self.pixel_angle = pixel_angle
 
-    def sample(self, name, x, z, scale, dist):
-        """距離 dist [m] とノイズ 1 枚の大きさ scale [m] からミップを選ぶ（レベル間は線形）"""
+    def sample(self, name, x, z, scale, dist, bias=0.0):
+        """距離 dist [m] とノイズ 1 枚の大きさ scale [m] からミップを選ぶ（レベル間は線形）。bias で粗い側へずらす"""
         levels = self.levels[name]
         texels = dist * self.pixel_angle * levels[0].shape[0] / scale
-        lod = np.clip(np.log2(np.maximum(texels, 1.0)), 0, len(levels) - 1)
+        lod = np.clip(np.log2(np.maximum(texels, 1.0)) + bias, 0, len(levels) - 1)
         l0 = np.floor(lod).astype(int)
         f = lod - l0
         u = x / scale
@@ -135,10 +142,43 @@ class Clouds:
 
     def cloud_noise(self, x, z, dist):
         p = self.p
-        large = self.noise.sample("shape", x, z, p["shapeScale"], dist)
-        moko = self.noise.sample("moko", x, z, p["mokoScale"], dist)
-        n = large + (moko - large) * p["mokoWeight"]
+        fade = self.detail_fade(dist)
+        large = self.noise.sample("shape", x, z, p["shapeScale"], dist, fade * p["detailFadeLod"])
+        if p["detailWeight"] > 0:
+            # 同じノイズを小さいスケールでも引いて混ぜる（煙感）。混ぜて狭まった分布を広げ直して補正値の意味を保つ
+            small = self.noise.sample("shape", x + 517.0, z + 263.0, p["detailScale"], dist)
+            w = p["detailWeight"]
+            large = np.clip(0.5 + ((1 - w) * large + w * small - 0.5) / np.sqrt((1 - w) ** 2 + w * w), 0, 1)
+        if p["mokoHeight"] > 0:
+            # もこもこは高さのでこぼこ（moko_offset）として別に足す。ノイズには混ぜない
+            return p["noiseFloor"] + (1 - p["noiseFloor"]) * large
+        moko = self.noise.sample("moko", x, z, p["mokoScale"], dist, p["mokoLodBias"])
+        # もこもこは大きな形の高い所（頂上）だけに乗せる。谷では高さの傾きが 1/ノイズ² 倍に増幅され、細かい段が縞になるため
+        w = p["mokoWeight"] * self.moko_mask(large) * (1 - fade)
+        n = large + (moko - large) * w
         return p["noiseFloor"] + (1 - p["noiseFloor"]) * n
+
+    def detail_fade(self, dist):
+        """遠くの細部の薄め具合（シェーダの DetailFade）"""
+        p = self.p
+        # 本当の距離で（ミップ用の dist は浅い角度で ÷|dir.y| 水増しされている）。fade_dist が無ければ dist
+        d = getattr(self, "fade_dist", None)
+        d = dist if d is None or np.shape(d) != np.shape(dist) else d
+        x = np.clip((d - p["detailFadeStart"]) / max(p["detailFadeEnd"] - p["detailFadeStart"], 1), 0, 1)
+        return x * x * (3 - 2 * x)
+
+    def moko_mask(self, large):
+        p = self.p
+        x = np.clip((large - p["mokoValleyLow"]) / max(p["mokoValleyHigh"] - p["mokoValleyLow"], 1e-3), 0, 1)
+        return x * x * (3 - 2 * x)
+
+    def moko_offset(self, x, z, dist):
+        """もこもこの高さのでこぼこ [m]（谷でも増幅されない一定の高さ）"""
+        p = self.p
+        if p["mokoHeight"] <= 0:
+            return np.zeros_like(x)
+        moko = self.noise.sample("moko", x, z, p["mokoScale"], dist, p["mokoLodBias"])
+        return p["mokoHeight"] * (moko - 0.5)
 
     def coverage(self, x, z, dist):
         m = self.noise.sample("mask", x, z, self.p["maskScale"], dist)
@@ -197,8 +237,18 @@ class Clouds:
 
     def over(self, pos, dist):
         p = self.p
+        if p["linearHeight"] > 0:
+            # 上面からの深さで濃さ（15m で 1）。下面は丸める
+            h, _ = self.linear_height(pos[:, 0], pos[:, 2], dist)
+            sea = (h - pos[:, 1]) / 15.0 * np.clip((pos[:, 1] - p["bottom"]) / p["bottomFade"], 0, 1)
+            inside, c, d = self.hole_region(pos)
+            if inside.any():
+                sea[inside] = np.minimum(sea[inside], self.hole_over(pos[inside], dist[inside], c[inside], d[inside]))
+            return sea
         n = self.cloud_noise(pos[:, 0], pos[:, 2], dist)
-        density = np.clip((p["top"] - pos[:, 1]) / p["seaDepth"], 0, 1) * np.clip((pos[:, 1] - p["bottom"]) / p["bottomFade"], 0, 1)
+        # もこもこの分だけ上面を持ち上げる＝その分だけ低い高さとして濃さを測る
+        y = pos[:, 1] - self.moko_offset(pos[:, 0], pos[:, 2], dist)
+        density = np.clip((p["top"] - y) / p["seaDepth"], 0, 1) * np.clip((pos[:, 1] - p["bottom"]) / p["bottomFade"], 0, 1)
         sea = (n * density - self.coverage(pos[:, 0], pos[:, 2], dist)) * p["sharpness"]
         inside, c, d = self.hole_region(pos)
         if inside.any():
@@ -206,12 +256,24 @@ class Clouds:
             sea[inside] = np.minimum(sea[inside], self.hole_over(pos[inside], dist[inside], c[inside], d[inside]))
         return sea
 
+    def linear_height(self, x, z, dist):
+        """線形の高さ（linearHeight=1）：頂上〜谷底の範囲はゼノブレ式と同じで、ノイズに比例。谷で傾きが増幅されない"""
+        p = self.p
+        n = self.cloud_noise(x, z, dist)
+        cov = self.coverage(x, z, dist)
+        dmin = p["seaDepth"] * cov
+        dmax = p["seaDepth"] * cov / max(p["noiseFloor"], 1e-3)
+        mix = (n - p["noiseFloor"]) / (1 - p["noiseFloor"])
+        return p["top"] - dmin - (dmax - dmin) * (1 - mix) + self.moko_offset(x, z, dist), dmax - dmin
+
     def surface_height(self, x, z, dist):
         """上面の高さ H = 最高点 − 深さ × 補正値 / ノイズ（ノイズ × 濃さ = 補正値 の所）"""
         p = self.p
+        if p["linearHeight"] > 0:
+            return self.linear_height(x, z, dist)[0]
         n = np.maximum(self.cloud_noise(x, z, dist), 1e-3)
         depth = np.minimum(p["seaDepth"] * self.coverage(x, z, dist) / n, p["seaDepth"])
-        return p["top"] - depth
+        return p["top"] - depth + self.moko_offset(x, z, dist)
 
     # --- B'（ボリューム） ----------------------------------------------------
 
@@ -291,22 +353,47 @@ class Clouds:
     # --- 歩き方 -----------------------------------------------------------
 
     def trace(self, eye, dirs, t0, t_end, active):
-        """上面の高さ場トレース（TraceSurface）。戻り値 (t, hit)"""
+        """上面の高さ場トレース（TraceSurface）。戻り値 (t, hit)
+        面との高さの差 /（下向きの傾き＋傾斜の見積もり）だけ進み、面の下に入ったら直前の点との間を 2 分探索して面の上に戻す。
+        2 分探索なしで「面に近づいたら止める」だと、浅い角度では歩数を使い切った所や面の少し上で止まり、
+        止まる位置が歩数の切り替わりで段々に変わって、指紋のような縞（陰影・谷の暗さの両方）になった"""
         p = self.p
         descent = -np.minimum(dirs[:, 1], -1e-4) + p["traceSlope"]
+        grazing = np.maximum(np.abs(dirs[:, 1]), p["grazingMin"]) ** p["grazingPower"]
         t = t0.copy()
+        prev = t0.copy()
         active = active & (t < t_end)
         hit = np.zeros(len(t), bool)
         for _ in range(int(p["steps"])):
             if not active.any():
                 break
             pos = eye + dirs * t[:, None]
-            gap = pos[:, 1] - self.surface_height(pos[:, 0], pos[:, 2], t)
+            self.fade_dist = t
+            gap = pos[:, 1] - self.surface_height(pos[:, 0], pos[:, 2], t / grazing)
+            self.fade_dist = None
             done = active & (gap < p["traceEpsilon"])
             hit |= done
             active &= ~done
+            prev = np.where(active, t, prev)
             t = np.where(active, t + np.maximum(gap, 0) / descent, t)
             active &= t < t_end
+        # 当たった所を面まで詰める：少し先（面の下）を探して挟み、2 分探索。挟めなければそのまま。
+        # 「面から traceEpsilon 以内で止める」だけだと、浅い角度では水平に最大 traceEpsilon/|dir.y| 手前で止まり、
+        # その位置が歩数で段々に変わって、陰影に指紋のような縞が出た
+        h = np.nonzero(hit)[0]
+        if len(h) and p["traceRefine"] > 0:
+            lo = t[h].copy()
+            reach = 2.0 * p["traceEpsilon"] / np.maximum(-dirs[h, 1], p["grazingMin"])
+            hi = lo + reach
+            qh = eye + dirs[h] * hi[:, None]
+            under = qh[:, 1] < self.surface_height(qh[:, 0], qh[:, 2], hi / grazing[h])
+            for _ in range(int(p["traceRefine"])):
+                mid = 0.5 * (lo + hi)
+                q = eye + dirs[h] * mid[:, None]
+                u = q[:, 1] < self.surface_height(q[:, 0], q[:, 2], mid / grazing[h])
+                hi = np.where(u, mid, hi)
+                lo = np.where(u, lo, mid)
+            t[h] = np.where(under, hi, t[h])
         return np.minimum(t, t_end), hit | active
 
     def march_geometric(self, eye, dirs, t0, t_end, active):
@@ -335,6 +422,89 @@ class Clouds:
             prev_o = np.where(live, o, prev_o)
         return t, hit
 
+    # --- ゼノブレ式（上から見下ろす雲海） ------------------------------------------
+
+    def sun_direction(self):
+        """太陽へ向かう向き。sunElevation [度] > 0 なら、ステージの太陽の方角のまま仰角だけ変える"""
+        sun = SUN_DIRECTION / np.linalg.norm(SUN_DIRECTION)
+        if self.p["sunElevation"] > 0:
+            h = np.array([sun[0], 0.0, sun[2]])
+            h /= np.linalg.norm(h)
+            e = np.radians(self.p["sunElevation"])
+            sun = np.array([h[0] * np.cos(e), np.sin(e), h[2] * np.cos(e)])
+        return sun
+
+    def xeno_alpha(self, over, dist):
+        """透明度 = saturate(over)。遠いほど乗算値を下げて柔らかく（遠景の歩幅の粗さを溶かす）"""
+        return np.clip(over / (1.0 + dist / self.p["softDistance"]), 0, 1)
+
+    def xeno_light(self, pos, dist):
+        """ゼノブレ式の陰影：太陽の方へ進んだ点の透明度で、明るい色と暗い色を混ぜる（lightTaps 点）"""
+        p = self.p
+        sun = self.sun_direction()
+        occ = np.zeros(len(pos))
+        for k in range(1, int(p["lightTaps"]) + 1):
+            occ += np.clip(self.over(pos + sun * (p["lightStep"] * k), dist), 0, 1)
+        return np.exp(-occ * p["density"])
+
+    def xeno_color(self, pos, dist):
+        p = self.p
+        lit = np.array(p["litColor"])
+        shadow = np.array(p["shadowColor"])
+        k = np.clip(self.xeno_light(pos, dist) * (1 - p["ambient"]) + p["ambient"], 0, 1)
+        return shadow + (lit - shadow) * k[:, None]
+
+    def xeno_render(self, eye, dirs, t0, t_end, valid):
+        """最高点〜帯の底（最高点 − 深さ）を等間隔に歩き、透明度が 0 を超えた点から手前→奥へ重ねる。
+        帯の底より下は詰まった雲なので、底まで来たら残りを不透明にする。戻り値 (乗算済みの色, 透明度, 最初に当たった距離)"""
+        p = self.p
+        count = len(dirs)
+        dy = np.minimum(dirs[:, 1], -1e-4)
+        t_band = (p["top"] - p["seaDepth"] - eye[1]) / dy
+        t1 = np.minimum(t_band, t_end)
+        steps = int(p["steps"])
+        dt = np.maximum(t1 - t0, 0) / steps
+        color = np.zeros((count, 3))
+        trans = np.ones(count)
+        first = np.full(count, np.nan)
+        live = valid & (dirs[:, 1] < -1e-4) & (dt > 0)
+        for i in range(steps):
+            if not live.any():
+                break
+            idx = np.nonzero(live)[0]
+            t = t0[idx] + (i + 0.5) * dt[idx]
+            pos = eye + dirs[idx] * t[:, None]
+            a = self.xeno_alpha(self.over(pos, t), t)
+            if p["accumulate"] > 0:
+                # 1 歩の不透明度を歩幅に合わせる（refStep [m] 進んで a になる）。歩数を変えても見た目が変わらない
+                a = 1 - (1 - np.minimum(a, 0.999)) ** (dt[idx] / p["refStep"])
+            if p["accumulate"] <= 0:
+                # 純粋なゼノブレ式：最初に 0 を超えた点の透明度をそのまま使って打ち切る
+                a = np.where(a > 0, a, 0)
+                stop = a > 0
+            else:
+                stop = np.zeros(len(idx), bool)
+            hit_now = a > 0
+            if hit_now.any():
+                h = idx[hit_now]
+                first[h] = np.where(np.isnan(first[h]), t[hit_now], first[h])
+                c = self.xeno_color(pos[hit_now], t[hit_now])
+                color[h] += (trans[h] * a[hit_now])[:, None] * c
+                trans[h] *= 1 - a[hit_now]
+            done = stop | (trans[idx] < 0.01)
+            live[idx[done]] = False
+        # 帯の底まで来た：その下は詰まった雲。底の点の色で残りを埋める
+        bottom = valid & (dirs[:, 1] < -1e-4) & (t_band < t_end) & (trans > 0.01)
+        if p["accumulate"] <= 0:
+            bottom &= np.isnan(first)
+        if bottom.any():
+            pos = eye + dirs[bottom] * t_band[bottom, None]
+            c = self.xeno_color(pos, t_band[bottom])
+            color[bottom] += trans[bottom, None] * c
+            first[bottom] = np.where(np.isnan(first[bottom]), t_band[bottom], first[bottom])
+            trans[bottom] = 0
+        return color, 1 - trans, np.nan_to_num(first, nan=0.0)
+
     def render(self, eye, dirs, scene_distance):
         """MarchSurface と同じ分岐。戻り値は (色, 透明度)"""
         p = self.p
@@ -358,6 +528,27 @@ class Clouds:
             vol_color, vol_alpha = self.march_volume(eye, dirs, t_enter, t_vol, valid)
             t_enter = np.where(valid, t_vol, t_enter)
             print(f"B' weight {w:.2f}")
+
+        if eye[1] > p["top"] and p["hv"] > 0:
+            hp = dict(p)
+            col, alpha = HeightVolume(hp, self.noise).render(eye, dirs, t_end)
+            return col, alpha
+
+        if eye[1] > p["top"] and p["xeno"] > 0:
+            pre, alpha, first = self.xeno_render(eye, dirs, t_enter, t_end, valid)
+            count = len(dirs)
+            horizon = sky(np.full(count, 0.02))
+            # 空気遠近：重ねた色を、最初に当たった距離で水平線の色へ寄せる
+            haze = np.clip((first - p["hazeStart"]) / max(p["hazeEnd"] - p["hazeStart"], 1), 0, 1) * p["hazeMax"]
+            fade = np.clip((first - p["fadeStart"]) / max(p["fadeEnd"] - p["fadeStart"], 1), 0, 1)
+            k = np.maximum(haze, fade)[:, None]
+            pre = pre * (1 - k) + horizon * alpha[:, None] * k
+            miss = valid & (alpha <= 0) & (dirs[:, 1] < 0) & (t_end >= p["maxDistance"] - 1)
+            pre[miss] = horizon[miss]
+            alpha[miss] = 1.0
+            out_color = vol_color + (1 - vol_alpha)[:, None] * pre
+            out_alpha = vol_alpha + (1 - vol_alpha) * alpha
+            return out_color / np.maximum(out_alpha, 1e-4)[:, None], out_alpha
 
         if eye[1] > p["top"]:
             t, hit = self.trace(eye, dirs, t_enter, t_end, valid)
@@ -386,19 +577,46 @@ class Clouds:
     def surface_frame(self, pos, dist):
         """面の法線・雲の中へ向かう向き・暗さ（SurfaceFrame）。上面は高さ場、縦穴の壁は中心線へ向く、底面は下向き"""
         p = self.p
-        eps = np.maximum(p["normalEps"], dist * self.noise.pixel_angle * 2)
+        # 上面の法線：焼いた傾きから（高さを差分すると、バイリニアの折れ目と量子化の段差で等高線のような縞が出た）
         n0 = np.maximum(self.cloud_noise(pos[:, 0], pos[:, 2], dist), 1e-3)
-        nx = self.cloud_noise(pos[:, 0] + eps, pos[:, 2], dist)
-        nz = self.cloud_noise(pos[:, 0], pos[:, 2] + eps, dist)
         cov = self.coverage(pos[:, 0], pos[:, 2], dist)
-        k = p["seaDepth"] * cov / (n0 * n0)
-        normal = np.stack([-k * (nx - n0) / eps, np.ones_like(n0), -k * (nz - n0) / eps], -1)
+        # 大きな形は高さの傾き（1/ノイズ² で増幅）、もこもこは増幅しない一定の強さの凹凸（谷で細かい段が縞にならないように）
+        fade = self.detail_fade(dist)
+        w = p["mokoWeight"] * (1 - fade)
+        sx = self.noise.sample("shape_du", pos[:, 0], pos[:, 2], p["shapeScale"], dist, fade * p["detailFadeLod"]) / p["shapeScale"]
+        sz = self.noise.sample("shape_dv", pos[:, 0], pos[:, 2], p["shapeScale"], dist, fade * p["detailFadeLod"]) / p["shapeScale"]
+        mx = self.noise.sample("moko_du", pos[:, 0], pos[:, 2], p["mokoScale"], dist, p["mokoLodBias"]) / p["mokoScale"]
+        mz = self.noise.sample("moko_dv", pos[:, 0], pos[:, 2], p["mokoScale"], dist, p["mokoLodBias"]) / p["mokoScale"]
+        k = p["seaDepth"] * cov / (n0 * n0) * (1 - p["noiseFloor"])
+        k_ref = p["seaDepth"] * cov / (MOKO_NOISE_REF * MOKO_NOISE_REF) * (1 - p["noiseFloor"]) * p["mokoNormal"]
+        if p["linearHeight"] > 0:
+            # 線形の高さの傾き：(dmax − dmin) × 混ぜたノイズの傾き（一定倍）
+            dmin = p["seaDepth"] * cov
+            dmax = p["seaDepth"] * cov / max(p["noiseFloor"], 1e-3)
+            gx = (dmax - dmin) * ((1 - w) * sx + w * mx)
+            gz = (dmax - dmin) * ((1 - w) * sz + w * mz)
+        elif p["mokoHeight"] > 0:
+            # 形と同じ式：大きな形の傾き（増幅あり）＋もこもこの高さの傾き（一定）
+            gx = k * sx + p["mokoHeight"] * mx
+            gz = k * sz + p["mokoHeight"] * mz
+        elif p["mokoValleyHigh"] > 0:
+            large = self.noise.sample("shape", pos[:, 0], pos[:, 2], p["shapeScale"], dist)
+            we = w * self.moko_mask(large)
+            gx = k * ((1 - we) * sx + we * mx)
+            gz = k * ((1 - we) * sz + we * mz)
+        else:
+            gx = k * (1 - w) * sx + k_ref * w * mx
+            gz = k * (1 - w) * sz + k_ref * w * mz
+        normal = np.stack([-gx, np.ones_like(n0), -gz], -1)
         normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
 
         # 上面の谷：こぶの高さの範囲の下ほど暗い
         depth_min = p["seaDepth"] * cov
         depth_max = p["seaDepth"] * cov / max(p["noiseFloor"], 1e-3)
-        valley = np.clip((p["top"] - pos[:, 1] - depth_min) / np.maximum(depth_max - depth_min, 1), 0, 1)
+        # 止まった点の高さではなく、その場所の上面の高さで決める（遠くはレイが面の少し上で止まり、
+        # 止まる高さが歩数の切り替わりで段々に変わって、等高線のような縞が出た）
+        surface_y = self.surface_height(pos[:, 0], pos[:, 2], dist)
+        valley = np.clip((p["top"] - surface_y - depth_min) / np.maximum(depth_max - depth_min, 1), 0, 1)
         ao = 1 - p["valley"] * valley ** p["valleyPow"]
 
         # 縦穴のまわり：濃さの式の傾き（中心差分）から法線。深いほど空が見えず暗い
@@ -434,7 +652,10 @@ class Clouds:
         count = len(dirs)
         sun = SUN_DIRECTION / np.linalg.norm(SUN_DIRECTION)
         pos = eye + dirs * t[:, None]
-        normal, ao, wall = self.surface_frame(pos, t)
+        # 陰影のミップは見る角度でも粗くする（浅い角度では 1 画素が奥行き方向に長い範囲を覆い、細かい凹凸がモアレになる）
+        shade_dist = t / np.maximum(np.abs(dirs[:, 1]), p["grazingMin"]) ** p["grazingPower"]
+        self.fade_dist = t
+        normal, ao, wall = self.surface_frame(pos, shade_dist)
 
         # 面に当たったら不透明（雲海の面の奥は中身の詰まった雲）。奥を測って半透明にすると、ふたを突き抜けて穴が透けた
         alpha = np.where(hit, 1.0, 0.0)
@@ -452,6 +673,225 @@ class Clouds:
         fade = np.clip((t - p["fadeStart"]) / max(p["fadeEnd"] - p["fadeStart"], 1), 0, 1)
         color = color + (horizon - color) * np.maximum(haze, fade)[:, None]
         return color, alpha
+
+
+class HeightVolume:
+    """ハイトマップ誘導のボリューム雲（試作）。
+    ① 上面 T(x,z) を高さの地形としてトレースし、② 上面の下の「綿の層」だけを数歩積み上げる。
+    影は太陽の方へハイトマップを読んで判定、谷の暗さはその場所の高さとぼかした高さの比較。法線は使わない"""
+
+    def __init__(self, p, noise):
+        self.p = p
+        self.noise = noise
+
+    # --- 形 ---------------------------------------------------------------
+
+    def height_noise(self, x, z, dist, bias=0.0):
+        """0..1。大きな形と小さな形（同じノイズを別スケール）を混ぜる"""
+        p = self.p
+        large = self.noise.sample("shape", x, z, p["shapeScale"], dist, bias)
+        small = self.noise.sample("shape", x + 517.0, z + 263.0, p["detailScale"], dist, bias)
+        w = p["detailWeight"]
+        n = (1 - w) * large + w * small
+        return np.clip(0.5 + (n - 0.5) / np.sqrt((1 - w) ** 2 + w * w), 0, 1)
+
+    def top(self, x, z, dist, bias=0.0):
+        """上面の高さ。ノイズ 1 で最高点、補正値より下は谷（relief [m] だけ沈む）"""
+        p = self.p
+        n = self.height_noise(x, z, dist, bias)
+        # 補正値（coverage）を境に上へ盛り上がる。smoothstep で山の裾をなだらかに
+        # 補正値より下（谷の床）も平らにしない：floorSpread だけ下までなだらかに続ける
+        low = p["coverage"] - p["floorSpread"]
+        x01 = np.clip((n - low) / max(1 - low, 1e-3), 0, 1)
+        bump = x01 * x01 * (3 - 2 * x01)
+        return p["top"] - p["relief"] * (1 - bump ** p["bumpPower"])
+
+    def density(self, pos, dist):
+        """濃さ 0..1：上面からの深さを綿の層の厚さで割り、3D ノイズで崩す（縁が溶ける）"""
+        p = self.p
+        x, z = pos[:, 0], pos[:, 2]
+        if p["warp"] > 0:
+            # ハイトマップを読む位置を 3D ノイズで高さごとにずらす。急な側面で横の模様が縦に伸びる（高さ場の宿命）のを崩す。
+            # 上面の近くはずらさない（ずらすと上面の上に小さな切れ端が浮いた）。深いほど強く
+            ramp = np.clip((self.top(x, z, dist) - pos[:, 1]) / p["warpRamp"], 0, 1)
+            w = pos / p["warpScale"]
+            x = x + (gradient_noise3d(w) - 0.5) * 2 * p["warp"] * ramp
+            z = z + (gradient_noise3d(w + 31.7) - 0.5) * 2 * p["warp"] * ramp
+        t = self.top(x, z, dist)
+        depth = (t - pos[:, 1]) / (p["fluff"] + dist * p["fluffPerMeter"])
+        q = pos / p["erosionScale"]
+        n3 = gradient_noise3d(q) * 0.65 + gradient_noise3d(q * 2.7) * 0.35
+        n3 = np.clip((n3 - 0.5) * 4.6 + 0.5, 0, 1)
+        return np.clip(depth + (n3 - 0.5) * p["erosion"], 0, 1)
+
+    # --- 光 ---------------------------------------------------------------
+
+    def light(self, pos, dist, dens):
+        p = self.p
+        sun = Clouds.sun_direction(self)  # 同じ仰角の上書きを使う
+        t_here = self.top(pos[:, 0], pos[:, 2], dist)
+        depth = np.maximum(t_here - pos[:, 1], 0)
+        # 太陽の方へ数点、濃さを積んで減衰を出す（光側マーチ）。自分の塊の厚みも、他の塊が落とす影もこれで入る。
+        # 真上の上面からの深さで減衰させると、塊の側面が縦の筋になった
+        od = np.zeros(len(pos))
+        prev = 0.0
+        for s in p["lightSteps"]:
+            od += self.density(pos + sun * s, dist) * (s - prev)
+            prev = s
+        sun_vis = np.exp(-p["lightSigma"] * od)
+        # powder：薄い縁は明るく、中は暗く（綿の光り方）
+        powder = 1 - np.exp(-2.0 * dens)
+        sun_term = sun_vis * ((1 - p["powderMix"]) + p["powderMix"] * powder)
+        # 谷の暗さ：その場所の上面が、まわり（ぼかしたミップ）より低いほど空が見えず暗い
+        t_avg = self.top(pos[:, 0], pos[:, 2], dist, p["aoBias"])
+        # 高さは上面より上に出さない（上面の上に 3D ノイズで出たもやが、高いぶん明るくなって白い筋・切れ端に見えた）
+        ao = np.clip(0.5 + (np.minimum(pos[:, 1], t_here) - t_avg) / p["aoRange"], 0, 1)
+        ao *= np.exp(-depth / p["aoDepth"])  # 深い所ほど暗い
+        lit = np.array(p["litColor"])
+        amb_top = np.array(p["skyAmbient"])
+        amb_low = np.array(p["shadowColor"])
+        ambient = amb_low + (amb_top - amb_low) * ao[:, None]
+        return lit * (sun_term * p["sunScale"])[:, None] + ambient * p["ambientScale"]
+
+    # --- 描画 -------------------------------------------------------------
+
+    def trace(self, eye, dirs, t0, t_end, active):
+        """上面に当たるまで：面との高さの差 /（下向きの傾き＋最大傾斜）だけ進む"""
+        p = self.p
+        descent = -np.minimum(dirs[:, 1], -1e-4) + p["traceSlope"]
+        t = t0.copy()
+        active = active & (t < t_end)
+        hit = np.zeros(len(t), bool)
+        for _ in range(int(p["steps"])):
+            if not active.any():
+                break
+            idx = np.nonzero(active)[0]
+            pos = eye + dirs[idx] * t[idx, None]
+            gap = pos[:, 1] - self.top(pos[:, 0], pos[:, 2], t[idx])
+            done = gap < p["traceEpsilon"]
+            hit[idx[done]] = True
+            active[idx[done]] = False
+            t[idx] = np.where(done, t[idx], t[idx] + np.maximum(gap, 0) / descent[idx])
+            active &= t < t_end
+        # 傾きの見積もりを超える急な所では面を突き抜けるので、面の上まで戻す（gap が 0 になる所を 2 分探索）
+        h = np.nonzero(hit)[0]
+        if len(h):
+            lo = np.maximum(t[h] - 200.0, t0[h])
+            hi = t[h]
+            for _ in range(8):
+                mid = 0.5 * (lo + hi)
+                q = eye + dirs[h] * mid[:, None]
+                under = q[:, 1] < self.top(q[:, 0], q[:, 2], mid)
+                hi = np.where(under, mid, hi)
+                lo = np.where(under, lo, mid)
+            t[h] = hi
+        return np.minimum(t, t_end), hit | active
+
+    def march_segment(self, eye, dirs, t_start, length, active, color, trans, last_c, has_c):
+        """t_start から length だけ綿の層を積み上げる"""
+        p = self.p
+        n = int(p["volumeSteps"])
+        dt = length / n
+        live = active.copy()
+        for i in range(n):
+            if not live.any():
+                break
+            idx = np.nonzero(live)[0]
+            t = t_start[idx] + (i + 0.5) * dt[idx]
+            pos = eye + dirs[idx] * t[:, None]
+            dens = self.density(pos, t)
+            a = 1 - np.exp(-p["extinction"] * dens * dt[idx])
+            c = self.light(pos, t, dens)
+            inside = dens > 0.05
+            last_c[idx[inside]] = c[inside]
+            has_c[idx[inside]] = True
+            color[idx] += (trans[idx] * a)[:, None] * c
+            trans[idx] *= 1 - a
+            live[idx[trans[idx] < 0.02]] = False
+
+    def render(self, eye, dirs, t_end_all):
+        p = self.p
+        count = len(dirs)
+        down = dirs[:, 1] < -1e-4
+        dy = np.where(down, dirs[:, 1], -1e-4)
+        t0 = np.maximum((p["top"] - eye[1]) / dy, 0)
+        t_end = np.minimum(t_end_all, p["maxDistance"])
+        slope = np.maximum(-dirs[:, 1], p["grazingMin"])
+        color = np.zeros((count, 3))
+        trans = np.ones(count)
+        last_c = np.zeros((count, 3))
+        has_c = np.zeros(count, bool)
+        first_hit = np.full(count, np.nan)
+        ever_hit = np.zeros(count, bool)
+        t_cur = t0.copy()
+        active = down.copy()
+        end_inside = np.zeros(count, bool)
+        # 綿の層を抜けて空中に出たレイは、次の上面を探してもう一度積む（最大 segments 回）。
+        # 1 回で打ち切って残りを不透明に塗ると、小さな塊の縁や切れ端がパリっとした白い板になった
+        for seg in range(int(p["segments"])):
+            if not active.any():
+                break
+            t_hit, hit = self.trace(eye, dirs, t_cur, t_end, active)
+            hit &= active
+            if not hit.any():
+                break
+            # 上面の少し上から歩き始める（縁の柔らかい所を拾う）。遠いほど縁を厚く（1 画素より細い縁はパリっと切れて見える）
+            soft = p["fluff"] + t_hit * p["fluffPerMeter"]
+            t_hit = np.maximum(t_hit - p["edgeLead"] * soft / slope, t_cur)
+            first_hit = np.where(hit & np.isnan(first_hit), t_hit, first_hit)
+            seg_count = getattr(self, "_seg", np.zeros(count)) if seg else np.zeros(count)
+            seg_count[hit] += 1
+            self._seg = seg_count
+            ever_hit |= hit
+            length = np.minimum((p["fluff"] + t_hit * p["fluffPerMeter"]) * (p["marchDepth"] + p["edgeLead"]) / slope, p["maxMarch"])
+            self.march_segment(eye, dirs, t_hit, length, hit, color, trans, last_c, has_c)
+            t_next = t_hit + length
+            q = eye + dirs * t_next[:, None]
+            inside_now = q[:, 1] < self.top(q[:, 0], q[:, 2], t_next) - p["fluff"] * 0.5
+            end_inside = np.where(hit, inside_now, end_inside)
+            # 層の中で終わった（中身の詰まった雲）か、もう透けない所は終わり。空中に出た所は続ける
+            active = hit & ~inside_now & (trans > 0.02) & (t_next < t_end)
+            t_cur = np.where(active, t_next, t_cur)
+        # 中身の詰まった雲の中で終わった分だけを埋める（後ろの青が透けない）
+        self.debug = dict(seg=self._seg.copy() if hasattr(self, '_seg') else None, trans_before_fill=trans.copy(), ever_hit=ever_hit.copy(), end_inside=end_inside.copy(), first_hit=first_hit.copy())
+        rest = ever_hit & end_inside & (trans > 0)
+        if rest.any():
+            idx = np.nonzero(rest)[0]
+            # 埋める色は「それまで積んだ色の平均」。最後の 1 点の色で埋めると、積みが浅い所だけ明るさが変わって
+            # 縁のくっきりした板に見えた
+            acc = 1 - trans[idx]
+            mean_c = color[idx] / np.maximum(acc, 1e-4)[:, None]
+            fallback = np.where(has_c[idx, None], last_c[idx], np.array(p["shadowColor"]))
+            w = np.clip(acc / p["fillMeanMin"], 0, 1)[:, None]
+            color[idx] += trans[idx, None] * (mean_c * w + fallback * (1 - w))
+            trans[idx] = 0
+        alpha = 1 - trans
+        horizon = sky(np.full(count, 0.02))
+        fh = np.nan_to_num(first_hit, nan=p["maxDistance"])
+        haze = np.clip((fh - p["hazeStart"]) / max(p["hazeEnd"] - p["hazeStart"], 1), 0, 1) * p["hazeMax"]
+        fade = np.clip((fh - p["fadeStart"]) / max(p["fadeEnd"] - p["fadeStart"], 1), 0, 1)
+        k = np.maximum(haze, fade)[:, None]
+        color = color * (1 - k) + horizon * alpha[:, None] * k
+        # 水平線の近くで抜けた所・当たらなかった所は水平線の色で埋める
+        rest_h = down & (alpha < 1)
+        color[rest_h] += (1 - alpha[rest_h])[:, None] * horizon[rest_h]
+        alpha[rest_h] = 1.0
+        return color / np.maximum(alpha, 1e-4)[:, None], alpha
+
+
+HV_DEFAULTS = dict(
+    # 2026-10-22 の試作で決めた値。形（floorSpread 1＝平らな床なし：床の縁がくっきりした板に見えた）
+    shapeScale=1500.0, detailScale=400.0, detailWeight=0.35, relief=60.0, bumpPower=1.0, floorSpread=1.0,
+    warp=20.0, warpScale=50.0, warpMargin=0.0, warpRamp=20.0, segments=3, fluffPerMeter=0.0, edgeLead=0.0, fillMeanMin=0.01,
+    # 綿の層
+    # （試作中は B' の既定値と名前が重なっていて、実際にはこの値で描いていた：48 歩・消散 0.015・崩し 0.5・3D ノイズ 100m）
+    fluff=12.0, marchDepth=2.0, maxMarch=400.0, volumeSteps=48, extinction=0.1, erosion=0.5, erosionScale=100.0,
+    # 光（消散 0.1＝どのレイも上面近くで不透明になる。弱いと、斜めに長く歩いた所だけ中の暗い色を拾って板に見えた）
+    lightSteps=(6.0, 18.0, 40.0, 90.0), lightSigma=0.4, powderMix=0.6,
+    aoBias=3.0, aoRange=60.0, aoDepth=120.0,
+    litColor=[1.0, 0.97, 0.92], shadowColor=[0.28, 0.40, 0.70], skyAmbient=[0.50, 0.66, 0.95],
+    ambientScale=0.55, sunScale=0.7,
+)
 
 
 def gradient_noise3d(p):
@@ -549,10 +989,14 @@ def camera_rays(width, height, yaw, pitch, fov_y):
 
 def load_params(use_json, overrides):
     p = dict(DEFAULTS)
+    if p.get("hv", 0) > 0:
+        p.update(HV_DEFAULTS)
     if use_json and TUNING_PATH.exists():
         root = json.loads(TUNING_PATH.read_text(encoding="utf-8-sig"))
         saved = root.get("raymarchClouds", {})
         p.update({k: v for k, v in saved.items() if k in p})
+        if p.get("hv", 0) > 0:
+            p.update(HV_DEFAULTS)  # 試作中は保存済みの旧方式の値（形の大きさ等）で上書きしない
     for item in overrides:
         key, value = item.split("=", 1)
         if key not in p:

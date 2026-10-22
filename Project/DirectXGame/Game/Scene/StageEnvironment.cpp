@@ -548,7 +548,12 @@ void StageEnvironment::OnImGuiClouds() {
 }
 
 void StageEnvironment::OnImGuiRaymarchClouds() {
-	if (!raymarcher_ || !ImGui::CollapsingHeader("Raymarch Clouds")) return;
+	if (!raymarcher_) return;
+	// 確認用の表示は 1 か所にまとめて、雲のパラメータとは別の見出しにする（開いたまま切り替えやすいように）
+	if (ImGui::CollapsingHeader("Cloud Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
+		raymarcher_->OnImGuiDebugView();
+	}
+	if (!ImGui::CollapsingHeader("Raymarch Clouds")) return;
 	ImGui::TextDisabled("雲海（ゼノブレ式＋入口・出口は B'）。ステージの Save で Tuning/StagePlay.json に保存");
 	ImGui::SeparatorText("Flow (against player forward)");
 	ImGui::DragFloat("Flow Speed [m/s]", &cloudFlow_.speed, 0.5f, 0.0f, 500.0f);

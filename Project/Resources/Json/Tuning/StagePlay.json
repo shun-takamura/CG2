@@ -276,7 +276,34 @@
     "powder": 6,
     "ambientStrength": 0.15000000596046448,
     "volumeLightStep": 25,
-    "resolutionScale": 0.5
+    "resolutionScale": 0.5,
+    "volumeSea": {
+      "enabled": true,
+      "temporal": true,
+      "temporalBlend": 0.06,
+      "shapeScale": 700,
+      "detailScale": 140,
+      "fluff": 160,
+      "erosion": 0.6,
+      "extinction": 0.14,
+      "steps": 40,
+      "stepMin": 4,
+      "stepGrowth": 0.006,
+      "lightSigma": 2.5,
+      "sunScale": 1.0,
+      "ambientScale": 1.0,
+      "phaseG": 0.6,
+      "powder": 0.8,
+      "macroShadow": 2.5,
+      "skyAmbient": [
+        0.14,
+        0.19,
+        0.3
+      ],
+      "densityGain": 2.5,
+      "verticalStretch": 1.0,
+      "multiScatter": 0.3
+    }
   },
   "cloudFlow": {
     "speed": 60,
