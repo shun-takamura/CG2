@@ -56,7 +56,7 @@ void BossStateMachine::Update(float dt, BossActionContext& ctx) {
 	if (attackCooldown_ > 0.0f) attackCooldown_ -= dt;
 	if (jumpCooldown_   > 0.0f) jumpCooldown_   -= dt;
 	manager_.Update(dt, ctx);
-	if (manager_.IsIdle()) SelectNext(ctx);
+	if (manager_.IsIdle() && !standDown_) SelectNext(ctx);
 }
 
 void BossStateMachine::SelectNext(BossActionContext& ctx) {

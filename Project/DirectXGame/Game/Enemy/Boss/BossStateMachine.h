@@ -9,6 +9,8 @@
 class BossStateMachine {
 public:
 	void Update(float dt, BossActionContext& ctx);
+	// true の間は次の行動を選ばない（今の行動は最後までやる）。自機の死亡演出の間（19 番 G3）
+	void SetStandDown(bool standDown) { standDown_ = standDown; }
 
 private:
 	void SelectNext(BossActionContext& ctx);
@@ -35,4 +37,6 @@ private:
 	float jumpCooldown_       = 0.0f; // ジャンプ飛び越え後、次に選べるまでの残り秒
 	float jumpCooldownBase_   = 4.0f; // 連発防止（飛び道具ほど頻発させない）
 	float jumpChance_         = 0.3f; // 攻撃不可時、移動系の中でジャンプを選ぶ確率（残りは接近移動）
+
+	bool standDown_ = false;
 };

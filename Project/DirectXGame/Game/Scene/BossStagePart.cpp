@@ -36,7 +36,9 @@ void BossStagePart::Enter() {
 		ctrl->entity_            = boss_;
 		ctrl->billboardToPlayer_ = true;
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
-		cmds.push_back(std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_));
+		auto brain = std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_);
+		brain_ = brain.get();
+		cmds.push_back(std::move(brain));
 		ctrl->Init(std::move(cmds));
 		host_->RegisterEnemyController(std::move(ctrl));
 	}
@@ -68,6 +70,7 @@ void BossStagePart::Update(float worldDt) {
 		bossDefeatedScoreValue_ = Gameplay::Of(boss_).GetScoreValue();
 		bossJustDefeated_ = true;
 		boss_ = nullptr;
+		brain_ = nullptr;   // この後の SweepDeadEntities でコントローラごと破棄される
 	}
 
 	// ボスAI（敵コントローラ）駆動。静止ボスなので stageTimeSec は未使用（0 を渡す）。
@@ -301,9 +304,14 @@ bool BossStagePart::ConsumeBossDefeated() {
 void BossStagePart::Reset() {
 	if (host_) host_->ClearBossRuntimeState();
 	boss_        = nullptr;
+	brain_       = nullptr;
 	bossSpawned_ = false;
 	groundVelocity_ = { 0.0f, 0.0f };
 	knockbackTimer_ = 0.0f;
+}
+
+void BossStagePart::SetBossStandDown(bool standDown) {
+	if (brain_) brain_->SetStandDown(standDown);
 }
 
 void BossStagePart::OnImGuiTuning(bool& changed) {

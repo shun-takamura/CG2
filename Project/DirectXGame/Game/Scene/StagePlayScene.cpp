@@ -3607,6 +3607,8 @@ void StagePlayScene::Update() {
 
 	// ボス戦 tick（ボスAI更新＋撃破掃除）。Enter 済みのこのフレームから駆動される。
 	if (phase_ == Phase::Boss && bossStage_) {
+		// 自機の死亡演出の間、ボスは今の攻撃を終えたら次の行動を選ばない（19 番 G3。プレビューが終われば戻る）
+		bossStage_->SetBossStandDown(IsPlayerDying());
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
 		if (bossWater_) {
 			const Vector3& c = bossStage_->GetArenaCenter();
@@ -3745,6 +3747,11 @@ void StagePlayScene::Update() {
 			// --- L1 / マウス中ボタン：短押し=ターゲットスナップ / 長押し=Free⇔LockOn トグル ---
 			bool camBtn = actions->IsPressed(static_cast<int>(Action::LockCamButton));
 			if (auto* m = input_->GetMouse(); m && m->IsButtonPressed(MouseInput::Button::Middle)) camBtn = true;
+			// 死亡演出の間はカメラを動かさない（右スティック・マウス・ボタンは actions を通らないのでここで切る。19 番 G3）
+			if (IsPlayerDying()) {
+				camStickX = camStickY = camMouseDx = camMouseDy = 0.0f;
+				camBtn = false;
+			}
 			const float uiDt = GetScaledDeltaTime(TimeGroup::UI);
 			if (camBtn) {
 				if (bossCamBtnHold_ < 0.0f) { bossCamBtnHold_ = 0.0f; bossCamBtnLongFired_ = false; }
@@ -3767,6 +3774,11 @@ void StagePlayScene::Update() {
 				ApplyJustDodgeCamera(bWorldPos);
 				ApplyJustDodgeMeleeCamera(bWorldPos);
 				ApplySpecialCamera(bWorldPos);
+				// 死亡演出（19 番 G3）：ボスのカメラの位置から自機の斜め前・低めへ回り込み、ほどけ始めから見上げる
+				if (IsPlayerDying()) {
+					playerDeath_->ApplyCamera(*camera_);
+					camera_->Update();
+				}
 			}
 		} else {
 
@@ -4180,8 +4192,14 @@ void StagePlayScene::Update() {
 	}
 
 	// 自機のスラスター（スケルトンが更新された後）。自機を描かない間（スタート演出・ジャスト回避の分身）は止める
+	// ボス戦の死亡演出の間は咳き込んで止まる（19 番 G3。PlayerDeathPart の予定表）
 	if (player_ && player_->GetVisible()) {
-		playerThrusters_.Update(player_, playerThrusters_.FromMoveAxis(playerMoveInput_.x, playerMoveInput_.y));
+		MechThrusters::Sizes deathSizes;
+		if (playerDeath_ && playerDeath_->GetThrusterSizes(deathSizes)) {
+			playerThrusters_.Update(player_, deathSizes);
+		} else {
+			playerThrusters_.Update(player_, playerThrusters_.FromMoveAxis(playerMoveInput_.x, playerMoveInput_.y));
+		}
 	} else {
 		playerThrusters_.StopAll();
 	}
@@ -5026,6 +5044,10 @@ void StagePlayScene::CollectWingBurnPoints(std::vector<Vector3>& out) {
 
 void StagePlayScene::FinishPlayerDeath() {
 	SceneManager::GetInstance()->ChangeScene("GAMEOVER");
+}
+
+void StagePlayScene::RestorePlayerPose() {
+	ApplyPlayerPose();
 }
 
 void StagePlayScene::BeginPlayerDeath(bool preview) {

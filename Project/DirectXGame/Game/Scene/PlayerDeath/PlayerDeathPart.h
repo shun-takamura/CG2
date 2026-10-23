@@ -1,5 +1,7 @@
 #pragma once
 #include "Vector3.h"
+#include "StageStart/MechThrusters.h"
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <random>
@@ -24,15 +26,17 @@ public:
 	virtual void CollectWingBurnPoints(std::vector<Vector3>& out) = 0;
 	// 死亡演出を終えた：ゲームオーバー画面へ
 	virtual void FinishPlayerDeath() = 0;
+	// 自機をいまのフェーズの姿勢（クリップ）へ戻す（プレビューの終わり・途中で打ち切ったとき。ボス戦の膝つきの後始末）
+	virtual void RestorePlayerPose() = 0;
 };
 
 /// <summary>
 /// 自機の死亡演出（19_GameOverAndDifficulty.md §1、G1 で骨組み）。爆発はせず、機体がエーテルの色で光り、
 /// 下から上へほどけて（高さの面のディゾルブ kDissolveRise）光の糸（EtherStrands）と粒になって天へ昇る。
-/// 段階：前置き（Prelude。ボス戦の膝つき＋スラスターの咳き込み＝G3 の口。今は 0 秒）→ 光る（Glow）
+/// 段階：前置き（Prelude。ボス戦だけ：両ひざをついてうなだれるクリップ＋スラスターの咳き込み＝G3）→ 光る（Glow）
 ///   → ほどける（Unravel）→ 余韻（Linger。糸と粒が昇り切る）→ 終わり（ホストへ GAMEOVER を頼む）。
 /// 種類：Rail（シューティング。光り始めと同時に羽根がオレンジの縁で焼け落ち、羽根の関節から焼ける羽根の粒子を出し続ける＝§1.1）／
-///   Boss（地上戦。羽根は無い＝§1.2）。G2・G3 は種類ごとの中身をここに足す。
+///   Boss（地上戦。羽根は無い。膝をつく間に 4 基のスラスターがばらばらに咳き込んで止まり、カメラは斜め前へ回り込む＝§1.2）。
 /// エーテルの色は未決（§6）なので JSON の仮の値（StagePlay.json の "playerDeath" → "etherColor"）。
 /// エフェクトは displayName が "Ether" で始まる部品だけ、再生のたびにエーテルの色を掛けて塗る（JSON は白で書く）。
 /// 演出の間、StagePlay は操作を受け付けず・被弾させない（IsActive を見る）。
@@ -77,10 +81,13 @@ public:
 	State GetState() const { return state_; }
 	Kind GetKind() const { return kind_; }
 	/// <summary>
-	/// 死亡中のカメラ（G2）：レールのカメラの姿勢（camera に置いた後）から、自機へ寄り、昇る糸を追って見上げる。
-	/// 毎フレーム、レールの姿勢に掛け直す（積み重ならない）。重みは 0 から上がるので始まりはレールのカメラのまま
+	/// 死亡中のカメラ。Rail（G2）：レールのカメラの姿勢（camera に置いた後）から、自機へ寄り、昇る糸を追って見上げる。
+	/// Boss（G3）：ボスのカメラの位置から、自機のまわりを回って斜め前・低めへ回り込み、ほどけ始めから見上げる。
+	/// 毎フレーム、元のカメラの姿勢に掛け直す（積み重ならない）。重みは 0 から上がるので始まりは元のカメラのまま
 	/// </summary>
 	void ApplyCamera(Camera& camera) const;
+	/// <summary>死亡中のスラスターの大きさ（ボス戦だけ。咳き込み→止まる）。false なら StagePlay はいつもどおり動かす</summary>
+	bool GetThrusterSizes(MechThrusters::Sizes& out) const;
 	/// <summary>自機の下地の発光に足す量（StagePlay の ApplyPlayerLook が足す）</summary>
 	Vector3 GetBodyGlow() const;
 	/// <summary>エーテルの色（仮。19 番 §6）</summary>
@@ -103,6 +110,19 @@ private:
 	// 羽根が燃えている間、羽根の関節から焼ける羽根の粒子を出す
 	void EmitFeatherBits(float deltaTime);
 	void RestorePlayer();
+	// ボス戦：4 基のスラスターの咳き込みの予定表を作る（基ごとにずれた、間隔の空いていく短い噴射）
+	void BuildCoughSchedule();
+	void ApplyRailCamera(Camera& camera, float w) const;
+	void ApplyBossCamera(Camera& camera, float w) const;
+	// 見上げ：ほどけ始め（Prelude＋Glow の後）から注視点を from から lookTo へ上げる高さ [m]（拡大率を掛ける前）
+	float LookHeight(float from) const;
+
+	// 咳き込みの 1 回の噴射（Prelude の始めからの秒）
+	struct Puff {
+		float start;
+		float end;
+		MechThrusters::Size size;
+	};
 
 	IPlayerDeathHost* host_ = nullptr;
 	AnimatedObject3DInstance* player_ = nullptr;   // 参照のみ（シーンの dynamicAnimated_ が持つ）
@@ -123,6 +143,7 @@ private:
 	std::vector<Vector3> jointPositions_;
 	std::vector<int32_t> jointParents_;
 	std::vector<Vector3> wingPoints_;
+	std::array<std::vector<Puff>, MechThrusters::kCount> coughs_;
 	std::mt19937 random_{ 20261021u };
 
 	uint64_t ascendHandle_ = 0;
@@ -131,7 +152,7 @@ private:
 	// 調整値（長さは体の大きさ 1 のとき。体の拡大率を掛ける）
 	Vector3 etherColor_ = { 1.0f, 0.9f, 0.65f };   // 仮（白金）。2026-10-21 時点で色は未決（19 番 §6）
 	float preludeRailSeconds_ = 0.0f;
-	float preludeBossSeconds_ = 0.0f;   // G3：膝つき＋スラスターの咳き込みの長さ
+	float preludeBossSeconds_ = 2.4f;   // G3：膝つき（クリップ 2.0s）＋うなだれたまま。スラスターの咳き込みもこの間
 	float glowSeconds_ = 0.6f;
 	float unravelSeconds_ = 2.0f;
 	float lingerSeconds_ = 1.2f;
@@ -157,4 +178,23 @@ private:
 	float cameraLookFrom_ = 1.2f;       // 始めの注視点の高さ（胸）[m]
 	float cameraLookTo_ = 3.0f;         // 見上げ切った注視点の高さ（頭の上、糸の昇る先）[m]
 	float cameraLookUpSeconds_ = 2.6f;  // ほどけ始め（Unravel）から見上げ切るまで
+
+	// ボス戦の膝つき（G3）。クリップは rig_player_mech.py の Kneel（両ひざをつく→胸が傾く→首の力が抜ける）
+	float kneelFadeSeconds_ = 0.15f;    // 直立のクリップからのつなぎ
+	// スラスターの咳き込み（G3。Prelude の始めからの秒）。coughStart までは中で噴き、coughEnd で全部止まる
+	float coughStart_ = 0.3f;
+	float coughEnd_ = 1.55f;            // クリップで胸が前へ傾き切るころ（動力が切れて崩れる）
+	float coughPuffLong_ = 0.18f;       // 始めのころの 1 回の噴射の長さ [s]
+	float coughPuffShort_ = 0.05f;      // 終わりのころの 1 回の噴射の長さ [s]
+	float coughGapShort_ = 0.04f;       // 始めのころの止まっている間 [s]
+	float coughGapLong_ = 0.3f;         // 終わりのころの止まっている間 [s]
+	float coughLargeChance_ = 0.3f;     // 噴射が大になる確率（始めのころ。終わりへ向けて 0 へ）
+
+	// ボス戦のカメラ（G3）。自機の向きの正面から yaw 度ずれた所へ、自機のまわりを回って回り込む（高さは体の大きさ 1 のとき）
+	// 2026-10-23 ユーザー：頭が下がるのを正面から見たい → 正面・低め（うなだれた顔を下から見上げる）
+	float bossCamYawDeg_ = 0.0f;        // 正面からの角度（正＝自機の右手側）
+	float bossCamDistance_ = 3.5f;      // 自機からの水平距離 [m]
+	float bossCamHeight_ = 0.5f;        // カメラの高さ（足元から）[m]
+	float bossCamOrbitSeconds_ = 1.6f;  // 回り込み切るまで
+	float bossCamLookFrom_ = 0.9f;      // 始めの注視点の高さ（両ひざをついた胸）[m]
 };

@@ -22,6 +22,8 @@ namespace {
 	constexpr const char* kLightEffect = "PlayerEtherLight";      // エーテルの色の点光源
 	constexpr const char* kFeatherEffect = "PlayerFeatherBurn";   // 焼ける羽根の小さな粒子（オレンジの縁のディゾルブ。塗らない）
 	constexpr const char* kEtherPrefix = "Ether";
+	// ボス戦の膝つき（rig_player_mech.py --body-clips の Kneel。1 回きり・最後のコマで止める）
+	constexpr const char* kKneelClip = "Resources/Models/Player/PlayerModel/PlayerModel_Kneel.anim";
 
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
@@ -90,6 +92,12 @@ void PlayerDeathPart::Begin(Kind kind, AnimatedObject3DInstance* player, bool pr
 	elapsed_ = 0.0f;
 	wingBurnTime_ = -1.0f;
 	strands_->Reset();
+	if (kind_ == Kind::Boss) {
+		// 両ひざをついてうなだれる。その間にスラスターが咳き込んで止まる（§1.2）
+		BuildCoughSchedule();
+		player_->PlayAnimation(kKneelClip, kneelFadeSeconds_);
+		player_->SetLoop(false);
+	}
 	Enter(PreludeSeconds() > 0.0f ? State::Prelude : State::Glow);
 }
 
@@ -108,6 +116,47 @@ void PlayerDeathPart::RestorePlayer() {
 	player_->ClearDissolve();
 	player_->SetVisible(true);
 	dissolving_ = false;
+	// ボス戦の膝つきのクリップを、いまのフェーズの姿勢へ戻す
+	if (host_) host_->RestorePlayerPose();
+}
+
+void PlayerDeathPart::BuildCoughSchedule() {
+	std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+	const float span = (std::max)(coughEnd_ - coughStart_, 1e-3f);
+	for (std::vector<Puff>& puffs : coughs_) {
+		puffs.clear();
+		// 基ごとに咳き込み始めをずらす。噴射は短く・間は長くなっていき、大はだんだん出なくなる
+		float t = coughStart_ + unit(random_) * 0.15f;
+		while (t < coughEnd_) {
+			const float p = (t - coughStart_) / span;
+			const float length = (coughPuffLong_ + (coughPuffShort_ - coughPuffLong_) * p) * (0.6f + 0.7f * unit(random_));
+			const bool large = unit(random_) < coughLargeChance_ * (1.0f - p);
+			puffs.push_back({ t, (std::min)(t + length, coughEnd_), large ? MechThrusters::Size::Large : MechThrusters::Size::Small });
+			const float gap = (coughGapShort_ + (coughGapLong_ - coughGapShort_) * p) * (0.6f + 0.8f * unit(random_));
+			t += (std::max)(length + gap, 0.01f);   // 調整値が 0 でも先へ進む
+		}
+	}
+}
+
+bool PlayerDeathPart::GetThrusterSizes(MechThrusters::Sizes& out) const {
+	if (!IsActive() || kind_ != Kind::Boss) return false;
+	out = MechThrusters::All(MechThrusters::Size::Off);
+	if (state_ != State::Prelude) return true;   // 光り始めからは止まったまま
+	for (int i = 0; i < MechThrusters::kCount; ++i) {
+		const std::vector<Puff>& puffs = coughs_[i];
+		// 咳き込み始めるまではいつもの中（ニュートラル）で噴く
+		if (puffs.empty() || stateTime_ < puffs.front().start) {
+			out[i] = stateTime_ < coughEnd_ ? MechThrusters::Size::Medium : MechThrusters::Size::Off;
+			continue;
+		}
+		for (const Puff& puff : puffs) {
+			if (stateTime_ >= puff.start && stateTime_ < puff.end) {
+				out[i] = puff.size;
+				break;
+			}
+		}
+	}
+	return true;
 }
 
 float PlayerDeathPart::PreludeSeconds() const {
@@ -262,7 +311,7 @@ void PlayerDeathPart::Update(float deltaTime) {
 
 	switch (state_) {
 	case State::Prelude:
-		// G3：ボス戦の膝つき・スラスターの咳き込みはここで進める
+		// ボス戦の膝つきはクリップが進め、スラスターの咳き込みは StagePlay が GetThrusterSizes で引く
 		if (stateTime_ >= PreludeSeconds()) Enter(State::Glow);
 		break;
 	case State::Glow:
@@ -310,15 +359,60 @@ void PlayerDeathPart::DrawBloom(DirectXCore* dxCore) {
 
 void PlayerDeathPart::ApplyCamera(Camera& camera) const {
 	if (!IsActive() || !player_) return;
-	const float w = cameraBlendSeconds_ > 1e-3f ? SmoothStep01(elapsed_ / cameraBlendSeconds_) : 1.0f;
+	const float blendSeconds = kind_ == Kind::Boss ? bossCamOrbitSeconds_ : cameraBlendSeconds_;
+	const float w = blendSeconds > 1e-3f ? SmoothStep01(elapsed_ / blendSeconds) : 1.0f;
 	if (w <= 0.0f) return;
+	if (kind_ == Kind::Boss) {
+		ApplyBossCamera(camera, w);
+	} else {
+		ApplyRailCamera(camera, w);
+	}
+}
+
+float PlayerDeathPart::LookHeight(float from) const {
+	// 見上げる：ほどけ始め（Prelude＋Glow の後）から注視点を from から頭の上へ上げる
+	const float lookStart = PreludeSeconds() + glowSeconds_;
+	const float up = cameraLookUpSeconds_ > 1e-3f ? SmoothStep01((elapsed_ - lookStart) / cameraLookUpSeconds_) : 1.0f;
+	return from + (cameraLookTo_ - from) * up;
+}
+
+void PlayerDeathPart::ApplyBossCamera(Camera& camera, float w) const {
+	const float s = player_->GetScale().x;
+	const Vector3& p = player_->GetTranslate();
+	// 今の（ボスの）カメラの位置を自機のまわりの角度・水平距離・高さで表し、回り込む先へ寄せる
+	// （まっすぐ寄せると背後から正面へ回るときに体の中を通る）
+	const Vector3 eye = camera.GetTranslate();
+	const float dx = eye.x - p.x;
+	const float dz = eye.z - p.z;
+	const float fromYaw = std::atan2(dx, dz);
+	const float fromDistance = std::sqrt(dx * dx + dz * dz);
+	const float fromHeight = eye.y - p.y;
+	// 自機の正面（+Z を yaw だけ回した向き）から右手側へ bossCamYawDeg 度
+	const float toYaw = player_->GetRotate().y + DegToRad(bossCamYawDeg_);
+	const float yaw = fromYaw + WrapAngle(toYaw - fromYaw) * w;
+	const float distance = fromDistance + (bossCamDistance_ * s - fromDistance) * w;
+	const float height = fromHeight + (bossCamHeight_ * s - fromHeight) * w;
+	const Vector3 newEye = { p.x + std::sin(yaw) * distance, p.y + height, p.z + std::cos(yaw) * distance };
+
+	// 向きは回り込みの途中も常に自機の縦の軸へ向ける（元の向きから少しずつ寄せると、回っている間に自機が画面から外れた。
+	// 2026-10-23 実機）。見る高さだけを、元のカメラが自機の真上（真下）で見ていた高さから、
+	// 両ひざをついた胸 → ほどけ始めから昇る糸を追って見上げる高さへ寄せる
+	const float pitch = camera.GetRotate().x;   // 下向きが正
+	const float fromLook = fromHeight - std::tan(pitch) * fromDistance;
+	const float lookHeight = fromLook + (LookHeight(bossCamLookFrom_) * s - fromLook) * w;
+	const Vector3 look = { p.x - newEye.x, p.y + lookHeight - newEye.y, p.z - newEye.z };
+	const float lookYaw = std::atan2(look.x, look.z);
+	const float lookPitch = -std::atan2(look.y, std::sqrt(look.x * look.x + look.z * look.z));
+	const float roll = camera.GetRotate().z;
+	camera.SetTranslate(newEye);
+	camera.SetRotate({ lookPitch, lookYaw, roll * (1.0f - w) });
+}
+
+void PlayerDeathPart::ApplyRailCamera(Camera& camera, float w) const {
 	const float s = player_->GetScale().x;
 	const Vector3& p = player_->GetTranslate();
 
-	// 見上げる：ほどけ始め（Prelude＋Glow の後）から注視点を胸から頭の上へ上げる
-	const float lookStart = PreludeSeconds() + glowSeconds_;
-	const float up = cameraLookUpSeconds_ > 1e-3f ? SmoothStep01((elapsed_ - lookStart) / cameraLookUpSeconds_) : 1.0f;
-	const float lookHeight = (cameraLookFrom_ + (cameraLookTo_ - cameraLookFrom_) * up) * s;
+	const float lookHeight = LookHeight(cameraLookFrom_) * s;
 	const Vector3 pivot = { p.x, p.y + cameraLookFrom_ * s, p.z };
 	const Vector3 target = { p.x, p.y + lookHeight, p.z };
 
@@ -410,6 +504,19 @@ void PlayerDeathPart::LoadTuning(const JsonValue& node) {
 	read("cameraLookFrom", cameraLookFrom_);
 	read("cameraLookTo", cameraLookTo_);
 	read("cameraLookUpSeconds", cameraLookUpSeconds_);
+	read("kneelFadeSeconds", kneelFadeSeconds_);
+	read("coughStart", coughStart_);
+	read("coughEnd", coughEnd_);
+	read("coughPuffLong", coughPuffLong_);
+	read("coughPuffShort", coughPuffShort_);
+	read("coughGapShort", coughGapShort_);
+	read("coughGapLong", coughGapLong_);
+	read("coughLargeChance", coughLargeChance_);
+	read("bossCamYawDeg", bossCamYawDeg_);
+	read("bossCamDistance", bossCamDistance_);
+	read("bossCamHeight", bossCamHeight_);
+	read("bossCamOrbitSeconds", bossCamOrbitSeconds_);
+	read("bossCamLookFrom", bossCamLookFrom_);
 	strands_->LoadTuning(node["strands"]);
 }
 
@@ -442,6 +549,19 @@ void PlayerDeathPart::SaveTuning(JsonValue& node) const {
 	write("cameraLookFrom", cameraLookFrom_);
 	write("cameraLookTo", cameraLookTo_);
 	write("cameraLookUpSeconds", cameraLookUpSeconds_);
+	write("kneelFadeSeconds", kneelFadeSeconds_);
+	write("coughStart", coughStart_);
+	write("coughEnd", coughEnd_);
+	write("coughPuffLong", coughPuffLong_);
+	write("coughPuffShort", coughPuffShort_);
+	write("coughGapShort", coughGapShort_);
+	write("coughGapLong", coughGapLong_);
+	write("coughLargeChance", coughLargeChance_);
+	write("bossCamYawDeg", bossCamYawDeg_);
+	write("bossCamDistance", bossCamDistance_);
+	write("bossCamHeight", bossCamHeight_);
+	write("bossCamOrbitSeconds", bossCamOrbitSeconds_);
+	write("bossCamLookFrom", bossCamLookFrom_);
 	strands_->SaveTuning(node["strands"]);
 }
 
@@ -478,6 +598,21 @@ void PlayerDeathPart::OnImGui() {
 	ImGui::DragFloat("Look From (m)", &cameraLookFrom_, 0.01f, -5.0f, 20.0f);
 	ImGui::DragFloat("Look To (m)", &cameraLookTo_, 0.01f, -5.0f, 20.0f);
 	ImGui::DragFloat("Look Up (s)", &cameraLookUpSeconds_, 0.01f, 0.0f, 10.0f);
+	ImGui::TextDisabled("Boss: kneel + thruster cough (G3)");
+	ImGui::DragFloat("Kneel Fade (s)", &kneelFadeSeconds_, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Cough Start (s)", &coughStart_, 0.01f, 0.0f, 10.0f);
+	ImGui::DragFloat("Cough End (s)", &coughEnd_, 0.01f, 0.0f, 10.0f);
+	ImGui::DragFloat("Puff Long (s)", &coughPuffLong_, 0.005f, 0.01f, 1.0f);
+	ImGui::DragFloat("Puff Short (s)", &coughPuffShort_, 0.005f, 0.01f, 1.0f);
+	ImGui::DragFloat("Gap Short (s)", &coughGapShort_, 0.005f, 0.0f, 1.0f);
+	ImGui::DragFloat("Gap Long (s)", &coughGapLong_, 0.005f, 0.0f, 2.0f);
+	ImGui::SliderFloat("Large Chance", &coughLargeChance_, 0.0f, 1.0f);
+	ImGui::TextDisabled("Boss camera (G3)");
+	ImGui::DragFloat("Orbit Yaw (deg)", &bossCamYawDeg_, 0.5f, -180.0f, 180.0f);
+	ImGui::DragFloat("Orbit Distance (m)", &bossCamDistance_, 0.05f, 0.5f, 30.0f);
+	ImGui::DragFloat("Orbit Height (m)", &bossCamHeight_, 0.01f, -2.0f, 20.0f);
+	ImGui::DragFloat("Orbit (s)", &bossCamOrbitSeconds_, 0.01f, 0.0f, 10.0f);
+	ImGui::DragFloat("Boss Look From (m)", &bossCamLookFrom_, 0.01f, -5.0f, 20.0f);
 	if (ImGui::TreeNode("Strands")) {
 		strands_->OnImGui();
 		ImGui::TreePop();

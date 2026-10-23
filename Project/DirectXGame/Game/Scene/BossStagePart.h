@@ -7,6 +7,7 @@
 class Camera;
 class IImGuiEditable;
 class EnemyController;
+class BossBrainCommand;
 
 /// <summary>
 /// BossStagePart が StagePlayScene / GameScene に対して必要とする操作だけを切り出した
@@ -67,6 +68,8 @@ public:
 	void SyncYawPitchFromCamera();
 	// Boss 離脱・シーン再入時のクリア（スポーン物・状態を破棄）。
 	void Reset();
+	// true の間、ボスは次の行動を選ばない（今の攻撃は最後までやる）。自機の死亡演出の間（19 番 G3）
+	void SetBossStandDown(bool standDown);
 
 	bool IsBossAlive() const { return boss_ != nullptr; }
 	// ボス本体への参照（撃破で nullptr）。ボスは Enemy タグではないため nearestEnemy_ 等の
@@ -88,6 +91,7 @@ private:
 	Camera*         camera_ = nullptr;
 
 	IImGuiEditable* boss_   = nullptr; // スポーンしたボス本体（撃破で null 化）
+	BossBrainCommand* brain_ = nullptr; // ボスの AI（参照のみ。EnemyController が持つ。boss_ と一緒に null 化）
 	bool  bossSpawned_ = false;
 
 	// 撃破イベント（ConsumeBossDefeated で一度だけ読み出される）

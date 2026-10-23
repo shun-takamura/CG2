@@ -32,6 +32,9 @@ public:
 
 	bool IsFinished() const override { return false; } // 撃破されるまでループ
 
+	// true の間は次の行動を選ばない（BossStateMachine::SetStandDown）
+	void SetStandDown(bool standDown) { brain_.SetStandDown(standDown); }
+
 private:
 	// 予兆の点滅色をボス本体（現状は Primitive）へ反映。元の色は初回に控えて、重み 0 で元へ戻す
 	void ApplyTint(IImGuiEditable* entity, const Vector4& tint) {

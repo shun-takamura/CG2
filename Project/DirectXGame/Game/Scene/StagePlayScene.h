@@ -183,6 +183,7 @@ private:
 	void BurnPlayerWings(float seconds) override;
 	void CollectWingBurnPoints(std::vector<Vector3>& out) override;
 	void FinishPlayerDeath() override;
+	void RestorePlayerPose() override;
 	// 自機の死亡演出（19_GameOverAndDifficulty.md §1）。HP0 → 演出 → GAMEOVER。StagePlayScene は IPlayerDeathHost 経由でのみ操作される
 	std::unique_ptr<PlayerDeathPart> playerDeath_;
 	// 死亡演出の間（操作を受け付けない・被弾しない・射撃しない）
