@@ -18,6 +18,7 @@
                                右腕のボーンも左腕の鏡写しの位置にする。ほかの手の修正は残る
         --body-clips <体の .blend>  体（PlayerModel_rig.blend）にスタート演出の姿勢のクリップ（BODY_CLIPS）を付け、
                                --preview で確認画像、--export <フォルダ> で PlayerModel.gltf を書き出す（.blend は上書きしない）
+                               --preview-only KneelBoth,Kneel で確認画像を姿勢・クリップの名前で絞る
         --export-wings <羽根の .blend>  羽根（PlayerWings_rig.blend）を Deploy / Stow のクリップごと --export <フォルダ> へ
                                PlayerWings.gltf で書き出す
 
@@ -1753,6 +1754,12 @@ BODY_HEIGHT = [1.694]                 # 体の全高 [m]（--body-clips で測�
 #            heel_lift＝つま先を支点にかかとを上げる [度]）／ik でなければボーンを向ける向き
 #   ankle_lean … 足首を支点に、上体の形はそのまま体全体を前へ倒す [度]（2026-10-18 ユーザー）
 #   tilt  … 最後に腰のまわりで脚ごと前へ倒す [度]   sway … ループの小さな動き
+#   ground … 最後に、変形した体のいちばん低い所が床に来るよう腰ごと上下させる
+PREVIEW_ONLY = []        # --preview-only <名前,…>：確認画像をこの姿勢・クリップだけにする
+FLOOR_Z = [0.0]          # 床の高さ（基本の姿勢の体のいちばん低い所。--body-clips で測る）
+BODY_OBJECT = [None]     # 変形後のメッシュを測るための体（--body-clips で入れる）
+# 両ひざをついた脚（右側で書く）：太ももは前へ傾けて腰をかかとの側へ引き、すねは後ろへ床に沿わせ・足の甲を床へ
+KNEEL_LEG_DIRS = {"UpLeg": (0.0, -0.3, -1.0), "Leg": (0.0, 1.0, 0.04), "Foot": (0.0, 1.0, -0.35)}
 BODY_POSES = {
     # 射出前（カタパルトで機体確認をしている間）：直立・動かない（2026-10-18 ユーザー）。足は固定台の上なので
     # 肩幅より広く、腰を少し下げて脚をわずかにハの字に。腕は体の横へ下ろす
@@ -1801,9 +1808,46 @@ BODY_POSES = {
                  "Left": {"UpLeg": (0.03, 0.30, -1.0), "Leg": (0.0, 0.95, -0.8), "Foot": (0.0, 0.8, -1.0)}},
         "sway": {"spine": 1.0, "hips_z": 0.012, "arm": 3.0, "leg": 3.0},
     },
+    # ボス戦の死亡演出（19_GameOverAndDifficulty.md §1.2、G3。2026-10-23 ユーザー決定：倒れ込まずに
+    # 両ひざをついてうなだれる）。よろめき：足は直立の位置のまま、腰が落ちて両ひざが曲がり、上体が前へ崩れる。
+    # 首はまだ力が入っていて、上体の傾きを打ち消して顔は前を向いたまま（2026-10-23 ユーザー：序盤で首が傾いて見えた）
+    "KneelBuckle": {
+        "hips": {"offset": (0.0, 0.03, -0.14), "lean": 10.0},
+        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 6.0, "Neck": -18.0, "Head": -14.0},
+        "arms": {"Arm": (-0.15, -0.15, -1.0), "ForeArm": (-0.08, -0.25, -1.0)},
+        "legs": {"ik": True, "knee": (-0.15, -1.0, 0.0), "toe_out": 0.0},
+        "ankle_lean": 4.0,
+    },
+    # 両ひざをつく：腰はかかとの側へ引き（太ももは前へ傾く）、上体は起こしたまま。首はまだ前を向く
+    # （2026-10-23 ユーザー：前傾すぎ。腰を引く。首は最初から下げない）
+    "KneelBoth": {
+        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
+        "bend": {"Spine": 0.0, "Spine1": 2.0, "Spine2": 4.0, "Neck": 0.0, "Head": 0.0},
+        "arms": {"Arm": (-0.12, -0.05, -1.0), "ForeArm": (-0.05, -0.1, -1.0)},
+        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
+        "ground": True,
+    },
+    # 胸が前へ傾く：腹ではなく胸（Spine2）から折れる。首はまだ力が入っていて、胸の傾きを打ち消して顔は前を向いたまま
+    # （2026-10-23 ユーザー：胸が傾く途中で首が傾いて見えた）
+    "KneelChest": {
+        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
+        "bend": {"Spine": 0.0, "Spine1": 6.0, "Spine2": 20.0, "Neck": -14.0, "Head": -10.0},
+        "arms": {"Arm": (-0.1, 0.0, -1.0), "ForeArm": (-0.03, 0.0, -1.0)},
+        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
+        "ground": True,
+    },
+    # うなだれる：胸が傾いた後、首の力が抜けて頭が落ちる。腕はまっすぐ垂れ下がる
+    "KneelHang": {
+        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
+        "bend": {"Spine": 0.0, "Spine1": 6.0, "Spine2": 20.0, "Neck": 28.0, "Head": 22.0},
+        "arms": {"Arm": (-0.1, 0.0, -1.0), "ForeArm": (-0.03, 0.0, -1.0)},
+        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
+        "ground": True,
+    },
 }
 # クリップ（エンジンでは PlayerModel_<名前>.anim）。pose＝その姿勢で sway のループ。
-# keys＝[(秒, 姿勢)] のあいだをつなぐ 1 回きりのクリップ（ボーンごとに位置を線形・回転を球面線形、キーのあいだは smoothstep）
+# keys＝[(秒, 姿勢)] のあいだをつなぐ 1 回きりのクリップ（ボーンごとに位置を線形・回転を球面線形、キーのあいだは smoothstep）。
+# (秒, 姿勢, つなぎ方) で前のキーからのつなぎ方を変えられる：in＝加速していく（力が抜けて落ちる）、linear＝等速
 BODY_CLIPS = {
     "Stand": {"duration": 1.0, "pose": "Stand"},                  # 機体確認の間の直立（ループ・動かない）
     "Ignite": {"duration": 0.5, "keys": [(0.0, "Stand"), (0.5, "Catapult")]},   # 直立 → 前傾（1 回）
@@ -1815,6 +1859,10 @@ BODY_CLIPS = {
     "Offer": {"duration": 1.6, "keys": [(0.0, "Stand"), (1.6, "Offer")]},       # 直立 → 手を差し出す（1 回）
     "OfferHold": {"duration": 1.0, "pose": "Offer"},              # 差し出したまま（ループ・動かない。降りるの始まり）
     "Retract": {"duration": 1.4, "keys": [(0.0, "Offer"), (1.4, "Stand")]},     # 手を戻して直立へ（1 回）
+    # ボス戦の死亡演出（G3）：よろめいて両ひざをつき、一拍おいて胸が前へ傾き、それから首の力が抜けて頭が落ちる（うなだれる）。
+    # 1 回きり・エンジンは最後のコマで止める。力が抜けるところは加速して（in）、止まる所で速さを殺さない
+    "Kneel": {"duration": 2.0, "keys": [(0.0, "Stand"), (0.35, "KneelBuckle"), (0.8, "KneelBoth"), (1.1, "KneelBoth"),
+                                       (1.55, "KneelChest", "in"), (2.0, "KneelHang", "in")]},
 }
 
 # HUB で右手を差し出す姿勢（18_HubTransitions.md ①）。値はエンジンの座標 [m]（機体の原点から、正面 +Z。
@@ -1974,8 +2022,34 @@ def pose_body(arm, name, phase=0.0):
                                  Quaternion(x_axis, np.radians(sway["leg"] * wave * phase_sign)))
     if spec.get("tilt"):
         rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(spec["tilt"])))
+    if spec.get("ground"):
+        low = posed_min_z(BODY_OBJECT[0])
+        hips.matrix = Matrix.Translation((0.0, 0.0, FLOOR_Z[0] - low)) @ hips.matrix
+        bpy.context.view_layer.update()
     if spec.get("arm_ik"):
         arm_ik(arm, "Right", spec["arm_ik"])
+
+
+def posed_min_z(body):
+    """今のポーズで変形した体のいちばん低い高さ"""
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = body.evaluated_get(depsgraph)
+    me = evaluated.to_mesh()
+    co = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co)
+    evaluated.to_mesh_clear()
+    co = co.reshape(-1, 3)
+    m = np.array(body.matrix_world)
+    return float((co @ m[:3, :3].T + m[:3, 3])[:, 2].min())
+
+
+def ease(kind, u):
+    u = min(max(u, 0.0), 1.0)
+    if kind == "in":
+        return u * u
+    if kind == "linear":
+        return u
+    return smoothstep(u)
 
 
 def engine_to_arm(v, scale=1.0):
@@ -2077,9 +2151,11 @@ def pose_clip(arm, clip, t, captured):
         pose_body(arm, spec["pose"], t / spec["duration"])
         return
     keys = spec["keys"]
-    for (t0, p0), (t1, p1) in zip(keys, keys[1:]):
+    for k0, k1 in zip(keys, keys[1:]):
+        (t0, p0), (t1, p1) = k0[:2], k1[:2]
         if t <= t1 or t1 == keys[-1][0]:
-            apply_blend(arm, captured[p0], captured[p1], smoothstep((t - t0) / max(t1 - t0, 1e-6)))
+            kind = k1[2] if len(k1) > 2 else "smooth"
+            apply_blend(arm, captured[p0], captured[p1], ease(kind, (t - t0) / max(t1 - t0, 1e-6)))
             return
 
 
@@ -2202,6 +2278,8 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
              ("back_diag", (-2.6, 3.0, 2.0)), ("front_diag", (2.4, -3.0, 1.2))]
     hub = preview_hub_marks(catapult_scale())
     for name in BODY_POSES:
+        if PREVIEW_ONLY and name not in PREVIEW_ONLY:
+            continue
         pose_body(arm, name)
         flying = name == "Fly"
         for o in wings:
@@ -2234,7 +2312,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
         o.hide_render = True
     for o in ground:
         o.hide_render = False
-    for clip in [c for c, spec in BODY_CLIPS.items() if "keys" in spec]:
+    for clip in [c for c, spec in BODY_CLIPS.items() if "keys" in spec and (not PREVIEW_ONLY or c in PREVIEW_ONLY)]:
         duration = BODY_CLIPS[clip]["duration"]
         paths = []
         for i in range(7):
@@ -2307,6 +2385,8 @@ def body_clips(body_blend, wings_blend, preview_dir, export_dir):
     for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
         bpy.data.objects.remove(o, do_unlink=True)
     BODY_HEIGHT[0] = float(world_vertices(body)[:, 2].max())
+    FLOOR_Z[0] = float(world_vertices(body)[:, 2].min())
+    BODY_OBJECT[0] = body
     scale = CATAPULT_SCALE_HEIGHT / BODY_HEIGHT[0]
     log(f"体の全高 {BODY_HEIGHT[0]:.3f} m → カタパルトでは {scale:.3f} 倍。固定台の中心はモデルの "
         f"x ±{CATAPULT_CLAMP[0] / scale:.4f}・前 {CATAPULT_CLAMP[1] / scale:.4f}")
@@ -2470,6 +2550,8 @@ def main():
 
     export_dir = arg_path(argv, "--export")
     clips_body = arg_path(argv, "--body-clips")
+    if "--preview-only" in argv:
+        PREVIEW_ONLY.extend(argv[argv.index("--preview-only") + 1].split(","))
     if clips_body:
         wings_blend = arg_path(argv, "--wings-blend") or Path("Assets/Models/Player/PlayerWings/PlayerWings_rig.blend")
         body_clips(clips_body, wings_blend, preview_dir, export_dir)
