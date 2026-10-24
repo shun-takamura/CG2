@@ -95,7 +95,10 @@ public:
 	/// <summary>雲のスクロールを進める。フェーズに関係なく毎フレーム、Skybox の Update の前に呼ぶ</summary>
 	void UpdateClouds(float deltaTime, const Vector3& eyePosition);
 
-	/// <summary>雲海を描いてシーンに重ねる。不透明物・水面の後、Primitive の前</summary>
+	/// <summary>
+	/// 雲海を描いてシーンに重ねる。不透明物・水面の後、Primitive の前。
+	/// 雲を抜けきった後（raymarchOff_.sec）は fadeSec で薄くしてからパスごと止める（11 番 §1 空・雲）
+	/// </summary>
 	void DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget);
 
 	/// <summary>雲海（InitializeRaymarchClouds 前でも JSON の値は持つ）。L5 は GetParams().opacity / enabled で消す</summary>
@@ -178,6 +181,15 @@ private:
 		float fadeEndSec = 48.0f;
 	} cloudFlow_;
 	Vector2 cloudFlowForward_{ 0.0f, 1.0f };
+
+	// 雲海を消す時刻（root["raymarchCloudsOff"]）。雲を抜けきった後の敵なしの区間で、雲はカメラの上か後ろにある。
+	// レールの時刻だけで決めるので、シークで巻き戻せば戻る
+	struct RaymarchOff {
+		float sec = 70.0f;
+		float fadeSec = 0.5f;
+	} raymarchOff_;
+	/// <summary>stageSec_ での雲海の濃さの倍率（1 = そのまま、0 = 描かない）</summary>
+	float RaymarchVisibility() const;
 	float stageSec_ = 0.0f;   // Update / Reset で受け取った今のステージ秒（雲の流れの強さ）
 
 	std::vector<StageSection> sections_;

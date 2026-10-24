@@ -31,6 +31,11 @@ struct GameplayComponents {
 	const std::string& GetPrefabName() const { return prefabName; }
 	void SetPrefabName(const std::string& n) { prefabName = n; }
 
+	//==================== ストリーミングのグループ ====================
+	// シーン JSON の "streamGroup"。保存で書き戻すために持つ（空 = シーン開始時に作った物）
+	const std::string& GetStreamGroup() const { return streamGroup; }
+	void SetStreamGroup(const std::string& g) { streamGroup = g; }
+
 	//==================== コライダー ====================
 	const SphereCollider& GetCollider() const { return collider; }
 	SphereCollider& GetCollider() { return collider; }
@@ -102,6 +107,7 @@ struct GameplayComponents {
 	//==================== 実データ ====================
 	EntityTag tag = EntityTag::None;
 	std::string prefabName;   // 空 = プレハブ由来でない（手置きの Object3D/Animated/Primitive）
+	std::string streamGroup;  // 空 = 区間ごとのストリーミングの対象でない
 	SphereCollider collider{};
 	HP hp{};
 	DamageDealer damageDealer{};

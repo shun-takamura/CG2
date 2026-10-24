@@ -100,7 +100,21 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 	if (loadState_ == LoadState::GPUReady) return;
 
 	// CPU パースが終わっていることを保証
-	assert(loadState_ == LoadState::CPUReady && "InitializeGPU called before LoadCPU");
+	assert(loadState_ != LoadState::Unloaded && "InitializeGPU called before LoadCPU");
+
+	if (loadState_ == LoadState::CPUReady) BeginGPUAsync(modelCore, dxCore);
+	if (loadState_ == LoadState::GPUPending) {
+		// 積んだ（または ScenePreloader などが待たずに送った）読み込みを待ってから仕上げる。
+		// シーンの読み込みのバッチ中は待ちが EndBatchAndWait に回るが、バリアを積んだコマンドリストは
+		// その後で実行されるので順番は保たれる（分ける前の同期ロードと同じ）
+		if (useDirectStorage_) DStorageManager::GetInstance()->SubmitAndWait();
+		FinishGPU(dxCore);
+	}
+}
+
+bool ModelInstance::BeginGPUAsync(ModelCore* modelCore, DirectXCore* dxCore)
+{
+	if (loadState_ != LoadState::CPUReady) return false;
 
 	modelCore_ = modelCore;
 
@@ -111,12 +125,21 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 	if (vertexCount_ == 0 || indexCount_ == 0) {
 		Log("[ModelInstance] 空のモデル（ファイル無し/破損の可能性）。描画をスキップします。\n");
 		loadState_ = LoadState::GPUReady;
-		return;
+		return false;
 	}
 
-	// 頂点 / インデックス / マテリアル GPU リソースの作成
+	// 頂点 / インデックスの GPU リソースの作成（DirectStorage 経路は積むだけ）
 	CreateVertexData(dxCore);
 	CreateIndexData(dxCore);
+	loadState_ = LoadState::GPUPending;
+	return useDirectStorage_;
+}
+
+void ModelInstance::FinishGPU(DirectXCore* dxCore)
+{
+	if (loadState_ != LoadState::GPUPending) return;
+
+	FinishBufferData(dxCore);
 	CreateMaterialData(dxCore);
 
 	// submesh ごとに .mat 値を GPU material へ反映し、テクスチャ／法線マップをロードする
@@ -185,7 +208,7 @@ void ModelInstance::InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore)
 void ModelInstance::Draw(DirectXCore* dxCore)
 {
 	// 読み込みに失敗した/空のモデルは何も描かない（以前は assert でクラッシュしていた）。
-	if (!indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
+	if (loadState_ != LoadState::GPUReady || !indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
 
 	auto* cmd = dxCore->GetCommandList();
 
@@ -236,7 +259,7 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 
 void ModelInstance::DrawIdPass(DirectXCore* dxCore)
 {
-	if (!indexResource_ || indexCount_ == 0) return;
+	if (loadState_ != LoadState::GPUReady || !indexResource_ || indexCount_ == 0) return;
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
 	PEPPER_COUNT("DrawCall");
@@ -245,7 +268,7 @@ void ModelInstance::DrawIdPass(DirectXCore* dxCore)
 
 void ModelInstance::DrawShadowPass(DirectXCore* dxCore)
 {
-	if (!indexResource_ || indexCount_ == 0) return;
+	if (loadState_ != LoadState::GPUReady || !indexResource_ || indexCount_ == 0) return;
 	dxCore->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	dxCore->GetCommandList()->IASetIndexBuffer(&indexBufferView_);
 	PEPPER_COUNT("DrawCall");
@@ -254,7 +277,7 @@ void ModelInstance::DrawShadowPass(DirectXCore* dxCore)
 
 void ModelInstance::DrawBloomPass(DirectXCore* dxCore, bool includeAll)
 {
-	if (!indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
+	if (loadState_ != LoadState::GPUReady || !indexResource_ || indexBufferView_.BufferLocation == 0 || indexCount_ == 0) return;
 	auto* cmd = dxCore->GetCommandList();
 	cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	cmd->IASetIndexBuffer(&indexBufferView_);
@@ -334,27 +357,18 @@ void ModelInstance::CreateVertexData(DirectXCore* dxCore)
 		HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
 			&heap, D3D12_HEAP_FLAG_NONE, &desc,
 			D3D12_RESOURCE_STATE_COMMON, nullptr,
-			IID_PPV_ARGS(&vertexResource_));
+			IID_PPV_ARGS(&pendingVertexResource_));
 		assert(SUCCEEDED(hr));
 
-		// pack 内 .mesh のオフセットを取得して DStorage で直接 VRAM へ転送
+		// pack 内 .mesh のオフセットを取得して DStorage で直接 VRAM へ転送（積むだけ。バリアとビューは FinishBufferData）
 		uint64_t packOffset = 0, packSize = 0;
 		AssetLocator::GetInstance()->GetPackEntryInfo(meshFilePath_, packOffset, packSize);
 		auto* ds = DStorageManager::GetInstance();
 		ds->EnqueueBufferRead(ds->GetPackFile(),
 			packOffset + vertexFileOffset_,
 			static_cast<uint32_t>(sizeInBytes),
-			vertexResource_.Get(), 0);
-		ds->SubmitAndWait();
-
-		// COMMON → VERTEX_AND_CONSTANT_BUFFER
-		D3D12_RESOURCE_BARRIER barrier{};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource   = vertexResource_.Get();
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-		dxCore->GetCommandList()->ResourceBarrier(1, &barrier);
+			pendingVertexResource_.Get(), 0);
+		return;
 	} else {
 		// DEFAULT heap に頂点バッファを作成（中間 UPLOAD バッファ経由でアップロード）
 		vertexResource_ = dxCore->CreateDefaultBuffer(
@@ -428,7 +442,7 @@ void ModelInstance::CreateIndexData(DirectXCore* dxCore)
 		HRESULT hr = dxCore->GetDevice()->CreateCommittedResource(
 			&heap, D3D12_HEAP_FLAG_NONE, &desc,
 			D3D12_RESOURCE_STATE_COMMON, nullptr,
-			IID_PPV_ARGS(&indexResource_));
+			IID_PPV_ARGS(&pendingIndexResource_));
 		assert(SUCCEEDED(hr));
 
 		uint64_t packOffset = 0, packSize = 0;
@@ -437,16 +451,8 @@ void ModelInstance::CreateIndexData(DirectXCore* dxCore)
 		ds->EnqueueBufferRead(ds->GetPackFile(),
 			packOffset + indexFileOffset_,
 			static_cast<uint32_t>(sizeInBytes),
-			indexResource_.Get(), 0);
-		ds->SubmitAndWait();
-
-		D3D12_RESOURCE_BARRIER barrier{};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource   = indexResource_.Get();
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-		dxCore->GetCommandList()->ResourceBarrier(1, &barrier);
+			pendingIndexResource_.Get(), 0);
+		return;
 	} else {
 		indexResource_ = dxCore->CreateDefaultBuffer(
 			sizeInBytes,
@@ -457,6 +463,34 @@ void ModelInstance::CreateIndexData(DirectXCore* dxCore)
 
 	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
 	indexBufferView_.SizeInBytes = UINT(sizeInBytes);
+	indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
+}
+
+void ModelInstance::FinishBufferData(DirectXCore* dxCore)
+{
+	if (!useDirectStorage_ || !pendingVertexResource_ || !pendingIndexResource_) return;
+
+	// DirectStorage の転送が終わってから COMMON → 頂点 / インデックス用（転送と重ならないよう、終わる前には積まない）
+	D3D12_RESOURCE_BARRIER barriers[2]{};
+	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barriers[0].Transition.pResource   = pendingVertexResource_.Get();
+	barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+	barriers[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+	barriers[1] = barriers[0];
+	barriers[1].Transition.pResource   = pendingIndexResource_.Get();
+	barriers[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+	dxCore->GetCommandList()->ResourceBarrier(2, barriers);
+
+	vertexResource_ = std::move(pendingVertexResource_);
+	indexResource_ = std::move(pendingIndexResource_);
+
+	vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
+	vertexBufferView_.SizeInBytes = UINT(sizeof(VertexData) * vertexCount_);
+	vertexBufferView_.StrideInBytes = sizeof(VertexData);
+
+	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+	indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * indexCount_);
 	indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
 }
 

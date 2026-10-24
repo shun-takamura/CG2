@@ -31,6 +31,7 @@
       "tag": "Terrain",
       "dir": "Resources/Models/RiverTerrain",
       "file": "RiverTerrain.mesh",
+      "streamGroup": "LowAltitude",
       "transform": {
         "scale": [
           1,
@@ -55,6 +56,7 @@
       "tag": "Terrain",
       "dir": "Resources/Models/CanyonTerrain",
       "file": "CanyonTerrain.mesh",
+      "streamGroup": "Plateau",
       "transform": {
         "scale": [
           1,

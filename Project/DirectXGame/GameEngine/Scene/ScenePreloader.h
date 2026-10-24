@@ -24,7 +24,8 @@ struct AnimatedMeshData;
 ///   2. メイン    ：テクスチャとアニメーションするモデルの GPU フェーズを 1 フレーム数 ms ずつ。DirectStorage へは
 ///                 待たずに送り、fence が終わった物からバリアを積んで仕上げる
 ///   3. 別スレッド：モデルの CPU フェーズ（テクスチャが全部そろってから。モデルの GPU フェーズがテクスチャを引くため）
-///   4. メイン    ：モデルの GPU フェーズを 1 フレーム数 ms ずつ
+///   4. メイン    ：モデルの GPU フェーズを 1 フレーム数 ms ずつ。テクスチャと同じく DirectStorage へは待たずに送り、
+///                 fence が終わった物から仕上げる
 ///
 /// SRV ヒープ・コマンドリスト・DirectStorage への登録はメインスレッドでしか触らない。
 /// </summary>
@@ -83,7 +84,7 @@ private:
 		size_t Count() const { return shaders.size() + textures.size() + models.size() + animatedModels.size() + animations.size(); }
 	};
 
-	enum class Stage { Idle, CpuTextures, GpuTextures, WaitTextures, CpuModels, GpuModels, Done };
+	enum class Stage { Idle, CpuTextures, GpuTextures, WaitTextures, CpuModels, GpuModels, WaitModels, Done };
 
 	static std::string ManifestPath(const std::string& sceneName);
 	static bool LoadManifest(const std::string& path, Manifest& out);
@@ -92,6 +93,7 @@ private:
 	void StartWorker(Stage stage);
 	void JoinWorker();
 	void UpdateGpuTextures(double budgetMs);
+	void UpdateGpuModels(double budgetMs);
 	void FinishCompletedTextureBatches(bool wait);
 	void StartModels();
 	void Finish();
@@ -107,7 +109,8 @@ private:
 	size_t nextTexture_ = 0;
 	std::vector<std::shared_ptr<AnimatedMeshData>> pendingMeshes_;  // CPU フェーズを済ませたアニメーションするモデル（別スレッドが詰める）
 	size_t nextMesh_ = 0;
-	// DirectStorage へ送って仕上げ待ちの物（fence が終わったら finishers を呼ぶ）
+	size_t nextModel_ = 0;
+	// DirectStorage へ送って仕上げ待ちの物（テクスチャ・モデル。fence が終わったら finishers を呼ぶ）
 	struct TextureBatch { uint64_t fence = 0; std::vector<std::function<void()>> finishers; };
 	std::vector<TextureBatch> textureBatches_;
 	double beginMs_ = 0.0;

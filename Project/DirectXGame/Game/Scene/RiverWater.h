@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
@@ -76,6 +77,7 @@ private:
 	enum class LoadState {
 		NotStarted, // まだ読んでいない
 		LoadingCPU, // 別スレッドで CPU フェーズ中
+		UploadingGPU, // 川のマップを DirectStorage へ待たずに送った。fence が終わったら仕上げて貼る
 		Ready,      // 描ける
 		Failed,     // 読めなかった（ログに理由）
 	};
@@ -93,7 +95,12 @@ private:
 	};
 
 	void StartLoad();
-	void FinishLoad();
+	/// <summary>CPU フェーズの後：川のマップを GPU へ待たずに送る（FS 経路はその場で貼る）</summary>
+	void BeginUpload();
+	/// <summary>送った途中でも今すぐ読み終えて貼る（シーク用。DirectStorage を待つ）</summary>
+	void FinishLoadNow();
+	/// <summary>川のマップ（GPU まで済んだ物）を水面に貼る</summary>
+	void ApplyRiverMap();
 	void LoadTuning();
 	void SaveTuning() const;
 
@@ -125,6 +132,7 @@ private:
 	std::thread loadThread_;
 	std::atomic<bool> cpuDone_{ false };
 	LoadedInfo loaded_; // 別スレッドが書き、cpuDone_ が立った後にメインスレッドが読む
+	uint64_t uploadFence_ = 0; // UploadingGPU の間：DStorageManager::SubmitWithFence の値
 
 	float loadStartSec_ = 51.0f; // 雲に入る時刻（11 番 §3.0 のストリーミングの窓の先頭）
 	float waterHeight_ = 0.0f;

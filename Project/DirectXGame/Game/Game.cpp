@@ -360,7 +360,9 @@ void Game::Initialize() {
 
 	// シーンマネージャに最初のシーンをセット
 	{
-#ifdef _DEBUG
+#if defined(_DEBUG) || defined(USE_PEPPER)
+		// Debug と Development（NDEBUG＋USE_PEPPER）は StagePlay から（HUB の降下の先読みを通らないので、
+		// 区間ごとのストリーミングのロードの重さをそのまま測れる。11 番 L9）
 		std::string startScene = "STAGEPLAY";
 #else
 		std::string startScene = "TITLE";
@@ -460,6 +462,8 @@ void Game::Draw() {
 					srvManager_->PreDraw();
 					scene->DispatchDynamicAnimatedSkinning();
 
+					// 深度を書く所だけ GPU で測る（スキニングの Compute は含めない）
+					PEPPER_GPU_SCOPE(cmd, "Game::ShadowPass");
 					shadowMap_->BeginPass(cmd);
 					for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
 						shadowMap_->BindCascade(cmd, c);

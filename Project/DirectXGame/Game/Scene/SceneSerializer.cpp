@@ -66,6 +66,7 @@ namespace {
 		if (d.kind != SceneEntityDesc::Kind::Prefab) {
 			e["tag"] = std::string(GetTagName(d.tag));
 		}
+		if (!d.streamGroup.empty()) e["streamGroup"] = d.streamGroup;
 
 		switch (d.kind) {
 		case SceneEntityDesc::Kind::Object3D:
@@ -112,6 +113,7 @@ namespace {
 
 		d.name = e["name"].AsString();
 		d.tag = TagFromName(e["tag"].AsString());
+		d.streamGroup = e["streamGroup"].AsString();
 
 		const JsonValue& tf = e["transform"];
 		d.scale = JsonToVec3(tf["scale"], { 1.0f, 1.0f, 1.0f });

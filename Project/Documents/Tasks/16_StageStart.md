@@ -459,7 +459,7 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 
 残り（やるなら別の作業）：差し替えの 51 ms の中身は StageStart（ケーブル・タコメーター・雷 6 ms、施設 5 ms）と Initialize の小物。小さな GPU バッファの作成（`CreateCommittedResource`）を軽くする (c) は別のタスクとして提案済み
 
-新規 `GameEngine/Graphics/Object3D/AnimatedMeshCache.{h,cpp}`・`GameEngine/Graphics/Object3D/AnimatedModelInstance.{h,cpp}`・`GameEngine/Graphics/Object3D/SkinCluster.cpp`・`GameEngine/Framework.cpp`・`GameEngine/Graphics/Object3D/AnimatedObject3DInstance.{h,cpp}`・`GameEngine/Core/DirectXCore.{h,cpp}`・`GameEngine/Core/DStorageManager.{h,cpp}`・`GameEngine/Graphics/TextureManager.{h,cpp}`・`GameEngine/Graphics/Object3D/ModelManager.{h,cpp}`・新規 `GameEngine/Scene/ScenePreloader.{h,cpp}`（ArcanaEngine.vcxproj と .filters に追記済み）
+新規 `GameEngine/Graphics/Object3D/AnimatedMeshCache.{h,cpp}`・`GameEngine/Graphics/Object3D/AnimatedModelInstance.{h,cpp}`・`GameEngine/Graphics/Object3D/SkinCluster.cpp`・`GameEngine/Framework.cpp`・`GameEngine/Graphics/Object3D/AnimatedObject3DInstance.{h,cpp}`・`GameEngine/Core/DirectXCore.{h,cpp}`・`GameEngine/Core/DStorageManager.{h,cpp}`・`GameEngine/Graphics/TextureManager.{h,cpp}`・`GameEngine/Graphics/Object3D/ModelManager.{h,cpp}`・新規 `GameEngine/Scene/ScenePreloader.{h,cpp}`（ArcanaEngine.vcxproj と .filters に追記済み）。2026-10-25 に 11 番 L9 S2 で `GameEngine/Graphics/Object3D/ModelInstance.{h,cpp}`・`ModelManager.{h,cpp}`・`ScenePreloader.{h,cpp}` を変更（静的モデルの GPU フェーズを待たずに送る。11 番 §6）
 
 罠・注意：
 - **先読みの途中の物をシーンの Initialize が同期で読むと壊れる**（テクスチャは CPU フェーズ中のエントリがあると `LoadTextureCPU` が素通りし、`LoadTextureGPU` が CPUReady でないと assert）。だからシーンを読む前に `CompleteNow`。モデルの CPU フェーズをテクスチャの後にしているのも同じ理由（モデルの GPU フェーズが `LoadTexture` を呼ぶ。HUB の `Scene::ProcessAsyncLoads` も 1 フレーム 1 件 `FlushGPUUpload` するので、先に積むと勝手に GPU フェーズが走る）

@@ -83,7 +83,8 @@ class ModelInstance
 	//==============================
 	// ロード状態
 	//==============================
-	enum class LoadState { Unloaded, CPUReady, GPUReady };
+	// GPUPending = BeginGPUAsync でバッファを作って DirectStorage に積んだが、まだ仕上げていない（描かない）
+	enum class LoadState { Unloaded, CPUReady, GPUPending, GPUReady };
 	LoadState loadState_ = LoadState::Unloaded;
 
 	//==============================
@@ -106,6 +107,9 @@ class ModelInstance
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource_;
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource_;
+	// DirectStorage で転送中のバッファ（FinishGPU で vertexResource_ / indexResource_ へ移す。それまでは描かない）
+	Microsoft::WRL::ComPtr<ID3D12Resource> pendingVertexResource_;
+	Microsoft::WRL::ComPtr<ID3D12Resource> pendingIndexResource_;
 
 	// バッファリソースの使い道を補足するバッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
@@ -133,8 +137,17 @@ public:
 	// CPU フェーズのみ（Assimp パース）スレッド安全
 	void LoadCPU(const std::string& directoryPath, const std::string& filename);
 
-	// GPU フェーズのみ（リソース作成）メインスレッドのみ
+	// GPU フェーズのみ（リソース作成）メインスレッドのみ。BeginGPUAsync → 待つ → FinishGPU を続けて行う
 	void InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore);
+
+	/// <summary>
+	/// GPU フェーズの前半（メインスレッドのみ）：頂点・インデックスのバッファを作り、DirectStorage 経路なら読み込みを積むだけ（送らない・待たない）。
+	/// true = DirectStorage に積んだ。呼び出し側が DStorageManager::SubmitWithFence で送り、fence が終わってから FinishGPU を呼ぶ。
+	/// false = 待つ物は無い（FS 経路・空のモデル・済み）。GPUPending なら続けて FinishGPU を呼んでよい
+	/// </summary>
+	bool BeginGPUAsync(ModelCore* modelCore, DirectXCore* dxCore);
+	/// <summary>GPU フェーズの後半（メインスレッドのみ）：バリアを積み、マテリアルとテクスチャを用意して GPUReady にする</summary>
+	void FinishGPU(DirectXCore* dxCore);
 
 	void Draw(DirectXCore* dxCore);
 
@@ -192,6 +205,7 @@ public:
 	// ロード状態の確認
 	bool IsCPUReady() const { return loadState_ >= LoadState::CPUReady; }
 	bool IsGPUReady() const { return loadState_ == LoadState::GPUReady; }
+	bool IsGPUPending() const { return loadState_ == LoadState::GPUPending; }
 
 private:
 
@@ -203,6 +217,9 @@ private:
 
 	// indexを作成
 	void CreateIndexData(DirectXCore* dxCore);
+
+	// DirectStorage で転送した頂点・インデックスにバリアを積み、ビューを作る（FS 経路は Create* で済んでいるので何もしない）
+	void FinishBufferData(DirectXCore* dxCore);
 
 	Node ReadNode(aiNode* node);
 

@@ -13,6 +13,7 @@
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
 #include "StageEnvironment.h"
+#include "StageStreaming.h"
 #include "VerticalMenu.h"
 #include "AttractMode.h"
 #include <functional>
@@ -45,7 +46,7 @@ class PlayerWingUnit;
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
 class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
-	private IPlayerDeathHost {
+	private IPlayerDeathHost, private IStageStreamingHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -86,6 +87,7 @@ protected:
 	std::string GetSceneJsonName() const override;
 	bool ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag tag) const override;
 	bool ShouldSkipOnLoad(const SceneEntityDesc& desc) const override;
+	bool ShouldStreamOnLoad(const SceneEntityDesc& desc) const override;
 	void OnBeforeSceneLoad() override;
 	void OnAfterSceneLoad() override;
 
@@ -164,6 +166,13 @@ private:
 	void SetPlayerHidden(bool hidden) override;
 	void RestoreStageEnvironment() override;
 	void BeginCloudTop() override;
+
+	// ----- IStageStreamingHost 実装（private override。StageStreaming 経由のみ）-----
+	size_t CreateStreamGroup(const std::string& group) override { return LoadStreamGroup(group); }
+	size_t GetPendingStreamEntityCount(const std::string& group) const override { return GetPendingStreamCount(group); }
+
+	// 区間ごとのストリーミングの時刻表（11 番 L9）。streamGroup 付きの配置を雲の中で裏で読み、決めた秒に作る
+	std::unique_ptr<StageStreaming> streaming_;
 
 	// スタート演出（③IN〜雲の上。16_StageStart.md）。StagePlayScene は IStageStartHost 経由でのみこれを操作する。
 	std::unique_ptr<StageStartPart> stageStart_;
@@ -554,6 +563,7 @@ private:
 	// ----- Rail → Landing 自動遷移 -----
 	float seekMaxSec_ = 180.0f; // Rail終了トリガー秒。JSON "phase.seekMaxSec" に保存（3分＝3セクション×1分）
 	float benchHoldSec_ = -1.0f; // 起動引数 --bench-hold の秒（>=0 でレールをその秒で止める。計測用、JSON非保存）
+
 
 	// ----- Landing フェーズ（滞在時間・自動進行）-----
 	float landingDuration_ = 10.0f; // Landing 滞在秒（将来カメラ演出に置換予定）。JSON "phase.landingDurationSec"

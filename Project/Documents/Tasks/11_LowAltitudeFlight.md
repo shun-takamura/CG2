@@ -189,7 +189,7 @@
 
 | 依頼元 | 依頼先 | 内容 | 状態 |
 |---|---|---|---|
-| L2 | L9 | `SceneSerializer`（`Game/Scene/SceneSerializer.cpp` の `DescToJson`/`JsonToDesc`）が `streamGroup` を読み書きしない。今は読み込み時に無視されるだけだが、**エディタからシーンを保存すると `streamGroup` が消える**。`SceneEntityDesc` に持たせて往復させてほしい（2026-10-08） | 未着手 |
+| L2 | L9 | `SceneSerializer`（`Game/Scene/SceneSerializer.cpp` の `DescToJson`/`JsonToDesc`）が `streamGroup` を読み書きしない。今は読み込み時に無視されるだけだが、**エディタからシーンを保存すると `streamGroup` が消える**。`SceneEntityDesc` に持たせて往復させてほしい（2026-10-08） | **完了**（2026-10-25、L9 S1。§6。シーン JSON から消えていたキーも付け直した） |
 | L2 | L5 | **連絡（L5 の領域に仮で手を入れた）**：地形の端を確かめるため、`Tuning/StagePlay.json` の SkyAboveClouds/CloudLayer/LowAltitude の空をタイトルの青空 `title_clear_sky.dds`（雲の中は空文字＝引き継ぎ）、SkyAboveClouds/LowAltitude の光の向きをタイトルの太陽 (0.191, −0.815, 0.547)、`skybox.defaultPath` も同じ青空にした。遠景の雲（CloudLayer）は `StageEnvironment` が所有（高さ 1500m。カメラが雲より上だと描かれないため）。ユーザー方針：背景は青空＋雲でいく。谷・ボス戦の空は未定で、雲はそこでも出たまま（2026-10-08） | 共有のみ |
 | L2 | L3 | **連絡：本物の川のマップができた**。`Resources/Textures/MaskTexture/Terrain/RiverTerrain_RiverMap.dds`（1024²・BC7_UNORM 線形）と `Resources/Json/Terrain/RiverTerrain.json`（x_min/x_max/z_min/z_max、`u = (x - x_min)/(x_max - x_min)`、`v = (z_max - z)/(z_max - z_min)`、maxDepth=10、maxFlowSpeed=8）。R = 水深 / maxDepth、G/B = 0.5 + 0.5 × 流れのワールド X/Z ÷ maxFlowSpeed。範囲の外（地形の外）は L3 側で「深い・+Z へ 2m/s」とみなしてよい。作り直しは `gen_terrain.py --river-map`（2026-10-08） | 共有のみ |
 | L2 | L5 | **連絡（ユーザーの指示で L5 のファイルを変更）**：`StageEnvironment::Update` は、区間の値が変わった時（切り替えの補間中・区間の値の編集）だけライト・フォグ・空の着色に書き込むようにした。区間の途中で演出や ImGui が変えた値は次の切り替えまで残る（以前は毎フレーム上書き）。`Reset`（シーク・開始）は従来どおり必ず書き込む（2026-10-08） | 共有のみ |
@@ -200,7 +200,8 @@
 | L2 | L8 | **最適化の余地あり（今はやらない。14番 §4.2 に集約）**：PEPPER（2026-10-08）で地形が画面を埋める降下〜低空では GPU の `Scene::DrawDynamicObjects` が 5〜8.7ms/f（高高度は 0.4〜0.7ms）。60fps は保てている（VSync 律速）。主因は地形 PS の塗り。候補は軽い順に ①重みが 0 の層を引かない分岐（`Terrain.PS.hlsl:185-187`、見た目は不変）②岩の三平面で寄与の小さい面を飛ばす ③異方性 16→8 ④影のパスに PEPPER の GPU 区間を足して頂点側も測る → 必要なら LOD／チャンク（12 番 §7）。水面・植生・岩などが入ってフレームが落ちたら L8 の仕上げでまとめて見る | 保留 |
 | L2（ユーザー） | L3 | 水面のさざ波が規則的（同じ模様の繰り返しに見える）。大河モードでは不規則な波にしてほしい（2026-10-08、実機の画面で指摘） | **完了**（2026-10-09：反射を入れたら気にならなくなったので対応不要と決定。13 番 §6） |
 | L3 | L5 | **連絡（ユーザーの許可で L5 のファイルに1行追加）**：`StageEnvironment` に `GetCloudLayer()` を足した。大河の水面に映る空へ遠景の雲を重ねるため（2026-10-09） | 共有のみ |
-| L3 | L9 | **依頼**：`DStorageManager` に待たない送出（`SubmitAsync` → `IsComplete`）ができたら、`RiverWater` の川のマップのロード（今は CPU フェーズを別スレッド・GPU フェーズはメインで `SubmitAndWait`）を差し替えてほしい（13 番 §2.2）（2026-10-09） | 未着手 |
+| L3 | L9 | **依頼**：`DStorageManager` に待たない送出（`SubmitAsync` → `IsComplete`）ができたら、`RiverWater` の川のマップのロード（今は CPU フェーズを別スレッド・GPU フェーズはメインで `SubmitAndWait`）を差し替えてほしい（13 番 §2.2）（2026-10-09） | **完了**（2026-10-25、L9 S4。§6） |
+| L9 | L5 | **連絡（ユーザーの指示で L5 のファイルに追加）**：レイマーチの雲（雲海）を雲を抜けた後に消す処理を `StageEnvironment` に入れた（§1 空・雲 の仕様どおり）。レールの時刻 `raymarchCloudsOff.sec`（既定 70 秒）から `fadeSec`（0.5 秒）で濃さを 0 へ下げ、0 でパスごと止める。濃さは描く間だけ掛けるので JSON・ImGui の Opacity は書き換えない。時刻だけで決まるのでシークで巻き戻せば戻る。ImGui は Raymarch Clouds の「Off after leaving the clouds」（2026-10-25、ビルド・実機未確認） | 共有のみ |
 | L3 | L6 | **依頼**：水面は川のマップの外（X ±1000 の外・Z 900 より手前）を描かない。地形の外周の端がむき出しになるので、遠景の山などで隠してほしい（2026-10-09） | 未着手 |
 | L0 | L4 | **依頼**：§3.0「低空の蛇行と山」に合わせて `gen_rail_path.py` の低空区間（idx29〜39）の XZ を引き直し、谷のレール（idx40 以降）を縁の出口の X へ平行移動する。カメラの向き（rotKeys）も曲がりに合わせる。速さは蛇行中 35m/s 以内が目安（2026-10-09） | **完了**（2026-10-09。右回りのフック型、`MEANDER_XZ`。蛇行 26m/s、縁の出口 X=322、谷は X を約 +290 移動。rotKeys は空＝カメラは接線を向くので作業不要） |
 | L0 | L2 | **依頼**：L4 のレールの引き直しの後、地形を作り直す（川筋の蛇行・大きい山・川のマップ・岸の線）。山は 95〜112秒のカメラ位置から縁の先が見えないこと（2026-10-09） | **完了**（2026-10-09。12 番 §8 Step 7。谷の中は 107秒まで見えない。台地は 72秒から見えるので `Plateau` に分けた＝§3.0） |
@@ -248,3 +249,71 @@ L2 の設計は専門の設計書 [12_TerrainRendering.md](12_TerrainRendering.m
 - 視野が狭いので 10° を超えると地平線が画面の上へ出る。画面の約 7 割が水面になり、流れる水で速さが出る。
 - **自機の反射はほぼ画面に入らない（実機確認 2026-10-09、不具合ではない）**。鏡像は水面下 −1.7m（自機と同じ深さ）にでき、12m 先ならカメラから約 23° 下＝画面中心から約 18° 下で、画面下端（12.9°）の外。自機を床（水面＋0.3m）まで下げた時だけ下端に入る。すれすれの時は L7 の波立ちで隠れるので、このままでよい（ユーザー判断）。映したい場面があれば L8 で見下ろしを 8° 以上にする（空が減る）。
 - **本来はカメラワーク（L8 の rotKeys）の仕事**。L8 が rotKeys を書けばそちらが優先され、これは効かなくなる（L8 は低空で 5° 前後の見下ろしを引き継ぐこと）。
+
+## 6. L9 ストリーミング（2026-10-25〜）
+
+HUB→StagePlay の裏ロード（16 番 §2.8 の `ScenePreloader`・`SubmitWithFence`・`BeginTextureGPUAsync`）を土台にする。段取り：
+
+| 段 | 内容 | 状態 |
+|---|---|---|
+| S1 | `streamGroup` を保存で残す／付いた配置は開始時に作らず、時刻が来たら**同期で**作る（まず正しく出ることと止まる時間を測る） | コードまで（2026-10-25、ビルド・実機未確認） |
+| S2 | 静的 .mesh の GPU フェーズを「送る」と「fence の後に仕上げる」に分ける（今は `ModelInstance::CreateVertexData/CreateIndexData` が `SubmitAndWait`、FS 経路は 65MB を 1 フレームで `CreateDefaultBuffer`）。エンジン | コードまで（2026-10-25、ビルド・実機未確認） |
+| S3 | `ScenePreloader` をグループ単位でも使い、51 秒から裏で読んで読み終えたら作る。時刻表を専用のクラスへ切り出す（置き場所は相談） | **完了**（2026-10-25、実機確認済み） |
+| S4 | 巻き戻し・`RiverWater` の川のマップを待たない送出へ（§3.4 の L3 の依頼） | コードまで（2026-10-25、ビルド・実機未確認）。巻き戻しは S1〜S3 で対応済み |
+| 後 | 谷のロード（`Canyon`）と 126 秒の低空の破棄（`ModelManager` にアンロードが無い） | 谷ができてから |
+
+**S1 の作り（2026-10-25）**
+- `SceneEntityDesc::streamGroup`（JSON の `"streamGroup"`、空なら書かない）。作ったエンティティは `GameplayComponents::streamGroup` に覚え、`CollectSceneData` が書き戻す
+- `GameScene::ShouldStreamOnLoad`（既定 false＝他のシーンは今までどおり）が true のエントリは作らずに取っておく。`LoadStreamGroup(group)` でその場で作る（profile.log に `LOAD kind=stream group= count= wall_ms=`）。一度読んだグループは覚えていて、Auto Reload などで配置を読み直してもすぐ作る。**取っておいたエントリも保存に書き出す**（読む前に保存しても消えない）
+- StagePlayScene：時刻表 `Tuning/StagePlay.json` の `"streaming": {"groups": [{"name", "loadSec"}]}`（既定 LowAltitude / Plateau とも 51 秒）。時刻表に無いグループ（`Canyon` など）はすぐ作る。Rail の Update で経過秒が `loadSec` を過ぎたら作る／着陸・ボス戦（ボス戦からのリトライを含む）は全部作る／`Seek` で窓より後へ飛んだら作る（前へ戻っても捨てない）。ImGui は StagePlay Tuning の Stage Phase に状態・Load (s)・「今読む」
+- `Preload/STAGEPLAY.json` には地形が入ったまま（HUB から来ると降下中に先読み済みで 51 秒はキャッシュに当たる。雲の上から始めると 51 秒で 118MB を同期で読む）。外すかは S3 で決める
+- 罠：S1 は同期なので、雲の上から始めると作る時刻で大きく止まるはず（**Development で**測る。Debug はシーンエディタが起動時に全モデルを裏で読む `SceneEditorWindow.cpp` ので、作るのは 1〜2ms で済み測れない）
+
+**S1 の実機（2026-10-25、Debug）**：雲の上から始めて 51 秒まで地形が出ない・60 秒より後へのシークですぐ出る、を確認。51 秒で作ると、**雲の中（51〜62 秒）で見えない地形を描いて 33〜42fps**（地形 4〜6ms＋未軽量化の雲 6〜8.5ms、GPU）、降下中に地形が透けて見えた（ユーザー：技術のアピールとしては無い方が分かりやすい）。雲を抜けると 59fps に戻る。低空（69 秒〜）は 41〜44fps：測れている GPU は約 10.5ms（地形 5.5〜6・水面 1.8・反射 1.5・空 1.6）でフレームは約 23ms → 残りは計測の無い所（影のパスが最有力）。Debug はシェーダが `-Od`＋デバッグレイヤーなので大きめに出る
+- → **作る時刻を雲を抜ける 62 秒に**（`StagePlayScene.h` の既定。JSON の `streaming` は ImGui で変えると書かれる）。S3 で「51 秒から裏で読み、作る時刻に作る」に分ける（作る時刻は下の Development の計測で 59 秒に変更）
+- → `Game::ShadowPass` に GPU の計測（`PEPPER_GPU_SCOPE`、深度を書く所だけ。スキニングの Compute は含めない）を足した。Development で低空を測り直す
+- Development も StagePlay（雲の上）から始まるようにした（`Game.cpp`、`_DEBUG || USE_PEPPER`）。HUB から来ると降下中の先読み（`Preload/STAGEPLAY.json` に地形が入ったまま）で読み終わり、作る時刻のロードが測れないため
+
+**Development の計測（2026-10-25、`Logs/2026-10-25_011814`、雲の上から通し）**
+
+| 区間 | fps | 地形 | 影 | 雲 | 水面＋反射 | 空 |
+|---|---|---|---|---|---|---|
+| 雲の中（51〜62 秒） | 60〜61 | 0 | 0.1 | 5〜8 | 0.3〜1.6 | 0.55 |
+| 雲を抜けた直後（62〜70 秒） | 61 | 2.5 | 2.2 | 0.02 | 1.8 | 0.53 |
+| 低空（71 秒〜、ログの最後 75 秒ごろまで） | 54〜55 | 6.2〜6.5 | 2.4 | 0.1 | 1.8＋1.5 | 1.6〜1.8 |
+
+（GPU の時間、ms／フレーム。`Game::ShadowPass` は深度を書く所だけ）
+- **62 秒で作ると 1 フレーム約 92ms 止まる**（`LOAD kind=stream` LowAltitude 54ms＋Plateau 38ms、同じフレーム。118MB の .mesh を同期で読み・送り・待つ）。S2・S3 で消す
+- カメラは **61〜62 秒で雲の下へ抜ける**（雲の March 60〜61 秒 5.2ms → 61〜62 秒 3.2ms → 0.2ms）。62 秒では抜けた瞬間に地形が無いのが見え（ユーザー「一瞬間に合っていない」）、停止も重なる → **作る時刻を 59 秒に**（`StagePlayScene.h` の既定。雲の中は 60fps に余裕がある）。停止は残るが雲の中で目立たない
+- Debug の 33〜42fps は主にシェーダの `-Od` だった（Development は雲の中でも 60fps）
+- 低空で 60fps を割る主因は**影（2.4ms）ではなく地形の描画（6.5ms）**。測れている GPU の合計は約 14ms で、ポストエフェクトなどを足すと 16.7ms を少し超える。対策は 14 番 §4.2。蛇行・滝の区間はまだ測っていない
+
+**S2 の作り（2026-10-25、エンジン。ArcanaEngine への同期が要る）**
+- Development は pack＋DirectStorage 経路（`NDEBUG` の既定）。.mesh の頂点・インデックスをそれぞれ `SubmitAndWait` で待っていたのが、作る時刻の 54ms＋38ms の大半
+- `ModelInstance`：状態 `GPUPending` を足し、GPU フェーズを `BeginGPUAsync`（バッファを作り DirectStorage に積むだけ。送らない・待たない）と `FinishGPU`（fence の後にバリア・ビュー、マテリアルの CB・.mat・テクスチャ → `GPUReady`）に分けた。転送中のバッファは `pendingVertexResource_` / `pendingIndexResource_` に置き、仕上げるまで描かない（描画 4 か所に `GPUReady` の判定）。同期の `InitializeGPU` は Begin → `SubmitAndWait` → Finish（シーンのバッチ中は待ちが `EndBatchAndWait` に回るが、バリアを積んだコマンドリストはその後に実行されるので今までと同じ）。FS 経路は Begin でアップロードまで済む
+- `ModelManager`：`BeginModelGPUAsync(file)` / `FinishModelGPU(file)`。`PreloadCPU(..., queueGPU=false)` で `FlushGPUUpload` の列に入れない（`Scene::ProcessAsyncLoads` が 1 フレーム 1 件、同期で仕上げて待つのを避ける）。`LoadModel` が `GPUPending` の物に当たると `InitializeGPU` が待ってから仕上げる。`FlushGPUUpload` は `GPUPending` を飛ばす
+- `ScenePreloader`：モデルの段をテクスチャと同じ「待たずに送る → fence の後に仕上げる」に（`UpdateGpuModels`・段 `WaitModels`）。HUB の降下の先読みで地形 2 枚分の待ちが消えるはず（`LOAD kind=preload` の wall_ms と降下中のフレームで確認）
+- 雲の上から始める道（作る時刻に同期で作る）はまだ止まる → S3
+- 罠：テクスチャは `FinishGPU` で読むので、先に読んでいないと仕上げのフレームで同期で読む（S3 ではテクスチャを先に送る）
+
+**S2 の実機（2026-10-25）**：ビルド OK・HUB 経由の降下で確認済み（ユーザー）
+
+**S3 の作り（2026-10-25、ゲーム側だけ。エンジンは変更なし）**
+- ユーザー決定：①読む物はグループごとに**記録**したマニフェスト（16 番の「手で書かずに記録」と同じ）②時刻表は新規 `Game/Scene/StageStreaming.{h,cpp}`（`CG2_0_1.vcxproj`・`.filters` に追記）③HUB の降下の先読みから地形を外す
+- `StageStreaming`：グループごとに `preloadSec`（既定 51）と `showSec`（既定 59）。Waiting →（preloadSec）Queued →（`ScenePreloader` が空いたら `Begin("STAGEPLAY@<グループ>")`）Preloading →（終わったら）Ready →（showSec）Created。先読みは一度に 1 本なので LowAltitude の次に Plateau。作るときに `ScenePreloader` が何かを読んでいたら先に `CompleteNow`（先読みの途中の物を同期で触ると壊れる。地形の層の配列は 2 つの地形で共有）。マニフェストが無いグループは先読みせず、showSec に同期で作る
+- 記録：Debug で作るときに `BeginRecording` / `EndRecording("STAGEPLAY@<グループ>")` で囲む → `Resources/Json/Preload/STAGEPLAY@LowAltitude.json` / `STAGEPLAY@Plateau.json`。**最初に一度、Debug で雲の上から 59 秒を越える**（越えるまでは同期で作る）
+- シーク：showSec より後なら作る、preloadSec より後なら先読みを頼む。着陸・ボス戦は全部作る（`CreateAll`）
+- StagePlayScene とは `IStageStreamingHost`（`CreateStreamGroup` / `GetPendingStreamEntityCount`）でつなぐ。S1 の直書き（`streamGroups_`・`UpdateStreamGroups`・JSON・ImGui）は移した。調整値は `Tuning/StagePlay.json` の `"streaming": {"groups": [{"name", "preloadSec", "showSec"}]}`（S1 の `loadSec` は showSec として読む）。ImGui は Stage Phase に状態・Preload (s)・Show (s)・「今作る」
+- profile.log：`LOAD kind=stream_preload group= wall_ms=`（先読みにかかった時間）、`LOAD kind=stream_complete_now`（作る時刻に間に合わず残りを済ませた時）、`LOAD kind=stream`（作った時）
+- **`Preload/STAGEPLAY.json` から地形を手で一度だけ消した**（RiverTerrain.mesh・CanyonTerrain.mesh と、地形にしか使わないテクスチャ 6 つ：River/Canyon の Splat・Tint、TerrainLayers の Color・Normal）。記録は「足すだけ」で古い分が残るため。今後は streamGroup の配置をシーンの初期化で作らないので記録に入らない。HUB の降下の先読みは 118MB 軽くなり、HUB から来ても雲の中で読む
+
+**S3 の実機（2026-10-25、Development `Logs/2026-10-25_020405`）**：59 秒で作るのは LowAltitude 0.69ms・Plateau 0.62ms（S1 は 54＋38ms）。雲の中の先読みは 51 秒から 137ms・107ms で終わる（`stream_complete_now` なし）。HUB の降下の先読みは地形を外して 164 → 99ms。59〜61 秒は地形と雲（約 6ms）が重なって 56〜57fps（59 秒にした引き換え、ユーザー了承）
+- 問題：グループのマニフェストに .mesh しか入らず、テクスチャが空だった。Debug はシーンエディタが起動時に全モデルを読むので、作る時に `LoadModel` がすぐ戻りテクスチャを読む処理が走らない → Development では先読みの仕上げ（`FinishGPU`）の中で地形のテクスチャを同期で読み、51 秒の先読み中に 1 フレーム約 21ms 止まった
+- 対策（エンジン `ScenePreloader::EndRecording`、ArcanaEngine 同期要。ビルド・実機未確認）：記録したモデルが仕上がっていれば、部位の色・法線・視差・地形の層の配列のテクスチャ（sRGB／線形も）を記録に足す（白のフォールバックは除く）。**Debug でもう一度雲の上から 59 秒を越えて記録し直す**（今のファイルに無い物だけ足すので消さなくてよい）
+
+**記録の修正の実機（2026-10-25、Debug で記録し直し → Development `Logs/2026-10-25_022546`）**：グループのマニフェストに地形のテクスチャ 4 つずつ（Splat・Tint・層の配列の色／法線、sRGB／線形も正しい）が入った。51 秒の先読み中の `Framework::Update` の最大は 19〜21ms → **5.6〜6.9ms**（止まりが消えた）。先読みは 115ms・117ms、59 秒の作成は 0.98ms・0.63ms。**S3 完了**
+- 残り（別件・未調査）：60〜61 秒ごろに `Framework::Update` が 1 フレーム 17〜18ms になる（S3 の前の回 `020405` にもあった）。作成の約 1 秒後なので、ストリーミング以外（水面・環境の区間の切り替えなど）の可能性
+
+**S4 の作り（2026-10-25、`Game/Scene/RiverWater.{h,cpp}` だけ）**：川のマップ（1024² の DDS）の GPU フェーズを待たない形に。状態 `UploadingGPU` を足し、CPU フェーズの後 `BeginUpload` で `BeginTextureGPUAsync` → `SubmitWithFence`、`Update` で `IsFenceComplete` を見て `FinishTextureGPU` → `ApplyRiverMap`（水面に貼る・範囲・高さ）。FS 経路はその場で貼る。シークは `FinishLoadNow`（送った途中なら `LoadTextureGPU` が DirectStorage を待って仕上げる）。貼るまで水面は描かない（今までどおり）。これで雲の中で読む物はすべて待たない形
+
+**レイマーチの雲を消す（2026-10-25、ユーザー指示。L5 の担当だが L9 で入れた。§3.4）**：`StageEnvironment::DrawRaymarchClouds` で、レールの時刻が `raymarchCloudsOff.sec`（70 秒）を過ぎたら `fadeSec`（0.5 秒）で薄くし、0 になったら描かない。`Tuning/StagePlay.json` の `"raymarchCloudsOff": {"sec", "fadeSec"}`。ビルド・実機未確認。注意：巻き戻して再び描き始めた最初のフレームは、時間方向の積み重ね（`CloudTemporal`）に古い履歴が残っている可能性がある

@@ -132,6 +132,22 @@ protected:
 	/// <summary>true を返したエントリは復元しない（古い save の混入除け等）。</summary>
 	virtual bool ShouldSkipOnLoad(const SceneEntityDesc& desc) const;
 
+	/// <summary>
+	/// true を返したエントリは読み込みでは作らず、LoadStreamGroup まで取っておく（11 番 L9）。
+	/// 既定は false（streamGroup が付いていてもすぐ作る）。一度 LoadStreamGroup したグループはすぐ作る
+	/// </summary>
+	virtual bool ShouldStreamOnLoad(const SceneEntityDesc& desc) const { (void)desc; return false; }
+
+	//====================
+	// 区間ごとのストリーミング（11 番 L9）
+	//====================
+	/// <summary>取っておいた group のエントリを今すぐ全部作る（同期）。作った数を返す。以後この group はすぐ作る</summary>
+	size_t LoadStreamGroup(const std::string& group);
+	/// <summary>LoadStreamGroup 済みか</summary>
+	bool IsStreamGroupLoaded(const std::string& group) const { return loadedStreamGroups_.contains(group); }
+	/// <summary>まだ作っていない group のエントリ数</summary>
+	size_t GetPendingStreamCount(const std::string& group) const;
+
 	/// <summary>動的エンティティを消した直後・復元の前。参照メンバのリセット用。</summary>
 	virtual void OnBeforeSceneLoad() {}
 
@@ -167,6 +183,9 @@ private:
 	SceneData pendingSceneData_;
 	size_t pendingSceneIndex_ = 0;
 	bool sceneLoadPending_ = false;
+	// ShouldStreamOnLoad で取っておいたエントリ（保存では作った物と同じく書き出す）と、読み込み済みのグループ
+	std::vector<SceneEntityDesc> pendingStreamEntities_;
+	std::unordered_set<std::string> loadedStreamGroups_;
 protected:
 
 	//====================

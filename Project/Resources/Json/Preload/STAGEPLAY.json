@@ -233,30 +233,6 @@
       "linear": true
     },
     {
-      "path": "Resources/Textures/MaskTexture/Terrain/RiverTerrain_Splat.dds",
-      "linear": false
-    },
-    {
-      "path": "Resources/Textures/MaskTexture/Terrain/RiverTerrain_Tint.dds",
-      "linear": true
-    },
-    {
-      "path": "Resources/Textures/Terrain/TerrainLayers_Color.dds",
-      "linear": false
-    },
-    {
-      "path": "Resources/Textures/NormalMapTexture/Terrain/TerrainLayers_Normal.dds",
-      "linear": true
-    },
-    {
-      "path": "Resources/Textures/MaskTexture/Terrain/CanyonTerrain_Splat.dds",
-      "linear": false
-    },
-    {
-      "path": "Resources/Textures/MaskTexture/Terrain/CanyonTerrain_Tint.dds",
-      "linear": true
-    },
-    {
       "path": "Resources/Models/Player/Bullet/playerBullet.dds",
       "linear": false
     },
@@ -329,14 +305,6 @@
     {
       "dir": "Resources/Models/NormalMapTest",
       "file": "NormalMapTest.mesh"
-    },
-    {
-      "dir": "Resources/Models/RiverTerrain",
-      "file": "RiverTerrain.mesh"
-    },
-    {
-      "dir": "Resources/Models/CanyonTerrain",
-      "file": "CanyonTerrain.mesh"
     },
     {
       "dir": "Resources/Models/Player/Bullet",

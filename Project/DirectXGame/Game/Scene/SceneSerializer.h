@@ -25,6 +25,9 @@ struct SceneEntityDesc {
 	std::string name;
 	EntityTag   tag = EntityTag::None;
 
+	// 区間ごとに裏で読む物のグループ名（11 番 §3.0。例 "LowAltitude"）。空 = シーン開始時に作る
+	std::string streamGroup;
+
 	// Object3D / AnimatedObject3D
 	std::string dir;
 	std::string file;
