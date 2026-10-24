@@ -661,6 +661,9 @@ void StagePlayScene::LoadTuningFromJson() {
 		seekMaxSec_      = static_cast<float>(ph["seekMaxSec"].AsDouble(seekMaxSec_));
 		landingDuration_ = static_cast<float>(ph["landingDurationSec"].AsDouble(landingDuration_));
 	}
+
+	// ----- streaming（区間ごとのストリーミング。11 番 L9）-----
+	if (streaming_) streaming_->LoadTuning(root["streaming"]);
 }
 
 void StagePlayScene::SaveTuningToJson() const {
@@ -1122,6 +1125,9 @@ void StagePlayScene::SaveTuningToJson() const {
 	phObj["seekMaxSec"]         = static_cast<double>(seekMaxSec_);
 	phObj["landingDurationSec"] = static_cast<double>(landingDuration_);
 	root["phase"] = std::move(phObj);
+
+	// ----- streaming（区間ごとのストリーミング。11 番 L9）-----
+	if (streaming_) streaming_->SaveTuning(root["streaming"]);
 
 	if (stageStart_) stageStart_->SaveTuning(root["stageStart"]);
 	if (cloudTopIntro_) cloudTopIntro_->SaveTuning(root["cloudTopIntro"]);
@@ -2250,6 +2256,9 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::DragFloat("Landing Duration (s)", &landingDuration_, 0.5f, 0.0f, 120.0f, "%.1f")) {}
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 
+		ImGui::SeparatorText("ストリーミング（11 番 L9）");
+		if (streaming_ && streaming_->OnImGui()) changed = true;
+
 		ImGui::SeparatorText("クリップ面");
 		ImGui::TextDisabled("Camera の既定は near=0.1 / far=100（=100m先が描画されない）。");
 		if (ImGui::DragFloat("Near Clip", &cameraNearClip_, 0.05f, 0.01f, 10.0f, "%.2f")) {
@@ -2853,6 +2862,9 @@ void StagePlayScene::Initialize() {
 	cloudTopIntro_ = std::make_unique<CloudTopIntro>();
 	playerWings_ = std::make_unique<PlayerWingUnit>();
 	playerDeath_ = std::make_unique<PlayerDeathPart>();
+	// ストリーミングの時刻表（LoadTuningFromJson で root["streaming"] を読む。配置を読む前に要る＝どれを後回しにするか）
+	streaming_ = std::make_unique<StageStreaming>();
+	streaming_->Initialize(this, "STAGEPLAY");
 
 	// 調整値の読み込み（プレイヤー生成 / RailCamera 設定より前に行う）
 	// 区間 StagePlay/* は差し替えの重さの内訳（SceneManager が profile.log の scene_phase 行に出す）
@@ -4127,6 +4139,14 @@ void StagePlayScene::Update() {
 	if (riverWater_ && phase_ == Phase::Rail && railStage_) {
 		riverWater_->Update(railStage_->GetStageSeconds(), GetScaledDeltaTime(TimeGroup::World));
 	}
+	// 区間ごとのストリーミング：時刻で裏で読み、決めた秒に作る。着陸・ボス戦（ボス戦からのリトライを含む）は全部作る
+	if (streaming_) {
+		if (phase_ == Phase::Rail && railStage_) {
+			streaming_->Update(railStage_->GetStageSeconds());
+		} else if (phase_ == Phase::Landing || phase_ == Phase::Boss) {
+			streaming_->CreateAll();
+		}
+	}
 
 	// カメラが確定した後に Skybox を更新する（VP 焼き込みのため、回り込みを背景にも反映）。
 	if (skybox_) {
@@ -5143,6 +5163,8 @@ void StagePlayScene::Seek(float seconds) {
 	if (stageEnv_) stageEnv_->Reset(seconds);
 	// 大河の水面のロード窓より後へ飛んだら、その場で読み終える
 	if (riverWater_) riverWater_->Seek(seconds);
+	// ストリーミング：作る時刻より後へ飛んだらその場で作る（前へ戻っても捨てない。破棄は L9 の後半）
+	if (streaming_) streaming_->Seek(seconds);
 }
 
 // IRailStageHost::ClearWaveRuntimeState() の実装。RailStagePart::Seek() から host_ 経由で呼ばれる。
@@ -5335,6 +5357,11 @@ bool StagePlayScene::ShouldSkipOnLoad(const SceneEntityDesc& desc) const {
 		return true;
 	}
 	return false;
+}
+
+bool StagePlayScene::ShouldStreamOnLoad(const SceneEntityDesc& desc) const {
+	// 時刻表にあるグループだけ後で作る。知らないグループ（まだ時刻の決まっていない "Canyon" など）はすぐ作る
+	return streaming_ && streaming_->HasGroup(desc.streamGroup);
 }
 
 void StagePlayScene::OnBeforeSceneLoad() {

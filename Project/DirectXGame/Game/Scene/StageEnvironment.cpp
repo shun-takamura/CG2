@@ -164,7 +164,21 @@ void StageEnvironment::SetCloudFlowDirection(const Vector2& forwardXZ) {
 }
 
 void StageEnvironment::DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget) {
-	if (raymarcher_ && skybox_) raymarcher_->Draw(camera, sceneTarget, skybox_->GetCubemapFilePath());
+	if (!raymarcher_ || !skybox_) return;
+	const float visibility = RaymarchVisibility();
+	if (visibility <= 0.0f) return;   // 消えきったらパスごと止める
+	// 濃さは描く間だけ掛ける（JSON・ImGui の Opacity は書き換えない）
+	CloudRaymarcher::Params& params = raymarcher_->GetParams();
+	const float opacity = params.opacity;
+	params.opacity = opacity * visibility;
+	raymarcher_->Draw(camera, sceneTarget, skybox_->GetCubemapFilePath());
+	params.opacity = opacity;
+}
+
+float StageEnvironment::RaymarchVisibility() const {
+	if (stageSec_ < raymarchOff_.sec) return 1.0f;
+	if (raymarchOff_.fadeSec <= 0.0f) return 0.0f;
+	return std::clamp(1.0f - (stageSec_ - raymarchOff_.sec) / raymarchOff_.fadeSec, 0.0f, 1.0f);
 }
 
 void StageEnvironment::Finalize() {
@@ -340,6 +354,10 @@ void StageEnvironment::LoadFromJson(const JsonValue& root) {
 		cloudFlow_.fadeStartSec = static_cast<float>(flow["fadeStartSec"].AsDouble(cloudFlow_.fadeStartSec));
 		cloudFlow_.fadeEndSec = static_cast<float>(flow["fadeEndSec"].AsDouble(cloudFlow_.fadeEndSec));
 	}
+	if (const JsonValue& off = root["raymarchCloudsOff"]; off.IsObject()) {
+		raymarchOff_.sec = static_cast<float>(off["sec"].AsDouble(raymarchOff_.sec));
+		raymarchOff_.fadeSec = static_cast<float>(off["fadeSec"].AsDouble(raymarchOff_.fadeSec));
+	}
 
 	const JsonValue& arr = root["sections"];
 	if (!arr.IsArray()) return;
@@ -409,6 +427,12 @@ void StageEnvironment::SaveToJson(JsonValue& root) const {
 		flow["fadeStartSec"] = static_cast<double>(cloudFlow_.fadeStartSec);
 		flow["fadeEndSec"] = static_cast<double>(cloudFlow_.fadeEndSec);
 		root["cloudFlow"] = std::move(flow);
+	}
+	{
+		JsonValue off = JsonValue::MakeObject();
+		off["sec"] = static_cast<double>(raymarchOff_.sec);
+		off["fadeSec"] = static_cast<double>(raymarchOff_.fadeSec);
+		root["raymarchCloudsOff"] = std::move(off);
 	}
 }
 
@@ -560,5 +584,9 @@ void StageEnvironment::OnImGuiRaymarchClouds() {
 	ImGui::DragFloat("Flow Fade Start (s)", &cloudFlow_.fadeStartSec, 0.1f, 0.0f, 300.0f);
 	ImGui::DragFloat("Flow Fade End (s)", &cloudFlow_.fadeEndSec, 0.1f, 0.0f, 300.0f);
 	ImGui::Text("forward (%.2f, %.2f)  now stage %.1f s", cloudFlowForward_.x, cloudFlowForward_.y, stageSec_);
+	ImGui::SeparatorText("Off after leaving the clouds (11 L5)");
+	ImGui::DragFloat("Off At (s)", &raymarchOff_.sec, 0.1f, 0.0f, 300.0f);
+	ImGui::DragFloat("Off Fade (s)", &raymarchOff_.fadeSec, 0.05f, 0.0f, 5.0f);
+	ImGui::Text("visibility now %.2f", RaymarchVisibility());
 	raymarcher_->OnImGui();
 }

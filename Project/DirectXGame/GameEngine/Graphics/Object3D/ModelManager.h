@@ -63,9 +63,20 @@ public:
 	//==============================
 
 	/// <summary>
-	/// CPU フェーズのみのモデル先読み（バックグラウンドスレッドから呼ぶ）
+	/// CPU フェーズのみのモデル先読み（バックグラウンドスレッドから呼ぶ）。
+	/// queueGPU = false なら FlushGPUUpload の待ちの列に入れない（BeginModelGPUAsync で呼び出し側が送る。
+	/// Scene::ProcessAsyncLoads が先に同期で仕上げて DirectStorage を待つのを避ける）
 	/// </summary>
-	void PreloadCPU(const std::string& directoryPath, const std::string& filePath);
+	void PreloadCPU(const std::string& directoryPath, const std::string& filePath, bool queueGPU = true);
+
+	/// <summary>
+	/// CPU フェーズ済みのモデルの GPU フェーズを待たずに始める（メインスレッドから呼ぶ）。
+	/// true = DirectStorage に積んだ。呼び出し側が DStorageManager::SubmitWithFence で送り、fence が終わってから FinishModelGPU を呼ぶ。
+	/// false = 待つ物は無い（FS 経路はこの中で仕上げまで済む／済み／CPU フェーズ前／無い）
+	/// </summary>
+	bool BeginModelGPUAsync(const std::string& filePath);
+	/// <summary>BeginModelGPUAsync で送った物を仕上げる（fence が終わってから。メインスレッドから呼ぶ）</summary>
+	void FinishModelGPU(const std::string& filePath);
 
 	/// <summary>
 	/// CPU パース完了済みかどうか（スレッド安全）

@@ -8,6 +8,7 @@
 #include "Effect/EffectManager.h"
 #include "Primitive/LineRenderer.h"
 #include "TextureManager.h"
+#include "DStorageManager.h"
 #include "Camera.h"
 #include "Log.h"
 #include "Json/JsonParser.h"
@@ -69,7 +70,7 @@ void RiverWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3
 	water_->InitializeRiverMode();
 	water_->SetCloudLayer(cloudLayer);
 	// 板はカメラに追従させず、川のマップの範囲を覆う1枚にする（範囲外はシェーダが描かない）。
-	// 範囲は FinishLoad で JSON の値に合わせ直す
+	// 範囲は ApplyRiverMap で JSON の値に合わせ直す
 	water_->SetFollowCamera(false);
 	water_->SetCenter({ 0.0f, 0.0f, (loaded_.zMin + loaded_.zMax) * 0.5f });
 	water_->SetSize((std::max)(loaded_.xMax - loaded_.xMin, loaded_.zMax - loaded_.zMin));
@@ -94,7 +95,11 @@ void RiverWater::Update(float stageSec, float deltaTime) {
 		StartLoad();
 	}
 	if (state_ == LoadState::LoadingCPU && cpuDone_.load(std::memory_order_acquire)) {
-		FinishLoad();
+		BeginUpload();
+	}
+	if (state_ == LoadState::UploadingGPU && DStorageManager::GetInstance()->IsFenceComplete(uploadFence_)) {
+		TextureManager::GetInstance()->FinishTextureGPU(loaded_.riverMapPath);
+		ApplyRiverMap();
 	}
 	if (state_ == LoadState::Ready) {
 		water_->Update(deltaTime);
@@ -135,7 +140,7 @@ void RiverWater::Seek(float stageSec) {
 	if (!water_ || stageSec < loadStartSec_) return;
 	// 窓より後へ飛んだら、その場で読み終える（雲の中で読むのを待てないため）
 	if (state_ == LoadState::NotStarted) StartLoad();
-	if (state_ == LoadState::LoadingCPU) FinishLoad();
+	FinishLoadNow();
 }
 
 void RiverWater::StartLoad() {
@@ -164,7 +169,7 @@ void RiverWater::StartLoad() {
 	});
 }
 
-void RiverWater::FinishLoad() {
+void RiverWater::BeginUpload() {
 	if (loadThread_.joinable()) loadThread_.join();
 
 	if (!loaded_.ok) {
@@ -178,9 +183,26 @@ void RiverWater::FinishLoad() {
 		state_ = LoadState::Failed;
 		return;
 	}
-	// GPU フェーズ（リソース・SRV の作成）。既に GPU まで済んでいれば何もしない
-	tm->LoadTextureGPU(loaded_.riverMapPath);
+	// GPU フェーズ（リソース・SRV の作成）。DirectStorage 経路は積んで待たずに送り、fence が終わったら Update で仕上げる。
+	// それ以外の経路はその場で GPU まで済む（13 番 §2.2、11 番 L9 S4）
+	if (tm->BeginTextureGPUAsync(loaded_.riverMapPath)) {
+		uploadFence_ = DStorageManager::GetInstance()->SubmitWithFence();
+		state_ = LoadState::UploadingGPU;
+		return;
+	}
+	ApplyRiverMap();
+}
 
+void RiverWater::FinishLoadNow() {
+	if (state_ == LoadState::LoadingCPU) BeginUpload();
+	if (state_ == LoadState::UploadingGPU) {
+		// 送った途中の物は DirectStorage を待ってから仕上げる
+		TextureManager::GetInstance()->LoadTextureGPU(loaded_.riverMapPath);
+		ApplyRiverMap();
+	}
+}
+
+void RiverWater::ApplyRiverMap() {
 	WaterSurface::RiverMapInfo info;
 	info.xMin = loaded_.xMin;
 	info.xMax = loaded_.xMax;

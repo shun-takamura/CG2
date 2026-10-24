@@ -88,7 +88,7 @@ void ModelManager::Finalize()
 // 非同期ロード API
 //==============================
 
-void ModelManager::PreloadCPU(const std::string& directoryPath, const std::string& filePath)
+void ModelManager::PreloadCPU(const std::string& directoryPath, const std::string& filePath, bool queueGPU)
 {
 	// 既にエントリがあれば、メインスレッドの所有なのでスキップ
 	// （二重ロードや LoadCPU の競合を避けるため、エントリ作成者だけが LoadCPU を呼ぶ）
@@ -108,10 +108,47 @@ void ModelManager::PreloadCPU(const std::string& directoryPath, const std::strin
 	target->LoadCPU(directoryPath, filePath);
 
 	// GPU アップロード待ちキューに登録
-	{
+	if (queueGPU) {
 		std::lock_guard<std::mutex> lock(gpuQueueMutex_);
 		pendingGPU_.push_back(filePath);
 	}
+}
+
+bool ModelManager::BeginModelGPUAsync(const std::string& filePath)
+{
+	if (!modelCore_) return false;
+	ModelInstance* target = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = models.find(filePath);
+		if (it != models.end()) target = it->second.get();
+	}
+	// CPU フェーズの途中（別スレッドが読んでいる）・済みの物は触らない
+	if (!target || !target->IsCPUReady() || target->IsGPUReady() || target->IsGPUPending()) return false;
+
+	// 待ちの列に入っていれば外す（FlushGPUUpload が同期で仕上げないように）
+	{
+		std::lock_guard<std::mutex> lock(gpuQueueMutex_);
+		std::erase(pendingGPU_, filePath);
+	}
+
+	DirectXCore* dxCore = modelCore_->GetDXCore();
+	if (target->BeginGPUAsync(modelCore_.get(), dxCore)) return true;
+	// FS 経路は転送をコマンドリストに積んだだけなので、その場で仕上げてよい
+	target->FinishGPU(dxCore);
+	return false;
+}
+
+void ModelManager::FinishModelGPU(const std::string& filePath)
+{
+	if (!modelCore_) return;
+	ModelInstance* target = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = models.find(filePath);
+		if (it != models.end()) target = it->second.get();
+	}
+	if (target) target->FinishGPU(modelCore_->GetDXCore());
 }
 
 bool ModelManager::IsCPUReady(const std::string& filePath) const
@@ -152,7 +189,8 @@ void ModelManager::FlushGPUUpload(DirectXCore* dxCore, int maxItems)
 			}
 		}
 
-		if (target && target->IsCPUReady() && !target->IsGPUReady()) {
+		// 待たずに送った物（GPUPending）は送った側が fence の後で仕上げる
+		if (target && target->IsCPUReady() && !target->IsGPUReady() && !target->IsGPUPending()) {
 			target->InitializeGPU(modelCore_.get(), dxCore);
 		}
 	}

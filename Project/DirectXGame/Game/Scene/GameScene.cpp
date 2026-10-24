@@ -1213,6 +1213,8 @@ void GameScene::ClearDynamicEntities() {
 		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
 	}
 	dynamicPrimitives_.clear();
+	// 取っておいたストリーミングのエントリも配置の一部なので一緒に捨てる（読み込み済みのグループは覚えたまま）
+	pendingStreamEntities_.clear();
 	for (auto& sp : dynamicSplines_) {
 		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
 	}
@@ -1239,6 +1241,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 	                     const std::string& prefabName) {
 		d.name = e->GetName();
 		d.tag = tag;
+		d.streamGroup = Gameplay::Of(e).GetStreamGroup();
 		if (!prefabName.empty()) {
 			d.kind = SceneEntityDesc::Kind::Prefab;
 			d.prefabName = prefabName;
@@ -1299,6 +1302,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		d.kind = SceneEntityDesc::Kind::Sprite;
 		d.name = s->GetName();
 		d.tag = tag;
+		d.streamGroup = Gameplay::Of(s).GetStreamGroup();
 		d.texture = s->GetTextureFilePath();
 		d.spritePos = s->GetPosition();
 		out.entities.push_back(std::move(d));
@@ -1312,9 +1316,13 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		d.kind = SceneEntityDesc::Kind::Spline;
 		d.name = sp->GetName();
 		d.tag = tag;
+		d.streamGroup = Gameplay::Of(sp).GetStreamGroup();
 		d.points = sp->GetPoints();
 		out.entities.push_back(std::move(d));
 	}
+
+	// まだ作っていないストリーミングのエントリ。書き出さないと、読む前に保存したとき配置から消える
+	for (const auto& d : pendingStreamEntities_) out.entities.push_back(d);
 }
 
 void GameScene::ApplySceneData(const SceneData& data) {
@@ -1325,14 +1333,21 @@ void GameScene::ApplySceneData(const SceneData& data) {
 
 void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 	if (ShouldSkipOnLoad(d)) return;
+	// 区間ごとに読む物：まだそのグループを読んでいなければ取っておく
+	if (!d.streamGroup.empty() && !IsStreamGroupLoaded(d.streamGroup) && ShouldStreamOnLoad(d)) {
+		pendingStreamEntities_.push_back(d);
+		return;
+	}
 
 	const double entityStart = LoadProfiler::NowMs();
 	const int kindIndex = static_cast<int>(d.kind);
+	IImGuiEditable* created = nullptr;
 	switch (d.kind) {
 	case SceneEntityDesc::Kind::Object3D: {
 		AddDynamicObject(d.dir, d.file, d.translate);
 		if (object3DInstances_.empty()) break;
 		auto& back = object3DInstances_.back();
+		created = back.get();
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1343,6 +1358,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		AddDynamicAnimated(d.dir, d.file, d.translate);
 		if (dynamicAnimated_.empty()) break;
 		auto& back = dynamicAnimated_.back();
+		created = back.get();
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1353,6 +1369,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		AddDynamicPrimitive(d.primitiveType, d.translate);
 		if (dynamicPrimitives_.empty()) break;
 		auto& back = dynamicPrimitives_.back();
+		created = back.get();
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1364,6 +1381,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		AddDynamicSprite(d.texture, d.spritePos.x, d.spritePos.y);
 		if (dynamicSprites_.empty()) break;
 		auto& back = dynamicSprites_.back();
+		created = back.get();
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		break;
@@ -1372,6 +1390,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		AddDynamicSpline(static_cast<int>(d.tag));
 		if (dynamicSplines_.empty()) break;
 		auto& back = dynamicSplines_.back();
+		created = back.get();
 		back->SetName(d.name);
 		back->MutablePoints().clear();
 		for (const auto& p : d.points) back->AddPoint(p);
@@ -1381,6 +1400,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		// プレハブから作り直すことで HP/弾パラメータ等の属性ごと復元する。
 		// タグはプレハブ定義が持つので JSON 側では上書きしない。
 		if (IImGuiEditable* back = InstantiatePrefab(d.prefabName, d.translate)) {
+			created = back;
 			back->SetName(d.name);
 			back->SetScale(d.scale);
 			back->SetRotate(d.rotate);
@@ -1388,6 +1408,7 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		break;
 	}
 	}
+	if (created && !d.streamGroup.empty()) Gameplay::Of(created).SetStreamGroup(d.streamGroup);
 	if (kindIndex >= 0 && kindIndex < kSceneKindCount) {
 		++sceneKindCount_[kindIndex];
 		sceneKindMs_[kindIndex] += LoadProfiler::NowMs() - entityStart;
@@ -1434,6 +1455,30 @@ bool GameScene::ApplySceneLoadStep(double budgetMs) {
 	pendingSceneData_ = SceneData{};
 	sceneLoadPending_ = false;
 	return true;
+}
+
+size_t GameScene::LoadStreamGroup(const std::string& group) {
+	if (group.empty()) return 0;
+	const double start = LoadProfiler::NowMs();
+	// 先に読み込み済みにする（ApplySceneEntity が取っておかずに作るように）
+	loadedStreamGroups_.insert(group);
+
+	std::vector<SceneEntityDesc> targets;
+	std::erase_if(pendingStreamEntities_, [&](SceneEntityDesc& d) {
+		if (d.streamGroup != group) return false;
+		targets.push_back(std::move(d));
+		return true;
+	});
+	for (const auto& d : targets) ApplySceneEntity(d);
+
+	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+		std::format("LOAD kind=stream group={} count={} wall_ms={:.2f}", group, targets.size(), LoadProfiler::NowMs() - start));
+	return targets.size();
+}
+
+size_t GameScene::GetPendingStreamCount(const std::string& group) const {
+	return static_cast<size_t>(std::count_if(pendingStreamEntities_.begin(), pendingStreamEntities_.end(),
+		[&](const SceneEntityDesc& d) { return d.streamGroup == group; }));
 }
 
 bool GameScene::SaveSceneToJson(const std::string& filePath) {

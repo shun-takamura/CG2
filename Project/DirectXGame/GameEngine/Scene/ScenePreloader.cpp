@@ -3,6 +3,7 @@
 #include "DStorageManager.h"
 #include "TextureManager.h"
 #include "ModelManager.h"
+#include "ModelInstance.h"
 #include "AnimatedMeshCache.h"
 #include "SessionLogger.h"
 #include "ConvertString.h"
@@ -53,6 +54,7 @@ void ScenePreloader::Begin(const std::string& sceneName) {
 	manifest_.Clear();
 	nextTexture_ = 0;
 	nextMesh_ = 0;
+	nextModel_ = 0;
 	pendingMeshes_.clear();
 	textureBatches_.clear();
 	if (!LoadManifest(ManifestPath(sceneName), manifest_) || manifest_.Empty()) {
@@ -87,16 +89,15 @@ void ScenePreloader::Update() {
 			stage_ = Stage::GpuModels;
 		}
 		break;
-	case Stage::GpuModels: {
-		auto* mm = ModelManager::GetInstance();
-		const double start = LoadProfiler::NowMs();
-		while (mm->GetPendingGPUCount() > 0) {
-			mm->FlushGPUUpload(dxCore_, 1);
-			if (LoadProfiler::NowMs() - start >= kGpuBudgetMs) break;
-		}
-		if (mm->GetPendingGPUCount() == 0) Finish();
+	case Stage::GpuModels:
+		UpdateGpuModels(kGpuBudgetMs);
+		FinishCompletedTextureBatches(false);
+		if (nextModel_ >= manifest_.models.size()) stage_ = Stage::WaitModels;
 		break;
-	}
+	case Stage::WaitModels:
+		FinishCompletedTextureBatches(false);
+		if (textureBatches_.empty()) Finish();
+		break;
 	default:
 		break;
 	}
@@ -113,8 +114,9 @@ void ScenePreloader::CompleteNow() {
 		// モデルの CPU フェーズはまだ始めていない：シーンの Initialize が LoadModel で読む
 	}
 	else {
-		// モデルの CPU フェーズは JoinWorker で終わっている。GPU フェーズを全部済ませる
-		ModelManager::GetInstance()->FlushGPUUpload(dxCore_, INT_MAX);
+		// モデルの CPU フェーズは JoinWorker で終わっている。残りの GPU フェーズをまとめて送り、1 回だけ待って仕上げる
+		UpdateGpuModels(1e9);
+		FinishCompletedTextureBatches(true);
 	}
 	Finish();
 }
@@ -128,7 +130,8 @@ float ScenePreloader::GetProgress() const {
 			: static_cast<float>(nextTexture_) / static_cast<float>(manifest_.textures.size()));
 	case Stage::WaitTextures: return 0.5f;
 	case Stage::CpuModels:    return 0.6f;
-	case Stage::GpuModels:    return 0.8f;
+	case Stage::GpuModels:    return 0.7f;
+	case Stage::WaitModels:   return 0.9f;
 	default:                  return 1.0f;
 	}
 }
@@ -164,7 +167,8 @@ void ScenePreloader::StartWorker(Stage stage) {
 		worker_ = std::thread([this]() {
 			auto* mm = ModelManager::GetInstance();
 			for (const ModelEntry& m : manifest_.models) {
-				mm->PreloadCPU(m.directory, m.file);
+				// 待ちの列には入れない（Scene::ProcessAsyncLoads が同期で仕上げて DirectStorage を待たないように。送るのは UpdateGpuModels）
+				mm->PreloadCPU(m.directory, m.file, false);
 			}
 			workerDone_ = true;
 		});
@@ -196,6 +200,22 @@ void ScenePreloader::UpdateGpuTextures(double budgetMs) {
 		} else {
 			amc->Insert(data);
 		}
+		if (LoadProfiler::NowMs() - start >= budgetMs) break;
+	}
+	if (!batch.finishers.empty()) {
+		batch.fence = DStorageManager::GetInstance()->SubmitWithFence();
+		textureBatches_.push_back(std::move(batch));
+	}
+}
+
+void ScenePreloader::UpdateGpuModels(double budgetMs) {
+	auto* mm = ModelManager::GetInstance();
+	const double start = LoadProfiler::NowMs();
+	TextureBatch batch;
+	while (nextModel_ < manifest_.models.size()) {
+		const std::string file = manifest_.models[nextModel_++].file;
+		// DirectStorage 経路はバッファを作って積むだけ（待たない）。FS 経路はその場で仕上げまで済む
+		if (mm->BeginModelGPUAsync(file)) batch.finishers.push_back([mm, file]() { mm->FinishModelGPU(file); });
 		if (LoadProfiler::NowMs() - start >= budgetMs) break;
 	}
 	if (!batch.finishers.empty()) {
@@ -290,6 +310,29 @@ void ScenePreloader::EndRecording(const std::string& sceneName) {
 		recorded_.Clear();
 	}
 #ifdef _DEBUG
+	// 記録したモデルが使うテクスチャも足す。モデルがもう仕上がっていると（Debug はシーンエディタが起動時に全モデルを読む）
+	// LoadModel がすぐ戻ってテクスチャを読む処理が走らず、記録に入らない。入っていないと先読みの仕上げの中で同期で読むことになる
+	{
+		std::unordered_set<std::string> seenTextures;
+		for (const TextureEntry& t : recorded.textures) seenTextures.insert(t.path);
+		auto addTexture = [&](const std::string& path, bool linear) {
+			// 白のフォールバックは手続きで作る物なのでファイルから読まない
+			if (path.empty() || path == "Resources/Textures/white1x1.dds") return;
+			if (seenTextures.insert(path).second) recorded.textures.push_back({ path, linear });
+		};
+		auto* mm = ModelManager::GetInstance();
+		for (const ModelEntry& m : recorded.models) {
+			const ModelInstance* model = mm->FindModel(m.file);
+			if (!model || !model->IsGPUReady()) continue;
+			for (const RenderSubmesh& sm : model->GetSubmeshes()) {
+				addTexture(sm.textureFilePath, false);
+				addTexture(sm.normalMapFilePath, true);
+				addTexture(sm.heightMapFilePath, true);
+				addTexture(sm.terrainColorArrayPath, false);
+				addTexture(sm.terrainNormalArrayPath, true);
+			}
+		}
+	}
 	if (recorded.Empty()) return;
 	// 上書きせず、今のマニフェストに無い物だけ足す（雲の上から始めた時と HUB から来た時で読む物が少し違うため。
 	// 一から作り直すときはファイルを消す）
