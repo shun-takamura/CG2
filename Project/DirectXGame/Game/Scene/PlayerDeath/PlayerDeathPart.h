@@ -150,7 +150,7 @@ private:
 	uint64_t lightHandle_ = 0;
 
 	// 調整値（長さは体の大きさ 1 のとき。体の拡大率を掛ける）
-	Vector3 etherColor_ = { 1.0f, 0.9f, 0.65f };   // 仮（白金）。2026-10-21 時点で色は未決（19 番 §6）
+	Vector3 etherColor_ = { 0.0f, 0.641f, 1.0f };   // エーテルの水色（19 番 §4.3）。器の液体・HUB の六角形のディゾルブと同じ
 	float preludeRailSeconds_ = 0.0f;
 	float preludeBossSeconds_ = 2.4f;   // G3：膝つき（クリップ 2.0s）＋うなだれたまま。スラスターの咳き込みもこの間
 	float glowSeconds_ = 0.6f;

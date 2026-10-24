@@ -84,10 +84,10 @@ namespace {
 	constexpr uint8_t kDoorLightId = 3;
 	constexpr const char* kTitleBgm = "bgm_title_scene";
 
-	enum TitleMenuItem : int {
-		kTitleStart = 0,
-		kTitleQuit,
-	};
+	// 扉の前で左上に出す「ゲーム終了」（2026-10-24 ユーザー：「スタート」は消し、ゲーム終了以外をクリックしたら扉に入る）
+	constexpr const char* kQuitLabel = "ゲーム終了";
+	// TextRenderer のフォントの高さ（Framework::Initialize の MPLUS1p 32px）
+	constexpr float kFontPixelHeight = 32.0f;
 
 	// 終端で少しだけ行き過ぎて戻る ease-out-back（ロゴの「ポン」と出る感じ）
 	float EaseOutBack(float t) {
@@ -199,7 +199,6 @@ void TitleScene::Initialize() {
 	}
 
 
-	menu_.SetItems({ "スタート", "ゲーム終了" });
 	SoundManager::GetInstance()->Play2DSoundLooped(kTitleBgm, bgmVolume_);
 
 	// まだどちらも反射に登録していない状態から、ロゴだけを出す（扉は ③ で出す）
@@ -296,7 +295,7 @@ void TitleScene::ChangePhase(Phase next) {
 			water_->StopRingBurst();
 			water_->SetAmbientRingScale(1.0f, 1.5f);
 		}
-		menu_.SetSelectedIndex(kTitleStart);
+		quitFocused_ = false;
 		break;
 
 	case Phase::Enter:
@@ -422,47 +421,95 @@ void TitleScene::UpdateInput() {
 	if (!actionMap) return;
 	const UIPointer pointer = UIPointer::FromInput(input_);
 
+	auto* attract = AttractMode::GetInstance();
+	// マウスはゲーム画面の上での左クリックだけ数える（Debug の ImGui パネルの操作で進まないように）
+	const bool pressed = (actionMap->AnyInputTriggered() && !IsPressExcludedInput()) || pointer.clicked;
+
 	switch (phase_) {
 	case Phase::Idle: {
 		// ロゴ登場中の入力は受け付けない（演出を飛ばして即次へ進まないように）
 		if (elapsed_ < introDuration_) return;
 		// デモモードは一定時間で押したことにする
-		auto* attract = AttractMode::GetInstance();
 		const bool autoPress = attract->IsEnabled() && elapsed_ >= introDuration_ + attract->titleIdleWait;
-		// マウスはゲーム画面の上での左クリックだけ数える（Debug の ImGui パネルの操作で進まないように）
-		const bool pressed = (actionMap->AnyInputTriggered() && !IsPressExcludedInput()) || pointer.clicked;
 		if (pressed || autoPress) ChangePhase(Phase::LogoVanish);
 		return;
 	}
 
+	case Phase::LogoVanish:
+	case Phase::DoorOutline:
+	case Phase::DoorForm:
+		// 扉が出てくる途中で押したら、すぐ扉が出切った所へ（2026-10-24 ユーザー）。デモモードは最後まで見せる
+		if (pressed && !attract->IsEnabled()) SkipToReady();
+		return;
+
 	case Phase::Ready: {
-		// デモモードは一定時間で「スタート」を決定する
-		if (auto* attract = AttractMode::GetInstance(); attract->IsEnabled() && phaseTime_ >= attract->titleReadyWait) {
-			menu_.SetSelectedIndex(kTitleStart);
-			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
-			ChangePhase(Phase::Enter);
+		// デモモードは一定時間で扉に入る
+		if (attract->IsEnabled()) {
+			if (phaseTime_ >= attract->titleReadyWait) {
+				SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+				ChangePhase(Phase::Enter);
+			}
 			return;
 		}
+		// 「ゲーム終了」（左上）以外の所をクリックしたら扉に入る。キー・パッドは決定で扉、上・左で「ゲーム終了」を選び、下・右で外す。
 		// キャンセルは無視する（ロゴは消えているので戻る先が無い）
-		menu_.SetPosition({ static_cast<float>(dxCore_->GetUIWidth()) * 0.5f,
-			static_cast<float>(dxCore_->GetUIHeight()) * menuHeightRatio_ });
-		const VerticalMenu::Result result = menu_.Update(actionMap, &pointer);
-		if (result != VerticalMenu::Result::Confirmed) return;
-		switch (menu_.GetSelectedIndex()) {
-		case kTitleStart:
-			ChangePhase(Phase::Enter);
-			return;
-		case kTitleQuit:
+		const bool overQuit = pointer.valid && IsOverQuit(pointer.position);
+		if (pointer.valid && pointer.moved) quitFocused_ = overQuit;
+		if (actionMap->IsTriggered(static_cast<int>(Action::MenuUp)) || actionMap->IsTriggered(static_cast<int>(Action::MenuLeft))) {
+			quitFocused_ = true;
+		}
+		if (actionMap->IsTriggered(static_cast<int>(Action::MenuDown)) || actionMap->IsTriggered(static_cast<int>(Action::MenuRight))) {
+			quitFocused_ = false;
+		}
+		bool quit = false;
+		bool enter = false;
+		if (pointer.valid && pointer.clicked) {
+			quit = overQuit;
+			enter = !overQuit;
+		} else if (actionMap->IsTriggered(static_cast<int>(Action::MenuConfirm))) {
+			quit = quitFocused_;
+			enter = !quitFocused_;
+		}
+		if (quit) {
+			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
 			PostQuitMessage(0);
-			return;
+		} else if (enter) {
+			ChangePhase(Phase::Enter);
 		}
 		return;
 	}
 
 	default:
-		// ②〜④ と ⑥ は入力を受け付けない
+		// ⑥ は入力を受け付けない
 		return;
 	}
+}
+
+void TitleScene::SkipToReady() {
+	// ② ロゴが消える → ③ 線画 → ④ 実体化 を飛ばして、扉が出切ってカメラが止まった所（⑤）へ。
+	// 扉の向き・光の向き・カメラの止まる角度は ③ の入口で決まるので、③ を通してから飛ぶ
+	if (phase_ == Phase::LogoVanish) {
+		logoDissolve_ = 0.0f;
+		SetLogoVisible(false);
+		ChangePhase(Phase::DoorOutline);
+	}
+	if (phase_ == Phase::DoorOutline) ChangePhase(Phase::DoorForm);
+	orbitStopElapsed_ = doorOutlineSeconds_ + doorFormSeconds_;
+	orbitAngle_ = orbitStopEndAngle_;
+	SetDoorLinesVisible(false);
+	doorLineDissolve_ = 1.0f;
+	doorLineAlpha_ = 0.0f;
+	doorOutlineIntensity_ = 0.0f;
+	ChangePhase(Phase::Ready);
+}
+
+bool TitleScene::IsOverQuit(const Vector2& position) const {
+	TextRenderer* tr = TextRenderer::GetInstance();
+	if (!tr->IsInitialized()) return false;
+	const float w = tr->MeasureWidth(kQuitLabel, quitScale_);
+	const float h = kFontPixelHeight * quitScale_;
+	return position.x >= quitMargin_.x - quitHitPadding_ && position.x <= quitMargin_.x + w + quitHitPadding_
+		&& position.y >= quitMargin_.y - quitHitPadding_ && position.y <= quitMargin_.y + h + quitHitPadding_;
 }
 
 bool TitleScene::IsPressExcludedInput() const {
@@ -925,8 +972,9 @@ void TitleScene::Draw() {
 	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
 
 	if (phase_ == Phase::Ready) {
-		menu_.SetPosition({ screenW * 0.5f, screenH * menuHeightRatio_ });
-		menu_.Draw();
+		// 「ゲーム終了」を左上に。選んでいる（カーソルが乗っている）ときは金
+		const Vector4 color = quitFocused_ ? Vector4{ 1.0f, 0.85f, 0.2f, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
+		tr->DrawText(kQuitLabel, { quitMargin_.x, quitMargin_.y }, quitScale_, color, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
 	} else if (phase_ == Phase::Idle && elapsed_ >= introDuration_) {
 		// ゆっくり明滅させて「押せる」ことを伝える
 		const float blink = 0.35f + 0.65f * (0.5f + 0.5f * std::sin((elapsed_ - introDuration_) * 3.0f));
@@ -1069,7 +1117,9 @@ void TitleScene::OnImGuiTuning() {
 		ImGui::Separator();
 		ImGui::DragFloat("Intro Duration", &introDuration_, 0.05f, 0.0f, 5.0f);
 		ImGui::DragFloat("Vignette", &vignetteIntensity_, 0.01f, 0.0f, 2.0f);
-		ImGui::SliderFloat("Menu Height", &menuHeightRatio_, 0.5f, 0.95f);
+		ImGui::DragFloat2("Quit Margin [px]", &quitMargin_.x, 0.5f, 0.0f, 400.0f);
+		ImGui::DragFloat("Quit Scale", &quitScale_, 0.01f, 0.2f, 4.0f);
+		ImGui::DragFloat("Quit Hit Padding [px]", &quitHitPadding_, 0.5f, 0.0f, 100.0f);
 		if (ImGui::CollapsingHeader("Door", ImGuiTreeNodeFlags_DefaultOpen)) {
 			bool logoVisible = logoVisible_;
 			if (ImGui::Checkbox("Logo Visible", &logoVisible)) SetLogoVisible(logoVisible);

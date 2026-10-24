@@ -187,8 +187,14 @@ void HubScene::Update() {
 	case State::Waiting:
 		UpdateWaiting();
 		break;
-	case State::Boarding:
-		// 乗り込み中は入力を読まない
+	case State::Boarding: {
+		// 乗り込み中は、何か押したら最後（ハッチが閉じ切ってコクピットの起動）まで飛ばす（2026-10-24 ユーザー「長いからスキップできるように」）。
+		// コクピットは暗い所から起動するので、外の景色から切り替わっても不自然になりにくい。デモモード中は飛ばさない
+		if (IsSkipPressed() && !boarding_.IsPreviewing()) {
+			EnterCockpit();
+			cockpitFromBoarding_ = true;
+			break;
+		}
 		boarding_.Update(dt);
 		if (boarding_.ConsumeSitImpact()) {
 			camera_->Shake(boarding_.GetSitShakeIntensity(), boarding_.GetSitShakeSeconds());
@@ -202,6 +208,7 @@ void HubScene::Update() {
 			cockpitFromBoarding_ = true;
 		}
 		break;
+	}
 	case State::Cockpit:
 		UpdateCockpit(dt);
 		break;
@@ -287,6 +294,11 @@ void HubScene::UpdateCockpit(float dt) {
 		disembark_.Start(boarding_.GetHomeKey(), boarding_.GetMinLightScale());
 		return;
 	}
+	// ②（ステージ選択 → HUB）のシャットダウン中は、何か押したら降り終わった所まで飛ばす（2026-10-24 ユーザー）
+	if (reveal_.GetPhase() == CockpitReveal::Phase::ShuttingDown && IsSkipPressed()) {
+		FinishDisembark();
+		return;
+	}
 	if (leaving_ || SceneManager::GetInstance()->IsTransitioning()) return;
 
 	auto* actions = input_->GetActionMap();
@@ -330,16 +342,29 @@ void HubScene::UpdateCockpit(float dt) {
 }
 
 void HubScene::UpdateDisembarking(float dt) {
-	// 降りている間は入力を読まない
-	disembark_.Update(dt);
-	if (disembark_.IsFinished()) {
-		// 振り返り終えた姿勢は待機の視点（乗り込みのキー 0）と同じ
-		disembark_.Stop();
-		boarding_.Stop();
-		reveal_.Reset();
-		state_ = State::Waiting;
-		attractMenu_.Reset();   // デモモードはここで一周。また神殿を見せてから「搭乗」
+	// 降りている間は、何か押したら降り終わった所まで飛ばす（2026-10-24 ユーザー）。ほかの入力は読まない
+	if (IsSkipPressed() && !disembark_.IsPreviewing()) {
+		FinishDisembark();
+		return;
 	}
+	disembark_.Update(dt);
+	if (disembark_.IsFinished()) FinishDisembark();
+}
+
+void HubScene::FinishDisembark() {
+	// 振り返り終えた姿勢は待機の視点（乗り込みのキー 0）と同じ
+	disembark_.Stop();
+	boarding_.Stop();
+	reveal_.Reset();
+	state_ = State::Waiting;
+	attractMenu_.Reset();   // デモモードはここで一周。また神殿を見せてから「搭乗」
+}
+
+bool HubScene::IsSkipPressed() const {
+	// 乗り込み・HUB へ戻る所のスキップ：何か押したら（キー・マウスのボタン・パッドのボタン）。デモモード中・白フェード中は飛ばさない
+	if (AttractMode::GetInstance()->IsEnabled() || SceneManager::GetInstance()->IsTransitioning()) return false;
+	const InputActionMap* actions = input_ ? input_->GetActionMap() : nullptr;
+	return actions && actions->AnyInputTriggered();
 }
 
 void HubScene::UpdateDescending(float dt) {

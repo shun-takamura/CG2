@@ -4,6 +4,9 @@
 #include "EngineTime.h"
 #include "AbstractSceneFactory.h"
 #include "TransitionManager.h"
+#include "AttractMode.h"
+#include "InputManager.h"
+#include "InputAction.h"
 #include "DStorageManager.h"
 #include "Components/CollisionManager.h"
 #include "SessionLogger.h"
@@ -62,8 +65,13 @@ void SceneManager::Finalize() {
 void SceneManager::Update() {
 	PEPPER_SCOPE("SceneManager::Update");
 
-	// トランジションの更新
-	TransitionManager::GetInstance()->Update();
+	// トランジションの更新。飛ばせる種類（羽根の着水）は何か押したら残りを飛ばす（19 番 §4.2.3。デモモード中は飛ばさない）
+	TransitionManager* transitions = TransitionManager::GetInstance();
+	if (transitions->IsSkippable() && input_ && !AttractMode::GetInstance()->IsEnabled()) {
+		const InputActionMap* actions = input_->GetActionMap();
+		if (actions && actions->AnyInputTriggered()) transitions->RequestSkip();
+	}
+	transitions->Update();
 
 	// 次のシーンの裏での先読み（GPU フェーズを少しずつ）
 	ScenePreloader::GetInstance()->Update();

@@ -94,10 +94,10 @@ private:
 
 	// 調整値（Hub.json の "liftDescent"）
 	float uiCollapseSeconds_ = 0.4f;      // 決定からステージ選択の UI がたたまれるまで
-	float releaseTime_ = 1.0f;            // リフトが切り離されて動き出す時刻
-	float accelSeconds_ = 2.5f;           // 動き出してから一定の速さになるまで（ゆっくり動き出す）
-	float descentSpeed_ = 4.0f;           // 一定の速さ [m/s]
-	float changeSceneTime_ = 8.0f;        // StagePlay へ差し替える時刻（裏の先読みが終わっていなければ、終わるまで降り続ける）
+	float releaseTime_ = 0.7f;            // リフトが切り離されて動き出す時刻
+	float accelSeconds_ = 1.5f;           // 動き出してから一定の速さになるまで（ゆっくり動き出す）
+	float descentSpeed_ = 6.0f;           // 一定の速さ [m/s]
+	float changeSceneTime_ = 5.0f;        // StagePlay へ差し替える時刻（裏の先読みが終わっていなければ、終わるまで降り続ける）
 	float maxPreloadWait_ = 10.0f;        // 先読みを待つのは changeSceneTime からこの秒まで。過ぎたら同期ロードで差し替える
 	float holeOpenDepth_ = 0.01f;         // これだけ下がったら床に穴を開ける [m]
 	float restOffsetY_ = -0.002f;         // 床の高さにある間、リフトを少し沈めて床と重ねない（上面のちらつき）

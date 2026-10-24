@@ -112,6 +112,8 @@ blender -b --factory-startup -P tools/BlenderPipeline/gen_catapult.py -- --expor
 
 ### 2.2 F2 で作ったもの（2026-10-15。ビルド・実機確認済み。降下の長さ `changeSceneTime` は F3 ができてから詰める）
 
+**2026-10-24 降下を短く（ユーザー「長いと言われた」。スキップしないとき。ビルド・実機 OK）**：約 22 秒 → 約 13 秒。HUB（`HubLiftDescent` の既定値。Hub.json はまだ無い）：切り離し `releaseTime` 1.0→0.7s・加速 `accelSeconds` 2.5→1.5s・速さ `descentSpeed` 4→6 m/s・差し替え `changeSceneTime` 8→5s。StagePlay（`StagePlay.json` の `stageStart`）：降り始め `startUnitsAboveShaftBase` 2→1 単位・減速 `brakeDistance` 14→10m・`defaultDescentSpeed` 4→6。**裏の先読みが 5 秒で終わらないと、終わるまで降り続ける**（最大 `maxPreloadWait`）ので、実機で短くならなければ scene_change の計測を見る
+
 **エンジン（ArcanaEngine への同期が要る）**
 - `WaterSurface` に八角形の穴：`SetOctagonHole(中心, H, C)` / `ClearHole()` / `HasHole()`。`Params` の末尾の `padding6[3]` を `holeEnabled / holeHalfWidth / holeChamfer` に替え、`holeCenter`（XZ）＋`padding7[2]` を足した（`WaterSurface.PS.hlsl` の cbuffer も 1:1）。PS の最初（大河モードより前）で `max(|x|−H, |z|−H, (|x|+|z|−(2H−C))/√2) < 0` を discard。**既定は穴なし**（タイトル・ボス・大河は変わらない）。ImGui は WaterSurface の「Octagon Hole」
 - 同期するもの：`GameEngine/Graphics/Water/WaterSurface.{h,cpp}`・`Resources/Shaders/Water/WaterSurface.PS.hlsl`（Release は .cso を作り直す）

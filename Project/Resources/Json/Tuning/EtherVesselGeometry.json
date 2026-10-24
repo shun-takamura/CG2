@@ -1,0 +1,88 @@
+{
+  "_comment": "gen_ether_vessel.py が書き出す。手で直さず、スクリプトの定数を直して --export する（19_GameOverAndDifficulty.md §4.2）。座標はエンジン（土台の脚の下が原点、正面 +Z、見る人の左＝文字盤の I の側が +X）",
+  "parts": {
+    "Table": {
+      "model": "Resources/Models/EtherVessel/Export/EtherVessel_Table.mesh",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Pillar": {
+      "model": "Resources/Models/EtherVessel/Export/EtherVessel_Pillar.mesh",
+      "position": [
+        0.0,
+        0.7711,
+        0.0
+      ]
+    },
+    "RingStand": {
+      "model": "Resources/Models/EtherVessel/Export/EtherVessel_RingStand.mesh",
+      "position": [
+        0.0,
+        1.8891,
+        0.0
+      ]
+    },
+    "Dial": {
+      "model": "Resources/Models/EtherVessel/Export/EtherVessel_Dial.mesh",
+      "position": [
+        0.0,
+        2.8591,
+        -0.09
+      ]
+    },
+    "Swing": {
+      "model": "Resources/Models/EtherVessel/Export/EtherVessel_Swing.mesh",
+      "position": [
+        0.0,
+        2.8591,
+        0.0
+      ]
+    }
+  },
+  "sphere": {
+    "center": [
+      0.0,
+      2.8591,
+      0.0
+    ],
+    "radius": 0.28
+  },
+  "swing": {
+    "_comment": "Swing（C の字の帯＋極の金具＋針）の原点＝球の中心。球と一緒にエンジンの Z 軸まわりに回す",
+    "pivot": [
+      0.0,
+      2.8591,
+      0.0
+    ],
+    "axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "bandInner": 0.2912,
+    "bandOuter": 0.2996,
+    "pointerTipDistance": 0.5643
+  },
+  "dial": {
+    "center": [
+      0.0,
+      2.8591,
+      -0.09
+    ],
+    "outerRadius": 0.7,
+    "numeralBandInnerRadius": 0.55,
+    "_comment": "目盛りは I〜IX の 9 個。I は真上から +X 側へ iDegrees、IX は -X 側へ iDegrees、V が真上",
+    "iDegrees": 45.0,
+    "ticks": 9,
+    "tickDegrees": 11.25
+  },
+  "ringStand": {
+    "ringY": 2.8591,
+    "ringInnerRadius": 0.734,
+    "ringOuterRadius": 0.98
+  },
+  "totalHeight": 3.5563
+}

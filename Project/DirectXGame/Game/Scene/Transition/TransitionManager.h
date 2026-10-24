@@ -112,6 +112,15 @@ public:
 	bool IsCovering() const;
 
 	/// <summary>
+	/// 今のトランジションを入力で飛ばせるか（種類で決める。今は羽根の着水だけ＝19 番 §4.2.3、2026-10-24 ユーザー）
+	/// </summary>
+	bool IsSkippable() const;
+	/// <summary>
+	/// 今のトランジションの残りを飛ばす（飛ばせる種類のときだけ。開く側が別の種類なら、開く側も飛ばす）
+	/// </summary>
+	void RequestSkip();
+
+	/// <summary>
 	/// 現在のトランジションを取得
 	/// </summary>
 	BaseTransition* GetCurrentTransition() const { return currentTransition_; }
@@ -183,6 +192,8 @@ private:
 
 	// 覆う側が終わったら引き継ぐ開く側（覆う側と同じ種類 / 開く演出なしのときは nullptr）
 	BaseTransition* pendingReveal_ = nullptr;
+	// 覆う側が飛ばされた（引き継ぐ開く側も飛ばす）
+	bool skipPendingReveal_ = false;
 
 	// 最後のトランジション記録
 	TransitionRecord lastRecord_;

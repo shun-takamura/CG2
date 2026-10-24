@@ -1,0 +1,46 @@
+{
+  "_comment": "19_GameOverAndDifficulty.md §4 G5。球の位置と半径は EtherVesselGeometry.json（G4）",
+  "glowAtMin": 0.15,
+  "glowAtMax": 0.45,
+  "splashRadius": 0.03,
+  "glass": {
+    "tint": [1.0, 1.0, 1.0],
+    "fresnelF0": 0.04,
+    "rimColor": [0.35, 0.5, 0.6],
+    "rimPower": 3.0,
+    "reflectionIntensity": 1.0,
+    "specularIntensity": 1.5,
+    "specularPower": 128.0,
+    "glassAlpha": 0.3,
+    "backRimIntensity": 0.5,
+    "lensIor": 1.0,
+    "rimBloom": 1.3
+  },
+  "liquid": {
+    "color": [0.0, 0.641, 1.0],
+    "density": 4.0,
+    "absorption": 4.0,
+    "coreWhite": 0.5,
+    "corePower": 2.0,
+    "surfaceColor": [0.749, 0.937, 1.0],
+    "surfaceIntensity": 0.6,
+    "meniscusWidth": 0.008,
+    "meniscusIntensity": 1.5,
+    "bloomScale": 0.8,
+    "rippleNormalScale": 1.0
+  },
+  "motion": {
+    "fillFollow": 3.0,
+    "sloshStiffness": 30.0,
+    "sloshDamping": 3.0,
+    "sloshDrive": 0.25,
+    "sloshMaxTilt": 0.5,
+    "rippleCoverage": 0.3,
+    "sloshRippleStrength": 0.004,
+    "sloshRippleRadius": 0.03,
+    "ambientRippleInterval": 0.6,
+    "ambientRippleStrength": 0.0015,
+    "ambientRippleRadius": 0.02,
+    "ambientRippleSpread": 0.0
+  }
+}

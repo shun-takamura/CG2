@@ -235,9 +235,9 @@ private:
 
 	// 調整値（StagePlay.json の "stageStart"）
 	Vector3 origin_ = { 0.0f, -3000.0f, 0.0f };   // カタパルトの原点（雲・フォグ・地形のロードの範囲から離す）
-	int startUnitsAboveShaftBase_ = 2;            // 降下の始め：縦穴の付け根（天井の上）から何単位上か
-	float brakeDistanceTuning_ = 14.0f;           // 減速の距離 [m]（止まる位置＝カタパルトの床の高さの手前から）
-	float defaultDescentSpeed_ = 4.0f;            // HUB から速さが来なかったとき [m/s]
+	int startUnitsAboveShaftBase_ = 1;            // 降下の始め：縦穴の付け根（天井の上）から何単位上か
+	float brakeDistanceTuning_ = 10.0f;           // 減速の距離 [m]（止まる位置＝カタパルトの床の高さの手前から）
+	float defaultDescentSpeed_ = 6.0f;            // HUB から速さが来なかったとき [m/s]
 	float arriveShakeIntensity_ = 0.03f;          // 止まったときの揺れ
 	float arriveShakeSeconds_ = 0.3f;
 	float settleSeconds_ = 0.6f;                  // 止まってから機体確認へ

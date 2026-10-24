@@ -52,6 +52,9 @@
     <Filter Include="DirectXGame\GameEngine\Graphics\Cloud">
       <UniqueIdentifier>{8b2e4f17-3c6a-4d95-9e0b-71a5c2d4e6f8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\GameEngine\Graphics\Glass">
+      <UniqueIdentifier>{8b58b1b7-85ba-567d-9033-38ab19dbcaa1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\GameEngine\Graphics\Water">
       <UniqueIdentifier>{3f1c7a52-9d4e-4b8a-a6c1-5e2d7b90c4f3}</UniqueIdentifier>
     </Filter>
@@ -218,6 +221,9 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Water\RippleSimulation.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Glass\LiquidGlassSphere.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Glass</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\PostEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering</Filter>
@@ -682,6 +688,9 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Water\RippleSimulation.h">
       <Filter>DirectXGame\GameEngine\Graphics\Water</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Glass\LiquidGlassSphere.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Glass</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Light\PointLight.h">
       <Filter>DirectXGame\GameEngine\Graphics\Light</Filter>

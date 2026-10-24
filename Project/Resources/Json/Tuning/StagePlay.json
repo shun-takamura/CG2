@@ -713,9 +713,9 @@
       -3000,
       0
     ],
-    "startUnitsAboveShaftBase": 2,
-    "brakeDistance": 14,
-    "defaultDescentSpeed": 4,
+    "startUnitsAboveShaftBase": 1,
+    "brakeDistance": 10,
+    "defaultDescentSpeed": 6,
     "arriveShakeIntensity": 0.029999999329447746,
     "arriveShakeSeconds": 0.30000001192092896,
     "settleSeconds": 0.60000002384185791,

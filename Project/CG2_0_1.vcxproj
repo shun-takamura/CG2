@@ -166,6 +166,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVessel.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\MechThrusters.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.cpp" />
@@ -217,6 +220,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Game.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\BossRetryState.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameInspectorSections.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameAssetBrowserSections.cpp" />
   </ItemGroup>
@@ -244,6 +248,9 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.h" />
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVessel.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\MechThrusters.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\LaunchTachometer.h" />
@@ -328,6 +335,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Game.h" />
     <ClInclude Include="DirectXGame\Game\Score\ScoreManager.h" />
     <ClInclude Include="DirectXGame\Game\Score\BossRetryState.h" />
+    <ClInclude Include="DirectXGame\Game\Score\EtherState.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameInspectorSections.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameAssetBrowserSections.h" />
   </ItemGroup>

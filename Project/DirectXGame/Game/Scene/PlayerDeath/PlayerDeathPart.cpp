@@ -569,7 +569,7 @@ void PlayerDeathPart::OnImGui() {
 #ifdef _DEBUG
 	static const char* kStateNames[] = { "Idle", "Prelude", "Glow", "Unravel", "Linger", "Finished" };
 	ImGui::Text("state %s  %.2fs  plane y %.2f", kStateNames[static_cast<int>(state_)], stateTime_, planeHeight_);
-	ImGui::ColorEdit3("Ether Color (仮)", &etherColor_.x, ImGuiColorEditFlags_Float);
+	ImGui::ColorEdit3("Ether Color", &etherColor_.x, ImGuiColorEditFlags_Float);
 	ImGui::TextDisabled("Timeline");
 	ImGui::DragFloat("Prelude Rail (s)", &preludeRailSeconds_, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Prelude Boss (s)", &preludeBossSeconds_, 0.01f, 0.0f, 10.0f);
