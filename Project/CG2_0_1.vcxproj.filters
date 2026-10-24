@@ -37,6 +37,9 @@
     <Filter Include="DirectXGame\Game\Scene\Cockpit">
       <UniqueIdentifier>{819fddb1-34dc-4cec-a531-14ef0963c430}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\GameOver">
+      <UniqueIdentifier>{320d68c5-9b88-5fea-8f5a-841aced3a3a8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\PlayerDeath">
       <UniqueIdentifier>{7c3e9a41-5d2b-4f8e-9b16-0a4c2e19d7f3}</UniqueIdentifier>
     </Filter>
@@ -167,6 +170,15 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.cpp">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVessel.cpp">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.cpp">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
@@ -318,6 +330,9 @@
     <ClCompile Include="DirectXGame\Game\Score\BossRetryState.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Editor\GameInspectorSections.cpp">
       <Filter>DirectXGame\Game\Editor</Filter>
     </ClCompile>
@@ -391,6 +406,15 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.h">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVessel.h">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.h">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
@@ -645,6 +669,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\BossRetryState.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\EtherState.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Editor\GameInspectorSections.h">

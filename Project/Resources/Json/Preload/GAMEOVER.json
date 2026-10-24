@@ -1,0 +1,72 @@
+{
+  "scene": "GAMEOVER",
+  "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
+  "shaders": [
+    {
+      "path": "Resources/Shaders/Water/RippleSimulation.CS.hlsl",
+      "profile": "cs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Glass/LiquidGlassSphere.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Glass/LiquidGlassSphere.PS.hlsl",
+      "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Water/WaterSurface.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Water/WaterSurface.PS.hlsl",
+      "profile": "ps_6_0"
+    }
+  ],
+  "textures": [
+    {
+      "path": "Resources/Cubemaps/hub_temple_ibl.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/white1x1.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Terrain/Flagstone_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/Flagstone_Height.dds",
+      "linear": true
+    }
+  ],
+  "models": [
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Table.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Pillar.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_RingStand.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Dial.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Swing.mesh"
+    }
+  ],
+  "animatedModels": [],
+  "animations": []
+}

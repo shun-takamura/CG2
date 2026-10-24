@@ -129,7 +129,21 @@ void TransitionManager::Update() {
 	pendingReveal_ = nullptr;
 	if (currentTransition_) {
 		currentTransition_->StartReveal();
+		if (skipPendingReveal_) currentTransition_->RequestSkip();
 	}
+	skipPendingReveal_ = false;
+}
+
+bool TransitionManager::IsSkippable() const {
+	if (!currentTransition_ || !currentTransition_->IsTransitioning()) return false;
+	// 何度も見るトランジションだけ（死ぬたびに見る羽根の着水）
+	return currentTransition_->GetType() == TransitionType::FeatherLand;
+}
+
+void TransitionManager::RequestSkip() {
+	if (!IsSkippable()) return;
+	currentTransition_->RequestSkip();
+	if (pendingReveal_) skipPendingReveal_ = true;
 }
 
 void TransitionManager::Draw() {

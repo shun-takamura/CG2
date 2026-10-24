@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "EtherVessel_Swing"
+    }
+  ],
+  "materials": [
+    {
+      "name": "EtherVessel_Pointer",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.8980000019073486,
+        "roughnessFactor": 0.0820000022649765
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "EtherVessel_Swing",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Pointer_NormalMap",
+      "uri": "EtherVessel_Pointer_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Pointer_BaseColor",
+      "uri": "EtherVessel_Pointer_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 7855,
+      "max": [
+        0.062224842607975006,
+        0.5643121004104614,
+        0.05040000006556511
+      ],
+      "min": [
+        -0.2996000051498413,
+        -0.32199999690055847,
+        -0.05040000006556511
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 7855,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 7855,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 33537,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 94260,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 94260,
+      "byteOffset": 94260,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 62840,
+      "byteOffset": 188520,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 67074,
+      "byteOffset": 251360,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 318436,
+      "uri": "EtherVessel_Swing.bin"
+    }
+  ]
+}

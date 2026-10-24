@@ -4,6 +4,7 @@
 
 void BaseTransition::Start(std::function<void()> onSceneChange, bool playReveal) {
 	if (isTransitioning_) return;
+	skipRequested_ = false;
 
 	isTransitioning_ = true;
 	state_ = TransitionState::FadeIn;
@@ -16,6 +17,7 @@ void BaseTransition::Start(std::function<void()> onSceneChange, bool playReveal)
 }
 
 void BaseTransition::StartReveal() {
+	skipRequested_ = false;
 	isTransitioning_ = true;
 	state_ = TransitionState::FadeOut;
 	currentTime_ = 0.0f;
@@ -28,6 +30,7 @@ void BaseTransition::StartReveal() {
 
 void BaseTransition::StartCovered(std::function<void()> onSceneChange, bool playReveal) {
 	if (isTransitioning_) return;
+	skipRequested_ = false;
 
 	isTransitioning_ = true;
 	state_ = TransitionState::Hold;
@@ -48,7 +51,9 @@ void BaseTransition::Update() {
 
 		switch (state_) {
 		case TransitionState::FadeIn:
-			if (UpdateCover(dt)) {
+			// スキップ：覆い切った所へ飛ぶ（次のフレームでシーンを差し替える）
+			if (skipRequested_) SetFullyCovered();
+			if (skipRequested_ || UpdateCover(dt)) {
 				state_ = TransitionState::Hold;
 				currentTime_ = 0.0f;
 				holdTime_ = 0.0f;
@@ -75,7 +80,8 @@ void BaseTransition::Update() {
 			break;
 
 		case TransitionState::FadeOut:
-			if (UpdateReveal(dt)) {
+			// スキップ：そこで開き切る
+			if (skipRequested_ || UpdateReveal(dt)) {
 				Finish();
 			}
 			break;
@@ -96,5 +102,6 @@ float BaseTransition::GetStepDeltaTime() const {
 void BaseTransition::Finish() {
 	state_ = TransitionState::None;
 	isTransitioning_ = false;
+	skipRequested_ = false;
 	OnFinished();
 }

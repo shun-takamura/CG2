@@ -45,7 +45,7 @@ LINEAR_TEXTURE_HINTS = ("MaskTexture", "NormalMap")
 # このプロジェクトの PNG は sRGB チャンクを持たないので、指定しないと texconv が線形とみなして sRGB へもう一度変換し、
 # 暗い色ほど持ち上がる（紺が明るい灰色に。2026-10-14 に HUB の機体で発覚）。本来は全部に効かせるべきだが、
 # 今の見た目は持ち上がった色で調整してあるので、提出までは機体と、新しく作ったカタパルト（16 番 §2.1）だけにする（17 番 §5.1 の罠）
-SRGB_INPUT_HINTS = ("HubMech", "Catapult", "PlayerModel", "PlayerWings")
+SRGB_INPUT_HINTS = ("HubMech", "Catapult", "PlayerModel", "PlayerWings", "EtherVessel")
 
 # ---- .mesh v4 フォーマット定数 ----
 # Header: magic(4) + version(4) + flags(4) + vc(4) + ic(4) + smc(4)

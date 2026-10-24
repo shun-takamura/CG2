@@ -1,0 +1,11 @@
+{
+  "_comment": "19_GameOverAndDifficulty.md §4.8 G6。エーテルの状態の初期値と、死んだときの減り方。状態そのものはセーブしない",
+  "initialHand": 100.0,
+  "initialBet": 60.0,
+  "initialDifficulty": 5.0,
+  "capacity": 100.0,
+  "betLossRatio": 0.2,
+  "difficultyDrop": 0.5,
+  "difficultyMin": 1.0,
+  "difficultyMax": 9.0
+}

@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "EtherVessel_Pillar"
+    }
+  ],
+  "materials": [
+    {
+      "name": "EtherVessel_Pillar",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.921999990940094,
+        "roughnessFactor": 0.039000000804662704
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "EtherVessel_Pillar",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Pillar_NormalMap",
+      "uri": "EtherVessel_Pillar_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Pillar_BaseColor",
+      "uri": "EtherVessel_Pillar_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 8197,
+      "max": [
+        0.6359558701515198,
+        1.2079192399978638,
+        0.6365906596183777
+      ],
+      "min": [
+        -0.6359558701515198,
+        0,
+        -0.6365906596183777
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 8197,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 8197,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 27129,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 98364,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 98364,
+      "byteOffset": 98364,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 65576,
+      "byteOffset": 196728,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 54258,
+      "byteOffset": 262304,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 316564,
+      "uri": "EtherVessel_Pillar.bin"
+    }
+  ]
+}

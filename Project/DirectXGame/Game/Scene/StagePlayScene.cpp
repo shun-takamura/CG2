@@ -49,6 +49,7 @@
 #include "Enemy/EnemyContext.h"
 #include "Score/ScoreManager.h"
 #include "Score/BossRetryState.h"
+#include "Score/EtherState.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
@@ -2820,6 +2821,8 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::Button("Save Player Death")) changed = true;
 		playerDeath_->OnImGui();
 	}
+	// 賭ける画面（19 番 §4.7）ができるまで、ここで賭け分と難易度を決めて始める（§4.8）
+	if (ImGui::CollapsingHeader("Ether State (19 G6)")) EtherState::GetInstance()->OnImGui();
 
 	if (changed) SaveTuningToJson();
 #endif

@@ -81,6 +81,10 @@ private:
 	void UpdateWaiting();
 	void UpdateCockpit(float dt);
 	void UpdateDisembarking(float dt);
+	/// <summary>降り終わった所（待機の視点）へ。降り終わり・スキップの両方から</summary>
+	void FinishDisembark();
+	/// <summary>乗り込み・HUB へ戻る所のスキップ（何か押した）。デモモード中・白フェード中は false</summary>
+	bool IsSkipPressed() const;
 	void UpdateEntering(float dt);
 	void UpdateDescending(float dt);
 	// ③：ステージを決めてリフトの降下を始める

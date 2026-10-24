@@ -3,7 +3,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Matrix4x4.h"
-#include "VerticalMenu.h"
+#include "Vector2.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -56,6 +56,9 @@ private:
 	void UpdatePhase(float dt);
 	void UpdateInput();
 	bool IsPressExcludedInput() const;
+	// ②〜④ を飛ばして扉が出切った所（⑤）へ
+	void SkipToReady();
+	bool IsOverQuit(const Vector2& position) const;
 	void UpdateMouseRipples();
 	bool PickWaterPoint(Vector3& out) const;
 	void UpdateCameraAndLogo(float dt);
@@ -102,7 +105,8 @@ private:
 	// Debug: デバッグカメラ中、反射をデバッグカメラ基準にする（既定はゲームカメラ基準で見え方を確認）
 	bool reflectFromDebugCamera_ = false;
 
-	VerticalMenu menu_;
+	// ⑤ の「ゲーム終了」にカーソルが乗っている / キーで選んでいる
+	bool quitFocused_ = false;
 
 	Phase phase_ = Phase::Idle;
 	float phaseTime_ = 0.0f;                 // 今のフェーズに入ってからの秒
@@ -155,8 +159,10 @@ private:
 	float logoSwaySpeed_ = 0.7f;
 	float introDuration_ = 1.4f;             // ロゴ登場の長さ
 	float vignetteIntensity_ = 0.0f;         // 0 で無効（2026-10-06：扉の見上げ構図で画面が暗く見えたので切った）
-	// ⑤ のメニュー（スタート / ゲーム終了）の縦位置（画面の高さに対する割合）。扉に重ならないよう下寄せ
-	float menuHeightRatio_ = 0.94f;
+	// ⑤ の「ゲーム終了」（左上。2026-10-24 ユーザー：「スタート」は消して、ほかの所をクリックしたら扉に入る）
+	Vector2 quitMargin_ = { 32.0f, 28.0f };  // 画面の左上からの位置 [px]
+	float quitScale_ = 1.0f;
+	float quitHitPadding_ = 12.0f;           // マウスの当たりを文字の四角から広げる量 [px]
 
 	// ----- フェーズの長さ [s] -----
 	float logoVanishSeconds_ = 2.0f;

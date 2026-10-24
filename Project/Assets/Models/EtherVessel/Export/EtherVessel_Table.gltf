@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "EtherVessel_Table"
+    }
+  ],
+  "materials": [
+    {
+      "name": "EtherVessel_Table",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.41600000858306885,
+        "roughnessFactor": 0.14900000393390656
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "EtherVessel_Table",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Table_NormalMap",
+      "uri": "EtherVessel_Table_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "EtherVessel_Table_BaseColor",
+      "uri": "EtherVessel_Table_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 20211,
+      "max": [
+        0.8328797817230225,
+        1.1608123779296875,
+        0.8322052955627441
+      ],
+      "min": [
+        -0.8328797817230225,
+        0,
+        -0.8322052955627441
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 20211,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 20211,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 86457,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 242532,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 242532,
+      "byteOffset": 242532,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 161688,
+      "byteOffset": 485064,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 172914,
+      "byteOffset": 646752,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 819668,
+      "uri": "EtherVessel_Table.bin"
+    }
+  ]
+}

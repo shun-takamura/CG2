@@ -105,7 +105,7 @@ private:
 	float chestRadius_ = 1.25f;          // 開き切りで消えている広がり [m]
 	float chestStretchY_ = 1.35f;        // 縦の伸び（入口は 1.4×1.8m の縦長）
 	float chestEdgeWidth_ = 0.35f;       // 光る帯の幅 [m]
-	Vector3 chestEdgeColor_ = { 2.4f, 2.1f, 1.5f };   // 白金（外の光は白と金）
+	Vector3 chestEdgeColor_ = { 0.0f, 1.538f, 2.4f };   // エーテルの水色 (0, 0.641, 1.0) × 2.4（19 番 §1.3・§4.3）
 	float chestCellSize_ = 0.35f;        // 六角形の大きさ [m]
 	float chestCellJitter_ = 0.3f;       // マスごとのばらつき [m]
 	float chestBloomScale_ = 1.0f;       // 光るマスを発光 RT に書く倍率

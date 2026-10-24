@@ -84,6 +84,13 @@ public:
 	void StartCovered(std::function<void()> onSceneChange, bool playReveal = true);
 
 	/// <summary>
+	/// 残りを飛ばす（入力でスキップ。19_GameOverAndDifficulty.md §4.2.3）。
+	/// 覆う途中なら覆い切った所へ飛んでシーンを差し替え、開く途中ならそこで開き切って終わる。一度呼べば最後まで飛ぶ
+	/// </summary>
+	void RequestSkip() { if (isTransitioning_) skipRequested_ = true; }
+	bool IsSkipRequested() const { return skipRequested_; }
+
+	/// <summary>
 	/// トランジション中かどうか
 	/// </summary>
 	bool IsTransitioning() const { return isTransitioning_; }
@@ -164,4 +171,6 @@ private:
 	bool playReveal_ = true;
 	// シーンの差し替えが終わってから数える Hold の経過秒
 	float holdTime_ = 0.0f;
+	// RequestSkip された（終わるまで残りを飛ばす）
+	bool skipRequested_ = false;
 };
