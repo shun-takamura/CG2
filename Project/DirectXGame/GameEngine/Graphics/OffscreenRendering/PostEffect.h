@@ -13,6 +13,7 @@
 #include "GaussianEffect.h"
 #include "SepiaEffect.h"
 #include "VignetteEffect.h"
+#include "ScreenDropletEffect.h"
 #include "SmoothingEffect.h"
 #include "RadialBlurEffect.h"
 #include "DissolveEffect.h"
@@ -170,6 +171,7 @@ public:
 	GaussianEffect* gaussian = nullptr;
 	SepiaEffect* sepia = nullptr;
 	VignetteEffect* vignette = nullptr;
+	ScreenDropletEffect* screenDroplet = nullptr; // 画面に付いた水滴（濡れ具合で自動で有効/無効）
 	SmoothingEffect* smoothing = nullptr;
 	RadialBlurEffect* radialBlur = nullptr;
 	DissolveEffect* dissolve = nullptr;

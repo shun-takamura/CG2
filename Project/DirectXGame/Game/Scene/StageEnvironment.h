@@ -104,6 +104,12 @@ public:
 	/// <summary>雲海（InitializeRaymarchClouds 前でも JSON の値は持つ）。L5 は GetParams().opacity / enabled で消す</summary>
 	CloudRaymarcher* GetCloudRaymarcher() { return raymarcher_.get(); }
 
+	/// <summary>
+	/// 画面の水滴の濡れ具合の目標（雲の縦穴。13_RiverWater.md §9.9）。視点が雲の層（下面〜最高点）の中にいる間 1、
+	/// 層の上下の端の kCloudDropletEdge [m] で 0→1。雲が無効・薄い時は 0
+	/// </summary>
+	float GetCloudDropletTarget(const Vector3& eyePosition) const;
+
 	/// <summary>Object3DManager はシーンをまたいで生きるので、雲を外して返す</summary>
 	void Finalize();
 

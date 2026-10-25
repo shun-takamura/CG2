@@ -2,6 +2,9 @@
 
 #include "Water/WaterSurface.h"
 #include "Water/WaterReflection.h"
+#include "Water/RippleSimulation.h"
+#include "Game.h"
+#include "PostEffect.h"
 #include "Object3DInstance.h"
 #include "AnimatedObject3DInstance.h"
 #include "Components/Gameplay.h"
@@ -14,6 +17,7 @@
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 
 #ifdef _DEBUG
@@ -54,6 +58,11 @@ namespace {
 	};
 	// 反射 RT を波で傾いた反射の向きで引くときの、映る物までの想定距離 [m]（低空から山まで 300〜500m）
 	constexpr float kDefaultReflectionDistance = 300.0f;
+
+	float Smoothstep(float edge0, float edge1, float x) {
+		const float t = std::clamp((x - edge0) / (std::max)(edge1 - edge0, 1e-4f), 0.0f, 1.0f);
+		return t * t * (3.0f - 2.0f * t);
+	}
 }
 
 RiverWater::RiverWater() = default;
@@ -78,6 +87,22 @@ void RiverWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3
 	for (EntityTag t : kDefaultReflectTags) reflectTags_[static_cast<int>(t)] = true;
 	// 映った山・地形も空と同じ揺れ方にする（13 番 §4.6）。タイトルの水面は 0 のまま
 	water_->GetParams().reflectionDistance = kDefaultReflectionDistance;
+
+	// 航跡（13 番 §8）：波はワールドに残し、範囲だけ自機について動かす。
+	// 64m 四方で 1 テクセル 0.125m。波の速さの上限は CFL で 0.67·Δx·刻み数 なので、毎秒 120 刻みで約 10m/s まで
+	{
+		RippleSimulation* sim = water_->GetRippleSimulation();
+		sim->SetScrollWithCenter(true);
+		RippleSimulation::Settings& s = sim->GetSettings();
+		s.simSize = 64.0f;
+		s.waveSpeed = 7.0f;       // 自機 26m/s で V 字の半分の角度 asin(7/26) ≈ 16°
+		s.damping = 0.995f;
+		s.stepsPerSecond = 120.0f;
+		s.edgeFade = 0.08f;
+		s.normalScale = 1.0f;
+	}
+	// 波源が通った後の深いへこみで法線が傾きすぎ、反射が空の一色（平らな水色）になるのを防ぐ
+	water_->GetParams().simMaxSlope = 0.3f;
 	LoadTuning();
 
 	// 反射 RT の解像度は作る時に決まるので、調整値を読んでから作る
@@ -89,7 +114,7 @@ void RiverWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3
 	reflection_->SetDrawEffects(true);
 }
 
-void RiverWater::Update(float stageSec, float deltaTime) {
+void RiverWater::Update(float stageSec, float deltaTime, const Vector3* playerPosition) {
 	if (!water_) return;
 	if (state_ == LoadState::NotStarted && stageSec >= loadStartSec_) {
 		StartLoad();
@@ -102,6 +127,8 @@ void RiverWater::Update(float stageSec, float deltaTime) {
 		ApplyRiverMap();
 	}
 	if (state_ == LoadState::Ready) {
+		// 範囲の中心を決めてから水面を進める（WaterSurface::Update がシミュレーションの中心を合わせる）
+		UpdateWake(playerPosition, deltaTime);
 		water_->Update(deltaTime);
 	}
 
@@ -126,6 +153,79 @@ void RiverWater::Update(float stageSec, float deltaTime) {
 #endif
 }
 
+void RiverWater::UpdateWake(const Vector3* playerPosition, float deltaTime) {
+	if (!playerPosition || !wake_.enabled) {
+		wakeHasPrev_ = false;
+		wakeLastFactor_ = 0.0f;
+		dropletTarget_ = 0.0f;
+		return;
+	}
+	const Vector3 position = *playerPosition;
+
+	float moveX = 0.0f;
+	float moveZ = 0.0f;
+	float moved = 0.0f;
+	if (wakeHasPrev_) {
+		moveX = position.x - wakePrevPosition_.x;
+		moveZ = position.z - wakePrevPosition_.z;
+		moved = std::sqrt(moveX * moveX + moveZ * moveZ);
+		if (moved > wake_.teleportDistance) {
+			// シーク・ワープ。前の位置から線を引かない
+			ResetWake();
+			moved = 0.0f;
+		}
+	}
+	if (moved > 1e-3f) wakeForward_ = { moveX / moved, 0.0f, moveZ / moved };
+
+	// 波源は自機より leadDistance 前（見た目のため。前のフレームの位置にも同じだけ足して線を引く）。
+	// 範囲の中心は波源の後ろ寄り（航跡は後ろへ伸びる。前は少しあれば足りる）
+	const float leadX = wakeForward_.x * wake_.leadDistance;
+	const float leadZ = wakeForward_.z * wake_.leadDistance;
+	const Vector3 center{
+		position.x + leadX - wakeForward_.x * wake_.backOffset,
+		waterHeight_,
+		position.z + leadZ - wakeForward_.z * wake_.backOffset };
+	water_->SetRippleCenter(center);
+	RippleSimulation* sim = water_->GetRippleSimulation();
+	sim->SetCenter({ center.x, center.z }); // 下の AddRippleImpulse が今の範囲で判定するように
+
+	// 水面に近いほど・速いほど強い（11 番 §3.4：触れた時ではなく、近くを速く通った風で波立つ）
+	const float height = position.y - waterHeight_;
+	const float speed = deltaTime > 0.0f ? moved / deltaTime : 0.0f;
+	const float factor = (1.0f - Smoothstep(wake_.fullHeight, wake_.maxHeight, height))
+	                   * Smoothstep(wake_.minSpeed, wake_.fullSpeed, speed);
+	wakeLastHeight_ = height;
+	wakeLastSpeed_ = speed;
+	wakeLastFactor_ = factor;
+	// 画面の水滴は波と同期させる（波が出始める高さで小さな水滴が付き始め、波が最大の高さで濡れきる。13 番 §9.5）
+	dropletTarget_ = factor;
+
+	if (wakeHasPrev_ && moved > 1e-3f && factor > 0.0f) {
+		// 速いと 1 フレームで 0.4m 以上進むので、軌跡に沿って細かく置く（点線にならないように）
+		const int count = std::clamp(static_cast<int>(std::ceil(moved / (std::max)(wake_.spacing, 0.01f))),
+			1, static_cast<int>(RippleSimulation::kMaxImpulsesPerFrame));
+		const float strength = (std::min)(wake_.strengthPerMeter * moved / static_cast<float>(count), wake_.maxStrength) * factor;
+		for (int i = 1; i <= count; ++i) {
+			const float t = static_cast<float>(i) / static_cast<float>(count);
+			water_->AddRippleImpulse({ wakePrevPosition_.x + leadX + moveX * t, waterHeight_, wakePrevPosition_.z + leadZ + moveZ * t },
+				wake_.radius, strength);
+		}
+	}
+
+	wakePrevPosition_ = position;
+	wakeHasPrev_ = true;
+}
+
+void RiverWater::ResetWake() {
+	wakeHasPrev_ = false;
+	if (water_) water_->GetRippleSimulation()->Clear();
+}
+
+void RiverWater::DispatchSimulation() {
+	if (!water_ || state_ != LoadState::Ready) return;
+	water_->DispatchSimulation();
+}
+
 void RiverWater::PlayTestEffect() {
 	const Vector3 position{
 		lastCameraPosition_.x,
@@ -137,6 +237,7 @@ void RiverWater::PlayTestEffect() {
 }
 
 void RiverWater::Seek(float stageSec) {
+	ResetWake();
 	if (!water_ || stageSec < loadStartSec_) return;
 	// 窓より後へ飛んだら、その場で読み終える（雲の中で読むのを待てないため）
 	if (state_ == LoadState::NotStarted) StartLoad();
@@ -302,6 +403,31 @@ void RiverWater::LoadTuning() {
 			if (t != EntityTag::None) reflectTags_[static_cast<int>(t)] = true;
 		}
 	}
+
+	const JsonValue& wake = root["wake"];
+	if (wake.IsObject()) {
+		WakeTuning& w = wake_;
+		w.enabled = wake["enabled"].AsBool(w.enabled);
+		w.leadDistance = ReadFloat(wake, "leadDistance", w.leadDistance);
+		w.backOffset = ReadFloat(wake, "backOffset", w.backOffset);
+		w.maxHeight = ReadFloat(wake, "maxHeight", w.maxHeight);
+		w.fullHeight = ReadFloat(wake, "fullHeight", w.fullHeight);
+		w.minSpeed = ReadFloat(wake, "minSpeed", w.minSpeed);
+		w.fullSpeed = ReadFloat(wake, "fullSpeed", w.fullSpeed);
+		w.radius = ReadFloat(wake, "radius", w.radius);
+		w.strengthPerMeter = ReadFloat(wake, "strengthPerMeter", w.strengthPerMeter);
+		w.maxStrength = ReadFloat(wake, "maxStrength", w.maxStrength);
+		w.spacing = ReadFloat(wake, "spacing", w.spacing);
+		w.teleportDistance = ReadFloat(wake, "teleportDistance", w.teleportDistance);
+		RippleSimulation::Settings& s = water_->GetRippleSimulation()->GetSettings();
+		s.simSize = ReadFloat(wake, "simSize", s.simSize);
+		s.waveSpeed = ReadFloat(wake, "waveSpeed", s.waveSpeed);
+		s.damping = ReadFloat(wake, "damping", s.damping);
+		s.stepsPerSecond = ReadFloat(wake, "stepsPerSecond", s.stepsPerSecond);
+		s.edgeFade = ReadFloat(wake, "edgeFade", s.edgeFade);
+		s.normalScale = ReadFloat(wake, "normalScale", s.normalScale);
+		p.simMaxSlope = ReadFloat(wake, "maxSlope", p.simMaxSlope);
+	}
 }
 
 void RiverWater::SaveTuning() const {
@@ -342,6 +468,30 @@ void RiverWater::SaveTuning() const {
 	}
 	refl["tags"] = std::move(tags);
 	root["reflection"] = std::move(refl);
+
+	const WakeTuning& w = wake_;
+	const RippleSimulation::Settings& s = water_->GetRippleSimulation()->GetSettings();
+	JsonValue wake = JsonValue::MakeObject();
+	wake["enabled"] = w.enabled;
+	wake["leadDistance"] = static_cast<double>(w.leadDistance);
+	wake["backOffset"] = static_cast<double>(w.backOffset);
+	wake["maxHeight"] = static_cast<double>(w.maxHeight);
+	wake["fullHeight"] = static_cast<double>(w.fullHeight);
+	wake["minSpeed"] = static_cast<double>(w.minSpeed);
+	wake["fullSpeed"] = static_cast<double>(w.fullSpeed);
+	wake["radius"] = static_cast<double>(w.radius);
+	wake["strengthPerMeter"] = static_cast<double>(w.strengthPerMeter);
+	wake["maxStrength"] = static_cast<double>(w.maxStrength);
+	wake["spacing"] = static_cast<double>(w.spacing);
+	wake["teleportDistance"] = static_cast<double>(w.teleportDistance);
+	wake["simSize"] = static_cast<double>(s.simSize);
+	wake["waveSpeed"] = static_cast<double>(s.waveSpeed);
+	wake["damping"] = static_cast<double>(s.damping);
+	wake["stepsPerSecond"] = static_cast<double>(s.stepsPerSecond);
+	wake["edgeFade"] = static_cast<double>(s.edgeFade);
+	wake["normalScale"] = static_cast<double>(s.normalScale);
+	wake["maxSlope"] = static_cast<double>(p.simMaxSlope);
+	root["wake"] = std::move(wake);
 
 	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
 }
@@ -384,6 +534,53 @@ void RiverWater::OnImGui() {
 				(testEffectLastHandle_ != 0 && em->IsAlive(testEffectLastHandle_)) ? "(alive)" : "(ended)");
 			ImGui::Text("Active effects: %zu", em->GetActiveInstanceCount());
 		}
+		ImGui::TreePop();
+	}
+	if (ImGui::TreeNode("Screen Droplets")) {
+		// PostEffect の窓は有効な時しか値を出さないので、ここからも触れるようにする
+		// 値は Tuning/ScreenDroplet.json（川＝Gravity・雲の縦穴＝Radial の 2 組）。ここは触りやすい置き場所
+		ImGui::Text("River target %.2f (= Wake Factor. heights: Wake > Max/Full Height)", GetDropletTarget());
+		if (auto* pe = Game::GetPostEffect(); pe && pe->screenDroplet) pe->screenDroplet->ShowImGui();
+		ImGui::TreePop();
+	}
+	if (ImGui::TreeNode("Wake")) {
+		WakeTuning& w = wake_;
+		RippleSimulation* sim = water_->GetRippleSimulation();
+		RippleSimulation::Settings& s = sim->GetSettings();
+		ImGui::Checkbox("Enabled##wake", &w.enabled);
+		ImGui::Text("Height %.2f m / Speed %.1f m/s / Factor %.2f", wakeLastHeight_, wakeLastSpeed_, wakeLastFactor_);
+		// V 字の半分の角度 = asin(波の速さ / 自機の速さ)。波の方が速いと V にならない
+		if (wakeLastSpeed_ > s.waveSpeed) {
+			ImGui::Text("V half-angle: %.1f deg", std::asin(s.waveSpeed / wakeLastSpeed_) * 57.29578f);
+		} else {
+			ImGui::TextUnformatted("V half-angle: - (slower than waves)");
+		}
+		{
+			// k = (c·Δt/Δx)² が 0.45 で止まる速さ（これより上げても伝わる速さは変わらない）
+			const float dx = s.simSize / static_cast<float>(RippleSimulation::kResolution);
+			ImGui::Text("Max wave speed (CFL): %.1f m/s", 0.67f * dx * s.stepsPerSecond);
+		}
+		ImGui::SeparatorText("Source");
+		ImGui::DragFloat("Max Height [m]", &w.maxHeight, 0.05f, 0.0f, 20.0f);
+		ImGui::DragFloat("Full Height [m]", &w.fullHeight, 0.05f, -5.0f, 20.0f);
+		ImGui::DragFloat("Min Speed [m/s]", &w.minSpeed, 0.5f, 0.0f, 100.0f);
+		ImGui::DragFloat("Full Speed [m/s]", &w.fullSpeed, 0.5f, 0.0f, 100.0f);
+		ImGui::DragFloat("Radius [m]", &w.radius, 0.01f, 0.05f, 5.0f);
+		ImGui::DragFloat("Strength / m", &w.strengthPerMeter, 0.001f, 0.0f, 0.5f, "%.4f");
+		ImGui::DragFloat("Max Strength", &w.maxStrength, 0.001f, 0.0f, 0.5f, "%.4f");
+		ImGui::DragFloat("Spacing [m]", &w.spacing, 0.01f, 0.01f, 5.0f);
+		ImGui::DragFloat("Lead Distance [m]", &w.leadDistance, 0.5f, -20.0f, 60.0f);
+		ImGui::DragFloat("Back Offset [m]", &w.backOffset, 0.5f, -50.0f, 50.0f);
+		ImGui::DragFloat("Teleport Distance [m]", &w.teleportDistance, 1.0f, 1.0f, 500.0f);
+		ImGui::SeparatorText("Waves");
+		ImGui::DragFloat("Sim Size [m]", &s.simSize, 0.5f, 8.0f, 256.0f);
+		ImGui::DragFloat("Wave Speed [m/s]", &s.waveSpeed, 0.05f, 0.05f, 30.0f);
+		ImGui::SliderFloat("Damping", &s.damping, 0.9f, 1.0f, "%.4f");
+		ImGui::DragFloat("Steps / s", &s.stepsPerSecond, 1.0f, 10.0f, 240.0f);
+		ImGui::SliderFloat("Edge Fade", &s.edgeFade, 0.001f, 0.5f);
+		ImGui::DragFloat("Normal Scale", &s.normalScale, 0.01f, 0.0f, 20.0f);
+		ImGui::DragFloat("Max Slope (0=off)", &water_->GetParams().simMaxSlope, 0.005f, 0.0f, 5.0f, "%.3f");
+		if (ImGui::Button("Clear Waves")) sim->Clear();
 		ImGui::TreePop();
 	}
 	water_->OnImGui();

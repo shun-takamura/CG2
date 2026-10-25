@@ -61,7 +61,8 @@ cbuffer WaterParams : register(b0)
     float  gSimSize;             // 範囲の一辺 [m]
     float  gSimNormalScale;      // 高さの傾きを法線に足す倍率
     float  gSimTexel;            // 1 テクセルの UV 幅
-    float3 gPadding4;
+    float  gSimMaxSlope;         // 傾きの上限（0 で無し）
+    float2 gPadding4;
     float  gFloorParallaxDepth;  // 床の凹凸の深さ（UV 1 あたり）
     float  gFloorNormalStrength;
     int    gFloorUseNormalMap;
@@ -284,7 +285,14 @@ float2 WaveGradient(float2 xz, float footprint)
             const float texelWorld = gSimSize * gSimTexel;
             // 遠くで 1 ピクセルに何テクセルも入るとちらつくので弱める（数テクセル＝おおよその最短波長）
             const float fade = AntiAliasFade(texelWorld * 6.0f, footprint);
-            gradient += float2(hx, hz) / (2.0f * texelWorld) * (gSimNormalScale * fade);
+            float2 simGradient = float2(hx, hz) / (2.0f * texelWorld) * (gSimNormalScale * fade);
+            // 深いへこみで法線が傾きすぎると、反射が空の一色になって平らな板に見える
+            const float slope = length(simGradient);
+            if (gSimMaxSlope > 0.0f && slope > gSimMaxSlope)
+            {
+                simGradient *= gSimMaxSlope / slope;
+            }
+            gradient += simGradient;
         }
     }
 

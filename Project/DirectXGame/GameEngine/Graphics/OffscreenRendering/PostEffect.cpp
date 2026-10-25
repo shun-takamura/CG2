@@ -472,6 +472,8 @@ void PostEffect::InitializeEffects()
 	grayscale = static_cast<GrayscaleEffect*>(registerEffect(std::make_unique<GrayscaleEffect>()));
 	gaussian = static_cast<GaussianEffect*>(registerEffect(std::make_unique<GaussianEffect>()));
 	sepia = static_cast<SepiaEffect*>(registerEffect(std::make_unique<SepiaEffect>()));
+	// 画面の水滴はビネットより前（水滴もふちで暗くなるように）。ブルームはこの後でチェーンの先頭に入る
+	screenDroplet = static_cast<ScreenDropletEffect*>(registerEffect(std::make_unique<ScreenDropletEffect>()));
 	vignette = static_cast<VignetteEffect*>(registerEffect(std::make_unique<VignetteEffect>()));
 	smoothing = static_cast<SmoothingEffect*>(registerEffect(std::make_unique<SmoothingEffect>()));
 	// RadialBlur は深度のマスクを読むので outline 用 RootSignature（並び順はここのまま）

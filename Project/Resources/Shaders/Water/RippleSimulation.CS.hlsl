@@ -3,6 +3,7 @@
 // テクスチャは R=今の高さ / G=1つ前の高さ。1刻みで
 //   next = (2·h - h_prev + k·(左右上下の和 - 4h)) · damping
 // を計算し、(next, h) を書く。範囲の縁は edgeFade の幅で減衰させて波を吸収する（反射して戻らないように）。
+// 範囲が動いた時（スクロール）は gShift テクセルずらした所を読む（外から入る所は平らな水）。
 
 #define MAX_IMPULSES 32 // RippleSimulation::kMaxImpulsesPerFrame と合わせる
 
@@ -21,7 +22,7 @@ cbuffer SimParams : register(b0)
     uint gImpulseCount;
     uint gResolution;
     uint gClear;
-    float2 gPadding;
+    int2 gShift;     // 読む位置のずれ [テクセル]（範囲の中心が動いた分）
     Impulse gImpulses[MAX_IMPULSES];
 };
 
@@ -52,11 +53,14 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     const int2 p = int2(id.xy);
-    const float2 state = gSource.Load(int3(p, 0));
+    // 前の状態は動く前の範囲の格子で入っているので、ずらした所を読む
+    const int2 q = p + gShift;
+    const float2 state = (any(q < 0) || any(q >= int2(gResolution, gResolution)))
+                       ? float2(0.0f, 0.0f) : gSource.Load(int3(q, 0));
     const float h = state.r;
     const float hPrev = state.g;
-    const float laplacian = HeightAt(p + int2(1, 0)) + HeightAt(p - int2(1, 0))
-                          + HeightAt(p + int2(0, 1)) + HeightAt(p - int2(0, 1)) - 4.0f * h;
+    const float laplacian = HeightAt(q + int2(1, 0)) + HeightAt(q - int2(1, 0))
+                          + HeightAt(q + int2(0, 1)) + HeightAt(q - int2(0, 1)) - 4.0f * h;
     float next = (2.0f * h - hPrev + gWaveFactor * laplacian) * gDamping;
 
     // 波源：ガウス形にへこませる

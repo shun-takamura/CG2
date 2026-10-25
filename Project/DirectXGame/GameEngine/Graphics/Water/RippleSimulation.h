@@ -17,6 +17,10 @@ class SRVManager;
 /// 波の数に上限が無く、重なれば干渉し、減衰しながら広がって範囲の縁で吸収される。
 /// テクスチャは R=今の高さ / G=1つ前の高さ（R32G32_FLOAT）を 2 枚で交互に読み書きする。
 /// WaterSurface が持ち、PS（t6）で高さの傾きを法線に足す。
+///
+/// 既定では中心を動かすと波も一緒に動く（ガラス球の液面のように、器にくっついた水）。
+/// SetScrollWithCenter(true) にすると波はワールドに残り、範囲だけが中心について動く（低空の航跡。13_RiverWater.md §8）。
+/// その時の範囲の中心はテクセルの格子にそろえ、動いた分だけ中身をずらす（新しく入る所は平らな水）。
 /// </summary>
 class RippleSimulation {
 public:
@@ -54,7 +58,18 @@ public:
 	D3D12_GPU_DESCRIPTOR_HANDLE GetHeightSrvHandle() const;
 
 	void SetCenter(const Vector2& centerXZ) { center_ = centerXZ; }
-	const Vector2& GetCenter() const { return center_; }
+	/// <summary>
+	/// 高さマップが表す範囲の中心。PS はこれで UV を出すこと。
+	/// スクロールが無効なら SetCenter の値、有効なら Dispatch でテクセルの格子にそろえた値
+	/// </summary>
+	const Vector2& GetCenter() const { return scrollWithCenter_ ? gridCenter_ : center_; }
+
+	/// <summary>
+	/// true で波をワールドに残し、範囲だけを中心について動かす（既定 false＝波も中心と一緒に動く）。
+	/// 切り替えた時は水面を平らに戻す
+	/// </summary>
+	void SetScrollWithCenter(bool enabled);
+	bool IsScrollWithCenter() const { return scrollWithCenter_; }
 	Settings& GetSettings() { return settings_; }
 	const Settings& GetSettings() const { return settings_; }
 
@@ -75,7 +90,7 @@ private:
 		uint32_t impulseCount;
 		uint32_t resolution;
 		uint32_t clear;          // 1 なら高さを 0 にする
-		float padding[2];
+		int32_t shift[2];        // 中身をずらすテクセル数（範囲の中心が動いた分。スクロール時の最初の刻みだけ）
 		Impulse impulses[kMaxImpulsesPerFrame];
 	};
 
@@ -101,10 +116,24 @@ private:
 	std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, kMaxStepsPerFrame> paramsResources_;
 	std::array<SimParamsForGPU*, kMaxStepsPerFrame> paramsData_{};
 
+	/// <summary>溜まった波源（ワールド XZ）を、今の範囲の UV に直して刻みの CB に詰める。返り値は詰めた数</summary>
+	uint32_t BuildImpulses(Impulse* out) const;
+
+	// AddImpulse で溜める波源。UV にするのは Dispatch（スクロールで範囲が動いた後）
+	struct PendingImpulse {
+		Vector2 positionXZ;
+		float radius;      // [m]
+		float strength;
+	};
+
 	Settings settings_;
 	Vector2 center_{};
 	float accumulator_ = 0.0f;
 	bool clearRequested_ = true;        // 生成直後のテクスチャの中身は保証されないので最初に消す
 	uint32_t impulseCount_ = 0;
-	std::array<Impulse, kMaxImpulsesPerFrame> pendingImpulses_{};
+	std::array<PendingImpulse, kMaxImpulsesPerFrame> pendingImpulses_{};
+
+	// スクロール（SetScrollWithCenter）
+	bool scrollWithCenter_ = false;
+	Vector2 gridCenter_{};              // 高さマップが表す範囲の中心（テクセルの格子にそろえた値）
 };

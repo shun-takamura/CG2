@@ -92,7 +92,8 @@ public:
 		float   simSize = 40.0f;                            // 範囲の一辺 [m]
 		float   simNormalScale = 1.0f;                      // 高さの傾きを法線に足す倍率
 		float   simTexel = 1.0f / 512.0f;                   // 1 テクセルの UV 幅
-		float   padding4[3]{};
+		float   simMaxSlope = 0.0f;                         // シミュレーションの傾きの上限（0 で無し＝既定）。深いへこみで反射が空の一色になるのを防ぐ
+		float   padding4[2]{};
 		// ----- 水底の床の法線マップ（t7）と視差（ハイトマップ t8）。SetFloorMaps で有効になる -----
 		float   floorParallaxDepth = 0.0f;                  // 凹凸の深さ（UV 1 あたり。深さ[m] ÷ テクスチャ1枚の長さ[m]）
 		float   floorNormalStrength = 1.0f;                 // 法線マップの強さ

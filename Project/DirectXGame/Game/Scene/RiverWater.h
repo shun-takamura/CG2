@@ -31,6 +31,9 @@ class AnimatedObject3DInstance;
 /// 反射（13 番 §4）：映すタグを持つ物を毎フレーム登録し直して反射 RT に描く（消えた物を指したまま残らない）。
 /// カメラが高い時は映り込みがほぼ見えないので、cutoffHeight より上ではパスごと飛ばす。
 ///
+/// 航跡（13 番 §8）：水面の波のシミュレーションの範囲を自機について動かし、水面すれすれを速く飛ぶと
+/// 通った線に沿って波源を入れる（後ろに V 字の波が立つ）。
+///
 /// IImGuiEditable なので Hierarchy に出て、Inspector で調整できる（シーン JSON には保存しない。コードで生成する）。
 /// </summary>
 class RiverWater : public IImGuiEditable {
@@ -51,7 +54,14 @@ public:
 	/// </summary>
 	/// <param name="stageSec">ステージ経過秒（RailStagePart::GetStageSeconds()）</param>
 	/// <param name="deltaTime">波の時間（World 時間）</param>
-	void Update(float stageSec, float deltaTime);
+	/// <param name="playerPosition">自機のワールド位置（航跡の波源。null なら航跡を立てない）</param>
+	void Update(float stageSec, float deltaTime, const Vector3* playerPosition);
+
+	/// <summary>航跡の波のシミュレーションを進める。シーン描画の最初（シーン RT を貼る前）に呼ぶ</summary>
+	void DispatchSimulation();
+
+	/// <summary>画面の水滴の濡れ具合の目標（＝航跡の波の強さ。川のロード前は 0）。StagePlayScene が雲の分とまとめて渡す</summary>
+	float GetDropletTarget() const { return state_ == LoadState::Ready ? dropletTarget_ : 0.0f; }
 
 	/// <summary>シーク。ロード開始時刻より後へ飛んだら、その場で読み終える</summary>
 	void Seek(float stageSec);
@@ -93,6 +103,41 @@ private:
 		float maxDepth = 10.0f;
 		float waterHeight = 0.0f;
 	};
+
+	/// <summary>
+	/// 自機の航跡（13 番 §8）。波のシミュレーションの範囲を自機について動かし、
+	/// 前のフレームの位置からの線に沿って波源を入れる。水面に近く速いほど強い
+	/// </summary>
+	void UpdateWake(const Vector3* playerPosition, float deltaTime);
+	/// <summary>航跡の続きを切る（シーク・ワープの後に前の位置から線を引かない）。波も消す</summary>
+	void ResetWake();
+
+	// 航跡の調整値（波の伝わり方は RippleSimulation::Settings に直接持つ）
+	struct WakeTuning {
+		bool enabled = true;
+		// 波源を自機より進む向きの前に置く量 [m]。カメラが低く（水面から 3.5m・自機の 12m 後ろ）、
+		// 自機の体の真下に見える水面は実際には自機の約 8m 前、画面の下端は自機の約 1m 後ろのため（2026-10-25 実機で 5m）
+		float leadDistance = 5.0f;
+		float backOffset = 12.0f;        // 範囲の中心を波源から進む向きの後ろへずらす量 [m]（航跡は後ろに伸びる）
+		float maxHeight = 2.0f;          // 水面からの高さがこれ以上なら波を立てない [m]
+		float fullHeight = 0.5f;         // これ以下なら最大の強さ [m]
+		float minSpeed = 5.0f;           // 水平の速さがこれ以下なら波を立てない [m/s]
+		float fullSpeed = 25.0f;         // これ以上なら最大の強さ [m/s]
+		float radius = 0.6f;             // 1 つの波源の半径 [m]
+		float strengthPerMeter = 0.2f;   // 1m 進んだときのへこみの深さ [m]（進んだ距離に比例）
+		float maxStrength = 0.4f;        // 1 つの波源のへこみの上限 [m]
+		float spacing = 0.25f;           // 軌跡に沿って波源を置く間隔 [m]
+		float teleportDistance = 30.0f;  // 1 フレームでこれ以上動いたら線を引かない [m]
+	};
+	float dropletTarget_ = 0.0f; // このフレームの画面の水滴の濡れ具合の目標（＝波の強さ。UpdateWake が決める）
+	WakeTuning wake_;
+	bool wakeHasPrev_ = false;
+	Vector3 wakePrevPosition_{};
+	Vector3 wakeForward_{ 0.0f, 0.0f, 1.0f }; // 最後に分かった水平の進む向き
+	// ImGui の確認用（最後のフレームの値）
+	float wakeLastHeight_ = 0.0f;
+	float wakeLastSpeed_ = 0.0f;
+	float wakeLastFactor_ = 0.0f;
 
 	void StartLoad();
 	/// <summary>CPU フェーズの後：川のマップを GPU へ待たずに送る（FS 経路はその場で貼る）</summary>
