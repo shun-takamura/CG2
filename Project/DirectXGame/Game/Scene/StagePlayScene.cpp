@@ -2839,6 +2839,8 @@ void StagePlayScene::OnImGuiTuning() {
 
 void StagePlayScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
+	// 画面の水滴の値（川・雲の縦穴の 2 組）。ResetEffects で既定に戻るので、ここで読み直す
+	Game::GetPostEffect()->screenDroplet->LoadSettings("Resources/Json/Tuning/ScreenDroplet.json");
 
 	// スコアをリセット（再ロード時の累積防止）
 	ScoreManager::GetInstance()->Reset();
@@ -3196,6 +3198,8 @@ void StagePlayScene::CompleteDeferredInit() {
 }
 
 void StagePlayScene::Finalize() {
+	// 画面の水滴は PostEffect（シーンをまたいで残る）にあるので消しておく
+	if (auto* pe = Game::GetPostEffect(); pe && pe->screenDroplet) pe->screenDroplet->Clear();
 	// 必殺技関連の GPU リソースを破棄する前に GPU 完了を待つ。
 	// （ウィンドウ閉じ等でシーンが落ちる際、command list がまだ参照中の resource を
 	//   解放すると D3D12 OBJECT_DELETED_WHILE_STILL_IN_USE になる）
@@ -4135,9 +4139,21 @@ void StagePlayScene::Update() {
 	if (stageEnv_ && phase_ == Phase::Rail && railStage_) {
 		stageEnv_->Update(railStage_->GetStageSeconds(), !specialActive_);
 	}
-	// 大河の水面：時刻でロードを始め、波を進める（波は World 時間＝スロー中は流れも遅い）
+	// 大河の水面：時刻でロードを始め、波を進める（波は World 時間＝スロー中は流れも遅い）。
+	// 自機が水面すれすれを飛ぶと後ろに航跡が立つ（13 番 §8）
 	if (riverWater_ && phase_ == Phase::Rail && railStage_) {
-		riverWater_->Update(railStage_->GetStageSeconds(), GetScaledDeltaTime(TimeGroup::World));
+		const Vector3 playerPosition = player_ ? player_->GetTranslate() : Vector3{};
+		riverWater_->Update(railStage_->GetStageSeconds(), GetScaledDeltaTime(TimeGroup::World),
+			player_ ? &playerPosition : nullptr);
+	}
+	// 画面の水滴：川（水面すれすれ＝重力）と雲の縦穴（放射）の濡れ具合の大きい方を、1 か所でフィルタへ渡す。
+	// 着陸・ボス戦は 0（乾いて消える）（13 番 §9.9）
+	if (auto* pe = Game::GetPostEffect(); pe && pe->screenDroplet) {
+		const bool rail = phase_ == Phase::Rail && railStage_;
+		const float river = (rail && riverWater_) ? riverWater_->GetDropletTarget() : 0.0f;
+		const float cloud = (rail && stageEnv_ && camera_) ? stageEnv_->GetCloudDropletTarget(camera_->GetTranslate()) : 0.0f;
+		pe->screenDroplet->Update(GetScaledDeltaTime(TimeGroup::World), (std::max)(river, cloud),
+			cloud > river ? ScreenDropletEffect::Mode::Radial : ScreenDropletEffect::Mode::Gravity);
 	}
 	// 区間ごとのストリーミング：時刻で裏で読み、決めた秒に作る。着陸・ボス戦（ボス戦からのリトライを含む）は全部作る
 	if (streaming_) {
@@ -4797,6 +4813,7 @@ void StagePlayScene::Draw() {
 	if (drawBossWater) bossWater_->DispatchSimulation();
 	// 大河の水面の反射 RT（映す物を鏡像で描く）。シーン RT を貼る前に描き、下で貼り直す
 	if (riverWater_ && phase_ == Phase::Rail && camera_) {
+		riverWater_->DispatchSimulation(); // 航跡の波（コンピュート）
 		riverWater_->RenderReflection(*camera_, object3DInstances_, dynamicAnimated_);
 	}
 

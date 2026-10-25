@@ -22,6 +22,8 @@ namespace {
 	// タイトルの雲は高さ 300m。CloudSky はカメラが雲の平面より上だと雲を描かないので、
 	// 高高度（Y=900）の区間でも頭上に見えるよう上げる
 	constexpr float kCloudHeight = 1500.0f;
+	// 雲の層の上下の端で画面の水滴を強めていく幅 [m]（入りきってから濡れきる）
+	constexpr float kCloudDropletEdge = 60.0f;
 
 	float Lerp1(float a, float b, float t) { return a + (b - a) * t; }
 
@@ -179,6 +181,20 @@ float StageEnvironment::RaymarchVisibility() const {
 	if (stageSec_ < raymarchOff_.sec) return 1.0f;
 	if (raymarchOff_.fadeSec <= 0.0f) return 0.0f;
 	return std::clamp(1.0f - (stageSec_ - raymarchOff_.sec) / raymarchOff_.fadeSec, 0.0f, 1.0f);
+}
+
+float StageEnvironment::GetCloudDropletTarget(const Vector3& eyePosition) const {
+	if (!raymarcher_) return 0.0f;
+	const CloudRaymarcher::Params& p = raymarcher_->GetParams();
+	if (!p.enabled || p.opacity <= 0.0f) return 0.0f;
+	auto smooth = [](float edge0, float edge1, float x) {
+		const float t = std::clamp((x - edge0) / (std::max)(edge1 - edge0, 1e-3f), 0.0f, 1.0f);
+		return t * t * (3.0f - 2.0f * t);
+	};
+	const float y = eyePosition.y;
+	const float inside = smooth(p.bottom, p.bottom + kCloudDropletEdge, y)
+	                   * (1.0f - smooth(p.top - kCloudDropletEdge, p.top, y));
+	return inside * (std::min)(p.opacity, 1.0f);
 }
 
 void StageEnvironment::Finalize() {

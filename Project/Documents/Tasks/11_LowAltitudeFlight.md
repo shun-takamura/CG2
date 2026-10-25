@@ -220,6 +220,7 @@
 | L2 | L6・L10 | **連絡：岸の線の並びが変わった**（2026-10-09）。`RiverTerrain_Shore.json` は「Z の昇順・行ごと」から**「下流へ向かう順・中心線の弧長 4m おき」**に変更（蛇行で川が横を向く所を行ごとでは取り違えるため）。中身の形式（`left` / `right` = [[x, z], ...]）は同じ | 共有のみ |
 | 雲（9番フェーズ3） | L5 | **連絡（ユーザーの許可で L5 のファイルに追加）**：雲海のレイマーチ（`CloudRaymarcher`）を `StageEnvironment` が持つようにした（`InitializeRaymarchClouds` / `DrawRaymarchClouds` / `GetCloudRaymarcher` / `OnImGuiRaymarchClouds`、JSON は `raymarchClouds`）。**雲のオフは `GetCloudRaymarcher()->GetParams().opacity` を 0 へ下げる（または enabled=false）**。描画は Rail フェーズだけ。雲の層は Y 300〜850、降下の線のまわりは円柱の空洞（中のフォグは未実装＝雲の中の演出は L5 か 9番の続き）。下面が 300 になったので、CloudLayer セクション（54〜66 秒）の終わりは約 61 秒に寄せるのが自然（2026-10-09） | L5 |
 | 雲（9番フェーズ3） | L5 | **連絡（ユーザー指示で L5 の値を変更）**：区間 `CloudLayer`（54〜66 秒）のフォグを LowAltitude と同じ値（色 0.70, 0.78, 0.90／近 150m／遠 2500m／濃さ 0.8）にした。元の値（近 20m／遠 220m／濃さ 2）はレイマーチ前の「雲の中」の仮表現で、雲を抜けた後も 66 秒まで地形と水面を白く塗っていた（実機で約 4 秒の真っ白）。雲の中はレイマーチ（B'）が描く。CloudLayer の光（ほぼ真上・1.4）はそのまま（2026-10-10） | 共有のみ |
+| L3（画面の水滴） | L5 | **連絡（ユーザーの許可で L5 のファイルに追加）**：`StageEnvironment::GetCloudDropletTarget(視点)` を足した。視点が雲海（`CloudRaymarcher` の下面〜最高点）の中にいる間、画面の水滴（放射モード：画面の周りに霧雨が付いて外へ流れる）を濡らす。上下の端 60m で強め、雲の不透明度を掛ける。雲を消す（opacity / enabled）と自動で 0。呼ぶのは `StagePlayScene`（13 番 §9.9）（2026-10-25） | 共有のみ |
 
 ---
 

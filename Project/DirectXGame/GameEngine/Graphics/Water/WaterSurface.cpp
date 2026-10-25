@@ -546,6 +546,7 @@ void WaterSurface::OnImGui()
 		ImGui::DragFloat("Steps / s", &sim.stepsPerSecond, 1.0f, 10.0f, 240.0f);
 		ImGui::SliderFloat("Edge Fade", &sim.edgeFade, 0.001f, 0.5f);
 		ImGui::DragFloat("Normal Scale", &sim.normalScale, 0.01f, 0.0f, 20.0f);
+		ImGui::DragFloat("Max Slope (0=off)", &params_.simMaxSlope, 0.005f, 0.0f, 5.0f, "%.3f");
 		if (ImGui::Button("Clear Ripples")) rippleSimulation_->Clear();
 	}
 	ImGui::SeparatorText("Undulation (noise)");

@@ -130,10 +130,33 @@ void RippleSimulation::Update(float deltaTime)
 void RippleSimulation::AddImpulse(const Vector3& position, float radius, float strength)
 {
 	if (impulseCount_ >= kMaxImpulsesPerFrame) return;
+	// 範囲の外は枠を使わない（スクロール時は Dispatch で範囲が少し動くので、そこでもう一度確かめる）
 	const float size = (std::max)(settings_.simSize, 0.01f);
 	const Vector2 uv{ (position.x - center_.x) / size + 0.5f, (position.z - center_.y) / size + 0.5f };
-	if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) return; // 範囲の外
-	pendingImpulses_[impulseCount_++] = { uv, radius / size, strength };
+	if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) return;
+	pendingImpulses_[impulseCount_++] = { { position.x, position.z }, radius, strength };
+}
+
+uint32_t RippleSimulation::BuildImpulses(Impulse* out) const
+{
+	const float size = (std::max)(settings_.simSize, 0.01f);
+	const Vector2& center = GetCenter();
+	uint32_t count = 0;
+	for (uint32_t i = 0; i < impulseCount_; ++i) {
+		const PendingImpulse& src = pendingImpulses_[i];
+		const Vector2 uv{ (src.positionXZ.x - center.x) / size + 0.5f, (src.positionXZ.y - center.y) / size + 0.5f };
+		if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) continue;
+		out[count++] = { uv, src.radius / size, src.strength };
+	}
+	return count;
+}
+
+void RippleSimulation::SetScrollWithCenter(bool enabled)
+{
+	if (scrollWithCenter_ == enabled) return;
+	scrollWithCenter_ = enabled;
+	gridCenter_ = center_;
+	clearRequested_ = true;
 }
 
 void RippleSimulation::Transition(uint32_t index, D3D12_RESOURCE_STATES after)
@@ -163,8 +186,33 @@ void RippleSimulation::Dispatch()
 	auto* cmd = dxCore_->GetCommandList();
 	PEPPER_GPU_SCOPE(cmd, "RippleSimulation::Dispatch");
 
-	// k = (c·Δt/Δx)²。0.5 以上だと発散するので手前で止める
 	const float dx = settings_.simSize / static_cast<float>(kResolution);
+
+	// スクロール：中心の動いた分を整数テクセルにして最初の刻みでずらす（端数は次のフレームへ持ち越す）。
+	// 刻みを回さないフレームはずらさず、GetCenter も前のまま（PS が読む中身と範囲が食い違わない）
+	int32_t shiftX = 0;
+	int32_t shiftZ = 0;
+	if (scrollWithCenter_) {
+		if (clearRequested_) {
+			gridCenter_ = center_;
+		} else {
+			const float texelX = std::round((center_.x - gridCenter_.x) / (std::max)(dx, 1e-4f));
+			const float texelZ = std::round((center_.y - gridCenter_.y) / (std::max)(dx, 1e-4f));
+			const float limit = static_cast<float>(kResolution);
+			if (std::abs(texelX) >= limit || std::abs(texelZ) >= limit) {
+				// 範囲より大きく飛んだ（シーク等）。残る波が無いので消してそこから始める
+				clearRequested_ = true;
+				gridCenter_ = center_;
+			} else {
+				shiftX = static_cast<int32_t>(texelX);
+				shiftZ = static_cast<int32_t>(texelZ);
+				gridCenter_.x += texelX * dx;
+				gridCenter_.y += texelZ * dx;
+			}
+		}
+	}
+
+	// k = (c·Δt/Δx)²。0.5 以上だと発散するので手前で止める
 	const float courant = settings_.waveSpeed * step / (std::max)(dx, 1e-4f);
 	const float waveFactor = (std::min)(courant * courant, 0.45f);
 
@@ -179,9 +227,10 @@ void RippleSimulation::Dispatch()
 		p.edgeFade = std::clamp(settings_.edgeFade, 0.001f, 0.5f);
 		p.resolution = kResolution;
 		p.clear = (s == 0 && clearRequested_) ? 1u : 0u;
-		// 波源は最初の刻みにだけ入れる
-		p.impulseCount = (s == 0) ? impulseCount_ : 0u;
-		for (uint32_t i = 0; i < p.impulseCount; ++i) p.impulses[i] = pendingImpulses_[i];
+		// 波源とずらしは最初の刻みにだけ入れる
+		p.impulseCount = (s == 0) ? BuildImpulses(p.impulses) : 0u;
+		p.shift[0] = (s == 0) ? shiftX : 0;
+		p.shift[1] = (s == 0) ? shiftZ : 0;
 
 		const uint32_t src = current_;
 		const uint32_t dst = 1u - current_;
