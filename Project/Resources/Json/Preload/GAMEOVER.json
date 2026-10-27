@@ -43,6 +43,46 @@
     {
       "path": "Resources/Textures/MaskTexture/Terrain/Flagstone_Height.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Table_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Table_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pillar_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pillar_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_RingStand_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_RingStand_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Dial_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Dial_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pointer_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pointer_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [

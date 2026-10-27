@@ -3421,7 +3421,12 @@ bool StagePlayScene::UpdateAttract() {
 		attractTime_ += dt;
 		if (attractTime_ < attract->stageActionTime) return false;
 		attractActed_ = true;
-		// 少し遊んだらポーズ →「ステージセレクトに戻る」→「はい」で一周の終わり
+		if (attract->dieInStage && player_) {
+			// 少し遊んだら死ぬ（残りの HP 分を被弾と同じ処理で受ける）→ 死亡演出 → ゲームオーバー（19 番 §4.7 のデモ。2026-10-27 ユーザー）
+			OnPlayerTakeDamage((std::max)(Gameplay::Of(player_).GetHP().currentHP, 1));
+			return false;
+		}
+		// 少し遊んだらポーズ →「ステージセレクトに戻る」→「はい」で一周の終わり（dieInStage が false のとき）
 		OpenPauseMenu();
 		attractPausing_ = true;
 		attractMenu_.Reset();

@@ -1,6 +1,7 @@
 #pragma once
 #include "GameScene.h"
 #include "Score/EtherState.h"
+#include "AttractMode.h"
 #include "Vector2.h"
 #include "Vector3.h"
 #include <memory>
@@ -9,8 +10,7 @@
 
 class Camera;
 class EtherVessel;
-class SpriteInstance;
-class WaterSurface;
+class EtherVesselRoom;
 
 /// <summary>
 /// ゲームオーバー画面（19_GameOverAndDifficulty.md §4.6、G6）。暗い水面に立つエーテルの器で、守れている賭け分を見せ、
@@ -22,6 +22,7 @@ class WaterSurface;
 ///   5a 再挑戦　　 ：球の光が強まる（糸・粒は出さない。2026-10-24 ユーザー）→ 羽根の飛翔
 ///   5b 引き上げる ：残ったエーテルが支柱を伝って泉へ下りる → ステージ選択
 /// 2〜3 の間に決定を押すと選択肢まで早送り（2026-10-24 ユーザー）。調整値は Resources/Json/Tuning/GameOver.json。
+/// 器・水面・背景・カメラは EtherVesselRoom（HUB の賭ける画面と共用）。
 /// </summary>
 class GameOverScene : public GameScene {
 public:
@@ -55,15 +56,17 @@ private:
 		Leaving,  // シーンを切り替え中
 	};
 
-	void InitializeWater();
-	void ApplyWaterTuning();
 	void StartFlow();
 	void UpdateFlow(float deltaTime);
 	void UpdateCamera(float deltaTime);
 	void UpdateChoose();
+	/// <summary>デモモードの自動選択。選んだら true（そのフレームは人の入力を読まない）</summary>
+	bool UpdateAttract();
 	void SkipToChoose();
 	void Confirm(Option option);
 	void DrawOptions();
+	/// <summary>針の先の純度の札。数字は針が今指している値（行き過ぎの間も死ぬ前〜後の範囲に収める）</summary>
+	void DrawPurityTag();
 	/// <summary>選択肢の文字の左上と幅・高さ（UI 座標）。描画とマウスの当たりで同じ並びを使う</summary>
 	struct OptionRect {
 		float x = 0.0f;
@@ -81,18 +84,17 @@ private:
 	void SaveTuning() const;
 	void OnImGui();
 
-	std::unique_ptr<Camera> camera_;
-	std::unique_ptr<EtherVessel> vessel_;
-	std::unique_ptr<WaterSurface> water_;
-	std::string iblPath_;
-	// 空を描かない画面なので、画面いっぱいの板でシーン RT を不透明な色に塗る（既定のクリアは α=0 で、Debug のビューポートに
-	// ImGui の背景が透ける。ClearRenderTargetView で別の色に塗ると作成時のクリア値と違うという D3D12 の警告で止まる）
-	std::unique_ptr<SpriteInstance> backgroundSprite_;
+	// 器の間（器・足元の水面・背景の板・カメラ）
+	std::unique_ptr<EtherVesselRoom> room_;
+	EtherVessel* vessel_ = nullptr;   // room_ の器（参照のみ）
 
 	std::vector<Option> options_;
 	int selectedIndex_ = 0;
 	bool hasBossCheckpoint_ = false;
 	bool wasTransitioning_ = true;   // 前のフレームにトランジション中だった
+	// デモモード：この周の 1 回目は「もう一度」、超えたら「引き上げる」を自動で選ぶ
+	AttractMenuTimer attractMenu_;
+	bool attractWithdraw_ = false;
 
 	// 流れ
 	Step step_ = Step::Emerge;
@@ -107,8 +109,7 @@ private:
 	float returnFillFrom_ = 0.0f;
 	Option chosen_ = Option::Restart;
 
-	// ----- 調整値（GameOver.json） -----
-	float background_[3] = { 0.01f, 0.012f, 0.02f };
+	// ----- 調整値（GameOver.json。背景・水面・器は EtherVesselRoom） -----
 	// カメラ：トランジション（着水の波紋）の間は液面のすぐ上（近い）に置き、明けたら引いて器を見せる（2026-10-24 ユーザー）。
 	// 位置は器の原点から、回転は度（Rx·Ry の順。Y=180 で -Z を向く）
 	Vector3 cameraNearPos_{ 0.0f, 2.979f, 0.483f };
@@ -129,17 +130,6 @@ private:
 	float particleStopRatio_ = 0.6f; // 減っている途中のこの割合で粒を止める（粒の寿命の分だけ早く）
 	float returnSeconds_ = 1.8f;      // 引き上げる：液面が 0 まで下がる秒
 	float returnTailSeconds_ = 0.5f;  // 下がり切ってからシーンを切り替えるまで
-	// 水面（器の足元）
-	float waterHeight_ = 0.03f;
-	float waterDepth_ = 0.6f;
-	Vector3 waterColor_{ 0.01f, 0.03f, 0.05f };
-	float waterSkyIntensity_ = 0.35f;
-	float waterRingAmplitude_ = 0.004f;   // 待機中のさざ波
-	float waterRingInterval_ = 5.0f;
-	float cursorRingAmplitude_ = 0.012f;  // カーソルを動かしたときの波紋
-	float cursorRingWavelength_ = 0.25f;
-	float cursorRingRadius_ = 6.0f;
-	float arrivalRingAmplitude_ = 0.008f; // 支柱を下りた光が泉に着いたときの波紋
 	// 選択肢の文字（外の世界の画面なので白に金の縁。§4.6）
 	float optionsYRatio_ = 0.86f;
 	float optionsGap_ = 140.0f;       // 選択肢どうしのすき間 [px]
@@ -150,6 +140,11 @@ private:
 	float underlineOffset_ = 6.0f;    // 文字の下から金の線まで [px]
 	float underlineThickness_ = 2.0f;
 	float hitPadding_ = 24.0f;        // マウスの当たりを文字の四角から広げる量 [px]
+	// 針の先の純度の札（賭ける画面と同じ。2026-10-27 ユーザー）。数字は針が今指している値
+	float tagScale_ = 1.4f;
+	float tagOffset_ = 46.0f;         // 針の先から札の中心まで（針の向きへ）[px]
+	float tagFadeSeconds_ = 0.5f;     // トランジションが明けてから札が出るまで
+	float tagAlpha_ = 0.0f;
 	// 選択肢の後ろの暗い帯
 	float bandColor_[3] = { 0.0f, 0.01f, 0.03f };
 	float bandAlpha_ = 0.6f;

@@ -141,6 +141,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEtherBet.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
@@ -175,6 +178,9 @@
       <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVessel.cpp">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselRoom.cpp">
       <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.cpp">
@@ -380,6 +386,9 @@
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEtherBet.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.h">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClInclude>
@@ -414,6 +423,9 @@
       <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVessel.h">
+      <Filter>DirectXGame\Game\Scene\GameOver</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselRoom.h">
       <Filter>DirectXGame\Game\Scene\GameOver</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.h">

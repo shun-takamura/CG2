@@ -11,6 +11,7 @@
 #include "Cockpit/CockpitLighting.h"
 #include "Hub/CockpitConsole.h"
 #include "Hub/HubLiftDescent.h"
+#include "Hub/HubEtherBet.h"
 #include "StageStart/StageStartSkip.h"
 #include "SceneManager.h"
 #include "TransitionManager.h"
@@ -94,6 +95,9 @@ void HubScene::Initialize() {
 	cockpitLighting_->Initialize();
 	console_ = std::make_unique<CockpitConsole>();
 	console_->Initialize();
+	// 器の間（賭ける画面。19 番 §4.7）。器・水面は GameOver.json の値で作る
+	etherBet_ = std::make_unique<HubEtherBet>();
+	etherBet_->Initialize(dxCore_, srvManager_, object3DManager_, spriteManager_);
 
 	LoadTuning();
 
@@ -106,6 +110,8 @@ void HubScene::Initialize() {
 	reveal_.Reset();
 	state_ = State::Waiting;
 	leaving_ = false;
+	betLeaving_ = false;
+	stagePreloadStarted_ = false;
 	if (entry_ == Entry::Temple) {
 		// タイトルから：白フェードが晴れる間に時計の門の扉の前から歩いて入る（18 番 ⑧）
 		entrySequence_.Start(boarding_.GetHomeKey());
@@ -133,6 +139,7 @@ void HubScene::Finalize() {
 	if (auto* blur = Game::GetPostEffect()->radialBlur) blur->SetEnabled(false);
 	if (cockpitLighting_) cockpitLighting_->Finalize(mech_ ? &mech_->GetCockpitModel() : nullptr);
 	if (hatchSign_) hatchSign_->Finalize();
+	if (etherBet_) etherBet_->Finalize();
 }
 
 Vector2 HubScene::GetScreenSize() const {
@@ -165,11 +172,74 @@ void HubScene::StartDescent() {
 	// 外が透けた全天周のモニターに縦穴が映っている扱い。ステージ選択の UI はたたんで消す
 	state_ = State::Descending;
 	liftDescent_->Start();
-	// 降りている間に StagePlay のアセットを裏で読んでおく（16 番 F7）。差し替えは読み終えてから
-	SceneManager::GetInstance()->PreloadScene("STAGEPLAY");
+	// 降りている間に StagePlay のアセットを裏で読んでおく（16 番 F7）。差し替えは読み終えてから。
+	// 器の間に入った所で始めていれば重ねて始めない
+	if (!stagePreloadStarted_) SceneManager::GetInstance()->PreloadScene("STAGEPLAY");
+	stagePreloadStarted_ = false;
 	if (!skip_) skip_ = std::make_unique<StageStartSkip>();
 	skip_->Reset();
 	attractMenu_.Reset();
+}
+
+void HubScene::StartBet() {
+	// コクピット → 器の間：黒フェード。シーンは切り替えず、覆い切った所で中身を差し替える（2026-10-27 ユーザー）
+	if (auto* fade = TransitionManager::GetInstance()->GetTransition<FadeTransition>(TransitionType::Fade)) {
+		fade->SetNextFade({ 0.0f, 0.0f, 0.0f }, betFadeSeconds_, betHoldSeconds_);
+	}
+	const std::string name = SceneManager::GetInstance()->GetCurrentSceneName();
+	TransitionManager::GetInstance()->StartTransition(TransitionType::Fade, name, name, [this]() { EnterBet(); });
+}
+
+void HubScene::EnterBet() {
+	state_ = State::Betting;
+	betLeaving_ = false;
+	attractMenu_.Reset();
+	etherBet_->Begin();
+	// 器の間の光：コクピットの緑の灯りを消し、外の光（平行光源）を素のまま当てる。ラジアルブラーは切る
+	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	cockpitLighting_->Apply(mech_->GetCockpitModel(), 0.0f, 0.0f, renderSize, hatchSign_->GetColor());
+	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
+		lm->SetDirectionalLightDirection(kSunLightDirection);
+		lm->SetDirectionalLightColor(kSunLightColor);
+		lm->SetDirectionalLightIntensity(sunIntensity_);
+	}
+	if (auto* blur = Game::GetPostEffect()->radialBlur) blur->SetEnabled(false);
+	// 決めたらすぐ降りるので、選んでいる間に StagePlay を裏で読み始めておく
+	if (!stagePreloadStarted_) {
+		SceneManager::GetInstance()->PreloadScene("STAGEPLAY");
+		stagePreloadStarted_ = true;
+	}
+}
+
+void HubScene::UpdateBetting(float dt) {
+	const bool inputEnabled = !betLeaving_ && !SceneManager::GetInstance()->IsTransitioning();
+	const HubEtherBet::Result result = etherBet_->Update(dt, input_, inputEnabled, AttractMode::GetInstance()->IsEnabled());
+	if (betLeaving_) return;
+	if (result == HubEtherBet::Result::Confirmed) LeaveBet(true);
+	if (result == HubEtherBet::Result::Canceled) LeaveBet(false);
+}
+
+void HubScene::LeaveBet(bool descend) {
+	betLeaving_ = true;
+	if (auto* fade = TransitionManager::GetInstance()->GetTransition<FadeTransition>(TransitionType::Fade)) {
+		fade->SetNextFade({ 0.0f, 0.0f, 0.0f }, betFadeSeconds_, betHoldSeconds_);
+	}
+	const std::string name = SceneManager::GetInstance()->GetCurrentSceneName();
+	TransitionManager::GetInstance()->StartTransition(TransitionType::Fade, name, name, [this, descend]() { ExitBet(descend); });
+}
+
+void HubScene::ExitBet(bool descend) {
+	// コクピットの中（起動し終えた見え方のまま）へ戻す。灯り・光・ブラーは次の ApplyPose が戻す
+	betLeaving_ = false;
+	state_ = State::Cockpit;
+	attractMenu_.Reset();
+	object3DManager_->SetDefaultCamera(camera_.get());
+	object3DManager_->SetEnvironmentTexture(temple_->GetIblPath());
+	object3DManager_->SetFogParams(Object3DManager::FogParams{});
+	if (descend) {
+		// 決めたらそのままリフトの降下へ（黒が明けるとステージ選択の UI がたたまれていく）
+		StartDescent();
+	}
 }
 
 void HubScene::Update() {
@@ -218,6 +288,14 @@ void HubScene::Update() {
 	case State::Descending:
 		UpdateDescending(dt);
 		break;
+	case State::Betting:
+		UpdateBetting(dt);
+		break;
+	}
+	if (state_ == State::Betting) {
+		// 器の間は自分のカメラで描く（神殿・機体は描かないので更新もしない）
+		UpdateDebugCameraIfActive();
+		return;
 	}
 	// 降下していない間も ImGui のシークを見え方に反映する
 	if (state_ != State::Descending) liftDescent_->Update(0.0f);
@@ -227,6 +305,8 @@ void HubScene::Update() {
 	ApplyPose();
 	camera_->UpdateShake(dt);
 	camera_->Update();
+	// デバッグカメラ ON ならここでカメラが差し替わる（呼ばないと上の視点が毎フレーム勝って動かせない）
+	UpdateDebugCameraIfActive();
 	skybox_->Update(dt);
 	temple_->Update(dt);
 	hatchSign_->Update(dt, mech_->GetPosition());
@@ -330,8 +410,8 @@ void HubScene::UpdateCockpit(float dt) {
 
 	switch (result) {
 	case CockpitConsole::Result::Stage1:
-		// ③ リフトで縦穴を降りてから StagePlay へ（UpdateDescending）
-		StartDescent();
+		// 器の間でエーテルを賭けて純度を決め（19 番 §4.7）、戻ったら ③ リフトで縦穴を降りてから StagePlay へ（UpdateDescending）
+		StartBet();
 		break;
 	case CockpitConsole::Result::BackToHub:
 		reveal_.StartShutdown();   // ②の OUT
@@ -373,9 +453,13 @@ void HubScene::UpdateDescending(float dt) {
 	if (liftDescent_->ConsumeReleaseImpact()) {
 		camera_->Shake(liftDescent_->GetReleaseShakeIntensity(), liftDescent_->GetReleaseShakeSeconds());
 	}
-	if (!leaving_ && skip_ && !AttractMode::GetInstance()->IsEnabled()) {
+	// デモモードは降下を LSHIFT の長押しのスキップで飛ばす（押し続けている扱い。2026-10-27 ユーザー）。skipDescent が false なら降下を見せる
+	const AttractMode* attract = AttractMode::GetInstance();
+	const bool attractSkip = attract->IsEnabled() && attract->skipDescent;
+	if (!leaving_ && skip_ && (!attract->IsEnabled() || attractSkip)) {
 		auto* actions = input_ ? input_->GetActionMap() : nullptr;
-		if (skip_->Update(dt, actions && actions->IsPressed(static_cast<int>(Action::SkipIntro)))) {
+		const bool held = attractSkip || (actions && actions->IsPressed(static_cast<int>(Action::SkipIntro)));
+		if (skip_->Update(dt, held)) {
 			// 雲の上から始めるよう印を付けて、白フェードで StagePlay へ（2026-10-19 ユーザー）
 			StageStartHandoff handoff = liftDescent_->MakeHandoff();
 			handoff.skipToCloudTop = true;
@@ -420,6 +504,11 @@ void HubScene::UpdateDescending(float dt) {
 
 void HubScene::Draw() {
 	auto* commandList = dxCore_->GetCommandList();
+
+	if (state_ == State::Betting) {
+		etherBet_->Draw();
+		return;
+	}
 
 	// 表示板の中身を RenderTexture へ（RTV とビューポートを切り替えるので、シーンの RT を描き始める前に）
 	if (hatchSign_) hatchSign_->RenderSignTexture(commandList);
@@ -472,7 +561,7 @@ void HubScene::Draw() {
 		console_->Draw(screen, st.backgroundAlpha, st.menuTime, (std::max)(st.collapse, liftDescent_->GetUiCollapse()),
 			cockpitTime_, IsGlowAllowed());
 	}
-	// スキップの案内（左上）。デモモードでも「スキップできる」ことを見せるため出す（長押しの判定はデモ中は止めたまま）
+	// スキップの案内（左上）。デモモードでも出す（skipDescent ならゲージが溜まって飛ぶ所も見せる）
 	if (state_ == State::Descending && skip_ && !leaving_) skip_->Draw(screen.x);
 	tr->Flush();
 }
@@ -482,6 +571,10 @@ bool HubScene::HasBloomSources() const {
 }
 
 void HubScene::DrawBloomSources() {
+	if (state_ == State::Betting) {
+		etherBet_->DrawBloom();
+		return;
+	}
 	if (mech_ && cockpitLighting_) {
 		mech_->DrawBloom(dxCore_, cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
 	}
@@ -490,6 +583,7 @@ void HubScene::DrawBloomSources() {
 }
 
 Camera* HubScene::GetCamera() {
+	if (state_ == State::Betting && etherBet_) return etherBet_->GetCamera();
 	return camera_.get();
 }
 
@@ -571,6 +665,9 @@ void HubScene::LoadTuning() {
 	whiteHoldSeconds_ = static_cast<float>(root["whiteHoldSeconds"].AsDouble(whiteHoldSeconds_));
 	fovYDegrees_ = static_cast<float>(root["fovYDegrees"].AsDouble(fovYDegrees_));
 	sunIntensity_ = static_cast<float>(root["sunIntensity"].AsDouble(sunIntensity_));
+	betFadeSeconds_ = static_cast<float>(root["betFadeSeconds"].AsDouble(betFadeSeconds_));
+	betHoldSeconds_ = static_cast<float>(root["betHoldSeconds"].AsDouble(betHoldSeconds_));
+	if (etherBet_) etherBet_->LoadTuning(root["etherBet"]);
 	if (mech_) mech_->LoadTuning(root["mech"]);
 	if (temple_) temple_->LoadTuning(root["temple"]);
 	if (liftDescent_) liftDescent_->LoadTuning(root["liftDescent"]);
@@ -589,6 +686,9 @@ void HubScene::SaveTuning() const {
 	root["whiteHoldSeconds"] = JsonValue(static_cast<double>(whiteHoldSeconds_));
 	root["fovYDegrees"] = JsonValue(static_cast<double>(fovYDegrees_));
 	root["sunIntensity"] = JsonValue(static_cast<double>(sunIntensity_));
+	root["betFadeSeconds"] = JsonValue(static_cast<double>(betFadeSeconds_));
+	root["betHoldSeconds"] = JsonValue(static_cast<double>(betHoldSeconds_));
+	if (etherBet_) etherBet_->SaveTuning(root["etherBet"]);
 	if (mech_) mech_->SaveTuning(root["mech"]);
 	if (temple_) temple_->SaveTuning(root["temple"]);
 	if (liftDescent_) liftDescent_->SaveTuning(root["liftDescent"]);
@@ -609,7 +709,7 @@ void HubScene::OnImGuiTuning() {
 	if (ImGui::Button("Reload Tuning")) LoadTuning();
 	ImGui::SameLine();
 	ImGui::TextDisabled("%s", kTuningPath);
-	static const char* kStateNames[] = { "Entering", "Waiting", "Boarding", "Cockpit", "Disembarking", "Descending" };
+	static const char* kStateNames[] = { "Entering", "Waiting", "Boarding", "Cockpit", "Disembarking", "Descending", "Betting" };
 	static const char* kEntryNames[] = { "Temple", "Cockpit", "Disembark" };
 	ImGui::Text("State: %s  (entry: %s)", kStateNames[static_cast<int>(state_)],
 		kEntryNames[static_cast<int>(entry_)]);
@@ -698,6 +798,15 @@ void HubScene::OnImGuiTuning() {
 		ImGui::SameLine();
 		ImGui::Checkbox("Change Scene at End", &descentChangesScene_);
 		liftDescent_->OnImGui();
+	}
+	if (etherBet_ && ImGui::CollapsingHeader("Ether Bet (19 4.7)")) {
+		// 器の間へ（コクピットの中から。本番と同じ黒フェード）
+		if (ImGui::Button("Enter##EtherBet") && state_ == State::Cockpit && !SceneManager::GetInstance()->IsTransitioning()) StartBet();
+		ImGui::SameLine();
+		ImGui::TextDisabled("(Cockpit state only)");
+		ImGui::DragFloat("Bet Fade (s)", &betFadeSeconds_, 0.05f, 0.05f, 5.0f);
+		ImGui::DragFloat("Bet Hold (s)", &betHoldSeconds_, 0.05f, 0.0f, 5.0f);
+		etherBet_->OnImGui();
 	}
 	if (cockpitLighting_ && ImGui::CollapsingHeader("Cockpit Lighting / Hex")) {
 		cockpitLighting_->OnImGui();

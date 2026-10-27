@@ -83,6 +83,7 @@ void EtherVessel::LoadGeometry(Object3DManager* object3DManager) {
 	const auto result = JsonParser::ParseFile(kGeometryPath);
 	if (!result.success) return;
 	iDegrees_ = static_cast<float>(result.value["dial"]["iDegrees"].AsDouble(iDegrees_));
+	pointerTipDistance_ = static_cast<float>(result.value["swing"]["pointerTipDistance"].AsDouble(pointerTipDistance_));
 	const JsonValue& parts = result.value["parts"];
 	for (const char* name : kPartNames) {
 		const JsonValue& part = parts[name];
@@ -110,6 +111,20 @@ void EtherVessel::SetOrigin(const Vector3& origin) {
 
 Vector3 EtherVessel::GetSphereCenter() const {
 	return glass_ ? glass_->GetSphereCenter() : origin_;
+}
+
+Vector3 EtherVessel::GetPointerTipWorld() const {
+	// 傾きは + で I の側（+X）へ倒れる（Swing の Z 回転とは符号が逆。EtherVesselGlass::GetRotationZ）
+	const Vector3 c = GetSphereCenter();
+	const float tilt = glass_ ? glass_->GetTilt() : 0.0f;
+	return { c.x + std::sin(tilt) * pointerTipDistance_, c.y + std::cos(tilt) * pointerTipDistance_, c.z };
+}
+
+float EtherVessel::GetNeedle01() const {
+	// SetDifficulty01 の逆：傾き = iDegrees·(1 − 2u)
+	if (!glass_ || iDegrees_ <= 1e-4f) return difficulty01_;
+	const float deg = glass_->GetTilt() / kDegToRad;
+	return 0.5f * (1.0f - deg / iDegrees_);
 }
 
 void EtherVessel::SetFill(float fill, bool immediate) {

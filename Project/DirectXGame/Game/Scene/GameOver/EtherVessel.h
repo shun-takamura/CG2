@@ -54,6 +54,10 @@ public:
 
 	EtherPillarFlow* GetPillarFlow() const { return pillarFlow_.get(); }
 	Vector3 GetSphereCenter() const;
+	/// <summary>今の針の先（ワールド）。賭ける画面の数値の札を針に付けるのに使う</summary>
+	Vector3 GetPointerTipWorld() const;
+	/// <summary>針が今指している所（I が 0、IX が 1。動いている途中・行き過ぎも含む。0..1 の外へ出ることがある）</summary>
+	float GetNeedle01() const;
 	const Vector3& GetEtherColor() const { return etherColor_; }
 
 	void Update(float deltaTime);
@@ -88,6 +92,7 @@ private:
 	Object3DInstance* swing_ = nullptr;
 	Vector3 origin_{};
 	float iDegrees_ = 45.0f;   // 文字盤の I（と IX）の真上からの角度。EtherVesselGeometry.json の dial.iDegrees
+	float pointerTipDistance_ = 0.5643f;   // 球の中心から針の先まで。swing.pointerTipDistance
 
 	// 針（傾き）と光
 	float difficulty01_ = 0.5f;

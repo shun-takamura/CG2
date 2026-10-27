@@ -16,7 +16,10 @@ AttractMode::AttractMode() {
 
 void AttractMode::SetEnabled(bool enabled) {
 	// 始めるたびに、最初の周は一人称から
-	if (enabled && !enabled_) thirdPersonLap = false;
+	if (enabled && !enabled_) {
+		thirdPersonLap = false;
+		lapDeaths = 0;
+	}
 	enabled_ = enabled;
 }
 

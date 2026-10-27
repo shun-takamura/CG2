@@ -38,5 +38,6 @@ UIPointer UIPointer::FromInput(InputManager* input) {
 
 	pointer.valid = true;
 	pointer.clicked = mouse->IsButtonTriggered(MouseInput::Button::Left);
+	pointer.pressed = mouse->IsButtonPressed(MouseInput::Button::Left);
 	return pointer;
 }

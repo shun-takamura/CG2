@@ -13,6 +13,14 @@
     {
       "path": "Resources/Shaders/Water/WaterSurface.PS.hlsl",
       "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Glass/LiquidGlassSphere.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Glass/LiquidGlassSphere.PS.hlsl",
+      "profile": "ps_6_0"
     }
   ],
   "textures": [
@@ -111,6 +119,162 @@
     {
       "path": "Resources/Models/HubTemple/HubFloor_BaseColor.dds",
       "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Marble_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Marble_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/HubTemple/MarbleDark_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/MarbleDark_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/HubTemple/Gold_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/HubTemple/Glass_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Cloth_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Step_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Flowers_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Light_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/Rune_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/HubTemple/ClockFace_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Marble_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Marble_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Gold_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Metal_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Metal_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/MetalDark_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/MetalDark_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Gold_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Hazard_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Neon_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Marble_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Catapult/Marble_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Catapult/Light_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "HatchSign_RenderTexture",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Terrain/Flagstone_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/MaskTexture/Terrain/Flagstone_Height.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Table_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Table_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pillar_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pillar_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_RingStand_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_RingStand_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Dial_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Dial_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pointer_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pointer_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -193,6 +357,26 @@
     {
       "dir": "Resources/Models/TitleLogo",
       "file": "logo_plane.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Table.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Pillar.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_RingStand.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Dial.mesh"
+    },
+    {
+      "dir": "Resources/Models/EtherVessel/Export",
+      "file": "EtherVessel_Swing.mesh"
     }
   ],
   "animatedModels": [

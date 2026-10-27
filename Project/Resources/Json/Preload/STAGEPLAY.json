@@ -263,6 +263,14 @@
     {
       "path": "Resources/Models/Enemy/enemy.dds",
       "linear": false
+    },
+    {
+      "path": "HatchSign_RenderTexture",
+      "linear": false
+    },
+    {
+      "path": "LaunchControlBoard_RenderTexture",
+      "linear": false
     }
   ],
   "models": [

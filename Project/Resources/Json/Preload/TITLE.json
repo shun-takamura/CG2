@@ -51,6 +51,22 @@
     {
       "path": "Resources/Textures/Cloud/cloud_moko_height.dds",
       "linear": false
+    },
+    {
+      "path": "HatchSign_RenderTexture",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Marble_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Marble_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/TitleDoor/Gold_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
