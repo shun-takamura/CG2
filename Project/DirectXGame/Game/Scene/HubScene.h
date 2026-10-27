@@ -19,6 +19,7 @@ class HatchSign;
 class CockpitLighting;
 class CockpitConsole;
 class HubLiftDescent;
+class HubEtherBet;
 
 /// <summary>
 /// ハブシーン（神殿。17_HubScene.md）。**ステージ選択（コクピット）もこのシーンの中**（2026-10-13 統合。18 番 ①「C で決まったこと」）。
@@ -29,7 +30,8 @@ class HubLiftDescent;
 ///   → コクピット（CockpitReveal の時間軸で、表示板 HatchSign が LOCKED → 六角形で外が透ける CockpitLighting
 ///      → ラジアルブラー → 文字のステージ選択 CockpitConsole。①の IN）
 ///   → 「HUB に戻る」でシャットダウン（②の OUT）→ 降りる（HubDisembarkSequence。②の IN）→ 待機
-///   → 「ステージ1」で機体ごと八角形のリフトで縦穴を降りる（HubLiftDescent。③の OUT、16_StageStart.md F2）→ StagePlay へ差し替え
+///   → 「ステージ1」で黒フェードして器の間（HubEtherBet。エーテルを賭けて純度を決める。19 番 §4.7）→ 黒フェードでコクピットへ戻る
+///   → 決めたら機体ごと八角形のリフトで縦穴を降りる（HubLiftDescent。③の OUT、16_StageStart.md F2）→ StagePlay へ差し替え
 /// 入口：TITLE から＝待機／シーン名 STAGESELECT（ポーズの「ステージセレクトに戻る」⑩）＝コクピットの起動から／
 ///   別のシーンから HUB へ（⑦。今はステージからデバッグの F3）＝真っ暗なコクピットに灯りが点いて（CockpitReveal の帰着）から降りる。
 /// キャンセルで白フェードしてタイトルへ（18 番 ⑧）。ゲーム終了はタイトルの責務に一本化している。
@@ -70,6 +72,7 @@ private:
 		Cockpit,     // コクピット（起動・ステージ選択・シャットダウン）
 		Disembarking,  // 降りる（機体に背を向けて乗るときと同じ道を戻り、振り返って待機の視点へ）
 		Descending,  // ③ ステージを決めて、機体ごとリフトで縦穴を降りる（コクピットの中の視点のまま）
+		Betting,     // 器の間でエーテルを賭けて純度を決める（19 番 §4.7。黒フェードで行き来する。シーンは切り替えない）
 	};
 
 	// タイトルへ戻る（白フェード）
@@ -89,6 +92,12 @@ private:
 	void UpdateDescending(float dt);
 	// ③：ステージを決めてリフトの降下を始める
 	void StartDescent();
+	// 器の間（19 番 §4.7）：黒フェードで行き来する。シーンは切り替えず、フェードが覆い切った所で中身を差し替える
+	void StartBet();
+	void EnterBet();
+	void UpdateBetting(float dt);
+	void LeaveBet(bool descend);
+	void ExitBet(bool descend);
 
 	// 今の見え方をカメラ・ハッチ・光・コクピットへ反映する
 	void ApplyPose();
@@ -131,10 +140,16 @@ private:
 	bool leaving_ = false;
 	// リフトの降下中の LSHIFT 長押しで雲の上へスキップ（16 番 F5）
 	std::unique_ptr<StageStartSkip> skip_;
+	// 器の間（賭ける画面）
+	std::unique_ptr<HubEtherBet> etherBet_;
+	bool betLeaving_ = false;          // 器の間から戻る黒フェードの途中
+	bool stagePreloadStarted_ = false; // StagePlay の先読みを器の間に入った所で始めた
 
 	// 調整値（Hub.json）
 	float whiteFadeSeconds_ = 0.8f;   // タイトルへ戻る白フェードの、白くなるまで
 	float whiteHoldSeconds_ = 0.3f;   // 同・白のまま待つ秒数
 	float fovYDegrees_ = 60.0f;       // 一人称の縦の画角
 	float sunIntensity_ = 1.0f;       // 外の光（乗り込みでハッチが閉じるにつれて弱め、外が透けると戻す）
+	float betFadeSeconds_ = 0.5f;     // 器の間へ行き来する黒フェードの、黒くなるまで
+	float betHoldSeconds_ = 0.2f;     // 同・黒のまま待つ秒数
 };

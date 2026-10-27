@@ -1,46 +1,62 @@
 {
   "_comment": "19_GameOverAndDifficulty.md §4 G5。球の位置と半径は EtherVesselGeometry.json（G4）",
-  "glowAtMin": 0.15,
-  "glowAtMax": 0.45,
-  "splashRadius": 0.03,
+  "glowAtMin": 0.15000000596046448,
+  "glowAtMax": 0.44999998807907104,
+  "splashRadius": 0.029999999329447746,
   "glass": {
-    "tint": [1.0, 1.0, 1.0],
-    "fresnelF0": 0.04,
-    "rimColor": [0.35, 0.5, 0.6],
-    "rimPower": 3.0,
-    "reflectionIntensity": 1.0,
+    "tint": [
+      1,
+      1,
+      1
+    ],
+    "fresnelF0": 0.039999999105930328,
+    "rimColor": [
+      0.34999999403953552,
+      0.5,
+      0.60000002384185791
+    ],
+    "rimPower": 3,
+    "reflectionIntensity": 1,
     "specularIntensity": 1.5,
-    "specularPower": 128.0,
-    "glassAlpha": 0.3,
+    "specularPower": 128,
+    "glassAlpha": 0.30000001192092896,
     "backRimIntensity": 0.5,
-    "lensIor": 1.0,
-    "rimBloom": 1.3
+    "lensIor": 1,
+    "rimBloom": 1.2999999523162842
   },
   "liquid": {
-    "color": [0.0, 0.641, 1.0],
-    "density": 4.0,
-    "absorption": 4.0,
+    "color": [
+      0,
+      0.64099997282028198,
+      1
+    ],
+    "density": 4,
+    "absorption": 4,
     "coreWhite": 0.5,
-    "corePower": 2.0,
-    "surfaceColor": [0.749, 0.937, 1.0],
-    "surfaceIntensity": 0.6,
-    "meniscusWidth": 0.008,
+    "corePower": 2,
+    "surfaceColor": [
+      0.74900001287460327,
+      0.93699997663497925,
+      1
+    ],
+    "surfaceIntensity": 0.60000002384185791,
+    "meniscusWidth": 0.0080000003799796104,
     "meniscusIntensity": 1.5,
-    "bloomScale": 0.8,
-    "rippleNormalScale": 1.0
+    "bloomScale": 0.80000001192092896,
+    "rippleNormalScale": 1
   },
   "motion": {
-    "fillFollow": 3.0,
-    "sloshStiffness": 30.0,
-    "sloshDamping": 3.0,
+    "fillFollow": 3,
+    "sloshStiffness": 30,
+    "sloshDamping": 3,
     "sloshDrive": 0.25,
     "sloshMaxTilt": 0.5,
-    "rippleCoverage": 0.3,
-    "sloshRippleStrength": 0.004,
-    "sloshRippleRadius": 0.03,
-    "ambientRippleInterval": 0.6,
-    "ambientRippleStrength": 0.0015,
-    "ambientRippleRadius": 0.02,
-    "ambientRippleSpread": 0.0
+    "rippleCoverage": 0.30000001192092896,
+    "sloshRippleStrength": 0.0040000001899898052,
+    "sloshRippleRadius": 0.029999999329447746,
+    "ambientRippleInterval": 0.60000002384185791,
+    "ambientRippleStrength": 0.001500000013038516,
+    "ambientRippleRadius": 0.019999999552965164,
+    "ambientRippleSpread": 0
   }
 }

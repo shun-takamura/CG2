@@ -107,9 +107,15 @@ void EtherPillarFlow::BeginDescend() {
 	descendTimer_ = 0.0f;
 }
 
+void EtherPillarFlow::BeginAscend() {
+	ascending_ = true;
+	ascendTimer_ = 0.0f;
+}
+
 void EtherPillarFlow::Update(float deltaTime) {
 	time_ += deltaTime;
 	arrivals_ = 0;
+	topArrivals_ = 0;
 	const int lines = std::clamp(lineCount_, 1, kMaxLines);
 
 	// 下から弱い光が昇る（泉の気配）
@@ -128,6 +134,15 @@ void EtherPillarFlow::Update(float deltaTime) {
 				descendSpeed_ * Rand(0.85f, 1.15f), descendIntensity_ * Rand(0.7f, 1.0f), pulseLength_ * Rand(0.8f, 1.6f) });
 		}
 	}
+	// 下から明るい光が次々に昇る（賭ける。速さ・間隔・明るさは下りると同じ値）
+	if (ascending_) {
+		ascendTimer_ -= deltaTime;
+		while (ascendTimer_ <= 0.0f) {
+			ascendTimer_ += (std::max)(descendInterval_, 0.005f) * Rand(0.5f, 1.5f);
+			pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - 0.001f)), totalLength_,
+				-descendSpeed_ * Rand(0.85f, 1.15f), descendIntensity_ * Rand(0.7f, 1.0f), pulseLength_ * Rand(0.8f, 1.6f) });
+		}
+	}
 	for (Pulse& p : pulses_) p.position += p.speed * deltaTime;
 	const float limit = totalLength_;
 	pulses_.erase(std::remove_if(pulses_.begin(), pulses_.end(), [this, limit](const Pulse& p) {
@@ -135,7 +150,12 @@ void EtherPillarFlow::Update(float deltaTime) {
 			++arrivals_;
 			return true;
 		}
-		return p.speed < 0.0f && p.position + p.length < 0.0f;
+		if (p.speed < 0.0f && p.position + p.length < 0.0f) {
+			// 泉の気配の弱い光は数えない
+			if (p.intensity > idlePulseIntensity_ * 1.01f) ++topArrivals_;
+			return true;
+		}
+		return false;
 	}), pulses_.end());
 }
 

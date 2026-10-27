@@ -14,6 +14,7 @@ struct UIPointer {
 	Vector2 position{};       // ゲーム画面のピクセル座標（TextRenderer / Sprite の描画座標と同じ）
 	bool moved = false;       // このフレームで動いた
 	bool clicked = false;     // ゲーム画面の上で左ボタンを押した（Debug の ImGui パネル上のクリックは数えない）
+	bool pressed = false;     // ゲーム画面の上で左ボタンを押している（長押し。賭ける画面の ◀ ▶ など）
 
 	static UIPointer FromInput(InputManager* input);
 };

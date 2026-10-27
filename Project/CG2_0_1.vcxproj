@@ -155,6 +155,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubMechModel.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubTemple.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEtherBet.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.cpp" />
@@ -168,6 +169,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVessel.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselRoom.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\MechThrusters.cpp" />
@@ -238,6 +240,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubMechModel.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubTemple.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubLiftDescent.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEtherBet.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Cockpit\CockpitModel.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultFacility.h" />
@@ -251,6 +254,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVessel.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselRoom.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherPillarFlow.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CatapultLightning.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\MechThrusters.h" />

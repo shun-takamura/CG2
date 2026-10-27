@@ -11,16 +11,12 @@
 #include "DirectXCore.h"
 #include "TextRenderer.h"
 #include "UIPointer.h"
+#include "SoundManager.h"
 #include "Score/BossRetryState.h"
 #include "GameOver/EtherVessel.h"
 #include "GameOver/EtherPillarFlow.h"
-#include "Water/WaterSurface.h"
-#include "LightManager.h"
+#include "GameOver/EtherVesselRoom.h"
 #include "PostEffect.h"
-#include "TextureManager.h"
-#include "AssetLocator.h"
-#include "SpriteManager.h"
-#include "SpriteInstance.h"
 #include "MathUtility.h"   // kPi
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
@@ -37,21 +33,9 @@
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/GameOver.json";
-	// 器の映り込み。神殿の IBL（無ければタイトルの空）
-	constexpr const char* kIblPath = "Resources/Cubemaps/hub_temple_ibl.dds";
-	constexpr const char* kFallbackIblPath = "Resources/Cubemaps/title_clear_sky_ibl.dds";
-	// 水底はタイトル・ボス戦と同じ石畳（tools/Python/gen_flagstone_material.py）。暗い水の底にうっすら
-	constexpr const char* kFloorTexturePath = "Resources/Textures/Terrain/Flagstone_BaseColor.dds";
-	constexpr const char* kFloorNormalMapPath = "Resources/Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.dds";
-	constexpr const char* kFloorHeightMapPath = "Resources/Textures/MaskTexture/Terrain/Flagstone_Height.dds";
-	constexpr float kFloorTileMeters = 3.0f;
-	constexpr float kFloorParallaxDepth = (0.0068f + 0.013f) / kFloorTileMeters;
-	constexpr float kWaterSize = 400.0f;   // カメラ追従
-	constexpr float kDegToRad = kPi / 180.0f;
 	// TextRenderer のフォントの高さ（Framework::Initialize の MPLUS1p 32px）
 	constexpr float kFontPixelHeight = 32.0f;
-	// 器の原点（土台の脚の下）。水面の真ん中に立つ
-	const Vector3 kVesselOrigin{ 0.0f, 0.0f, 0.0f };
+	constexpr float kDegToRad = kPi / 180.0f;
 
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
@@ -95,28 +79,11 @@ GameOverScene::~GameOverScene() = default;
 void GameOverScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
 
-	camera_ = std::make_unique<Camera>();
-	camera_->SetTranslate({ 0.0f, 0.0f, -10.0f });
-	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
-	object3DManager_->SetDefaultCamera(camera_.get());
-
-	iblPath_ = AssetLocator::GetInstance()->Exists(kIblPath) ? kIblPath : kFallbackIblPath;
-	TextureManager::GetInstance()->LoadTexture(iblPath_);
-	object3DManager_->SetEnvironmentTexture(iblPath_);
-	// ステージの距離フォグはシーンをまたいで残るので切る
-	object3DManager_->DisableFog();
-
-	backgroundSprite_ = std::make_unique<SpriteInstance>();
-	backgroundSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "GameOverBackground");
-	backgroundSprite_->SetPosition({ 0.0f, 0.0f });
-	backgroundSprite_->SetSize({ static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()) });
-
-	vessel_ = std::make_unique<EtherVessel>();
-	vessel_->Initialize(dxCore_, srvManager_, object3DManager_);
-	vessel_->SetOrigin(kVesselOrigin);
-	InitializeWater();
+	room_ = std::make_unique<EtherVesselRoom>();
+	room_->Initialize(dxCore_, srvManager_, object3DManager_, spriteManager_);
+	room_->Activate();
+	vessel_ = room_->GetVessel();
 	LoadTuning();
-	ApplyWaterTuning();   // JSON が無くても既定値を水面へ
 
 	hasBossCheckpoint_ = BossRetryState::GetInstance()->HasCheckpoint();
 	options_.clear();
@@ -124,6 +91,14 @@ void GameOverScene::Initialize() {
 	options_.push_back(Option::Restart);
 	options_.push_back(Option::Withdraw);
 	selectedIndex_ = 0;
+
+	// デモモード：この周で何回目の死亡か（retriesPerLap を超えたら「引き上げる」）
+	attractMenu_.Reset();
+	attractWithdraw_ = false;
+	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
+		++attract->lapDeaths;
+		attractWithdraw_ = attract->lapDeaths > attract->retriesPerLap;
+	}
 
 	// 死んだ分は入口で黙って減らす（§3：どれだけ減ったかは画面に出さない）
 	EtherState* ether = EtherState::GetInstance();
@@ -136,17 +111,7 @@ void GameOverScene::Initialize() {
 }
 
 void GameOverScene::Finalize() {
-	if (vessel_) vessel_->Finalize();
-}
-
-void GameOverScene::InitializeWater() {
-	water_ = std::make_unique<WaterSurface>();
-	water_->Initialize(dxCore_, srvManager_, object3DManager_, kFloorTexturePath);
-	water_->SetSize(kWaterSize);
-	water_->SetFollowCamera(true);
-	water_->GetParams().floorTiling = 1.0f / kFloorTileMeters;
-	water_->SetFloorMaps(kFloorNormalMapPath, kFloorHeightMapPath, kFloorParallaxDepth);
-	water_->SetRippleCenter(kVesselOrigin);
+	if (room_) room_->Finalize();
 }
 
 void GameOverScene::StartFlow() {
@@ -247,12 +212,6 @@ void GameOverScene::UpdateFlow(float deltaTime) {
 		break;
 	}
 
-	// 支柱を下りた光が泉に着いたら、足元の水面に波紋
-	if (EtherPillarFlow* flow = vessel_->GetPillarFlow()) {
-		for (int n = 0; n < flow->GetArrivals(); ++n) {
-			water_->EmitRing(kVesselOrigin, arrivalRingAmplitude_, cursorRingWavelength_, 2.5f, cursorRingRadius_);
-		}
-	}
 }
 
 void GameOverScene::UpdateCamera(float deltaTime) {
@@ -266,15 +225,11 @@ void GameOverScene::UpdateCamera(float deltaTime) {
 	auto lerp = [t](const Vector3& a, const Vector3& b) {
 		return Vector3{ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
 	};
-	const Vector3 pos = lerp(cameraNearPos_, cameraFarPos_);
-	const Vector3 rotDeg = lerp(cameraNearRotDeg_, cameraFarRotDeg_);
-	camera_->SetTranslate({ kVesselOrigin.x + pos.x, kVesselOrigin.y + pos.y, kVesselOrigin.z + pos.z });
-	camera_->SetRotate({ rotDeg.x * kDegToRad, rotDeg.y * kDegToRad, rotDeg.z * kDegToRad });
-	camera_->Update();
+	room_->SetCameraPose(lerp(cameraNearPos_, cameraFarPos_), lerp(cameraNearRotDeg_, cameraFarRotDeg_));
 }
 
 void GameOverScene::EmitCursorRing() {
-	water_->EmitRing(kVesselOrigin, cursorRingAmplitude_, cursorRingWavelength_, 2.5f, cursorRingRadius_);
+	room_->EmitCursorRing();
 }
 
 void GameOverScene::Confirm(Option option) {
@@ -311,6 +266,7 @@ void GameOverScene::UpdateChoose() {
 		return;
 	}
 	if (step_ != Step::Choose) return;
+	if (UpdateAttract()) return;
 
 	// カーソルを乗せたら選ぶ（動かしたフレームだけ。置きっぱなしのマウスがキー・パッドの操作を奪わないように）。
 	// 左クリックは乗せている選択肢で決定、選択肢の外は何もしない
@@ -352,16 +308,48 @@ void GameOverScene::Update() {
 	// デバッグカメラ ON ならここでカメラが差し替わる（呼ばないと上の設定が毎フレーム勝って動かせない）
 	UpdateDebugCameraIfActive();
 
-	water_->GetParams().waterColor = { waterColor_.x, waterColor_.y, waterColor_.z, 1.0f };
-	water_->Update(dt);
-	vessel_->Update(dt);
-	UpdateGlobalEffects(camera_.get(), dt);
-	backgroundSprite_->SetColor({ background_[0], background_[1], background_[2], 1.0f });
-	backgroundSprite_->Update();
+	room_->Update(dt);
+	UpdateGlobalEffects(room_->GetCamera(), dt);
+	// 純度の札はトランジション（着水）が明けたらふわっと出す
+	if (!SceneManager::GetInstance()->IsTransitioning()) {
+		tagAlpha_ = tagFadeSeconds_ > 1e-3f ? (std::min)(tagAlpha_ + dt / tagFadeSeconds_, 1.0f) : 1.0f;
+	}
 
 #ifdef _DEBUG
 	OnImGui();
 #endif
+}
+
+bool GameOverScene::UpdateAttract() {
+	AttractMode* attract = AttractMode::GetInstance();
+	if (!attract->IsEnabled() || optionsAlpha_ < 1.0f) return false;
+	const Option want = attractWithdraw_ ? Option::Withdraw : Option::Restart;
+	int target = 0;
+	for (size_t i = 0; i < options_.size(); ++i) {
+		if (options_[i] == want) target = static_cast<int>(i);
+	}
+	switch (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->menuWait, attract->menuConfirmDelay)) {
+	case AttractMenuTimer::Step::MoveCursor:
+		if (selectedIndex_ != target) {
+			selectedIndex_ = target;
+			SoundManager::GetInstance()->Play2DSound("se_ui_cursor");
+			EmitCursorRing();
+		}
+		return true;
+	case AttractMenuTimer::Step::Confirm:
+		selectedIndex_ = target;
+		SoundManager::GetInstance()->Play2DSound("se_ui_decide");
+		attractMenu_.Reset();
+		if (want == Option::Withdraw) {
+			// 一周の終わり：数え直し、次の周は視点を入れ替える（一人称 ↔ 三人称）
+			attract->lapDeaths = 0;
+			attract->thirdPersonLap = !attract->thirdPersonLap;
+		}
+		Confirm(want);
+		return true;
+	default:
+		return false;   // 待っている間は人の入力も読む
+	}
 }
 
 const char* GameOverScene::OptionLabel(Option option) const {
@@ -464,46 +452,39 @@ int GameOverScene::HitOption(const Vector2& position) const {
 }
 
 void GameOverScene::Draw() {
-	auto* commandList = dxCore_->GetCommandList();
-	vessel_->DispatchSimulation();
-	water_->DispatchSimulation();
-
-	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(dxCore_->GetRenderWidth()),
-		static_cast<float>(dxCore_->GetRenderHeight()), 0.0f, 1.0f };
-	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(dxCore_->GetRenderWidth()), static_cast<LONG>(dxCore_->GetRenderHeight()) };
-	commandList->RSSetViewports(1, &viewport);
-	commandList->RSSetScissorRects(1, &scissor);
-	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-	auto dsvHandle = dxCore_->GetDsvHandle();
-	commandList->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
-	// 背景の板（スプライトは深度を書くので、塗った後に深度を作成時と同じ 1.0 で消す）
-	spriteManager_->DrawSetting();
-	backgroundSprite_->Draw();
-	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-	object3DManager_->DrawSetting();
-	LightManager::GetInstance()->BindLights(commandList);
-	vessel_->DrawOpaque(dxCore_);
-	// 足元の暗い水面（不透明物の後。ルートシグネチャを替える）
-	water_->Draw(*camera_, iblPath_, nullptr);
-	// ガラスの球・支柱の光・糸は深度を見るだけ。粒はその後
-	vessel_->DrawTransparent(camera_.get(), iblPath_);
+	room_->Draw();
+	// 粒はガラスの後（ガラスの α で粒が薄まらないように）
 	DrawGlobalEffects();
 
+	DrawPurityTag();
 	DrawOptions();
 }
 
+void GameOverScene::DrawPurityTag() {
+	if (tagAlpha_ <= 0.0f) return;
+	// 針の傾き → 純度（I が +iDegrees、IX が −iDegrees。EtherVessel::SetDifficulty01 の逆）。0.1 単位に丸める
+	EtherState* ether = EtherState::GetInstance();
+	const float u = vessel_->GetNeedle01();
+	const float minD = ether->GetDifficultyMin();
+	const float maxD = ether->GetDifficultyMax();
+	const float lo = (std::min)(death_.difficultyBefore, death_.difficultyAfter);
+	const float hi = (std::max)(death_.difficultyBefore, death_.difficultyAfter);
+	const float purity = std::clamp(minD + (maxD - minD) * u, lo, hi);
+	room_->DrawPurityTag(std::round(purity * 10.0f) / 10.0f, SmoothStep01(tagAlpha_), tagScale_, tagOffset_, outlineGold_);
+	TextRenderer::GetInstance()->Flush();
+}
+
 Camera* GameOverScene::GetCamera() {
-	return camera_.get();
+	return room_ ? room_->GetCamera() : nullptr;
 }
 
 bool GameOverScene::HasBloomSources() const {
 	// トランジション（着水の羽根・波紋、羽根の飛翔）の上に発光が足されて隠してしまうので、その間は光らせない（HubScene と同じ）
-	return vessel_ != nullptr && !SceneManager::GetInstance()->IsTransitioning();
+	return room_ != nullptr && !SceneManager::GetInstance()->IsTransitioning();
 }
 
 void GameOverScene::DrawBloomSources() {
-	if (vessel_) vessel_->DrawBloom(camera_.get(), iblPath_);
+	if (room_) room_->DrawBloom();
 }
 
 bool GameOverScene::LoadTuning() {
@@ -511,7 +492,6 @@ bool GameOverScene::LoadTuning() {
 	const auto result = JsonParser::ParseFile(kTuningPath);
 	if (!result.success) return false;
 	const JsonValue& root = result.value;
-	ReadColor3(root["background"], background_);
 
 	const JsonValue& cam = root["camera"];
 	ReadVector3(cam["nearPos"], cameraNearPos_);
@@ -533,18 +513,6 @@ bool GameOverScene::LoadTuning() {
 	ReadFloat(flow, "returnSeconds", returnSeconds_);
 	ReadFloat(flow, "returnTailSeconds", returnTailSeconds_);
 
-	const JsonValue& water = root["water"];
-	ReadFloat(water, "height", waterHeight_);
-	ReadFloat(water, "depth", waterDepth_);
-	ReadVector3(water["color"], waterColor_);
-	ReadFloat(water, "skyIntensity", waterSkyIntensity_);
-	ReadFloat(water, "ringAmplitude", waterRingAmplitude_);
-	ReadFloat(water, "ringInterval", waterRingInterval_);
-	ReadFloat(water, "cursorRingAmplitude", cursorRingAmplitude_);
-	ReadFloat(water, "cursorRingWavelength", cursorRingWavelength_);
-	ReadFloat(water, "cursorRingRadius", cursorRingRadius_);
-	ReadFloat(water, "arrivalRingAmplitude", arrivalRingAmplitude_);
-
 	const JsonValue& text = root["text"];
 	ReadFloat(text, "yRatio", optionsYRatio_);
 	ReadFloat(text, "gap", optionsGap_);
@@ -555,30 +523,21 @@ bool GameOverScene::LoadTuning() {
 	ReadFloat(text, "underlineOffset", underlineOffset_);
 	ReadFloat(text, "underlineThickness", underlineThickness_);
 	ReadFloat(text, "hitPadding", hitPadding_);
+	ReadFloat(text, "tagScale", tagScale_);
+	ReadFloat(text, "tagOffset", tagOffset_);
+	ReadFloat(text, "tagFadeSeconds", tagFadeSeconds_);
 	ReadColor3(text["bandColor"], bandColor_);
 	ReadFloat(text, "bandAlpha", bandAlpha_);
 	ReadFloat(text, "bandHeight", bandHeight_);
 	ReadFloat(text, "bandEdgeFade", bandEdgeFade_);
 
-	vessel_->LoadTuning(root["vessel"]);
-	ApplyWaterTuning();
+	room_->LoadTuning(root);
 	return true;
-}
-
-void GameOverScene::ApplyWaterTuning() {
-	WaterSurface::Params& p = water_->GetParams();
-	p.depth = waterDepth_;
-	p.skyIntensity = waterSkyIntensity_;
-	p.ringAmplitude = waterRingAmplitude_;
-	p.ringInterval = waterRingInterval_;
-	p.waterColor = { waterColor_.x, waterColor_.y, waterColor_.z, 1.0f };
-	water_->SetWaterHeight(kVesselOrigin.y + waterHeight_);
 }
 
 void GameOverScene::SaveTuning() const {
 	JsonValue root = JsonValue::MakeObject();
 	root["_comment"] = JsonValue(std::string("19_GameOverAndDifficulty.md §4.6 G6。ガラスとエーテルの見た目は EtherVesselGlass.json（G5）、エーテルの状態は EtherState.json"));
-	root["background"] = MakeColor3(background_);
 
 	JsonValue& cam = root["camera"];
 	cam = JsonValue::MakeObject();
@@ -602,19 +561,6 @@ void GameOverScene::SaveTuning() const {
 	WriteFloat(flow, "returnSeconds", returnSeconds_);
 	WriteFloat(flow, "returnTailSeconds", returnTailSeconds_);
 
-	JsonValue& water = root["water"];
-	water = JsonValue::MakeObject();
-	WriteFloat(water, "height", waterHeight_);
-	WriteFloat(water, "depth", waterDepth_);
-	water["color"] = MakeVector3(waterColor_);
-	WriteFloat(water, "skyIntensity", waterSkyIntensity_);
-	WriteFloat(water, "ringAmplitude", waterRingAmplitude_);
-	WriteFloat(water, "ringInterval", waterRingInterval_);
-	WriteFloat(water, "cursorRingAmplitude", cursorRingAmplitude_);
-	WriteFloat(water, "cursorRingWavelength", cursorRingWavelength_);
-	WriteFloat(water, "cursorRingRadius", cursorRingRadius_);
-	WriteFloat(water, "arrivalRingAmplitude", arrivalRingAmplitude_);
-
 	JsonValue& text = root["text"];
 	text = JsonValue::MakeObject();
 	WriteFloat(text, "yRatio", optionsYRatio_);
@@ -626,12 +572,15 @@ void GameOverScene::SaveTuning() const {
 	WriteFloat(text, "underlineOffset", underlineOffset_);
 	WriteFloat(text, "underlineThickness", underlineThickness_);
 	WriteFloat(text, "hitPadding", hitPadding_);
+	WriteFloat(text, "tagScale", tagScale_);
+	WriteFloat(text, "tagOffset", tagOffset_);
+	WriteFloat(text, "tagFadeSeconds", tagFadeSeconds_);
 	text["bandColor"] = MakeColor3(bandColor_);
 	WriteFloat(text, "bandAlpha", bandAlpha_);
 	WriteFloat(text, "bandHeight", bandHeight_);
 	WriteFloat(text, "bandEdgeFade", bandEdgeFade_);
 
-	vessel_->SaveTuning(root["vessel"]);
+	room_->SaveTuning(root);
 	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
 }
 
@@ -674,38 +623,22 @@ void GameOverScene::OnImGui() {
 			ImGui::SameLine();
 			if (ImGui::Button("Near <- Debug Cam") && GetUseDebugCamera()) {
 				// デバッグカメラで探した位置をそのまま写す（シーンのカメラはデバッグカメラに差し替わっている）
-				const Vector3& t = camera_->GetTranslate();
-				cameraNearPos_ = { t.x - kVesselOrigin.x, t.y - kVesselOrigin.y, t.z - kVesselOrigin.z };
-				const Vector3& r = camera_->GetRotate();
+				const Vector3& t = room_->GetCamera()->GetTranslate();
+				const Vector3& o = room_->GetOrigin();
+				cameraNearPos_ = { t.x - o.x, t.y - o.y, t.z - o.z };
+				const Vector3& r = room_->GetCamera()->GetRotate();
 				cameraNearRotDeg_ = { r.x / kDegToRad, r.y / kDegToRad, r.z / kDegToRad };
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Far <- Debug Cam") && GetUseDebugCamera()) {
-				const Vector3& t = camera_->GetTranslate();
-				cameraFarPos_ = { t.x - kVesselOrigin.x, t.y - kVesselOrigin.y, t.z - kVesselOrigin.z };
-				const Vector3& r = camera_->GetRotate();
+				const Vector3& t = room_->GetCamera()->GetTranslate();
+				const Vector3& o = room_->GetOrigin();
+				cameraFarPos_ = { t.x - o.x, t.y - o.y, t.z - o.z };
+				const Vector3& r = room_->GetCamera()->GetRotate();
 				cameraFarRotDeg_ = { r.x / kDegToRad, r.y / kDegToRad, r.z / kDegToRad };
 			}
 		}
-		if (ImGui::CollapsingHeader("Water")) {
-			WaterSurface::Params& p = water_->GetParams();
-			if (ImGui::DragFloat("Height [m]", &waterHeight_, 0.005f, -1.0f, 2.0f)) water_->SetWaterHeight(kVesselOrigin.y + waterHeight_);
-			if (ImGui::DragFloat("Depth [m]", &waterDepth_, 0.01f, 0.0f, 5.0f)) p.depth = waterDepth_;
-			ImGui::ColorEdit3("Water Color", &waterColor_.x, ImGuiColorEditFlags_Float);
-			if (ImGui::DragFloat("Sky Intensity", &waterSkyIntensity_, 0.01f, 0.0f, 3.0f)) p.skyIntensity = waterSkyIntensity_;
-			if (ImGui::DragFloat("Ambient Ring Amplitude", &waterRingAmplitude_, 0.0005f, 0.0f, 0.1f, "%.4f")) p.ringAmplitude = waterRingAmplitude_;
-			if (ImGui::DragFloat("Ambient Ring Interval", &waterRingInterval_, 0.05f, 0.1f, 30.0f)) p.ringInterval = waterRingInterval_;
-			ImGui::DragFloat("Cursor Ring Amplitude", &cursorRingAmplitude_, 0.0005f, 0.0f, 0.2f, "%.4f");
-			ImGui::DragFloat("Cursor Ring Wavelength", &cursorRingWavelength_, 0.005f, 0.01f, 3.0f);
-			ImGui::DragFloat("Cursor Ring Radius", &cursorRingRadius_, 0.05f, 0.1f, 50.0f);
-			ImGui::DragFloat("Arrival Ring Amplitude", &arrivalRingAmplitude_, 0.0005f, 0.0f, 0.2f, "%.4f");
-			if (ImGui::Button("Cursor Ring")) EmitCursorRing();
-			ImGui::ColorEdit3("Background", background_);
-			if (ImGui::TreeNode("WaterSurface (raw)")) {
-				water_->OnImGui();
-				ImGui::TreePop();
-			}
-		}
+		if (ImGui::CollapsingHeader("Water")) room_->OnImGuiWater();
 		if (ImGui::CollapsingHeader("Options Text")) {
 			ImGui::SliderFloat("Y (ratio)", &optionsYRatio_, 0.0f, 1.0f);
 			ImGui::DragFloat("Gap [px]", &optionsGap_, 1.0f, 0.0f, 600.0f);
@@ -716,6 +649,9 @@ void GameOverScene::OnImGui() {
 			ImGui::DragFloat("Underline Offset [px]", &underlineOffset_, 0.5f, -50.0f, 50.0f);
 			ImGui::DragFloat("Underline Thickness [px]", &underlineThickness_, 0.1f, 0.0f, 20.0f);
 			ImGui::DragFloat("Mouse Hit Padding [px]", &hitPadding_, 0.5f, 0.0f, 200.0f);
+			ImGui::DragFloat("Purity Tag Scale", &tagScale_, 0.01f, 0.2f, 5.0f);
+			ImGui::DragFloat("Purity Tag Offset [px]", &tagOffset_, 0.5f, -200.0f, 300.0f);
+			ImGui::DragFloat("Purity Tag Fade [s]", &tagFadeSeconds_, 0.01f, 0.0f, 3.0f);
 			ImGui::ColorEdit3("Band Color", bandColor_);
 			ImGui::SliderFloat("Band Alpha", &bandAlpha_, 0.0f, 1.0f);
 			ImGui::DragFloat("Band Height [px]", &bandHeight_, 1.0f, 0.0f, 600.0f);
@@ -726,7 +662,7 @@ void GameOverScene::OnImGui() {
 			if (ImGui::Button("Save Glass (EtherVesselGlass.json)")) vessel_->SaveGlassTuning();
 			vessel_->OnImGui();
 		}
-		ImGui::Text("IBL: %s", iblPath_.c_str());
+		ImGui::Text("IBL: %s", room_->GetIblPath().c_str());
 	}
 	ImGui::End();
 #endif

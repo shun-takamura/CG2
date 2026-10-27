@@ -14,7 +14,8 @@ struct MeshVertex;
 /// 器の支柱の溝を走るエーテルの光の線（19_GameOverAndDifficulty.md §4.5・§4.6、G6）。
 /// 線は球の下から支柱を伝って土台へ下りる道（断面の輪郭＝高さと半径の折れ線）に沿って、まわりに何本か並べる。
 ///   - いつも：うっすら通っていて、ときどき下から弱い光が昇る（下に泉がある気配）
-///   - 泉へ下りる（BeginDescend）：明るい光が上から次々に下りていく（引き上げる＝賭け分が手元へ戻る）
+///   - 泉へ下りる（BeginDescend）：明るい光が上から次々に下りていく（引き上げる・賭け分を下げる＝手元へ戻る）
+///   - 泉から昇る（BeginAscend）：明るい光が下から次々に昇っていく（賭ける＝手元から器へ。§4.7）
 /// 作りは EtherStrands と同じ（カメラへ向けた帯を 1 つの動的 PrimitiveMesh にまとめて 1 回で描く。加算＋発光パス）。
 /// 道の形・本数・明るさは GameOver.json の "pillarFlow"。輪郭は器の原点（土台の脚の下）からの高さと、中心の軸からの半径。
 /// </summary>
@@ -29,6 +30,13 @@ public:
 	/// <summary>光を上から次々に下ろす（止めるまで）</summary>
 	void BeginDescend();
 	void StopDescend() { descending_ = false; }
+	/// <summary>光を下から次々に昇らせる（止めるまで）</summary>
+	void BeginAscend();
+	void StopAscend() { ascending_ = false; }
+	bool IsAscending() const { return ascending_; }
+	bool IsDescending() const { return descending_; }
+	/// <summary>この Update の間に道の上の端（球）へ着いた明るい光の数（液面に波紋を立てるのに使う）</summary>
+	int GetTopArrivals() const { return topArrivals_; }
 	/// <summary>いつもの淡い光の倍率（0 で消える）</summary>
 	void SetIdleScale(float scale) { idleScale_ = scale; }
 	/// <summary>この Update の間に道の下の端へ着いた光の数（泉に波紋を立てるのに使う）</summary>
@@ -77,6 +85,9 @@ private:
 	float idleTimer_ = 0.0f;
 	float descendTimer_ = 0.0f;
 	bool descending_ = false;
+	float ascendTimer_ = 0.0f;
+	bool ascending_ = false;
+	int topArrivals_ = 0;
 	float idleScale_ = 1.0f;
 	int arrivals_ = 0;
 	bool built_ = false;
