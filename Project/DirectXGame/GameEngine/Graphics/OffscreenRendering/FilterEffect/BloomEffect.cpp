@@ -191,7 +191,7 @@ void BloomEffect::Composite(ID3D12GraphicsCommandList* commandList, uint32_t sce
 	Params p{};
 	p.levelWeights = levelWeights_;
 	p.tint = tint_;
-	p.intensity = (std::max)(intensity_, 0.0f);
+	p.intensity = (std::max)(intensity_, 0.0f) * std::clamp(fade_, 0.0f, 1.0f);
 	DrawFullscreen(commandList, pipelineState_.Get(), srvs, p);
 }
 

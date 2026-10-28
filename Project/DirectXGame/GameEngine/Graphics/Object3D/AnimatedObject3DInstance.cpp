@@ -14,7 +14,21 @@
 #include "TextureManager.h"
 #include "EditorDropPayload.h"  // MATERIAL_DROP / ANIM_DROP / SPRITE_DROP 等の D&D ペイロード
 
-AnimatedObject3DInstance::~AnimatedObject3DInstance() = default;
+AnimatedObject3DInstance::~AnimatedObject3DInstance()
+{
+    FreeSkinClusterDescriptors();
+}
+
+void AnimatedObject3DInstance::FreeSkinClusterDescriptors()
+{
+    // スキニング用に確保した 4 つの番号を返す。シーンごとに作られるので、返さないと SRV の枠が尽きてモデルが消える
+    if (!hasSkinCluster_ || !srvManager_) return;
+    srvManager_->Free(skinCluster_.paletteSrvIndex);
+    srvManager_->Free(skinCluster_.influenceSrvIndex);
+    srvManager_->Free(skinCluster_.inputVertexSrvIndex);
+    srvManager_->Free(skinCluster_.skinnedVertexUavIndex);
+    hasSkinCluster_ = false;
+}
 
 void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
     SkinningComputeManager* skinningComputeManager,
@@ -23,6 +37,8 @@ void AnimatedObject3DInstance::Initialize(Object3DManager* object3DManager,
     AnimatedModelInstance* animatedModel,
     const std::string& name)
 {
+    // 作り直しのときは前のスキニングの番号を返してから確保する
+    FreeSkinClusterDescriptors();
     object3DManager_ = object3DManager;
     skinningComputeManager_ = skinningComputeManager;
     srvManager_ = srvManager;

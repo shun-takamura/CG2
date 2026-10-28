@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "SoundManager.h"
 #include <filesystem>
+#include <algorithm>
 
 #include "DirectXTex.h"
 #include "d3dx12.h"
@@ -583,9 +584,15 @@ void Game::Draw() {
 	const bool effectBloom = EffectManager::GetInstance()->HasActiveBloomSource();
 	const bool sceneBloom = bloomScene && bloomScene->HasBloomSources();
 	const bool textBloom = TextRenderer::GetInstance()->HasPendingGlow();
-	const bool bloomActive = effectBloom || sceneBloom || textBloom;
+	{
+		const float target = SceneManager::GetInstance()->IsTransitionCovering() ? 0.0f : 1.0f;
+		const float step = (std::min)(dxCore_->GetDeltaTime(), 1.0f / 30.0f) / kBloomFadeSeconds;
+		bloomFade_ = (bloomFade_ < target) ? (std::min)(bloomFade_ + step, target) : (std::max)(bloomFade_ - step, target);
+	}
+	const bool bloomActive = (effectBloom || sceneBloom || textBloom) && bloomFade_ > 0.0f;
 	if (postEffect_ && postEffect_->bloom) {
 		postEffect_->bloom->SetEnabled(bloomActive);
+		postEffect_->bloom->SetFade(bloomFade_);
 	}
 	if (bloomActive) {
 		PEPPER_SCOPE("Game::BloomPass");

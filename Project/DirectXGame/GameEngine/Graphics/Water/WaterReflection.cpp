@@ -21,7 +21,10 @@
 #endif
 
 WaterReflection::WaterReflection() = default;
-WaterReflection::~WaterReflection() = default;
+WaterReflection::~WaterReflection() {
+	// RenderTexture は自分では SRV の番号を返さない
+	if (renderTexture_) renderTexture_->Finalize();
+}
 
 void WaterReflection::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
 	float resolutionScale)

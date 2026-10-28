@@ -1,9 +1,19 @@
 #include "SRVManager.h"
+#include "Log.h"
 
 const uint32_t SRVManager::kMaxSRVCount = 512;
 
 uint32_t SRVManager::Allocate()
 {
+	// Release では assert が消えてヒープの外に書き込み、後から作った物だけが黙って消える。
+	// 解放漏れにすぐ気づけるよう、尽きたら 1 回だけログに出す
+	if (!CanAllocate()) {
+		static bool warned = false;
+		if (!warned) {
+			warned = true;
+			Log("SRVManager: SRV の枠（" + std::to_string(kMaxSRVCount) + " 個）が尽きた。どこかで Free し忘れている\n");
+		}
+	}
 	assert(CanAllocate());
 
 	if (!freeList_.empty()) {

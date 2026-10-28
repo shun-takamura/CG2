@@ -100,7 +100,16 @@ namespace {
 
 CloudRaymarcher::CloudRaymarcher() = default;
 CloudRaymarcher::~CloudRaymarcher() {
+	// ステージごとに作られるので、SRV の番号を全部返す（返さないと枠が尽きて雲が消える）
 	if (target_) target_->Finalize();
+	if (depthTarget_) depthTarget_->Finalize();
+	for (auto& h : history_) {
+		if (h) h->Finalize();
+	}
+	if (srvManager_) {
+		if (shape3D_) srvManager_->Free(shape3DSrv_);
+		if (detail3D_) srvManager_->Free(detail3DSrv_);
+	}
 }
 
 void CloudRaymarcher::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t screenWidth, uint32_t screenHeight)

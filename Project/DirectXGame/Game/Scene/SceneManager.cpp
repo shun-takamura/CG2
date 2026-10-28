@@ -57,6 +57,10 @@ void SceneManager::Finalize() {
 	if (currentScene_) {
 		currentScene_->Finalize();
 	}
+	// SRVManager 等より先にシーンの本体を壊す。static の SceneManager と一緒に終了時に壊れると、
+	// デストラクタが返す SRV の番号が、もう無い SRVManager に届いて落ちる
+	currentScene_.reset();
+	nextScene_.reset();
 
 	// エンジン側の時間スケール供給元を解除（dangling 参照防止）
 	EngineTime::SetProvider(nullptr);

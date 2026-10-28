@@ -80,6 +80,11 @@ private:
 	// キーコンフィグのオプション
 	KeyConfig::Options keyConfigOptions_;
 
+	// ブルームの掛け率。トランジションが画面を覆う間は 0 へ、開く間は 1 へ戻す
+	// （覆いはシーンの絵の中に描かれ、ブルームはその上から足されるので、覆いの上に光が残ってしまう）
+	float bloomFade_ = 1.0f;
+	static constexpr float kBloomFadeSeconds = 0.25f;
+
 #ifdef _DEBUG
 	/// <summary>
 	/// ゲーム型に触るエディタウィンドウ／パネルを ImGuiManager へ追加登録する。
