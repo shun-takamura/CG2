@@ -72,6 +72,8 @@ public:
 	void SetIntensity(float v) { intensity_ = v; }
 	void SetTint(const Vector3& c) { tint_ = c; }
 	float GetIntensity() const { return intensity_; }
+	// Intensity に掛ける率（0〜1）。トランジションの覆いの上に光が出ないよう Game.cpp が毎フレーム設定する
+	void SetFade(float v) { fade_ = v; }
 
 private:
 	// HLSL の BloomParams（Bloom.hlsli）と並びを一致させる。ルート定数で渡す。
@@ -108,6 +110,7 @@ private:
 	std::array<Level, kLevelCount> levels_;
 
 	float   intensity_ = 1.0f;
+	float   fade_ = 1.0f;
 	Vector3 tint_ = { 1.0f, 1.0f, 1.0f };
 	Vector4 levelWeights_ = { 1.0f, 0.8f, 0.6f, 0.4f };
 };

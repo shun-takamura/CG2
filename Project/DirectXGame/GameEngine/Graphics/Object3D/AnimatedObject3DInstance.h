@@ -94,6 +94,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
 
     SkinCluster skinCluster_;
     bool hasSkinCluster_ = false;
+    void FreeSkinClusterDescriptors();
 
     // このフレームで既にスキニングをDispatch済みか。Update でリセットし、
     // DispatchSkinning で立てる。シャドウパス先行Dispatchとメイン描画の二重実行を防ぐ。

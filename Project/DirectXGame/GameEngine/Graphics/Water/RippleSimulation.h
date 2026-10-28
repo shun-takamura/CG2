@@ -36,6 +36,8 @@ public:
 		float normalScale = 1.0f;       // 高さの傾きを法線に足す倍率
 	};
 
+	~RippleSimulation();
+
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
 
 	/// <summary>時間を進める（実際の計算は Dispatch でまとめて行う）</summary>
@@ -95,6 +97,8 @@ private:
 	};
 
 	void CreateTextures();
+	// 確保した SRV/UAV の番号を返す（シーンを作るたびに作られるので、返さないと 512 枠を食い潰す）
+	void FreeDescriptors();
 	void CreateRootSignature();
 	void CreatePipelineState();
 	void Transition(uint32_t index, D3D12_RESOURCE_STATES after);
@@ -107,8 +111,8 @@ private:
 
 	std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, 2> textures_;
 	std::array<D3D12_RESOURCE_STATES, 2> states_{};
-	std::array<uint32_t, 2> srvIndices_{};
-	std::array<uint32_t, 2> uavIndices_{};
+	std::array<uint32_t, 2> srvIndices_{ UINT32_MAX, UINT32_MAX };
+	std::array<uint32_t, 2> uavIndices_{ UINT32_MAX, UINT32_MAX };
 	uint32_t current_ = 0;              // 最新の高さが入っている方
 
 	// 刻みごとに中身を変えるので、1フレームの最大刻み数ぶん CB を持つ（GPU が読み終わる前に上書きしない）

@@ -22,8 +22,30 @@ namespace {
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 }
 
+RippleSimulation::~RippleSimulation()
+{
+	FreeDescriptors();
+}
+
+void RippleSimulation::FreeDescriptors()
+{
+	if (!srvManager_) return;
+	for (uint32_t i = 0; i < 2; ++i) {
+		if (srvIndices_[i] != UINT32_MAX) {
+			srvManager_->Free(srvIndices_[i]);
+			srvIndices_[i] = UINT32_MAX;
+		}
+		if (uavIndices_[i] != UINT32_MAX) {
+			srvManager_->Free(uavIndices_[i]);
+			uavIndices_[i] = UINT32_MAX;
+		}
+	}
+}
+
 void RippleSimulation::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 {
+	// 2 回目の Initialize（作り直し）でも前の番号を返してから確保する
+	FreeDescriptors();
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
 
