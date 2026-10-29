@@ -12,6 +12,7 @@
 #include "Json/JsonValue.h"
 #include "LogBuffer.h"
 #include "MathUtility.h"
+#include "Score/DifficultyProfile.h"
 #include "Score/ScoreManager.h"
 #include "Spline/CameraRotKey.h"
 #include "Spline/RailAimController.h"
@@ -321,7 +322,8 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 					ctrl->waveEntryIndex_   = static_cast<int>(i);
 					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
 					ctrl->triggerSec_       = we.triggerSec;
-					ctrl->shootIntervalSec_ = we.shootIntervalSec;
+					// 純度の倍率（19 番 §5）。子の敵はこの値を受け継ぐので二重には掛からない
+					ctrl->shootIntervalSec_ = we.shootIntervalSec * DifficultyProfile::GetInstance()->GetShootIntervalScale();
 					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 					ctrl->spawnLimit_       = we.spawnLimit;
 					// 子敵は明示指定があればそれを、なければ自身のプレハブ／スプラインにフォールバック
@@ -483,7 +485,7 @@ void RailStagePart::Seek(float seconds) {
 			ctrl->waveEntryIndex_   = static_cast<int>(i);
 			ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
 			ctrl->triggerSec_       = we.triggerSec;
-			ctrl->shootIntervalSec_ = we.shootIntervalSec;
+			ctrl->shootIntervalSec_ = we.shootIntervalSec * DifficultyProfile::GetInstance()->GetShootIntervalScale();
 			ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
 			ctrl->spawnLimit_       = we.spawnLimit;
 			ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;

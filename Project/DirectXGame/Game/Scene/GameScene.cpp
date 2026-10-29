@@ -23,10 +23,24 @@
 #include "Primitive/PrimitiveInstance.h"
 #include "Primitive/DebugDraw.h"
 #include "Physics/CollisionGeometry.h"
+#include "Score/DifficultyProfile.h"
 #include <algorithm>
 #include <cmath>
 
 namespace {
+	// スポーンした敵・ボスの体力に純度の倍率を掛ける（19_GameOverAndDifficulty.md §5）
+	void ApplyDifficultyHp(IImGuiEditable* e) {
+		if (!e) return;
+		const EntityTag tag = Gameplay::Of(e).GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		HP& hp = Gameplay::Of(e).GetHP();
+		if (!hp.enabled) return;
+		const DifficultyProfile* dp = DifficultyProfile::GetInstance();
+		hp.maxHP = DifficultyProfile::ScaleInt(hp.maxHP,
+			tag == EntityTag::Boss ? dp->GetBossHpScale() : dp->GetEnemyHpScale());
+		hp.currentHP = hp.maxHP;
+	}
+
 	// 進行方向（正規化済み）→ オイラー角（ラジアン）。LH系・前方+Z 前提。
 	Vector3 DirectionToEuler(const Vector3& dir) {
 		const float yaw = std::atan2(dir.x, dir.z);
@@ -290,6 +304,7 @@ IImGuiEditable* GameScene::SpawnEnemyOnSpline(const std::string& prefabName,
 			LogBuffer::Level::Warning);
 		return nullptr;
 	}
+	ApplyDifficultyHp(spawned);
 
 	MovingEnemy me{};
 	me.entity         = spawned;
@@ -535,14 +550,18 @@ IImGuiEditable* GameScene::SpawnEnemyAt(const std::string& prefabName, const Vec
 	const size_t prevAnim = dynamicAnimated_.size();
 	const size_t prevObj  = object3DInstances_.size();
 	InstantiatePrefab(prefabName, pos);
+	IImGuiEditable* spawned = nullptr;
 	if (dynamicPrimitives_.size() != prevPrim) {
 		// CB を即座にスポーン位置で確定させる（フレーム終わりに走る Update まで原点で描画されないように）
 		dynamicPrimitives_.back()->Update();
-		return dynamicPrimitives_.back().get();
+		spawned = dynamicPrimitives_.back().get();
+	} else if (dynamicAnimated_.size() != prevAnim) {
+		spawned = dynamicAnimated_.back().get();
+	} else if (object3DInstances_.size() != prevObj) {
+		spawned = object3DInstances_.back().get();
 	}
-	if (dynamicAnimated_.size()   != prevAnim) return dynamicAnimated_.back().get();
-	if (object3DInstances_.size() != prevObj)  return object3DInstances_.back().get();
-	return nullptr;
+	ApplyDifficultyHp(spawned);
+	return spawned;
 }
 
 void GameScene::ApplyEnemyRepulsion(IImGuiEditable* self) {

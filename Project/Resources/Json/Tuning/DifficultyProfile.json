@@ -1,0 +1,9 @@
+{
+  "_comment": "19_GameOverAndDifficulty.md §5。純度 I・V・IX のときの倍率（間は直線）。純度は EtherState。shootInterval・bossCooldown は小さいほど速い",
+  "midPurity": 5.0,
+  "enemyHp": { "I": 0.6, "V": 1.0, "IX": 1.8 },
+  "bossHp": { "I": 0.7, "V": 1.0, "IX": 1.5 },
+  "damage": { "I": 0.5, "V": 1.0, "IX": 2.0 },
+  "shootInterval": { "I": 1.6, "V": 1.0, "IX": 0.55 },
+  "bossCooldown": { "I": 1.6, "V": 1.0, "IX": 0.5 }
+}

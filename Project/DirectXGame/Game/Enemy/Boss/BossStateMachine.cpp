@@ -14,6 +14,7 @@
 #include "Camera.h"
 #include "SoundManager.h"
 #include "Scene/GameScene.h"
+#include "Score/DifficultyProfile.h"
 
 namespace {
 	// 発狂移行の咆哮：攻撃はせず、画面を揺らし爆発エフェクトと白の激しい点滅で「ここから本気」を見せる。
@@ -73,7 +74,8 @@ void BossStateMachine::SelectNext(BossActionContext& ctx) {
 	}
 	if (canAttack && dist(rng_) < (rage ? rageAttackChance_ : attackChance_)) {
 		StartAttack(ctx, rage);
-		attackCooldown_ = rage ? rageAttackCooldown_ : attackCooldownBase_;
+		attackCooldown_ = (rage ? rageAttackCooldown_ : attackCooldownBase_)
+			* DifficultyProfile::GetInstance()->GetBossCooldownScale();
 		return;
 	}
 

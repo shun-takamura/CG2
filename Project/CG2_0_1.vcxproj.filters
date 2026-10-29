@@ -345,6 +345,9 @@
     <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Editor\GameInspectorSections.cpp">
       <Filter>DirectXGame\Game\Editor</Filter>
     </ClCompile>
@@ -699,6 +702,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\EtherState.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Editor\GameInspectorSections.h">
