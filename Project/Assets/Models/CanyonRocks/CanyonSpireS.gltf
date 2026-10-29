@@ -1,0 +1,149 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "CanyonSpireS"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "CanyonRock",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.8999999761581421
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "CanyonSpireS",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "CanyonRock_NormalMap",
+      "uri": "CanyonRock_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "CanyonRock_BaseColor",
+      "uri": "CanyonRock_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 2724,
+      "max": [
+        12.42457103729248,
+        14,
+        11.614745140075684
+      ],
+      "min": [
+        -12.165745735168457,
+        -100,
+        -10.993414878845215
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 2724,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 2724,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 4068,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 32688,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32688,
+      "byteOffset": 32688,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 21792,
+      "byteOffset": 65376,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 8136,
+      "byteOffset": 87168,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 95304,
+      "uri": "CanyonSpireS.bin"
+    }
+  ]
+}

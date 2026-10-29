@@ -1,0 +1,79 @@
+{
+  "scene": "STAGEPLAY@Canyon",
+  "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
+  "shaders": [],
+  "textures": [
+    {
+      "path": "Resources/Models/CanyonRocks/CanyonRock_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/CanyonRocks/CanyonRock_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Enemy/enemy.dds",
+      "linear": false
+    }
+  ],
+  "models": [
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireL.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireS.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireL_Stump.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireL_Top.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireS_Stump.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireS_Top.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam_StubA.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam_HalfA.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam_HalfB.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam_StubB.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonChunk.mesh"
+    },
+    {
+      "dir": "Resources/Models/Enemy",
+      "file": "enemy.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireLow.mesh"
+    }
+  ],
+  "animatedModels": [],
+  "animations": []
+}

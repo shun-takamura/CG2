@@ -268,3 +268,27 @@ Step 10 崩壊演出の強化（任意）             Voronoi破片の流用可�
 | Wave データ | `Resources/Json/Waves/stage1.json` |
 | Wave エディタ | `DirectXGame/Game/Scene/RailStagePart.cpp:465-495` |
 | ディスラプター破片（流用候補） | `DirectXGame/GameEngine/Graphics/Effect/DisruptorShardRenderer.h` / `.cpp` |
+
+---
+
+## 11. 谷の実装（2026-10-29、コンテスト「ゲームシステム」の②）
+
+§3 の形はユーザーのスケッチで変更した：**とがった岩**（谷底から立つ円すい。大・小＝障害物、低＝飾り）と **石柱の梁**（谷を横切る円柱の岩。傾けて 2 本を X に交差させられる）。低空の前振り（鉄塔/アーチ）は作らない（§2.2 のとおり低空は障害物なし）。連鎖破壊（§5）は後回し。
+
+| 物 | モデル / プレハブ | 当たり判定 | HP |
+|---|---|---|---|
+| とがった岩・大 | `CanyonSpireL` / `canyon_spire_l` | カプセル 半径 5m・長さ 47m・中心 −1.5m（−30〜+27m を覆う） | 120 |
+| とがった岩・小 | `CanyonSpireS` / `canyon_spire_s` | カプセル 半径 3m・長さ 32m・中心 −6m（−25〜+13m を覆う） | 60 |
+| 石柱の梁 | `CanyonBeam` / `canyon_beam` | カプセル 半径 3.5m・長さ 110m | 120 |
+| 低い岩（飾り） | `CanyonSpireLow`（シーン JSON の `CanyonDecor_*`、`streamGroup "Canyon"`） | なし | − |
+
+- モデル：`tools/BlenderPipeline/gen_canyon_rocks.py`（Blender 4.4。`--export Assets/Models/CanyonRocks` → cook）。原点は飛行高度（Y −60）、岩は下へ 100m 伸ばして谷底に埋める。テクスチャは地形の岩の層の写し（`Assets/Textures/CanyonRocks/`、cook は `-srgbi`）
+- 配置：`tools/Python/gen_canyon_wave.py`（秒・左右・上下・傾きの表 → `stage1.json` の **118 秒以降を作り直す**、`--scene` で `CanyonDecor_*`）。手で直すなら表を直して流し直す（Wave エディタで直した分は上書きされる）
+- コード：`enemy_type "Obstacle"` → `ObstacleCommand`（動かない・撃たない・向きを変えない・常に接触ダメージ＝ジャスト回避の対象）。接触ダメージの判定は球の距離から形どおり（`CollisionGeometry::TestPair`）に。Wave の `rotate_deg`（度、省略可）
+- **直した不具合**：`Static` のプレハブは `positions[]` があってもカメラ相対で出ていた（§5.3・§8-4 の前提が効いていなかった）→ `positions[]` があればワールド座標に置く（`RailStagePart`）
+- **罠：梁は Z 軸だけで倒す**（`rotate_deg = (0, 0, 90 ± 傾き)`）。描画（`MakeAffineMatrix`）は Rx·Ry·Rz、当たり判定（`CollisionGeometry` の `MakeRotateMatrix`）は Rz·Ry·Rx で、2 軸以上を回すと見た目と判定がずれる。梁はワールドの X 方向に横たわり、谷の曲がりは長さ 120m で吸収する
+- 接触ダメージはプレハブの `damageDealer` を持たせない（既定の 10）。持たせると CollisionManager が重なった他の敵の HP を削る
+- **罠：高速弾の先読みは球の敵しか見ていなかった**（`GameScene::FindFirstEnemyHitOnSegment`。自機の弾は 1 フレーム約 11m）→ カプセルの岩・梁をすり抜けた。カプセルも線分どうしの最短距離で見るようにした
+- **罠：地形の層の色画像はアルファに高さが入っている**→ 写した `CanyonRock_BaseColor.png` をそのまま使うと岩が半透明になった。RGB に直して使う
+- **崩れ方**（2026-10-29、ユーザーのスケッチ：岩は上が折れて倒れ落ち根元が残る／梁は真ん中で折れて両側が落ち壁際に根元が残る）：`ObstacleDebris`（`Game/Scene/ObstacleDebris.{h,cpp}`、`RailStagePart` が持つ。撃破を見つけた所で `Break`）。壊れた岩を、元と同じ原点・向きで切り分けた部品（`gen_canyon_rocks.py` の `SPIRE_PIECES` / `BEAM_PIECES`、切り口はギザギザ）に差し替える。残る部品（根元）はシークまで、落ちる部品は支点のまわりに Z 軸だけで倒れ／垂れ、`releaseDeg` で外れて回りながら落ちる、破片（`CanyonChunk`）ははじけて落ちる。谷底より下か 6 秒で消す。割れ方と数字は `Resources/Json/Tuning/ObstacleDebris.json`（シークのたびに読み直す）。部品のプレハブはタグ None・当たり判定なし、シーン JSON の保存から外す（`StagePlayScene::ShouldSkipOnSave`）。障害物の撃破エフェクト（仮の `Death_Drone`）は外した
+- **罠：下を塞がない開いた形は Blender の `recalc_face_normals` が内向きにそろえることがある**（`CanyonSpireS` などが裏返り、背面カリングで消えて透けて見えた）。`gen_canyon_rocks.py` の `finish_mesh` で中心から外向きかを確かめ、内向きなら裏返す

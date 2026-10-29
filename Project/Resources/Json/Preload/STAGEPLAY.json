@@ -271,6 +271,14 @@
     {
       "path": "LaunchControlBoard_RenderTexture",
       "linear": false
+    },
+    {
+      "path": "Resources/Models/CanyonRocks/CanyonRock_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/CanyonRocks/CanyonRock_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -321,6 +329,10 @@
     {
       "dir": "Resources/Models/Enemy",
       "file": "enemy.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireLow.mesh"
     }
   ],
   "animatedModels": [

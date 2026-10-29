@@ -1,4 +1,5 @@
 #include "RailStagePart.h"
+#include "PepperMacros.h"
 
 #include "Camera.h"
 #include "Components/EntityTag.h"
@@ -30,12 +31,22 @@
 #include "imgui.h"
 #endif
 
+namespace {
+	/// <summary>positions[] に置いた物へ Wave の rotate_deg（度）を反映する（谷の障害物の向き）</summary>
+	void ApplyWaveRotation(IImGuiEditable* entity, const WaveEntry& we) {
+		const Vector3& d = we.rotateDeg;
+		if (d.x == 0.0f && d.y == 0.0f && d.z == 0.0f) return;
+		entity->SetRotate({ DegToRad(d.x), DegToRad(d.y), DegToRad(d.z) });
+	}
+}
+
 RailStagePart::RailStagePart() = default;
 RailStagePart::~RailStagePart() = default;
 
 void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 	host_ = host;
 	camera_ = camera;
+	obstacleDebris_.Initialize(this);
 
 	// レールカメラ用スプライン（位置）。
 	// 実体はシーンの dynamicSplines_ 側に置く＝シーン JSON に載るので、
@@ -135,6 +146,7 @@ void RailStagePart::ReloadWaveNow() {
 }
 
 bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, float seekMaxSec) {
+	PEPPER_SCOPE("RailStagePart::UpdateCamera");
 	(void)actions;
 	if (!host_) return false;
 
@@ -204,6 +216,7 @@ bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, 
 }
 
 void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
+	PEPPER_SCOPE("RailStagePart::UpdateWaveAndEnemies");
 	if (!host_) return;
 
 	// Blender から敵配置を Export したらその場で反映する（変化時だけ走るので軽い）
@@ -223,11 +236,24 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 				// 撃破で加点（プレハブ側で設定された scoreValue を使う）
 				ScoreManager::GetInstance()->AddScore(Gameplay::Of(entity).GetScoreValue());
 				ScoreManager::GetInstance()->AddKill();
+				// 谷の障害物は、同じ原点・向きで切り分けた部品に差し替えて崩す（本体は直後の Sweep で消える）
+				const WaveEntry& we = currentWave_.entries[waveEntryIndex];
+				if (we.enemyType == "Obstacle") {
+					const Vector3* pos = entity->GetEditableTranslate();
+					const Vector3* rot = entity->GetEditableRotate();
+					IImGuiEditable* player = host_->GetPlayer();
+					const Vector3* playerPos = player ? player->GetEditableTranslate() : nullptr;
+					if (pos) {
+						obstacleDebris_.Break(we.prefab, *pos, rot ? *rot : Vector3{ 0.0f, 0.0f, 0.0f },
+							playerPos ? *playerPos : *pos);
+					}
+				}
 			}
 		});
 
 		// HP がゼロになった敵などを破棄キューへ
 		host_->SweepDeadEntities();
+		obstacleDebris_.Update(worldDt);
 	}
 
 	// スポーン：カメラ進行度 t でエントリをトリガー
@@ -251,11 +277,12 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 				// このトリガーで湧いた敵を集める（positions[] 指定時は複数体になりうる）
 				std::vector<IImGuiEditable*> spawnedList;
 
-				if (!we.positions.empty() && !cameraRelative) {
-					// ワールド固定敵（Blender 配置の固定砲台・地上設置物など）。
+				if (!we.positions.empty() && !we.useCameraOffset) {
+					// ワールド固定敵（Blender 配置の固定砲台・地上設置物・谷の障害物など）。Static でも座標を優先する。
 					// 各座標に 1 体ずつ置き、位置はコントローラが固定する（spline=null/speed=0）。
 					for (const auto& wp : we.positions) {
 						if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, wp)) {
+							ApplyWaveRotation(s, we);
 							host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
 							spawnedList.push_back(s);
 						}
@@ -292,7 +319,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 					auto ctrl = std::make_unique<EnemyController>();
 					ctrl->entity_           = spawned;
 					ctrl->waveEntryIndex_   = static_cast<int>(i);
-					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
+					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
 					ctrl->triggerSec_       = we.triggerSec;
 					ctrl->shootIntervalSec_ = we.shootIntervalSec;
 					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
@@ -319,7 +346,20 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 			if (i < retreatFired_.size() && i < spawnFired_.size()
 				&& spawnFired_[i] && !retreatFired_[i]
 				&& we.retreatSec >= 0.0f && nowSec >= we.retreatSec) {
-				host_->TriggerRetreatForWaveEntry(static_cast<int>(i));
+				const PrefabDef* rdef = PrefabManager::GetInstance()->Find(we.prefab);
+				const bool placedStatic = !we.positions.empty() && !we.useCameraOffset &&
+					rdef && rdef->hasMovement && rdef->movementType == MovementType::Static;
+				if (we.enemyType == "Obstacle" || placedStatic) {
+					// 谷の障害物・地形に置いた砲台は退場の動きを持たないので、カメラが通り過ぎた後（retreat_sec）にそのまま消す。
+					// 後ろに残った物を描き続けないため（14 番 §4.6）。撃破ではないので崩さず・加点しない
+					std::vector<IImGuiEditable*> passed;
+					host_->ForEachMovingEnemy([&](IImGuiEditable* entity, int waveEntryIndex) {
+						if (waveEntryIndex == static_cast<int>(i) && entity) passed.push_back(entity);
+					});
+					for (IImGuiEditable* e : passed) host_->DestroyEntity(e);
+				} else {
+					host_->TriggerRetreatForWaveEntry(static_cast<int>(i));
+				}
 				retreatFired_[i] = true;
 			}
 		}
@@ -356,6 +396,9 @@ void RailStagePart::Seek(float seconds) {
 	// 現在生きている敵・弾・スプライン追従敵・敵コントローラをすべて掃除
 	host_->ClearWaveRuntimeState();
 	host_->ResetDodgeState();
+	// 崩れた岩の部品も片付ける（調整値はここで読み直す＝JSON を直してシークすれば試せる）
+	obstacleDebris_.Clear();
+	obstacleDebris_.LoadTuning();
 
 	// スポーン/退避フラグ / kill t を Seek 先に合わせて再構築
 	const float seekT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
@@ -400,10 +443,11 @@ void RailStagePart::Seek(float seconds) {
 				 pdef->movementType == MovementType::Static));
 
 		std::vector<IImGuiEditable*> spawnedList;
-		if (!we.positions.empty() && !cameraRelative) {
+		if (!we.positions.empty() && !we.useCameraOffset) {
 			// ワールド固定敵は seek で動かないのでそのまま各座標へ復元
 			for (const auto& wp : we.positions) {
 				if (IImGuiEditable* s = host_->SpawnEnemyAt(we.prefab, wp)) {
+					ApplyWaveRotation(s, we);
 					host_->RegisterStationaryMovingEnemy(s, static_cast<int>(i));
 					spawnedList.push_back(s);
 				}
@@ -437,7 +481,7 @@ void RailStagePart::Seek(float seconds) {
 			auto ctrl = std::make_unique<EnemyController>();
 			ctrl->entity_           = spawned;
 			ctrl->waveEntryIndex_   = static_cast<int>(i);
-			ctrl->billboardToPlayer_ = (we.enemyType != "Carrier");
+			ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
 			ctrl->triggerSec_       = we.triggerSec;
 			ctrl->shootIntervalSec_ = we.shootIntervalSec;
 			ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
@@ -933,6 +977,10 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 				if (we.traverseSec < 0.1f) we.traverseSec = 0.1f;
 			}
 		}
+		// ワールド座標に置く物（谷の障害物など）の向き
+		if (!we.positions.empty() && !we.useCameraOffset) {
+			ImGui::DragFloat3("rotate_deg (X/Y/Z)", &we.rotateDeg.x, 0.5f, -360.0f, 360.0f, "%.1f");
+		}
 
 		if (ImGui::Button("この変更を反映 (再構築)")) {
 			RebuildWaveRuntimeState();
@@ -964,3 +1012,15 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 	}
 }
 #endif // _DEBUG
+
+bool RailStagePart::IsObstacleDebris(const IImGuiEditable* entity) const {
+	return obstacleDebris_.Owns(entity);
+}
+
+IImGuiEditable* RailStagePart::SpawnDebrisPiece(const std::string& prefab, const Vector3& pos) {
+	return host_ ? host_->SpawnEnemyAt(prefab, pos) : nullptr;
+}
+
+void RailStagePart::DestroyDebrisPiece(IImGuiEditable* entity) {
+	if (host_) host_->DestroyEntity(entity);
+}
