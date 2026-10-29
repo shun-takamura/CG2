@@ -208,14 +208,8 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		if (dynamicPrimitives_.empty()) return nullptr;
 
 		auto& back = dynamicPrimitives_.back();
-		std::string name = base;
-		int suffix = 1;
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		while (std::any_of(dynamicPrimitives_.begin(), dynamicPrimitives_.end() - 1,
-			[&name](const std::unique_ptr<PrimitiveInstance>& o) { return o->GetName() == name; })) {
-			name = base + " (" + std::to_string(suffix++) + ")";
-		}
-		back->SetName(name);
+		back->SetName(MakeUniqueDynamicName(base, dynamicPrimitives_, back.get()));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->ApplyPrefabParams(def->primitiveParams);
@@ -230,14 +224,8 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		if (dynamicAnimated_.empty()) return nullptr;
 
 		auto& back = dynamicAnimated_.back();
-		std::string name = base;
-		int suffix = 1;
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		while (std::any_of(dynamicAnimated_.begin(), dynamicAnimated_.end() - 1,
-			[&name](const std::unique_ptr<AnimatedObject3DInstance>& o) { return o->GetName() == name; })) {
-			name = base + " (" + std::to_string(suffix++) + ")";
-		}
-		back->SetName(name);
+		back->SetName(MakeUniqueDynamicName(base, dynamicAnimated_, back.get()));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->SetScale(def->defaultScale);
@@ -250,14 +238,8 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		if (object3DInstances_.empty()) return nullptr;
 
 		auto& back = object3DInstances_.back();
-		std::string name = base;
-		int suffix = 1;
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		while (std::any_of(object3DInstances_.begin(), object3DInstances_.end() - 1,
-			[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; })) {
-			name = base + " (" + std::to_string(suffix++) + ")";
-		}
-		back->SetName(name);
+		back->SetName(MakeUniqueDynamicName(base, object3DInstances_, back.get()));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->SetScale(def->defaultScale);
@@ -1579,10 +1561,16 @@ size_t GameScene::UnloadStreamGroup(const std::string& group) {
 }
 
 void GameScene::PreloadPrefabModels(const std::vector<std::string>& prefabs) {
+	auto load = [](const PrefabDef* def) {
+		if (!def || def->kind != PrefabKind::Object3D || def->modelFile.empty()) return;
+		ModelManager::GetInstance()->LoadModel(def->modelDir, def->modelFile);
+	};
 	for (const std::string& name : prefabs) {
 		const PrefabDef* def = PrefabManager::GetInstance()->Find(name);
-		if (!def || def->kind != PrefabKind::Object3D || def->modelFile.empty()) continue;
-		ModelManager::GetInstance()->LoadModel(def->modelDir, def->modelFile);
+		load(def);
+		// 撃つ弾のプレハブも 1 段たどる（敵が初めて撃った時に読み込みで止まらないように）
+		if (!def) continue;
+		for (const auto& kv : def->bulletPrefabs) load(PrefabManager::GetInstance()->Find(kv.second));
 	}
 }
 

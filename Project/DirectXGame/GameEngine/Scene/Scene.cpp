@@ -364,13 +364,7 @@ void Scene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) {
 	const auto type = static_cast<PrimitiveInstance::PrimitiveType>(primitiveType);
 
 	// 同名衝突を避けて連番を付ける（例: "Box (1)"）
-	const char* baseName = PrimitiveInstance::PrimitiveTypeToString(type);
-	std::string name = baseName;
-	int suffix = 1;
-	while (std::any_of(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
-		[&name](const std::unique_ptr<PrimitiveInstance>& p) { return p->GetName() == name; })) {
-		name = std::string(baseName) + " (" + std::to_string(suffix++) + ")";
-	}
+	const std::string name = MakeUniqueDynamicName(PrimitiveInstance::PrimitiveTypeToString(type), dynamicPrimitives_);
 
 	auto prim = std::make_unique<PrimitiveInstance>();
 	prim->Initialize(type, name);

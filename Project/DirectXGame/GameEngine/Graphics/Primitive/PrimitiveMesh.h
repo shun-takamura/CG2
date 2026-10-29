@@ -8,6 +8,7 @@
 #include "Quaternion.h"
 #include <wrl.h>
 #include <d3d12.h>
+#include <functional>
 #include <string>
 #include "Vector2.h"
 #include "BillboardMode.h"
@@ -22,6 +23,12 @@ public:
 
     // 初期化（MeshDataを受け取ってGPUバッファ化）
     void Initialize(const MeshData& meshData);
+
+    // 同じ形を何度も作る物（弾・エフェクトの板など）用。geometryKey が同じなら頂点・インデックスのバッファを使い回し、
+    // 2 回目からは make を呼ばない（形の計算もバッファの作成もしない）。共有したメッシュは UpdateVertices できない
+    void InitializeShared(const std::string& geometryKey, const std::function<MeshData()>& make);
+    // InitializeShared の共有バッファを捨てる（終了時。PrimitivePipeline::Finalize から）
+    static void ReleaseSharedGeometry();
 
     // 頂点の中身だけ書き換える（ひも・雷など毎フレーム形が変わるもの用）。頂点数とインデックスは Initialize のまま。
     // count が Initialize の頂点数を超えた分は捨てる。バッファは 1 本なので、同じフレームに違う形で 2 回は描けない
@@ -135,6 +142,11 @@ private:
     void CreateIndexResource(const MeshData& meshData);
     void CreateTransformResource();
     void CreateMaterialResource();
+    // プレビュー・反射・歪みの CB は使う物が少ないので、初めて使う時に作る（弾 1 発ごとのバッファ作成を減らす）
+    void EnsurePreviewTransform();
+    void EnsureReflectionTransform();
+    void EnsureDistortionMaterial();
+    void WriteDistortionMaterial();
 
     void DrawBloomPassImpl(ID3D12Resource* transformResource, float intensity);
 
@@ -159,6 +171,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> indexResource_;
     D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
     uint32_t indexCount_ = 0;
+    // 頂点・インデックスが InitializeShared の共有バッファ（書き換え禁止）
+    bool sharedGeometry_ = false;
 
     // 変換行列バッファ（メイン用）
     Microsoft::WRL::ComPtr<ID3D12Resource> transformResource_;
