@@ -505,6 +505,18 @@ float RailStagePart::GetCameraProgressT() const {
 	return railCamera_ ? railCamera_->GetProgress() : -1.0f;
 }
 
+std::vector<std::string> RailStagePart::CollectWavePrefabs() const {
+	std::vector<std::string> out;
+	auto add = [&out](const std::string& name) {
+		if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(name);
+	};
+	for (const WaveEntry& e : currentWave_.entries) {
+		add(e.prefab);
+		add(e.childPrefab);
+	}
+	return out;
+}
+
 Vector3 RailStagePart::SampleCameraPathAtSec(float sec) const {
 	if (!cameraPath_) return { 0.0f, 0.0f, 0.0f };
 	return cameraPath_->Sample(std::clamp(sec * railCameraSpeed_, 0.0f, 1.0f));

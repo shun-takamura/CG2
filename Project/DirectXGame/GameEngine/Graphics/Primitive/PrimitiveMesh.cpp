@@ -7,16 +7,60 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
+
+namespace {
+    // InitializeShared の形ごとの頂点・インデックス（ComPtr なので各メッシュと共有で持つ）
+    struct SharedGeometry {
+        Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
+        Microsoft::WRL::ComPtr<ID3D12Resource> indexResource;
+        D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+        D3D12_INDEX_BUFFER_VIEW indexBufferView{};
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+    };
+    std::unordered_map<std::string, SharedGeometry>& SharedGeometryCache() {
+        static std::unordered_map<std::string, SharedGeometry> cache;
+        return cache;
+    }
+}
 
 void PrimitiveMesh::Initialize(const MeshData& meshData) {
+    sharedGeometry_ = false;
     CreateVertexResource(meshData);
     CreateIndexResource(meshData);
     CreateTransformResource();
     CreateMaterialResource();
 }
 
+void PrimitiveMesh::InitializeShared(const std::string& geometryKey, const std::function<MeshData()>& make) {
+    auto& cache = SharedGeometryCache();
+    auto it = cache.find(geometryKey);
+    if (it == cache.end()) {
+        const MeshData meshData = make();
+        CreateVertexResource(meshData);
+        CreateIndexResource(meshData);
+        it = cache.emplace(geometryKey, SharedGeometry{ vertexResource_, indexResource_,
+            vertexBufferView_, indexBufferView_, vertexCount_, indexCount_ }).first;
+    }
+    const SharedGeometry& g = it->second;
+    vertexResource_   = g.vertexResource;
+    indexResource_    = g.indexResource;
+    vertexBufferView_ = g.vertexBufferView;
+    indexBufferView_  = g.indexBufferView;
+    vertexCount_      = g.vertexCount;
+    indexCount_       = g.indexCount;
+    sharedGeometry_   = true;
+    CreateTransformResource();
+    CreateMaterialResource();
+}
+
+void PrimitiveMesh::ReleaseSharedGeometry() {
+    SharedGeometryCache().clear();
+}
+
 void PrimitiveMesh::UpdateVertices(const MeshVertex* vertices, uint32_t count) {
-    if (!vertexResource_ || !vertices || vertexCount_ == 0) return;
+    if (sharedGeometry_ || !vertexResource_ || !vertices || vertexCount_ == 0) return;
     const uint32_t n = (std::min)(count, vertexCount_);
     MeshVertex* vertexData = nullptr;
     if (FAILED(vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData)))) return;
@@ -86,37 +130,39 @@ void PrimitiveMesh::Update(Camera* camera, float deltaTime) {
     materialData_->dissolveEdgeWidth = dissolveEdgeWidth_;
     materialData_->dissolveEdgeColor = dissolveEdgeColor_;
 
-    // --- Distortion 用 UV 変換の累積（通常 UV と完全に独立） ---
-    if (distortionMaterialData_) {
-        distortionUVScrollAccumulated_.x += distortionUVScrollSpeed_.x * deltaTime;
-        distortionUVScrollAccumulated_.y += distortionUVScrollSpeed_.y * deltaTime;
+    // --- Distortion 用 UV 変換の累積（通常 UV と完全に独立）。CB は歪みを描く時に作るので、累積だけは常に進める ---
+    distortionUVScrollAccumulated_.x += distortionUVScrollSpeed_.x * deltaTime;
+    distortionUVScrollAccumulated_.y += distortionUVScrollSpeed_.y * deltaTime;
+    if (distortionMaterialData_) WriteDistortionMaterial();
+}
 
-        float dsx = distortionUVScale_.x;
-        float dsy = distortionUVScale_.y;
-        if (distortionUVFlipU_) dsx = -dsx;
-        if (distortionUVFlipV_) dsy = -dsy;
+void PrimitiveMesh::WriteDistortionMaterial() {
+    float dsx = distortionUVScale_.x;
+    float dsy = distortionUVScale_.y;
+    if (distortionUVFlipU_) dsx = -dsx;
+    if (distortionUVFlipV_) dsy = -dsy;
 
-        float dtx = distortionUVScrollAccumulated_.x + distortionUVOffset_.x;
-        float dty = distortionUVScrollAccumulated_.y + distortionUVOffset_.y;
-        if (distortionUVFlipU_) dtx += 1.0f;
-        if (distortionUVFlipV_) dty += 1.0f;
+    float dtx = distortionUVScrollAccumulated_.x + distortionUVOffset_.x;
+    float dty = distortionUVScrollAccumulated_.y + distortionUVOffset_.y;
+    if (distortionUVFlipU_) dtx += 1.0f;
+    if (distortionUVFlipV_) dty += 1.0f;
 
-        Matrix4x4 distUvMat = MakeIdentity4x4();
-        distUvMat.m[0][0] = dsx;
-        distUvMat.m[1][1] = dsy;
-        distUvMat.m[3][0] = dtx;
-        distUvMat.m[3][1] = dty;
-        distortionMaterialData_->uvTransform = distUvMat;
-        // alphaReference は 0 固定で OK（discard はほぼ発生しない）
-        distortionMaterialData_->alphaReference = 0.0f;
-        // color.a に per-instance の歪み強度を載せる（シェーダーで texture.a × vertex.color.a × color.a）
-        distortionMaterialData_->color = { 1.0f, 1.0f, 1.0f, distortionStrength_ };
-        distortionMaterialData_->samplerMode = 0;
-    }
+    Matrix4x4 distUvMat = MakeIdentity4x4();
+    distUvMat.m[0][0] = dsx;
+    distUvMat.m[1][1] = dsy;
+    distUvMat.m[3][0] = dtx;
+    distUvMat.m[3][1] = dty;
+    distortionMaterialData_->uvTransform = distUvMat;
+    // alphaReference は 0 固定で OK（discard はほぼ発生しない）
+    distortionMaterialData_->alphaReference = 0.0f;
+    // color.a に per-instance の歪み強度を載せる（シェーダーで texture.a × vertex.color.a × color.a）
+    distortionMaterialData_->color = { 1.0f, 1.0f, 1.0f, distortionStrength_ };
+    distortionMaterialData_->samplerMode = 0;
 }
 
 void PrimitiveMesh::UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4x4& viewProjectionMatrix, const Vector3& cameraPos) {
-    if (!transformPreviewData_) return;
+    if (!transformResource_) return;
+    EnsurePreviewTransform();
 
     // プレビュー用のワールド行列（billboardはプレビューカメラ基準で再計算される）
     Matrix4x4 worldMatrix = BuildWorldMatrixFromMatrices(viewMatrix, cameraPos);
@@ -264,7 +310,8 @@ void PrimitiveMesh::DrawIdPass(uint32_t objectId) {
 }
 
 void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
-    if (!transformResource_ || !distortionMaterialResource_) return;
+    if (!transformResource_) return;
+    EnsureDistortionMaterial();
 
     auto* pp = PrimitivePipeline::GetInstance();
     auto* cmd = pp->GetDxCore()->GetCommandList();
@@ -293,7 +340,8 @@ void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
 }
 
 void PrimitiveMesh::DrawDistortionPassPreview(uint32_t normalMapSrvIndex) {
-    if (!transformPreviewResource_ || !distortionMaterialResource_) return;
+    if (!transformPreviewResource_) return;
+    EnsureDistortionMaterial();
 
     auto* pp = PrimitivePipeline::GetInstance();
     auto* cmd = pp->GetDxCore()->GetCommandList();
@@ -394,7 +442,8 @@ void PrimitiveMesh::DrawPreview() {
 }
 
 void PrimitiveMesh::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x4& mirroredViewProjection, const Vector3& mirroredCameraPos) {
-    if (!transformReflectionResource_ || indexCount_ == 0 || vertexCount_ == 0) return;
+    if (!transformResource_ || indexCount_ == 0 || vertexCount_ == 0) return;
+    EnsureReflectionTransform();
 
     // ビルボードは鏡像の視点基準で組む（鏡像の View で組むと、反射の中でも画面を向く）
     const Matrix4x4 worldMatrix = BuildWorldMatrixFromMatrices(mirroredView, mirroredCameraPos);
@@ -502,14 +551,21 @@ void PrimitiveMesh::CreateTransformResource() {
     transformResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformData_));
     transformData_->WVP = MakeIdentity4x4();
     transformData_->World = MakeIdentity4x4();
+}
 
+void PrimitiveMesh::EnsurePreviewTransform() {
+    if (transformPreviewResource_) return;
     // プレビュー用（同じインスタンスを別カメラで描画するため）
-    transformPreviewResource_ = dxCore->CreateBufferResource(sizeof(TransformationMatrix));
+    transformPreviewResource_ = PrimitivePipeline::GetInstance()->GetDxCore()->CreateBufferResource(sizeof(TransformationMatrix));
     transformPreviewResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformPreviewData_));
-    transformReflectionResource_ = dxCore->CreateBufferResource(sizeof(TransformationMatrix));
-    transformReflectionResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformReflectionData_));
     transformPreviewData_->WVP = MakeIdentity4x4();
     transformPreviewData_->World = MakeIdentity4x4();
+}
+
+void PrimitiveMesh::EnsureReflectionTransform() {
+    if (transformReflectionResource_) return;
+    transformReflectionResource_ = PrimitivePipeline::GetInstance()->GetDxCore()->CreateBufferResource(sizeof(TransformationMatrix));
+    transformReflectionResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformReflectionData_));
 }
 
 void PrimitiveMesh::CreateMaterialResource() {
@@ -535,9 +591,12 @@ void PrimitiveMesh::CreateMaterialResource() {
     // t1 既定マスク（white1x1）を確保。マスク未設定でも t1 は常にバインドする必要があるため。
     TextureManager::GetInstance()->LoadTexture("Resources/Textures/white1x1.dds");
     whiteSrvIndex_ = TextureManager::GetInstance()->GetSrvIndex("Resources/Textures/white1x1.dds");
+}
 
+void PrimitiveMesh::EnsureDistortionMaterial() {
+    if (distortionMaterialResource_) return;
     // Distortion 用 CB（PS の Material と同じレイアウト、独立した uvTransform を持つ）
-    distortionMaterialResource_ = dxCore->CreateBufferResource(sizeof(PrimitiveMaterial));
+    distortionMaterialResource_ = PrimitivePipeline::GetInstance()->GetDxCore()->CreateBufferResource(sizeof(PrimitiveMaterial));
     distortionMaterialResource_->Map(0, nullptr, reinterpret_cast<void**>(&distortionMaterialData_));
 
     distortionMaterialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -553,4 +612,6 @@ void PrimitiveMesh::CreateMaterialResource() {
     distortionMaterialData_->dissolveEdgeEnable = 0;
     distortionMaterialData_->dissolveEdgeWidth = 0.0f;
     distortionMaterialData_->dissolveEdgeColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // 作ったフレームの描画から今の UV・強さで描く
+    WriteDistortionMaterial();
 }

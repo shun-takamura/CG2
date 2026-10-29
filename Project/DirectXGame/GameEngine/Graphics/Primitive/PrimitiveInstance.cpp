@@ -24,36 +24,31 @@ void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) 
     // 名前未指定ならタイプ名を使用
     name_ = name.empty() ? PrimitiveTypeToString(type) : name;
 
-    // タイプに応じたメッシュデータを生成
-    MeshData meshData;
+    // タイプに応じたメッシュを作る。パラメータを持たない形は全インスタンスで頂点・インデックスを共有する
+    // （弾を出すたびに同じ形とバッファを作り直さない）
     switch (type) {
-    case PrimitiveType::Plane:
-        meshData = PrimitiveGenerator::CreatePlane();
-        break;
     case PrimitiveType::Box:
-        meshData = PrimitiveGenerator::CreateBox();
+        mesh_.InitializeShared("Box", [] { return PrimitiveGenerator::CreateBox(); });
         break;
     case PrimitiveType::Sphere:
-        meshData = PrimitiveGenerator::CreateSphere();
+        mesh_.InitializeShared("Sphere", [] { return PrimitiveGenerator::CreateSphere(); });
         break;
     case PrimitiveType::Ring:
-        meshData = PrimitiveGenerator::CreateRing(ringParams_);
+        mesh_.Initialize(PrimitiveGenerator::CreateRing(ringParams_));
         break;
     case PrimitiveType::Cylinder:
-        meshData = PrimitiveGenerator::CreateCylinder(cylinderParams_);
+        mesh_.Initialize(PrimitiveGenerator::CreateCylinder(cylinderParams_));
         break;
     case PrimitiveType::Helix:
-        meshData = PrimitiveGenerator::CreateHelix(helixParams_);
+        mesh_.Initialize(PrimitiveGenerator::CreateHelix(helixParams_));
         break;
     case PrimitiveType::Hemisphere:
-        meshData = PrimitiveGenerator::CreateHemisphere();
+        mesh_.InitializeShared("Hemisphere", [] { return PrimitiveGenerator::CreateHemisphere(); });
         break;
-    default:
-        meshData = PrimitiveGenerator::CreatePlane();
+    default: // Plane
+        mesh_.InitializeShared("Plane", [] { return PrimitiveGenerator::CreatePlane(); });
         break;
     }
-
-    mesh_.Initialize(meshData);
 
     // 不透明物体としてシーンに馴染ませるため、通常ブレンド・深度書き込みONに変更
     mesh_.SetBlendMode(PrimitivePipeline::kBlendModeNormal);

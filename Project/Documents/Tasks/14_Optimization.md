@@ -156,7 +156,7 @@
 
 ### 4.7 ステージ全体：1 フレームだけ 15〜50ms 止まる（CPU）
 
-- **状態**：未着手（原因の特定まで。2026-10-29 谷の担当が PEPPER の区間を足して調べた）
+- **状態**：実施中（2026-10-29 候補 1〜4 をコードまで・**ビルド・実機未確認**。⑤⑥は手を付けていない）
 - **実測**：Development `Logs/2026-10-29_184514`（雲の上からボス戦まで通し）。止まった秒の `SceneManager::Update` の下に出た区間：
   | 止まり | 区間 | 大きさ | いつ |
   |---|---|---|---|
@@ -170,7 +170,18 @@
   - ① 弾 1 発ごとに `PrimitiveGenerator::CreateSphere` で形を作り直し、`mesh_.Initialize` で頂点・インデックスのバッファを新しく作っている（同じ形を毎回作る）
   - ② 同じ名前が無くなるまで全部の物と比べ直す（`name (1)`, `name (2)` … と毎回 1 から数える）
   - ③ Wave で出るプレハブのモデルを開始時に読んでいない（谷の分だけは `StageStreaming` の `prefabs` で読むようにした＝11番 §6 S5）
-  - ④ 4 個のうちのどれか（ループするエフェクト？）が約 30 秒ごとに重い処理をしている（未特定。`EffectInstance::Update` の中を分けて測る）
+  - ④ 4 個は自機のスラスター（`PlayerThruster_*`／`Thruster_*`、`loop: true`・`totalDuration: 30`）。ループのたびに `EffectInstance::ResetForLoop` がプリミティブのレンダラ（円柱 2＋板 1）を捨て、次のフレームで 4×3＝12 個ぶん形と GPU バッファを作り直していた（コードを読んで特定。秒も合う）
+  - ① 補足：敵弾 `EnemyBullet` は板（Plane）なので形の計算はほぼ 0。重いのは `PrimitiveMesh::Initialize` が 1 個につき作る GPU バッファ 7 本（頂点・インデックス・変換・プレビュー用変換・反射用変換・マテリアル・歪み用マテリアル）
+- **対応**（2026-10-29、コードまで）：
+  1. 名前：`Scene::MakeUniqueDynamicName`（`Scene.h` のテンプレート）。基本の名前ごとに次の番号を覚え、照合は 1 回。番号は戻さない。`GameScene::InstantiatePrefab` の 3 か所と `Scene::AddDynamicPrimitive` を置き換え
+  2. 弾（案 B を採用。プールは手間と危険が大きいので見送り）：
+     - `PrimitiveMesh::InitializeShared(key, make)`：パラメータの無い形（Plane/Box/Sphere/Hemisphere）は頂点・インデックスを全インスタンスで共有（`PrimitiveInstance::Initialize` と `EffectPrimitiveRenderer::Initialize` から）。共有したメッシュは `UpdateVertices` 不可。終了時は `PrimitivePipeline::Finalize` で `ReleaseSharedGeometry`
+     - プレビュー・反射・歪みの CB は初めて使う時に作る（`EnsurePreviewTransform`／`EnsureReflectionTransform`／`EnsureDistortionMaterial`）
+     - 弾 1 発のバッファ作成は 7 本 → 2 本（変換・マテリアル）。Ring/Cylinder/Helix は今まで通り（Primitive のプレハブで使っている物は無い）
+  3. Wave のモデル：`RailStagePart::CollectWavePrefabs`（prefab と child_prefab）→ `StagePlayScene` の降下中の初期化に段 `StagePlay/WavePrefabs`（1 フレーム 1 プレハブ）。`GameScene::PreloadPrefabModels` は弾のプレハブ（`bulletPrefabs`）も 1 段たどる。谷の障害物もここで読まれる（`StageStreaming` の先読みは読み込み済みで素通り）
+  4. エフェクト：ループの 2 周目からはレンダラを使い回す（`ResetForLoop` で捨てない。向き・材質だけ設定し直す）。見た目の違いはループの境目で UV スクロールが 0 に戻らなくなることだけ。レンダラを作る所に `PEPPER_SCOPE("EffectInstance::CreatePrimitive")`
+  - エンジン側の変更（ArcanaEngine へ同期が要る）：`Scene.h/.cpp`、`PrimitiveMesh.h/.cpp`、`PrimitiveInstance.cpp`、`PrimitivePipeline.cpp`、`EffectPrimitiveRenderer.cpp`、`EffectInstance.cpp`
+  - **確認すること**：Development で雲の上からボス戦まで通し、`SceneManager::Update` の山が 16ms を超えないか。`InstantiatePrefab::AddPrimitive`／`UniqueName` の大きさ、11 秒の `AddObject3D`、30 秒おきの `UpdateInstances`（`EffectInstance::CreatePrimitive` が 2 周目から出ないこと）、降下中の `deferred_step name=StagePlay/WavePrefabs` の 1 フレームの長さ。見た目では敵弾・ボスの弾・スラスター・エフェクトの歪み／水面への映り込み
 - **候補**：
   1. ② 実行時に出す物は連番のカウンタで名前を付ける（または名前を付けない）。手間小・見た目は不変
   2. ① 形ごとにメッシュを共有する（型＋パラメータでキャッシュ）、または弾をプールして使い回す。効果大・エンジンの変更（ArcanaEngine 同期）

@@ -115,6 +115,8 @@ public:
 	float GetStageSeconds() const;         // progress / speed。SeekMax比較・ImGui表示に使う
 	/// <summary>ステージ秒 sec のときのレール上のカメラ位置（揺れ・水面クランプ前の素の位置）</summary>
 	Vector3 SampleCameraPathAtSec(float sec) const;
+	/// <summary>Wave で出すプレハブ名（prefab と child_prefab、重複なし）。ステージ開始時にモデルを先読みする用</summary>
+	std::vector<std::string> CollectWavePrefabs() const;
 
 	void OnImGuiTuning(bool& changed);      // "Rail Camera" + (_DEBUG) "Wave Editor"
 	void LoadFromJson(const JsonValue& root);   // root["camera"]（既存キー名を維持、データ非破壊）

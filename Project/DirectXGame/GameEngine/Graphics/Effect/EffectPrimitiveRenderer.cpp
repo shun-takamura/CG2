@@ -36,8 +36,24 @@ void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& t
                                          const PrimitiveGenerator::LightningBoltParams& lightningParams,
                                          const PrimitiveGenerator::FrameParams& frameParams) {
     primitiveType_ = primitiveType;
-    MeshData md = GenerateByType(primitiveType, ringParams, cylinderParams, helixParams, beamParams, lightningParams, frameParams);
-    mesh_.Initialize(md);
+    // パラメータを持たない形（Plane/Box/Sphere/Hemisphere）は PrimitiveInstance と同じ共有バッファを使う
+    // （弾のエフェクトを出すたびに同じ形を作り直さない）
+    const char* sharedKey = nullptr;
+    switch (primitiveType) {
+    case 0: sharedKey = "Plane"; break;
+    case 1: sharedKey = "Box"; break;
+    case 2: sharedKey = "Sphere"; break;
+    case 8: sharedKey = "Hemisphere"; break;
+    default: break;
+    }
+    auto make = [&]() {
+        return GenerateByType(primitiveType, ringParams, cylinderParams, helixParams, beamParams, lightningParams, frameParams);
+    };
+    if (sharedKey) {
+        mesh_.InitializeShared(sharedKey, make);
+    } else {
+        mesh_.Initialize(make());
+    }
 
     // エフェクト用既定：加算ブレンド・深度書き込みなし・背面カリング無効
     mesh_.SetBlendMode(PrimitivePipeline::kBlendModeAdd);

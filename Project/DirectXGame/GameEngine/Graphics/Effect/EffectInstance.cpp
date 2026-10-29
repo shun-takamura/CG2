@@ -7,6 +7,7 @@
 #include "Quaternion.h"
 #include "EngineTime.h"
 #include "TimeGroup.h"
+#include "PepperMacros.h"
 #include <algorithm>
 #include <random>
 #define NOMINMAX
@@ -240,12 +241,16 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         float local = rt.clock - pc.startTime;
         if (local < 0.0f) continue;
 
-        // 開始：レンダラ生成
+        // 開始：レンダラ生成（ループの 2 周目からは前の周のレンダラを使い回す。
+        // 作り直すとスラスターのような 30 秒ループが周ごとに 13〜26ms 止まっていた＝14 番 §4.7）
         if (!rt.started) {
-            rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
-            rt.renderer->Initialize(pc.meshType, pc.texturePath,
-                                    pc.ringParams, pc.cylinderParams, pc.helixParams, pc.beamParams,
-                                    pc.lightningParams, pc.frameParams);
+            if (!rt.renderer) {
+                PEPPER_SCOPE("EffectInstance::CreatePrimitive");
+                rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
+                rt.renderer->Initialize(pc.meshType, pc.texturePath,
+                                        pc.ringParams, pc.cylinderParams, pc.helixParams, pc.beamParams,
+                                        pc.lightningParams, pc.frameParams);
+            }
 
             // 向きの初期化：基準 rotate（× 出現時ランダム）をクオータニオンで合成。
             Quaternion baseQ = QuaternionFromEuler(pc.rotate);
@@ -341,7 +346,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 
         // 寿命終了（totalDuration を超えた場合も含む）
         if (local >= life || elapsedTime_ >= def_.totalDuration) {
-            rt.renderer.reset();
+            // ループするエフェクトは次の周で使い回すので残す（finished の間は描かない）
+            if (!def_.loop) rt.renderer.reset();
             rt.finished = true;
         }
     }
@@ -611,8 +617,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 }
 
 void EffectInstance::ResetForLoop() {
-    // 現在確保中のライト・サウンドはここで解放（Primitive renderer は Update 内で
-    // 自分の finished と共に reset 済みなので再生成される）
+    // 現在確保中のライト・サウンドはここで解放。Primitive の renderer は残し、次の周の開始で
+    // 向き・材質だけ設定し直す（作り直さない）
     LightManager* lm = LightManager::GetInstance();
     for (auto& rt : lights_) {
         if (rt.slot != kInvalidLightSlot) {
@@ -630,7 +636,6 @@ void EffectInstance::ResetForLoop() {
         rt = SoundRuntime{};
     }
     for (auto& rt : primitives_) {
-        rt.renderer.reset();
         rt.started = false;
         rt.finished = false;
         rt.clock = 0.0f;

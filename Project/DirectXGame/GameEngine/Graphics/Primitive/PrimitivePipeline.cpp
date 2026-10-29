@@ -1,4 +1,5 @@
 ﻿#include "PrimitivePipeline.h"
+#include "PrimitiveMesh.h"
 #include "Log.h"
 #include <cassert>
 
@@ -28,6 +29,7 @@ void PrimitivePipeline::Initialize(DirectXCore* dxCore, SRVManager* srvManager) 
 }
 
 void PrimitivePipeline::Finalize() {
+    PrimitiveMesh::ReleaseSharedGeometry();
     for (auto& dim2 : pipelineStates_) {
         for (auto& dim1 : dim2) {
             for (auto& pso : dim1) {

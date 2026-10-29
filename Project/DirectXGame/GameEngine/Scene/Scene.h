@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // PrimitiveInstance はシーン基底が直接 std::unique_ptr で保持するため、完全型が必要
@@ -250,6 +251,27 @@ protected:
 	void DrawDynamicSprites();
 	void UpdateDynamicPrimitives();
 	void DrawDynamicPrimitives();
+
+	/// <summary>
+	/// 動的に出す物の名前を一意にする（"base", "base (1)", "base (2)" …）。base ごとの次の番号から試すので
+	/// 弾を何百発出しても照合は 1 回で済む（毎回 1 から数え直すと物の数の 2 乗になる）。番号は戻さない。
+	/// except は items に追加済みの自分自身（照合から外す）。
+	/// </summary>
+	template <class Container>
+	std::string MakeUniqueDynamicName(const std::string& base, const Container& items, const void* except = nullptr) {
+		int& next = nameCounters_[base];
+		for (;;) {
+			std::string name = (next == 0) ? base : base + " (" + std::to_string(next) + ")";
+			++next;
+			bool taken = false;
+			for (const auto& p : items) {
+				if (static_cast<const void*>(p.get()) != except && p->GetName() == name) { taken = true; break; }
+			}
+			if (!taken) return name;
+		}
+	}
+	// MakeUniqueDynamicName の base ごとの次の番号
+	std::unordered_map<std::string, int> nameCounters_;
 
 	// GPU がまだ使用中のリソースを即破棄するとエラーになるため、Remove 時は一旦ここへ退避し
 	// 次フレームの ProcessAsyncLoads で破棄する（型消去で include を増やさない）

@@ -3083,6 +3083,16 @@ void StagePlayScene::Initialize() {
 		RebuildUiAfterSceneLoad();
 		return true;
 	} });
+	// Wave で出る敵（と撃つ弾）のモデルを先に読む。初めて出た時の読み込みで止まらないように
+	// （11 秒の最初の敵で 46ms＝14 番 §4.7）。1 フレームに 1 プレハブずつ
+	deferredInit_.push_back({ "StagePlay/WavePrefabs", [this, names = std::vector<std::string>{}, next = size_t{ 0 }, collected = false]() mutable {
+		if (!collected) {
+			if (railStage_) names = railStage_->CollectWavePrefabs();
+			collected = true;
+		}
+		if (next < names.size()) PreloadPrefabModels({ names[next++] });
+		return next >= names.size();
+	} });
 	// 「ボス戦からリトライ」：Rail/Landing を飛ばしてボス戦開始時点のHP・必殺技ゲージへ復元する。
 	// prevPhase_ は Phase::Rail のまま（上で設定済み）なので、Update() 初回のフェーズ遷移エッジ検出で
 	// bossStage_->Enter() が自動的に走る。（後回しにするのは HUB から来たときだけなのでここは必ず Initialize の中）
