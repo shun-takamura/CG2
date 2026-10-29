@@ -51,6 +51,7 @@
 #include "Score/ScoreManager.h"
 #include "Score/BossRetryState.h"
 #include "Score/EtherState.h"
+#include "Score/DifficultyProfile.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
@@ -2840,6 +2841,7 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 	// 賭ける画面（19 番 §4.7）ができるまで、ここで賭け分と難易度を決めて始める（§4.8）
 	if (ImGui::CollapsingHeader("Ether State (19 G6)")) EtherState::GetInstance()->OnImGui();
+	if (ImGui::CollapsingHeader("Difficulty Profile (19 5)")) DifficultyProfile::GetInstance()->OnImGui();
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -5650,8 +5652,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			} else if (dodgeInv || dmgInv || specialInv) {
 				// 無敵中：ダメージ無効（弾はそのまま通過＝既存の被弾無敵と同様）
 			} else {
-				// 通常被弾
-				OnPlayerTakeDamage(incomingDamage);
+				// 通常被弾（敵の攻撃のダメージに純度の倍率。19 番 §5）
+				OnPlayerTakeDamage(DifficultyProfile::ScaleInt(incomingDamage, DifficultyProfile::GetInstance()->GetDamageScale()));
 				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）
 				if (phase_ == Phase::Boss && bossStage_) {
 					bossStage_->ApplyKnockback(hitSourcePos, heavyHit);

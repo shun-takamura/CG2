@@ -333,6 +333,18 @@
     {
       "dir": "Resources/Models/CanyonRocks",
       "file": "CanyonSpireLow.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireS.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonSpireL.mesh"
+    },
+    {
+      "dir": "Resources/Models/CanyonRocks",
+      "file": "CanyonBeam.mesh"
     }
   ],
   "animatedModels": [
