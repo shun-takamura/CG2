@@ -165,6 +165,8 @@ DEFAULT_RECIPE: dict = {
         "half_width": 130.0,            # 上の半幅 [m]（仮。谷の担当が決める）
         "half_width_amp": 15.0,         # 左右別の 1D ノイズで揺らす量
         "half_width_wavelength": 180.0,
+        "mouth_half_width": 0.0,        # 滝の口の上の半幅 [m]。縁（cliff.z）からここで始めて half_width へ絞る。0 で無効
+        "mouth_length": 200.0,          # 絞り終える縁からの Z の距離 [m]
         "wall_noise_amp": 10.0,         # 壁の線のギザギザ（尾根ノイズ）
         "wall_noise_wavelength": 60.0,
         "floor_ratio": 0.55,            # 谷底の半幅 = 上の半幅 × これ
@@ -653,6 +655,10 @@ def build_height(recipe: dict):
                 return cn["half_width"] + cn["half_width_amp"] * n
             w_right, w_left = canyon_side(), canyon_side()
             top = np.where(canyon_sd >= 0.0, w_right, w_left)
+            if cn["mouth_half_width"] > 0.0:
+                # 滝の幅（川の半幅 ≈ 112m）のまま落ちて、谷の奥へ向かって絞る
+                mouth = smoothstep(cl["z"], cl["z"] + cn["mouth_length"], pz)
+                top = top + (cn["mouth_half_width"] - top) * (1.0 - mouth)
             top = top + cn["wall_noise_amp"] * (ridged_2d(px, pz, cn["wall_noise_wavelength"], 3, krng) * 2.0 - 1.0)
             bottom = top * cn["floor_ratio"]
             u = np.clip((np.abs(canyon_sd) - bottom) / np.maximum(top - bottom, 1e-3), 0.0, 1.0)

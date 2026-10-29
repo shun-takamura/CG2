@@ -6,11 +6,18 @@
 #include "Commands/ChargeRushCommand.h"
 #include "Commands/SpawnDroneCommand.h"
 #include "Commands/HoverStationCommand.h"
+#include "Commands/ObstacleCommand.h"
 
 namespace EnemyCommandFactory {
 
 	std::vector<std::unique_ptr<IEnemyCommand>> Create(const WaveEntry& entry, const PrefabDef* prefab) {
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
+
+		// 谷の障害物はプレハブの移動方法（Static）より先に分ける（撃たせない）
+		if (entry.enemyType == "Obstacle") {
+			cmds.push_back(std::make_unique<ObstacleCommand>());
+			return cmds;
+		}
 
 		// 移動方法はプレハブが優先（hasMovement なら movementType で分岐）
 		if (prefab && prefab->hasMovement) {

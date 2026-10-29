@@ -16,6 +16,7 @@ struct WaveEntry {
 	float       traverseSec = 8.0f;// 敵スプラインを踏破するのにかかる秒数
 	std::string splineId;               // 移動スプライン名（Drone の固定ルート / Rusher の登場スプライン）
 	std::vector<Vector3> positions;     // 固定位置スポーン座標（Carrier など、splineId 不使用時）
+	Vector3     rotateDeg{ 0.0f, 0.0f, 0.0f }; // positions に置く物の向き [度]（谷の石柱の梁の傾きなど。JSON は省略可）
 	int         count          = 1;     // スポーン数（positions が空の場合は同一地点に count 体）
 	float       shootIntervalSec = 3.0f;// 射撃間隔 [秒]（Drone 用。0 で射撃なし）
 	float       spawnIntervalSec = 5.0f;// 子敵生成間隔 [秒]（Carrier 用）

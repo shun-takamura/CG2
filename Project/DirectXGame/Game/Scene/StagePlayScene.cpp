@@ -1,4 +1,5 @@
 ﻿#include "StagePlayScene.h"
+#include "PepperMacros.h"
 #include "Components/Gameplay.h"
 #include "SoundManager.h"
 #include "Physics/CollisionGeometry.h"
@@ -1620,6 +1621,7 @@ void StagePlayScene::EndJustDodgeCounterAction()
 
 void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateJustDodgeCounterAction");
 	if (!justDodgeCounterActive_) return;
 	jdActionPhaseTimer_ += dt;
 	if (phase_ == Phase::Boss && jdBossMeleeCamActive_) jdBossCamSwingTimer_ += dt;
@@ -1745,6 +1747,7 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 
 void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector2& moveDelta, float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateJustDodgeClones");
 	if (!jdSelecting_ && !jdMerging_) return;
 	if (!player_ || !camera_) return;
 
@@ -1810,6 +1813,7 @@ void StagePlayScene::UpdateJustDodgeClones(InputActionMap* actions, const Vector
 
 void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDelta, float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateDodge");
 	// クールダウン・行動ロックを実時間で減衰
 	if (dodgeCooldownTimer_ > 0.0f)   dodgeCooldownTimer_   -= dt;
 	if (dodgeActionLockTimer_ > 0.0f) dodgeActionLockTimer_ -= dt;
@@ -1891,6 +1895,7 @@ void StagePlayScene::ResetDodgeState()
 
 void StagePlayScene::UpdateHeal(InputActionMap* actions)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateHeal");
 	if (!actions || !player_) return;
 	// ジャスト回避演出中は通常Healを発動しない（左派生で消費される＝同フレ二重消費を防ぐ）
 	if (justDodgeActive_) return;
@@ -1960,6 +1965,7 @@ void StagePlayScene::SpawnPendingMelee()
 
 void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateMeleeCombo");
 	if (!player_) return;
 
 	// タイマー進行
@@ -2038,6 +2044,7 @@ void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 
 void StagePlayScene::UpdateJustDodgeEffect(float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdateJustDodgeEffect");
 	if (!justDodgeActive_) { jdEffectIntensity_ = 0.0f; return; }
 
 	justDodgeTimer_ += dt;
@@ -2101,6 +2108,7 @@ void StagePlayScene::UpdateJustDodgeEffect(float dt)
 
 void StagePlayScene::UpdatePrecisionAim(InputActionMap* actions, float dt)
 {
+	PEPPER_SCOPE("StagePlayScene::UpdatePrecisionAim");
 	if (!actions) return;
 
 	// LT / 右クリックのホールドでモード ON（トグルは将来追加）
@@ -3175,6 +3183,7 @@ void StagePlayScene::RunDeferredInitStep() {
 }
 
 void StagePlayScene::UpdateDeferredInit(double budgetMs) {
+	PEPPER_SCOPE("StagePlayScene::UpdateDeferredInit");
 	const double start = LoadProfiler::NowMs();
 	do {
 		RunDeferredInitStep();
@@ -4261,7 +4270,7 @@ void StagePlayScene::Update() {
 	// 全シーン共通の EffectManager + GPUParticle を更新。
 	// 実 delta（unscaled）を渡す。各エフェクト成分は EffectDef の TimeGroup（既定 World）で内部スケールされる。
 	// 必殺技の全停止中でも進めたい演出は TimeGroup=Effect にしておけば動く（Effect グループ既定 1.0）。
-	UpdateGlobalEffects(camera_.get(), dxCore_->GetDeltaTime());
+	{ PEPPER_SCOPE("StagePlay::UpdateGlobalEffects"); UpdateGlobalEffects(camera_.get(), dxCore_->GetDeltaTime()); }
 
 	// ジャスト回避演出のタイマ更新。受付期間/フェードは実時間（UI グループ）で計測する
 	// （World をスローにしても受付 3 秒は実時間で一定にしたいため）。
@@ -5137,6 +5146,7 @@ void StagePlayScene::BeginCloudTop() {
 }
 
 void StagePlayScene::ApplyPlayerLook() {
+	PEPPER_SCOPE("StagePlayScene::ApplyPlayerLook");
 	if (!player_) return;
 	player_->SetEnvironmentCoefficient(playerLook_.environmentCoefficient);
 	if (playerLook_.overrideMaterial) player_->SetMetallicRoughness(playerLook_.metallic, playerLook_.roughness);
@@ -5363,6 +5373,8 @@ bool StagePlayScene::ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag ta
 	// 敵・ボスは Wave JSON からスポーンするランタイム実体。**シーン JSON には絶対に保存しない**
 	// （プレイ中に自動保存が走ると、湧いた敵がマップオブジェクトとして焼き込まれてしまうため）。
 	if (tag == EntityTag::Enemy || tag == EntityTag::Boss) return true;
+	// 谷の障害物が崩れた部品も同じくランタイム実体
+	if (railStage_ && railStage_->IsObstacleDebris(entity)) return true;
 	// ランタイム UI（HP バー / 必殺ゲージ）は毎回建て直すので保存しない
 	if (entity == hpBarBackground_ || entity == hpBarForeground_ ||
 		entity == gaugeBarBackground_ || entity == gaugeBarForeground_) return true;
@@ -5478,6 +5490,7 @@ void StagePlayScene::InitializeHPBarUI() {
 }
 
 void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
+	PEPPER_SCOPE("StagePlayScene::UpdatePlayerDamageAndUI");
 	if (!player_) return;
 
 	// シェイクオフセットの計算を進める
@@ -5562,16 +5575,21 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		}
 
 		// 突進など「攻撃接触中」の敵（弾が当たっていない場合のみ。ただの移動接触は contactDamageActive_=false で除外）
+		// 形どおり（球・カプセル・OBB）に判定する。谷の障害物は細長いカプセル／梁なので球の距離では合わない
 		if (!hitFound) {
+			const Collider& pc = Gameplay::Of(player_).GetCollider();
+			CollisionGeometry::WorldData pw;
+			const bool playerShape = pc.enabled && CollisionGeometry::TryGetWorldData(player_, pc, pw);
 			for (auto& ctrl : enemyControllers_) {
+				if (!playerShape) break;
 				if (!ctrl || !ctrl->contactDamageActive_ || !ctrl->entity_) continue;
 				IImGuiEditable* e = ctrl->entity_;
 				const Vector3* ep = e->GetEditableTranslate();
 				if (!ep) continue;
-				const float er = Gameplay::Of(e).GetCollider().radius;
-				float dx = playerPos.x - ep->x, dy = playerPos.y - ep->y, dz = playerPos.z - ep->z;
-				float sumR = playerR + er;
-				if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
+				const Collider& ec = Gameplay::Of(e).GetCollider();
+				CollisionGeometry::WorldData ew;
+				if (!CollisionGeometry::TryGetWorldData(e, ec, ew)) continue;
+				if (CollisionGeometry::TestPair(pc, pw, ec, ew)) {
 					incomingDamage = Gameplay::Of(e).GetDamageDealer().damage;
 					if (incomingDamage <= 0) incomingDamage = 10;
 					attacker = e;
@@ -5735,6 +5753,7 @@ void StagePlayScene::OnPlayerMeleeHit(IImGuiEditable* /*target*/, const std::str
 }
 
 void StagePlayScene::UpdateSpecialGaugeUI() {
+	PEPPER_SCOPE("StagePlayScene::UpdateSpecialGaugeUI");
 	if (!gaugeBarBackground_ || !gaugeBarForeground_) return;
 
 	// 位置（ImGuiでチューニングされた値を毎フレ反映）
@@ -5760,6 +5779,7 @@ void StagePlayScene::UpdateSpecialGaugeUI() {
 }
 
 void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
+	PEPPER_SCOPE("StagePlayScene::UpdateSpecialMove");
 	if (!actions) return;
 
 	if (specialActive_) {

@@ -154,6 +154,7 @@ private:
 	}
 	SplineCurveActor* EnsureCameraPathSpline(const std::vector<Vector3>& defaultPoints) override;
 	void ClearWaveRuntimeState() override;
+	void DestroyEntity(IImGuiEditable* entity) override { DestroyDynamicEntity(entity); }
 
 	// ----- IBossStageHost 実装（RegisterEnemyController/UpdateEnemyControllers/SweepDeadEntities/
 	//        GetPlayer は IRailStageHost と同一シグネチャのため上の override 1つで両方を満たす）-----
@@ -170,6 +171,8 @@ private:
 	// ----- IStageStreamingHost 実装（private override。StageStreaming 経由のみ）-----
 	size_t CreateStreamGroup(const std::string& group) override { return LoadStreamGroup(group); }
 	size_t GetPendingStreamEntityCount(const std::string& group) const override { return GetPendingStreamCount(group); }
+	size_t DestroyStreamGroup(const std::string& group) override { return UnloadStreamGroup(group); }
+	void WarmPrefabModels(const std::vector<std::string>& prefabs) override { PreloadPrefabModels(prefabs); }
 
 	// 区間ごとのストリーミングの時刻表（11 番 L9）。streamGroup 付きの配置を雲の中で裏で読み、決めた秒に作る
 	std::unique_ptr<StageStreaming> streaming_;

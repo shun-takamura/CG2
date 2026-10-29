@@ -51,6 +51,8 @@
 | 雲抜け・入口（53 秒、ふたの中） | `CloudRaymarcher::March` **5.71** / `Scene::DrawDynamicObjects` 4.69 | **17.49ms（60fps 割れ）** | 2026-10-10 |
 | 雲抜け・縦穴〜出口（60 秒） | `CloudRaymarcher::March` **5.21** / `Scene::DrawDynamicObjects` 2.74 | 16.68ms | 2026-10-10 |
 | 降下〜低空（地形が画面を埋める） | `Scene::DrawDynamicObjects` 5〜8.7（地形込み） | 59〜61fps（VSync 律速） | 2026-10-08（Debug ログ） |
+| 谷（122〜124 秒、障害物が近くにない所） | `Scene::DrawDynamicObjects` 4.7〜5.1 / `Game::ShadowPass` 2.3 | 60〜61fps | 2026-10-29 |
+| 谷（134〜139・146〜149 秒、岩柱・梁のそばを通る所） | `Scene::DrawDynamicObjects` **12〜14.4** / `Game::ShadowPass` 1.1〜1.3 | **49〜55fps** | 2026-10-29 |
 | ボス戦 | 未計測 | — | — |
 
 ---
@@ -139,6 +141,43 @@
   3. `DispatchSkinning` のバリア→Dispatch→バリアを全インスタンスでまとめる（`AnimatedObject3DInstance::DispatchSkinning`、`AnimatedObject3DInstance.cpp:201` 〜）。①②で足りなければ
 - **進め方**：まず PEPPER で現状を測る（分身をスキン付きに戻した状態で）→ ① → 再計測 → ② → 再計測
 - **元**：8番 §4
+
+### 4.6 谷：岩柱・梁のそばを通る所
+
+- **状態**：実施中（2026-10-29 案 1 をコードまで・ビルド・実機未確認。`RailStagePart` の退避トリガーで、enemy_type "Obstacle" と地形に置いた `Static`（砲台）は `retreat_sec` に消す。`gen_canyon_wave.py` が通過の 3 秒後を `retreat_sec` に書く。崩れた根元は残る）
+- **案 1 の実測**（Development `Logs/2026-10-29_172911`、前の回 `163056` と同じ通し）：`Scene::DrawDynamicObjects` の山は 134〜139 秒 12〜13 → 9.7〜11ms、146〜150 秒 11.7〜14.4 → 8.8〜12.5ms。fps は 49〜55 → 50〜59（148〜151 秒はまだ 50〜56）。ただし谷に入る前（104〜121 秒）も 1ms ほど低く出ているので、回ごとのぶれが 1ms ほどある。残りは近くの岩と奥の壁の塗り（案 2・3）
+- **実測**：Development `Logs/2026-10-29_163056`（雲の上から通し）。`Scene::DrawDynamicObjects` は障害物の無い 122〜124 秒で 4.7〜5.1ms、岩柱・梁のそばを通る 134〜139 秒・146〜149 秒で 12〜14.4ms（49〜55fps）。126 秒に低空の地形を消した後は `Game::ShadowPass` が 2.0 → 1.1ms に下がった
+- **原因**（推定）：カメラが岩の 1〜2m そばを通るので、岩（PBR）が画面の大部分を塗る＋その奥の峡谷の壁（地形 PS、4.2）の重ね塗り。通り過ぎた障害物は壊されるまで残る（`ObstacleCommand` は退場しない）ので、後ろの岩も描いている可能性。岩ごとの区間はまだ測っていない
+- **候補**：
+  1. 通り過ぎた障害物を消す（カメラの後ろ数十 m で `retreat` 相当。見た目は変わらない）。効果は描く数次第・手間小
+  2. 4.2 の地形 PS の軽量化（重みが 0 の層を飛ばす等。見た目は不変）
+  3. 岩の PBR を軽い材質にする／近い岩だけ LOD（見た目が少し変わる）
+- **元**：11番 §6 S5、4番 §11
+
+### 4.7 ステージ全体：1 フレームだけ 15〜50ms 止まる（CPU）
+
+- **状態**：未着手（原因の特定まで。2026-10-29 谷の担当が PEPPER の区間を足して調べた）
+- **実測**：Development `Logs/2026-10-29_184514`（雲の上からボス戦まで通し）。止まった秒の `SceneManager::Update` の下に出た区間：
+  | 止まり | 区間 | 大きさ | いつ |
+  |---|---|---|---|
+  | ① 弾・敵を出す | `InstantiatePrefab::AddPrimitive`（エンジン `Scene::AddDynamicPrimitive` → `PrimitiveInstance::Initialize`） | 1 個 0.5〜2ms。ボス戦で敵弾を 1 秒に 20〜40 個出すと **37〜49ms** | ステージ全体（26・62・84・108 秒…、ボス戦 186〜196 秒） |
+  | ② 名前を一意にする | `InstantiatePrefab::UniqueName`（＋エンジンの `AddDynamicPrimitive` の中にも同じループ） | 物の数の 2 乗。板 103 個で 10ms | 弾が多い時 |
+  | ③ 初めて出るモデル | `InstantiatePrefab::AddObject3D` | 46ms（1 回） | 11 秒（最初の敵） |
+  | ④ エフェクトの更新 | `EffectManager::UpdateInstances` | 13〜26ms。動いているエフェクトは 4 個だけ | **約 30 秒おき**（1・30・61・90・151・180 秒） |
+  | ⑤ エフェクトの片付け | `EffectManager::PendingDelete` | 8ms | 199 秒 |
+  | ⑥ 区間の空の差し替え | `StageEnvironment::Update`（谷の区間の夜の cubemap `rogland_clear_night_4k.dds` を同期で読む） | 39ms | 谷の区間に入る所（`Logs/2026-10-29_182803` の 125 秒） |
+- **原因**：
+  - ① 弾 1 発ごとに `PrimitiveGenerator::CreateSphere` で形を作り直し、`mesh_.Initialize` で頂点・インデックスのバッファを新しく作っている（同じ形を毎回作る）
+  - ② 同じ名前が無くなるまで全部の物と比べ直す（`name (1)`, `name (2)` … と毎回 1 から数える）
+  - ③ Wave で出るプレハブのモデルを開始時に読んでいない（谷の分だけは `StageStreaming` の `prefabs` で読むようにした＝11番 §6 S5）
+  - ④ 4 個のうちのどれか（ループするエフェクト？）が約 30 秒ごとに重い処理をしている（未特定。`EffectInstance::Update` の中を分けて測る）
+- **候補**：
+  1. ② 実行時に出す物は連番のカウンタで名前を付ける（または名前を付けない）。手間小・見た目は不変
+  2. ① 形ごとにメッシュを共有する（型＋パラメータでキャッシュ）、または弾をプールして使い回す。効果大・エンジンの変更（ArcanaEngine 同期）
+  3. ③ ステージの開始時（HUB の降下の先読み）に Wave の全プレハブのモデルを読む
+  4. ④ `EffectInstance::Update` を分けて測り、どのエフェクトかを特定する（エンジン）
+  5. ⑥ 谷の区間の空をほかの区間と同じ青空にする（読み込みが無くなる。背景は青空＋雲の方針。L5 の値）
+- **元**：11番 §6 S5（谷の担当の計測）
 
 ---
 

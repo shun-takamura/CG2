@@ -645,6 +645,624 @@
       "spawn_limit": 3,
       "child_prefab": "drone",
       "child_spline_id": "EnemyPath_01"
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 119.0,
+      "retreat_sec": 130.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          320.434,
+          -62.609,
+          2638.089
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 122.0,
+      "retreat_sec": 133.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          285.345,
+          -60.0,
+          2682.582
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "turret",
+      "trigger_sec": 123.0,
+      "retreat_sec": 134.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 2.5,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          315.326,
+          -58.0,
+          2718.539
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_l",
+      "trigger_sec": 125.0,
+      "retreat_sec": 136.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          274.075,
+          -60.0,
+          2737.717
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "turret",
+      "trigger_sec": 127.0,
+      "retreat_sec": 138.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 2.5,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          228.252,
+          -59.0,
+          2763.699
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_l",
+      "trigger_sec": 128.0,
+      "retreat_sec": 139.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          248.911,
+          -60.0,
+          2783.846
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 132.0,
+      "retreat_sec": 143.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          273.819,
+          -65.0,
+          2849.444
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        108.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 136.0,
+      "retreat_sec": 147.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          307.764,
+          -65.5,
+          2915.0
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        106.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 136.0,
+      "retreat_sec": 147.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          307.764,
+          -65.5,
+          2915.0
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        74.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 139.0,
+      "retreat_sec": 150.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          330.714,
+          -60.0,
+          2963.266
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 141.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 3.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        -6.0,
+        2.0,
+        30.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 142.0,
+      "retreat_sec": 153.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          322.987,
+          -54.5,
+          3013.333
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        106.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 142.0,
+      "retreat_sec": 153.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          322.987,
+          -54.5,
+          3013.333
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        74.0
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "turret",
+      "trigger_sec": 145.0,
+      "retreat_sec": 156.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 2.5,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          277.971,
+          -58.0,
+          3049.588
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_l",
+      "trigger_sec": 146.0,
+      "retreat_sec": 157.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          287.438,
+          -60.0,
+          3074.911
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 146.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 3.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        6.0,
+        1.0,
+        30.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 146.5,
+      "retreat_sec": 157.5,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          295.774,
+          -60.0,
+          3090.539
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 149.0,
+      "retreat_sec": 160.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          269.475,
+          -65.0,
+          3128.056
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        72.0
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "turret",
+      "trigger_sec": 150.0,
+      "retreat_sec": 161.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 2.5,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          287.776,
+          -60.0,
+          3152.561
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_l",
+      "trigger_sec": 152.0,
+      "retreat_sec": 163.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          265.103,
+          -60.0,
+          3177.669
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 152.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 3.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        0.0,
+        3.0,
+        32.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 155.0,
+      "retreat_sec": 166.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          264.305,
+          -65.5,
+          3226.389
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        106.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_beam",
+      "trigger_sec": 155.0,
+      "retreat_sec": 166.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          264.305,
+          -65.5,
+          3226.389
+        ]
+      ],
+      "rotate_deg": [
+        0.0,
+        0.0,
+        74.0
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "turret",
+      "trigger_sec": 155.0,
+      "retreat_sec": 166.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 2.5,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          237.951,
+          -59.0,
+          3235.848
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 158.0,
+      "retreat_sec": 169.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          281.759,
+          -60.0,
+          3278.519
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 158.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 3.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        -6.0,
+        1.0,
+        30.0
+      ]
+    },
+    {
+      "enemy_type": "Obstacle",
+      "prefab": "canyon_spire_s",
+      "trigger_sec": 158.5,
+      "retreat_sec": 169.5,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 0.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "positions": [
+        [
+          297.309,
+          -60.0,
+          3280.519
+        ]
+      ]
+    },
+    {
+      "enemy_type": "Drone",
+      "prefab": "HoverEnemy",
+      "trigger_sec": 164.0,
+      "retreat_sec": -1.0,
+      "traverse_sec": 8.0,
+      "spline_id": "",
+      "count": 1,
+      "shoot_interval_sec": 3.0,
+      "spawn_interval_sec": 5.0,
+      "spawn_limit": 4,
+      "child_prefab": "",
+      "child_spline_id": "",
+      "camera_offset": [
+        6.0,
+        2.0,
+        30.0
+      ]
     }
   ]
 }

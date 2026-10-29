@@ -1,0 +1,50 @@
+{
+  "kind": "Object3D",
+  "model": {
+    "dir": "Resources/Models/CanyonRocks",
+    "file": "CanyonSpireL.mesh",
+    "animated": false
+  },
+  "tag": "Enemy",
+  "defaults": {
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "collider": {
+    "shape": "Capsule",
+    "offset": [
+      0,
+      -1.5,
+      0
+    ],
+    "radius": 5.0,
+    "halfExtents": [
+      5.0,
+      5.0,
+      5.0
+    ],
+    "capsuleRadius": 5.0,
+    "capsuleHeight": 47.0
+  },
+  "hp": {
+    "maxHP": 120
+  },
+  "scoreValue": 30,
+  "movement": {
+    "type": "Static",
+    "moveSpeed": 0,
+    "hoverApproachSpeed": 0,
+    "hoverHoldDuration": 0
+  },
+  "effects": {
+    "hurt": "Hit_Small"
+  }
+}

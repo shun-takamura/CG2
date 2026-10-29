@@ -1,4 +1,5 @@
 #include "RiverWater.h"
+#include "PepperMacros.h"
 
 #include "Water/WaterSurface.h"
 #include "Water/WaterReflection.h"
@@ -115,6 +116,7 @@ void RiverWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3
 }
 
 void RiverWater::Update(float stageSec, float deltaTime, const Vector3* playerPosition) {
+	PEPPER_SCOPE("RiverWater::Update");
 	if (!water_) return;
 	if (state_ == LoadState::NotStarted && stageSec >= loadStartSec_) {
 		StartLoad();
@@ -192,8 +194,10 @@ void RiverWater::UpdateWake(const Vector3* playerPosition, float deltaTime) {
 	// 水面に近いほど・速いほど強い（11 番 §3.4：触れた時ではなく、近くを速く通った風で波立つ）
 	const float height = position.y - waterHeight_;
 	const float speed = deltaTime > 0.0f ? moved / deltaTime : 0.0f;
+	// 水面より下（縁を越えて谷へ落ちた後）は川の上ではないので出さない
 	const float factor = (1.0f - Smoothstep(wake_.fullHeight, wake_.maxHeight, height))
-	                   * Smoothstep(wake_.minSpeed, wake_.fullSpeed, speed);
+	                   * Smoothstep(wake_.minSpeed, wake_.fullSpeed, speed)
+	                   * Smoothstep(-2.0f, 0.0f, height);
 	wakeLastHeight_ = height;
 	wakeLastSpeed_ = speed;
 	wakeLastFactor_ = factor;

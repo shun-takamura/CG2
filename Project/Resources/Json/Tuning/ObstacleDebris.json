@@ -1,0 +1,144 @@
+{
+  "_note": "谷の障害物が壊れた後の崩れ方（ObstacleDebris。4_StageGimmick.md §11）。pivot / tip / origin は岩のローカル [m]（原点 = 飛行高度）。シークのたびに読み直す",
+  "gravity": 25.0,
+  "killY": -160.0,
+  "maxLife": 6.0,
+  "breaks": {
+    "canyon_spire_l": {
+      "stays": [
+        "canyon_spire_l_stump"
+      ],
+      "falls": [
+        {
+          "prefab": "canyon_spire_l_top",
+          "pivot": [
+            0,
+            1,
+            0
+          ],
+          "tip": [
+            0,
+            12,
+            0
+          ],
+          "hingeAccel": 2.0,
+          "releaseDeg": 40
+        }
+      ],
+      "chunks": {
+        "prefab": "canyon_chunk",
+        "count": 10,
+        "origin": [
+          0,
+          1,
+          0
+        ],
+        "spread": 3.0,
+        "speed": [
+          6,
+          16
+        ],
+        "scale": [
+          0.6,
+          2.0
+        ]
+      }
+    },
+    "canyon_spire_s": {
+      "stays": [
+        "canyon_spire_s_stump"
+      ],
+      "falls": [
+        {
+          "prefab": "canyon_spire_s_top",
+          "pivot": [
+            0,
+            0,
+            0
+          ],
+          "tip": [
+            0,
+            5,
+            0
+          ],
+          "hingeAccel": 3.0,
+          "releaseDeg": 40
+        }
+      ],
+      "chunks": {
+        "prefab": "canyon_chunk",
+        "count": 7,
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "spread": 2.0,
+        "speed": [
+          6,
+          16
+        ],
+        "scale": [
+          0.5,
+          1.4
+        ]
+      }
+    },
+    "canyon_beam": {
+      "stays": [
+        "canyon_beam_stub_a",
+        "canyon_beam_stub_b"
+      ],
+      "falls": [
+        {
+          "prefab": "canyon_beam_half_a",
+          "pivot": [
+            0,
+            -28,
+            0
+          ],
+          "tip": [
+            0,
+            -14,
+            0
+          ],
+          "hingeAccel": 1.8,
+          "releaseDeg": 30
+        },
+        {
+          "prefab": "canyon_beam_half_b",
+          "pivot": [
+            0,
+            28,
+            0
+          ],
+          "tip": [
+            0,
+            14,
+            0
+          ],
+          "hingeAccel": 1.8,
+          "releaseDeg": 30
+        }
+      ],
+      "chunks": {
+        "prefab": "canyon_chunk",
+        "count": 8,
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "spread": 2.5,
+        "speed": [
+          6,
+          16
+        ],
+        "scale": [
+          0.5,
+          1.6
+        ]
+      }
+    }
+  }
+}

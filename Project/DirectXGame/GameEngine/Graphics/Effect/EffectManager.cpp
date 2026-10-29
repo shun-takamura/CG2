@@ -1,4 +1,5 @@
 #include "EffectManager.h"
+#include "PepperMacros.h"
 #include "GPUParticleManager.h"
 #include "Camera.h"
 #include "Log.h"
@@ -221,13 +222,21 @@ void EffectManager::StopAll() {
 //==========================================================
 
 void EffectManager::Update(float deltaTime) {
+    PEPPER_SCOPE("EffectManager::Update");
     // 前フレームの「描画後に解放したい」インスタンスをここで安全に破棄。
     // ここに来た時点で GPU は前フレームのコマンド消化を待ち合わせ済み（フレーム境界）。
-    pendingDelete_.clear();
+    {
+        PEPPER_SCOPE("EffectManager::PendingDelete");
+        pendingDelete_.clear();
+    }
 
     // 各インスタンスを更新
-    for (auto& inst : activeInstances_) {
-        if (inst) inst->Update(camera_, deltaTime);
+    {
+        PEPPER_SCOPE("EffectManager::UpdateInstances");
+        PEPPER_GAUGE("EffectManager.Active", static_cast<double>(activeInstances_.size()));
+        for (auto& inst : activeInstances_) {
+            if (inst) inst->Update(camera_, deltaTime);
+        }
     }
 
     // 終了したインスタンスを取り出して pendingDelete_ へ移送（即破棄しない）。

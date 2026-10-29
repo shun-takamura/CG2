@@ -1,4 +1,5 @@
 #include "GameScene.h"
+#include "PepperMacros.h"
 #include "Profiling/LoadProfiler.h"
 #include "SessionLogger.h"
 #include <format>
@@ -9,6 +10,7 @@
 #include "Effect/EffectManager.h"
 #include "Camera.h"          // 視錐台の構築に ViewProjection が要る
 #include "Object3DInstance.h"
+#include "ModelManager.h"
 #include "AnimatedObject3DInstance.h"
 // 保存/読込で全コンテナを触るため、deferredDeletes_ への退避に完全型が要る
 #include "AnimatedModelInstance.h"
@@ -20,6 +22,7 @@
 #include "LogBuffer.h"
 #include "Primitive/PrimitiveInstance.h"
 #include "Primitive/DebugDraw.h"
+#include "Physics/CollisionGeometry.h"
 #include <algorithm>
 #include <cmath>
 
@@ -89,6 +92,7 @@ void GameScene::DrawDynamicSplinesDebug() {
 //====================
 
 IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, const Vector3& worldPos) {
+	PEPPER_SCOPE("GameScene::InstantiatePrefab");
 	const PrefabDef* def = PrefabManager::GetInstance()->Find(prefabName);
 	if (!def) {
 		LogBuffer::Instance().Add("Prefab not found: " + prefabName, LogBuffer::Level::Warning);
@@ -200,12 +204,13 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
 
 	if (def->kind == PrefabKind::Primitive) {
-		AddDynamicPrimitive(def->primitiveParams.primitiveType, worldPos);
+		{ PEPPER_SCOPE("InstantiatePrefab::AddPrimitive"); AddDynamicPrimitive(def->primitiveParams.primitiveType, worldPos); }
 		if (dynamicPrimitives_.empty()) return nullptr;
 
 		auto& back = dynamicPrimitives_.back();
 		std::string name = base;
 		int suffix = 1;
+		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
 		while (std::any_of(dynamicPrimitives_.begin(), dynamicPrimitives_.end() - 1,
 			[&name](const std::unique_ptr<PrimitiveInstance>& o) { return o->GetName() == name; })) {
 			name = base + " (" + std::to_string(suffix++) + ")";
@@ -221,12 +226,13 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		applyHPAndDamage(back.get());
 		return back.get();
 	} else if (def->kind == PrefabKind::Animated || def->isAnimated) {
-		AddDynamicAnimated(def->modelDir, def->modelFile, worldPos);
+		{ PEPPER_SCOPE("InstantiatePrefab::AddAnimated"); AddDynamicAnimated(def->modelDir, def->modelFile, worldPos); }
 		if (dynamicAnimated_.empty()) return nullptr;
 
 		auto& back = dynamicAnimated_.back();
 		std::string name = base;
 		int suffix = 1;
+		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
 		while (std::any_of(dynamicAnimated_.begin(), dynamicAnimated_.end() - 1,
 			[&name](const std::unique_ptr<AnimatedObject3DInstance>& o) { return o->GetName() == name; })) {
 			name = base + " (" + std::to_string(suffix++) + ")";
@@ -240,12 +246,13 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		applyHPAndDamage(back.get());
 		return back.get();
 	} else {
-		AddDynamicObject(def->modelDir, def->modelFile, worldPos);
+		{ PEPPER_SCOPE("InstantiatePrefab::AddObject3D"); AddDynamicObject(def->modelDir, def->modelFile, worldPos); }
 		if (object3DInstances_.empty()) return nullptr;
 
 		auto& back = object3DInstances_.back();
 		std::string name = base;
 		int suffix = 1;
+		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
 		while (std::any_of(object3DInstances_.begin(), object3DInstances_.end() - 1,
 			[&name](const std::unique_ptr<Object3DInstance>& o) { return o->GetName() == name; })) {
 			name = base + " (" + std::to_string(suffix++) + ")";
@@ -314,6 +321,7 @@ IImGuiEditable* GameScene::SpawnEnemyOnSpline(const std::string& prefabName,
 }
 
 void GameScene::UpdateMovingEnemies(float deltaTime) {
+	PEPPER_SCOPE("GameScene::UpdateMovingEnemies");
 	if (movingEnemies_.empty()) return;
 
 	for (auto& m : movingEnemies_) {
@@ -354,6 +362,7 @@ void GameScene::UpdateMovingEnemies(float deltaTime) {
 }
 
 void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, float stageTimeSec) {
+	PEPPER_SCOPE("GameScene::UpdateEnemyControllers");
 	// 視錐台は毎フレーム1回だけ構築して全コントローラで使い回す（敵ごとに作り直さない）。
 	// 将来フラスタムカリングを入れる時も「1回構築→多数判定」の同じ形になる。
 	Frustum viewFrustum{};
@@ -918,6 +927,7 @@ void GameScene::PlayHitEffects(IImGuiEditable* attacker, IImGuiEditable* target,
 }
 
 void GameScene::SweepDeadEntities() {
+	PEPPER_SCOPE("GameScene::SweepDeadEntities");
 	// 死亡エンティティを収集（破棄で配列が変わるので二段階）。Player タグは除外。
 	std::vector<IImGuiEditable*> dead;
 	dead.reserve(8);
@@ -949,6 +959,50 @@ void GameScene::SweepDeadEntities() {
 	}
 }
 
+namespace {
+	/// <summary>
+	/// 線分 p1q1 と p2q2 の最短距離の二乗と、そのときの p1q1 上の割合 s（0..1）を返す（Christer Ericson）。
+	/// 弾の移動線分とカプセルの芯の交差に使う。
+	/// </summary>
+	float ClosestSegmentSegment(const Vector3& p1, const Vector3& q1, const Vector3& p2, const Vector3& q2, float& s) {
+		const Vector3 d1{ q1.x - p1.x, q1.y - p1.y, q1.z - p1.z };
+		const Vector3 d2{ q2.x - p2.x, q2.y - p2.y, q2.z - p2.z };
+		const Vector3 r{ p1.x - p2.x, p1.y - p2.y, p1.z - p2.z };
+		auto dot = [](const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+		const float a = dot(d1, d1);
+		const float e = dot(d2, d2);
+		const float f = dot(d2, r);
+		float t = 0.0f;
+		s = 0.0f;
+		if (a <= 1e-8f && e <= 1e-8f) {
+			// 両方とも点
+		} else if (a <= 1e-8f) {
+			t = (std::clamp)(f / e, 0.0f, 1.0f);
+		} else {
+			const float c = dot(d1, r);
+			if (e <= 1e-8f) {
+				s = (std::clamp)(-c / a, 0.0f, 1.0f);
+			} else {
+				const float b = dot(d1, d2);
+				const float denom = a * e - b * b;
+				s = denom > 1e-8f ? (std::clamp)((b * f - c * e) / denom, 0.0f, 1.0f) : 0.0f;
+				t = (b * s + f) / e;
+				if (t < 0.0f) {
+					t = 0.0f;
+					s = (std::clamp)(-c / a, 0.0f, 1.0f);
+				} else if (t > 1.0f) {
+					t = 1.0f;
+					s = (std::clamp)((b - c) / a, 0.0f, 1.0f);
+				}
+			}
+		}
+		const Vector3 c1{ p1.x + d1.x * s, p1.y + d1.y * s, p1.z + d1.z * s };
+		const Vector3 c2{ p2.x + d2.x * t, p2.y + d2.y * t, p2.z + d2.z * t };
+		const Vector3 diff{ c1.x - c2.x, c1.y - c2.y, c1.z - c2.z };
+		return dot(diff, diff);
+	}
+}
+
 float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const {
 	const Vector3 d{ to.x - from.x, to.y - from.y, to.z - from.z };
 	const float a = d.x * d.x + d.y * d.y + d.z * d.z;
@@ -966,7 +1020,24 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 		const Collider& col = Gameplay::Of(e).GetCollider();
-		if (!col.enabled || col.shape != ColliderShape::Sphere) return;
+		if (!col.enabled) return;
+
+		// カプセル（谷の障害物の岩・梁）：弾の移動線分と芯の線分が最も近づく点で止める
+		if (col.shape == ColliderShape::Capsule) {
+			CollisionGeometry::WorldData w;
+			if (!CollisionGeometry::TryGetWorldData(e, col, w)) return;
+			const float half = col.capsuleHeight * 0.5f;
+			const Vector3 a0{ w.center.x + w.axes[1].x * half, w.center.y + w.axes[1].y * half, w.center.z + w.axes[1].z * half };
+			const Vector3 a1{ w.center.x - w.axes[1].x * half, w.center.y - w.axes[1].y * half, w.center.z - w.axes[1].z * half };
+			const float r = (col.capsuleRadius + bulletRadius) * kInsideRate;
+			float s = 0.0f;
+			if (ClosestSegmentSegment(from, to, a0, a1, s) > r * r) return;
+			if (bestEntry >= 0.0f && s >= bestEntry) return;
+			bestEntry = s;
+			bestStop = s;
+			return;
+		}
+		if (col.shape != ColliderShape::Sphere) return;
 
 		const Vector3 c{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
 		const float r = (col.radius + bulletRadius) * kInsideRate;
@@ -1002,6 +1073,7 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 }
 
 void GameScene::UpdateBullets(float deltaTime) {
+	PEPPER_SCOPE("GameScene::UpdateBullets");
 	if (bullets_.empty()) return;
 
 	for (auto& b : bullets_) {
@@ -1138,6 +1210,7 @@ void GameScene::UpdateBullets(float deltaTime) {
 }
 
 void GameScene::UpdateMelees(float deltaTime) {
+	PEPPER_SCOPE("GameScene::UpdateMelees");
 	if (melees_.empty()) return;
 
 	for (auto& m : melees_) {
@@ -1215,6 +1288,7 @@ void GameScene::ClearDynamicEntities() {
 	dynamicPrimitives_.clear();
 	// 取っておいたストリーミングのエントリも配置の一部なので一緒に捨てる（読み込み済みのグループは覚えたまま）
 	pendingStreamEntities_.clear();
+	streamCreated_.clear();
 	for (auto& sp : dynamicSplines_) {
 		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
 	}
@@ -1408,7 +1482,10 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		break;
 	}
 	}
-	if (created && !d.streamGroup.empty()) Gameplay::Of(created).SetStreamGroup(d.streamGroup);
+	if (created && !d.streamGroup.empty()) {
+		Gameplay::Of(created).SetStreamGroup(d.streamGroup);
+		streamCreated_.push_back({ created, d });
+	}
 	if (kindIndex >= 0 && kindIndex < kSceneKindCount) {
 		++sceneKindCount_[kindIndex];
 		sceneKindMs_[kindIndex] += LoadProfiler::NowMs() - entityStart;
@@ -1458,6 +1535,7 @@ bool GameScene::ApplySceneLoadStep(double budgetMs) {
 }
 
 size_t GameScene::LoadStreamGroup(const std::string& group) {
+	PEPPER_SCOPE("GameScene::LoadStreamGroup");
 	if (group.empty()) return 0;
 	const double start = LoadProfiler::NowMs();
 	// 先に読み込み済みにする（ApplySceneEntity が取っておかずに作るように）
@@ -1474,6 +1552,38 @@ size_t GameScene::LoadStreamGroup(const std::string& group) {
 	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 		std::format("LOAD kind=stream group={} count={} wall_ms={:.2f}", group, targets.size(), LoadProfiler::NowMs() - start));
 	return targets.size();
+}
+
+size_t GameScene::UnloadStreamGroup(const std::string& group) {
+	if (group.empty()) return 0;
+	// エディタで消された物を触らないよう、まだシーンにあるかをポインタの比較だけで確かめる
+	auto alive = [&](const IImGuiEditable* e) {
+		auto in = [&](const auto& list) {
+			return std::any_of(list.begin(), list.end(), [&](const auto& p) { return p.get() == e; });
+		};
+		return in(object3DInstances_) || in(dynamicAnimated_) || in(dynamicPrimitives_) ||
+		       in(dynamicSprites_) || in(dynamicSplines_);
+	};
+	size_t count = 0;
+	std::erase_if(streamCreated_, [&](StreamCreated& c) {
+		if (c.desc.streamGroup != group) return false;
+		if (alive(c.entity)) {
+			DestroyDynamicEntity(c.entity);
+			++count;
+		}
+		pendingStreamEntities_.push_back(std::move(c.desc));
+		return true;
+	});
+	loadedStreamGroups_.erase(group);
+	return count;
+}
+
+void GameScene::PreloadPrefabModels(const std::vector<std::string>& prefabs) {
+	for (const std::string& name : prefabs) {
+		const PrefabDef* def = PrefabManager::GetInstance()->Find(name);
+		if (!def || def->kind != PrefabKind::Object3D || def->modelFile.empty()) continue;
+		ModelManager::GetInstance()->LoadModel(def->modelDir, def->modelFile);
+	}
 }
 
 size_t GameScene::GetPendingStreamCount(const std::string& group) const {

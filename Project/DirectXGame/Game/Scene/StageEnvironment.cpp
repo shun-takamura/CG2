@@ -1,4 +1,5 @@
 #include "StageEnvironment.h"
+#include "PepperMacros.h"
 
 #include "Cloud/CloudLayer.h"
 #include "Cloud/CloudRaymarcher.h"
@@ -147,6 +148,7 @@ void StageEnvironment::InitializeRaymarchClouds(DirectXCore* dxCore, SRVManager*
 }
 
 void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition) {
+	PEPPER_SCOPE("StageEnvironment::UpdateClouds");
 	if (cloudLayer_) cloudLayer_->Update(deltaTime, eyePosition);
 	if (raymarcher_) {
 		// 自機の進む向きと逆へ流す。降下の前に止める
@@ -312,6 +314,7 @@ void StageEnvironment::ApplyValues(const StageEnvValues& v, bool applyTint) {
 }
 
 void StageEnvironment::Update(float stageSec, bool applyTint) {
+	PEPPER_SCOPE("StageEnvironment::Update");
 	stageSec_ = stageSec;
 	if (sections_.empty()) return;   // セクション未定義なら従来どおり何もしない
 

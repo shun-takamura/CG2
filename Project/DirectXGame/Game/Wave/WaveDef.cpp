@@ -71,6 +71,8 @@ namespace WaveDefIO {
 						entry.positions.push_back(JsonToVec3(pos[j]));
 					}
 				}
+				const JsonValue& rot = e["rotate_deg"];
+				if (rot.IsArray() && rot.Size() >= 3) entry.rotateDeg = JsonToVec3(rot);
 				out.entries.push_back(std::move(entry));
 			}
 		}
@@ -107,6 +109,9 @@ namespace WaveDefIO {
 					posArr.Push(Vec3ToJson(p));
 				}
 				o["positions"] = std::move(posArr);
+			}
+			if (e.rotateDeg.x != 0.0f || e.rotateDeg.y != 0.0f || e.rotateDeg.z != 0.0f) {
+				o["rotate_deg"] = Vec3ToJson(e.rotateDeg);
 			}
 			arr.Push(std::move(o));
 		}

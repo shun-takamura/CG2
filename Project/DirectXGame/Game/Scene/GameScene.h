@@ -147,6 +147,13 @@ protected:
 	bool IsStreamGroupLoaded(const std::string& group) const { return loadedStreamGroups_.contains(group); }
 	/// <summary>まだ作っていない group のエントリ数</summary>
 	size_t GetPendingStreamCount(const std::string& group) const;
+	/// <summary>
+	/// 作った group の配置を消し、作った時のエントリを「まだ作っていない」へ戻す（以後 LoadStreamGroup で作り直せる）。
+	/// 消した数を返す。モデルは ModelManager のキャッシュに残る（解放はしない）
+	/// </summary>
+	size_t UnloadStreamGroup(const std::string& group);
+	/// <summary>プレハブの静的モデルを ModelManager に読んでおく（後から InstantiatePrefab した時に読み込みで止まらないように）</summary>
+	void PreloadPrefabModels(const std::vector<std::string>& prefabs);
 
 	/// <summary>動的エンティティを消した直後・復元の前。参照メンバのリセット用。</summary>
 	virtual void OnBeforeSceneLoad() {}
@@ -186,6 +193,12 @@ private:
 	// ShouldStreamOnLoad で取っておいたエントリ（保存では作った物と同じく書き出す）と、読み込み済みのグループ
 	std::vector<SceneEntityDesc> pendingStreamEntities_;
 	std::unordered_set<std::string> loadedStreamGroups_;
+	// streamGroup 付きで作った配置と、作った時のエントリ（UnloadStreamGroup で消して取っておきへ戻すため）
+	struct StreamCreated {
+		IImGuiEditable* entity = nullptr;
+		SceneEntityDesc desc;
+	};
+	std::vector<StreamCreated> streamCreated_;
 protected:
 
 	//====================

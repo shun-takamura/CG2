@@ -159,7 +159,12 @@
     }
   ],
   "canyon": {
-    "enabled": true
+    "enabled": true,
+    "half_width": 40.0,
+    "half_width_amp": 4.7,
+    "wall_noise_amp": 3.3,
+    "mouth_half_width": 120.0,
+    "mouth_length": 250.0
   },
   "coast": {
     "enabled": true

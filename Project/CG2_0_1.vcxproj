@@ -193,6 +193,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\BossArenaWater.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\RiverWater.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStreaming.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\ObstacleDebris.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOverScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
@@ -278,6 +279,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\BossArenaWater.h" />
     <ClInclude Include="DirectXGame\Game\Scene\RiverWater.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStreaming.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\ObstacleDebris.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOverScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />
@@ -306,6 +308,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Enemy\EnemyCommandFactory.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ShootAtPlayerCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\HoverStationCommand.h" />
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\ObstacleCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\RetreatCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\BossAttackCommand.h" />
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\ChargeRushCommand.h" />

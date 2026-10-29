@@ -1,0 +1,21 @@
+{
+  "kind": "Object3D",
+  "model": {
+    "dir": "Resources/Models/CanyonRocks",
+    "file": "CanyonBeam_StubB.mesh",
+    "animated": false
+  },
+  "tag": "None",
+  "defaults": {
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  }
+}

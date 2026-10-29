@@ -1,5 +1,6 @@
 #pragma once
 #include "Vector3.h"
+#include "ObstacleDebris.h"
 #include "Wave/WaveDef.h"
 #include "TimeGroup.h"
 
@@ -65,6 +66,9 @@ public:
 	// Seek() 用：既存 STG エンティティ（弾/近接判定/敵/コントローラ）を一括破棄する。
 	// 中身は StagePlayScene が実装（現行 Seek() の該当コンテナクリア処理をそのまま移す）。
 	virtual void ClearWaveRuntimeState() = 0;
+
+	// 谷の障害物が崩れた部品（ObstacleDebris）を消す。中身は GameScene::DestroyDynamicEntity
+	virtual void DestroyEntity(IImGuiEditable* entity) = 0;
 };
 
 /// <summary>
@@ -72,7 +76,7 @@ public:
 /// StagePlayScene から切り出したパート。IRailStageHost 経由でのみ GameScene/StagePlayScene
 /// の機能を呼ぶ（friend やアクセス修飾子の緩和は使わない）。
 /// </summary>
-class RailStagePart {
+class RailStagePart : private IObstacleDebrisHost {
 public:
 	RailStagePart();
 	~RailStagePart();
@@ -126,7 +130,14 @@ public:
 	Vector3 CameraOffsetToWorld(const Vector3& off) const;
 	Vector3 WorldToCameraOffset(const Vector3& world) const;
 
+	/// <summary>谷の障害物が崩れた部品か（シーン JSON に保存しない）</summary>
+	bool IsObstacleDebris(const IImGuiEditable* entity) const;
+
 private:
+	// IObstacleDebrisHost（IRailStageHost へ取り次ぐ）
+	IImGuiEditable* SpawnDebrisPiece(const std::string& prefab, const Vector3& pos) override;
+	void DestroyDebrisPiece(IImGuiEditable* entity) override;
+
 	IRailStageHost* host_ = nullptr;
 	Camera* camera_ = nullptr;
 	// 走行スプライン。所有はシーン（dynamicSplines_）側で、ここは参照のみ。
@@ -166,6 +177,8 @@ private:
 	void ApplyWaterClampToCamera();
 
 	WaveDef currentWave_;
+	// 谷の障害物（enemy_type "Obstacle"）が壊れた後の崩れ方（4_StageGimmick.md §11）
+	ObstacleDebris obstacleDebris_;
 	std::vector<bool> spawnFired_, retreatFired_;
 	std::vector<float> killAtT_;
 	std::string wavePath_ = "Resources/Json/Waves/stage1.json";

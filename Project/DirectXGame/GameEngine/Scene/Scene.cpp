@@ -103,6 +103,7 @@ void Scene::UpdateGlobalEffects(Camera* camera, float deltaTime) {
 	EffectManager::GetInstance()->SetCamera(camera);
 	EffectManager::GetInstance()->Update(deltaTime);
 	if (auto* gpu = EffectManager::GetInstance()->GetGPUParticleManager()) {
+		PEPPER_SCOPE("GPUParticleManager::Update");
 		gpu->Update(camera, deltaTime);
 	}
 }
