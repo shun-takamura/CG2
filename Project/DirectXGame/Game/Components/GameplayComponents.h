@@ -4,6 +4,7 @@
 
 #include "EntityTag.h"
 #include "SphereCollider.h"
+#include "Vector3.h"
 #include "HP.h"
 #include "DamageDealer.h"
 #include "BulletParams.h"
@@ -39,6 +40,14 @@ struct GameplayComponents {
 	//==================== コライダー ====================
 	const SphereCollider& GetCollider() const { return collider; }
 	SphereCollider& GetCollider() { return collider; }
+	// ゲームが毎フレーム決める判定の中心・軸（プレハブには保存しない）。
+	// 入っている間は translate＋offset / rotate の代わりに判定・デバッグ描画で使う（自機の前傾・回転順の違いを揃える）
+	void SetColliderPose(const Vector3& center, const Vector3 axes[3]) {
+		hasColliderPose = true;
+		colliderPoseCenter = center;
+		for (int i = 0; i < 3; ++i) colliderPoseAxes[i] = axes[i];
+	}
+	void ClearColliderPose() { hasColliderPose = false; }
 
 	//==================== HP ====================
 	const HP& GetHP() const { return hp; }
@@ -109,6 +118,9 @@ struct GameplayComponents {
 	std::string prefabName;   // 空 = プレハブ由来でない（手置きの Object3D/Animated/Primitive）
 	std::string streamGroup;  // 空 = 区間ごとのストリーミングの対象でない
 	SphereCollider collider{};
+	bool    hasColliderPose = false;
+	Vector3 colliderPoseCenter{ 0.0f, 0.0f, 0.0f };
+	Vector3 colliderPoseAxes[3]{ { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
 	HP hp{};
 	DamageDealer damageDealer{};
 	BulletParams bulletParams{};

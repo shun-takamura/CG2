@@ -1,0 +1,52 @@
+{
+  "_comment": "20_Loadout.md §3 飛行ユニット。配列は [段階1, 段階2, 段階3]。秒は実時間",
+  "assault": {
+    "passiveInterval": [0.8, 0.65, 0.5],
+    "passiveDamageScale": [0.3, 0.4, 0.5],
+    "funnelDuration": [6, 7, 8],
+    "funnelDamageScale": [0.5, 0.65, 0.8],
+    "cooldown": [25, 23, 20],
+    "attackScale": [1.05, 1.1, 1.15],
+    "funnelCount": 4,
+    "funnelFireInterval": 0.35,
+    "funnelRadius": 2.2,
+    "funnelSpin": 1.2,
+    "funnelDeploy": 0.25,
+    "passiveMuzzleRight": 0.9,
+    "passiveMuzzleUp": 0.6,
+    "funnelScale": [0.12, 0.12, 0.45, 0],
+    "color": [1, 0.55, 0.25, 1]
+  },
+  "guard": {
+    "passiveReduce": [0.5, 0.5, 0.5],
+    "passiveCooldown": [8, 6, 5],
+    "barrierHpRatio": [0.5, 0.75, 1],
+    "barrierDuration": [8, 8, 8],
+    "cooldown": [30, 27, 24],
+    "maxHpScale": [1.05, 1.1, 1.15],
+    "barrierRadius": 2,
+    "contactHitInterval": 0.3,
+    "barrierAlpha": 0.25,
+    "flashDuration": 0.25,
+    "color": [0.4, 0.7, 1, 1]
+  },
+  "mobility": {
+    "moveSpeedScale": [1.05, 1.1, 1.15],
+    "justDodgeGaugeBonus": [4, 6, 8],
+    "justDodgeWindowBonus": [0.01, 0.025, 0.05],
+    "slowDuration": [3, 3.5, 4],
+    "cooldown": [25, 22, 20],
+    "slowWorld": 0.35,
+    "easeIn": 0.12,
+    "easeOut": 0.25,
+    "color": [0.45, 0.95, 0.85, 1]
+  },
+  "ui": {
+    "posX": 60,
+    "posY": 80,
+    "width": 180,
+    "height": 8,
+    "coolingAlpha": 0.35,
+    "bgColor": [0.1, 0.1, 0.2, 0.8]
+  }
+}

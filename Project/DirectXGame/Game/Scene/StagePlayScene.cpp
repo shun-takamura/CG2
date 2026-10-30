@@ -3,6 +3,7 @@
 #include "Components/Gameplay.h"
 #include "SoundManager.h"
 #include "Physics/CollisionGeometry.h"
+#include "Components/CollisionManager.h"
 
 #include "Camera.h"
 #include "Object3DManager.h"
@@ -153,6 +154,10 @@ void StagePlayScene::LoadTuningFromJson() {
 		root["player"]["smoothTime"].AsDouble(playerSmoothTime_));
 	attackMoveSpeedScale_ = static_cast<float>(
 		root["player"]["attackMoveSpeedScale"].AsDouble(attackMoveSpeedScale_));
+	moveStateDelay_ = static_cast<float>(
+		root["player"]["moveStateDelay"].AsDouble(moveStateDelay_));
+	moveStateLeanDeg_ = static_cast<float>(
+		root["player"]["moveStateLeanDeg"].AsDouble(moveStateLeanDeg_));
 	if (const JsonValue& look = root["player"]["look"]; look.IsObject()) {
 		playerLook_.environmentCoefficient = static_cast<float>(look["environmentCoefficient"].AsDouble(playerLook_.environmentCoefficient));
 		playerLook_.overrideMaterial = look["overrideMaterial"].AsBool(playerLook_.overrideMaterial);
@@ -687,6 +692,8 @@ void StagePlayScene::SaveTuningToJson() const {
 	playerObj["clipMargin"]  = std::move(marArr);
 	playerObj["smoothTime"]  = static_cast<double>(playerSmoothTime_);
 	playerObj["attackMoveSpeedScale"] = static_cast<double>(attackMoveSpeedScale_);
+	playerObj["moveStateDelay"] = static_cast<double>(moveStateDelay_);
+	playerObj["moveStateLeanDeg"] = static_cast<double>(moveStateLeanDeg_);
 	{
 		JsonValue look = JsonValue::MakeObject();
 		look["environmentCoefficient"] = static_cast<double>(playerLook_.environmentCoefficient);
@@ -1176,6 +1183,8 @@ void StagePlayScene::TriggerJustDodge(IImGuiEditable* attacker)
 	// （ストック制廃止：左派生＝小回復・無制限、デフォルトHeal＝大回復・固定回数制に再設計）
 	// スコア加点
 	ScoreManager::GetInstance()->AddScore(justDodgeScore_);
+	// 機動系の飛行ユニット：ジャスト回避で必殺技ゲージを足す（20 番 §3.3）
+	if (flightUnit_) specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + flightUnit_->GetJustDodgeGaugeBonus());
 
 	// 分身カウンター：4方向に分身プレビューを出し、方向入力での確定待ちに入る。
 	// （上=近接強 / 右=近接弱 / 下=追加回避 / 左=回復。各アクションは Phase2 で実装）
@@ -1661,6 +1670,7 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 				meleePending_         = true;
 				meleeActionLockTimer_ = startup + active + recovery;
 				meleeComboTimer_      = startup + active + recovery + comboWindow;
+				MarkPlayerAttack();
 				meleeComboIndex_      = (jdChosen_ == CounterDir::Up) ? 0 : stage;
 				if (meleeStartupTimer_ <= 0.0f) {
 					meleeStartupTimer_ = 0.0f;
@@ -1956,7 +1966,7 @@ void StagePlayScene::SpawnPendingMelee()
 	SoundManager::GetInstance()->Play2DSound("se_melee");
 	Vector3 right, up, forward;
 	ComputeAimBasis(right, up, forward);
-	const int atk = Gameplay::Of(player_).HasAttackPower() ? Gameplay::Of(player_).GetAttackPower() : 0;
+	const int atk = ScaledPlayerAttack();
 	// プレイヤー原点は足元なので、判定を world-up に meleeOriginHeight_ 持ち上げて体の中心から出す。
 	// サイズは STG=プレハブ基準(1.0)、ボス戦は当てやすすぎるので meleeBossSizeScale_ で縮小。
 	const float meleeSize = (phase_ == Phase::Boss) ? meleeBossSizeScale_ : 1.0f;
@@ -2032,6 +2042,7 @@ void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
 	meleeStartupTimer_  = startup;
 	meleePending_       = true;
 	meleeActionLockTimer_ = startup + active + recovery;
+	MarkPlayerAttack();
 	// 後隙終了後 comboWindow 秒だけ次段を受け付ける（その間に入力が無ければコンボリセット）
 	meleeComboTimer_      = startup + active + recovery + comboWindow;
 
@@ -2207,6 +2218,11 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Attack Move Scale", &attackMoveSpeedScale_, 0.01f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Move State Delay (s)", &moveStateDelay_, 0.05f, 0.0f, 5.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Move State Hit Lean (deg)", &moveStateLeanDeg_, 0.5f, 0.0f, 90.0f, "%.1f");
+		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::Text("Move State: %s", (timeSinceAttack_ >= moveStateDelay_) ? "Move" : "Attack");
 		ImGui::SeparatorText("Look (material)");
 		ImGui::SliderFloat("Environment (IBL) Coefficient##look", &playerLook_.environmentCoefficient, 0.0f, 2.0f);
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
@@ -2842,6 +2858,7 @@ void StagePlayScene::OnImGuiTuning() {
 	// 賭ける画面（19 番 §4.7）ができるまで、ここで賭け分と難易度を決めて始める（§4.8）
 	if (ImGui::CollapsingHeader("Ether State (19 G6)")) EtherState::GetInstance()->OnImGui();
 	if (ImGui::CollapsingHeader("Difficulty Profile (19 5)")) DifficultyProfile::GetInstance()->OnImGui();
+	if (ImGui::CollapsingHeader("Flight Unit (20 3)") && flightUnit_) flightUnit_->OnImGui();
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -2874,6 +2891,7 @@ void StagePlayScene::Initialize() {
 	cloudTopIntro_ = std::make_unique<CloudTopIntro>();
 	playerWings_ = std::make_unique<PlayerWingUnit>();
 	playerDeath_ = std::make_unique<PlayerDeathPart>();
+	flightUnit_ = std::make_unique<FlightUnitPart>();
 	// ストリーミングの時刻表（LoadTuningFromJson で root["streaming"] を読む。配置を読む前に要る＝どれを後回しにするか）
 	streaming_ = std::make_unique<StageStreaming>();
 	streaming_->Initialize(this, "STAGEPLAY");
@@ -3001,6 +3019,11 @@ void StagePlayScene::Initialize() {
 	// 死亡演出の昇る糸のメッシュ
 	deferredInit_.push_back({ "StagePlay/PlayerDeath", [this]() {
 		playerDeath_->Initialize(this);
+		return true;
+	} });
+	// 飛行ユニット（ファンネル・バリアの形とクールタイムのバー。20_Loadout.md §3）
+	deferredInit_.push_back({ "StagePlay/FlightUnit", [this]() {
+		flightUnit_->Initialize(this, camera_.get(), spriteManager_);
 		return true;
 	} });
 	deferredInit_.push_back({ "StagePlay/UI", [this]() {
@@ -3260,9 +3283,10 @@ void StagePlayScene::Finalize() {
 }
 
 bool StagePlayScene::IsPlayerAttacking(InputActionMap* actions) const {
-	// 射撃ボタン保持（連射/チャージ）・連射間隔中・チャージ中・近接の発生〜後隙中を「攻撃中」とみなす
-	if (actions && actions->IsPressed(static_cast<int>(Action::Fire))) return true;
-	return fireTimer_ > 0.0f || playerChargeLevel_ >= 0.0f || meleeActionLockTimer_ > 0.0f;
+	// 最後に撃つ／近接を出してから moveStateDelay_ 秒以内と、近接の発生〜後隙中を「攻撃中」とみなす。
+	// チャージは射撃ボタンを離している間に進むので数えない（チャージしながら移動状態で動ける）
+	(void)actions;
+	return timeSinceAttack_ < moveStateDelay_ || meleeActionLockTimer_ > 0.0f;
 }
 
 void StagePlayScene::ApplyCameraIdleSway(float dt) {
@@ -3614,6 +3638,8 @@ void StagePlayScene::Update() {
 
 	// ----- フェーズ遷移エッジ検出（自動遷移・F4 手動の両方をここで一元処理）-----
 	if (phase_ != prevPhase_) {
+		// 飛行ユニットの技はフェーズをまたがない（スローは戻し、ファンネル・バリアは消す。クールタイムも 0）
+		if (flightUnit_) flightUnit_->Reset();
 		if (phase_ == Phase::Boss) {
 			bossBattleActive_ = true;            // 既存スカイボックスクロスフェードを自動発火
 			bossFacingInit_   = false;           // ボス戦開始時に向きを取り直す（初回フレームで再サンプル）
@@ -3722,7 +3748,8 @@ void StagePlayScene::Update() {
 			// ジャスト回避スロー受付中は地上の自由移動を禁止（残存速度は慣性で減速し停止）。
 			// STG と同方針。近接派生中（jdMeleeCameraActive_）はワープ/攻撃で位置を直接管理するため
 			// 地上移動そのものを止める（UpdatePlayerGroundMovement を呼ばない）。
-			const float moveScale = IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f;
+			const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
+				* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f);
 			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : Vector2{ moveDelta.x * moveScale, moveDelta.y * moveScale };
 			if (!jdMeleeCameraActive_) {
 				bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
@@ -3831,7 +3858,9 @@ void StagePlayScene::Update() {
 		// 下=追加回避を選んだ瞬間の WASD を回避方向に使うため、ここでは zero 化しない。
 
 		// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
-		const float moveScale = IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f;
+		// 飛行ユニットの常時の効果（機動系は移動が速くなる）
+		const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
+			* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f);
 		Vector2 targetVel = {
 			moveDelta.x * playerMoveSpeed_.x * moveScale,
 			moveDelta.y * playerMoveSpeed_.y * moveScale,
@@ -4128,6 +4157,17 @@ void StagePlayScene::Update() {
 			playerVelocity_ = { 0.0f, 0.0f };
 		}
 
+		// 原点（足元）まわりに回すと体が振れるので、体の中心まわりに回ったように位置をずらす。
+		// 自機の行列は照準で回す前（UpdateDynamicAnimated）に作られるので、ずらしもその時点の回転で掛ける
+		{
+			const Vector3& off = Gameplay::Of(player_).GetCollider().offset;
+			const Matrix4x4 m = MakeCameraRotateMatrix(player_->GetRotate());
+			const Vector3 rotated{
+				off.x * m.m[0][0] + off.y * m.m[1][0] + off.z * m.m[2][0],
+				off.x * m.m[0][1] + off.y * m.m[1][1] + off.z * m.m[2][1],
+				off.x * m.m[0][2] + off.y * m.m[1][2] + off.z * m.m[2][2] };
+			worldPos = { worldPos.x + off.x - rotated.x, worldPos.y + off.y - rotated.y, worldPos.z + off.z - rotated.z };
+		}
 		player_->SetTranslate(worldPos);
 		// 回転は照準ロジックで後段にてセット（camera 同期は廃止）
 
@@ -4220,6 +4260,8 @@ void StagePlayScene::Update() {
 	// Scene の動的エンティティ群（プレハブ生成物含む）の Update
 	UpdateDynamicObjects();
 	UpdateDynamicAnimated(GetScaledDeltaTime());
+	// 判定の姿勢は、このフレームに描く自機の行列と同じ translate / rotate で作る（照準で回すのはこの後＝次のフレームの描画）
+	UpdatePlayerColliderPose();
 	UpdateDynamicPrimitives();
 	UpdateDynamicSprites();
 
@@ -4489,12 +4531,14 @@ void StagePlayScene::Update() {
 
 		// プレイヤー回転を player → aimTarget 方向に。
 		// ただし近接派生中（Up/Right）はレティクルではなく対象敵を直接向く。
-		const Vector3 playerPos = player_->GetTranslate();
+		// 向きは足元でなく体の中心（判定の姿勢の中心＝このフレームに描く体の中心）から測る
+		const Vector3 bodyPos = Gameplay::Of(player_).hasColliderPose
+			? Gameplay::Of(player_).colliderPoseCenter : GameScene::GetShotAimPoint(player_);
 		Vector3 aimTgt = aimTarget_;
 		if (jdMeleeCameraActive_ && jdCounterTarget_) {
 			if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) aimTgt = *tp;
 		}
-		const Vector3 toAim{ aimTgt.x - playerPos.x, aimTgt.y - playerPos.y, aimTgt.z - playerPos.z };
+		const Vector3 toAim{ aimTgt.x - bodyPos.x, aimTgt.y - bodyPos.y, aimTgt.z - bodyPos.z };
 		const float horiz = std::sqrt(toAim.x * toAim.x + toAim.z * toAim.z);
 		if (GetSceneTimeScale() == 0.0f) {
 			// シーン停止中（エディタ Pause）はレティクル追従を止めて固定アングルで構える。
@@ -4517,9 +4561,7 @@ void StagePlayScene::Update() {
 			// yaw は移動ブランチで bossFacingYaw_ に更新済み（pitch/roll は 0＝地上を走る通常キャラ）。
 			player_->SetRotate({ 0.0f, bossFacingYaw_, 0.0f });
 		} else if (horiz > 1e-4f || std::abs(toAim.y) > 1e-4f) {
-			const float yaw = std::atan2(toAim.x, toAim.z);
-			const float pitch = -std::atan2(toAim.y, horiz);
-			player_->SetRotate({ pitch, yaw, 0.0f });
+			ApplyRailAimRotation(toAim);
 		}
 
 		// ロックオン時：敵の見かけサイズ（スクリーンpixel半径）を計算してレティクルへ
@@ -4591,6 +4633,7 @@ void StagePlayScene::Update() {
 		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
 		fireTimer_ -= dtP;
 		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
+		timeSinceAttack_ += dtP;
 
 		// プレイヤープレハブからチャージ時間を反映（有効時のみ）
 		if (player_) {
@@ -4714,7 +4757,7 @@ void StagePlayScene::Update() {
 
 				const float homeStrength = homeTarget ? homing : 0.0f;
 				// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
-				const int atk = (player_ && Gameplay::Of(player_).HasAttackPower()) ? Gameplay::Of(player_).GetAttackPower() : 0;
+				const int atk = ScaledPlayerAttack();
 				SpawnPlayerBullet(origin, dir, speed, lifetime,
 					colliderGrowth, homeTarget, homeStrength,
 					aimPlaneDistance_, bulletPrefab, atk);
@@ -4723,6 +4766,7 @@ void StagePlayScene::Update() {
 				// 連射間隔はプレイヤープレハブの ChargeParams.fireRate から
 				const float fr = Gameplay::Of(player_).GetChargeParams().fireRate;
 				fireTimer_ = (fr > 0.0f) ? fr : 0.12f;
+				MarkPlayerAttack();
 
 				// チャージ状態だった場合はリセット
 				if (playerChargeLevel_ >= 0.0f) {
@@ -4755,7 +4799,9 @@ void StagePlayScene::Update() {
 
 	// 弾の進行と寿命処理（World 時間軸で動かす）
 	if (!gameFrozen) {
-		UpdateBullets(worldDt);
+		// 機動系の RB のスロー中は、自機の弾だけ Player の時間で進める（ジャスト回避のスローは今までどおり World）
+		const bool flightSlow = flightUnit_ && flightUnit_->IsTimeSlowActive();
+		UpdateBullets(worldDt, flightSlow ? GetScaledDeltaTime(TimeGroup::Player) : -1.0f);
 	}
 	// 近接判定の追従・寿命処理。
 	// 近接派生中はワールド完全停止だが、判定の寿命と当たり処理は進める必要があるので Player dt で動かす。
@@ -4766,6 +4812,9 @@ void StagePlayScene::Update() {
 			UpdateMelees(meleeDt);
 		}
 	}
+	// 飛行ユニット（RB の技・クールタイム。実時間で進む）
+	UpdateFlightUnit(actions);
+
 	// 必殺技発動中は World が止まっていても必殺技自身の進行と UI 更新は走らせる
 	if (!gameFrozen || specialActive_) {
 
@@ -4895,6 +4944,9 @@ void StagePlayScene::Draw() {
 	// 死亡演出の昇る糸（加算・半透明。PrimitivePipeline に切り替える）
 	if (playerDeath_ && camera_) playerDeath_->Draw(camera_.get());
 
+	// 飛行ユニットのファンネル・バリア（加算・半透明）
+	if (flightUnit_ && flightUnit_->IsInitialized()) flightUnit_->Draw3D();
+
 	// LightningRuntime テスト描画
 	if (lightningTest_ && lightningTest_->IsActive()) {
 		lightningTest_->Draw();
@@ -4950,6 +5002,8 @@ void StagePlayScene::Draw() {
 	// スプライト
 	spriteManager_->DrawSetting();
 	DrawDynamicSprites();
+	// 飛行ユニットのクールタイムのバー（必殺技ゲージの下）
+	if (flightUnit_ && flightUnit_->IsInitialized() && !IsCloudTopIntroActive()) flightUnit_->DrawUI();
 	if (reticle_ && !IsCloudTopIntroActive()) reticle_->Draw();
 
 	DrawBossHpBarUI();
@@ -5553,7 +5607,12 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。死亡演出の間は当たらない。
 	if (!justInv && !IsPlayerDying()) {
 		const Vector3 playerPos = player_->GetTranslate();
-		const float playerR = Gameplay::Of(player_).GetCollider().radius;
+
+		// 敵弾の当たり判定はプレハブのカプセル。中心・軸は UpdatePlayerColliderPose が決めたもの（デバッグ描画と同じ）
+		if (!Gameplay::Of(player_).hasColliderPose) UpdatePlayerColliderPose();
+		const Collider& playerCol = Gameplay::Of(player_).GetCollider();
+		const Vector3 bodyCenter = Gameplay::Of(player_).colliderPoseCenter;
+		const Vector3* capsuleAxes = Gameplay::Of(player_).colliderPoseAxes;
 
 		bool            hitFound = false;
 		int             incomingDamage = 0;
@@ -5570,9 +5629,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			const Vector3* bp = b.primitive->GetEditableTranslate();
 			if (!bp) continue;
 			const float bulletR = Gameplay::Of(b.primitive).GetCollider().radius;
-			float dx = playerPos.x - bp->x, dy = playerPos.y - bp->y, dz = playerPos.z - bp->z;
-			float sumR = playerR + bulletR;
-			if (dx * dx + dy * dy + dz * dz < sumR * sumR) {
+			if (CollisionGeometry::TestSphereCapsule(*bp, bulletR, bodyCenter, capsuleAxes,
+				playerCol.capsuleHeight, playerCol.capsuleRadius)) {
 				incomingDamage = Gameplay::Of(b.primitive).GetDamageDealer().damage;
 				if (incomingDamage <= 0) incomingDamage = 10;
 				hitBulletIndex = static_cast<int>(i);
@@ -5591,7 +5649,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		if (!hitFound) {
 			const Collider& pc = Gameplay::Of(player_).GetCollider();
 			CollisionGeometry::WorldData pw;
-			const bool playerShape = pc.enabled && CollisionGeometry::TryGetWorldData(player_, pc, pw);
+			const bool playerShape = pc.enabled && CollisionManager::GetWorldData(player_, pc, pw);
 			for (auto& ctrl : enemyControllers_) {
 				if (!playerShape) break;
 				if (!ctrl || !ctrl->contactDamageActive_ || !ctrl->entity_) continue;
@@ -5617,7 +5675,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 		if (!hitFound) {
 			const Collider& pc = Gameplay::Of(player_).GetCollider();
 			CollisionGeometry::WorldData pw;
-			if (pc.enabled && CollisionGeometry::TryGetWorldData(player_, pc, pw)) {
+			if (pc.enabled && CollisionManager::GetWorldData(player_, pc, pw)) {
 				for (auto& p : dynamicPrimitives_) {
 					if (!p || Gameplay::Of(p.get()).GetTag() != EntityTag::EnemyAttack) continue;
 					const bool isBullet = std::any_of(bullets_.begin(), bullets_.end(),
@@ -5643,8 +5701,17 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			}
 		}
 
+		// 防御系のバリア（RB）が張られている間は、バリアが受ける（ジャスト回避もダメージも起きない。20 番 §3.2）
+		// 回避中でも先にバリアが受ける（バリアの間はジャスト回避が起きない）。被弾無敵・必殺技の無敵の間は減らさない
+		if (hitFound && !dmgInv && !specialInv && flightUnit_ &&
+			flightUnit_->TryAbsorbHit(DifficultyProfile::ScaleInt(incomingDamage, DifficultyProfile::GetInstance()->GetDamageScale()))) {
+			if (hitBulletIndex >= 0) bullets_[hitBulletIndex].remainingLifetime = -1.0f;
+			hitFound = false;
+		}
+
 		if (hitFound) {
-			if (dodgeActive_ && dodgeTimer_ <= dodgeJustWindow_) {
+			const float justWindow = dodgeJustWindow_ + (flightUnit_ ? flightUnit_->GetJustDodgeWindowBonus() : 0.0f);
+			if (dodgeActive_ && dodgeTimer_ <= justWindow) {
 				// ジャスト回避成立（スロー＋演出＋回復ストック＋スコア）
 				TriggerJustDodge(attacker);
 				dodgeActive_ = false; // 回避無敵を消費し、以降はジャスト無敵へ移行
@@ -5652,8 +5719,10 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			} else if (dodgeInv || dmgInv || specialInv) {
 				// 無敵中：ダメージ無効（弾はそのまま通過＝既存の被弾無敵と同様）
 			} else {
-				// 通常被弾（敵の攻撃のダメージに純度の倍率。19 番 §5）
-				OnPlayerTakeDamage(DifficultyProfile::ScaleInt(incomingDamage, DifficultyProfile::GetInstance()->GetDamageScale()));
+				// 通常被弾（敵の攻撃のダメージに純度の倍率。19 番 §5）。防御系の常時の軽減もここで掛ける
+				int damage = DifficultyProfile::ScaleInt(incomingDamage, DifficultyProfile::GetInstance()->GetDamageScale());
+				if (flightUnit_) damage = flightUnit_->ModifyIncomingDamage(damage);
+				OnPlayerTakeDamage(damage);
 				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）
 				if (phase_ == Phase::Boss && bossStage_) {
 					bossStage_->ApplyKnockback(hitSourcePos, heavyHit);
@@ -7524,6 +7593,138 @@ void StagePlayScene::CollectScreenTargets(std::vector<std::pair<IImGuiEditable*,
 	for (auto& up : dynamicPrimitives_) pushEnemy(up.get());
 	for (auto& up : object3DInstances_) pushEnemy(up.get());
 	for (auto& up : dynamicAnimated_)   pushEnemy(up.get());
+}
+
+//====================
+// 飛行ユニット（20_Loadout.md §3）
+//====================
+
+void StagePlayScene::UpdateFlightUnit(InputActionMap* actions) {
+	if (!flightUnit_ || !flightUnit_->IsInitialized() || !player_) return;
+	const bool inPlay = (phase_ == Phase::Rail || phase_ == Phase::Boss);
+	// ジャスト回避・必殺技・死亡演出が時間を握っている間は技を出せない（機動系のスローはそこで終わる）
+	const bool timeTaken = justDodgeActive_ || specialActive_ || IsPlayerDying();
+	const bool canAct = inPlay && !timeTaken && !IsActionLocked();
+	const bool triggered = actions && actions->IsTriggered(static_cast<int>(Action::FlightSkill));
+	flightUnit_->Update(GetScaledDeltaTime(TimeGroup::UI), triggered, canAct, timeTaken);
+
+	// 防御系の HP 上限の補正。付け替えても残り HP の割合は保つ
+	HP& hp = Gameplay::Of(player_).GetHP();
+	if (playerBaseMaxHP_ < 0) playerBaseMaxHP_ = hp.maxHP;
+	const int wantMax = (std::max)(1, static_cast<int>(std::lround(static_cast<float>(playerBaseMaxHP_) * flightUnit_->GetMaxHpScale())));
+	if (hp.maxHP != wantMax && hp.maxHP > 0) {
+		const float ratio = static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP);
+		hp.maxHP = wantMax;
+		hp.currentHP = (std::min)(wantMax, static_cast<int>(std::lround(ratio * static_cast<float>(wantMax))));
+	}
+}
+
+void StagePlayScene::UpdatePlayerColliderPose() {
+	if (!player_) return;
+	const Vector3 t = player_->GetTranslate();
+	const Vector3& off = Gameplay::Of(player_).GetCollider().offset;
+	// 自機の回転（Object3D と同じ Rx·Ry·Rz）。行が右・上・前
+	const Matrix4x4 m = MakeCameraRotateMatrix(player_->GetRotate());
+	const Vector3 right{ m.m[0][0], m.m[0][1], m.m[0][2] };
+	const Vector3 up{ m.m[1][0], m.m[1][1], m.m[1][2] };
+	const Vector3 fwd{ m.m[2][0], m.m[2][1], m.m[2][2] };
+	const Vector3 center{
+		t.x + off.x * right.x + off.y * up.x + off.z * fwd.x,
+		t.y + off.x * right.y + off.y * up.y + off.z * fwd.y,
+		t.z + off.x * right.z + off.y * up.z + off.z * fwd.z };
+
+	// STG の移動状態は、カプセルの軸（上）を前へ moveStateLeanDeg_ だけ倒す（頭が前・足が後ろ。飛ぶ姿勢のモデルと同じ角度）
+	const bool leaning = (phase_ == Phase::Rail) && !IsPlayerAttacking(nullptr);
+	const float a = leaning ? moveStateLeanDeg_ * (kPi / 180.0f) : 0.0f;
+	const float c = std::cos(a), s = std::sin(a);
+	const Vector3 axes[3] = {
+		right,
+		{ up.x * c + fwd.x * s, up.y * c + fwd.y * s, up.z * c + fwd.z * s },
+		{ fwd.x * c - up.x * s, fwd.y * c - up.y * s, fwd.z * c - up.z * s } };
+	Gameplay::Of(player_).SetColliderPose(center, axes);
+}
+
+void StagePlayScene::ApplyRailAimRotation(const Vector3& toAim) {
+	// 上の基準を世界の上でなくカメラの上にする。雲の中の降下（ほぼ真下を向く）でも、照準が少し動いただけで
+	// ヨーが大きく回ることがない。水平飛行ではカメラの上≒世界の上なので今までと同じ向きになる
+	const float len = std::sqrt(toAim.x * toAim.x + toAim.y * toAim.y + toAim.z * toAim.z);
+	if (len < 1e-5f || !camera_) return;
+	const Vector3 f{ toAim.x / len, toAim.y / len, toAim.z / len };
+	const Matrix4x4 camRot = MakeCameraRotateMatrix(camera_->GetRotate());
+	const Vector3 refUp{ camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
+	Vector3 r{ refUp.y * f.z - refUp.z * f.y, refUp.z * f.x - refUp.x * f.z, refUp.x * f.y - refUp.y * f.x };
+	float rl = std::sqrt(r.x * r.x + r.y * r.y + r.z * r.z);
+	if (rl < 1e-4f) {
+		r = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
+		rl = 1.0f;
+	}
+	r = { r.x / rl, r.y / rl, r.z / rl };
+	const Vector3 u{ f.y * r.z - f.z * r.y, f.z * r.x - f.x * r.z, f.x * r.y - f.y * r.x };
+
+	// 行（右・上・前）＝ Rx·Ry·Rz から角度を取り出す（Object3D の回転順。MakeRotateMatrix とは逆順なので自前で解く）
+	const float sinYaw = (std::max)(-1.0f, (std::min)(1.0f, -r.z));
+	const float yaw = std::asin(sinYaw);
+	float pitch = 0.0f, roll = 0.0f;
+	if (std::cos(yaw) > 1e-4f) {
+		pitch = std::atan2(u.z, f.z);
+		roll  = std::atan2(r.y, r.x);
+	} else {
+		// ヨー ±90°（真横を向く）はピッチとロールが重なるので、ロールを 0 に固定して解く
+		pitch = (sinYaw > 0.0f) ? std::atan2(u.x, u.y) : std::atan2(-u.x, u.y);
+	}
+	player_->SetRotate({ pitch, yaw, roll });
+}
+
+int StagePlayScene::ScaledPlayerAttack() const {
+	if (!player_ || !Gameplay::Of(player_).HasAttackPower()) return 0;
+	const int atk = Gameplay::Of(player_).GetAttackPower();
+	const float scale = flightUnit_ ? flightUnit_->GetAttackScale() : 1.0f;
+	return (atk > 0) ? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(atk) * scale))) : 0;
+}
+
+void StagePlayScene::CollectOnScreenEnemies(std::vector<IImGuiEditable*>& out) {
+	std::vector<std::pair<IImGuiEditable*, bool>> targets;
+	CollectScreenTargets(targets);
+	for (const auto& [e, isBullet] : targets) {
+		if (!isBullet) out.push_back(e);
+	}
+}
+
+void StagePlayScene::FireSupportBullet(const Vector3& from, const Vector3& dir, IImGuiEditable* homingTarget, float damageScale) {
+	if (!player_) return;
+	// 自機の通常弾と同じプレハブ・同じ弾の値（攻撃力だけ倍率を掛ける）
+	std::string bulletPrefab = Gameplay::Of(player_).FindBulletPrefab("normal");
+	if (bulletPrefab.empty()) bulletPrefab = "TemporaryPlayerBullet";
+	float speed = 80.0f, lifetime = 2.0f, colliderGrowth = 0.0f, homing = 0.0f;
+	if (const PrefabDef* bdef = PrefabManager::GetInstance()->Find(bulletPrefab); bdef && bdef->hasBullet) {
+		speed          = bdef->bulletSpeed;
+		lifetime       = bdef->bulletLifetime;
+		colliderGrowth = bdef->bulletColliderGrowth;
+		homing         = homingTarget ? bdef->bulletStrongHomingStrength : 0.0f;
+	}
+	const int atk = ScaledPlayerAttack();
+	const int scaledAtk = atk > 0 ? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(atk) * damageScale))) : 0;
+	// 狙う敵がいれば狙いの面で消さない（ファンネルは面より奥の敵も撃つ）
+	SpawnPlayerBullet(from, dir, speed, lifetime, colliderGrowth, homingTarget, homing,
+		homingTarget ? 0.0f : aimPlaneDistance_, bulletPrefab, scaledAtk);
+}
+
+int StagePlayScene::AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) {
+	int total = 0;
+	const float r2 = radius * radius;
+	for (auto& b : bullets_) {
+		if (!b.primitive || b.remainingLifetime < 0.0f) continue;
+		if (Gameplay::Of(b.primitive).GetTag() != EntityTag::EnemyAttack) continue;
+		const Vector3* bp = b.primitive->GetEditableTranslate();
+		if (!bp) continue;
+		const float dx = bp->x - center.x, dy = bp->y - center.y, dz = bp->z - center.z;
+		if (dx * dx + dy * dy + dz * dz > r2) continue;
+		int dmg = Gameplay::Of(b.primitive).GetDamageDealer().damage;
+		if (dmg <= 0) dmg = 10;
+		total += dmg;
+		b.remainingLifetime = -1.0f;
+	}
+	return total;
 }
 
 Vector3 StagePlayScene::SpecialPlayerCenter() const {

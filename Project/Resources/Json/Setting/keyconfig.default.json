@@ -12,6 +12,7 @@
     "Dodge":         [ "kb.Space", "gp.A" ],
     "Heal":          [ "kb.R", "gp.X" ],
     "Ultimate":      [ "kb.F", "gp.R3" ],
+    "FlightSkill":   [ "kb.C", "gp.RB" ],
     "LockCamButton": [ "kb.Tab", "gp.LB" ],
     "Pause":         [ "kb.Escape", "gp.Start" ],
     "ViewToggle":    [ "kb.V", "gp.Back" ],

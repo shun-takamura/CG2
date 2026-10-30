@@ -17,6 +17,16 @@ CollisionManager* CollisionManager::GetInstance() {
 	return &instance;
 }
 
+bool CollisionManager::GetWorldData(IImGuiEditable* e, const Collider& c, WorldData& out) {
+	const GameplayComponents& g = Gameplay::Of(e);
+	if (g.hasColliderPose) {
+		out.center = g.colliderPoseCenter;
+		for (int i = 0; i < 3; ++i) out.axes[i] = g.colliderPoseAxes[i];
+		return true;
+	}
+	return CollisionGeometry::TryGetWorldData(e, c, out);
+}
+
 void CollisionManager::Register(IImGuiEditable* e) {
 	if (!e) return;
 	if (std::find(entities_.begin(), entities_.end(), e) != entities_.end()) return;
@@ -45,7 +55,7 @@ void CollisionManager::Update() {
 		if (!CollisionMatrix::IsCollidableTag(ta)) continue;
 
 		WorldData wA;
-		if (!CollisionGeometry::TryGetWorldData(a, ca, wA)) continue;
+		if (!GetWorldData(a, ca, wA)) continue;
 
 		for (size_t j = i + 1; j < n; ++j) {
 			IImGuiEditable* b = entities_[j];
@@ -57,7 +67,7 @@ void CollisionManager::Update() {
 			if (!CollisionMatrix::ShouldCollide(ta, tb)) continue;
 
 			WorldData wB;
-			if (!CollisionGeometry::TryGetWorldData(b, cb, wB)) continue;
+			if (!GetWorldData(b, cb, wB)) continue;
 
 			if (CollisionGeometry::TestPair(ca, wA, cb, wB)) {
 				ca.isCollidingThisFrame = true;
@@ -99,7 +109,7 @@ void CollisionManager::DrawDebug() {
 		const Collider& c = Gameplay::Of(e).GetCollider();
 		if (!c.enabled || !c.showDebug) continue;
 		WorldData w;
-		if (!CollisionGeometry::TryGetWorldData(e, c, w)) continue;
+		if (!GetWorldData(e, c, w)) continue;
 
 		Vector4 color;
 		if (c.isCollidingThisFrame) {

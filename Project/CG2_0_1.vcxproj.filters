@@ -43,6 +43,9 @@
     <Filter Include="DirectXGame\Game\Scene\PlayerDeath">
       <UniqueIdentifier>{7c3e9a41-5d2b-4f8e-9b16-0a4c2e19d7f3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\FlightUnit">
+      <UniqueIdentifier>{3f6b2d8e-91a4-4c57-b0e3-6d2a8f4c1e95}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\StageStart">
       <UniqueIdentifier>{02d64872-e2e9-5978-9018-66f6901e0e11}</UniqueIdentifier>
     </Filter>
@@ -170,6 +173,18 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.cpp">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.cpp">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.cpp">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.cpp">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.cpp">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
@@ -345,6 +360,9 @@
     <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\LoadoutState.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
@@ -421,6 +439,18 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.h">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.h">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.h">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.h">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.h">
+      <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
@@ -702,6 +732,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\EtherState.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\LoadoutState.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h">

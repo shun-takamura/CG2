@@ -88,6 +88,12 @@ public:
 		IImGuiEditable* homingTarget = nullptr,
 		float homingStrength = -1.0f);
 
+	/// <summary>
+	/// 敵弾が狙う点。自機は原点が足元なので、当たり判定のオフセットぶん上げた体の中心を返す（それ以外は位置そのまま）。
+	/// 偏差射撃の狙いとホーミングの目標の両方で使う。
+	/// </summary>
+	static Vector3 GetShotAimPoint(IImGuiEditable* target);
+
 	/// <summary>指定プレハブをスプラインなしで指定座標に直接スポーンする。</summary>
 	IImGuiEditable* SpawnEnemyAt(const std::string& prefabName, const Vector3& pos);
 
@@ -204,7 +210,8 @@ protected:
 	//====================
 	// 弾 / 近接 / 敵の更新（派生シーンの Update から呼ぶ）
 	//====================
-	void UpdateBullets(float deltaTime);
+	// playerBulletDeltaTime が 0 以上なら、自機の弾（PlayerBullet）だけその dt で進める（機動系の RB のスロー中も自機の弾は等速）
+	void UpdateBullets(float deltaTime, float playerBulletDeltaTime = -1.0f);
 	// 線分 from→to が Enemy/Boss の球コライダー（弾半径ぶん膨らませる）に最初に入る位置を 0..1 で返す。無ければ -1
 	float FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const;
 	void SweepDeadEntities();
