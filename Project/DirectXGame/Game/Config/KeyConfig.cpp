@@ -108,6 +108,9 @@ void KeyConfig::ApplyHardcodedDefaults(InputActionMap& map) {
 	Set(map, Action::Ultimate,
 		PhysicalBinding::Keyboard(DIK_F),
 		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_RIGHT_THUMB));
+	Set(map, Action::FlightSkill,
+		PhysicalBinding::Keyboard(DIK_C),
+		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_RIGHT_SHOULDER));
 	Set(map, Action::LockCamButton,
 		PhysicalBinding::Keyboard(DIK_TAB),
 		PhysicalBinding::Gamepad(XINPUT_GAMEPAD_LEFT_SHOULDER));

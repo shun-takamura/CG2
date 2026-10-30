@@ -52,11 +52,13 @@ private:
 			ctx.playerRailVelocity.x + ctx.playerOwnVelocity.x * ctx.shotLeadRate,
 			ctx.playerRailVelocity.y + ctx.playerOwnVelocity.y * ctx.shotLeadRate,
 			ctx.playerRailVelocity.z + ctx.playerOwnVelocity.z * ctx.shotLeadRate };
-		Vector3 aim = *ppos;
+		// 狙うのは足元（原点）でなく当たり判定の中心
+		const Vector3 body = GameScene::GetShotAimPoint(ctx.player);
+		Vector3 aim = body;
 		for (int i = 0; i < 2; ++i) { // 着弾時間→予測位置を2回反復して収束させる
 			const float dx = aim.x - pos->x, dy = aim.y - pos->y, dz = aim.z - pos->z;
 			const float t = std::sqrt(dx * dx + dy * dy + dz * dz) / bulletSpeed;
-			aim = { ppos->x + leadVel.x * t, ppos->y + leadVel.y * t, ppos->z + leadVel.z * t };
+			aim = { body.x + leadVel.x * t, body.y + leadVel.y * t, body.z + leadVel.z * t };
 		}
 
 		Vector3 dir{ aim.x - pos->x, aim.y - pos->y, aim.z - pos->z };

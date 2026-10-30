@@ -12,6 +12,7 @@
 #include "StageStart/StageStartPart.h"
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
+#include "FlightUnit/FlightUnitPart.h"
 #include "StageEnvironment.h"
 #include "StageStreaming.h"
 #include "VerticalMenu.h"
@@ -46,7 +47,7 @@ class PlayerWingUnit;
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
 class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
-	private IPlayerDeathHost, private IStageStreamingHost {
+	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -203,6 +204,25 @@ private:
 	// 死亡演出を始める（preview＝調整用。終わってもゲームオーバーへ行かない）
 	void BeginPlayerDeath(bool preview);
 
+	// ----- IFlightUnitHost 実装（private override。FlightUnitPart 経由のみ。GetPlayer/GetTimeScale/SetTimeScale は上の override で満たす）-----
+	Vector3 GetFlightUnitAnchor() const override { return SpecialPlayerCenter(); }
+	IImGuiEditable* GetReticleTarget() const override { return IsSpecialTargetAlive(lockedEnemy_) ? lockedEnemy_ : nullptr; }
+	Vector3 GetReticleAimPoint() const override { return firingTarget_; }
+	void CollectOnScreenEnemies(std::vector<IImGuiEditable*>& out) override;
+	bool IsEnemyAlive(IImGuiEditable* e) const override { return IsSpecialTargetAlive(e); }
+	void FireSupportBullet(const Vector3& from, const Vector3& dir, IImGuiEditable* homingTarget, float damageScale) override;
+	int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) override;
+	// 飛行ユニット（サブ武器。20_Loadout.md §3）。付けている系統は LoadoutState。シューティングとボス戦の両方で RB の技を使う
+	std::unique_ptr<FlightUnitPart> flightUnit_;
+	// 飛行ユニットの毎フレーム（RB の入力・技・クールタイム）
+	void UpdateFlightUnit(class InputActionMap* actions);
+	// 自機の攻撃力（攻撃系の補正込み）。射撃・近接・支援射撃で使う
+	int ScaledPlayerAttack() const;
+	// STG の自機を照準へ向ける（上の基準はカメラの上。体の中心まわりのずらしは位置を作るときに掛ける）
+	void ApplyRailAimRotation(const Vector3& toAim);
+	// 自機の判定の姿勢（中心＝体の中心・軸＝自機の回転。STG の移動状態は前傾）を Gameplay に入れる。敵弾・接触・デバッグ描画が同じものを使う
+	void UpdatePlayerColliderPose();
+
 	// 自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦は Stand
 	void ApplyPlayerPose();
 
@@ -232,9 +252,15 @@ private:
 
 	// ----- ImGui で編集可能な調整値（Resources/Json/Tuning/StagePlay.json に自動同期） -----
 	Vector3 playerLocalOffset_{ 0.0f, -0.5f, 6.0f };  // カメラローカルの中心位置（無入力時）
-	// 攻撃中（射撃/チャージ/近接）の移動速度倍率。STG・ボス戦共通。撃ちながらだと避けにくくする
+	// 攻撃中（最後の射撃/近接から moveStateDelay_ 秒以内）の移動速度倍率。STG・ボス戦共通。撃ちながらだと避けにくくする。
+	// それ以外は「移動状態」＝全速・STG は当たり判定のカプセルをモデルと同じ角度に前へ傾ける。チャージだけなら移動状態のまま
 	float   attackMoveSpeedScale_ = 0.6f;
+	float   moveStateDelay_ = 1.0f;          // 最後の攻撃から移動状態になるまで [sec]
+	float   moveStateLeanDeg_ = 55.0f;       // 移動状態の当たり判定の前傾 [deg]（飛ぶ姿勢のモデルの体の角度に合わせる）
+	float   timeSinceAttack_ = 1000.0f;      // 最後の攻撃からの経過（Player の時間）
 	bool    IsPlayerAttacking(class InputActionMap* actions) const;
+	void    MarkPlayerAttack() { timeSinceAttack_ = 0.0f; }
+	int     playerBaseMaxHP_ = -1;           // 飛行ユニットの HP 上限の補正を掛ける前（プレハブの値。-1＝未取得）
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
 	Vector2 playerClipMargin_{ 0.1f, 0.1f };           // クリップ空間で許す画面外マージン（X/Y）
 	float   playerSmoothTime_ = 0.15f;                 // 慣性の指数減衰時定数（秒）：小さい=反応速い
@@ -377,7 +403,7 @@ private:
 	// 通常回避（ダッシュ＋無敵窓）。タイマー類は実時間（UI グループ dt）で進める。
 	bool  dodgeActive_ = false;          // 回避無敵が有効か
 	float dodgeTimer_ = 0.0f;            // 回避開始からの経過 [sec]
-	float dodgeJustWindow_ = 0.2f;       // ジャスト成立窓：入力後この秒数以内に被弾接触すると成立
+	float dodgeJustWindow_ = 0.15f;      // ジャスト成立窓：入力後この秒数以内に被弾接触すると成立（StagePlay.json の dodge.justWindow。機動系の延長は判定の所で足す）
 	float dodgeIFrameDuration_ = 0.4f;   // 回避無敵：入力後この秒数まで被弾無効（justWindow を内包）
 	float dodgeCooldown_ = 0.6f;         // 回避クールダウン [sec]
 	float dodgeCooldownTimer_ = 0.0f;    // クールダウン残り

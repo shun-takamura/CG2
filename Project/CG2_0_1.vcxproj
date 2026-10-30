@@ -166,6 +166,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOver\EtherVessel.cpp" />
@@ -225,6 +229,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Score\ScoreManager.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\BossRetryState.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\LoadoutState.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameInspectorSections.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameAssetBrowserSections.cpp" />
@@ -253,6 +258,10 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\CloudTopIntro.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\PlayerWingUnit.h" />
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.h" />
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVesselGlass.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOver\EtherVessel.h" />
@@ -346,6 +355,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Score\ScoreManager.h" />
     <ClInclude Include="DirectXGame\Game\Score\BossRetryState.h" />
     <ClInclude Include="DirectXGame\Game\Score\EtherState.h" />
+    <ClInclude Include="DirectXGame\Game\Score\LoadoutState.h" />
     <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameInspectorSections.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameAssetBrowserSections.h" />

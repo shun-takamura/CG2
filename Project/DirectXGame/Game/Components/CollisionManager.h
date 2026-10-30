@@ -3,6 +3,8 @@
 #include <vector>
 
 class IImGuiEditable;
+struct Collider;
+namespace CollisionGeometry { struct WorldData; }
 
 /// <summary>
 /// 球コライダーの登録・判定を一元管理する（シングルトン）。
@@ -27,6 +29,12 @@ public:
 	/// Update の中で自動的に呼ばれるが、外から強制描画したい場合のために公開しておく。
 	/// </summary>
 	void DrawDebug();
+
+	/// <summary>
+	/// 判定の中心・軸。ゲームが姿勢を上書きしていればそれ（Gameplay の SetColliderPose）、
+	/// 無ければエンジンの TryGetWorldData（translate＋offset / rotate）。
+	/// </summary>
+	static bool GetWorldData(IImGuiEditable* e, const Collider& c, CollisionGeometry::WorldData& out);
 
 	//====================
 	// グローバル設定（Debug 用）

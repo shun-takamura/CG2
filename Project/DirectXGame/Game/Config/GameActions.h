@@ -15,6 +15,7 @@ enum class Action : int {
 	Dodge,           // 回避
 	Heal,            // ジャスト回避後HP回復
 	Ultimate,        // 装備中の必殺技を発動
+	FlightSkill,     // 飛行ユニットの技（RB。20_Loadout.md §4）
 	LockCamButton,   // ターゲットカメラ / ロックオンカメラ切替（短押し・長押しはシーン側で判別）
 	Pause,           // ポーズメニュー
 	ViewToggle,      // スタート演出の一人称 ↔ 三人称（16_StageStart.md）
@@ -42,6 +43,7 @@ inline std::string_view GetActionName(Action a) {
 	case Action::Dodge:          return "Dodge";
 	case Action::Heal:           return "Heal";
 	case Action::Ultimate:       return "Ultimate";
+	case Action::FlightSkill:    return "FlightSkill";
 	case Action::LockCamButton:  return "LockCamButton";
 	case Action::Pause:          return "Pause";
 	case Action::ViewToggle:     return "ViewToggle";

@@ -24,6 +24,7 @@
 #include "Primitive/DebugDraw.h"
 #include "Physics/CollisionGeometry.h"
 #include "Score/DifficultyProfile.h"
+#include "MathUtility.h"
 #include <algorithm>
 #include <cmath>
 
@@ -493,6 +494,23 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 		}
 		pendingEnemyControllers_.clear();
 	}
+}
+
+Vector3 GameScene::GetShotAimPoint(IImGuiEditable* target) {
+	const Vector3* tp = target ? target->GetEditableTranslate() : nullptr;
+	if (!tp) return { 0.0f, 0.0f, 0.0f };
+	if (Gameplay::Of(target).GetTag() != EntityTag::Player) return *tp;
+	// シーンが判定の姿勢を決めていればその中心（当たり判定と同じ点を狙う）
+	if (Gameplay::Of(target).hasColliderPose) return Gameplay::Of(target).colliderPoseCenter;
+	// オフセットは自機の回転（Object3D と同じ Rx·Ry·Rz）で回す。降下中の前傾でも見た目の体の中心に合う
+	const Vector3& off = Gameplay::Of(target).GetCollider().offset;
+	const Vector3* rot = static_cast<const IImGuiEditable*>(target)->GetEditableRotate();
+	if (!rot) return { tp->x + off.x, tp->y + off.y, tp->z + off.z };
+	const Matrix4x4 m = Multiply(MakeRotateXMatrix(*rot), Multiply(MakeRotateYMatrix(*rot), MakeRotateZMatrix(*rot)));
+	return {
+		tp->x + off.x * m.m[0][0] + off.y * m.m[1][0] + off.z * m.m[2][0],
+		tp->y + off.x * m.m[0][1] + off.y * m.m[1][1] + off.z * m.m[2][1],
+		tp->z + off.x * m.m[0][2] + off.y * m.m[1][2] + off.z * m.m[2][2] };
 }
 
 void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
@@ -1073,12 +1091,14 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 	return bestStop;
 }
 
-void GameScene::UpdateBullets(float deltaTime) {
+void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime) {
 	PEPPER_SCOPE("GameScene::UpdateBullets");
 	if (bullets_.empty()) return;
 
 	for (auto& b : bullets_) {
 		if (!b.primitive) continue;
+		const float deltaTime = (playerBulletDeltaTime >= 0.0f && Gameplay::Of(b.primitive).GetTag() == EntityTag::PlayerBullet)
+			? playerBulletDeltaTime : worldDeltaTime;
 
 		// 貫通弾の多段ヒット用クールタイムを減算
 		if (b.penetrate) {
@@ -1096,11 +1116,12 @@ void GameScene::UpdateBullets(float deltaTime) {
 		// ----- ホーミング（target が生きていれば velocity を target 方向へ補正） -----
 		// 弾速の大きさは保持し、方向だけを target に向けて指数減衰で寄せる。
 		if (b.homingTarget && b.homingStrength > 0.0f && b.speed > 0.0f) {
-			const Vector3* tp = b.homingTarget->GetEditableTranslate();
-			if (tp) {
-				const float dx = tp->x - t->x;
-				const float dy = tp->y - t->y;
-				const float dz = tp->z - t->z;
+			if (b.homingTarget->GetEditableTranslate()) {
+				// 自機へ曲がる敵弾は足元でなく体の中心へ
+				const Vector3 tp = GetShotAimPoint(b.homingTarget);
+				const float dx = tp.x - t->x;
+				const float dy = tp.y - t->y;
+				const float dz = tp.z - t->z;
 				const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
 				if (dist > 1e-4f) {
 					const float wantedX = dx / dist;
