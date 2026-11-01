@@ -1,5 +1,9 @@
 #include "LoadoutState.h"
 
+#include "MainWeaponCatalog.h"
+#include "ShieldCatalog.h"
+#include "Effect/BeamShieldRenderer.h"
+
 #include <algorithm>
 #include <string>
 
@@ -55,6 +59,99 @@ bool LoadoutState::OnImGui() {
 			SetFlightUnitLevel(static_cast<FlightUnitKind>(i), lv);
 			changed = true;
 		}
+	}
+#endif
+	return changed;
+}
+
+const std::string& LoadoutState::GetMainWeaponId() const {
+	return mainWeaponId_.empty() ? MainWeaponCatalog::GetInstance()->GetDefaultId() : mainWeaponId_;
+}
+
+void LoadoutState::SetMainWeaponId(const std::string& id) {
+	if (MainWeaponCatalog::GetInstance()->IndexOf(id) < 0) return;
+	mainWeaponId_ = id;
+}
+
+const MainWeaponDef* LoadoutState::GetMainWeapon() const {
+	return MainWeaponCatalog::GetInstance()->Find(GetMainWeaponId());
+}
+
+bool LoadoutState::OnImGuiMainWeapon() {
+	bool changed = false;
+#ifdef _DEBUG
+	MainWeaponCatalog* catalog = MainWeaponCatalog::GetInstance();
+	const int current = catalog->IndexOf(GetMainWeaponId());
+	const MainWeaponDef* cur = catalog->GetDef(current);
+	if (ImGui::BeginCombo("Main Weapon##Loadout", cur ? cur->id.c_str() : "(none)")) {
+		for (int i = 0; i < catalog->GetCount(); ++i) {
+			const MainWeaponDef* d = catalog->GetDef(i);
+			if (ImGui::Selectable(d->id.c_str(), i == current) && i != current) {
+				SetMainWeaponId(d->id);
+				changed = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::Button("Reload MainWeapon.json##Loadout")) {
+		catalog->Load();
+		changed = true;
+	}
+	if (const MainWeaponDef* d = GetMainWeapon()) {
+		ImGui::Text("Attack +%d  FireRate %.2fs  Charge %.1f / %.1fs", d->attackBonus, d->fireRate,
+			d->chargeStage1Time, d->chargeStage2Time);
+		ImGui::Text("Normal: speed x%.2f size x%.2f homing x%.2f", d->normal.speedScale, d->normal.sizeScale, d->normal.homingScale);
+		ImGui::Text("Charge: speed x%.2f size x%.2f homing x%.2f", d->charge.speedScale, d->charge.sizeScale, d->charge.homingScale);
+	}
+#endif
+	return changed;
+}
+
+const std::string& LoadoutState::GetShieldId() const {
+	return shieldId_.empty() ? ShieldCatalog::GetInstance()->GetDefaultId() : shieldId_;
+}
+
+void LoadoutState::SetShieldId(const std::string& id) {
+	if (ShieldCatalog::GetInstance()->IndexOf(id) < 0) return;
+	shieldId_ = id;
+}
+
+const ShieldDef* LoadoutState::GetShield() const {
+	return ShieldCatalog::GetInstance()->Find(GetShieldId());
+}
+
+bool LoadoutState::OnImGuiShield() {
+	bool changed = false;
+#ifdef _DEBUG
+	ShieldCatalog* catalog = ShieldCatalog::GetInstance();
+	const int current = catalog->IndexOf(GetShieldId());
+	const ShieldDef* cur = catalog->GetDef(current);
+	if (ImGui::BeginCombo("Shield##Loadout", cur ? cur->id.c_str() : "(none)")) {
+		for (int i = 0; i < catalog->GetCount(); ++i) {
+			const ShieldDef* d = catalog->GetDef(i);
+			if (ImGui::Selectable(d->id.c_str(), i == current) && i != current) {
+				SetShieldId(d->id);
+				changed = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::Button("Reload Shield.json##Loadout")) {
+		catalog->Load();
+		changed = true;
+	}
+	if (ShieldDef* d = catalog->GetDefMutable(catalog->IndexOf(GetShieldId()))) {
+		ImGui::Text("MaxHP +%d  DamageCut %.0f%%  Move x%.2f", d->maxHpAdd, d->damageCut * 100.0f, d->moveSpeedScale);
+		// 左手の握り（仮モデルの置き方を合わせる用。Save で Shield.json へ）
+		ImGui::DragFloat3("Grip Translate##Shield", &d->gripTranslate.x, 0.01f);
+		ImGui::DragFloat3("Grip Rotate##Shield", &d->gripRotate.x, 0.01f);
+		ImGui::DragFloat3("Grip Scale##Shield", &d->gripScale.x, 0.01f, 0.0f, 10.0f);
+		if (d->beam && ImGui::TreeNode("Beam##Shield")) {
+			ImGui::DragFloat3("Beam Offset##Shield", &d->beamOffset.x, 0.005f);
+			BeamShieldRenderer::EditAppearance(d->beamLook);
+			ImGui::TreePop();
+		}
+		if (ImGui::Button("Save Shield.json##Loadout")) catalog->Save();
 	}
 #endif
 	return changed;

@@ -22,6 +22,7 @@
 #include "MaskedGrayscaleEffect.h"
 #include "MaskedOutlineEffect.h"
 #include "LightShaftEffect.h"
+#include "GlitchEffect.h"
 #include "ColorInvertEffect.h"
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
@@ -179,6 +180,7 @@ public:
 	OutlineNormalEffect* outlineNormal = nullptr;
 	MaskedGrayscaleEffect* maskedGrayscale = nullptr;
 	LightShaftEffect* lightShaft = nullptr;
+	GlitchEffect* glitch = nullptr;  // 空間がずれたようなノイズ（HUB の機体設定の入れ替えなど）
 	MaskedOutlineEffect* maskedOutline = nullptr;
 	ColorInvertEffect* colorInvert = nullptr;
 	PrecisionBlurEffect* precisionBlur = nullptr;

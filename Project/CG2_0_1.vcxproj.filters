@@ -363,6 +363,12 @@
     <ClCompile Include="DirectXGame\Game\Score\LoadoutState.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\MainWeaponCatalog.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\ShieldCatalog.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
@@ -735,6 +741,12 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\LoadoutState.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\MainWeaponCatalog.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\ShieldCatalog.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h">

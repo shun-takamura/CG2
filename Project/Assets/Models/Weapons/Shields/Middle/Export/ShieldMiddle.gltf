@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "ShieldMiddle"
+    }
+  ],
+  "materials": [
+    {
+      "name": "ShieldMiddle",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.8349999785423279,
+        "roughnessFactor": 0.05900000035762787
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "ShieldMiddle",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "ShieldMiddle_NormalMap",
+      "uri": "ShieldMiddle_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "ShieldMiddle_BaseColor",
+      "uri": "ShieldMiddle_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 17760,
+      "max": [
+        0.3019714653491974,
+        0.4901275634765625,
+        0.09385299682617188
+      ],
+      "min": [
+        -0.3019714653491974,
+        -0.4901275634765625,
+        -0.09385299682617188
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 17760,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 17760,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 85110,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 213120,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 213120,
+      "byteOffset": 213120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 142080,
+      "byteOffset": 426240,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 170220,
+      "byteOffset": 568320,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 738540,
+      "uri": "ShieldMiddle.bin"
+    }
+  ]
+}
