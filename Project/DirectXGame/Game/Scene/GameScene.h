@@ -52,7 +52,8 @@ public:
 		float homingStrength = 0.0f,
 		float maxTravelDistance = 0.0f,
 		const std::string& prefabName = "TemporaryPlayerBullet",
-		int attackPower = 0);
+		int attackPower = 0,
+		float sizeScale = 1.0f); // 判定＋見た目のサイズ倍率（メイン武器の弾の大きさ）
 
 	/// <summary>
 	/// プレイヤー近接攻撃の判定を1つスポーン。owner に追従させて持続させる。

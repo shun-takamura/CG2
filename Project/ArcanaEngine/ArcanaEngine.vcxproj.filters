@@ -141,6 +141,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GlitchEffect.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BloomEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
@@ -154,6 +157,9 @@
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp">
@@ -545,6 +551,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\LightShaftEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GlitchEffect.h">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\BloomEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
@@ -558,6 +567,12 @@
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldAppearance.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.h">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.h">

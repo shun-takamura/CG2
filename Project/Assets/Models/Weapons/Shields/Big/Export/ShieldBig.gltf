@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "ShieldBig"
+    }
+  ],
+  "materials": [
+    {
+      "name": "ShieldBig",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.9649999737739563,
+        "roughnessFactor": 0.2549999952316284
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "ShieldBig",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "ShieldBig_NormalMap",
+      "uri": "ShieldBig_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "ShieldBig_BaseColor",
+      "uri": "ShieldBig_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 31380,
+      "max": [
+        0.2506866753101349,
+        0.48944091796875,
+        0.07649994641542435
+      ],
+      "min": [
+        -0.2506866753101349,
+        -0.48944091796875,
+        -0.07649994641542435
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 31380,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 31380,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 145476,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 376560,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 376560,
+      "byteOffset": 376560,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 251040,
+      "byteOffset": 753120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 290952,
+      "byteOffset": 1004160,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1295112,
+      "uri": "ShieldBig.bin"
+    }
+  ]
+}

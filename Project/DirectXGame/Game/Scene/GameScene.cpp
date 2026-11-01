@@ -685,7 +685,8 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	IImGuiEditable* homingTarget, float homingStrength,
 	float maxTravelDistance,
 	const std::string& prefabName,
-	int attackPower) {
+	int attackPower,
+	float sizeScale) {
 	const size_t prevCount = dynamicPrimitives_.size();
 	InstantiatePrefab(prefabName, pos);
 	if (dynamicPrimitives_.size() != prevCount + 1) {
@@ -716,6 +717,20 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	if (spawned) {
 		// 進行方向に弾の向きを合わせる
 		spawned->SetRotate(bulletEuler);
+		// サイズ倍率を見た目とコライダー両方に適用（baseColliderRadius は下で倍率後の半径を拾う）
+		if (sizeScale != 1.0f) {
+			if (const PrefabDef* sdef = PrefabManager::GetInstance()->Find(prefabName)) {
+				const Vector3& s = sdef->defaultScale;
+				spawned->SetScale({ s.x * sizeScale, s.y * sizeScale, s.z * sizeScale });
+			}
+			Collider& bc = Gameplay::Of(spawned).GetCollider();
+			bc.radius        *= sizeScale;
+			bc.halfExtents.x *= sizeScale;
+			bc.halfExtents.y *= sizeScale;
+			bc.halfExtents.z *= sizeScale;
+			bc.capsuleRadius *= sizeScale;
+			bc.capsuleHeight *= sizeScale;
+		}
 		spawned->Update();
 
 		// プレイヤー攻撃力 × プレハブの倍率で最終ダメージを確定（発射時に焼き込む）

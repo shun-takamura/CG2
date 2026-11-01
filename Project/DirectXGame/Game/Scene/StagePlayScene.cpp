@@ -53,6 +53,10 @@
 #include "Score/BossRetryState.h"
 #include "Score/EtherState.h"
 #include "Score/DifficultyProfile.h"
+#include "Score/MainWeaponCatalog.h"
+#include "Score/ShieldCatalog.h"
+#include "Effect/BeamShieldRenderer.h"
+#include "ModelManager.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
 #include "Effect/EffectManager.h"
@@ -2859,6 +2863,12 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Ether State (19 G6)")) EtherState::GetInstance()->OnImGui();
 	if (ImGui::CollapsingHeader("Difficulty Profile (19 5)")) DifficultyProfile::GetInstance()->OnImGui();
 	if (ImGui::CollapsingHeader("Flight Unit (20 3)") && flightUnit_) flightUnit_->OnImGui();
+	if (ImGui::CollapsingHeader("Main Weapon (20 1)") && LoadoutState::GetInstance()->OnImGuiMainWeapon()) {
+		RebuildMainWeaponModel();
+	}
+	if (ImGui::CollapsingHeader("Shield (20 2)") && LoadoutState::GetInstance()->OnImGuiShield()) {
+		RebuildShieldModel();
+	}
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -3093,9 +3103,8 @@ void StagePlayScene::Initialize() {
 				wp.modelDir        = "Resources/Models/Player/Bullet";
 				wp.modelFile       = "playerBullet.mesh";
 			}
-			weapon_ = std::make_unique<Object3DInstance>();
-			weapon_->Initialize(object3DManager_, dxCore_, wp.modelDir, wp.modelFile, "Weapon");
-			weapon_->SetCamera(camera_.get());
+			RebuildMainWeaponModel();
+			RebuildShieldModel();
 		}
 		return true;
 	} });
@@ -3749,7 +3758,8 @@ void StagePlayScene::Update() {
 			// STG と同方針。近接派生中（jdMeleeCameraActive_）はワープ/攻撃で位置を直接管理するため
 			// 地上移動そのものを止める（UpdatePlayerGroundMovement を呼ばない）。
 			const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
-				* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f);
+				* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f)
+				* ShieldMoveSpeedScale();
 			const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : Vector2{ moveDelta.x * moveScale, moveDelta.y * moveScale };
 			if (!jdMeleeCameraActive_) {
 				bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
@@ -3860,7 +3870,8 @@ void StagePlayScene::Update() {
 		// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
 		// 飛行ユニットの常時の効果（機動系は移動が速くなる）
 		const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
-			* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f);
+			* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f)
+			* ShieldMoveSpeedScale();
 		Vector2 targetVel = {
 			moveDelta.x * playerMoveSpeed_.x * moveScale,
 			moveDelta.y * playerMoveSpeed_.y * moveScale,
@@ -4271,17 +4282,42 @@ void StagePlayScene::Update() {
 	if (weapon_ && player_ && Gameplay::Of(player_).GetWeaponParams().enabled) {
 		// ソケットの追従先/オフセットは player の WeaponParams（Inspector 編集）から毎フレ同期。
 		const WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
+		const MainWeaponDef* mw = LoadoutState::GetInstance()->GetMainWeapon();
+		const bool gripFromWeapon = mw && !mw->modelFile.empty();
 		weaponSocket_.target           = player_;  // プレイヤー再生成（シーン再構築）に毎フレ追従
 		weaponSocket_.jointName        = wp.bone;
-		weaponSocket_.offset.translate = wp.offsetTranslate;
-		weaponSocket_.offset.rotate    = wp.offsetRotate;
-		weaponSocket_.offset.scale     = wp.offsetScale;
+		weaponSocket_.offset.translate = gripFromWeapon ? mw->gripTranslate : wp.offsetTranslate;
+		weaponSocket_.offset.rotate    = gripFromWeapon ? mw->gripRotate : wp.offsetRotate;
+		weaponSocket_.offset.scale     = gripFromWeapon ? mw->gripScale : wp.offsetScale;
 		const Matrix4x4 world = weaponSocket_.World();
 		weapon_->SetWorldMatrixOverride(world);
 		// ギズモ/Inspector でも追従を確認できるよう、平行移動成分を transform_ にも反映する
 		// （描画は override 側を使うので見た目には影響しない。デバッグ可視化用）
 		weapon_->SetTranslate(weaponSocket_.Position());
 		weapon_->Update();
+	}
+	// 盾を左手ボーンへ追従させる（20 番 §2。握りは付けている盾の grip）
+	if (shield_ && player_) {
+		if (const ShieldDef* sd = LoadoutState::GetInstance()->GetShield(); sd && !sd->modelFile.empty()) {
+			shieldSocket_.target           = player_;
+			shieldSocket_.jointName        = sd->bone;
+			shieldSocket_.offset.translate = sd->gripTranslate;
+			shieldSocket_.offset.rotate    = sd->gripRotate;
+			shieldSocket_.offset.scale     = sd->gripScale;
+			shield_->SetWorldMatrixOverride(shieldSocket_.World());
+			shield_->SetTranslate(shieldSocket_.Position());
+			shield_->Update();
+			// ビームシールド：発生装置の位置（盾のローカル）を手の行列に重ねる
+			if (beamShield_ && sd->beam) {
+				Matrix4x4 emitter = MakeIdentity4x4();
+				emitter.m[3][0] = sd->beamOffset.x;
+				emitter.m[3][1] = sd->beamOffset.y;
+				emitter.m[3][2] = sd->beamOffset.z;
+				beamShield_->SetAppearance(sd->beamLook);
+				beamShield_->SetWorld(Multiply(emitter, shieldSocket_.World()));
+				beamShield_->Update(GetScaledDeltaTime(TimeGroup::UI));
+			}
+		}
 	}
 
 	// 自機の照らし方（IBL を切って平行光源で）と点滅の発光
@@ -4635,8 +4671,11 @@ void StagePlayScene::Update() {
 		if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
 		timeSinceAttack_ += dtP;
 
-		// プレイヤープレハブからチャージ時間を反映（有効時のみ）
-		if (player_) {
+		// チャージ時間：メイン武器（20 番 §1）→ 無ければプレイヤープレハブ（有効時のみ）
+		if (const MainWeaponDef* mw = LoadoutState::GetInstance()->GetMainWeapon()) {
+			chargeStage1Time_ = mw->chargeStage1Time;
+			chargeStage2Time_ = mw->chargeStage2Time;
+		} else if (player_) {
 			const ChargeParams& chp = Gameplay::Of(player_).GetChargeParams();
 			if (chp.enabled) {
 				chargeStage1Time_ = chp.stage1Time;
@@ -4745,6 +4784,17 @@ void StagePlayScene::Update() {
 					homing         = isLocked ? bdef->bulletStrongHomingStrength : bdef->bulletHomingStrength;
 				}
 
+				// メイン武器の弾の倍率（通常弾／チャージ弾。精密射撃の加算より前に掛ける）
+				const MainWeaponDef* mainWeapon = LoadoutState::GetInstance()->GetMainWeapon();
+				float sizeScale = 1.0f;
+				if (mainWeapon) {
+					const MainWeaponShot& shot = mainWeapon->ShotFor(playerChargeLevel_);
+					speed          *= shot.speedScale;
+					homing         *= shot.homingScale;
+					colliderGrowth *= shot.sizeScale;
+					sizeScale       = shot.sizeScale;
+				}
+
 				// 精密射撃モードの加算（precisionBlend_ で補間）。
 				// 弾速は全弾に加算、ホーミング加算はロック中（強ホーミング）の弾だけに効かせる。
 				if (player_) {
@@ -4760,11 +4810,11 @@ void StagePlayScene::Update() {
 				const int atk = ScaledPlayerAttack();
 				SpawnPlayerBullet(origin, dir, speed, lifetime,
 					colliderGrowth, homeTarget, homeStrength,
-					aimPlaneDistance_, bulletPrefab, atk);
+					aimPlaneDistance_, bulletPrefab, atk, sizeScale);
 				SoundManager::GetInstance()->Play2DSound(playerChargeLevel_ >= 1.0f ? "se_charge_shot" : "se_shot");
 
-				// 連射間隔はプレイヤープレハブの ChargeParams.fireRate から
-				const float fr = Gameplay::Of(player_).GetChargeParams().fireRate;
+				// 連射間隔はメイン武器 → 無ければプレイヤープレハブの ChargeParams.fireRate
+				const float fr = mainWeapon ? mainWeapon->fireRate : Gameplay::Of(player_).GetChargeParams().fireRate;
 				fireTimer_ = (fr > 0.0f) ? fr : 0.12f;
 				MarkPlayerAttack();
 
@@ -4920,6 +4970,9 @@ void StagePlayScene::Draw() {
 	if (weapon_ && player_ && player_->GetVisible() && Gameplay::Of(player_).GetWeaponParams().enabled) {
 		weapon_->Draw(dxCore_);
 	}
+	if (shield_ && player_ && player_->GetVisible()) {
+		if (const ShieldDef* sd = LoadoutState::GetInstance()->GetShield(); sd && !sd->modelFile.empty()) shield_->Draw(dxCore_);
+	}
 	DrawDynamicAnimated();
 	// 自機の羽根（Spine2 に付けたスキニングのモデル）
 	if (playerWings_) playerWings_->Draw(dxCore_);
@@ -4993,6 +5046,8 @@ void StagePlayScene::Draw() {
 
 	// 光の翼は GPU パーティクル群（special_wing_*）として DrawGlobalEffects が自動描画
 
+	// 盾のビーム（乗算済み α の半透明。20 番 §2。ルートシグネチャを替えるので、前の物の描画状態を壊さないようここで）
+	if (IsShieldBeamVisible() && camera_) beamShield_->Draw(*camera_);
 	// 全シーン共通の GPUParticle + Effect Editor 描画
 	DrawGlobalEffects();
 
@@ -5148,6 +5203,8 @@ void StagePlayScene::DrawBloomSources() {
 	if (playerWings_) playerWings_->DrawBloom(dxCore_);
 	// 死亡演出：自機がほどける縁・昇る糸
 	if (playerDeath_) playerDeath_->DrawBloom(dxCore_);
+	// 盾のビーム
+	if (IsShieldBeamVisible() && camera_) beamShield_->DrawBloomPass(*camera_);
 }
 
 void StagePlayScene::BurnPlayerWings(float seconds) {
@@ -5722,6 +5779,9 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				// 通常被弾（敵の攻撃のダメージに純度の倍率。19 番 §5）。防御系の常時の軽減もここで掛ける
 				int damage = DifficultyProfile::ScaleInt(incomingDamage, DifficultyProfile::GetInstance()->GetDamageScale());
 				if (flightUnit_) damage = flightUnit_->ModifyIncomingDamage(damage);
+				if (const ShieldDef* shield = LoadoutState::GetInstance()->GetShield()) damage = shield->ReduceDamage(damage);
+				// ビームシールドは受けた瞬間だけ強く光る
+				if (IsShieldBeamVisible()) beamShield_->Flash(1.0f);
 				OnPlayerTakeDamage(damage);
 				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）
 				if (phase_ == Phase::Boss && bossStage_) {
@@ -7611,7 +7671,10 @@ void StagePlayScene::UpdateFlightUnit(InputActionMap* actions) {
 	// 防御系の HP 上限の補正。付け替えても残り HP の割合は保つ
 	HP& hp = Gameplay::Of(player_).GetHP();
 	if (playerBaseMaxHP_ < 0) playerBaseMaxHP_ = hp.maxHP;
-	const int wantMax = (std::max)(1, static_cast<int>(std::lround(static_cast<float>(playerBaseMaxHP_) * flightUnit_->GetMaxHpScale())));
+	// 盾の加算 → 防御系の倍率の順（20 番 §2）
+	const ShieldDef* shield = LoadoutState::GetInstance()->GetShield();
+	const int baseMax = playerBaseMaxHP_ + (shield ? shield->maxHpAdd : 0);
+	const int wantMax = (std::max)(1, static_cast<int>(std::lround(static_cast<float>(baseMax) * flightUnit_->GetMaxHpScale())));
 	if (hp.maxHP != wantMax && hp.maxHP > 0) {
 		const float ratio = static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP);
 		hp.maxHP = wantMax;
@@ -7677,9 +7740,58 @@ void StagePlayScene::ApplyRailAimRotation(const Vector3& toAim) {
 
 int StagePlayScene::ScaledPlayerAttack() const {
 	if (!player_ || !Gameplay::Of(player_).HasAttackPower()) return 0;
-	const int atk = Gameplay::Of(player_).GetAttackPower();
+	const MainWeaponDef* mw = LoadoutState::GetInstance()->GetMainWeapon();
+	const int atk = Gameplay::Of(player_).GetAttackPower() + (mw ? mw->attackBonus : 0);
 	const float scale = flightUnit_ ? flightUnit_->GetAttackScale() : 1.0f;
 	return (atk > 0) ? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(atk) * scale))) : 0;
+}
+
+void StagePlayScene::RebuildMainWeaponModel() {
+	if (!player_) return;
+	const WeaponParams& wp = Gameplay::Of(player_).GetWeaponParams();
+	const MainWeaponDef* mw = LoadoutState::GetInstance()->GetMainWeapon();
+	const bool fromWeapon = mw && !mw->modelFile.empty();
+	const std::string& dir = fromWeapon ? mw->modelDir : wp.modelDir;
+	const std::string& file = fromWeapon ? mw->modelFile : wp.modelFile;
+	if (!weapon_) {
+		weapon_ = std::make_unique<Object3DInstance>();
+		weapon_->Initialize(object3DManager_, dxCore_, dir, file, "Weapon");
+	} else {
+		// 作り直すと前のフレームの定数バッファを GPU が使っている間に消してしまうので、モデルだけ差し替える
+		ModelManager::GetInstance()->LoadModel(dir, file);
+		weapon_->SetModel(file);
+	}
+	weapon_->SetCamera(camera_.get());
+}
+
+void StagePlayScene::RebuildShieldModel() {
+	if (!player_) return;
+	const ShieldDef* sd = LoadoutState::GetInstance()->GetShield();
+	if (!sd || sd->modelFile.empty()) return; // モデルの無い盾は描かない（shield_ は残して使い回す）
+	if (!shield_) {
+		shield_ = std::make_unique<Object3DInstance>();
+		shield_->Initialize(object3DManager_, dxCore_, sd->modelDir, sd->modelFile, "Shield");
+	} else {
+		// 武器と同じく、作り直さずモデルだけ差し替える
+		ModelManager::GetInstance()->LoadModel(sd->modelDir, sd->modelFile);
+		shield_->SetModel(sd->modelFile);
+	}
+	shield_->SetCamera(camera_.get());
+	if (sd->beam && !beamShield_) {
+		beamShield_ = std::make_unique<BeamShieldRenderer>();
+		beamShield_->Initialize(dxCore_);
+	}
+}
+
+bool StagePlayScene::IsShieldBeamVisible() const {
+	if (!beamShield_ || !shield_ || !player_ || !player_->GetVisible()) return false;
+	const ShieldDef* sd = LoadoutState::GetInstance()->GetShield();
+	return sd && sd->beam && !sd->modelFile.empty();
+}
+
+float StagePlayScene::ShieldMoveSpeedScale() const {
+	const ShieldDef* sd = LoadoutState::GetInstance()->GetShield();
+	return sd ? sd->moveSpeedScale : 1.0f;
 }
 
 void StagePlayScene::CollectOnScreenEnemies(std::vector<IImGuiEditable*>& out) {

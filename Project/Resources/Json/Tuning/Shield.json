@@ -1,0 +1,139 @@
+{
+  "_comment": "20_Loadout.md §2 盾（左手）。maxHpAdd はプレハブの HP 上限に足す（飛行ユニットの補正の前）。damageCut は通常の被弾の軽減（0.2＝20%）、moveSpeedScale は移動速度の倍率。grip は左手に付けるモデルのずらし（model を空にすると描かない）。beam があればビームシールド（offset＝発生装置の位置、モデルのローカル）",
+  "default": "Standard",
+  "shields": [
+    {
+      "id": "Standard",
+      "displayName": "ハロー・バックラー",
+      "description": "最初から持っている盾。動きを邪魔しない。",
+      "maxHpAdd": 0,
+      "damageCut": 0,
+      "moveSpeedScale": 1,
+      "model": {
+        "dir": "Resources/Models/Weapons/Shields/Middle/Export",
+        "file": "ShieldMiddle.mesh",
+        "bone": "mixamorig:LeftHand"
+      },
+      "grip": {
+        "translate": [
+          -0.10000000149011612,
+          -0.10999999940395355,
+          0
+        ],
+        "rotate": [
+          0,
+          1.5707999467849731,
+          3.059999942779541
+        ],
+        "scale": [
+          0.80000001192092896,
+          0.80000001192092896,
+          0.80000001192092896
+        ]
+      }
+    },
+    {
+      "id": "Heavy",
+      "displayName": "サンクチュアリ・タワー",
+      "description": "身の丈ほどの大盾。耐久力が大きく上がるが、重くて動きが少し遅くなる。",
+      "maxHpAdd": 40,
+      "damageCut": 0,
+      "moveSpeedScale": 0.89999997615814209,
+      "model": {
+        "dir": "Resources/Models/Weapons/Shields/Big/Export",
+        "file": "ShieldBig.mesh",
+        "bone": "mixamorig:LeftHand"
+      },
+      "grip": {
+        "translate": [
+          -0.10000000149011612,
+          -0.14000000059604645,
+          0
+        ],
+        "rotate": [
+          0,
+          1.5707999467849731,
+          3.059999942779541
+        ],
+        "scale": [
+          1.2000000476837158,
+          1.2000000476837158,
+          1.2000000476837158
+        ]
+      }
+    },
+    {
+      "id": "Mirror",
+      "displayName": "アイギス・ビーム",
+      "description": "発生装置から光の膜を張る盾。受けるダメージを和らげる。",
+      "maxHpAdd": 10,
+      "damageCut": 0.20000000298023224,
+      "moveSpeedScale": 1,
+      "model": {
+        "dir": "Resources/Models/Weapons/Shields/Small/Export",
+        "file": "ShieldSmall.mesh",
+        "bone": "mixamorig:LeftHand"
+      },
+      "grip": {
+        "translate": [
+          -0.10000000149011612,
+          -0.23999999463558197,
+          0
+        ],
+        "rotate": [
+          0,
+          1.5707999467849731,
+          3.059999942779541
+        ],
+        "scale": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "beam": {
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "halfWidth": 0.69999998807907104,
+        "halfHeight": 1.1000000238418579,
+        "topY": 1,
+        "shoulderY": 0.44999998807907104,
+        "waistX": 0.69999998807907104,
+        "waistY": -0.55000001192092896,
+        "bottomY": -1.1000000238418579,
+        "edgeNoiseAmp": 0.039999999105930328,
+        "edgeNoiseFreq": 40,
+        "edgeNoiseSpeed": 6,
+        "streakCount": 160,
+        "streakSharpness": 4,
+        "streakSpeed": 1.5,
+        "streakIntensity": 0.60000002384185791,
+        "coreRadius": 0.30000001192092896,
+        "coreAlpha": 0.89999997615814209,
+        "edgeWidth": 0.070000000298023224,
+        "edgeAlpha": 0.85000002384185791,
+        "midAlpha": 0.18000000715255737,
+        "innerScale": 0.30000001192092896,
+        "innerAlpha": 0.75,
+        "intensity": 1.3999999761581421,
+        "bloomScale": 0.60000002384185791,
+        "flashIntensity": 1.2000000476837158,
+        "flashEdgeNoise": 1,
+        "flashDecay": 6,
+        "color": [
+          0.05000000074505806,
+          0.5,
+          1
+        ],
+        "edgeColor": [
+          0.34999999403953552,
+          0.85000002384185791,
+          1
+        ]
+      }
+    }
+  ]
+}

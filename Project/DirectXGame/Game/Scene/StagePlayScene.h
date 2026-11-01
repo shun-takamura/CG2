@@ -39,6 +39,7 @@ class BossArenaWater;
 class RiverWater;
 class CloudTopIntro;
 class PlayerWingUnit;
+class BeamShieldRenderer;
 
 /// <summary>
 /// ステージプレイシーン
@@ -216,8 +217,16 @@ private:
 	std::unique_ptr<FlightUnitPart> flightUnit_;
 	// 飛行ユニットの毎フレーム（RB の入力・技・クールタイム）
 	void UpdateFlightUnit(class InputActionMap* actions);
-	// 自機の攻撃力（攻撃系の補正込み）。射撃・近接・支援射撃で使う
+	// 自機の攻撃力（メイン武器の加算・攻撃系の補正込み）。射撃・近接・支援射撃で使う
 	int ScaledPlayerAttack() const;
+	// 右手のモデルを付けているメイン武器（LoadoutState）で作り直す。武器にモデルが無ければプレハブの weapon
+	void RebuildMainWeaponModel();
+	// 左手のモデルを付けている盾（LoadoutState）で作り直す。盾にモデルが無ければ描かない
+	void RebuildShieldModel();
+	// 付けている盾の移動速度の倍率（盾なしは 1）
+	float ShieldMoveSpeedScale() const;
+	// 付けている盾がビームシールドで、いま描くか
+	bool IsShieldBeamVisible() const;
 	// STG の自機を照準へ向ける（上の基準はカメラの上。体の中心まわりのずらしは位置を作るときに掛ける）
 	void ApplyRailAimRotation(const Vector3& toAim);
 	// 自機の判定の姿勢（中心＝体の中心・軸＝自機の回転。STG の移動状態は前傾）を Gameplay に入れる。敵弾・接触・デバッグ描画が同じものを使う
@@ -243,7 +252,13 @@ private:
 	std::unique_ptr<Object3DInstance> weapon_;
 	// 武器のランタイム追従ヘルパ。追従先ボーン/オフセット/enabled は毎フレ
 	// player の WeaponParams コンポーネント（Inspector 編集・プレハブ保存）から同期する。
+	// メイン武器（MainWeapon.json）がモデルを持つときは、オフセットはその武器の grip を使う。
 	BoneSocket weaponSocket_;
+	// 盾（左手のソケット追従、20 番 §2）。構成は付けている盾（Shield.json）の model / grip
+	std::unique_ptr<Object3DInstance> shield_;
+	BoneSocket shieldSocket_;
+	// ビームシールドの本体（発生装置のモデルは shield_。ビームの盾を初めて付けたときに作る）
+	std::unique_ptr<BeamShieldRenderer> beamShield_;
 
 	// シーン停止中（エディタ Pause = SceneTimeScale==0）だけレティクル照準追従を止め、
 	// この向きで固定する。武器ソケットの確認・編集をしやすくする。再生中は通常照準。
