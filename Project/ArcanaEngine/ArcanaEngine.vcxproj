@@ -80,6 +80,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\CameraCapture.cpp" />
@@ -249,6 +250,8 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeAppearance.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldAppearance.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.h" />

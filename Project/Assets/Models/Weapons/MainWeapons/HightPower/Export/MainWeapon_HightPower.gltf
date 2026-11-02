@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "MainWeapon_HightPower"
+    }
+  ],
+  "materials": [
+    {
+      "name": "MainWeapon_HightPower",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.9409999847412109,
+        "roughnessFactor": 0.06300000101327896
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "MainWeapon_HightPower",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "MainWeapon_HightPower_NormalMap",
+      "uri": "MainWeapon_HightPower_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "MainWeapon_HightPower_BaseColor",
+      "uri": "MainWeapon_HightPower_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 30137,
+      "max": [
+        0.09464561939239502,
+        0.2413177490234375,
+        0.6546880006790161
+      ],
+      "min": [
+        -0.09464561939239502,
+        -0.2413177490234375,
+        -0.6546880006790161
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 30137,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 30137,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 144921,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 361644,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 361644,
+      "byteOffset": 361644,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 241096,
+      "byteOffset": 723288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 289842,
+      "byteOffset": 964384,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1254228,
+      "uri": "MainWeapon_HightPower.bin"
+    }
+  ]
+}

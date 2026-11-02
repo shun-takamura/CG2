@@ -54,6 +54,17 @@
   - 右手のモデル：武器に `model` があればそれと `grip`（ずらし）を使い、無ければプレハブの weapon。付け替えは `Object3DInstance::SetModel` でモデルだけ差し替える（作り直さない）。**ModelManager はファイル名で引くので、Tripo のモデルは武器ごとに別のファイル名にする**
   - 飛行ユニットの支援射撃・ファンネルには武器の弾の倍率を掛けない（攻撃力の加算は効く）
 
+### 1.2 モデルとビームの刃（2026-11-02、ビルド・実機 OK。握り・刃の位置はユーザーが ImGui で合わせて保存済み）
+
+- **モデル**：Tripo の銃 3 丁（`Assets/Models/Weapons/MainWeapons/<MiddlePower|HightPower|LowPower>/*.glb`）。標準＝MiddlePower、重い＝HightPower、軽い＝LowPower
+  - `tools/BlenderPipeline/prep_main_weapons.py`（`prep_shields.py` と同じ流れ）：Tripo は銃が**床に寝て水平面の斜め**を向いて出るので、水平面の主成分で銃身の向きを出し、**銃口＝エンジンの +Z・上＝+Y・中心が原点**にそろえる。銃口の側は「端の背が低い方」で決め、外れたものは `FLIP_MUZZLE`（LowPower が外れた）。金属度・粗さは係数に、色と法線は PNG → cook。`cook_assets.py` の `SRGB_INPUT_HINTS` に `MainWeapons`
+  - 握り（grip）は ImGui「Main Weapon (20 1)」で合わせて Save（`MainWeapon.json`）
+- **ビームの刃**：画像（プラモデルの銃の下の刃）のように、**銃身の下から前へ伸びる刃を近接のときだけ出す**。盾のビームと違い、**揺らぎのない、実体に近い安定した刃**（ユーザー指定）
+  - エンジンの `BeamBladeRenderer`（`GameEngine/Graphics/Effect/`、シェーダー `Resources/Shaders/Effect/BeamBlade.*.hlsl`）。板ではなく**立体**：菱形の断面（中央に稜線）を根元・肩・先の 3 か所でつなぎ、先はとがる。頂点は形の係数だけで、寸法は VS が作る（ImGui で形を変えても作り直さない）。面は ddx/ddy の法線で角ばらせ、縁と稜線を明るく・斜めの面ほど明るく。乗算済み α＋発光 RT
+  - **形は片刃・刃が下向き**（2026-11-02 ユーザー）：稜線を上へ寄せ（`ridgeOffset` 0.75）、峰を真っすぐ保ち（`backAnchor` 1）、先を峰の線に（`tipOffset` 1）。ImGui の「Single Edge (down)」／「Double Edge」で切り替え
+  - 出し入れ：近接の発生〜後隙とコンボの受付（`meleeComboTimer_`）の間だけ伸び（0.08 秒）、切れたら縮む（0.15 秒）。付け替えるとすぐ消す
+  - 値は `MainWeapon.json` の各武器の `blade`（`offset` / `rotate` / `scale`＝モデルのローカル。刃は +Z へ伸び、幅は Y・厚みは X）。ImGui の「Preview Blade」で近接なしで出し、「Main Weapon (20 1)」の Blade の欄（位置・向き・大きさ・長さ・幅。細かい形と色は「Blade Look」）で調整 → Save
+
 ## 2. 盾（左手）
 
 - **5 つくらい**。買い替えで強くなる。防御の性能（被ダメージの軽減など）と見た目が違う

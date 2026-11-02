@@ -56,6 +56,7 @@
 #include "Score/MainWeaponCatalog.h"
 #include "Score/ShieldCatalog.h"
 #include "Effect/BeamShieldRenderer.h"
+#include "Effect/BeamBladeRenderer.h"
 #include "ModelManager.h"
 #include "TextRenderer.h"
 #include "FontAtlas.h"
@@ -2863,8 +2864,9 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Ether State (19 G6)")) EtherState::GetInstance()->OnImGui();
 	if (ImGui::CollapsingHeader("Difficulty Profile (19 5)")) DifficultyProfile::GetInstance()->OnImGui();
 	if (ImGui::CollapsingHeader("Flight Unit (20 3)") && flightUnit_) flightUnit_->OnImGui();
-	if (ImGui::CollapsingHeader("Main Weapon (20 1)") && LoadoutState::GetInstance()->OnImGuiMainWeapon()) {
-		RebuildMainWeaponModel();
+	if (ImGui::CollapsingHeader("Main Weapon (20 1)")) {
+		ImGui::Checkbox("Preview Blade (show without melee)##MainWeapon", &weaponBladePreview_);
+		if (LoadoutState::GetInstance()->OnImGuiMainWeapon()) RebuildMainWeaponModel();
 	}
 	if (ImGui::CollapsingHeader("Shield (20 2)") && LoadoutState::GetInstance()->OnImGuiShield()) {
 		RebuildShieldModel();
@@ -4295,6 +4297,14 @@ void StagePlayScene::Update() {
 		// （描画は override 側を使うので見た目には影響しない。デバッグ可視化用）
 		weapon_->SetTranslate(weaponSocket_.Position());
 		weapon_->Update();
+		// ビームの刃：近接の発生〜後隙とコンボの受付の間だけ伸びる（刃の位置・向きは武器のモデルのローカル）
+		if (weaponBlade_ && mw && mw->blade && gripFromWeapon) {
+			const Matrix4x4 local = MakeAffineMatrix(Transform{ mw->bladeScale, mw->bladeRotate, mw->bladeOffset });
+			weaponBlade_->SetAppearance(mw->bladeLook);
+			weaponBlade_->SetWorld(Multiply(local, world));
+			weaponBlade_->SetActive(weaponBladePreview_ || meleeActionLockTimer_ > 0.0f || meleeComboTimer_ > 0.0f);
+			weaponBlade_->Update(GetScaledDeltaTime(TimeGroup::Player));
+		}
 	}
 	// 盾を左手ボーンへ追従させる（20 番 §2。握りは付けている盾の grip）
 	if (shield_ && player_) {
@@ -5048,6 +5058,8 @@ void StagePlayScene::Draw() {
 
 	// 盾のビーム（乗算済み α の半透明。20 番 §2。ルートシグネチャを替えるので、前の物の描画状態を壊さないようここで）
 	if (IsShieldBeamVisible() && camera_) beamShield_->Draw(*camera_);
+	// メイン武器のビームの刃（同じく乗算済み α の半透明）
+	if (IsWeaponBladeVisible() && camera_) weaponBlade_->Draw(*camera_);
 	// 全シーン共通の GPUParticle + Effect Editor 描画
 	DrawGlobalEffects();
 
@@ -5205,6 +5217,8 @@ void StagePlayScene::DrawBloomSources() {
 	if (playerDeath_) playerDeath_->DrawBloom(dxCore_);
 	// 盾のビーム
 	if (IsShieldBeamVisible() && camera_) beamShield_->DrawBloomPass(*camera_);
+	// メイン武器のビームの刃
+	if (IsWeaponBladeVisible() && camera_) weaponBlade_->DrawBloomPass(*camera_);
 }
 
 void StagePlayScene::BurnPlayerWings(float seconds) {
@@ -7762,6 +7776,19 @@ void StagePlayScene::RebuildMainWeaponModel() {
 		weapon_->SetModel(file);
 	}
 	weapon_->SetCamera(camera_.get());
+	if (fromWeapon && mw->blade && !weaponBlade_) {
+		weaponBlade_ = std::make_unique<BeamBladeRenderer>();
+		weaponBlade_->Initialize(dxCore_);
+	}
+	// 付け替えたら前の武器の刃は出さない
+	if (weaponBlade_) weaponBlade_->SnapExtend(0.0f);
+}
+
+bool StagePlayScene::IsWeaponBladeVisible() const {
+	if (!weaponBlade_ || !weaponBlade_->IsVisible() || !weapon_ || !player_ || !player_->GetVisible()) return false;
+	if (!Gameplay::Of(player_).GetWeaponParams().enabled) return false;
+	const MainWeaponDef* mw = LoadoutState::GetInstance()->GetMainWeapon();
+	return mw && mw->blade && !mw->modelFile.empty();
 }
 
 void StagePlayScene::RebuildShieldModel() {

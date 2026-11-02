@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "MainWeapon_MiddlePower"
+    }
+  ],
+  "materials": [
+    {
+      "name": "MainWeapon_MiddlePower",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.5329999923706055,
+        "roughnessFactor": 0.09000000357627869
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "MainWeapon_MiddlePower",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "MainWeapon_MiddlePower_NormalMap",
+      "uri": "MainWeapon_MiddlePower_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "MainWeapon_MiddlePower_BaseColor",
+      "uri": "MainWeapon_MiddlePower_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 30352,
+      "max": [
+        0.07325778901576996,
+        0.1807403564453125,
+        0.5227291584014893
+      ],
+      "min": [
+        -0.07325778901576996,
+        -0.1807403564453125,
+        -0.5227291584014893
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 30352,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 30352,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 146976,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 364224,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 364224,
+      "byteOffset": 364224,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 242816,
+      "byteOffset": 728448,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 293952,
+      "byteOffset": 971264,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1265216,
+      "uri": "MainWeapon_MiddlePower.bin"
+    }
+  ]
+}
