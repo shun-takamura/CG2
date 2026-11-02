@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "Vector3.h"
+#include "Effect/BeamBladeAppearance.h"
 
 /// <summary>メイン武器の弾 1 種類ぶんの倍率（基準は弾プレハブの BulletParams・コライダー）</summary>
 struct MainWeaponShot {
@@ -28,6 +29,12 @@ struct MainWeaponDef {
 	Vector3 gripTranslate{ 0.0f, 0.0f, 0.0f };
 	Vector3 gripRotate{ 0.0f, 0.0f, 0.0f };
 	Vector3 gripScale{ 1.0f, 1.0f, 1.0f };
+	// 近接のときだけ出すビームの刃（BeamBladeRenderer）。位置・向きは武器のモデルのローカル（銃口が +Z）
+	bool blade = false;
+	Vector3 bladeOffset{ 0.0f, 0.0f, 0.0f };
+	Vector3 bladeRotate{ 0.0f, 0.0f, 0.0f };
+	Vector3 bladeScale{ 1.0f, 1.0f, 1.0f };  // 刃全体の大きさ（形の値に掛ける）
+	BeamBladeAppearance bladeLook;
 	int price = 0;            // 購入を入れるときのための予約（今は使わない）
 
 	/// <summary>チャージ段階（playerChargeLevel_：-1/0＝通常、1 以上＝チャージ）に合う弾の倍率</summary>
@@ -45,6 +52,8 @@ public:
 	int GetCount() const { return static_cast<int>(weapons_.size()); }
 	/// <summary>範囲外なら nullptr</summary>
 	const MainWeaponDef* GetDef(int index) const;
+	/// <summary>Debug の調整用（握り・刃を ImGui で触る）</summary>
+	MainWeaponDef* GetDefMutable(int index);
 	const MainWeaponDef* Find(const std::string& id) const;
 	/// <summary>見つからなければ -1</summary>
 	int IndexOf(const std::string& id) const;
@@ -52,6 +61,8 @@ public:
 	const std::string& GetDefaultId() const { return defaultId_; }
 
 	bool Load();
+	/// <summary>今の値を MainWeapon.json へ書く（Debug の握り・刃の調整用）</summary>
+	bool Save() const;
 
 private:
 	MainWeaponCatalog();

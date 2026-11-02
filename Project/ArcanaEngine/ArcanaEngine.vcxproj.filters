@@ -159,6 +159,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClCompile>
@@ -567,6 +570,12 @@
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeAppearance.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.h">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldAppearance.h">

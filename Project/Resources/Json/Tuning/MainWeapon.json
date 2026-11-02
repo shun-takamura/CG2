@@ -1,5 +1,5 @@
 {
-  "_comment": "20_Loadout.md §1 メイン武器（右手）。attackBonus はプレハブの攻撃力に足す（射撃・近接で分けない）。秒は実時間。normal＝通常弾、charge＝チャージ弾（1・2 段目とも）の倍率。sizeScale は弾の当たり判定と見た目の両方。grip は右手に付けるモデルのずらし（model を空にするとプレハブの weapon のまま）。price は購入を入れるときのための予約（今は使わない）",
+  "_comment": "20_Loadout.md §1 メイン武器（右手）。attackBonus はプレハブの攻撃力に足す（射撃・近接で分けない）。秒は実時間。normal＝通常弾、charge＝チャージ弾（1・2 段目とも）の倍率。sizeScale は弾の当たり判定と見た目の両方。grip は右手に付けるモデルのずらし（model を空にするとプレハブの weapon のまま）。blade は近接のときだけ出すビームの刃（offset / rotate / scale はモデルのローカル、銃口が +Z。刃は +Z へ伸び、幅は Y）。price は購入を入れるときのための予約（今は使わない）",
   "default": "Standard",
   "weapons": [
     {
@@ -7,13 +7,84 @@
       "displayName": "セラフ・ロッド",
       "description": "癖のない標準の武器。連射・チャージ・弾の速さがそろっている。",
       "attackBonus": 4,
-      "fireRate": 0.3,
+      "fireRate": 0.30000001192092896,
       "chargeStage1Time": 3,
       "chargeStage2Time": 6,
-      "normal": { "speedScale": 1, "sizeScale": 1, "homingScale": 1 },
-      "charge": { "speedScale": 1, "sizeScale": 1, "homingScale": 1 },
-      "model": { "dir": "Resources/Models/Player/Bullet", "file": "playerBullet.mesh" },
-      "grip": { "translate": [0, 0.3, 0], "rotate": [0, 0, 0], "scale": [0.3, 2, 0.3] },
+      "normal": {
+        "speedScale": 1,
+        "sizeScale": 1,
+        "homingScale": 1
+      },
+      "charge": {
+        "speedScale": 1,
+        "sizeScale": 1,
+        "homingScale": 1
+      },
+      "model": {
+        "dir": "Resources/Models/Weapons/MainWeapons/MiddlePower/Export",
+        "file": "MainWeapon_MiddlePower.mesh"
+      },
+      "grip": {
+        "translate": [
+          -0.029999999329447746,
+          0.36000001430511475,
+          -0.090000003576278687
+        ],
+        "rotate": [
+          -1.5299999713897705,
+          0,
+          0
+        ],
+        "scale": [
+          0.89999997615814209,
+          0.89999997615814209,
+          0.89999997615814209
+        ]
+      },
+      "blade": {
+        "offset": [
+          0,
+          -0.11999999731779099,
+          -0.075000002980232239
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "length": 0.94999998807907104,
+        "halfWidth": 0.059999998658895493,
+        "halfThickness": 0.012000000104308128,
+        "baseWidth": 0.60000002384185791,
+        "tipLength": 0.30000001192092896,
+        "tipOffset": 1,
+        "ridgeOffset": 0.75,
+        "backAnchor": 1,
+        "intensity": 1.6000000238418579,
+        "bodyAlpha": 0.55000001192092896,
+        "edgeAlpha": 0.94999998807907104,
+        "edgeSharpness": 6,
+        "fresnelPower": 3,
+        "fresnelStrength": 0.60000002384185791,
+        "bloomScale": 0.5,
+        "extendTime": 0.079999998211860657,
+        "retractTime": 0.15000000596046448,
+        "coreColor": [
+          0.10000000149011612,
+          0.75,
+          1
+        ],
+        "edgeColor": [
+          0.69999998807907104,
+          1,
+          1
+        ]
+      },
       "price": 0
     },
     {
@@ -21,13 +92,84 @@
       "displayName": "アーク・ランス",
       "description": "重い一撃。連射とチャージは遅いが、弾が大きくよく曲がり、チャージ弾はビームのように速い。",
       "attackBonus": 10,
-      "fireRate": 0.45,
+      "fireRate": 0.44999998807907104,
       "chargeStage1Time": 4.5,
       "chargeStage2Time": 8,
-      "normal": { "speedScale": 0.6, "sizeScale": 1.5, "homingScale": 2 },
-      "charge": { "speedScale": 2.5, "sizeScale": 1.6, "homingScale": 1 },
-      "model": { "dir": "Resources/Models/Player/Bullet", "file": "playerBullet.mesh" },
-      "grip": { "translate": [0, 0.4, 0], "rotate": [0, 0, 0], "scale": [0.5, 2.6, 0.5] },
+      "normal": {
+        "speedScale": 0.60000002384185791,
+        "sizeScale": 1.5,
+        "homingScale": 2
+      },
+      "charge": {
+        "speedScale": 2.5,
+        "sizeScale": 1.6000000238418579,
+        "homingScale": 1
+      },
+      "model": {
+        "dir": "Resources/Models/Weapons/MainWeapons/HightPower/Export",
+        "file": "MainWeapon_HightPower.mesh"
+      },
+      "grip": {
+        "translate": [
+          -0.059999998658895493,
+          0.41999998688697815,
+          -0.11999999731779099
+        ],
+        "rotate": [
+          -1.6499999761581421,
+          -0.059999998658895493,
+          0.059999998658895493
+        ],
+        "scale": [
+          0.89999997615814209,
+          0.89999997615814209,
+          0.89999997615814209
+        ]
+      },
+      "blade": {
+        "offset": [
+          0,
+          -0.20999999344348907,
+          -0.25999999046325684
+        ],
+        "rotate": [
+          0.11999999731779099,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1.2000000476837158
+        ],
+        "length": 1.2000000476837158,
+        "halfWidth": 0.079999998211860657,
+        "halfThickness": 0.012000000104308128,
+        "baseWidth": 0.60000002384185791,
+        "tipLength": 0.30000001192092896,
+        "tipOffset": 1,
+        "ridgeOffset": 0.75,
+        "backAnchor": 1,
+        "intensity": 1.6000000238418579,
+        "bodyAlpha": 0.55000001192092896,
+        "edgeAlpha": 0.94999998807907104,
+        "edgeSharpness": 6,
+        "fresnelPower": 3,
+        "fresnelStrength": 0.60000002384185791,
+        "bloomScale": 0.5,
+        "extendTime": 0.079999998211860657,
+        "retractTime": 0.15000000596046448,
+        "coreColor": [
+          0.10000000149011612,
+          0.75,
+          1
+        ],
+        "edgeColor": [
+          0.69999998807907104,
+          1,
+          1
+        ]
+      },
       "price": 0
     },
     {
@@ -35,13 +177,84 @@
       "displayName": "フェザー・ニードル",
       "description": "軽く速い。弾は小さく曲がりにくいが、連射とチャージが速く、貫通するチャージ弾を何度も撃てる。",
       "attackBonus": 0,
-      "fireRate": 0.18,
+      "fireRate": 0.18000000715255737,
       "chargeStage1Time": 2,
       "chargeStage2Time": 4,
-      "normal": { "speedScale": 1.4, "sizeScale": 0.7, "homingScale": 0.4 },
-      "charge": { "speedScale": 1.4, "sizeScale": 0.7, "homingScale": 0.4 },
-      "model": { "dir": "Resources/Models/Player/Bullet", "file": "playerBullet.mesh" },
-      "grip": { "translate": [0, 0.25, 0], "rotate": [0, 0, 0], "scale": [0.18, 1.6, 0.18] },
+      "normal": {
+        "speedScale": 1.3999999761581421,
+        "sizeScale": 0.69999998807907104,
+        "homingScale": 0.40000000596046448
+      },
+      "charge": {
+        "speedScale": 1.3999999761581421,
+        "sizeScale": 0.69999998807907104,
+        "homingScale": 0.40000000596046448
+      },
+      "model": {
+        "dir": "Resources/Models/Weapons/MainWeapons/LowPower/Export",
+        "file": "MainWeapon_LowPower.mesh"
+      },
+      "grip": {
+        "translate": [
+          -0.029999999329447746,
+          0.20999999344348907,
+          -0.11999999731779099
+        ],
+        "rotate": [
+          -1.7699999809265137,
+          0,
+          0
+        ],
+        "scale": [
+          0.5,
+          0.69999998807907104,
+          0.69999998807907104
+        ]
+      },
+      "blade": {
+        "offset": [
+          0,
+          -0.23999999463558197,
+          0.094999998807907104
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "length": 0.85000002384185791,
+        "halfWidth": 0.070000000298023224,
+        "halfThickness": 0.012000000104308128,
+        "baseWidth": 0.60000002384185791,
+        "tipLength": 0.30000001192092896,
+        "tipOffset": 1,
+        "ridgeOffset": 0.75,
+        "backAnchor": 1,
+        "intensity": 1.6000000238418579,
+        "bodyAlpha": 0.55000001192092896,
+        "edgeAlpha": 0.94999998807907104,
+        "edgeSharpness": 6,
+        "fresnelPower": 3,
+        "fresnelStrength": 0.60000002384185791,
+        "bloomScale": 0.5,
+        "extendTime": 0.079999998211860657,
+        "retractTime": 0.15000000596046448,
+        "coreColor": [
+          0.10000000149011612,
+          0.75,
+          1
+        ],
+        "edgeColor": [
+          0.69999998807907104,
+          1,
+          1
+        ]
+      },
       "price": 0
     }
   ]

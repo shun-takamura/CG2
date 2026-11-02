@@ -40,6 +40,7 @@ class RiverWater;
 class CloudTopIntro;
 class PlayerWingUnit;
 class BeamShieldRenderer;
+class BeamBladeRenderer;
 
 /// <summary>
 /// ステージプレイシーン
@@ -227,6 +228,8 @@ private:
 	float ShieldMoveSpeedScale() const;
 	// 付けている盾がビームシールドで、いま描くか
 	bool IsShieldBeamVisible() const;
+	// メイン武器のビームの刃をいま描くか（近接の間だけ伸びる）
+	bool IsWeaponBladeVisible() const;
 	// STG の自機を照準へ向ける（上の基準はカメラの上。体の中心まわりのずらしは位置を作るときに掛ける）
 	void ApplyRailAimRotation(const Vector3& toAim);
 	// 自機の判定の姿勢（中心＝体の中心・軸＝自機の回転。STG の移動状態は前傾）を Gameplay に入れる。敵弾・接触・デバッグ描画が同じものを使う
@@ -259,6 +262,9 @@ private:
 	BoneSocket shieldSocket_;
 	// ビームシールドの本体（発生装置のモデルは shield_。ビームの盾を初めて付けたときに作る）
 	std::unique_ptr<BeamShieldRenderer> beamShield_;
+	// メイン武器のビームの刃（20 番 §1.2。刃のある武器を初めて付けたときに作る）。近接の間だけ伸びる
+	std::unique_ptr<BeamBladeRenderer> weaponBlade_;
+	bool weaponBladePreview_ = false; // Debug：近接でなくても出して調整する
 
 	// シーン停止中（エディタ Pause = SceneTimeScale==0）だけレティクル照準追従を止め、
 	// この向きで固定する。武器ソケットの確認・編集をしやすくする。再生中は通常照準。

@@ -3,6 +3,7 @@
 #include "MainWeaponCatalog.h"
 #include "ShieldCatalog.h"
 #include "Effect/BeamShieldRenderer.h"
+#include "Effect/BeamBladeRenderer.h"
 
 #include <algorithm>
 #include <string>
@@ -102,6 +103,25 @@ bool LoadoutState::OnImGuiMainWeapon() {
 			d->chargeStage1Time, d->chargeStage2Time);
 		ImGui::Text("Normal: speed x%.2f size x%.2f homing x%.2f", d->normal.speedScale, d->normal.sizeScale, d->normal.homingScale);
 		ImGui::Text("Charge: speed x%.2f size x%.2f homing x%.2f", d->charge.speedScale, d->charge.sizeScale, d->charge.homingScale);
+	}
+	if (MainWeaponDef* d = catalog->GetDefMutable(catalog->IndexOf(GetMainWeaponId()))) {
+		// 右手の握り（モデルの置き方を合わせる用。Save で MainWeapon.json へ）
+		ImGui::DragFloat3("Grip Translate##MainWeapon", &d->gripTranslate.x, 0.01f);
+		ImGui::DragFloat3("Grip Rotate##MainWeapon", &d->gripRotate.x, 0.01f);
+		ImGui::DragFloat3("Grip Scale##MainWeapon", &d->gripScale.x, 0.01f, 0.0f, 10.0f);
+		// ビームの刃（位置・向き・大きさは武器のモデルのローカル。銃口が +Z、刃は +Z へ伸び、幅は Y）
+		ImGui::SeparatorText("Blade");
+		ImGui::Checkbox("Has Blade##MainWeapon", &d->blade);
+		ImGui::DragFloat3("Blade Offset##MainWeapon", &d->bladeOffset.x, 0.005f);
+		ImGui::DragFloat3("Blade Rotate##MainWeapon", &d->bladeRotate.x, 0.01f);
+		ImGui::DragFloat3("Blade Scale##MainWeapon", &d->bladeScale.x, 0.01f, 0.01f, 20.0f);
+		ImGui::DragFloat("Blade Length##MainWeapon", &d->bladeLook.length, 0.01f, 0.05f, 10.0f);
+		ImGui::DragFloat("Blade Half Width##MainWeapon", &d->bladeLook.halfWidth, 0.002f, 0.005f, 2.0f);
+		if (ImGui::TreeNode("Blade Look (shape / color)##MainWeapon")) {
+			BeamBladeRenderer::EditAppearance(d->bladeLook);
+			ImGui::TreePop();
+		}
+		if (ImGui::Button("Save MainWeapon.json##Loadout")) catalog->Save();
 	}
 #endif
 	return changed;
