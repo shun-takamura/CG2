@@ -367,6 +367,22 @@
     {
       "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseBackLeft_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityOut_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityOut_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityMiddle_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityMiddle_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -473,6 +489,30 @@
     {
       "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
       "file": "DefenseBackLeft.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutBack.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityMiddle.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOut.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutBackR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityMiddleR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutR.mesh"
     }
   ],
   "animatedModels": [

@@ -40,13 +40,6 @@ namespace {
 		m.m[3][0] = pos.x; m.m[3][1] = pos.y; m.m[3][2] = pos.z;
 		return m;
 	}
-	// X の面で鏡に映した置き方（Rx·Ry·Rz の順なので Y・Z の回転を反転する）
-	Transform Mirrored(const Transform& t) {
-		return { t.scale, { t.rotate.x, -t.rotate.y, -t.rotate.z }, { -t.translate.x, t.translate.y, t.translate.z } };
-	}
-	Transform LerpTransform(const Transform& a, const Transform& b, float k) {
-		return { Lerp(a.scale, b.scale, k), Lerp(a.rotate, b.rotate, k), Lerp(a.translate, b.translate, k) };
-	}
 }
 
 FlightUnitGuard::FlightUnitGuard() {
@@ -62,7 +55,7 @@ FlightUnitGuard::FlightUnitGuard() {
 	closedParts_[2] = { one, { 0.0f, 0.0f, 0.49f }, { -0.07f, -0.2f, -0.05f } };
 	// 背中：自機の左（バックパックのローカルで +X）・右の肩の後ろ。上を外へ倒して V 字に（右の初期値は左の鏡写し）
 	stowMounts_[0] = { { 1.6f, 1.6f, 1.6f }, { 0.0f, 0.0f, 0.35f }, { 0.5f, 0.5f, 0.1f } };
-	stowMounts_[1] = Mirrored(stowMounts_[0]);
+	stowMounts_[1] = MirroredX(stowMounts_[0]);
 }
 
 FlightUnitGuard::~FlightUnitGuard() = default;
@@ -173,7 +166,7 @@ void FlightUnitGuard::UpdateModels(const Matrix4x4& backpackWorld) {
 		for (int p = 0; p < kPartCount; ++p) {
 			const int src = p < kTunedParts ? p : p - 2;   // 左は右（1・2）の鏡写し
 			Transform local = LerpTransform(closedParts_[src], openParts_[src], k);
-			if (p >= kTunedParts) local = Mirrored(local);
+			if (p >= kTunedParts) local = MirroredX(local);
 			const Matrix4x4 w = Multiply(MakeAffineMatrix(local), unitWorld);
 			if (auto& m = unit.parts[p]) {
 				m->SetWorldMatrixOverride(w);
@@ -363,7 +356,7 @@ void FlightUnitGuard::OnImGui() {
 		DragTransform("GuardStowL", stowMounts_[0]);
 		ImGui::SeparatorText("Right unit");
 		DragTransform("GuardStowR", stowMounts_[1]);
-		if (ImGui::Button("Right = mirror of Left##Guard")) stowMounts_[1] = Mirrored(stowMounts_[0]);
+		if (ImGui::Button("Right = mirror of Left##Guard")) stowMounts_[1] = MirroredX(stowMounts_[0]);
 		ImGui::TreePop();
 	}
 	const char* partNames[kTunedParts] = { "Main", "Front Right", "Back Right" };

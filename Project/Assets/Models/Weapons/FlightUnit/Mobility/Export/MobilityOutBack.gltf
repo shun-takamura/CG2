@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "MobilityOutBack"
+    }
+  ],
+  "materials": [
+    {
+      "name": "MobilityOutBack",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.9570000171661377,
+        "roughnessFactor": 0.012000000104308128
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "MobilityOutBack",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "MobilityOut_NormalMap",
+      "uri": "MobilityOut_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "MobilityOut_BaseColor",
+      "uri": "MobilityOut_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 6735,
+      "max": [
+        0.17424774169921875,
+        0,
+        0.06695178151130676
+      ],
+      "min": [
+        -0.17424774169921875,
+        -0.981292724609375,
+        -0.06695178151130676
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 6735,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 6735,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 27660,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 80820,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 80820,
+      "byteOffset": 80820,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 53880,
+      "byteOffset": 161640,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 55320,
+      "byteOffset": 215520,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 270840,
+      "uri": "MobilityOutBack.bin"
+    }
+  ]
+}

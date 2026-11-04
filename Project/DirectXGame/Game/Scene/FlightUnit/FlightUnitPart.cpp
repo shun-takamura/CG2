@@ -108,6 +108,15 @@ JsonValue FlightUnitSkill::WriteTransform(const Transform& t) {
 	return node;
 }
 
+Transform FlightUnitSkill::MirroredX(const Transform& t) {
+	// Rx·Ry·Rz の順なので、Y・Z の回転を反転する
+	return { t.scale, { t.rotate.x, -t.rotate.y, -t.rotate.z }, { -t.translate.x, t.translate.y, t.translate.z } };
+}
+
+Transform FlightUnitSkill::LerpTransform(const Transform& a, const Transform& b, float k) {
+	return { Lerp(a.scale, b.scale, k), Lerp(a.rotate, b.rotate, k), Lerp(a.translate, b.translate, k) };
+}
+
 void FlightUnitSkill::DragTransform(const char* id, Transform& t) {
 #ifdef _DEBUG
 	ImGui::PushID(id);
@@ -116,8 +125,13 @@ void FlightUnitSkill::DragTransform(const char* id, Transform& t) {
 	if (ImGui::DragFloat3("Rotate (deg)", &deg.x, 0.5f, -360.0f, 360.0f, "%.1f")) {
 		t.rotate = { DegToRad(deg.x), DegToRad(deg.y), DegToRad(deg.z) };
 	}
+	// X・Y・Z 別々（板を薄くするなど）。Uniform はまとめて掛ける
+	ImGui::DragFloat3("Scale XYZ", &t.scale.x, 0.005f, 0.01f, 10.0f, "%.3f");
 	float s = t.scale.x;
-	if (ImGui::DragFloat("Scale", &s, 0.005f, 0.01f, 10.0f, "%.3f")) t.scale = { s, s, s };
+	if (ImGui::DragFloat("Scale (uniform)", &s, 0.005f, 0.01f, 10.0f, "%.3f") && t.scale.x > 1e-5f) {
+		const float r = s / t.scale.x;
+		t.scale = { s, t.scale.y * r, t.scale.z * r };
+	}
 	ImGui::PopID();
 #else
 	(void)id; (void)t;

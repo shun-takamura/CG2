@@ -1,14 +1,20 @@
 #pragma once
 #include "FlightUnitPart.h"
+#include <array>
 
 /// <summary>
 /// 機動系（20_Loadout.md §3.3。ジャスト回避を軸にする）。
 /// 常時：移動が速くなる・ジャスト回避のときに必殺技ゲージを足す。
 /// RB：数秒だけ World をスローにする（自分は Player グループなので普通の速さ）。カウンターは無い。
 /// ジャスト回避・必殺技が起きたら、スローはそこで終わる（時間の倍率はそちらに任せる）。
+/// モデル：背中の左右に 3 枚重ねの可変ウィング（バックパックの位置が基準・本体は描かない）。スローの間は、
+/// 板の上の端を支点に扇のように開き、終わると閉じる。束の位置は左右別々、束の中の板は右が左の鏡写し。
 /// </summary>
 class FlightUnitMobility : public FlightUnitSkill {
 public:
+	FlightUnitMobility();
+	~FlightUnitMobility() override;
+
 	bool Activate() override;
 	void Cancel(bool restoreTime) override;
 	bool IsActive() const override { return active_; }
@@ -16,6 +22,12 @@ public:
 	float GetActiveRatio() const override;
 	float GetCooldown() const override { return cooldown_[LevelIndex()]; }
 	void Update(float dt, bool canAct) override;
+
+	bool UsesBackpack() const override { return true; }
+	bool DrawsBackpack() const override { return false; }
+	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
+	void UpdateModels(const Matrix4x4& backpackWorld) override;
+	void DrawModels(DirectXCore* dxCore) override;
 
 	float GetMoveSpeedScale() const override { return moveSpeedScale_[LevelIndex()]; }
 	float GetJustDodgeGaugeBonus() const override { return justDodgeGaugeBonus_[LevelIndex()]; }
@@ -40,4 +52,22 @@ private:
 
 	bool active_ = false;
 	float timer_ = 0.0f;          // 経過
+
+	// ----- 可変ウィング -----
+	// 板：0=Back（奥＝体の側。動かない）, 1=Middle, 2=Front（手前＝カメラの側。いちばん大きく回る）
+	static constexpr int kPlateCount = 3;
+	static constexpr int kGroupCount = 2;   // 0=自機の左, 1=右
+	struct Group {
+		std::array<std::unique_ptr<Object3DInstance>, kPlateCount> plates;
+		bool placed = false;
+	};
+	std::array<Group, kGroupCount> groups_;
+	Transform groupMounts_[kGroupCount];       // 束を付ける所（バックパックのローカル。+Z が後ろ、自機の左が +X。左右は別々）
+	Transform closedPlates_[kPlateCount];      // 閉じたときの板（束のローカル。原点＝板の上の端＝支点。右の束は鏡写し）
+	Transform openPlates_[kPlateCount];        // 開いたときの板
+	float openTime_ = 0.3f;
+	float closeTime_ = 0.4f;
+	float openness_ = 0.0f;       // 0＝閉じている、1＝開いている
+	bool preview_ = false;        // ImGui：止めたまま開き具合を見る
+	float previewRatio_ = 1.0f;
 };

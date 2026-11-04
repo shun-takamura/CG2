@@ -27,10 +27,12 @@ LOG = "[prep_flight_units]"
 ROOT = Path("Assets/Models/Weapons/FlightUnit")
 # 名前: (フォルダ, 元の glb, 前を +Z にする Blender の Z まわりの回転[度], 他の指定)
 # glTF の +Z は Blender の -Y、glTF の +X は Blender の +X
-# 他の指定: roll＝表から見て時計回りの回転[度]（Blender の Y まわり）／scale＝拡大／mirror＝左右反転（左のパーツ）
+# 他の指定: roll＝表から見て時計回りの回転[度]（Blender の Y まわり）／scale＝拡大／mirror＝反転（True か "X"＝左右、"Y"＝前後、"XY"＝両方）
+#           pivot="top"＝原点を上の端へ（コードでそこを支点に回す）／tex＝テクスチャを共有する元の名前（反転したパーツ用）
 # 防御系（20 番 §3.2）：展開図（ゲーム内展開モデル）の並びで、回転なしにそろう向き・大きさにする（Main の長さ約 1m が基準）。
 #   FrontRight / BackRight は表が Main と逆だったので Z まわりに 180°、BackRight は寝ていたので起こす。左は右の鏡写し
 DEFENSE = "Defense"
+MOBILITY = "Mobility"
 UNITS = {
     "FlightUnitBackpack": ("Backpack", "Backpack.glb", 0.0, {}),
     "FunnelLarge": ("Attack", "LargeFannel.glb", 0.0, {}),
@@ -40,6 +42,14 @@ UNITS = {
     "DefenseBackRight": (DEFENSE, "FlightUnit_Defense_BackRight.glb", 180.0, {"roll": 90.0, "scale": 0.5}),
     "DefenseFrontLeft": (DEFENSE, "FlightUnit_Defense_FrontRight.glb", 180.0, {"scale": 0.36, "mirror": True}),
     "DefenseBackLeft": (DEFENSE, "FlightUnit_Defense_BackRight.glb", 180.0, {"roll": 90.0, "scale": 0.5, "mirror": True}),
+    # 機動系（20 番 §3.3）：背中の左右に 3 枚重ねの可変ウィング。どれも縦に立った板（上が +Y、面が ±Z）で、上の端を支点に扇のように開く。
+    #   左の束：奥（体の側）＝OutBack（OutWing を前後反転）／中＝Middle／手前（カメラの側）＝Out。右の束は左の左右反転
+    "MobilityOut": (MOBILITY, "LeftOutWing.glb", 0.0, {"pivot": "top"}),
+    "MobilityMiddle": (MOBILITY, "LefrMiddleWing.glb", 0.0, {"pivot": "top"}),
+    "MobilityOutBack": (MOBILITY, "LeftOutWing.glb", 0.0, {"pivot": "top", "mirror": "Y", "tex": "MobilityOut"}),
+    "MobilityOutR": (MOBILITY, "LeftOutWing.glb", 0.0, {"pivot": "top", "mirror": "X", "tex": "MobilityOut"}),
+    "MobilityMiddleR": (MOBILITY, "LefrMiddleWing.glb", 0.0, {"pivot": "top", "mirror": "X", "tex": "MobilityMiddle"}),
+    "MobilityOutBackR": (MOBILITY, "LeftOutWing.glb", 0.0, {"pivot": "top", "mirror": "XY", "tex": "MobilityOut"}),
 }
 
 
@@ -83,16 +93,23 @@ def import_unit(name, folder, file, yaw_deg, opts):
         mesh.data.transform(Matrix.Rotation(math.radians(opts["roll"]), 4, "Y"))
     if opts.get("scale", 1.0) != 1.0:
         mesh.data.transform(Matrix.Scale(opts["scale"], 4))
-    if opts.get("mirror"):
-        # X を反転して面の巡りを戻す（法線は transform で X が反転済み）
-        mesh.data.transform(Matrix.Scale(-1.0, 4, Vector((1.0, 0.0, 0.0))))
-        mesh.data.flip_normals()
+    mirror = opts.get("mirror")
+    if mirror:
+        axes = "X" if mirror is True else mirror
+        for axis in axes:
+            mesh.data.transform(Matrix.Scale(-1.0, 4, Vector((1.0, 0.0, 0.0)) if axis == "X" else Vector((0.0, 1.0, 0.0))))
+        # 反転が奇数回なら面の巡りを戻す（法線は transform で反転済み）
+        if len(axes) % 2 == 1:
+            mesh.data.flip_normals()
     check_winding(mesh, name)
     # 包む箱の中心を原点へ
     vs = [v.co for v in mesh.data.vertices]
     lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
     hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
     center = (lo + hi) * 0.5
+    if opts.get("pivot") == "top":
+        # 上の端（Blender の Z の最大＝エンジンの +Y）の真ん中を原点に
+        center = Vector((center.x, center.y, hi.z))
     mesh.data.transform(Matrix.Translation(-center))
     log(f"{name}: size={tuple(round(c, 3) for c in (hi - lo))} center moved by {tuple(round(c, 3) for c in -center)}")
     return mesh
@@ -110,14 +127,15 @@ def check_winding(obj, name):
     log(f"{name}: winding agrees with normals on {good}/{len(me.polygons)} faces")
 
 
-def prepare_material(obj, name):
+def prepare_material(obj, name, tex_name=None):
     mat = obj.data.materials[0]
     mat.name = name
     bsdf, base = tex_node_into(mat, "Base Color")
     _, normal = tex_node_into(mat, "Normal")
     _, mr = tex_node_into(mat, "Roughness")
-    base.image.name = f"{name}_BaseColor"
-    normal.image.name = f"{name}_NormalMap"
+    # tex_name があれば、そのパーツと同じ名前の画像にする（同じ PNG→DDS を共有する）
+    base.image.name = f"{tex_name or name}_BaseColor"
+    normal.image.name = f"{tex_name or name}_NormalMap"
     px = image_pixels(mr.image)
     used = (px[..., 1] > 0.01) | (px[..., 2] > 0.01)
     rough = round(float(np.median(px[..., 1][used])), 3)
@@ -209,12 +227,17 @@ def main():
         if picks and not any(name.startswith(p) for p in picks):
             continue
         obj = import_unit(name, folder, file, yaw, opts)
-        info = prepare_material(obj, name)
+        info = prepare_material(obj, name, opts.get("tex"))
         out_dir = ROOT / folder / "Export"
         out_dir.mkdir(parents=True, exist_ok=True)
         save_textures_as_png(info, out_dir)
         export_object(obj, out_dir / f"{name}.gltf")
         bpy.data.objects.remove(obj)
+        # 次のパーツが同じ名前の画像を使えるように（残っていると .001 が付く）
+        for img in list(bpy.data.images):
+            bpy.data.images.remove(img)
+        for mat in list(bpy.data.materials):
+            bpy.data.materials.remove(mat)
 
 
 main()
