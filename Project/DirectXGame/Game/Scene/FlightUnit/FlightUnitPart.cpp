@@ -4,6 +4,8 @@
 #include "FlightUnitGuard.h"
 #include "FlightUnitMobility.h"
 #include "Camera.h"
+#include "MathUtility.h"
+#include "Object3DInstance.h"
 #include "SpriteInstance.h"
 #include "SpriteManager.h"
 #include "SoundManager.h"
@@ -20,6 +22,8 @@
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/FlightUnit.json";
+	constexpr const char* kBackpackDir = "Resources/Models/Weapons/FlightUnit/Backpack/Export";
+	constexpr const char* kBackpackFile = "FlightUnitBackpack.mesh";
 }
 
 //====================
@@ -75,6 +79,51 @@ void FlightUnitSkill::WriteVec4(JsonValue& node, const char* key, const Vector4&
 	node[key] = std::move(a);
 }
 
+void FlightUnitSkill::ReadVec3(const JsonValue& node, const char* key, Vector3& v) {
+	const JsonValue& a = node[key];
+	if (!a.IsArray() || a.Size() < 3) return;
+	v = { static_cast<float>(a[0].AsDouble(v.x)), static_cast<float>(a[1].AsDouble(v.y)), static_cast<float>(a[2].AsDouble(v.z)) };
+}
+
+void FlightUnitSkill::WriteVec3(JsonValue& node, const char* key, const Vector3& v) {
+	JsonValue a = JsonValue::MakeArray();
+	a.Push(JsonValue(static_cast<double>(v.x)));
+	a.Push(JsonValue(static_cast<double>(v.y)));
+	a.Push(JsonValue(static_cast<double>(v.z)));
+	node[key] = std::move(a);
+}
+
+void FlightUnitSkill::ReadTransform(const JsonValue& node, Transform& t) {
+	if (!node.IsObject()) return;
+	ReadVec3(node, "translate", t.translate);
+	ReadVec3(node, "rotate", t.rotate);
+	ReadVec3(node, "scale", t.scale);
+}
+
+JsonValue FlightUnitSkill::WriteTransform(const Transform& t) {
+	JsonValue node = JsonValue::MakeObject();
+	WriteVec3(node, "translate", t.translate);
+	WriteVec3(node, "rotate", t.rotate);
+	WriteVec3(node, "scale", t.scale);
+	return node;
+}
+
+void FlightUnitSkill::DragTransform(const char* id, Transform& t) {
+#ifdef _DEBUG
+	ImGui::PushID(id);
+	ImGui::DragFloat3("Translate", &t.translate.x, 0.005f, -5.0f, 5.0f, "%.3f");
+	Vector3 deg{ RadToDeg(t.rotate.x), RadToDeg(t.rotate.y), RadToDeg(t.rotate.z) };
+	if (ImGui::DragFloat3("Rotate (deg)", &deg.x, 0.5f, -360.0f, 360.0f, "%.1f")) {
+		t.rotate = { DegToRad(deg.x), DegToRad(deg.y), DegToRad(deg.z) };
+	}
+	float s = t.scale.x;
+	if (ImGui::DragFloat("Scale", &s, 0.005f, 0.01f, 10.0f, "%.3f")) t.scale = { s, s, s };
+	ImGui::PopID();
+#else
+	(void)id; (void)t;
+#endif
+}
+
 //====================
 // FlightUnitPart
 //====================
@@ -88,11 +137,20 @@ FlightUnitPart::FlightUnitPart() {
 
 FlightUnitPart::~FlightUnitPart() = default;
 
-void FlightUnitPart::Initialize(IFlightUnitHost* host, Camera* camera, SpriteManager* spriteManager) {
+void FlightUnitPart::Initialize(IFlightUnitHost* host, Camera* camera, SpriteManager* spriteManager,
+	Object3DManager* object3DManager, DirectXCore* dxCore) {
 	host_ = host;
 	spriteManager_ = spriteManager;
 	for (auto& s : skills_) {
-		if (s) s->Initialize(host, camera);
+		if (s) {
+			s->Initialize(host, camera);
+			if (object3DManager && dxCore) s->InitializeModels(object3DManager, dxCore);
+		}
+	}
+	if (object3DManager && dxCore) {
+		backpack_ = std::make_unique<Object3DInstance>();
+		backpack_->Initialize(object3DManager, dxCore, kBackpackDir, kBackpackFile, "FlightUnitBackpack");
+		backpack_->SetCamera(camera);
 	}
 	if (spriteManager_) {
 		barBg_ = std::make_unique<SpriteInstance>();
@@ -152,6 +210,34 @@ void FlightUnitPart::Update(float dt, bool triggered, bool canAct, bool timeTake
 
 void FlightUnitPart::Draw3D() {
 	if (FlightUnitSkill* s = Current()) s->Draw();
+}
+
+bool FlightUnitPart::UsesBackpack() const {
+	const FlightUnitSkill* s = Current();
+	return s && s->UsesBackpack();
+}
+
+void FlightUnitPart::UpdateModels(AnimatedObject3DInstance* body) {
+	backpackPlaced_ = false;
+	FlightUnitSkill* s = Current();
+	if (!backpack_ || !body || !s || !s->UsesBackpack()) return;
+	backpackSocket_.target = body;
+	backpackSocket_.jointName = backpackBone_;
+	backpackSocket_.offset = backpackMount_;
+	const Matrix4x4 world = backpackSocket_.World();
+	backpack_->SetWorldMatrixOverride(world);
+	backpack_->SetTranslate({ world.m[3][0], world.m[3][1], world.m[3][2] });
+	backpack_->Update();
+	s->UpdateModels(world);
+	backpackPlaced_ = true;
+}
+
+void FlightUnitPart::DrawModels(DirectXCore* dxCore) {
+	if (!backpackPlaced_) return;
+	FlightUnitSkill* s = Current();
+	if (!s) return;
+	if (backpack_ && s->DrawsBackpack()) backpack_->Draw(dxCore);
+	s->DrawModels(dxCore);
 }
 
 void FlightUnitPart::DrawUI() {
@@ -251,6 +337,11 @@ bool FlightUnitPart::LoadTuning() {
 		barCoolingAlpha_ = static_cast<float>(ui["coolingAlpha"].AsDouble(barCoolingAlpha_));
 		FlightUnitSkill::ReadVec4(ui, "bgColor", barBgColor_);
 	}
+	const JsonValue& bp = root["backpack"];
+	if (bp.IsObject()) {
+		backpackBone_ = bp["bone"].AsString(backpackBone_);
+		FlightUnitSkill::ReadTransform(bp["mount"], backpackMount_);
+	}
 	return true;
 }
 
@@ -272,6 +363,10 @@ void FlightUnitPart::SaveTuning() const {
 	ui["coolingAlpha"] = JsonValue(static_cast<double>(barCoolingAlpha_));
 	FlightUnitSkill::WriteVec4(ui, "bgColor", barBgColor_);
 	root["ui"] = std::move(ui);
+	JsonValue bp = JsonValue::MakeObject();
+	bp["bone"] = JsonValue(backpackBone_);
+	bp["mount"] = FlightUnitSkill::WriteTransform(backpackMount_);
+	root["backpack"] = std::move(bp);
 
 	std::filesystem::path p(kTuningPath);
 	if (p.has_parent_path()) {
@@ -297,6 +392,11 @@ void FlightUnitPart::OnImGui() {
 			skills_[i]->OnImGui();
 			ImGui::TreePop();
 		}
+	}
+	if (ImGui::TreeNode("Backpack##FlightUnit")) {
+		ImGui::TextDisabled("Bone: %s  (attack / defense units use it)", backpackBone_.c_str());
+		FlightUnitSkill::DragTransform("BackpackMount", backpackMount_);
+		ImGui::TreePop();
 	}
 	if (ImGui::TreeNode("Cooldown Bar##FlightUnit")) {
 		ImGui::DragFloat2("Pos##FlightUnitBar", &barPos_.x, 1.0f, 0.0f, 4000.0f, "%.0f");

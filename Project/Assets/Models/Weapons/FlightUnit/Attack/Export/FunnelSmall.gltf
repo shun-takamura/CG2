@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "FunnelSmall"
+    }
+  ],
+  "materials": [
+    {
+      "name": "FunnelSmall",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.8080000281333923,
+        "roughnessFactor": 0.32899999618530273
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "FunnelSmall",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "FunnelSmall_NormalMap",
+      "uri": "FunnelSmall_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "FunnelSmall_BaseColor",
+      "uri": "FunnelSmall_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 12284,
+      "max": [
+        0.2886047661304474,
+        0.3032073974609375,
+        0.4904633164405823
+      ],
+      "min": [
+        -0.2886047661304474,
+        -0.3032073974609375,
+        -0.4904633164405823
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 12284,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 12284,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 55920,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 147408,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 147408,
+      "byteOffset": 147408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 98272,
+      "byteOffset": 294816,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 111840,
+      "byteOffset": 393088,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 504928,
+      "uri": "FunnelSmall.bin"
+    }
+  ]
+}

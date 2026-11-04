@@ -1,8 +1,8 @@
 #include "FlightUnitAssault.h"
 
 #include "IImGuiEditable.h"
-#include "Effect/EffectPrimitiveRenderer.h"
-#include "Primitive/PrimitivePipeline.h"
+#include "MathUtility.h"
+#include "Object3DInstance.h"
 #include "Json/JsonValue.h"
 #include <algorithm>
 #include <cmath>
@@ -12,50 +12,84 @@
 #endif
 
 namespace {
+	constexpr const char* kFunnelDir = "Resources/Models/Weapons/FlightUnit/Attack/Export";
+	constexpr const char* kFunnelLargeFile = "FunnelLarge.mesh";
+	constexpr const char* kFunnelSmallFile = "FunnelSmall.mesh";
+
 	Vector3 Normalized(const Vector3& v, const Vector3& fallback) {
 		const float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 		if (len < 1e-5f) return fallback;
 		return { v.x / len, v.y / len, v.z / len };
 	}
-	// +Z を dir へ向ける回転（Rx·Ry·Rz の Euler。ロールは 0）
-	Vector3 DirToEuler(const Vector3& d) {
-		const float yaw = std::atan2(d.x, d.z);
-		const float pitch = std::atan2(-d.y, std::sqrt(d.x * d.x + d.z * d.z));
-		return { pitch, yaw, 0.0f };
+	Vector3 CrossV(const Vector3& a, const Vector3& b) {
+		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+	}
+	float DotV(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+	Vector3 Row(const Matrix4x4& m, int r) { return { m.m[r][0], m.m[r][1], m.m[r][2] }; }
+	// 前（+Z）を forward、上を upHint に寄せた行列（行＝右・上・前・位置）
+	Matrix4x4 MakeLookWorld(const Vector3& pos, const Vector3& forward, const Vector3& upHint, float scale) {
+		const Vector3 f = Normalized(forward, { 0.0f, 0.0f, 1.0f });
+		const Vector3 r = Normalized(CrossV(upHint, f), { 1.0f, 0.0f, 0.0f });
+		const Vector3 u = CrossV(f, r);
+		Matrix4x4 m = MakeIdentity4x4();
+		m.m[0][0] = r.x * scale; m.m[0][1] = r.y * scale; m.m[0][2] = r.z * scale;
+		m.m[1][0] = u.x * scale; m.m[1][1] = u.y * scale; m.m[1][2] = u.z * scale;
+		m.m[2][0] = f.x * scale; m.m[2][1] = f.y * scale; m.m[2][2] = f.z * scale;
+		m.m[3][0] = pos.x; m.m[3][1] = pos.y; m.m[3][2] = pos.z;
+		return m;
 	}
 }
 
-FlightUnitAssault::FlightUnitAssault() = default;
+FlightUnitAssault::FlightUnitAssault() {
+	// 付ける所の初期値（バックパックのローカル。バックパックは装甲の面＝+Z を後ろへ向けて背負うので、前は -Z。
+	// ファンネルの前（+Z）を自機の前へ向けるため Y を 180°）。ImGui で合わせて FlightUnit.json に保存する
+	const Vector3 front{ 0.0f, kPi, 0.0f };
+	funnels_[0].mount = { { 0.8f, 0.8f, 0.8f }, front, { -0.2f, 0.6f, 0.0f } };
+	funnels_[1].mount = { { 0.8f, 0.8f, 0.8f }, front, { 0.2f, 0.6f, 0.0f } };
+	funnels_[2].mount = { { 0.6f, 0.6f, 0.6f }, front, { -0.4f, -0.3f, 0.0f } };
+	funnels_[3].mount = { { 0.6f, 0.6f, 0.6f }, front, { 0.4f, -0.3f, 0.0f } };
+}
+
 FlightUnitAssault::~FlightUnitAssault() = default;
 
 void FlightUnitAssault::Initialize(IFlightUnitHost* host, Camera* camera) {
 	FlightUnitSkill::Initialize(host, camera);
-	for (auto& f : funnels_) {
-		f.vis = std::make_unique<EffectPrimitiveRenderer>();
-		f.vis->Initialize(1 /*Box*/, "Resources/Textures/white1x1.dds");
-		f.vis->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
-		f.vis->SetDepthWrite(false);
-		f.vis->SetColor(color_);
-		f.vis->SetScale(funnelScale_);
+}
+
+void FlightUnitAssault::InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) {
+	for (int i = 0; i < kFunnelCount; ++i) {
+		Funnel& f = funnels_[i];
+		const bool large = i < kLargeCount;
+		f.model = std::make_unique<Object3DInstance>();
+		f.model->Initialize(object3DManager, dxCore, kFunnelDir, large ? kFunnelLargeFile : kFunnelSmallFile,
+			large ? "FunnelLarge" : "FunnelSmall");
+		f.model->SetCamera(camera_);
 	}
 }
 
 bool FlightUnitAssault::Activate() {
 	if (!host_) return false;
+	// 戻る途中に出し直したら、今の離れ具合から出ていく
+	const float k = ReleaseRatio();
 	active_ = true;
-	timer_ = 0.0f;
-	const Vector3 anchor = host_->GetFlightUnitAnchor();
-	const int count = std::clamp(funnelCount_, 1, kMaxFunnels);
-	for (int i = 0; i < count; ++i) {
-		funnels_[i].pos = anchor;
+	returning_ = false;
+	timer_ = k * funnelDeploy_;
+	for (int i = 0; i < kFunnelCount; ++i) {
+		Funnel& f = funnels_[i];
+		if (k <= 0.0f) f.aimDir = (i < kLargeCount) ? f.turretDir : f.mountForward;
 		// 撃つ間隔をずらして、一斉ではなく順に撃たせる
-		funnels_[i].fireTimer = funnelDeploy_ + funnelFireInterval_ * static_cast<float>(i) / static_cast<float>(count);
+		f.fireTimer = funnelDeploy_ + funnelFireInterval_ * static_cast<float>(i) / static_cast<float>(kFunnelCount);
 	}
 	return true;
 }
 
 void FlightUnitAssault::Cancel(bool restoreTime) {
 	(void)restoreTime;
+	if (active_) {
+		// 輪からバックパックへ戻る（出ていく途中なら、その離れ具合から）
+		returnTimer_ = (1.0f - ReleaseRatio()) * funnelReturn_;
+		returning_ = true;
+	}
 	active_ = false;
 	timer_ = 0.0f;
 }
@@ -65,38 +99,61 @@ float FlightUnitAssault::GetActiveRatio() const {
 	return d > 1e-4f ? std::clamp(1.0f - timer_ / d, 0.0f, 1.0f) : 0.0f;
 }
 
-void FlightUnitAssault::Update(float dt, bool canAct) {
-	if (!host_) return;
-	if (canAct) UpdatePassive(dt);
-	UpdateFunnels(dt, canAct);
+float FlightUnitAssault::ReleaseRatio() const {
+	if (active_) return funnelDeploy_ > 1e-4f ? (std::min)(timer_ / funnelDeploy_, 1.0f) : 1.0f;
+	if (returning_) return funnelReturn_ > 1e-4f ? std::clamp(1.0f - returnTimer_ / funnelReturn_, 0.0f, 1.0f) : 0.0f;
+	return 0.0f;
 }
 
-void FlightUnitAssault::UpdatePassive(float dt) {
+Vector3 FlightUnitAssault::MuzzlePosition(const Funnel& f) const {
+	const Vector3 p = Row(f.world, 3);
+	const Vector3 z = Row(f.world, 2);   // 大きさ込みの +Z
+	return { p.x + z.x * muzzleZ_, p.y + z.y * muzzleZ_, p.z + z.z * muzzleZ_ };
+}
+
+void FlightUnitAssault::Update(float dt, bool canAct) {
+	if (!host_) return;
+	UpdateFunnels(dt, canAct);
+	UpdatePassive(dt, canAct);
+}
+
+void FlightUnitAssault::UpdatePassive(float dt, bool canAct) {
+	Vector3 right, up, forward;
+	GetCameraBasis(right, up, forward);
+	const Vector3 aim = host_->GetReticleAimPoint();
+
+	// ファンネル大の砲身を、付いたままレティクルへ向ける（後ろ寄りの狙いは追わない）
+	const float turn = 1.0f - std::exp(-dt * turretTurnSpeed_);
+	for (int i = 0; i < kLargeCount; ++i) {
+		Funnel& f = funnels_[i];
+		Vector3 desired = f.mountForward;
+		if (canAct && f.hasWorld) {
+			const Vector3 p = Row(f.world, 3);
+			const Vector3 d = Normalized({ aim.x - p.x, aim.y - p.y, aim.z - p.z }, f.mountForward);
+			if (DotV(d, f.mountForward) > 0.3f) desired = d;
+		}
+		f.turretDir = Normalized(Lerp(f.turretDir, desired, turn), f.mountForward);
+	}
+
+	// ファンネルが離れている間（戻るまで）は撃たない
+	if (!canAct || active_ || returning_) return;
 	passiveTimer_ -= dt;
 	if (passiveTimer_ > 0.0f) return;
 	passiveTimer_ = passiveInterval_[LevelIndex()];
 
-	Vector3 right, up, forward;
-	GetCameraBasis(right, up, forward);
-	const Vector3 anchor = host_->GetFlightUnitAnchor();
-	const float side = passiveRight_ ? 1.0f : -1.0f;
-	passiveRight_ = !passiveRight_;
-	const Vector3 from = {
-		anchor.x + right.x * passiveMuzzle_.x * side + up.x * passiveMuzzle_.y,
-		anchor.y + right.y * passiveMuzzle_.x * side + up.y * passiveMuzzle_.y,
-		anchor.z + right.z * passiveMuzzle_.x * side + up.z * passiveMuzzle_.y,
-	};
+	const Funnel& f = funnels_[passiveNext_];
+	passiveNext_ = (passiveNext_ + 1) % kLargeCount;
+	const Vector3 from = f.hasWorld ? MuzzlePosition(f) : host_->GetFlightUnitAnchor();
 	IImGuiEditable* target = host_->GetReticleTarget();
-	const Vector3 aim = host_->GetReticleAimPoint();
 	const Vector3 dir = Normalized({ aim.x - from.x, aim.y - from.y, aim.z - from.z }, forward);
 	host_->FireSupportBullet(from, dir, target, passiveDamageScale_[LevelIndex()]);
 }
 
-Vector3 FlightUnitAssault::FunnelHome(int i, int count) const {
+Vector3 FlightUnitAssault::FunnelHome(int i) const {
 	Vector3 right, up, forward;
 	GetCameraBasis(right, up, forward);
 	const Vector3 anchor = host_->GetFlightUnitAnchor();
-	const float a = spinAngle_ + 6.2831853f * static_cast<float>(i) / static_cast<float>((std::max)(count, 1));
+	const float a = spinAngle_ + 6.2831853f * static_cast<float>(i) / static_cast<float>(kFunnelCount);
 	const float c = std::cos(a) * funnelRadius_;
 	const float s = std::sin(a) * funnelRadius_ * 0.6f;   // 縦に少しつぶす（自機の上下を隠さない）
 	return {
@@ -117,6 +174,12 @@ IImGuiEditable* FlightUnitAssault::PickFunnelTarget(int i) {
 }
 
 void FlightUnitAssault::UpdateFunnels(float dt, bool canAct) {
+	if (returning_) {
+		spinAngle_ += funnelSpin_ * dt;
+		returnTimer_ += dt;
+		if (returnTimer_ >= funnelReturn_) returning_ = false;
+		return;
+	}
 	if (!active_) return;
 	timer_ += dt;
 	if (timer_ >= funnelDuration_[LevelIndex()]) {
@@ -127,54 +190,70 @@ void FlightUnitAssault::UpdateFunnels(float dt, bool canAct) {
 
 	Vector3 right, up, forward;
 	GetCameraBasis(right, up, forward);
-	const Vector3 anchor = host_->GetFlightUnitAnchor();
-	const int count = std::clamp(funnelCount_, 1, kMaxFunnels);
-	// 自機から輪へ出ていく（ease-out）
-	float k = funnelDeploy_ > 1e-4f ? (std::min)(timer_ / funnelDeploy_, 1.0f) : 1.0f;
-	k = 1.0f - (1.0f - k) * (1.0f - k);
-
 	screenEnemies_.clear();
 	if (canAct) host_->CollectOnScreenEnemies(screenEnemies_);
 
-	for (int i = 0; i < count; ++i) {
+	for (int i = 0; i < kFunnelCount; ++i) {
 		Funnel& f = funnels_[i];
-		const Vector3 home = FunnelHome(i, count);
-		f.pos = { anchor.x + (home.x - anchor.x) * k, anchor.y + (home.y - anchor.y) * k, anchor.z + (home.z - anchor.z) * k };
+		const Vector3 pos = f.hasWorld ? Row(f.world, 3) : FunnelHome(i);
 
 		IImGuiEditable* target = canAct ? PickFunnelTarget(i) : nullptr;
 		Vector3 desired = forward;
 		if (target) {
 			if (const Vector3* tp = target->GetEditableTranslate()) {
-				desired = Normalized({ tp->x - f.pos.x, tp->y - f.pos.y, tp->z - f.pos.z }, forward);
+				desired = Normalized({ tp->x - pos.x, tp->y - pos.y, tp->z - pos.z }, forward);
 			}
 		}
 		// 向きはすっと寄せる
 		const float turn = 1.0f - std::exp(-dt * 12.0f);
-		f.aimDir = Normalized({ f.aimDir.x + (desired.x - f.aimDir.x) * turn,
-			f.aimDir.y + (desired.y - f.aimDir.y) * turn,
-			f.aimDir.z + (desired.z - f.aimDir.z) * turn }, forward);
+		f.aimDir = Normalized(Lerp(f.aimDir, desired, turn), forward);
 
 		f.fireTimer -= dt;
 		if (f.fireTimer <= 0.0f) {
 			f.fireTimer = funnelFireInterval_;
-			if (target) host_->FireSupportBullet(f.pos, desired, target, funnelDamageScale_[LevelIndex()]);
-		}
-
-		if (f.vis) {
-			f.vis->SetTranslate(f.pos);
-			f.vis->SetRotate(DirToEuler(f.aimDir));
-			f.vis->SetScale(funnelScale_);
-			f.vis->SetColor(color_);
-			f.vis->Update(camera_, dt);
+			if (target) host_->FireSupportBullet(f.hasWorld ? MuzzlePosition(f) : pos, desired, target, funnelDamageScale_[LevelIndex()]);
 		}
 	}
 }
 
-void FlightUnitAssault::Draw() {
-	if (!active_) return;
-	const int count = std::clamp(funnelCount_, 1, kMaxFunnels);
-	for (int i = 0; i < count; ++i) {
-		if (funnels_[i].vis) funnels_[i].vis->Draw();
+void FlightUnitAssault::UpdateModels(const Matrix4x4& backpackWorld) {
+	if (!host_) return;
+	Vector3 right, up, forward;
+	GetCameraBasis(right, up, forward);
+	float k = ReleaseRatio();
+	k = k * k * (3.0f - 2.0f * k);
+
+	for (int i = 0; i < kFunnelCount; ++i) {
+		Funnel& f = funnels_[i];
+		const Matrix4x4 mount = Multiply(MakeAffineMatrix(f.mount), backpackWorld);
+		const Vector3 mountZ = Row(mount, 2);
+		const float scale = Length(mountZ);   // バックパックと付ける所の大きさを掛けたもの
+		f.mountForward = Normalized(mountZ, forward);
+		if (!f.hasWorld) f.turretDir = f.mountForward;
+
+		if (k <= 0.0f && i >= kLargeCount) {
+			f.world = mount;
+		} else {
+			// 付いている形（大は砲身をレティクルへ）と輪を回る形の間
+			const Vector3 restDir = (i < kLargeCount) ? f.turretDir : f.mountForward;
+			const Vector3 mountUp = Normalized(Row(mount, 1), up);
+			const Vector3 pos = Lerp(Row(mount, 3), FunnelHome(i), k);
+			const Vector3 dir = Normalized(Lerp(restDir, f.aimDir, k), f.mountForward);
+			const Vector3 upHint = Normalized(Lerp(mountUp, up, k), up);
+			f.world = MakeLookWorld(pos, dir, upHint, scale);
+		}
+		f.hasWorld = true;
+		if (f.model) {
+			f.model->SetWorldMatrixOverride(f.world);
+			f.model->SetTranslate(Row(f.world, 3));
+			f.model->Update();
+		}
+	}
+}
+
+void FlightUnitAssault::DrawModels(DirectXCore* dxCore) {
+	for (const Funnel& f : funnels_) {
+		if (f.model && f.hasWorld) f.model->Draw(dxCore);
 	}
 }
 
@@ -185,16 +264,17 @@ void FlightUnitAssault::LoadTuning(const JsonValue& node) {
 	ReadLevels(node, "funnelDamageScale", funnelDamageScale_);
 	ReadLevels(node, "cooldown", cooldown_);
 	ReadLevels(node, "attackScale", attackScale_);
-	funnelCount_ = static_cast<int>(node["funnelCount"].AsDouble(funnelCount_));
 	funnelFireInterval_ = static_cast<float>(node["funnelFireInterval"].AsDouble(funnelFireInterval_));
 	funnelRadius_ = static_cast<float>(node["funnelRadius"].AsDouble(funnelRadius_));
 	funnelSpin_ = static_cast<float>(node["funnelSpin"].AsDouble(funnelSpin_));
 	funnelDeploy_ = static_cast<float>(node["funnelDeploy"].AsDouble(funnelDeploy_));
-	passiveMuzzle_.x = static_cast<float>(node["passiveMuzzleRight"].AsDouble(passiveMuzzle_.x));
-	passiveMuzzle_.y = static_cast<float>(node["passiveMuzzleUp"].AsDouble(passiveMuzzle_.y));
-	Vector4 s{ funnelScale_.x, funnelScale_.y, funnelScale_.z, 0.0f };
-	ReadVec4(node, "funnelScale", s);
-	funnelScale_ = { s.x, s.y, s.z };
+	funnelReturn_ = static_cast<float>(node["funnelReturn"].AsDouble(funnelReturn_));
+	turretTurnSpeed_ = static_cast<float>(node["turretTurnSpeed"].AsDouble(turretTurnSpeed_));
+	muzzleZ_ = static_cast<float>(node["muzzleZ"].AsDouble(muzzleZ_));
+	const JsonValue& mounts = node["mounts"];
+	if (mounts.IsArray()) {
+		for (size_t i = 0; i < funnels_.size() && i < mounts.Size(); ++i) ReadTransform(mounts[i], funnels_[i].mount);
+	}
 	ReadVec4(node, "color", color_);
 }
 
@@ -205,14 +285,16 @@ void FlightUnitAssault::SaveTuning(JsonValue& node) const {
 	WriteLevels(node, "funnelDamageScale", funnelDamageScale_);
 	WriteLevels(node, "cooldown", cooldown_);
 	WriteLevels(node, "attackScale", attackScale_);
-	node["funnelCount"] = JsonValue(static_cast<double>(funnelCount_));
 	node["funnelFireInterval"] = JsonValue(static_cast<double>(funnelFireInterval_));
 	node["funnelRadius"] = JsonValue(static_cast<double>(funnelRadius_));
 	node["funnelSpin"] = JsonValue(static_cast<double>(funnelSpin_));
 	node["funnelDeploy"] = JsonValue(static_cast<double>(funnelDeploy_));
-	node["passiveMuzzleRight"] = JsonValue(static_cast<double>(passiveMuzzle_.x));
-	node["passiveMuzzleUp"] = JsonValue(static_cast<double>(passiveMuzzle_.y));
-	WriteVec4(node, "funnelScale", { funnelScale_.x, funnelScale_.y, funnelScale_.z, 0.0f });
+	node["funnelReturn"] = JsonValue(static_cast<double>(funnelReturn_));
+	node["turretTurnSpeed"] = JsonValue(static_cast<double>(turretTurnSpeed_));
+	node["muzzleZ"] = JsonValue(static_cast<double>(muzzleZ_));
+	JsonValue mounts = JsonValue::MakeArray();
+	for (const Funnel& f : funnels_) mounts.Push(WriteTransform(f.mount));
+	node["mounts"] = std::move(mounts);
 	WriteVec4(node, "color", color_);
 }
 
@@ -221,9 +303,9 @@ void FlightUnitAssault::OnImGui() {
 	ImGui::SeparatorText("Passive (support fire)");
 	DragLevels("Interval##Assault", passiveInterval_, 0.01f, 0.05f, 10.0f);
 	DragLevels("Damage Scale##AssaultPassive", passiveDamageScale_, 0.01f, 0.0f, 5.0f);
-	ImGui::DragFloat2("Muzzle (R/U)##Assault", &passiveMuzzle_.x, 0.05f, -5.0f, 5.0f, "%.2f");
+	ImGui::DragFloat("Turret Turn##Assault", &turretTurnSpeed_, 0.1f, 0.0f, 50.0f, "%.1f");
+	ImGui::DragFloat("Muzzle Z##Assault", &muzzleZ_, 0.01f, -2.0f, 2.0f, "%.2f");
 	ImGui::SeparatorText("RB (funnels)");
-	ImGui::SliderInt("Count##Assault", &funnelCount_, 1, kMaxFunnels);
 	DragLevels("Duration##Assault", funnelDuration_, 0.05f, 0.1f, 30.0f);
 	DragLevels("Damage Scale##AssaultFunnel", funnelDamageScale_, 0.01f, 0.0f, 5.0f);
 	DragLevels("Cooldown##Assault", cooldown_, 0.1f, 0.0f, 120.0f);
@@ -232,7 +314,16 @@ void FlightUnitAssault::OnImGui() {
 	ImGui::DragFloat("Radius##Assault", &funnelRadius_, 0.05f, 0.1f, 10.0f, "%.2f");
 	ImGui::DragFloat("Spin##Assault", &funnelSpin_, 0.05f, -10.0f, 10.0f, "%.2f");
 	ImGui::DragFloat("Deploy##Assault", &funnelDeploy_, 0.01f, 0.0f, 2.0f, "%.2f");
-	ImGui::DragFloat3("Funnel Scale##Assault", &funnelScale_.x, 0.01f, 0.01f, 3.0f, "%.2f");
+	ImGui::DragFloat("Return##Assault", &funnelReturn_, 0.01f, 0.0f, 2.0f, "%.2f");
 	ImGui::ColorEdit4("Color##Assault", &color_.x);
+	// 付いている所（バックパックのローカル）。攻撃系を付けているとゲームの中でそのまま見える
+	if (ImGui::TreeNode("Mounts (backpack local)##Assault")) {
+		const char* names[kFunnelCount] = { "Large A", "Large B", "Small A", "Small B" };
+		for (int i = 0; i < kFunnelCount; ++i) {
+			ImGui::SeparatorText(names[i]);
+			DragTransform(names[i], funnels_[i].mount);
+		}
+		ImGui::TreePop();
+	}
 #endif
 }

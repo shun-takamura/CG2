@@ -1,0 +1,148 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.4.56",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "DefenseFrontLeft"
+    }
+  ],
+  "materials": [
+    {
+      "name": "DefenseFrontLeft",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.9570000171661377,
+        "roughnessFactor": 0.012000000104308128
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "DefenseFrontLeft",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "DefenseFrontLeft_NormalMap",
+      "uri": "DefenseFrontLeft_NormalMap.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "DefenseFrontLeft_BaseColor",
+      "uri": "DefenseFrontLeft_BaseColor.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 7257,
+      "max": [
+        0.17757205665111542,
+        0.15294617414474487,
+        0.05295136198401451
+      ],
+      "min": [
+        -0.17757205665111542,
+        -0.15294617414474487,
+        -0.05295136198401451
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 7257,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 7257,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 27108,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 87084,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 87084,
+      "byteOffset": 87084,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 58056,
+      "byteOffset": 174168,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 54216,
+      "byteOffset": 232224,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 286440,
+      "uri": "DefenseFrontLeft.bin"
+    }
+  ]
+}
