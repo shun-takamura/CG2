@@ -112,6 +112,9 @@ public:
 	static JsonValue WriteTransform(const Transform& t);
 	// 付ける位置・角度（度で見せる）・大きさの ImGui
 	static void DragTransform(const char* id, Transform& t);
+	// X の面で鏡に映した置き方（左右のパーツ・ユニット用）
+	static Transform MirroredX(const Transform& t);
+	static Transform LerpTransform(const Transform& a, const Transform& b, float k);
 
 protected:
 	int LevelIndex() const { return level_ < 1 ? 0 : (level_ > 3 ? 2 : level_ - 1); }
