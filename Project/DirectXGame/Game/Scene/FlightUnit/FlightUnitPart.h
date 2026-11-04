@@ -1,16 +1,22 @@
 #pragma once
 #include "Score/LoadoutState.h"
+#include "BoneSocket.h"
 #include "TimeGroup.h"
 #include "Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include <array>
 #include <memory>
+#include <string>
 #include <vector>
 
+class AnimatedObject3DInstance;
 class Camera;
+class DirectXCore;
 class IImGuiEditable;
 class JsonValue;
+class Object3DInstance;
+class Object3DManager;
 class SpriteInstance;
 class SpriteManager;
 
@@ -63,6 +69,17 @@ public:
 	virtual void Update(float dt, bool canAct) = 0;
 	virtual void Draw() {}
 
+	// ----- 背中のモデル（バックパックと、それに付ける物。20 番 §3.1）-----
+	// バックパックを背負う系統（付けている間は羽根を隠す）
+	virtual bool UsesBackpack() const { return false; }
+	// バックパック本体を描く（防御系は位置の基準にだけ使い、本体は描かない）
+	virtual bool DrawsBackpack() const { return true; }
+	virtual void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) { (void)object3DManager; (void)dxCore; }
+	// バックパックの行列が決まった後（体のスケルトンの更新の後）に、付けている物の行列を作る
+	virtual void UpdateModels(const Matrix4x4& backpackWorld) { (void)backpackWorld; }
+	// 不透明のパスで描く
+	virtual void DrawModels(DirectXCore* dxCore) { (void)dxCore; }
+
 	// ----- 常時の効果 -----
 	// ステータスの補正（攻撃系＝攻撃力・防御系＝HP の上限・機動系＝移動速度。20 番 §3.4）
 	virtual float GetAttackScale() const { return 1.0f; }
@@ -88,6 +105,13 @@ public:
 	static void DragLevels(const char* label, float (&v)[3], float speed, float minV, float maxV);
 	static void ReadVec4(const JsonValue& node, const char* key, Vector4& v);
 	static void WriteVec4(JsonValue& node, const char* key, const Vector4& v);
+	static void ReadVec3(const JsonValue& node, const char* key, Vector3& v);
+	static void WriteVec3(JsonValue& node, const char* key, const Vector3& v);
+	// { translate, rotate（ラジアン）, scale }
+	static void ReadTransform(const JsonValue& node, Transform& t);
+	static JsonValue WriteTransform(const Transform& t);
+	// 付ける位置・角度（度で見せる）・大きさの ImGui
+	static void DragTransform(const char* id, Transform& t);
 
 protected:
 	int LevelIndex() const { return level_ < 1 ? 0 : (level_ > 3 ? 2 : level_ - 1); }
@@ -110,7 +134,8 @@ public:
 	FlightUnitPart();
 	~FlightUnitPart();
 
-	void Initialize(IFlightUnitHost* host, Camera* camera, SpriteManager* spriteManager);
+	void Initialize(IFlightUnitHost* host, Camera* camera, SpriteManager* spriteManager,
+		Object3DManager* object3DManager, DirectXCore* dxCore);
 	bool IsInitialized() const { return host_ != nullptr; }
 	// LoadoutState の系統・段階に付け直す（技は止める）
 	void SyncLoadout();
@@ -122,6 +147,12 @@ public:
 	void Update(float dt, bool triggered, bool canAct, bool timeTaken);
 	void Draw3D();
 	void DrawUI();
+	// 背中のモデル（バックパックを body の Spine2 に付ける）。体のスケルトンの更新の後に呼ぶ
+	void UpdateModels(AnimatedObject3DInstance* body);
+	// 不透明のパスで描く（自機が見えている間だけ呼ぶ）
+	void DrawModels(DirectXCore* dxCore);
+	// 付けている系統がバックパックを背負う（羽根を隠す）
+	bool UsesBackpack() const;
 	// 技を止め、クールタイムを 0 にする（フェーズの切り替え）
 	void Reset();
 
@@ -151,6 +182,14 @@ private:
 	FlightUnitKind kind_ = FlightUnitKind::Wings;
 	float cooldownTimer_ = 0.0f;   // 残り（0 で撃てる）
 	bool wasActive_ = false;
+
+	// ----- バックパック（背中。系統の物を付ける土台）-----
+	std::unique_ptr<Object3DInstance> backpack_;
+	BoneSocket backpackSocket_;
+	std::string backpackBone_ = "mixamorig:Spine2";
+	// 骨から見たずらし（骨のスケールは除いてある＝メートル）。装甲の面（モデルの +Z）を後ろへ向ける
+	Transform backpackMount_{ { 0.5f, 0.5f, 0.5f }, { 0.0f, 3.14159265f, 0.0f }, { 0.0f, 0.0f, -0.2f } };
+	bool backpackPlaced_ = false;   // 行列を作った（作る前は描かない）
 
 	// ----- クールタイムのバー（必殺技ゲージの下）-----
 	std::unique_ptr<SpriteInstance> barBg_;

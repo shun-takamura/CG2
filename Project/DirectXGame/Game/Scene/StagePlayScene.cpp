@@ -3035,7 +3035,7 @@ void StagePlayScene::Initialize() {
 	} });
 	// 飛行ユニット（ファンネル・バリアの形とクールタイムのバー。20_Loadout.md §3）
 	deferredInit_.push_back({ "StagePlay/FlightUnit", [this]() {
-		flightUnit_->Initialize(this, camera_.get(), spriteManager_);
+		flightUnit_->Initialize(this, camera_.get(), spriteManager_, object3DManager_, dxCore_);
 		return true;
 	} });
 	deferredInit_.push_back({ "StagePlay/UI", [this]() {
@@ -4329,13 +4329,18 @@ void StagePlayScene::Update() {
 			}
 		}
 	}
+	// 飛行ユニットのバックパック（Spine2）と、それに付ける物（攻撃系のファンネル。20 番 §3.1）
+	if (flightUnit_ && flightUnit_->IsInitialized() && player_) flightUnit_->UpdateModels(player_);
 
 	// 自機の照らし方（IBL を切って平行光源で）と点滅の発光
 	ApplyPlayerLook();
 
 	// 自機の羽根を Spine2 に付ける（スケルトンが更新された後）。デバッグで演出を飛ばしてレールへ来たとき（F4・シーク）は開いた形で付ける
 	// （死亡演出で隠した羽根は出し直さない）
-	if (playerWings_) {
+	// バックパックを背負う飛行ユニット（攻撃系など）を付けている間は羽根を出さない（展開・焼け落ちも含めて隠したまま）
+	if (playerWings_ && flightUnit_ && flightUnit_->UsesBackpack()) {
+		if (playerWings_->GetState() != PlayerWingUnit::State::Hidden) playerWings_->Hide();
+	} else if (playerWings_) {
 		if (phase_ == Phase::Rail && !IsCloudTopIntroActive() && !IsPlayerDying()
 			&& playerWings_->GetState() == PlayerWingUnit::State::Hidden) {
 			playerWings_->ShowDeployed();
@@ -4983,6 +4988,8 @@ void StagePlayScene::Draw() {
 	if (shield_ && player_ && player_->GetVisible()) {
 		if (const ShieldDef* sd = LoadoutState::GetInstance()->GetShield(); sd && !sd->modelFile.empty()) shield_->Draw(dxCore_);
 	}
+	// 飛行ユニットのバックパックとファンネル（不透明）
+	if (flightUnit_ && flightUnit_->IsInitialized() && player_ && player_->GetVisible()) flightUnit_->DrawModels(dxCore_);
 	DrawDynamicAnimated();
 	// 自機の羽根（Spine2 に付けたスキニングのモデル）
 	if (playerWings_) playerWings_->Draw(dxCore_);
@@ -7680,7 +7687,11 @@ void StagePlayScene::UpdateFlightUnit(InputActionMap* actions) {
 	const bool timeTaken = justDodgeActive_ || specialActive_ || IsPlayerDying();
 	const bool canAct = inPlay && !timeTaken && !IsActionLocked();
 	const bool triggered = actions && actions->IsTriggered(static_cast<int>(Action::FlightSkill));
-	flightUnit_->Update(GetScaledDeltaTime(TimeGroup::UI), triggered, canAct, timeTaken);
+	// World が止まっている間（エディタの一時停止・ヒットストップ・必殺技の止め）は技・支援射撃・クールタイムも止める。
+	// 飛行ユニットは UI の時間で進むので、止めないと止まった World に支援射撃の弾が積もる
+	if (GetTimeScale(TimeGroup::World) > 0.0f) {
+		flightUnit_->Update(GetScaledDeltaTime(TimeGroup::UI), triggered, canAct, timeTaken);
+	}
 
 	// 防御系の HP 上限の補正。付け替えても残り HP の割合は保つ
 	HP& hp = Gameplay::Of(player_).GetHP();
