@@ -178,11 +178,12 @@ void FlightUnitGuard::UpdateModels(const Matrix4x4& backpackWorld) {
 	}
 }
 
-void FlightUnitGuard::DrawModels(DirectXCore* dxCore) {
+void FlightUnitGuard::DrawModels(DirectXCore* dxCore, bool idPass) {
 	for (const Unit& u : units_) {
 		if (!u.placed) continue;
 		for (const auto& m : u.parts) {
-			if (m) m->Draw(dxCore);
+			if (!m) continue;
+			if (idPass) m->DrawIdPass(dxCore); else m->Draw(dxCore);
 		}
 	}
 }

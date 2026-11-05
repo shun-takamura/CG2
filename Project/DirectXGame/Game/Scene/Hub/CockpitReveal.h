@@ -4,7 +4,8 @@ class JsonValue;
 
 /// <summary>
 /// コクピットの起動（18_HubTransitions.md ①の IN）とシャットダウン（②の OUT）の時間軸。
-/// 時刻から「灯りの強さ・外が透ける割合（六角形）・ラジアルブラー・背景 UI とメニューの出・表示板の LOCK」に変える。
+/// 時刻から「灯りの強さ・外が透ける割合（六角形）・背景 UI とメニューの出・表示板の LOCK」に変える。
+/// 2026-11-05 ユーザー：UI が出るまでのラジアルブラーは削除し、六角形が広がり始めたらすぐステージ選択を出す。
 /// 描画は持たない（HubScene が CockpitLighting / CockpitConsole / HatchSign / PostEffect へ渡す）。
 /// 調整値は Hub.json の "cockpitReveal"。
 /// </summary>
@@ -22,7 +23,6 @@ public:
 	struct State {
 		float lightLevel = 0.0f;       // コクピットの灯り（緑のポイントライト・光る部位）0..1
 		float reveal = 0.0f;           // 外が透ける割合（六角形のディゾルブ）0..1
-		float blurWidth = 0.0f;        // ラジアルブラーの強さ（RadialBlurEffect::SetBlurWidth。0 で切る）
 		float backgroundAlpha = 0.0f;  // 背景 UI（上下の枠・中央の円の計器）の出 0..1（チラつき込み）
 		float menuTime = -1.0f;        // メニューが出始めてからの秒（負はまだ）
 		float collapse = 0.0f;         // シャットダウンで UI が潰れる進み 0..1（1 で消え切った）
@@ -71,12 +71,9 @@ private:
 	float lightsOnSeconds_ = 0.6f;     // 点き切るまで（チカチカ）
 	float hexStartTime_ = 1.0f;        // 六角形が広がり始める
 	float hexSeconds_ = 1.4f;          // 晴れ切るまで
-	float backgroundTime_ = 2.5f;      // 背景 UI が出る（ラジアルブラーはこの直前に上がり切る）
-	float blurRiseSeconds_ = 0.15f;    // ラジアルブラーを上げる秒（線形）
-	float menuTime_ = 2.8f;            // 文字のステージ選択が出る（ラジアルブラーはここから下げる）
-	float blurFallSeconds_ = 0.2f;     // ラジアルブラーを下げる秒（線形）
-	float blurMax_ = 0.035f;           // ラジアルブラーの強さの上限
-	float inputDelay_ = 0.35f;         // メニューが出てから入力を受け付けるまで
+	float backgroundTime_ = 1.0f;      // 背景 UI が出る
+	float menuTime_ = 1.1f;            // 文字のステージ選択が出る
+	float inputDelay_ = 0.15f;         // メニューが出てから入力を受け付けるまで
 
 	// 調整値：シャットダウン（始めてからの秒）
 	float collapseSeconds_ = 0.4f;     // UI がブラウン管のように潰れて消えるまで

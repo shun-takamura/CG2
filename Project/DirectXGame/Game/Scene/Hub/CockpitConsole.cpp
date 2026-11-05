@@ -17,6 +17,7 @@ namespace {
 	enum ConsoleItem : int {
 		kItemTutorial = 0,
 		kItemStage1,
+		kItemLoadout,
 		kItemBackToHub,
 	};
 
@@ -62,7 +63,7 @@ void CockpitConsole::ResetToDefaults() {
 }
 
 void CockpitConsole::Initialize() {
-	menu_.SetItems({ "チュートリアル", "ステージ1", "HUB に戻る" }, kItemStage1);
+	menu_.SetItems({ "チュートリアル", "ステージ1", "機体設定", "HUB に戻る" }, kItemStage1);
 	// チュートリアルのステージができるまでは表示だけ（7_Tutorial.md）
 	menu_.SetItemEnabled(kItemTutorial, false);
 }
@@ -83,6 +84,7 @@ CockpitConsole::Result CockpitConsole::Update(InputActionMap* actions, const UIP
 	if (result == VerticalMenu::Result::Confirmed) {
 		switch (menu_.GetSelectedIndex()) {
 		case kItemStage1:    return Result::Stage1;
+		case kItemLoadout:   return Result::Loadout;
 		case kItemBackToHub: return Result::BackToHub;
 		default: break;
 		}
@@ -91,7 +93,7 @@ CockpitConsole::Result CockpitConsole::Update(InputActionMap* actions, const UIP
 }
 
 void CockpitConsole::SelectItem(Result item, bool playSound) {
-	const int index = (item == Result::Stage1) ? kItemStage1 : kItemBackToHub;
+	const int index = (item == Result::Stage1) ? kItemStage1 : (item == Result::Loadout) ? kItemLoadout : kItemBackToHub;
 	if (menu_.GetSelectedIndex() == index) return;
 	menu_.SetSelectedIndex(index);
 	if (playSound) SoundManager::GetInstance()->Play2DSound("se_ui_cursor");

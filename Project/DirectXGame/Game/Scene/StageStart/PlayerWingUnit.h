@@ -50,6 +50,8 @@ public:
 	/// <summary>体のボーンに付けて行列・ディゾルブを作る。体の Update（スケルトン）の後、カメラが決まった後に呼ぶ</summary>
 	void Update(AnimatedObject3DInstance* body, float deltaTime);
 	void Draw(DirectXCore* dxCore);
+	// ID マスクへ（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）
+	void DrawIdPass(DirectXCore* dxCore);
 	/// <summary>ディゾルブの縁を光らせている間</summary>
 	bool HasBloom() const;
 	void DrawBloom(DirectXCore* dxCore);

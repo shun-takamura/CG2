@@ -31,7 +31,7 @@ public:
 	bool DrawsBackpack() const override { return false; }
 	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
 	void UpdateModels(const Matrix4x4& backpackWorld) override;
-	void DrawModels(DirectXCore* dxCore) override;
+	void DrawModels(DirectXCore* dxCore, bool idPass) override;
 
 	int ModifyIncomingDamage(int damage) override;
 	bool AbsorbHit(int damage) override;

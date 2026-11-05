@@ -229,7 +229,8 @@ void FlightUnitAssault::UpdateModels(const Matrix4x4& backpackWorld) {
 		const Vector3 mountZ = Row(mount, 2);
 		const float scale = Length(mountZ);   // バックパックと付ける所の大きさを掛けたもの
 		f.mountForward = Normalized(mountZ, forward);
-		if (!f.hasWorld) f.turretDir = f.mountForward;
+		// モデルだけ見せるとき（HUB の機体設定）は狙いを追わないので、砲身は付ける所の前のまま（ImGui の角度がすぐ見える）
+		if (!f.hasWorld || modelPreview_) f.turretDir = f.mountForward;
 
 		if (k <= 0.0f && i >= kLargeCount) {
 			f.world = mount;
@@ -251,9 +252,10 @@ void FlightUnitAssault::UpdateModels(const Matrix4x4& backpackWorld) {
 	}
 }
 
-void FlightUnitAssault::DrawModels(DirectXCore* dxCore) {
+void FlightUnitAssault::DrawModels(DirectXCore* dxCore, bool idPass) {
 	for (const Funnel& f : funnels_) {
-		if (f.model && f.hasWorld) f.model->Draw(dxCore);
+		if (!f.model || !f.hasWorld) continue;
+		if (idPass) f.model->DrawIdPass(dxCore); else f.model->Draw(dxCore);
 	}
 }
 

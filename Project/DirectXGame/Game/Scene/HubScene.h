@@ -5,6 +5,7 @@
 #include "Hub/HubDisembarkSequence.h"
 #include "Hub/HubEntrySequence.h"
 #include "Hub/CockpitReveal.h"
+#include "Hub/HubLoadoutSequence.h"
 #include "StageStart/StageStartGeometry.h"
 #include "AttractMode.h"
 #include "Vector2.h"
@@ -20,6 +21,8 @@ class CockpitLighting;
 class CockpitConsole;
 class HubLiftDescent;
 class HubEtherBet;
+class LoadoutAttachments;
+class LoadoutScreen;
 
 /// <summary>
 /// ハブシーン（神殿。17_HubScene.md）。**ステージ選択（コクピット）もこのシーンの中**（2026-10-13 統合。18 番 ①「C で決まったこと」）。
@@ -31,6 +34,8 @@ class HubEtherBet;
 ///      → ラジアルブラー → 文字のステージ選択 CockpitConsole。①の IN）
 ///   → 「HUB に戻る」でシャットダウン（②の OUT）→ 降りる（HubDisembarkSequence。②の IN）→ 待機
 ///   → 「ステージ1」で黒フェードして器の間（HubEtherBet。エーテルを賭けて純度を決める。19 番 §4.7）→ 黒フェードでコクピットへ戻る
+///   → 「機体設定」でカメラを外へ切り替え、神殿をノイズで消して装備を選ぶ（HubLoadoutSequence / LoadoutScreen / LoadoutAttachments。20_Loadout.md）
+///     → 戻るとノイズで神殿を戻してコクピットへ
 ///   → 決めたら機体ごと八角形のリフトで縦穴を降りる（HubLiftDescent。③の OUT、16_StageStart.md F2）→ StagePlay へ差し替え
 /// 入口：TITLE から＝待機／シーン名 STAGESELECT（ポーズの「ステージセレクトに戻る」⑩）＝コクピットの起動から／
 ///   別のシーンから HUB へ（⑦。今はステージからデバッグの F3）＝真っ暗なコクピットに灯りが点いて（CockpitReveal の帰着）から降りる。
@@ -61,6 +66,10 @@ public:
 	bool HasBloomSources() const override;
 	void DrawBloomSources() override;
 
+	// 機体設定のノイズを機体だけ・機体以外にかけるため、機体と装備を ID マスクに描く
+	bool HasExtraIdPassObjects() const override;
+	void DrawExtraIdPassObjects() override;
+
 	/// <summary>調整値の ImGui（Game.cpp の「Hub Tuning」窓から呼ぶ）</summary>
 	void OnImGuiTuning();
 
@@ -73,6 +82,7 @@ private:
 		Disembarking,  // 降りる（機体に背を向けて乗るときと同じ道を戻り、振り返って待機の視点へ）
 		Descending,  // ③ ステージを決めて、機体ごとリフトで縦穴を降りる（コクピットの中の視点のまま）
 		Betting,     // 器の間でエーテルを賭けて純度を決める（19 番 §4.7。黒フェードで行き来する。シーンは切り替えない）
+		Loadout,     // 機体設定（装備画面。20 番）。コクピットから外へカメラを切り替え、神殿をノイズで消して機体と UI だけにする
 	};
 
 	// タイトルへ戻る（白フェード）
@@ -98,6 +108,11 @@ private:
 	void UpdateBetting(float dt);
 	void LeaveBet(bool descend);
 	void ExitBet(bool descend);
+	// 機体設定（20 番）：コクピットの「機体設定」から入り、戻るとコクピットへ
+	void StartLoadout();
+	void UpdateLoadout(float dt);
+	// 機体設定の間だけノイズ（GlitchEffect）を出す。ほかの状態では自分が点けた分だけ切る
+	void ApplyGlitch();
 
 	// 今の見え方をカメラ・ハッチ・光・コクピットへ反映する
 	void ApplyPose();
@@ -144,6 +159,17 @@ private:
 	std::unique_ptr<HubEtherBet> etherBet_;
 	bool betLeaving_ = false;          // 器の間から戻る黒フェードの途中
 	bool stagePreloadStarted_ = false; // StagePlay の先読みを器の間に入った所で始めた
+	// 機体設定（20 番）
+	HubLoadoutSequence loadoutSequence_;
+	HubLoadoutSequence::View loadoutView_{};
+	std::unique_ptr<LoadoutScreen> loadoutScreen_;
+	std::unique_ptr<LoadoutAttachments> loadoutAttachments_;
+	float loadoutTime_ = 0.0f;         // 背景の輪を回す経過秒
+	bool loadoutDragging_ = false;     // UI の外でドラッグして機体を回している
+	int loadoutTab_ = 0;               // カメラを合わせているタブ
+	int loadoutSwapTab_ = 0;           // 付け替えのノイズをかける部分（替えたタブ）
+	Vector2 loadoutDragLast_{};
+	bool glitchOwned_ = false;         // ノイズを点けたのはこのシーン（ImGui で試している分は切らない）
 
 	// 調整値（Hub.json）
 	float whiteFadeSeconds_ = 0.8f;   // タイトルへ戻る白フェードの、白くなるまで

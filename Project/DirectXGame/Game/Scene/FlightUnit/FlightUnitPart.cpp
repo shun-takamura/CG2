@@ -5,6 +5,7 @@
 #include "FlightUnitMobility.h"
 #include "Camera.h"
 #include "MathUtility.h"
+#include "Quaternion.h"
 #include "Object3DInstance.h"
 #include "SpriteInstance.h"
 #include "SpriteManager.h"
@@ -13,6 +14,7 @@
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <string>
 
@@ -24,6 +26,24 @@ namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/FlightUnit.json";
 	constexpr const char* kBackpackDir = "Resources/Models/Weapons/FlightUnit/Backpack/Export";
 	constexpr const char* kBackpackFile = "FlightUnitBackpack.mesh";
+
+	// MakeAffineMatrix の回転（Rx·Ry·Rz。エンジンの QuaternionFromEuler / EulerFromQuaternion は逆の Rz·Ry·Rx なので使えない）
+	// の行列からオイラー角を取り出す。Y が ±90° の所では Z を 0 にする
+	Vector3 EulerXYZFromMatrix(const Matrix4x4& m) {
+		const float cosY = std::sqrt(m.m[0][0] * m.m[0][0] + m.m[0][1] * m.m[0][1]);
+		const float y = std::atan2(-m.m[0][2], cosY);
+		if (cosY > 1e-6f) return { std::atan2(m.m[1][2], m.m[2][2]), y, std::atan2(m.m[0][1], m.m[0][0]) };
+		return { std::atan2(-m.m[2][1], m.m[1][1]), y, 0.0f };
+	}
+
+	// 自分のローカルの軸まわりに回す。クォータニオンで掛け合わせてからオイラー角へ戻す（オイラー角を直接いじるとジンバルロックで回せない向きができる）
+	void RotateLocal(Vector3& rotate, const Vector3& axis, float radians) {
+		const Quaternion current = Multiply(Multiply(MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, rotate.x),
+			MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, rotate.y)), MakeRotateAxisAngleQuaternion({ 0.0f, 0.0f, 1.0f }, rotate.z));
+		// 行列は行ベクトル（点に左から掛かる物が先）なので、ローカルの回転は今の回転の前に掛ける
+		const Quaternion rotated = Normalize(Multiply(MakeRotateAxisAngleQuaternion(axis, radians), current));
+		rotate = EulerXYZFromMatrix(MakeRotateMatrix(rotated));
+	}
 }
 
 //====================
@@ -125,6 +145,16 @@ void FlightUnitSkill::DragTransform(const char* id, Transform& t) {
 	if (ImGui::DragFloat3("Rotate (deg)", &deg.x, 0.5f, -360.0f, 360.0f, "%.1f")) {
 		t.rotate = { DegToRad(deg.x), DegToRad(deg.y), DegToRad(deg.z) };
 	}
+	// 自分の軸まわりに回す（ドラッグした分だけ回る。値は毎フレーム 0 に戻る）。どの向きからでも 3 軸とも回せる
+	Vector3 local{};
+	if (ImGui::DragFloat3("Rotate Local (deg)", &local.x, 0.5f, -360.0f, 360.0f, "%.1f")) {
+		if (local.x != 0.0f) RotateLocal(t.rotate, { 1.0f, 0.0f, 0.0f }, DegToRad(local.x));
+		if (local.y != 0.0f) RotateLocal(t.rotate, { 0.0f, 1.0f, 0.0f }, DegToRad(local.y));
+		if (local.z != 0.0f) RotateLocal(t.rotate, { 0.0f, 0.0f, 1.0f }, DegToRad(local.z));
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Quaternion: rotates around the part's own axes (no gimbal lock)");
 	// X・Y・Z 別々（板を薄くするなど）。Uniform はまとめて掛ける
 	ImGui::DragFloat3("Scale XYZ", &t.scale.x, 0.005f, 0.01f, 10.0f, "%.3f");
 	float s = t.scale.x;
@@ -173,6 +203,17 @@ void FlightUnitPart::Initialize(IFlightUnitHost* host, Camera* camera, SpriteMan
 		barFg_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "FlightUnitBarForeground");
 	}
 	SyncLoadout();
+}
+
+void FlightUnitPart::SetModelPreview(bool preview) {
+	for (auto& s : skills_) {
+		if (s) s->SetModelPreview(preview);
+	}
+}
+
+const FlightUnitSkill* FlightUnitPart::GetSkill(FlightUnitKind kind) const {
+	const size_t i = static_cast<size_t>(kind);
+	return i < skills_.size() ? skills_[i].get() : nullptr;
 }
 
 FlightUnitSkill* FlightUnitPart::Current() const {
@@ -238,6 +279,10 @@ void FlightUnitPart::UpdateModels(AnimatedObject3DInstance* body) {
 	backpackSocket_.target = body;
 	backpackSocket_.jointName = backpackBone_;
 	backpackSocket_.offset = backpackMount_;
+	backpackSocket_.offset.translate = { backpackMount_.translate.x * modelScale_, backpackMount_.translate.y * modelScale_,
+		backpackMount_.translate.z * modelScale_ };
+	backpackSocket_.offset.scale = { backpackMount_.scale.x * modelScale_, backpackMount_.scale.y * modelScale_,
+		backpackMount_.scale.z * modelScale_ };
 	const Matrix4x4 world = backpackSocket_.World();
 	backpack_->SetWorldMatrixOverride(world);
 	backpack_->SetTranslate({ world.m[3][0], world.m[3][1], world.m[3][2] });
@@ -251,7 +296,15 @@ void FlightUnitPart::DrawModels(DirectXCore* dxCore) {
 	FlightUnitSkill* s = Current();
 	if (!s) return;
 	if (backpack_ && s->DrawsBackpack()) backpack_->Draw(dxCore);
-	s->DrawModels(dxCore);
+	s->DrawModels(dxCore, false);
+}
+
+void FlightUnitPart::DrawModelsIdPass(DirectXCore* dxCore) {
+	if (!backpackPlaced_) return;
+	FlightUnitSkill* s = Current();
+	if (!s) return;
+	if (backpack_ && s->DrawsBackpack()) backpack_->DrawIdPass(dxCore);
+	s->DrawModels(dxCore, true);
 }
 
 void FlightUnitPart::DrawUI() {

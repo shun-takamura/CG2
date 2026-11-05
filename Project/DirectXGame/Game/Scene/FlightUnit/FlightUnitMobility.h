@@ -27,7 +27,7 @@ public:
 	bool DrawsBackpack() const override { return false; }
 	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
 	void UpdateModels(const Matrix4x4& backpackWorld) override;
-	void DrawModels(DirectXCore* dxCore) override;
+	void DrawModels(DirectXCore* dxCore, bool idPass) override;
 
 	float GetMoveSpeedScale() const override { return moveSpeedScale_[LevelIndex()]; }
 	float GetJustDodgeGaugeBonus() const override { return justDodgeGaugeBonus_[LevelIndex()]; }

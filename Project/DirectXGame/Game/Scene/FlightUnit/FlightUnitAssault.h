@@ -27,7 +27,7 @@ public:
 	bool UsesBackpack() const override { return true; }
 	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
 	void UpdateModels(const Matrix4x4& backpackWorld) override;
-	void DrawModels(DirectXCore* dxCore) override;
+	void DrawModels(DirectXCore* dxCore, bool idPass) override;
 
 	Vector4 GetColor() const override { return color_; }
 	void LoadTuning(const JsonValue& node) override;

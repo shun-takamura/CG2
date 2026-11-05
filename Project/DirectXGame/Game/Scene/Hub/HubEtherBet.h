@@ -44,6 +44,11 @@ public:
 	/// <summary>inputEnabled=false の間は入力を読まない（フェード中）。attract はデモモード（少し待って今の値で決める）</summary>
 	Result Update(float deltaTime, InputManager* input, bool inputEnabled, bool attract);
 	void Draw();
+	/// <summary>
+	/// 右上の所持エーテルの枠（斜めの暗い枠・しずくの印・金の縁の数字）を積む。Flush は呼び出し側。
+	/// 賭ける画面と機体設定（HubScene）で同じ物を出す。alpha は 0..1
+	/// </summary>
+	void DrawHandPanel(float alpha) const;
 	void DrawBloom();
 	Camera* GetCamera() const;
 
