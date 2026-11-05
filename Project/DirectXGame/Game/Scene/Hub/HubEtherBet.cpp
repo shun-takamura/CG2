@@ -390,6 +390,37 @@ void HubEtherBet::DrawArrow(const Vector2& center, float size, bool right, float
 	}
 }
 
+void HubEtherBet::DrawHandPanel(float alpha) const {
+	TextRenderer* tr = TextRenderer::GetInstance();
+	if (!tr->IsInitialized() || alpha <= 0.0f) return;
+	const float a = alpha;
+	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
+	const Vector4 gold{ outlineGold_[0], outlineGold_[1], outlineGold_[2], a };
+	const Vector4 white{ 1.0f, 1.0f, 1.0f, a };
+	const EtherState* ether = EtherState::GetInstance();
+
+	const float right = screenW - handPanelMargin_;
+	const float top = handPanelMargin_;
+	const float slant = handPanelHeight_ * 0.45f;
+	constexpr int kRows = 16;
+	const float rowH = handPanelHeight_ / static_cast<float>(kRows);
+	for (int r = 0; r < kRows; ++r) {
+		const float inset = slant * (static_cast<float>(r) + 0.5f) / static_cast<float>(kRows);
+		tr->DrawRect({ right - handPanelWidth_ + inset, top + rowH * static_cast<float>(r) }, { handPanelWidth_ - inset, rowH + 0.5f },
+			{ 0.0f, 0.01f, 0.03f, 0.7f * a });
+	}
+	tr->DrawRect({ right - handPanelWidth_ + slant, top + handPanelHeight_ }, { handPanelWidth_ - slant, 2.0f }, gold);
+	const int hand = ether->IsInfiniteHand() ? kHandDisplayMax
+		: (std::min)(static_cast<int>(std::lround(ether->GetHand())), kHandDisplayMax);
+	const std::string handText = FormatThousands(hand);
+	const float textH = kFontPixelHeight * handScale_;
+	const float textW = tr->MeasureWidth(handText, handScale_);
+	const float textX = right - 24.0f - textW;
+	const float textY = top + (handPanelHeight_ - textH) * 0.5f;
+	DrawDroplet({ textX - 26.0f, top + handPanelHeight_ * 0.5f }, textH * 0.7f, a);
+	tr->DrawText(handText, { textX, textY }, handScale_, white, 2.0f, gold);
+}
+
 void HubEtherBet::DrawUi() {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized() || uiAlpha_ <= 0.0f) return;
@@ -402,26 +433,9 @@ void HubEtherBet::DrawUi() {
 
 	// ----- 右上：所持エーテル（斜めの暗い枠。今は無限＝99,999） -----
 	{
+		DrawHandPanel(a);
 		const float right = screenW - handPanelMargin_;
 		const float top = handPanelMargin_;
-		const float slant = handPanelHeight_ * 0.45f;
-		constexpr int kRows = 16;
-		const float rowH = handPanelHeight_ / static_cast<float>(kRows);
-		for (int r = 0; r < kRows; ++r) {
-			const float inset = slant * (static_cast<float>(r) + 0.5f) / static_cast<float>(kRows);
-			tr->DrawRect({ right - handPanelWidth_ + inset, top + rowH * static_cast<float>(r) }, { handPanelWidth_ - inset, rowH + 0.5f },
-				{ 0.0f, 0.01f, 0.03f, 0.7f * a });
-		}
-		tr->DrawRect({ right - handPanelWidth_ + slant, top + handPanelHeight_ }, { handPanelWidth_ - slant, 2.0f }, gold);
-		const int hand = ether->IsInfiniteHand() ? kHandDisplayMax
-			: (std::min)(static_cast<int>(std::lround(ether->GetHand())), kHandDisplayMax);
-		const std::string handText = FormatThousands(hand);
-		const float textH = kFontPixelHeight * handScale_;
-		const float textW = tr->MeasureWidth(handText, handScale_);
-		const float textX = right - 24.0f - textW;
-		const float textY = top + (handPanelHeight_ - textH) * 0.5f;
-		DrawDroplet({ textX - 26.0f, top + handPanelHeight_ * 0.5f }, textH * 0.7f, a);
-		tr->DrawText(handText, { textX, textY }, handScale_, white, 2.0f, gold);
 
 		// 決定したら所持の下に消費分が出る（所持は無限なので数字は減らない）
 		if (step_ != Step::Adjust) {

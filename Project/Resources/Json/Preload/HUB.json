@@ -21,6 +21,14 @@
     {
       "path": "Resources/Shaders/Glass/LiquidGlassSphere.PS.hlsl",
       "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Effect/BeamShield.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Effect/BeamShield.PS.hlsl",
+      "profile": "ps_6_0"
     }
   ],
   "textures": [
@@ -275,6 +283,110 @@
     {
       "path": "Resources/Models/EtherVessel/Export/EtherVessel_Pointer_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Player/PlayerWings/textures/PlayerWings_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/PlayerWings/textures/PlayerWings_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Attack/Export/FunnelLarge_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Attack/Export/FunnelLarge_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Attack/Export/FunnelSmall_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Attack/Export/FunnelSmall_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseMain_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseMain_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseFrontRight_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseFrontRight_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseBackRight_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseBackRight_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseFrontLeft_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseFrontLeft_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseBackLeft_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Defense/Export/DefenseBackLeft_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityOut_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityOut_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityMiddle_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityMiddle_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Backpack/Export/FlightUnitBackpack_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/FlightUnit/Backpack/Export/FlightUnitBackpack_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/MiddlePower/Export/MainWeapon_MiddlePower_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/MiddlePower/Export/MainWeapon_MiddlePower_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Middle/Export/ShieldMiddle_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Middle/Export/ShieldMiddle_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -377,15 +489,84 @@
     {
       "dir": "Resources/Models/EtherVessel/Export",
       "file": "EtherVessel_Swing.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Attack/Export",
+      "file": "FunnelLarge.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Attack/Export",
+      "file": "FunnelSmall.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
+      "file": "DefenseMain.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
+      "file": "DefenseFrontRight.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
+      "file": "DefenseBackRight.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
+      "file": "DefenseFrontLeft.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Defense/Export",
+      "file": "DefenseBackLeft.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutBack.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityMiddle.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOut.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutBackR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityMiddleR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
+      "file": "MobilityOutR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/FlightUnit/Backpack/Export",
+      "file": "FlightUnitBackpack.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/MainWeapons/MiddlePower/Export",
+      "file": "MainWeapon_MiddlePower.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/Shields/Middle/Export",
+      "file": "ShieldMiddle.mesh"
     }
   ],
   "animatedModels": [
     {
       "dir": "Resources/Models/Player/PlayerModel",
       "file": "PlayerModel.mesh"
+    },
+    {
+      "dir": "Resources/Models/Player/PlayerWings",
+      "file": "PlayerWings.mesh"
     }
   ],
   "animations": [
-    "Resources/Models/Player/PlayerModel/PlayerModel_Offer.anim"
+    "Resources/Models/Player/PlayerModel/PlayerModel_Offer.anim",
+    "Resources/Models/Player/PlayerWings/PlayerWings_Deploy.anim"
   ]
 }

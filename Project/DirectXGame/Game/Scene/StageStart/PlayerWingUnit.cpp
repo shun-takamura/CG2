@@ -247,6 +247,11 @@ void PlayerWingUnit::Draw(DirectXCore* dxCore) {
 	wings_->Draw(dxCore);
 }
 
+void PlayerWingUnit::DrawIdPass(DirectXCore* dxCore) {
+	if (!IsDrawn()) return;
+	wings_->DrawIdPass(dxCore);
+}
+
 bool PlayerWingUnit::HasBloom() const {
 	return IsDrawn() && dissolving_;
 }

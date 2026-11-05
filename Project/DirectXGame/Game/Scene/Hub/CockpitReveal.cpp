@@ -19,12 +19,6 @@ namespace {
 	}
 
 	// 線形の上げ下げ：rise の間に 0→1、hold の間 1、fall の間に 1→0
-	float Trapezoid(float t, float riseStart, float riseEnd, float fallStart, float fallEnd) {
-		if (t < riseStart || t >= fallEnd) return 0.0f;
-		if (t < riseEnd) return (t - riseStart) / (std::max)(riseEnd - riseStart, 1e-4f);
-		if (t < fallStart) return 1.0f;
-		return 1.0f - (t - fallStart) / (std::max)(fallEnd - fallStart, 1e-4f);
-	}
 }
 
 CockpitReveal::CockpitReveal() {
@@ -41,12 +35,9 @@ void CockpitReveal::ResetToDefaults() {
 	lightsOnSeconds_ = 0.6f;
 	hexStartTime_ = 1.0f;
 	hexSeconds_ = 1.4f;
-	backgroundTime_ = 2.5f;
-	blurRiseSeconds_ = 0.15f;
-	menuTime_ = 2.8f;
-	blurFallSeconds_ = 0.2f;
-	blurMax_ = 0.035f;
-	inputDelay_ = 0.35f;
+	backgroundTime_ = 1.0f;
+	menuTime_ = 1.1f;
+	inputDelay_ = 0.15f;
 	collapseSeconds_ = 0.4f;
 	hexCloseStartTime_ = 0.3f;
 	hexCloseSeconds_ = 0.6f;
@@ -117,9 +108,6 @@ CockpitReveal::State CockpitReveal::Evaluate() const {
 		const float idle = idleLightLevel_ * (1.0f - SmoothStep01(t / 0.15f));
 		s.lightLevel = (std::max)(idle, Flicker(t - lightsOnTime_, lightsOnSeconds_));
 		s.reveal = SmoothStep01((t - hexStartTime_) / (std::max)(hexSeconds_, 1e-4f));
-		// ラジアルブラー：背景を出す直前に線形に上げ、文字を出すときに線形に下げる
-		s.blurWidth = blurMax_ * Trapezoid(t, backgroundTime_ - blurRiseSeconds_, backgroundTime_,
-			menuTime_, menuTime_ + blurFallSeconds_);
 		s.backgroundAlpha = Flicker(t - backgroundTime_, 0.25f);
 		s.menuTime = t - menuTime_;
 		s.inputEnabled = t >= menuTime_ + inputDelay_;
@@ -177,10 +165,7 @@ void CockpitReveal::LoadTuning(const JsonValue& node) {
 	readFloat("hexStartTime", hexStartTime_);
 	readFloat("hexSeconds", hexSeconds_);
 	readFloat("backgroundTime", backgroundTime_);
-	readFloat("blurRiseSeconds", blurRiseSeconds_);
 	readFloat("menuTime", menuTime_);
-	readFloat("blurFallSeconds", blurFallSeconds_);
-	readFloat("blurMax", blurMax_);
 	readFloat("inputDelay", inputDelay_);
 	readFloat("collapseSeconds", collapseSeconds_);
 	readFloat("hexCloseStartTime", hexCloseStartTime_);
@@ -209,10 +194,7 @@ void CockpitReveal::SaveTuning(JsonValue& node) const {
 	write("hexStartTime", hexStartTime_);
 	write("hexSeconds", hexSeconds_);
 	write("backgroundTime", backgroundTime_);
-	write("blurRiseSeconds", blurRiseSeconds_);
 	write("menuTime", menuTime_);
-	write("blurFallSeconds", blurFallSeconds_);
-	write("blurMax", blurMax_);
 	write("inputDelay", inputDelay_);
 	write("collapseSeconds", collapseSeconds_);
 	write("hexCloseStartTime", hexCloseStartTime_);
@@ -245,10 +227,7 @@ void CockpitReveal::OnImGui() {
 	ImGui::DragFloat("Hex Start", &hexStartTime_, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Hex (s)", &hexSeconds_, 0.01f, 0.05f, 10.0f);
 	ImGui::DragFloat("Background", &backgroundTime_, 0.01f, 0.0f, 10.0f);
-	ImGui::DragFloat("Blur Rise (s)", &blurRiseSeconds_, 0.01f, 0.0f, 2.0f);
 	ImGui::DragFloat("Menu", &menuTime_, 0.01f, 0.0f, 10.0f);
-	ImGui::DragFloat("Blur Fall (s)", &blurFallSeconds_, 0.01f, 0.0f, 2.0f);
-	ImGui::DragFloat("Blur Max", &blurMax_, 0.001f, 0.0f, 0.3f);
 	ImGui::DragFloat("Input Delay (s)", &inputDelay_, 0.01f, 0.0f, 3.0f);
 
 	ImGui::SeparatorText("Shutdown (s from start)");

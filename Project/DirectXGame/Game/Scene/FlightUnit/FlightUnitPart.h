@@ -54,6 +54,8 @@ public:
 
 	virtual void Initialize(IFlightUnitHost* host, Camera* camera) { host_ = host; camera_ = camera; }
 	void SetLevel(int level) { level_ = level; }
+	// 技を動かさずにモデルだけ見せる（HUB の機体設定）。狙いを追う物は付ける所の向きのまま
+	void SetModelPreview(bool preview) { modelPreview_ = preview; }
 
 	// RB の技を出す。出せたら true（クールタイムは技が終わってから数える）
 	virtual bool Activate() = 0;
@@ -77,8 +79,8 @@ public:
 	virtual void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) { (void)object3DManager; (void)dxCore; }
 	// バックパックの行列が決まった後（体のスケルトンの更新の後）に、付けている物の行列を作る
 	virtual void UpdateModels(const Matrix4x4& backpackWorld) { (void)backpackWorld; }
-	// 不透明のパスで描く
-	virtual void DrawModels(DirectXCore* dxCore) { (void)dxCore; }
+	// 不透明のパスで描く。idPass なら ID マスクへ（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）
+	virtual void DrawModels(DirectXCore* dxCore, bool idPass) { (void)dxCore; (void)idPass; }
 
 	// ----- 常時の効果 -----
 	// ステータスの補正（攻撃系＝攻撃力・防御系＝HP の上限・機動系＝移動速度。20 番 §3.4）
@@ -124,6 +126,7 @@ protected:
 	IFlightUnitHost* host_ = nullptr;
 	Camera* camera_ = nullptr;
 	int level_ = 1;
+	bool modelPreview_ = false;
 };
 
 /// <summary>
@@ -154,8 +157,16 @@ public:
 	void UpdateModels(AnimatedObject3DInstance* body);
 	// 不透明のパスで描く（自機が見えている間だけ呼ぶ）
 	void DrawModels(DirectXCore* dxCore);
+	// 同じ物を ID マスクへ（HUB の機体設定）
+	void DrawModelsIdPass(DirectXCore* dxCore);
 	// 付けている系統がバックパックを背負う（羽根を隠す）
 	bool UsesBackpack() const;
+	// 背中のモデルの大きさ（付ける所のずらしはメートルなので、拡大した体に付けるときに掛ける。HUB の機体設定の 18m の機体）
+	void SetModelScale(float scale) { modelScale_ = scale; }
+	// 技を動かさずにモデルだけ見せる（全系統へ。FlightUnitSkill::SetModelPreview）
+	void SetModelPreview(bool preview);
+	// 系統ごとの中身（装備画面が付けていない系統の値も出すため。段階は LoadoutState の値＝SyncLoadout で入る）。Wings は null
+	const FlightUnitSkill* GetSkill(FlightUnitKind kind) const;
 	// 技を止め、クールタイムを 0 にする（フェーズの切り替え）
 	void Reset();
 
@@ -193,6 +204,7 @@ private:
 	// 骨から見たずらし（骨のスケールは除いてある＝メートル）。装甲の面（モデルの +Z）を後ろへ向ける
 	Transform backpackMount_{ { 0.5f, 0.5f, 0.5f }, { 0.0f, 3.14159265f, 0.0f }, { 0.0f, 0.0f, -0.2f } };
 	bool backpackPlaced_ = false;   // 行列を作った（作る前は描かない）
+	float modelScale_ = 1.0f;       // SetModelScale
 
 	// ----- クールタイムのバー（必殺技ゲージの下）-----
 	std::unique_ptr<SpriteInstance> barBg_;

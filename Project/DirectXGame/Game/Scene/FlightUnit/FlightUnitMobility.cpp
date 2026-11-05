@@ -68,11 +68,12 @@ void FlightUnitMobility::UpdateModels(const Matrix4x4& backpackWorld) {
 	}
 }
 
-void FlightUnitMobility::DrawModels(DirectXCore* dxCore) {
+void FlightUnitMobility::DrawModels(DirectXCore* dxCore, bool idPass) {
 	for (const Group& g : groups_) {
 		if (!g.placed) continue;
 		for (const auto& m : g.plates) {
-			if (m) m->Draw(dxCore);
+			if (!m) continue;
+			if (idPass) m->DrawIdPass(dxCore); else m->Draw(dxCore);
 		}
 	}
 }

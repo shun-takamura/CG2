@@ -147,6 +147,15 @@
     <ClCompile Include="DirectXGame\Game\Scene\Hub\HubEtherBet.cpp">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\HubLoadoutSequence.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\LoadoutScreen.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Hub\LoadoutAttachments.cpp">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.cpp">
       <Filter>DirectXGame\Game\Scene\StageStart</Filter>
     </ClCompile>
@@ -417,6 +426,15 @@
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Hub\HubEtherBet.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\HubLoadoutSequence.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\LoadoutScreen.h">
+      <Filter>DirectXGame\Game\Scene\Hub</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Hub\LoadoutAttachments.h">
       <Filter>DirectXGame\Game\Scene\Hub</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\StageStart\StageStartGeometry.h">

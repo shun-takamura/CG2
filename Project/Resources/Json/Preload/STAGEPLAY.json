@@ -383,6 +383,22 @@
     {
       "path": "Resources/Models/Weapons/FlightUnit/Mobility/Export/MobilityMiddle_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/LowPower/Export/MainWeapon_LowPower_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/LowPower/Export/MainWeapon_LowPower_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Big/Export/ShieldBig_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Big/Export/ShieldBig_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -513,6 +529,14 @@
     {
       "dir": "Resources/Models/Weapons/FlightUnit/Mobility/Export",
       "file": "MobilityOutR.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/MainWeapons/LowPower/Export",
+      "file": "MainWeapon_LowPower.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/Shields/Big/Export",
+      "file": "ShieldBig.mesh"
     }
   ],
   "animatedModels": [

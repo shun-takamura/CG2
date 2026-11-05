@@ -12,7 +12,7 @@ struct UIPointer;
 /// コクピットの緑のネオンの UI（ステージ選択。18_HubTransitions.md ①の IN の 5〜6、②の OUT）。
 /// 文字と塗りつぶしの四角だけで描く（TextRenderer）。光らせる所は発光の層にも同じ物を積む。
 ///  - 背景：画面の上下の枠の線・中央の円の計器・飾りの文字（外が透けて見える上に重ねる）
-///  - メニュー：チュートリアル / ステージ1 / HUB に戻る（チュートリアルはステージが無いうちは選べない）
+///  - メニュー：チュートリアル / ステージ1 / 機体設定 / HUB に戻る（チュートリアルはステージが無いうちは選べない。機体設定は 20_Loadout.md）
 ///  - シャットダウン：ブラウン管が切れるように縦に潰れて線になり、点になって消える
 /// 時間軸（出る・潰れる）は CockpitReveal が決め、ここは渡された値で描くだけ。調整値は Hub.json の "cockpitConsole"。
 /// </summary>
@@ -21,6 +21,7 @@ public:
 	enum class Result {
 		None,
 		Stage1,
+		Loadout,     // 機体設定（装備画面）
 		BackToHub,   // 「HUB に戻る」かキャンセル
 	};
 
@@ -31,7 +32,7 @@ public:
 	/// <summary>入力を読む（inputEnabled の間だけ）。screenSize はメニューの位置（マウスの当たり）に使う</summary>
 	Result Update(InputActionMap* actions, const UIPointer* pointer, const Vector2& screenSize, bool inputEnabled);
 
-	/// <summary>カーソルを item（Stage1 / BackToHub）の行へ動かす（デモモードの自動選択）。playSound でカーソルの音を鳴らす</summary>
+	/// <summary>カーソルを item（Stage1 / Loadout / BackToHub）の行へ動かす（デモモードの自動選択）。playSound でカーソルの音を鳴らす</summary>
 	void SelectItem(Result item, bool playSound);
 
 	/// <summary>
