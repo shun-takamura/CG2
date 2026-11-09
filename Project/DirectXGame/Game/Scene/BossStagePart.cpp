@@ -41,6 +41,7 @@ void BossStagePart::LoadArenaGeometry() {
 			static_cast<float>(c[2].AsDouble(arenaCenter_.z)) };
 		groundY_ = arenaCenter_.y;
 	}
+	arenaYaw_       = static_cast<float>(root["forwardYaw"].AsDouble(arenaYaw_));
 	seaY_           = static_cast<float>(root["seaY"].AsDouble(seaY_));
 	waterRadius_    = static_cast<float>(root["waterRadius"].AsDouble(waterRadius_));
 	arenaRadius_    = static_cast<float>(root["playerRadius"].AsDouble(arenaRadius_));
@@ -50,8 +51,8 @@ void BossStagePart::LoadArenaGeometry() {
 void BossStagePart::Enter() {
 	if (bossSpawned_ || !host_) return;
 
-	// ボス本体：アリーナ中心の +Z 側に接地。
-	const Vector3 bossPos{ arenaCenter_.x, groundY_ + bossHeight_, arenaCenter_.z + bossForward_ };
+	// ボス本体：アリーナの前（arenaYaw_ の向き）に接地。
+	const Vector3 bossPos = GetBossStartPos();
 	boss_ = host_->SpawnPrefabAt(bossPrefab_, bossPos);
 	if (boss_) {
 		// ボスAI：BossAttackCommand を1つ積んだ EnemyController をプログラム的に生成（Wave 非経由）。
@@ -69,7 +70,7 @@ void BossStagePart::Enter() {
 	// プレイヤーをボス手前の地上へ配置（レール終端の camera-local 位置から地上へリセット）。
 	if (IImGuiEditable* pl = host_->GetPlayer()) {
 		if (Vector3* pp = pl->GetEditableTranslate()) {
-			*pp = { arenaCenter_.x, groundY_, arenaCenter_.z - playerStartBack_ };
+			*pp = GetPlayerStartPos();
 		}
 	}
 
@@ -116,14 +117,20 @@ namespace {
 }
 
 Vector3 BossStagePart::GetPlayerStartPos() const {
-	return { arenaCenter_.x, groundY_, arenaCenter_.z - playerStartBack_ };
+	return { arenaCenter_.x - std::sin(arenaYaw_) * playerStartBack_, groundY_,
+		arenaCenter_.z - std::cos(arenaYaw_) * playerStartBack_ };
+}
+
+Vector3 BossStagePart::GetBossStartPos() const {
+	return { arenaCenter_.x + std::sin(arenaYaw_) * bossForward_, groundY_ + bossHeight_,
+		arenaCenter_.z + std::cos(arenaYaw_) * bossForward_ };
 }
 
 void BossStagePart::ComputeStartCamera(Vector3& outEye, float& outYaw, float& outPitch) const {
 	// ComputeBossYawPitch と同じ式を、ボスが出る予定の位置で解く
 	const Vector3 p = GetPlayerStartPos();
 	const Vector3 focus{ p.x, p.y + camFocusHeight_, p.z };
-	const Vector3 bPos{ arenaCenter_.x, groundY_ + bossHeight_, arenaCenter_.z + bossForward_ };
+	const Vector3 bPos = GetBossStartPos();
 	Vector3 d{ bPos.x - focus.x, bPos.y - focus.y, bPos.z - focus.z };
 	const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
 	if (len > 1e-4f) { d.x /= len; d.y /= len; d.z /= len; }
