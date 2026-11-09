@@ -125,6 +125,10 @@ public:
 		float   holeHalfWidth = 10.0f;                      // 正方形の半分の幅 [m]
 		float   holeChamfer = 1.0f;                         // 角を落とす量 [m]
 		Vector2 holeCenter{};                               // 穴の中心（ワールド XZ）
+		// ----- 描く範囲を絞る（SetKeepCircle / SetClipMinZ）。ボス戦の足場の円・海の手前の端 -----
+		Vector2 keepCenter{};                               // 円の中心（ワールド XZ）
+		float   keepRadius = 0.0f;                          // > 0 ならこの半径の外は描かない
+		float   clipMinZ = -1.0e9f;                         // ワールド Z がこれより手前は描かない
 		float   padding7[2]{};
 	};
 
@@ -238,6 +242,10 @@ public:
 	/// <param name="chamfer">角を落とす量 C [m]</param>
 	void SetOctagonHole(const Vector3& center, float halfWidth, float chamfer);
 	void ClearHole() { params_.holeEnabled = 0; }
+	/// <summary>円（中心 XZ・半径）の中だけ描く。radius &lt;= 0 で無効</summary>
+	void SetKeepCircle(const Vector3& center, float radius) { params_.keepCenter = { center.x, center.z }; params_.keepRadius = radius; }
+	/// <summary>ワールド Z がこれより手前（小さい）所は描かない（海岸より陸側に水を張らない）</summary>
+	void SetClipMinZ(float minZ) { params_.clipMinZ = minZ; }
 	bool HasHole() const { return params_.holeEnabled != 0; }
 
 	void OnImGui();

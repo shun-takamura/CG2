@@ -52,6 +52,9 @@
     <Filter Include="DirectXGame\Game\Scene\Transition">
       <UniqueIdentifier>{c6c2f369-1f62-5fed-a8c7-6c3c9b8b9dd3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Loot">
+      <UniqueIdentifier>{5f9b624e-f594-4ce9-b4c8-cd5e2e8e461f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Score">
       <UniqueIdentifier>{7f345a6a-ad88-52dd-8bce-f2d93e90f0bc}</UniqueIdentifier>
     </Filter>
@@ -377,6 +380,21 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\ShieldCatalog.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\LootCatalog.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\LootLedger.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\CraftingCatalog.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Loot\LootDrops.cpp">
+      <Filter>DirectXGame\Game\Scene\Loot</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Loot\LootPickupLog.cpp">
+      <Filter>DirectXGame\Game\Scene\Loot</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
@@ -766,6 +784,21 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\ShieldCatalog.h">
       <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\LootCatalog.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\LootLedger.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\CraftingCatalog.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Loot\LootDrops.h">
+      <Filter>DirectXGame\Game\Scene\Loot</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Loot\LootPickupLog.h">
+      <Filter>DirectXGame\Game\Scene\Loot</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h">
       <Filter>DirectXGame\Game\Score</Filter>

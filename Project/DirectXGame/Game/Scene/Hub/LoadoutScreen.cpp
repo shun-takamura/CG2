@@ -15,6 +15,8 @@
 #include "FlightUnit/FlightUnitPart.h"
 #include "Score/MainWeaponCatalog.h"
 #include "Score/ShieldCatalog.h"
+#include "Score/CraftingCatalog.h"
+#include "Score/LootCatalog.h"
 #include "Json/JsonValue.h"
 #include <algorithm>
 #include <cmath>
@@ -717,11 +719,94 @@ void LoadoutScreen::DrawRight(const Vector2& screen, float appear, const FlightU
 		y += 34.0f;
 	}
 	y += 10.0f;
+	// 説明文は下の端の「作成／強化に必要」の欄にかからない所まで
+	const float costHeight = DrawCost(panel, appear, true);
 	for (const std::string& line : Wrap(ItemDescription(tab_, cursor), kSmallScale, x1 - x0)) {
-		if (y > panel.y + panel.height - 28.0f) break;
+		if (y > panel.y + panel.height - 28.0f - costHeight) break;
 		Text(line, { x0, y }, kSmallScale, WithAlpha(color_, 0.7f * appear), 0.0f);
 		y += 25.0f;
 	}
+	DrawCost(panel, appear, false);
+}
+
+const CraftCost* LoadoutScreen::ItemCost(int tab, int index, int& level) const {
+	const CraftingCatalog* crafting = CraftingCatalog::GetInstance();
+	level = 1;
+	switch (tab) {
+	case kTabMain:
+		if (const MainWeaponDef* d = MainWeaponCatalog::GetInstance()->GetDef(index)) return crafting->FindMainWeapon(d->id);
+		break;
+	case kTabShield:
+		if (const ShieldDef* d = ShieldCatalog::GetInstance()->GetDef(index)) return crafting->FindShield(d->id);
+		break;
+	case kTabUnit:
+		if (index >= 0 && index < static_cast<int>(FlightUnitKind::Count)) {
+			const FlightUnitKind kind = UnitKindAt(index);
+			level = LoadoutState::GetInstance()->GetFlightUnitLevel(kind);
+			const std::string id = LoadoutState::GetFlightUnitName(kind);
+			// 段階の無い物（初期の羽根）は Lv1 の欄を見る
+			const CraftCost* cost = crafting->FindFlightUnit(id, level);
+			if (!cost) {
+				cost = crafting->FindFlightUnit(id, 1);
+				level = 1;
+			}
+			return cost;
+		}
+		break;
+	default:
+		break;
+	}
+	return nullptr;
+}
+
+float LoadoutScreen::DrawCost(const Rect& panel, float appear, bool measureOnly) {
+	int level = 1;
+	const CraftCost* cost = ItemCost(tab_, cursor_[tab_], level);
+	if (!cost) return 0.0f;
+
+	constexpr float kRow = 30.0f;
+	const int rows = cost->initial ? 1 : static_cast<int>(cost->materials.size()) + 1;
+	const float height = kSectionHeight + 8.0f + kRow * static_cast<float>(rows) + 8.0f;
+	if (measureOnly) return height;
+
+	TextRenderer* tr = TextRenderer::GetInstance();
+	const float x0 = panel.x + 16.0f;
+	const float x1 = panel.x + panel.width - 16.0f;
+	float y = panel.y + panel.height - height;
+	const Vector4 dark = { 0.0f, 0.08f, 0.04f, appear };
+	auto rightAligned = [&](const std::string& text, float yy, const Vector4& color) {
+		const float w = tr->MeasureWidth(text, kSmallScale + 0.04f);
+		Text(text, { x1 - w, yy }, kSmallScale + 0.04f, color, textGlow_ * 0.3f);
+	};
+
+	// 見出し：初期装備／作成に必要／Lv○ への強化に必要
+	std::string title;
+	if (cost->initial) title = "入手";
+	else if (level >= 2) title = Format("Lv%d への強化に必要", level);
+	else title = "作成に必要";
+	Rect4({ panel.x, y, panel.width, kSectionHeight }, WithAlpha(color_, 0.8f * appear), 0.35f);
+	Text(title, { x0, y + 3.0f }, kSmallScale, dark, 0.0f);
+	y += kSectionHeight + 8.0f;
+
+	if (cost->initial) {
+		Text("初期装備（最初から持っている）", { x0 + 8.0f, y }, kSmallScale + 0.04f, WithAlpha(color_, 0.8f * appear), 0.0f);
+		return height;
+	}
+	// 素材の行：アイテムの色の印＋名前、右に個数
+	const LootCatalog* loot = LootCatalog::GetInstance();
+	auto row = [&](const std::string& label, const Vector4& mark, const std::string& value) {
+		Rect4({ x0 + 8.0f, y + 7.0f, 12.0f, 12.0f }, WithAlpha(mark, appear), 0.4f);
+		Text(label, { x0 + 30.0f, y }, kSmallScale + 0.04f, WithAlpha(color_, 0.85f * appear), 0.0f);
+		rightAligned(value, y, WithAlpha(color_, appear));
+		Rect4({ x0, y + 27.0f, x1 - x0, 1.0f }, WithAlpha(dimColor_, 0.7f * appear), 0.0f);
+		y += kRow;
+	};
+	for (const CraftCost::Material& m : cost->materials) {
+		const LootItemDef* item = loot->FindItem(m.itemId);
+		row(item ? item->displayName : m.itemId, item ? item->color : color_, Format("×%d", m.count));
+	}
+	row(loot->GetEther().displayName, loot->GetEther().color, Format("%d", cost->ether));
+	return height;
 }
 
 void LoadoutScreen::DrawFooter(const Vector2& screen, float appear) {

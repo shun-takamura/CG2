@@ -92,5 +92,7 @@ private:
 			"canyon_spire_l_stump", "canyon_spire_l_top", "canyon_spire_s_stump", "canyon_spire_s_top",
 			"canyon_beam_stub_a", "canyon_beam_half_a", "canyon_beam_half_b", "canyon_beam_stub_b", "canyon_chunk",
 			"turret", "HoverEnemy" } },
+		// ボス戦の闘技場（海の上の足場と柱）。谷の出口（168 秒〜）で海と一緒に見えるので、谷の後半で読む
+		{ "BossArena",  140.0f, 160.0f },
 	};
 };

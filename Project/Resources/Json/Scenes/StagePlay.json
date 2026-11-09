@@ -76,6 +76,31 @@
       }
     },
     {
+      "type": "Object3D",
+      "name": "BossArena",
+      "tag": "None",
+      "dir": "Resources/Models/BossArena",
+      "file": "BossArena.mesh",
+      "streamGroup": "BossArena",
+      "transform": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotate": [
+          0,
+          0,
+          0
+        ],
+        "translate": [
+          280,
+          -148,
+          3850
+        ]
+      }
+    },
+    {
       "type": "Primitive",
       "name": "Plane (10)",
       "tag": "None",

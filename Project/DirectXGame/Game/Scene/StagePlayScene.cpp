@@ -55,6 +55,7 @@
 #include "Score/DifficultyProfile.h"
 #include "Score/MainWeaponCatalog.h"
 #include "Score/ShieldCatalog.h"
+#include "Score/LootLedger.h"
 #include "Effect/BeamShieldRenderer.h"
 #include "Effect/BeamBladeRenderer.h"
 #include "ModelManager.h"
@@ -2748,6 +2749,10 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 	}
 
+	if (ImGui::CollapsingHeader("Loot (22)")) {
+		LootLedger::GetInstance()->OnImGui();
+	}
+
 	if (ImGui::CollapsingHeader("Score UI")) {
 		ImGui::Text("Score: %d", ScoreManager::GetInstance()->GetScore());
 		if (ImGui::Button("Reset Score")) ScoreManager::GetInstance()->Reset();
@@ -2883,6 +2888,9 @@ void StagePlayScene::Initialize() {
 
 	// スコアをリセット（再ロード時の累積防止）
 	ScoreManager::GetInstance()->Reset();
+	// 手に入れたアイテムとエーテルの集計も（リザルトが読む。22_ItemDrop.md）
+	LootLedger::GetInstance()->Reset();
+	lootLog_.Clear();
 
 	// ゲームオーバー画面の「ボス戦からリトライ」要求とスナップショットを読み出す。
 	// このアタリで再取得されるまではチェックポイントを無効化しておく
@@ -3622,7 +3630,9 @@ void StagePlayScene::Update() {
 	}
 	// 雲の上の回り込みの間は操作を受け付けない（16 番 §1。レールは t=0 から進める）。バインドの無い入力マップ＝何も押されていない
 	static InputActionMap kNoInput;
-	if (IsCloudTopIntroActive() || IsPlayerDying()) actions = &kNoInput;
+	// 着陸（谷の出口 → 闘技場）と、撃破 → STAGE CLEAR の間も同じ
+	if (IsCloudTopIntroActive() || IsPlayerDying() || phase_ == Phase::Landing
+		|| (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing())) actions = &kNoInput;
 
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
@@ -3638,9 +3648,21 @@ void StagePlayScene::Update() {
 			ApplyCameraIdleSway(GetScaledDeltaTime(TimeGroup::World));
 		}
 	} else if (phase_ == Phase::Landing) {
-		// 着地遷移（演出は後日実装）。滞在時間が経過したら自動的に Boss へ。
+		// 着陸：谷の出口から海の上の闘技場へ飛んで降りる（カメラと自機の位置は BossStagePart が書く）。
+		// 降り終わったら Boss へ。BossStagePart が無ければ従来どおり滞在秒で進める
 		landingTimer_ += GetScaledDeltaTime();
-		if (bossPreloadReady_ && landingTimer_ >= landingDuration_) {
+		bool landed = landingTimer_ >= landingDuration_;
+		if (bossStage_) {
+			if (!bossStage_->IsLandingActive() && !bossStage_->HasLandingTouchedDown()) bossStage_->BeginLanding();
+			landed = bossStage_->UpdateLanding(GetScaledDeltaTime());
+			if (bossStage_->ConsumeLandingTouchdown()) {
+				// 足場に着いた：羽根をしまって立つ・足元の水に波
+				if (playerWings_) playerWings_->Stow();
+				ApplyPlayerPose();
+				if (bossWater_) bossWater_->EmitSplash(bossStage_->GetPlayerStartPos());
+			}
+		}
+		if (bossPreloadReady_ && landed) {
 			phase_ = Phase::Boss;
 		}
 	} else if (phase_ == Phase::Boss) {
@@ -3651,6 +3673,15 @@ void StagePlayScene::Update() {
 	if (phase_ != prevPhase_) {
 		// 飛行ユニットの技はフェーズをまたがない（スローは戻し、ファンネル・バリアは消す。クールタイムも 0）
 		if (flightUnit_) flightUnit_->Reset();
+		// レールを抜けたら、まだ飛んでいる落とし物は拾ったことにする（以降は動かさないため）
+		if (prevPhase_ == Phase::Rail && railStage_) railStage_->CollectAllLoot();
+		// 着陸の始まり：谷に残った敵を片付ける（降りている間に撃たれない・敵の参照を残さない。Boss 突入と同じ）
+		if (phase_ == Phase::Landing) {
+			ClearBossRuntimeState();
+			nearestEnemy_    = nullptr;
+			lockedEnemy_     = nullptr;
+			jdCounterTarget_ = nullptr;
+		}
 		if (phase_ == Phase::Boss) {
 			bossBattleActive_ = true;            // 既存スカイボックスクロスフェードを自動発火
 			bossFacingInit_   = false;           // ボス戦開始時に向きを取り直す（初回フレームで再サンプル）
@@ -3692,20 +3723,32 @@ void StagePlayScene::Update() {
 		// 自機の死亡演出の間、ボスは今の攻撃を終えたら次の行動を選ばない（19 番 G3。プレビューが終われば戻る）
 		bossStage_->SetBossStandDown(IsPlayerDying());
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
-		if (bossWater_) {
-			const Vector3& c = bossStage_->GetArenaCenter();
-			bossWater_->SetGroundY(bossStage_->GetGroundY());
-			bossWater_->SetArenaCenter(c.x, c.z);
-			bossWater_->Update(GetScaledDeltaTime(TimeGroup::World));
-		}
 		UpdateBossHpBarUI(GetScaledDeltaTime(TimeGroup::UI));
 
-		// ボス撃破検出：スコア加点・撃破数カウントの上でリザルトへ。
+		// ボス撃破検出：スコア加点・撃破数カウント → STAGE CLEAR を見せてからリザルトへ。
+		// 残った敵の弾は消す（クリアの間は被弾もしない）
 		if (bossStage_->ConsumeBossDefeated()) {
 			ScoreManager::GetInstance()->AddScore(bossStage_->GetLastBossScoreValue());
 			ScoreManager::GetInstance()->AddKill();
+			LootLedger::GetInstance()->AddBossReward();   // ボスの報酬（右下に出て、リザルトの合計に入る）
+			for (auto& b : bullets_) {
+				if (b.primitive && Gameplay::Of(b.primitive).GetTag() == EntityTag::EnemyAttack) b.remainingLifetime = -1.0f;
+			}
+			bossStage_->BeginClear();
+		}
+		if (bossStage_->IsClearing() && bossStage_->UpdateClear(GetScaledDeltaTime(TimeGroup::UI))) {
 			SceneManager::GetInstance()->ChangeScene("RESULT");
 		}
+	}
+
+	// 拾った物の表示（実時間。スローでも普通の速さで出入りする）
+	lootLog_.Update(GetScaledDeltaTime(TimeGroup::UI));
+
+	// 闘技場の水（足場の床・海）。World 時間で進める（スロー中は波も遅い）
+	if (bossWater_ && bossStage_ && IsBossArenaVisible()) {
+		bossWater_->SetArena(bossStage_->GetArenaCenter(), bossStage_->GetGroundY(),
+			bossStage_->GetWaterRadius(), bossStage_->GetSeaY());
+		bossWater_->Update(GetScaledDeltaTime(TimeGroup::World));
 	}
 
 	// 精密射撃モード（FOV ズーム・感度・演出）。FOV を camera_->Update() の前に反映する
@@ -3864,6 +3907,8 @@ void StagePlayScene::Update() {
 					camera_->Update();
 				}
 			}
+		} else if (phase_ == Phase::Landing && bossStage_) {
+			// 着陸中は自機の位置を BossStagePart::UpdateLanding が書く（カメラ基準の配置はしない）
 		} else {
 
 		// 分身選択中も WASD/スティックは通常移動として有効（方向選択はアクションボタン側で受ける）。
@@ -4607,6 +4652,10 @@ void StagePlayScene::Update() {
 			const Vector3& railRotate = cloudTopIntro_->GetRailRotate();
 			player_->SetRotate({ railRotate.x, railRotate.y, 0.0f });
 			aimInitialized_ = false;
+		} else if (phase_ == Phase::Landing && bossStage_) {
+			// 着陸中は進む向き → 降りる前にボスの方へ（pitch は 0）
+			player_->SetRotate({ 0.0f, bossStage_->GetLandingPlayerYaw(), 0.0f });
+			aimInitialized_ = false;
 		} else if (phase_ == Phase::Boss) {
 			// ボス戦：レティクル追従ではなく移動入力方向／ジャスト回避中は攻撃元方向を向く。
 			// yaw は移動ブランチで bossFacingYaw_ に更新済み（pitch/roll は 0＝地上を走る通常キャラ）。
@@ -4948,7 +4997,7 @@ void StagePlayScene::Draw() {
 		DrawStageStart();
 		return;
 	}
-	const bool drawBossWater = (phase_ == Phase::Boss && bossWater_);
+	const bool drawBossWater = (bossWater_ && IsBossArenaVisible());
 	// 波のシミュレーション（コンピュート）はシーン RT をバインドする前に回す
 	if (drawBossWater) bossWater_->DispatchSimulation();
 	// 大河の水面の反射 RT（映す物を鏡像で描く）。シーン RT を貼る前に描き、下で貼り直す
@@ -5078,17 +5127,32 @@ void StagePlayScene::Draw() {
 	DrawDynamicSprites();
 	// 飛行ユニットのクールタイムのバー（必殺技ゲージの下）
 	if (flightUnit_ && flightUnit_->IsInitialized() && !IsCloudTopIntroActive()) flightUnit_->DrawUI();
-	if (reticle_ && !IsCloudTopIntroActive()) reticle_->Draw();
+	if (reticle_ && !IsCloudTopIntroActive() && phase_ != Phase::Landing) reticle_->Draw();
 
 	DrawBossHpBarUI();
+
+	// STAGE CLEAR（ボス撃破の後。文字は下のスコア表示と同じ Flush でまとめて描く）
+	if (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing()) {
+		const float a = bossStage_->GetClearTextAlpha();
+		TextRenderer* tr = TextRenderer::GetInstance();
+		if (a > 0.0f && tr->IsInitialized()) {
+			constexpr const char* kClearText = "STAGE CLEAR";
+			constexpr float kScale = 3.0f;
+			const float w = tr->MeasureWidth(kClearText, kScale);
+			const Vector2 pos{ (static_cast<float>(WindowsApplication::kUIWidth) - w) * 0.5f,
+				static_cast<float>(WindowsApplication::kUIHeight) * 0.42f };
+			tr->DrawText(kClearText, pos, kScale, { 1.0f, 0.92f, 0.6f, a }, 3.0f, { 0.0f, 0.0f, 0.0f, a });
+		}
+	}
 
 	// ポーズメニュー（文字は下のスコア表示と同じ Flush でまとめて描く）
 	if (paused_) DrawPauseMenu();
 
-	// スコア表示（右上、控えめサイズ）
+	// スコア表示（右上、控えめサイズ）。拾った物の表示（右下）も同じ Flush で描く
 	{
 		TextRenderer* tr = TextRenderer::GetInstance();
 		if (tr->IsInitialized()) {
+			lootLog_.Draw(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 			// 上段「SCORE」ラベル + 下段に数値。ラベルと数値は独立に位置・サイズ・色を設定可。
 			// 位置は画面右上 (screenW, 0) から (offsetX, offsetY) のオフセット（右端基準）。
 			int rawScore = ScoreManager::GetInstance()->GetScore();
@@ -5304,12 +5368,20 @@ bool StagePlayScene::IsCloudTopIntroActive() const {
 	return cloudTopIntro_ && cloudTopIntro_->IsActive();
 }
 
+bool StagePlayScene::IsBossArenaVisible() const {
+	// 谷の出口（168 秒〜）で海が見え始める。闘技場のモデル（streamGroup "BossArena"）は 160 秒に作る
+	constexpr float kShowSec = 150.0f;
+	if (phase_ == Phase::Landing || phase_ == Phase::Boss) return true;
+	return phase_ == Phase::Rail && railStage_ && railStage_->GetStageSeconds() >= kShowSec;
+}
+
 void StagePlayScene::ApplyPlayerPose() {
 	if (!player_) return;
 	// 自機の新モデルのクリップ（rig_player_mech.py --body-clips）。player.json のモデルを替えたらここも合わせる
 	constexpr const char* kStandClip = "Resources/Models/Player/PlayerModel/PlayerModel_Stand.anim";
 	constexpr const char* kLaunchClip = "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim";
-	if (phase_ == Phase::Boss) {
+	// 着陸で足場に着いた後もボス戦と同じ立ち姿勢
+	if (phase_ == Phase::Boss || (phase_ == Phase::Landing && bossStage_ && bossStage_->HasLandingTouchedDown())) {
 		player_->PlayAnimation(kStandClip, 0.0f);
 		player_->SetLoop(true);
 	} else {
@@ -5519,6 +5591,8 @@ bool StagePlayScene::ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag ta
 	if (tag == EntityTag::Enemy || tag == EntityTag::Boss) return true;
 	// 谷の障害物が崩れた部品も同じくランタイム実体
 	if (railStage_ && railStage_->IsObstacleDebris(entity)) return true;
+	// 敵が落とした物も
+	if (railStage_ && railStage_->IsLootDrop(entity)) return true;
 	// ランタイム UI（HP バー / 必殺ゲージ）は毎回建て直すので保存しない
 	if (entity == hpBarBackground_ || entity == hpBarForeground_ ||
 		entity == gaugeBarBackground_ || entity == gaugeBarForeground_) return true;
@@ -5683,7 +5757,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// ----- 敵攻撃との接触判定（敵弾＋突進）-----
 	// ジャスト回避中は完全スルー。それ以外は、回避ジャスト窓内の接触＝ジャスト回避成立、
 	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。死亡演出の間は当たらない。
-	if (!justInv && !IsPlayerDying()) {
+	const bool stageClearing = (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing());
+	if (!justInv && !IsPlayerDying() && !stageClearing) {
 		const Vector3 playerPos = player_->GetTranslate();
 
 		// 敵弾の当たり判定はプレハブのカプセル。中心・軸は UpdatePlayerColliderPose が決めたもの（デバッグ描画と同じ）

@@ -11,6 +11,9 @@
 #include "Enemy/EnemyController.h"
 #include "Enemy/IEnemyCommand.h"
 #include "Enemy/Boss/BossBrainCommand.h"
+#include "Json/JsonParser.h"
+#include "Json/JsonValue.h"
+#include <filesystem>
 
 #ifdef _DEBUG
 #include "imgui.h"
@@ -22,6 +25,26 @@ BossStagePart::~BossStagePart() = default;
 void BossStagePart::Initialize(IBossStageHost* host, Camera* camera) {
 	host_   = host;
 	camera_ = camera;
+	LoadArenaGeometry();
+}
+
+void BossStagePart::LoadArenaGeometry() {
+	constexpr const char* kPath = "Resources/Json/Tuning/BossArenaGeometry.json";
+	if (!std::filesystem::exists(kPath)) return;
+	const auto result = JsonParser::ParseFile(kPath);
+	if (!result.success) return;
+	const JsonValue& root = result.value;
+	const JsonValue& c = root["center"];
+	if (c.IsArray() && c.Size() >= 3) {
+		arenaCenter_ = { static_cast<float>(c[0].AsDouble(arenaCenter_.x)),
+			static_cast<float>(c[1].AsDouble(arenaCenter_.y)),
+			static_cast<float>(c[2].AsDouble(arenaCenter_.z)) };
+		groundY_ = arenaCenter_.y;
+	}
+	seaY_           = static_cast<float>(root["seaY"].AsDouble(seaY_));
+	waterRadius_    = static_cast<float>(root["waterRadius"].AsDouble(waterRadius_));
+	arenaRadius_    = static_cast<float>(root["playerRadius"].AsDouble(arenaRadius_));
+	camArenaRadius_ = static_cast<float>(root["cameraRadius"].AsDouble(camArenaRadius_));
 }
 
 void BossStagePart::Enter() {
@@ -59,6 +82,171 @@ void BossStagePart::Enter() {
 	float y, p;
 	if (ComputeBossYawPitch(y, p)) { camYaw_ = y; camPitch_ = p; }
 	else { camYaw_ = 0.0f; camPitch_ = 0.15f; }
+}
+
+namespace {
+	Vector3 Bezier3(const Vector3 (&p)[4], float u) {
+		const float v = 1.0f - u;
+		const float a = v * v * v, b = 3.0f * v * v * u, c = 3.0f * v * u * u, d = u * u * u;
+		return { a * p[0].x + b * p[1].x + c * p[2].x + d * p[3].x,
+			a * p[0].y + b * p[1].y + c * p[2].y + d * p[3].y,
+			a * p[0].z + b * p[1].z + c * p[2].z + d * p[3].z };
+	}
+	Vector3 Bezier3Tangent(const Vector3 (&p)[4], float u) {
+		const float v = 1.0f - u;
+		const float a = 3.0f * v * v, b = 6.0f * v * u, c = 3.0f * u * u;
+		return { a * (p[1].x - p[0].x) + b * (p[2].x - p[1].x) + c * (p[3].x - p[2].x),
+			a * (p[1].y - p[0].y) + b * (p[2].y - p[1].y) + c * (p[3].y - p[2].y),
+			a * (p[1].z - p[0].z) + b * (p[2].z - p[1].z) + c * (p[3].z - p[2].z) };
+	}
+	// 始めは等速（s'(0)=1＝レールの速さのまま）、終わりは止まる（s'(1)=0）時間の写像
+	float EaseOutKeepStart(float t) {
+		t = std::clamp(t, 0.0f, 1.0f);
+		return t + t * t - t * t * t;
+	}
+	float SmoothStep01(float x) {
+		x = std::clamp(x, 0.0f, 1.0f);
+		return x * x * (3.0f - 2.0f * x);
+	}
+	float WrapPi(float a) {
+		while (a > 3.14159265f) a -= 6.28318531f;
+		while (a < -3.14159265f) a += 6.28318531f;
+		return a;
+	}
+}
+
+Vector3 BossStagePart::GetPlayerStartPos() const {
+	return { arenaCenter_.x, groundY_, arenaCenter_.z - playerStartBack_ };
+}
+
+void BossStagePart::ComputeStartCamera(Vector3& outEye, float& outYaw, float& outPitch) const {
+	// ComputeBossYawPitch と同じ式を、ボスが出る予定の位置で解く
+	const Vector3 p = GetPlayerStartPos();
+	const Vector3 focus{ p.x, p.y + camFocusHeight_, p.z };
+	const Vector3 bPos{ arenaCenter_.x, groundY_ + bossHeight_, arenaCenter_.z + bossForward_ };
+	Vector3 d{ bPos.x - focus.x, bPos.y - focus.y, bPos.z - focus.z };
+	const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+	if (len > 1e-4f) { d.x /= len; d.y /= len; d.z /= len; }
+	else { d = { 0.0f, 0.0f, 1.0f }; }
+	outYaw = std::atan2(d.x, d.z);
+	outPitch = std::clamp(-std::asin(std::clamp(d.y, -1.0f, 1.0f)), pitchMin_, pitchMax_);
+	const float cp = std::cos(outPitch);
+	const Vector3 fwd{ std::sin(outYaw) * cp, -std::sin(outPitch), std::cos(outYaw) * cp };
+	outEye = { focus.x - fwd.x * camDistance_, focus.y - fwd.y * camDistance_, focus.z - fwd.z * camDistance_ };
+}
+
+void BossStagePart::BeginLanding() {
+	if (!camera_ || !host_) return;
+	landingActive_ = true;
+	landingTouchedDown_ = false;
+	landingTouchdownEvent_ = false;
+	landingTimer_ = 0.0f;
+
+	// 始点：今のカメラ（レールの終わり）。進む向きは水平にしたカメラの前
+	const Vector3 eye0 = camera_->GetTranslate();
+	Vector3 fwd = camera_->GetForward();
+	fwd.y = 0.0f;
+	const float fl = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+	if (fl < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; }
+	else { fwd.x /= fl; fwd.z /= fl; }
+	landingPlayerYaw_ = std::atan2(fwd.x, fwd.z);
+
+	Vector3 eye1;
+	float yaw1 = 0.0f, pitch1 = 0.0f;
+	ComputeStartCamera(eye1, yaw1, pitch1);
+	const float backX = -std::sin(yaw1), backZ = -std::cos(yaw1);
+
+	// 3 次ベジェの始点の速さ = 3|P1−P0|/T。レールの速さのまま出るように P1 を置く。
+	// 終点の手前の制御点は闘技場の後ろ上＝見下ろしながら降りてくる
+	const float lead = landingStartSpeed_ * landingDuration_ / 3.0f;
+	landingCam_[0] = eye0;
+	landingCam_[1] = { eye0.x + fwd.x * lead, eye0.y, eye0.z + fwd.z * lead };
+	landingCam_[2] = { eye1.x + backX * landingCamBack_, eye1.y + landingCamLift_, eye1.z + backZ * landingCamBack_ };
+	landingCam_[3] = eye1;
+	landingLookStart_ = { eye0.x + fwd.x * landingLookAhead_, eye0.y, eye0.z + fwd.z * landingLookAhead_ };
+	const Vector3 pEnd = GetPlayerStartPos();
+	landingFocusEnd_ = { pEnd.x, pEnd.y + camFocusHeight_, pEnd.z };
+
+	// 自機：今の位置から、上から足場の開始位置へ降りる。自機が着くまでの時間で同じ速さになるように P1 を置く
+	Vector3 p0 = pEnd;
+	if (IImGuiEditable* pl = host_->GetPlayer()) {
+		if (const Vector3* pp = pl->GetEditableTranslate()) p0 = *pp;
+	}
+	const float playerLead = landingStartSpeed_ * landingDuration_ * landingPlayerRatio_ / 3.0f;
+	landingPlayer_[0] = p0;
+	landingPlayer_[1] = { p0.x + fwd.x * playerLead, p0.y, p0.z + fwd.z * playerLead };
+	landingPlayer_[2] = { pEnd.x + backX * landingPlayerBack_, pEnd.y + landingPlayerLift_, pEnd.z + backZ * landingPlayerBack_ };
+	landingPlayer_[3] = pEnd;
+}
+
+bool BossStagePart::UpdateLanding(float dt) {
+	if (!landingActive_ || !camera_ || !host_) return true;
+	landingTimer_ += dt;
+	const float t = (landingDuration_ > 1e-3f) ? landingTimer_ / landingDuration_ : 1.0f;
+
+	// カメラ：位置は曲線、向きは「進む先」から「自機の体の中心」へ見る点を移す
+	const Vector3 eye = Bezier3(landingCam_, EaseOutKeepStart(t));
+	const float lookBlend = SmoothStep01(t * 1.2f);
+	const Vector3 look{
+		landingLookStart_.x + (landingFocusEnd_.x - landingLookStart_.x) * lookBlend,
+		landingLookStart_.y + (landingFocusEnd_.y - landingLookStart_.y) * lookBlend,
+		landingLookStart_.z + (landingFocusEnd_.z - landingLookStart_.z) * lookBlend };
+	Vector3 d{ look.x - eye.x, look.y - eye.y, look.z - eye.z };
+	const float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+	if (dl > 1e-4f) {
+		d.x /= dl; d.y /= dl; d.z /= dl;
+		camera_->SetTranslate(eye);
+		camera_->SetRotate({ -std::asin(std::clamp(d.y, -1.0f, 1.0f)), std::atan2(d.x, d.z), 0.0f });
+	}
+
+	// 自機
+	const float tp = (landingPlayerRatio_ > 1e-3f) ? t / landingPlayerRatio_ : 1.0f;
+	const float sp = EaseOutKeepStart(tp);
+	if (IImGuiEditable* pl = host_->GetPlayer()) {
+		if (Vector3* pp = pl->GetEditableTranslate()) *pp = Bezier3(landingPlayer_, sp);
+	}
+	// 向き：進む向き → 着く前の 3 割でボスの方へ
+	{
+		Vector3 e;
+		float yawEnd = 0.0f, pitchEnd = 0.0f;
+		ComputeStartCamera(e, yawEnd, pitchEnd);
+		const Vector3 tan = Bezier3Tangent(landingPlayer_, (std::min)(sp, 0.98f));
+		const float moveYaw = (tan.x * tan.x + tan.z * tan.z > 1e-6f) ? std::atan2(tan.x, tan.z) : landingPlayerYaw_;
+		const float w = SmoothStep01((tp - 0.7f) / 0.3f);
+		landingPlayerYaw_ = moveYaw + WrapPi(yawEnd - moveYaw) * w;
+	}
+	if (tp >= 1.0f && !landingTouchedDown_) {
+		landingTouchedDown_ = true;
+		landingTouchdownEvent_ = true;
+	}
+
+	if (t >= 1.0f) {
+		landingActive_ = false;
+		return true;
+	}
+	return false;
+}
+
+void BossStagePart::BeginClear() {
+	if (clearTimer_ < 0.0f) clearTimer_ = 0.0f;
+}
+
+bool BossStagePart::UpdateClear(float dt) {
+	if (clearTimer_ < 0.0f) return false;
+	clearTimer_ += dt;
+	return clearTimer_ >= clearDelay_ + clearTextFade_ + clearHold_;
+}
+
+float BossStagePart::GetClearTextAlpha() const {
+	if (clearTimer_ < 0.0f) return 0.0f;
+	if (clearTextFade_ <= 1e-3f) return clearTimer_ >= clearDelay_ ? 1.0f : 0.0f;
+	return SmoothStep01((clearTimer_ - clearDelay_) / clearTextFade_);
+}
+
+bool BossStagePart::ConsumeLandingTouchdown() {
+	if (!landingTouchdownEvent_) return false;
+	landingTouchdownEvent_ = false;
+	return true;
 }
 
 void BossStagePart::Update(float worldDt) {
@@ -276,6 +464,22 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 		const float fitDist = (focus.y - minEyeY) / forward.y;
 		if (fitDist < targetDist) targetDist = (std::max)(fitDist, camMinDistance_);
 	}
+	// 闘技場の囲い：eye の水平位置が柱の内側（camArenaRadius_）に収まる距離まで寄せる。
+	// |p + u·d| = R を d について解く（p = focus − 中心、u = −forward の水平成分）
+	if (camArenaRadius_ > 0.0f) {
+		const float px = focus.x - arenaCenter_.x;
+		const float pz = focus.z - arenaCenter_.z;
+		const float ux = -forward.x;
+		const float uz = -forward.z;
+		const float uu = ux * ux + uz * uz;
+		const float pu = px * ux + pz * uz;
+		const float pp = px * px + pz * pz;
+		const float r2 = camArenaRadius_ * camArenaRadius_;
+		if (uu > 1e-6f && pp < r2) {
+			const float fitDist = (-pu + std::sqrt(pu * pu - uu * (pp - r2))) / uu;
+			if (fitDist < targetDist) targetDist = (std::max)(fitDist, camMinDistance_);
+		}
+	}
 	if (camEffectiveDistance_ < 0.0f || targetDist < camEffectiveDistance_) {
 		camEffectiveDistance_ = targetDist;
 	} else {
@@ -303,6 +507,10 @@ bool BossStagePart::ConsumeBossDefeated() {
 
 void BossStagePart::Reset() {
 	if (host_) host_->ClearBossRuntimeState();
+	landingActive_ = false;
+	landingTouchedDown_ = false;
+	landingTouchdownEvent_ = false;
+	clearTimer_ = -1.0f;
 	boss_        = nullptr;
 	brain_       = nullptr;
 	bossSpawned_ = false;
@@ -318,14 +526,33 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 #ifdef _DEBUG
 	if (ImGui::CollapsingHeader("Boss Battle")) {
 		ImGui::Text("Boss: %s", boss_ ? "alive" : (bossSpawned_ ? "dead" : "not spawned"));
+		ImGui::Text("Arena (%.0f, %.1f, %.0f)  sea %.1f", arenaCenter_.x, arenaCenter_.y, arenaCenter_.z, seaY_);
+		ImGui::TextDisabled("寸法は BossArenaGeometry.json（gen_boss_arena.py が書く）");
 		ImGui::DragFloat("Arena Radius", &arenaRadius_, 0.5f, 1.0f, 200.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::DragFloat("Camera Arena Radius", &camArenaRadius_, 0.5f, 0.0f, 200.0f, "%.1f");
 		ImGui::DragFloat("Player Move Speed", &playerMoveSpeed_, 0.2f, 0.0f, 60.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Player Smooth (s)", &playerSmoothTime_, 0.005f, 0.0f, 1.0f, "%.3f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Dodge Dash Speed", &dodgeDashSpeed_, 0.5f, 0.0f, 120.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::SeparatorText("Landing (谷の出口 → 闘技場)");
+		ImGui::Text("Landing: %s  %.2f / %.2f s", landingActive_ ? "active" : "-", landingTimer_, landingDuration_);
+		ImGui::DragFloat("Landing Duration (s)", &landingDuration_, 0.1f, 1.0f, 30.0f, "%.1f");
+		ImGui::DragFloat("Player Ratio", &landingPlayerRatio_, 0.01f, 0.3f, 1.0f, "%.2f");
+		ImGui::DragFloat("Start Speed (m/s)", &landingStartSpeed_, 0.5f, 0.0f, 100.0f, "%.1f");
+		ImGui::DragFloat("Cam Lift (m)", &landingCamLift_, 0.5f, -50.0f, 200.0f, "%.1f");
+		ImGui::DragFloat("Cam Back (m)", &landingCamBack_, 0.5f, -100.0f, 300.0f, "%.1f");
+		ImGui::DragFloat("Player Lift (m)", &landingPlayerLift_, 0.5f, -20.0f, 100.0f, "%.1f");
+		ImGui::DragFloat("Player Back (m)", &landingPlayerBack_, 0.5f, -50.0f, 150.0f, "%.1f");
+		ImGui::DragFloat("Look Ahead (m)", &landingLookAhead_, 1.0f, 10.0f, 500.0f, "%.0f");
+
+		ImGui::SeparatorText("Clear (撃破 → STAGE CLEAR → リザルト)");
+		ImGui::DragFloat("Clear Delay (s)", &clearDelay_, 0.05f, 0.0f, 10.0f, "%.2f");
+		ImGui::DragFloat("Clear Text Fade (s)", &clearTextFade_, 0.05f, 0.0f, 5.0f, "%.2f");
+		ImGui::DragFloat("Clear Hold (s)", &clearHold_, 0.1f, 0.0f, 20.0f, "%.1f");
 
 		ImGui::SeparatorText("Knockback");
 		ImGui::DragFloat("Light Speed (bullet)", &knockLightSpeed_, 0.5f, 0.0f, 80.0f, "%.1f");

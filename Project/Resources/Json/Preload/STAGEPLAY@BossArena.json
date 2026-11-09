@@ -1,0 +1,23 @@
+{
+  "scene": "STAGEPLAY@BossArena",
+  "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
+  "shaders": [],
+  "textures": [
+    {
+      "path": "Resources/Textures/Terrain/Flagstone_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.dds",
+      "linear": true
+    }
+  ],
+  "models": [
+    {
+      "dir": "Resources/Models/BossArena",
+      "file": "BossArena.mesh"
+    }
+  ],
+  "animatedModels": [],
+  "animations": []
+}

@@ -1,0 +1,135 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "gen_boss_arena.py"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "BossArena"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "BossArena",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "ArenaStone",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.85
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    },
+    {
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "uri": "../../Textures/Terrain/Flagstone_BaseColor.png"
+    },
+    {
+      "uri": "../../Textures/NormalMapTexture/Terrain/Flagstone_NormalMap.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "BossArena.bin",
+      "byteLength": 136192
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 43008,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 43008,
+      "byteLength": 43008,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 86016,
+      "byteLength": 28672,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 114688,
+      "byteLength": 21504,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3584,
+      "type": "VEC3",
+      "min": [
+        -40.5,
+        -18.0,
+        -40.5
+      ],
+      "max": [
+        40.5,
+        15.0,
+        40.5
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 3584,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3584,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "count": 5376,
+      "type": "SCALAR"
+    }
+  ]
+}

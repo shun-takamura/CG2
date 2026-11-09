@@ -1,0 +1,58 @@
+{
+  "_comment": "22_ItemDrop.md。items＝素材の定義（prefab は落ちている間の見た目、color は拾ったときの表示とリザルトの印）。ether はエーテルの見た目。drops＝敵のプレハブ名ごとに落とす物（ether はエーテルの量、items は chance の確率で count 個）。boss は撃破でそのまま集計へ入る。motion は落ちた物の動き（秒・m）",
+  "items": [
+    {
+      "id": "Cog",
+      "displayName": "天輪の歯車",
+      "prefab": "loot_cog",
+      "color": [1.0, 0.78, 0.32, 1.0],
+      "scale": 0.45,
+      "spinSpeed": 4.0
+    },
+    {
+      "id": "StarShard",
+      "displayName": "星晶のかけら",
+      "prefab": "loot_shard",
+      "color": [0.45, 0.9, 1.0, 1.0],
+      "scale": 0.4,
+      "spinSpeed": 3.0
+    },
+    {
+      "id": "AstralCore",
+      "displayName": "天球の核",
+      "prefab": "loot_core",
+      "color": [1.0, 0.95, 0.82, 1.0],
+      "scale": 0.6,
+      "spinSpeed": 1.5
+    }
+  ],
+  "ether": {
+    "displayName": "エーテル",
+    "prefab": "loot_ether",
+    "color": [0.0, 0.641, 1.0, 1.0],
+    "scale": 0.35,
+    "spinSpeed": 0.0
+  },
+  "drops": [
+    { "prefab": "drone", "ether": 5, "items": [ { "id": "Cog", "chance": 0.4, "count": 1 } ] },
+    { "prefab": "HoverEnemy", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
+    { "prefab": "rusher", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
+    { "prefab": "turret", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
+    { "prefab": "carrier", "ether": 40, "items": [ { "id": "AstralCore", "chance": 1.0, "count": 1 }, { "id": "StarShard", "chance": 1.0, "count": 2 } ] }
+  ],
+  "boss": { "ether": 300, "items": [ { "id": "AstralCore", "chance": 1.0, "count": 3 }, { "id": "StarShard", "chance": 1.0, "count": 5 } ] },
+  "motion": {
+    "popSpeedMin": 4.0,
+    "popSpeedMax": 8.0,
+    "popDamping": 6.0,
+    "popTime": 0.3,
+    "homeRate": 2.0,
+    "homeAccel": 10.0,
+    "homeMinSpeed": 6.0,
+    "collectRadius": 0.8,
+    "maxLifetime": 3.0,
+    "aimHeight": 1.0,
+    "appearTime": 0.12,
+    "maxPieces": 48
+  }
+}
