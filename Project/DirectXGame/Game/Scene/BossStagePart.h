@@ -78,8 +78,9 @@ public:
 	// 着いたフレームだけ true（羽根をしまう・水しぶき）
 	bool ConsumeLandingTouchdown();
 	float GetLandingPlayerYaw() const { return landingPlayerYaw_; }
-	// 自機の開始位置（足場の上）
+	// 自機の開始位置（足場の上）とボスの出る位置。アリーナの前（arenaYaw_）の向きに並ぶ
 	Vector3 GetPlayerStartPos() const;
+	Vector3 GetBossStartPos() const;
 	// ----- 撃破 → STAGE CLEAR → リザルト（演出は次週。今は「クリアした」と分かるところまで）-----
 	// 撃破の爆発を見せる間 → 文字が出る → しばらく表示。入力・被弾はホストが止める
 	void BeginClear();
@@ -127,6 +128,7 @@ private:
 	Vector3 arenaCenter_{ 0.0f, 0.0f, 0.0f };
 	float   arenaRadius_ = 30.0f;          // プレイヤーが出られる範囲（中心からの半径）
 	float   groundY_     = 0.0f;           // プレイヤー原点（足元）の接地高さ
+	float   arenaYaw_    = 0.0f;           // アリーナの前（ボスのいる向き）。谷から入ってくる向きにそろえる
 	float   seaY_        = -150.0f;        // 海面
 	float   waterRadius_ = 36.0f;          // 足場の薄い水の円（縁石の内側）
 	float   camArenaRadius_ = 0.0f;        // カメラが出られる水平の半径（柱の内側）。0 で制限なし

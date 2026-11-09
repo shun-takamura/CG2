@@ -30,9 +30,17 @@ import sys
 from pathlib import Path
 
 # ---------------------------------------------------------------- 配置（ワールド）
-# 谷のレールの終点は (280, -60, 3505)、海岸線は Z ≈ 3530〜3710、海面 Y=-150（11 番 §3.0）
-CENTER_X = 280.0
-CENTER_Z = 3850.0
+# 谷のレールの終点は (280, -60, 3505)、海面 Y=-150（11 番 §3.0）。峡谷はレールの最後の向きのまま
+# 海へ延びる（gen_terrain.py の canyon.tail_extend）ので、闘技場もその線の上に置き、向きもそろえる
+# （まっすぐ置くと着陸の道が峡谷の壁を横切った。2026-11-09）。谷の口は Z ≈ 3640、海は Z ≈ 3665 から
+RAIL_END = (280.228, 3505.0)
+RAIL_PREV = (306.966, 3455.0)
+ARENA_DISTANCE = 380.0     # レールの終点から闘技場の中心まで（線に沿って）
+_dx, _dz = RAIL_END[0] - RAIL_PREV[0], RAIL_END[1] - RAIL_PREV[1]
+_dl = math.hypot(_dx, _dz)
+FORWARD_YAW = math.atan2(_dx, _dz)  # 闘技場の前（ボスのいる向き）。シーン JSON の rotate.y にも同じ値
+CENTER_X = RAIL_END[0] + _dx / _dl * ARENA_DISTANCE
+CENTER_Z = RAIL_END[1] + _dz / _dl * ARENA_DISTANCE
 SEA_Y = -150.0
 TOP_Y = -148.0             # 足場の上面（自機の足元）。海面の 2m 上
 
@@ -54,7 +62,9 @@ PLINTH_RADIUS = 1.45       # 台座
 PLINTH_HEIGHT = 0.7
 CAPITAL_RADIUS = 1.4       # 柱頭（折れていない柱だけ）
 CAPITAL_HEIGHT = 0.6
-# 柱の高さ（縁石の上から）。0 番は +Z（ボスの側）。遺跡らしく一部は折れて低い
+# 柱は前後（±Z）に柱のない門が来るように半歩ずらす（着陸の道が後ろの柱を貫通しないように）
+PILLAR_PHASE = math.pi / 12
+# 柱の高さ（縁石の上から）。遺跡らしく一部は折れて低い
 PILLAR_HEIGHTS = [14.0, 14.0, 7.5, 14.0, 14.0, 4.0, 14.0, 11.0, 14.0, 14.0, 6.0, 14.0]
 PILLAR_FULL = 14.0
 
@@ -143,7 +153,7 @@ def build_mesh() -> Mesh:
 
     # 柱
     for i, h in enumerate(PILLAR_HEIGHTS[:PILLAR_COUNT]):
-        t = 2.0 * math.pi * i / PILLAR_COUNT
+        t = PILLAR_PHASE + 2.0 * math.pi * i / PILLAR_COUNT
         cx, cz = PILLAR_RING * math.sin(t), PILLAR_RING * math.cos(t)
         base = CURB_HEIGHT
         # 台座（四角に近い八角形）
@@ -224,7 +234,8 @@ def build_gltf(m: Mesh, rel_to_assets: str) -> tuple[dict, bytes]:
 def write_geometry_json(path: Path) -> None:
     doc = {
         "_comment": "gen_boss_arena.py が書く。手で直さない（直すならスクリプトの定数を直して流し直す）",
-        "center": [CENTER_X, TOP_Y, CENTER_Z],
+        "center": [round(CENTER_X, 3), TOP_Y, round(CENTER_Z, 3)],
+        "forwardYaw": round(FORWARD_YAW, 5),
         "seaY": SEA_Y,
         "waterRadius": WATER_RADIUS,
         "curbOuter": CURB_OUTER,

@@ -1,10 +1,11 @@
 {
   "_comment": "gen_boss_arena.py が書く。手で直さない（直すならスクリプトの定数を直して流し直す）",
   "center": [
-    280.0,
+    101.032,
     -148.0,
-    3850.0
+    3840.095
   ],
+  "forwardYaw": -0.49107,
   "seaY": -150.0,
   "waterRadius": 36.0,
   "curbOuter": 38.0,
