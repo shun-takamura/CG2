@@ -48,6 +48,7 @@ void RailStagePart::Initialize(IRailStageHost* host, Camera* camera) {
 	host_ = host;
 	camera_ = camera;
 	obstacleDebris_.Initialize(this);
+	lootDrops_.Initialize(this);
 
 	// レールカメラ用スプライン（位置）。
 	// 実体はシーンの dynamicSplines_ 側に置く＝シーン JSON に載るので、
@@ -239,6 +240,10 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 				ScoreManager::GetInstance()->AddKill();
 				// 谷の障害物は、同じ原点・向きで切り分けた部品に差し替えて崩す（本体は直後の Sweep で消える）
 				const WaveEntry& we = currentWave_.entries[waveEntryIndex];
+				// アイテムとエーテルを落とす（表に無い敵・障害物は落とさない）
+				if (we.enemyType != "Obstacle") {
+					if (const Vector3* pos = entity->GetEditableTranslate()) lootDrops_.DropFrom(we.prefab, *pos);
+				}
 				if (we.enemyType == "Obstacle") {
 					const Vector3* pos = entity->GetEditableTranslate();
 					const Vector3* rot = entity->GetEditableRotate();
@@ -255,6 +260,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 		// HP がゼロになった敵などを破棄キューへ
 		host_->SweepDeadEntities();
 		obstacleDebris_.Update(worldDt);
+		lootDrops_.Update(worldDt);
 	}
 
 	// スポーン：カメラ進行度 t でエントリをトリガー
@@ -401,6 +407,7 @@ void RailStagePart::Seek(float seconds) {
 	// 崩れた岩の部品も片付ける（調整値はここで読み直す＝JSON を直してシークすれば試せる）
 	obstacleDebris_.Clear();
 	obstacleDebris_.LoadTuning();
+	lootDrops_.Clear();
 
 	// スポーン/退避フラグ / kill t を Seek 先に合わせて再構築
 	const float seekT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
@@ -1037,4 +1044,28 @@ IImGuiEditable* RailStagePart::SpawnDebrisPiece(const std::string& prefab, const
 
 void RailStagePart::DestroyDebrisPiece(IImGuiEditable* entity) {
 	if (host_) host_->DestroyEntity(entity);
+}
+
+bool RailStagePart::IsLootDrop(const IImGuiEditable* entity) const {
+	return lootDrops_.Owns(entity);
+}
+
+void RailStagePart::CollectAllLoot() {
+	lootDrops_.CollectAll();
+}
+
+IImGuiEditable* RailStagePart::SpawnLootPiece(const std::string& prefab, const Vector3& pos) {
+	return host_ ? host_->SpawnEnemyAt(prefab, pos) : nullptr;
+}
+
+void RailStagePart::DestroyLootPiece(IImGuiEditable* entity) {
+	if (host_) host_->DestroyEntity(entity);
+}
+
+bool RailStagePart::GetLootCollectPoint(Vector3& out) const {
+	IImGuiEditable* player = host_ ? host_->GetPlayer() : nullptr;
+	const Vector3* t = player ? player->GetEditableTranslate() : nullptr;
+	if (!t) return false;
+	out = *t;
+	return true;
 }

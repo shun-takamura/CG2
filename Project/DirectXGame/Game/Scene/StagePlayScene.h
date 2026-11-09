@@ -13,6 +13,7 @@
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
 #include "FlightUnit/FlightUnitPart.h"
+#include "Loot/LootPickupLog.h"
 #include "StageEnvironment.h"
 #include "StageStreaming.h"
 #include "VerticalMenu.h"
@@ -193,6 +194,8 @@ private:
 	MechThrusters playerThrusters_{ MechThrusters::Preset::Player };
 	Vector2 playerMoveInput_{ 0.0f, 0.0f };
 	bool IsCloudTopIntroActive() const;
+	// 闘技場の水（足場の床・海）を動かして描くか。谷の出口から海が見えるので、ボス戦の前から
+	bool IsBossArenaVisible() const;
 
 	// ----- IPlayerDeathHost 実装（private override。PlayerDeathPart 経由のみ）-----
 	void BurnPlayerWings(float seconds) override;
@@ -216,6 +219,8 @@ private:
 	int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) override;
 	// 飛行ユニット（サブ武器。20_Loadout.md §3）。付けている系統は LoadoutState。シューティングとボス戦の両方で RB の技を使う
 	std::unique_ptr<FlightUnitPart> flightUnit_;
+	// 拾ったアイテムとエーテルを右下に出す（22_ItemDrop.md。落とす・拾うのは RailStagePart の LootDrops）
+	LootPickupLog lootLog_;
 	// 飛行ユニットの毎フレーム（RB の入力・技・クールタイム）
 	void UpdateFlightUnit(class InputActionMap* actions);
 	// 自機の攻撃力（メイン武器の加算・攻撃系の補正込み）。射撃・近接・支援射撃で使う

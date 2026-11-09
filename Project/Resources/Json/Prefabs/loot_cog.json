@@ -1,0 +1,25 @@
+{
+  "kind": "Primitive",
+  "model": { "dir": "", "file": "", "animated": false },
+  "tag": "None",
+  "defaults": { "scale": [0.45, 0.45, 0.45], "rotate": [0, 0, 0] },
+  "primitive": {
+    "primitiveType": 3,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [1.0, 0.78, 0.32, 1.0],
+    "blendMode": 2,
+    "depthWrite": false,
+    "cullBackface": false,
+    "billboardMode": "None",
+    "timeGroup": "World",
+    "ring": {
+      "outerRadius": 1.0,
+      "innerRadius": 0.5,
+      "divisions": 12,
+      "innerColor": [1.0, 0.9, 0.6, 1.0],
+      "outerColor": [1.0, 0.6, 0.15, 1.0],
+      "startAngle": 0,
+      "endAngle": 6.2831854820251465
+    }
+  }
+}

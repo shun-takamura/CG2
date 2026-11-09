@@ -235,6 +235,11 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Score\LoadoutState.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\MainWeaponCatalog.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\ShieldCatalog.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\LootCatalog.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\LootLedger.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\CraftingCatalog.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Loot\LootDrops.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Loot\LootPickupLog.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\DifficultyProfile.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameInspectorSections.cpp" />
     <ClCompile Include="DirectXGame\Game\Editor\GameAssetBrowserSections.cpp" />
@@ -366,6 +371,11 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Score\LoadoutState.h" />
     <ClInclude Include="DirectXGame\Game\Score\MainWeaponCatalog.h" />
     <ClInclude Include="DirectXGame\Game\Score\ShieldCatalog.h" />
+    <ClInclude Include="DirectXGame\Game\Score\LootCatalog.h" />
+    <ClInclude Include="DirectXGame\Game\Score\LootLedger.h" />
+    <ClInclude Include="DirectXGame\Game\Score\CraftingCatalog.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Loot\LootDrops.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Loot\LootPickupLog.h" />
     <ClInclude Include="DirectXGame\Game\Score\DifficultyProfile.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameInspectorSections.h" />
     <ClInclude Include="DirectXGame\Game\Editor\GameAssetBrowserSections.h" />

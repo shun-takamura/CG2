@@ -1,0 +1,31 @@
+{
+  "_comment": "22_ItemDrop.md。装備を作る・強めるのに要る物（展示用：表示するだけで減らさない）。materials の id は Loot.json の items。initial は初期装備。飛行ユニットの levels は [Lv1＝作成, Lv2 への強化, Lv3 への強化]",
+  "mainWeapons": [
+    { "id": "Standard", "initial": true },
+    { "id": "Heavy", "materials": [ { "id": "Cog", "count": 12 }, { "id": "StarShard", "count": 6 }, { "id": "AstralCore", "count": 1 } ], "ether": 600 },
+    { "id": "Light", "materials": [ { "id": "Cog", "count": 15 }, { "id": "StarShard", "count": 4 } ], "ether": 450 }
+  ],
+  "shields": [
+    { "id": "Standard", "initial": true },
+    { "id": "Heavy", "materials": [ { "id": "Cog", "count": 18 }, { "id": "StarShard", "count": 4 }, { "id": "AstralCore", "count": 1 } ], "ether": 600 },
+    { "id": "Mirror", "materials": [ { "id": "StarShard", "count": 10 }, { "id": "AstralCore", "count": 2 } ], "ether": 800 }
+  ],
+  "flightUnits": [
+    { "id": "Wings", "initial": true },
+    { "id": "Assault", "levels": [
+      { "materials": [ { "id": "Cog", "count": 10 }, { "id": "StarShard", "count": 5 }, { "id": "AstralCore", "count": 1 } ], "ether": 500 },
+      { "materials": [ { "id": "Cog", "count": 15 }, { "id": "StarShard", "count": 8 }, { "id": "AstralCore", "count": 2 } ], "ether": 900 },
+      { "materials": [ { "id": "Cog", "count": 20 }, { "id": "StarShard", "count": 12 }, { "id": "AstralCore", "count": 4 } ], "ether": 1500 }
+    ] },
+    { "id": "Guard", "levels": [
+      { "materials": [ { "id": "Cog", "count": 12 }, { "id": "StarShard", "count": 4 }, { "id": "AstralCore", "count": 1 } ], "ether": 500 },
+      { "materials": [ { "id": "Cog", "count": 18 }, { "id": "StarShard", "count": 6 }, { "id": "AstralCore", "count": 2 } ], "ether": 900 },
+      { "materials": [ { "id": "Cog", "count": 24 }, { "id": "StarShard", "count": 10 }, { "id": "AstralCore", "count": 4 } ], "ether": 1500 }
+    ] },
+    { "id": "Mobility", "levels": [
+      { "materials": [ { "id": "Cog", "count": 8 }, { "id": "StarShard", "count": 6 }, { "id": "AstralCore", "count": 1 } ], "ether": 500 },
+      { "materials": [ { "id": "Cog", "count": 12 }, { "id": "StarShard", "count": 10 }, { "id": "AstralCore", "count": 2 } ], "ether": 900 },
+      { "materials": [ { "id": "Cog", "count": 16 }, { "id": "StarShard", "count": 14 }, { "id": "AstralCore", "count": 4 } ], "ether": 1500 }
+    ] }
+  ]
+}

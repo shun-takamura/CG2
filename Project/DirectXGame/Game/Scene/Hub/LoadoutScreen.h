@@ -12,13 +12,15 @@ class Camera;
 class FlightUnitPart;
 class InputManager;
 class JsonValue;
+struct CraftCost;
 struct UIPointer;
 
 /// <summary>
 /// 機体設定（装備画面。20_Loadout.md）の UI と入力。コクピットと同じ緑のネオンで、文字と塗りつぶしの四角だけで描く（TextRenderer）。
 ///  左上：メイン武器 / 盾 / 飛行ユニットのタブ、その下に選んでいるタブの一覧（付けている物に E）
 ///  右上：フレームの合計（攻撃力・HP 上限・移動速度）。カーソルの物に替えたときの値も並べる
-///  右下：カーソルの物の性能と説明文。飛行ユニットは段階（Lv1〜3）を左右で選べる
+///  右下：カーソルの物の性能と説明文。飛行ユニットは段階（Lv1〜3）を左右で選べる。
+///        下の端に「作成／強化に必要」な素材とエーテル（22_ItemDrop.md。展示用で、表示するだけ）
 /// 操作：タブ＝LB/RB・Q/E・クリック、一覧＝上下・W/S・カーソルを合わせる、付ける＝A・Enter・Space・クリック、
 ///       段階＝左右・A/D・◀ ▶ のクリック、戻る＝B・Esc・BackSpace・「戻る」のクリック。
 /// 付けるとすぐ LoadoutState を書き換える（モデルの入れ替えは持ち主がノイズの山で行う）。
@@ -98,6 +100,8 @@ private:
 	FrameStats ComputeFrame(int tab, int index, const FlightUnitPart* unit) const;
 	std::vector<StatLine> ItemStats(int tab, int index, const FlightUnitPart* unit) const;
 	std::string ItemDescription(int tab, int index) const;
+	// 作る・強めるのに要る物（CraftingCatalog）。level は飛行ユニットの段階（他は 1）。表に無ければ nullptr
+	const CraftCost* ItemCost(int tab, int index, int& level) const;
 
 	// 配置（UI の仮想解像度のピクセル）
 	Rect TabRect(int tab) const;
@@ -115,6 +119,8 @@ private:
 	void DrawLeft(float appear, const FlightUnitPart* unit);
 	void DrawRight(const Vector2& screen, float appear, const FlightUnitPart* unit);
 	void DrawFooter(const Vector2& screen, float appear);
+	// 右の枠の下の端に「作成／強化に必要」を描く。描いた高さを返す（measureOnly なら描かずに高さだけ）
+	float DrawCost(const Rect& panel, float appear, bool measureOnly);
 	// 幅に収まるように折り返す（UTF-8 の文字ごと）
 	std::vector<std::string> Wrap(std::string_view text, float scale, float maxWidth) const;
 

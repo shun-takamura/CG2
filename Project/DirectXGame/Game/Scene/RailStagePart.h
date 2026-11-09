@@ -1,6 +1,7 @@
 #pragma once
 #include "Vector3.h"
 #include "ObstacleDebris.h"
+#include "Loot/LootDrops.h"
 #include "Wave/WaveDef.h"
 #include "TimeGroup.h"
 
@@ -76,7 +77,7 @@ public:
 /// StagePlayScene から切り出したパート。IRailStageHost 経由でのみ GameScene/StagePlayScene
 /// の機能を呼ぶ（friend やアクセス修飾子の緩和は使わない）。
 /// </summary>
-class RailStagePart : private IObstacleDebrisHost {
+class RailStagePart : private IObstacleDebrisHost, private ILootDropsHost {
 public:
 	RailStagePart();
 	~RailStagePart();
@@ -134,11 +135,19 @@ public:
 
 	/// <summary>谷の障害物が崩れた部品か（シーン JSON に保存しない）</summary>
 	bool IsObstacleDebris(const IImGuiEditable* entity) const;
+	/// <summary>敵が落とした物か（シーン JSON に保存しない。22_ItemDrop.md）</summary>
+	bool IsLootDrop(const IImGuiEditable* entity) const;
+	/// <summary>落ちている物を全部拾ったことにする（レールのフェーズを抜けるとき）</summary>
+	void CollectAllLoot();
 
 private:
 	// IObstacleDebrisHost（IRailStageHost へ取り次ぐ）
 	IImGuiEditable* SpawnDebrisPiece(const std::string& prefab, const Vector3& pos) override;
 	void DestroyDebrisPiece(IImGuiEditable* entity) override;
+	// ILootDropsHost（同じく IRailStageHost へ取り次ぐ）
+	IImGuiEditable* SpawnLootPiece(const std::string& prefab, const Vector3& pos) override;
+	void DestroyLootPiece(IImGuiEditable* entity) override;
+	bool GetLootCollectPoint(Vector3& out) const override;
 
 	IRailStageHost* host_ = nullptr;
 	Camera* camera_ = nullptr;
@@ -181,6 +190,8 @@ private:
 	WaveDef currentWave_;
 	// 谷の障害物（enemy_type "Obstacle"）が壊れた後の崩れ方（4_StageGimmick.md §11）
 	ObstacleDebris obstacleDebris_;
+	// 敵が落とすアイテムとエーテル（22_ItemDrop.md）
+	LootDrops lootDrops_;
 	std::vector<bool> spawnFired_, retreatFired_;
 	std::vector<float> killAtT_;
 	std::string wavePath_ = "Resources/Json/Waves/stage1.json";

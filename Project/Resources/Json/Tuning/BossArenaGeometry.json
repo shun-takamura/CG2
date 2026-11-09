@@ -1,0 +1,16 @@
+{
+  "_comment": "gen_boss_arena.py が書く。手で直さない（直すならスクリプトの定数を直して流し直す）",
+  "center": [
+    280.0,
+    -148.0,
+    3850.0
+  ],
+  "seaY": -150.0,
+  "waterRadius": 36.0,
+  "curbOuter": 38.0,
+  "curbHeight": 0.4,
+  "playerRadius": 32.0,
+  "cameraRadius": 34.5,
+  "pillarRing": 37.0,
+  "pillarCount": 12
+}

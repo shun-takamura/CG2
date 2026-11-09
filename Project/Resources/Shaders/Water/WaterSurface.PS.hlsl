@@ -90,6 +90,10 @@ cbuffer WaterParams : register(b0)
     float  gHoleHalfWidth;       // 正方形の半分の幅 H [m]
     float  gHoleChamfer;         // 角を落とす量 C [m]
     float2 gHoleCenter;          // 穴の中心（ワールド XZ）
+    // ----- 描く範囲を絞る（ボス戦の足場の円・海の手前の端）-----
+    float2 gKeepCenter;          // 円の中心（ワールド XZ）
+    float  gKeepRadius;          // > 0 ならこの半径の外は描かない
+    float  gClipMinZ;            // ワールド Z がこれより手前は描かない
     float2 gPadding7;
 };
 
@@ -358,6 +362,16 @@ PixelShaderOutput main(WaterVertexOutput input)
         {
             discard;
         }
+    }
+
+    // 描く範囲を絞る：足場の円の外・海岸より手前
+    if (gKeepRadius > 0.0f && length(xz - gKeepCenter) > gKeepRadius)
+    {
+        discard;
+    }
+    if (xz.y < gClipMinZ)
+    {
+        discard;
     }
 
     // 大河モード：川のマップの水深。描かない所は波の計算より先に落とす
