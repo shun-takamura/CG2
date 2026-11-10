@@ -318,6 +318,9 @@
     <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.cpp">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossRig.cpp">
+      <Filter>DirectXGame\Game\Enemy\Boss</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\GameScene.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
@@ -690,6 +693,9 @@
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.h">
+      <Filter>DirectXGame\Game\Enemy\Boss</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossRig.h">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossBrainCommand.h">

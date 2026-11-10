@@ -11,6 +11,8 @@ public:
 	void Update(float dt, BossActionContext& ctx);
 	// true の間は次の行動を選ばない（今の行動は最後までやる）。自機の死亡演出の間（19 番 G3）
 	void SetStandDown(bool standDown) { standDown_ = standDown; }
+	// 部位が壊れた：次の Update で今の行動を打ち切り、seconds 秒ひるむ
+	void RequestStagger(float seconds) { staggerRequest_ = seconds; }
 
 private:
 	void SelectNext(BossActionContext& ctx);
@@ -39,4 +41,5 @@ private:
 	float jumpChance_         = 0.3f; // 攻撃不可時、移動系の中でジャンプを選ぶ確率（残りは接近移動）
 
 	bool standDown_ = false;
+	float staggerRequest_ = -1.0f; // >= 0 で次の Update にひるむ
 };

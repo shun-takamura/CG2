@@ -3,6 +3,7 @@
 #include "Enemy/Boss/IBossAction.h"
 #include "Scene/GameScene.h"
 #include "IImGuiEditable.h"
+#include "Enemy/Boss/BossRig.h"
 
 /// <summary>
 /// 近接攻撃：予兆→ヒット判定（一定時間持続）→硬直。
@@ -23,6 +24,18 @@ public:
 		phase_ = Phase::Telegraph;
 		timer_ = 0.0f;
 		ctx.billboardToPlayer = true;
+		if (ctx.rig) {
+			// 残っている腕で薙ぐ（両方あれば交互）。腕が無ければ何もしない
+			static bool sUseRight = true;
+			sUseRight = !sUseRight;
+			const BossRig::Side first = sUseRight ? BossRig::Side::Right : BossRig::Side::Left;
+			const BossRig::Side second = sUseRight ? BossRig::Side::Left : BossRig::Side::Right;
+			if (ctx.rig->IsArmAlive(first)) side_ = first;
+			else if (ctx.rig->IsArmAlive(second)) side_ = second;
+			else { phase_ = Phase::Done; return; }
+			useArm_ = true;
+			activeDuration_ = (std::max)(activeDuration_, kArmSweepTime);
+		}
 	}
 
 	void Update(float dt, BossActionContext& ctx) override {
@@ -31,13 +44,19 @@ public:
 
 		if (phase_ == Phase::Telegraph) {
 			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
-			// 予兆（判定なし）。将来ここで振りかぶりエフェクト/アニメを鳴らす。
+			// 予兆（判定なし）：腕を外へ振りかぶる
+			if (useArm_ && ctx.rig) ctx.rig->SetArmTarget(side_, kWindRaise, kWindSwing, 0.12f);
 			if (timer_ >= telegraphTime_) {
 				SpawnHitVolume(ctx);
 				phase_ = Phase::Active;
 				timer_ = 0.0f;
 			}
 		} else if (phase_ == Phase::Active) {
+			// 外から内へ低く薙ぐ。判定は拳に付いていく
+			if (useArm_ && ctx.rig) {
+				const float t = (activeDuration_ > 1e-4f) ? (std::min)(timer_ / activeDuration_, 1.0f) : 1.0f;
+				ctx.rig->SetArmTarget(side_, kSweepRaise, kWindSwing + (kSweepEndSwing - kWindSwing) * t, 0.03f);
+			}
 			UpdateHitVolume(ctx);
 			if (timer_ >= activeDuration_) {
 				DestroyHitVolume(ctx);
@@ -45,6 +64,7 @@ public:
 				timer_ = 0.0f;
 			}
 		} else if (phase_ == Phase::Recover) {
+			if (useArm_ && ctx.rig && timer_ < recoverTime_ * 0.6f) ctx.rig->SetArmTarget(side_, kSweepRaise, kSweepEndSwing, 0.08f);
 			if (timer_ >= recoverTime_) phase_ = Phase::Done;
 		}
 	}
@@ -58,7 +78,7 @@ public:
 private:
 	void SpawnHitVolume(BossActionContext& ctx) {
 		if (!ctx.scene) return;
-		const Vector3 pos = ResolveBossHitAnchor(ctx, hitLocalOffset_);
+		const Vector3 pos = HitPos(ctx);
 		hitVolume_ = ctx.scene->SpawnEnemyAt("BossMeleeHit", pos);
 		if (hitVolume_) {
 			hitVolume_->SetRotate(ComputeFacingRotate(ctx)); // OBB を前方（ボス→プレイヤー方向）へ向ける
@@ -68,7 +88,7 @@ private:
 	void UpdateHitVolume(BossActionContext& ctx) {
 		if (!hitVolume_) return;
 		if (Vector3* p = hitVolume_->GetEditableTranslate()) {
-			*p = ResolveBossHitAnchor(ctx, hitLocalOffset_);
+			*p = HitPos(ctx);
 		}
 	}
 
@@ -76,6 +96,12 @@ private:
 		if (!hitVolume_) return;
 		if (ctx.scene) ctx.scene->DestroyDynamicEntity(hitVolume_);
 		hitVolume_ = nullptr;
+	}
+
+	// 腕があれば拳、無ければ従来どおり胴の前
+	Vector3 HitPos(const BossActionContext& ctx) const {
+		if (useArm_ && ctx.rig && ctx.rig->IsArmAlive(side_)) return ctx.rig->GetFistPos(side_);
+		return ResolveBossHitAnchor(ctx, hitLocalOffset_);
 	}
 
 	Vector3 ComputeFacingRotate(const BossActionContext& ctx) const {
@@ -100,4 +126,13 @@ private:
 	Vector3 hitLocalOffset_{ 0.0f, 0.0f, 4.0f }; // アンカーからの前方オフセット（間合い）
 
 	IImGuiEditable* hitVolume_ = nullptr;
+
+	// 腕の薙ぎ払い（BossRig の raise / swing）
+	static constexpr float kArmSweepTime  = 0.35f; // 薙ぐ時間（判定の出ている時間）
+	static constexpr float kWindRaise     = 1.9f;  // 振りかぶり：肩より上
+	static constexpr float kWindSwing     = -1.0f; // 振りかぶり：外へ
+	static constexpr float kSweepRaise    = 0.8f;  // 薙ぐ高さ：拳が自機の胸のあたり
+	static constexpr float kSweepEndSwing = 1.3f;  // 薙ぎ終わり：体の内側の先まで
+	BossRig::Side side_ = BossRig::Side::Right;
+	bool useArm_ = false;
 };

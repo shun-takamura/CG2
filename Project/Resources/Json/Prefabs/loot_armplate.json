@@ -1,0 +1,36 @@
+{
+  "kind": "Primitive",
+  "model": {
+    "dir": "",
+    "file": "",
+    "animated": false
+  },
+  "tag": "None",
+  "defaults": {
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "primitive": {
+    "primitiveType": 1,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [
+      0.95,
+      0.6,
+      0.3,
+      1.0
+    ],
+    "blendMode": 2,
+    "depthWrite": false,
+    "cullBackface": false,
+    "billboardMode": "None",
+    "timeGroup": "World"
+  }
+}

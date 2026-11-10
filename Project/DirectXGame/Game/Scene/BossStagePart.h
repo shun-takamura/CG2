@@ -3,6 +3,8 @@
 #include <string>
 #include "Vector2.h"
 #include "Vector3.h"
+#include "Enemy/Boss/BossRig.h"
+#include "Loot/LootDrops.h"
 
 class Camera;
 class IImGuiEditable;
@@ -24,6 +26,8 @@ public:
 	virtual IImGuiEditable* GetPlayer() const = 0;
 	// Enemy/Boss/Terrain タグの動的エンティティ＋敵コントローラを一括破棄（Reset/シーン再入用）。
 	virtual void ClearBossRuntimeState() = 0;
+	// 実体を 1 つ消す（ボスの手足・破片・落とし物）
+	virtual void DestroyEntity(IImGuiEditable* entity) = 0;
 };
 
 /// <summary>
@@ -31,7 +35,7 @@ public:
 /// ボス生成・ボスAI駆動・地上移動・ロックオン追従カメラを担当する。
 /// 縦スライス最小構成：ボスは静止、1攻撃パターン、カメラはロックオン追従1種のみ。
 /// </summary>
-class BossStagePart {
+class BossStagePart : private IBossRigHost, private ILootDropsHost {
 public:
 	BossStagePart();
 	~BossStagePart();
@@ -150,7 +154,7 @@ private:
 	float   knockbackHop_       = 0.0f;    // 今回の跳ね上げ高さ
 
 	// ボス配置
-	float   bossHeight_  = 2.0f;   // ボス中心の接地高さ（≒コライダー半径）
+	float   bossHeight_  = 3.4f;   // ボス中心の接地高さ（脚の分だけ高い。BossRig の bodyHeight_ と同じ）
 	float   bossForward_ = 12.0f;  // アリーナ中心から +Z にこの距離
 
 	// ----- カメラ（プレイヤー周回・yaw/pitch 駆動の3モード）-----
@@ -177,6 +181,20 @@ private:
 
 	// 闘技場の寸法を読む（無ければ既定値のまま）
 	void LoadArenaGeometry();
+	// HP が尽きたら撃破として参照を切る（手足も外す）
+	void CheckBossDefeated();
+
+	// ----- 手足と部位破壊（22 番 §7.1）-----
+	// IBossRigHost / ILootDropsHost：ホストへ取り次ぐ
+	IImGuiEditable* SpawnRigPiece(const std::string& prefab, const Vector3& pos) override;
+	void DestroyRigPiece(IImGuiEditable* entity) override;
+	IImGuiEditable* SpawnLootPiece(const std::string& prefab, const Vector3& pos) override;
+	void DestroyLootPiece(IImGuiEditable* entity) override;
+	bool GetLootCollectPoint(Vector3& out) const override;
+
+	BossRig   rig_;
+	LootDrops lootDrops_;               // 壊れた腕が落とす素材（落ち方・拾い方はシューティングと同じ）
+	float     partStaggerSeconds_ = 2.0f; // 腕が壊れたときのひるみ [s]
 	// ボス戦の最初のカメラ（自機の開始位置からボスの出る位置を向く）。Enter と着陸の終点で同じ姿勢にする
 	void ComputeStartCamera(Vector3& outEye, float& outYaw, float& outPitch) const;
 

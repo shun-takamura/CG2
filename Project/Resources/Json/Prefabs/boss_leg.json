@@ -1,0 +1,75 @@
+{
+  "kind": "Primitive",
+  "model": {
+    "dir": "",
+    "file": "",
+    "animated": false
+  },
+  "tag": "Boss",
+  "defaults": {
+    "scale": [
+      1.0,
+      2.4,
+      1.0
+    ],
+    "rotate": [
+      0,
+      0,
+      0
+    ]
+  },
+  "primitive": {
+    "primitiveType": 1,
+    "texturePath": "Resources/Textures/white1x1.dds",
+    "color": [
+      0.32,
+      0.3,
+      0.36,
+      1.0
+    ],
+    "blendMode": 1,
+    "depthWrite": true,
+    "alphaReference": 0,
+    "cullBackface": false,
+    "samplerMode": 0,
+    "uvAutoScroll": false,
+    "uvScrollSpeed": [
+      0,
+      0
+    ],
+    "uvOffset": [
+      0,
+      0
+    ],
+    "uvScale": [
+      1,
+      1
+    ],
+    "uvFlipU": false,
+    "uvFlipV": false,
+    "billboardMode": "None",
+    "timeGroup": "World"
+  },
+  "collider": {
+    "shape": "Capsule",
+    "offset": [
+      0,
+      0,
+      0
+    ],
+    "radius": 0.75,
+    "halfExtents": [
+      0.5,
+      1.2,
+      0.5
+    ],
+    "capsuleRadius": 0.75,
+    "capsuleHeight": 2.0
+  },
+  "hp": {
+    "maxHP": 99999
+  },
+  "effects": {
+    "hurt": "Hit_Small"
+  }
+}

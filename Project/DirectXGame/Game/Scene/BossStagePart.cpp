@@ -26,6 +26,32 @@ void BossStagePart::Initialize(IBossStageHost* host, Camera* camera) {
 	host_   = host;
 	camera_ = camera;
 	LoadArenaGeometry();
+	rig_.Initialize(this);
+	lootDrops_.Initialize(this);
+}
+
+IImGuiEditable* BossStagePart::SpawnRigPiece(const std::string& prefab, const Vector3& pos) {
+	return host_ ? host_->SpawnPrefabAt(prefab, pos) : nullptr;
+}
+
+void BossStagePart::DestroyRigPiece(IImGuiEditable* entity) {
+	if (host_ && entity) host_->DestroyEntity(entity);
+}
+
+IImGuiEditable* BossStagePart::SpawnLootPiece(const std::string& prefab, const Vector3& pos) {
+	return host_ ? host_->SpawnPrefabAt(prefab, pos) : nullptr;
+}
+
+void BossStagePart::DestroyLootPiece(IImGuiEditable* entity) {
+	if (host_ && entity) host_->DestroyEntity(entity);
+}
+
+bool BossStagePart::GetLootCollectPoint(Vector3& out) const {
+	IImGuiEditable* player = host_ ? host_->GetPlayer() : nullptr;
+	const Vector3* t = player ? player->GetEditableTranslate() : nullptr;
+	if (!t) return false;
+	out = *t;
+	return true;
 }
 
 void BossStagePart::LoadArenaGeometry() {
@@ -60,11 +86,13 @@ void BossStagePart::Enter() {
 		ctrl->entity_            = boss_;
 		ctrl->billboardToPlayer_ = true;
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
-		auto brain = std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_);
+		auto brain = std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_, &rig_);
 		brain_ = brain.get();
 		cmds.push_back(std::move(brain));
 		ctrl->Init(std::move(cmds));
 		host_->RegisterEnemyController(std::move(ctrl));
+		// 手足（腕は壊せる部位）
+		rig_.Spawn(boss_);
 	}
 
 	// プレイヤーをボス手前の地上へ配置（レール終端の camera-local 位置から地上へリセット）。
@@ -259,6 +287,27 @@ bool BossStagePart::ConsumeLandingTouchdown() {
 void BossStagePart::Update(float worldDt) {
 	if (!bossSpawned_ || !host_) return;
 
+	CheckBossDefeated();
+
+	// ボスAI（敵コントローラ）駆動。静止ボスなので stageTimeSec は未使用（0 を渡す）。
+	host_->UpdateEnemyControllers(worldDt, host_->GetPlayer(), 0.0f);
+
+	// 手足：本体の動きに付け直し、部位のダメージを本体へ回す。腕が壊れたらひるませて素材を落とす
+	rig_.Update(worldDt);
+	BossRig::Side brokenSide;
+	Vector3 brokenPos;
+	while (rig_.PopBrokenArm(brokenSide, brokenPos)) {
+		if (brain_) brain_->RequestStagger(partStaggerSeconds_);
+		lootDrops_.DropFrom("boss_arm", brokenPos);
+	}
+	lootDrops_.Update(worldDt);
+
+	// 部位から回したダメージで本体が倒れることがある。掃除（実体の破棄）の前にもう一度見る
+	CheckBossDefeated();
+	host_->SweepDeadEntities();
+}
+
+void BossStagePart::CheckBossDefeated() {
 	// 撃破検出：HP が尽きたら参照を切る（この後の SweepDeadEntities が実体を破棄＋death エフェクト）。
 	// 参照を切る前にスコア値をキャプチャしておく（切った後は Gameplay::Of(boss_) が参照できない）。
 	if (boss_ && Gameplay::Of(boss_).GetHP().IsDead()) {
@@ -266,11 +315,8 @@ void BossStagePart::Update(float worldDt) {
 		bossJustDefeated_ = true;
 		boss_ = nullptr;
 		brain_ = nullptr;   // この後の SweepDeadEntities でコントローラごと破棄される
+		rig_.BreakAll();    // 手足も外れて落ちる
 	}
-
-	// ボスAI（敵コントローラ）駆動。静止ボスなので stageTimeSec は未使用（0 を渡す）。
-	host_->UpdateEnemyControllers(worldDt, host_->GetPlayer(), 0.0f);
-	host_->SweepDeadEntities();
 }
 
 void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const {
@@ -513,6 +559,9 @@ bool BossStagePart::ConsumeBossDefeated() {
 }
 
 void BossStagePart::Reset() {
+	// 手足（tag None の拳・破片も含む）と落とし物は先に消す（ClearBossRuntimeState は Boss タグ等しか消さない）
+	rig_.Clear();
+	lootDrops_.Clear();
 	if (host_) host_->ClearBossRuntimeState();
 	landingActive_ = false;
 	landingTouchedDown_ = false;
@@ -544,6 +593,10 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Dodge Dash Speed", &dodgeDashSpeed_, 0.5f, 0.0f, 120.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+
+		ImGui::SeparatorText("Parts (手足・部位破壊)");
+		ImGui::DragFloat("Part Stagger (s)", &partStaggerSeconds_, 0.05f, 0.0f, 10.0f, "%.2f");
+		rig_.OnImGui();
 
 		ImGui::SeparatorText("Landing (谷の出口 → 闘技場)");
 		ImGui::Text("Landing: %s  %.2f / %.2f s", landingActive_ ? "active" : "-", landingTimer_, landingDuration_);

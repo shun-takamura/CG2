@@ -6,6 +6,7 @@
 #include "IImGuiEditable.h"
 
 class GameScene;
+class BossRig;
 
 /// <summary>
 /// ボス行動（移動/攻撃/反撃）に渡すコンテキスト。雑魚敵の EnemyContext とは独立して定義し、
@@ -23,6 +24,9 @@ struct BossActionContext {
 	// アリーナ（突進/跳躍の着地点をこの円内へ収める）。radius <= 0 なら制限なし
 	Vector3 arenaCenter{ 0.0f, 0.0f, 0.0f };
 	float   arenaRadius = 0.0f;
+
+	// 手足（無ければ null）。攻撃は腕の構えを指示し、近接の判定は拳に付ける
+	BossRig* rig = nullptr;
 };
 
 // 予兆の点滅色。溜めの終わりに近づくほど濃く・速く点滅させ、「もうすぐ来る」を伝える

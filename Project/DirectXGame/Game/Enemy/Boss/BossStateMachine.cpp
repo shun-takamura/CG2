@@ -15,6 +15,7 @@
 #include "SoundManager.h"
 #include "Scene/GameScene.h"
 #include "Score/DifficultyProfile.h"
+#include "Enemy/Boss/BossRig.h"
 
 namespace {
 	// 発狂移行の咆哮：攻撃はせず、画面を揺らし爆発エフェクトと白の激しい点滅で「ここから本気」を見せる。
@@ -50,12 +51,67 @@ namespace {
 		float duration_ = 1.5f;
 		float shakeIntensity_ = 0.35f;
 	};
+
+	// ひるみ（部位破壊の直後）：攻撃せず、沈んでよろめき、白く点滅する。残った腕はだらりと垂らす
+	class BossStagger : public IBossAction {
+	public:
+		explicit BossStagger(float duration) : duration_(duration) {}
+
+		void OnEnter(BossActionContext& ctx) override {
+			timer_ = 0.0f;
+			ctx.billboardToPlayer = false;
+			if (const Vector3* bp = ctx.boss ? ctx.boss->GetEditableTranslate() : nullptr) baseY_ = bp->y;
+			if (ctx.scene) {
+				if (Camera* cam = ctx.scene->GetCamera()) cam->Shake(0.25f, 0.4f);
+			}
+		}
+
+		void Update(float dt, BossActionContext& ctx) override {
+			timer_ += dt;
+			ctx.billboardToPlayer = false;
+			const float t = (duration_ > 1e-4f) ? (std::min)(timer_ / duration_, 1.0f) : 1.0f;
+			// 沈み込み → 戻る。左右に揺れる
+			if (Vector3* bp = ctx.boss ? ctx.boss->GetEditableTranslate() : nullptr) {
+				bp->y = baseY_ - sinkDepth_ * std::sin(3.14159265f * t);
+			}
+			if (ctx.boss) {
+				if (const Vector3* r = ctx.boss->GetEditableRotate()) {
+					ctx.boss->SetRotate({ r->x, r->y + std::sin(timer_ * 14.0f) * 0.02f * (1.0f - t), r->z });
+				}
+			}
+			const float blink = 0.5f + 0.5f * std::cos(6.2831853f * 6.0f * timer_);
+			ctx.tint = { 1.0f, 1.0f, 1.0f, blink * (1.0f - t) * 0.8f };
+			if (ctx.rig) {
+				ctx.rig->SetArmTarget(BossRig::Side::Left, 0.45f, -0.3f, 0.15f);
+				ctx.rig->SetArmTarget(BossRig::Side::Right, 0.45f, -0.3f, 0.15f);
+			}
+		}
+
+		void OnExit(BossActionContext& ctx) override {
+			if (Vector3* bp = ctx.boss ? ctx.boss->GetEditableTranslate() : nullptr) bp->y = baseY_;
+			ctx.billboardToPlayer = true;
+		}
+
+		bool IsFinished() const override { return timer_ >= duration_; }
+
+	private:
+		float timer_ = 0.0f;
+		float duration_ = 2.0f;
+		float sinkDepth_ = 0.8f;
+		float baseY_ = 0.0f;
+	};
 }
 #include "IImGuiEditable.h"
 
 void BossStateMachine::Update(float dt, BossActionContext& ctx) {
 	if (attackCooldown_ > 0.0f) attackCooldown_ -= dt;
 	if (jumpCooldown_   > 0.0f) jumpCooldown_   -= dt;
+	if (staggerRequest_ >= 0.0f) {
+		// 今の行動は OnExit で後始末される（判定の消去・高さの戻し）
+		manager_.Start(std::make_unique<BossStagger>(staggerRequest_), ctx);
+		staggerRequest_ = -1.0f;
+		attackCooldown_ = (std::max)(attackCooldown_, 0.6f);
+	}
 	manager_.Update(dt, ctx);
 	if (manager_.IsIdle() && !standDown_) SelectNext(ctx);
 }
@@ -93,7 +149,14 @@ void BossStateMachine::StartAttack(BossActionContext& ctx, bool rage) {
 	// 重み付き抽選。近接レンジ内は近距離技中心、レンジ外は弾幕中心。
 	static constexpr float kNearWeights[kKindCount] = { 35.0f, 20.0f, 25.0f, 20.0f, 0.0f, 0.0f };
 	static constexpr float kFarWeights[kKindCount]  = { 0.0f, 15.0f, 20.0f, 15.0f, 30.0f, 20.0f };
-	const float* weights = IsPlayerInMeleeRange(ctx) ? kNearWeights : kFarWeights;
+	float weights[kKindCount];
+	const float* base = IsPlayerInMeleeRange(ctx) ? kNearWeights : kFarWeights;
+	for (int i = 0; i < kKindCount; ++i) weights[i] = base[i];
+	// 腕が両方壊れたら腕の薙ぎ払いは無い（その分は突進へ）
+	if (ctx.rig && !ctx.rig->HasAnyArm()) {
+		weights[kCharge] += weights[kMelee];
+		weights[kMelee] = 0.0f;
+	}
 
 	float total = 0.0f;
 	for (int i = 0; i < kKindCount; ++i) total += weights[i];

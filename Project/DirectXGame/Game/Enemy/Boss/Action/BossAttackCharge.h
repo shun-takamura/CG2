@@ -1,6 +1,7 @@
 #pragma once
 #include "Enemy/Boss/IBossAction.h"
 #include "Scene/GameScene.h"
+#include "Enemy/Boss/BossRig.h"
 
 /// <summary>
 /// 突進：予兆（プレイヤーを向いて溜め）→予兆終了時のプレイヤー位置を突き抜ける直線ダッシュ→硬直。
@@ -26,14 +27,16 @@ public:
 		if (phase_ == Phase::Telegraph) {
 			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			ctx.billboardToPlayer = true;
+			SetArms(ctx, -0.5f, -0.4f, 0.2f); // 両腕を後ろへ引いて溜める
 			if (timer_ >= telegraphTime_) {
 				if (!BeginDash(ctx)) { phase_ = Phase::Done; return; }
 				phase_ = Phase::Dash;
 				timer_ = 0.0f;
 			}
 		} else if (phase_ == Phase::Dash) {
-			// 突進中は向きを固定（振り向かない）
+			// 突進中は向きを固定（振り向かない）。両腕を前へ突き出す
 			ctx.billboardToPlayer = false;
+			SetArms(ctx, 1.45f, 0.25f, 0.05f);
 			float t = (dashDuration_ > 1e-4f) ? (timer_ / dashDuration_) : 1.0f;
 			if (t > 1.0f) t = 1.0f;
 			const float e = t * t * (3.0f - 2.0f * t);
@@ -81,6 +84,12 @@ private:
 		return true;
 	}
 
+	static void SetArms(BossActionContext& ctx, float raise, float swing, float smoothTime) {
+		if (!ctx.rig) return;
+		ctx.rig->SetArmTarget(BossRig::Side::Left, raise, swing, smoothTime);
+		ctx.rig->SetArmTarget(BossRig::Side::Right, raise, swing, smoothTime);
+	}
+
 	void DestroyHitVolume(BossActionContext& ctx) {
 		if (!hitVolume_) return;
 		if (ctx.scene) ctx.scene->DestroyDynamicEntity(hitVolume_);
@@ -94,7 +103,8 @@ private:
 	float dashDuration_ = 0.6f;
 	float overshoot_ = 6.0f;          // プレイヤー位置からさらに進む距離 [m]
 	float recoverTime_ = 0.8f;
-	Vector3 hitLocalOffset_{ 0.0f, 0.0f, 1.5f };
+	// 胴の中心は脚の分だけ高い（地面から 3.4m）ので、判定は自機の胸の高さまで下げる
+	Vector3 hitLocalOffset_{ 0.0f, -1.6f, 1.5f };
 
 	Vector3 startPos_{ 0.0f, 0.0f, 0.0f };
 	Vector3 goalPos_{ 0.0f, 0.0f, 0.0f };
