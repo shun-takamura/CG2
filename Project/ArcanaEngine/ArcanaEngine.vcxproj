@@ -85,6 +85,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\CameraCapture.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\CameraPreviewSprite.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Media\MoviePlayer.cpp" />
     <ClCompile Include="..\DirectXGame\Debug\Debug.cpp" />
     <ClCompile Include="..\DirectXGame\Debug\LogBuffer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Core\Input\ControllerInput.cpp" />
@@ -276,6 +277,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Math\QuaternionTransform.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\CameraCapture.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\CameraPreviewSprite.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Media\MoviePlayer.h" />
     <ClInclude Include="..\DirectXGame\Debug\Debug.h" />
     <ClInclude Include="..\DirectXGame\Debug\LogBuffer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Core\Input\ControllerInput.h" />

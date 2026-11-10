@@ -17,6 +17,7 @@
 #include "StageEnvironment.h"
 #include "StageStreaming.h"
 #include "VerticalMenu.h"
+#include "ControlGuide.h"
 #include "AttractMode.h"
 #include <functional>
 #include <memory>
@@ -673,6 +674,7 @@ private:
 	void RebuildUiAfterSceneLoad();
 	PauseView pauseView_ = PauseView::Main;
 	VerticalMenu pauseMenu_;
+	ControlGuide controlGuide_;   // ポーズの「操作ガイド」（開いている間はメニューの代わりに描く）
 	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため dynamicSprites_ 外で所有）
 	void OpenPauseMenu();
 	void ClosePauseMenu();

@@ -256,8 +256,9 @@ def collect_entries(resources_root: Path,
     # プロジェクトルートからの相対パス（"Resources/..." 形式）に統一
     # AssetLocator::Open の引数と一致させる
     project_root = resources_root.parent
-    # シェーダは pack に含めない。.hlsl も .cso も DirectXCore が FS から個別に読むため
-    skip_dirs = [resources_root / "Shaders", resources_root / "CompiledShaders"]
+    # シェーダは pack に含めない。.hlsl も .cso も DirectXCore が FS から個別に読むため。
+    # 動画（Movies）も MoviePlayer が Media Foundation で FS から直接読むので入れない（大きいので pack が膨らむ）
+    skip_dirs = [resources_root / "Shaders", resources_root / "CompiledShaders", resources_root / "Movies"]
 
     DDS_HEADER_SIZE = 148  # DDS magic(4) + DDS_HEADER(124) + DDS_HEADER_DXT10(20)
 

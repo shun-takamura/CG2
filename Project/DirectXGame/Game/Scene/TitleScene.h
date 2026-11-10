@@ -14,6 +14,7 @@ class Object3DInstance;
 class WaterReflection;
 class WaterSurface;
 class CloudLayer;
+class TitleDemoMovie;
 struct Material;
 
 /// <summary>
@@ -76,6 +77,8 @@ private:
 	void ReleaseDoorPointLight();
 	void SetSunYaw(float cameraStopAngle);
 	void UpdatePostEffect();
+	// 「ゲーム終了」と「PRESS ANY BUTTON」（Flush まで）
+	void DrawTexts();
 	float GetPostEffectFade() const;
 	void OnImGuiTuning();
 
@@ -98,6 +101,9 @@ private:
 
 	// 遠景の雲。Skybox と水面が同じ CB を挿すので、空と映り込みで形がずれない
 	std::unique_ptr<CloudLayer> cloudLayer_;
+
+	// 放置したらデモ映像を流す（展示用。TitleDemo.json）
+	std::unique_ptr<TitleDemoMovie> demoMovie_;
 
 	// デバッグカメラで差し替わる前のゲームカメラ（反射はこの視点で作る）
 	Matrix4x4 gameViewProjection_{};

@@ -592,3 +592,39 @@ tools/BlenderPipeline/gen_title_door.py（寸法・金の配置をパラメー�
 - [ ] 台座の手前の上面の網目ノイズ（影のアクネか、水面と 5cm で深度が競合しているか未切り分け）
 - [ ] `Game.cpp` の Debug 開始シーンが `"TITLE"` のまま（確認が終わったら `"STAGEPLAY"` に戻す）
 - 形や色を変えるときは Blender で直接いじらず、スクリプトのパラメータを直して作り直す（§10.8）
+
+## 11. 放置デモ（展示用・2026-11-10）
+
+タイトルで一定時間なにも触らないと、黒へフェードしてデモ映像（mp4）をループで流す。何か触るとタイトルへ戻り、そのまま普通に始められる。見る人向け（遊ぶ人向けはポーズ画面の操作ガイド＝別チャット）。これに合わせ、前のデモモード（`AttractMode`）が Release で起動時から始まる所は消した（F8 と各シーンの分岐はコンテストの後まで残す。18 番「デモモード」）。
+
+### 11.1 決めたこと（ユーザー）
+
+- 待ち時間は 30 秒くらい（`Resources/Json/Tuning/TitleDemo.json` の `idleSeconds`）。Debug は Title Tuning →「Mouse Ripple / Attract」の `Demo Movie Idle (s)` で短くして試せる
+- 戻るきっかけ：マウスを動かす・キー・ゲームパッド（ボタン・トリガー・スティック）のどれでも。きっかけの入力はタイトルに渡さない
+- 映像はユーザーが OBS などで録る（装備の切り替え・難易度・ジャスト回避と派生・近接・RB のスキル・精密射撃・ボス撃破からクリアまで）。差し替えるときは同じ名前で `Resources/Movies/TitleDemo.mp4` に置くだけ
+- 音は出さない（動画の音は読まない）。タイトルの BGM がそのまま流れる。動画の音はコンテストの後
+
+### 11.2 作り
+
+- `GameEngine/Media/MoviePlayer`（エンジン。ArcanaEngine へ同期が要る）：`CameraCapture` と同じ作り。Media Foundation の SourceReader を別スレッドで回し、RGB32（BGRA）に変えた最新の 1 フレームだけをメインへ渡して `TextureManager` の動的テクスチャへ送る
+  - 再生の速さは実時間（`steady_clock`）。フレームの時刻まで別スレッドで待つ。250ms より遅れたら時計を合わせ直す（早送りにしない）
+  - 終わりまで来たら `SetCurrentPosition(0)` でループ。映像のストリームだけ読む
+  - `MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING`＋`MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS`（HEVC の録画も GPU のデコーダーで読めるように）。行の幅は `IMF2DBuffer::Lock2D` で取る（1080p の 1088 行対策）
+  - テクスチャは消せないので、名前に大きさを付けて（`##TitleDemoMovie##_1920x1080` など）一度だけ作り、次の再生で使い回す
+- `Game/Scene/Title/TitleDemoMovie`（ゲーム）：放置の時間（実時間）→ 黒へフェード（`fadeInSeconds`）→ 動画を開いて流す（最初のフレームから `movieFadeInSeconds` で映像を出す。縦横比を保ち、余りは黒）→ 触ったら止めて `returnFadeSeconds` で戻る → `inputGraceSeconds` の間はタイトルの入力を読まない
+  - 放置の時間を数えないのは：⑥ 扉に入る途中・トランジション中・F8 のデモモード中
+  - 動画が無ければ流さない（タイトルのまま）。読めなかったら黒から戻ってログに出す
+  - 描く場所はタイトルの `Draw` の最後（シーンの RT・文字の上）
+- `TitleScene`：`Update` で入力処理の前に `TitleDemoMovie::Update`、`BlocksTitleInput()` の間は `UpdateInput` を呼ばない
+
+### 11.3 配布
+
+動画は **pack に入れず FS から直接読む**（`pack_assets.py` の `skip_dirs` に `Resources/Movies` を足した）。配布 ZIP へは `package_release.py` の `FS_INCLUDE_DIRS` に `Resources/Movies` を足したので、Release ビルドで ZIP を作れば `Resources/Movies/TitleDemo.mp4` が入る。ZIP を作る前に、本番の動画が `Project/Resources/Movies/TitleDemo.mp4` にあるか確かめる。
+
+### 11.4 確認
+
+- [ ] ビルド（Debug / Release）
+- [ ] タイトルで放置 → 黒へフェード → 映像がループで流れる。BGM はタイトルのまま
+- [ ] マウスを動かす・キー・パッドで戻る。戻った入力で扉に入ったり「ゲーム終了」が選ばれたりしない。戻ってから普通に始められる
+- [ ] Release の exe を起動してもデモモード（「デモプレイ中」）で始まらない
+- [ ] 配布 ZIP に `Resources/Movies/TitleDemo.mp4` が入っていて、ZIP から起動しても流れる

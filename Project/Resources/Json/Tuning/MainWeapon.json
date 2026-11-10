@@ -4,7 +4,7 @@
   "weapons": [
     {
       "id": "Standard",
-      "displayName": "セラフ・ロッド",
+      "displayName": "スタンダードライフル",
       "description": "癖のない標準の武器。連射・チャージ・弾の速さがそろっている。",
       "attackBonus": 4,
       "fireRate": 0.30000001192092896,
@@ -89,7 +89,7 @@
     },
     {
       "id": "Heavy",
-      "displayName": "アーク・ランス",
+      "displayName": "ヘビーライフル",
       "description": "重い一撃。連射とチャージは遅いが、弾が大きくよく曲がり、チャージ弾はビームのように速い。",
       "attackBonus": 10,
       "fireRate": 0.44999998807907104,
@@ -174,7 +174,7 @@
     },
     {
       "id": "Light",
-      "displayName": "フェザー・ニードル",
+      "displayName": "ライトライフル",
       "description": "軽く速い。弾は小さく曲がりにくいが、連射とチャージが速く、貫通するチャージ弾を何度も撃てる。",
       "attackBonus": 0,
       "fireRate": 0.18000000715255737,
