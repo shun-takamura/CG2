@@ -149,6 +149,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Spline\CameraRotKey.cpp" />
     <ClCompile Include="DirectXGame\Game\Spline\RailAimController.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp" />
+    <ClCompile Include="DirectXGame\Game\UI\ControlGuide.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp" />
     <ClCompile Include="DirectXGame\Game\UI\UIPointer.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\HubScene.cpp" />
@@ -201,6 +202,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\RiverWater.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\StageStreaming.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ObstacleDebris.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\Title\TitleDemoMovie.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\GameOverScene.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\DemoScene.cpp" />
@@ -252,6 +254,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Spline\CameraRotKey.h" />
     <ClInclude Include="DirectXGame\Game\Spline\RailAimController.h" />
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h" />
+    <ClInclude Include="DirectXGame\Game\UI\ControlGuide.h" />
     <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h" />
     <ClInclude Include="DirectXGame\Game\UI\UIPointer.h" />
     <ClInclude Include="DirectXGame\Game\Scene\HubScene.h" />
@@ -304,6 +307,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\RiverWater.h" />
     <ClInclude Include="DirectXGame\Game\Scene\StageStreaming.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ObstacleDebris.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\Title\TitleDemoMovie.h" />
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\GameOverScene.h" />
     <ClInclude Include="DirectXGame\Game\Scene\DemoScene.h" />

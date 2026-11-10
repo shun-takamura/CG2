@@ -1,0 +1,8 @@
+{
+  "idleSeconds": 30.0,
+  "fadeInSeconds": 1.0,
+  "movieFadeInSeconds": 0.5,
+  "returnFadeSeconds": 0.3,
+  "inputGraceSeconds": 0.3,
+  "moviePath": "Resources/Movies/TitleDemo.mp4"
+}

@@ -133,6 +133,22 @@ public:
 	/// </summary>
 	bool GetUIPosition(float& x, float& y) const;
 
+	//====================
+	// カーソルの閉じ込め
+	//====================
+
+	/// <summary>
+	/// カーソルをゲーム画面の枠（黒帯を除く）に閉じ込めるか。ウィンドウが手前にある間だけ効く。
+	/// 既定は Debug だけオフ（ImGui のエディタで窓の外を触るため）
+	/// </summary>
+	void SetConfineCursor(bool confine);
+	bool IsConfineCursor() const { return confineCursor_; }
+
+private:
+	// 毎フレーム、手前にあれば枠へ閉じ込め、そうでなければ外す
+	void UpdateCursorClip();
+	void ReleaseCursorClip();
+
 private:
 	WindowsApplication* winApp_ = nullptr;
 
@@ -146,4 +162,12 @@ private:
 
 	POINT screenPosition_{};                    // スクリーン座標
 	POINT clientPosition_{};                    // クライアント座標（ウィンドウ内座標）
+
+#ifdef _DEBUG
+	bool confineCursor_ = false;
+#else
+	bool confineCursor_ = true;
+#endif
+	bool cursorClipped_ = false;                // 今 ClipCursor を掛けているか
+	RECT clipRect_{};                           // 掛けている範囲（同じなら掛け直さない）
 };

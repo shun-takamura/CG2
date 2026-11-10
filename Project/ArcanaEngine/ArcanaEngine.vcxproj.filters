@@ -82,6 +82,9 @@
     <Filter Include="DirectXGame\GameEngine\Scene">
       <UniqueIdentifier>{e93f3208-7c98-50fc-82fa-901384ed2f20}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\GameEngine\Media">
+      <UniqueIdentifier>{541e5b7b-dd78-59d1-904f-17879078ef74}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\GameEngine\Sound">
       <UniqueIdentifier>{37574457-54f6-5c22-8a0f-6e6219682c2f}</UniqueIdentifier>
     </Filter>
@@ -173,6 +176,9 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\CameraPreviewSprite.cpp">
       <Filter>DirectXGame\GameEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Media\MoviePlayer.cpp">
+      <Filter>DirectXGame\GameEngine\Media</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\Debug\Debug.cpp">
       <Filter>DirectXGame\Debug</Filter>
@@ -649,6 +655,9 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\CameraPreviewSprite.h">
       <Filter>DirectXGame\GameEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Media\MoviePlayer.h">
+      <Filter>DirectXGame\GameEngine\Media</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\Debug\Debug.h">
       <Filter>DirectXGame\Debug</Filter>

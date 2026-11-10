@@ -10,6 +10,8 @@ MouseInput::MouseInput() {
 }
 
 MouseInput::~MouseInput() {
+	ReleaseCursorClip();
+
 	// マウスデバイスの解放
 	if (mouse_) {
 		mouse_->Unacquire();
@@ -82,6 +84,8 @@ void MouseInput::Update() {
 		ZeroMemory(&currentState_, sizeof(currentState_));
 	}
 
+	UpdateCursorClip();
+
 	// スクリーン座標を取得
 	GetCursorPos(&screenPosition_);
 
@@ -104,6 +108,51 @@ bool MouseInput::GetUIPosition(float& x, float& y) const {
 	x = (x - rect.x) * (uiW / rect.width);
 	y = (y - rect.y) * (uiH / rect.height);
 	return x >= 0.0f && y >= 0.0f && x < uiW && y < uiH;
+}
+
+void MouseInput::SetConfineCursor(bool confine) {
+	confineCursor_ = confine;
+	if (!confine) ReleaseCursorClip();
+}
+
+void MouseInput::UpdateCursorClip() {
+	if (!winApp_ || !confineCursor_) {
+		ReleaseCursorClip();
+		return;
+	}
+	HWND hwnd = winApp_->GetHwnd();
+	if (GetForegroundWindow() != hwnd || IsIconic(hwnd)) {
+		ReleaseCursorClip();
+		return;
+	}
+
+	// GetUIPosition と同じ枠（黒帯を除いたゲーム画面）をスクリーン座標にする
+	const WindowsApplication::OutputRect rect =
+		WindowsApplication::ComputeOutputRect(winApp_->GetClientWidth(), winApp_->GetClientHeight());
+	if (rect.width <= 0.0f || rect.height <= 0.0f) {
+		ReleaseCursorClip();
+		return;
+	}
+	POINT topLeft{ static_cast<LONG>(rect.x), static_cast<LONG>(rect.y) };
+	POINT bottomRight{ static_cast<LONG>(rect.x + rect.width), static_cast<LONG>(rect.y + rect.height) };
+	ClientToScreen(hwnd, &topLeft);
+	ClientToScreen(hwnd, &bottomRight);
+	const RECT clip{ topLeft.x, topLeft.y, bottomRight.x, bottomRight.y };
+
+	// ほかのアプリが外すこともあるので、範囲が同じでも今の閉じ込めと違えば掛け直す
+	RECT current{};
+	GetClipCursor(&current);
+	if (cursorClipped_ && EqualRect(&clip, &clipRect_) && EqualRect(&clip, &current)) return;
+	if (ClipCursor(&clip)) {
+		clipRect_ = clip;
+		cursorClipped_ = true;
+	}
+}
+
+void MouseInput::ReleaseCursorClip() {
+	if (!cursorClipped_) return;
+	ClipCursor(nullptr);
+	cursorClipped_ = false;
 }
 
 void MouseInput::ApplyReplay(LONG dx, LONG dy, LONG wheel, int btnMask) {

@@ -7,12 +7,8 @@ AttractMode* AttractMode::GetInstance() {
 	return &instance;
 }
 
-AttractMode::AttractMode() {
-	// 展示用の Release の exe は起動したときからデモモード（Development は NDEBUG と USE_PEPPER の両方を持つので除く）
-#if defined(NDEBUG) && !defined(USE_PEPPER)
-	SetEnabled(true);
-#endif
-}
+// 2026-11-10：Release の exe で起動時から始めるのはやめた（展示はタイトルの放置デモ＝TitleDemoMovie で動画を流す）。F8 で始めるのは残す
+AttractMode::AttractMode() = default;
 
 void AttractMode::SetEnabled(bool enabled) {
 	// 始めるたびに、最初の周は一人称から

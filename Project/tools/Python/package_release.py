@@ -40,6 +40,7 @@ FS_INCLUDE_DIRS = [
     RESOURCES_DIR / "CompiledShaders",
     RESOURCES_DIR / "Json",     # シーン/プリファブ/チューニング/キーコンフィグ等
     RESOURCES_DIR / "Sounds",   # MediaFoundation が URL で直接読む .wav
+    RESOURCES_DIR / "Movies",   # タイトルの放置デモの .mp4（MoviePlayer が MediaFoundation で直接読む）
 ]
 
 # Release ディレクトリから取り込む拡張子

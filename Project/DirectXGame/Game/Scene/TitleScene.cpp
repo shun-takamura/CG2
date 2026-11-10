@@ -28,6 +28,7 @@
 #include "Cloud/CloudLayer.h"
 #include "Effect/EffectManager.h"
 #include "AttractMode.h"
+#include "Title/TitleDemoMovie.h"
 #include "UIPointer.h"
 #include "KeyboardInput.h"
 #include "MouseInput.h"
@@ -201,6 +202,9 @@ void TitleScene::Initialize() {
 
 	SoundManager::GetInstance()->Play2DSoundLooped(kTitleBgm, bgmVolume_);
 
+	demoMovie_ = std::make_unique<TitleDemoMovie>();
+	demoMovie_->Initialize(spriteManager_, input_);
+
 	// まだどちらも反射に登録していない状態から、ロゴだけを出す（扉は ③ で出す）
 	logoVisible_ = false;
 	doorVisible_ = false;
@@ -212,6 +216,7 @@ void TitleScene::Initialize() {
 void TitleScene::Finalize() {
 	Game::GetPostEffect()->ResetEffects();
 	SoundManager::GetInstance()->Stop2DSound(kTitleBgm);
+	if (demoMovie_) demoMovie_->Finalize();
 	ReleaseDoorPointLight();
 	// cloudLayer_ はこのシーンと一緒に消えるので、共有の Object3DManager から外しておく
 	object3DManager_->SetCloudLayer(nullptr);
@@ -409,7 +414,16 @@ void TitleScene::Update() {
 	OnImGuiTuning();
 #endif
 
-	if (SceneManager::GetInstance()->IsTransitioning()) {
+	const bool transitioning = SceneManager::GetInstance()->IsTransitioning();
+	// 放置デモ：扉に入る所・トランジション中・F8 のデモモード中は数えない。入力処理より先に見て、
+	// 映像中と戻った直後はタイトルに入力を渡さない（戻るきっかけの入力が決定などに化けないように）
+	if (demoMovie_) {
+		const bool canIdle = !transitioning && phase_ != Phase::Enter && !AttractMode::GetInstance()->IsEnabled();
+		demoMovie_->Update(canIdle);
+		if (demoMovie_->BlocksTitleInput()) return;
+	}
+
+	if (transitioning) {
 		return;
 	}
 
@@ -966,8 +980,19 @@ void TitleScene::Draw() {
 	DrawGlobalEffects();
 
 	TextRenderer* tr = TextRenderer::GetInstance();
-	if (!tr->IsInitialized()) return;
+	if (tr->IsInitialized()) {
+		DrawTexts();
+	}
 
+	// 放置デモの黒い幕と映像は、文字も含めた全部の上に重ねる。文字が RT を替えることがあるので付け直す
+	if (demoMovie_) {
+		commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
+		demoMovie_->Draw();
+	}
+}
+
+void TitleScene::DrawTexts() {
+	TextRenderer* tr = TextRenderer::GetInstance();
 	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
 	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
 
@@ -1050,6 +1075,8 @@ void TitleScene::OnImGuiTuning() {
 			ImGui::DragFloat("Ripple Max Strength", &mouseRippleMaxStrength_, 0.0005f, 0.0f, 0.2f, "%.4f");
 			ImGui::DragFloat("Ripple Spacing [m]", &mouseRippleSpacing_, 0.01f, 0.01f, 2.0f);
 			ImGui::Separator();
+			// 放置デモ（TitleDemo.json）。ボタンで始めるとクリックで即戻るので、待ち時間を短くして試す
+			if (demoMovie_) ImGui::DragFloat("Demo Movie Idle (s)", &demoMovie_->idleSeconds, 0.5f, 1.0f, 300.0f);
 			auto* attract = AttractMode::GetInstance();
 			bool attractOn = attract->IsEnabled();
 			if (ImGui::Checkbox("Attract Mode (F8)", &attractOn)) attract->SetEnabled(attractOn);

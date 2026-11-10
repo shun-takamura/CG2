@@ -55,6 +55,9 @@
     <Filter Include="DirectXGame\Game\Scene\Loot">
       <UniqueIdentifier>{5f9b624e-f594-4ce9-b4c8-cd5e2e8e461f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Title">
+      <UniqueIdentifier>{2723f317-79ca-50f1-9cfc-e67173c0251b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Score">
       <UniqueIdentifier>{7f345a6a-ad88-52dd-8bce-f2d93e90f0bc}</UniqueIdentifier>
     </Filter>
@@ -127,6 +130,9 @@
       <Filter>DirectXGame\Game\Spline</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\UI\Reticle.cpp">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\UI\ControlGuide.cpp">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp">
@@ -285,6 +291,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\ObstacleDebris.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Title\TitleDemoMovie.cpp">
+      <Filter>DirectXGame\Game\Scene\Title</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\ResultScene.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
@@ -426,6 +435,9 @@
       <Filter>DirectXGame\Game\Spline</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\UI\Reticle.h">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\UI\ControlGuide.h">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h">
@@ -583,6 +595,9 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\ObstacleDebris.h">
       <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Title\TitleDemoMovie.h">
+      <Filter>DirectXGame\Game\Scene\Title</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\ResultScene.h">
       <Filter>DirectXGame\Game\Scene</Filter>

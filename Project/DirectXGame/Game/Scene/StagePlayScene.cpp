@@ -3413,12 +3413,13 @@ void StagePlayScene::OpenPauseMenu() {
 void StagePlayScene::ClosePauseMenu() {
 	paused_ = false;
 	pauseView_ = PauseView::Main;
+	controlGuide_.Close();
 }
 
 void StagePlayScene::SetPauseView(PauseView view) {
 	pauseView_ = view;
 	if (view == PauseView::Main) {
-		pauseMenu_.SetItems({ "再開", "リトライ", "ステージセレクトに戻る", "タイトルに戻る" });
+		pauseMenu_.SetItems({ "再開", "操作ガイド", "リトライ", "ステージセレクトに戻る", "タイトルに戻る" });
 	} else {
 		// 誤操作で戻ってしまわないよう「いいえ」を既定にする
 		pauseMenu_.SetItems({ "いいえ", "はい" });
@@ -3429,6 +3430,11 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 	pauseMenu_.SetPosition({ static_cast<float>(dxCore_->GetUIWidth()) * 0.5f,
 		static_cast<float>(dxCore_->GetUIHeight()) * 0.58f });
 	const UIPointer pointer = UIPointer::FromInput(input_);
+	// 操作ガイドを開いている間はガイドだけが入力を読む（閉じたらカーソルは「操作ガイド」のまま）
+	if (controlGuide_.IsOpen()) {
+		controlGuide_.Update(actions, &pointer);
+		return;
+	}
 	const VerticalMenu::Result result = pauseMenu_.Update(actions, &pointer);
 	const int index = pauseMenu_.GetSelectedIndex();
 
@@ -3442,13 +3448,16 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 		case 0: // 再開
 			ClosePauseMenu();
 			break;
-		case 1: // リトライ
+		case 1: // 操作ガイド
+			controlGuide_.Open();
+			break;
+		case 2: // リトライ
 			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 			break;
-		case 2: // ステージセレクトに戻る（確認を挟む。開く側はステージ選択の起動＝18 番 ①の IN）
+		case 3: // ステージセレクトに戻る（確認を挟む。開く側はステージ選択の起動＝18 番 ①の IN）
 			SetPauseView(PauseView::ConfirmStageSelect);
 			break;
-		case 3: // タイトルに戻る（確認を挟む）
+		case 4: // タイトルに戻る（確認を挟む）
 			SetPauseView(PauseView::ConfirmTitle);
 			break;
 		}
@@ -3460,7 +3469,7 @@ void StagePlayScene::UpdatePauseMenu(InputActionMap* actions) {
 	if (result == VerticalMenu::Result::Canceled
 		|| (result == VerticalMenu::Result::Confirmed && index == 0)) {
 		SetPauseView(PauseView::Main);
-		pauseMenu_.SetSelectedIndex(toTitle ? 3 : 2);
+		pauseMenu_.SetSelectedIndex(toTitle ? 4 : 3);
 		return;
 	}
 	if (result == VerticalMenu::Result::Confirmed && index == 1) {
@@ -3500,7 +3509,7 @@ bool StagePlayScene::UpdateAttract() {
 	// デモモードが開いたポーズ：「ステージセレクトに戻る」→「はい」をカーソルが動くのを見せながら選ぶ
 	if (!attractPausing_ || !paused_) return false;
 	const bool confirmView = (pauseView_ == PauseView::ConfirmStageSelect);
-	const int target = confirmView ? 1 : 2;   // 確認は「はい」、メインは「ステージセレクトに戻る」
+	const int target = confirmView ? 1 : 3;   // 確認は「はい」、メインは「ステージセレクトに戻る」
 	switch (attractMenu_.Advance(dt, attract->menuWait, attract->menuConfirmDelay)) {
 	case AttractMenuTimer::Step::MoveCursor:
 		if (pauseMenu_.GetSelectedIndex() != target) {
@@ -3534,6 +3543,11 @@ void StagePlayScene::DrawPauseMenu() {
 
 	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
 	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
+
+	if (controlGuide_.IsOpen()) {
+		controlGuide_.Draw(screenW, screenH);
+		return;
+	}
 	const Vector4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Vector4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
 
@@ -3574,7 +3588,12 @@ void StagePlayScene::Update() {
 	// Pause アクションでポーズトグル。トグルしたフレームはメニュー入力を読まない
 	// （同じキーが MenuCancel 等に割り当てられていても二重に反応させないため）
 	if (actions->IsTriggered(static_cast<int>(Action::Pause))) {
-		if (paused_) ClosePauseMenu();
+		if (paused_ && controlGuide_.IsOpen()) {
+			// 操作ガイドからはポーズの項目へ戻る（ゲームには戻さない）
+			controlGuide_.Close();
+			SoundManager::GetInstance()->Play2DSound("se_ui_cancel");
+		}
+		else if (paused_) ClosePauseMenu();
 		else         OpenPauseMenu();
 		return;
 	}
@@ -5152,7 +5171,10 @@ void StagePlayScene::Draw() {
 	{
 		TextRenderer* tr = TextRenderer::GetInstance();
 		if (tr->IsInitialized()) {
-			lootLog_.Draw(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
+			// 操作ガイドの下地（右下まで広い）に重ならないよう、ガイドを開いている間は出さない
+			if (!controlGuide_.IsOpen()) {
+				lootLog_.Draw(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
+			}
 			// 上段「SCORE」ラベル + 下段に数値。ラベルと数値は独立に位置・サイズ・色を設定可。
 			// 位置は画面右上 (screenW, 0) から (offsetX, offsetY) のオフセット（右端基準）。
 			int rawScore = ScoreManager::GetInstance()->GetScore();

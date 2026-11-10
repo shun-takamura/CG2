@@ -4,7 +4,7 @@
   "shields": [
     {
       "id": "Standard",
-      "displayName": "ハロー・バックラー",
+      "displayName": "スタンダードシールド",
       "description": "最初から持っている盾。動きを邪魔しない。",
       "maxHpAdd": 0,
       "damageCut": 0,
@@ -34,7 +34,7 @@
     },
     {
       "id": "Heavy",
-      "displayName": "サンクチュアリ・タワー",
+      "displayName": "ヘビーシールド",
       "description": "身の丈ほどの大盾。耐久力が大きく上がるが、重くて動きが少し遅くなる。",
       "maxHpAdd": 40,
       "damageCut": 0,
@@ -64,7 +64,7 @@
     },
     {
       "id": "Mirror",
-      "displayName": "アイギス・ビーム",
+      "displayName": "ビームシールド",
       "description": "発生装置から光の膜を張る盾。受けるダメージを和らげる。",
       "maxHpAdd": 10,
       "damageCut": 0.20000000298023224,
