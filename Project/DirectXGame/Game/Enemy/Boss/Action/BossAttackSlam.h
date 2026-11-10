@@ -2,6 +2,7 @@
 #include "Enemy/Boss/IBossAction.h"
 #include "Scene/GameScene.h"
 #include "SoundManager.h"
+#include "Enemy/Boss/BossRig.h"
 
 /// <summary>
 /// 叩きつけ：沈み込み（予兆）→プレイヤーの手前へ高く跳ぶ→着地の瞬間に地面すれすれの衝撃波リング（N 発）→硬直。
@@ -32,6 +33,7 @@ public:
 
 		if (phase_ == Phase::Crouch) {
 			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, crouchTime_); // 弾幕系=黄 / 近接系=白
+			SetArms(ctx, 2.7f, -0.3f, 0.12f); // 両腕を振り上げる
 			float t = (crouchTime_ > 1e-4f) ? (timer_ / crouchTime_) : 1.0f;
 			if (t > 1.0f) t = 1.0f;
 			bp->y = baselineY_ - crouchDepth_ * std::sin(3.14159265f * 0.5f * t);
@@ -43,6 +45,9 @@ public:
 		} else if (phase_ == Phase::Jump) {
 			float t = (jumpDuration_ > 1e-4f) ? (timer_ / jumpDuration_) : 1.0f;
 			if (t > 1.0f) t = 1.0f;
+			// 上がりきるまで振り上げたまま、落ち始めたら振り下ろしへ
+			if (t < 0.6f) SetArms(ctx, 2.9f, -0.2f, 0.1f);
+			else SetArms(ctx, 0.6f, 0.3f, 0.06f);
 			bp->x = startPos_.x + (goalPos_.x - startPos_.x) * t;
 			bp->z = startPos_.z + (goalPos_.z - startPos_.z) * t;
 			// 沈んだ位置から跳び、元の高さに着地する放物線
@@ -55,6 +60,8 @@ public:
 				timer_ = 0.0f;
 			}
 		} else if (phase_ == Phase::Recover) {
+			// 叩きつけた腕を少しの間そのまま（地面を叩いた手応え）
+			if (timer_ < recoverTime_ * 0.5f) SetArms(ctx, 0.55f, 0.3f, 0.04f);
 			if (timer_ >= recoverTime_) phase_ = Phase::Done;
 		}
 	}
@@ -84,6 +91,12 @@ private:
 		const Vector3* pp = ctx.player ? ctx.player->GetEditableTranslate() : nullptr;
 		shockwaveY_ = pp ? pp->y + shockwaveHeight_ : baselineY_;
 		return true;
+	}
+
+	static void SetArms(BossActionContext& ctx, float raise, float swing, float smoothTime) {
+		if (!ctx.rig) return;
+		ctx.rig->SetArmTarget(BossRig::Side::Left, raise, swing, smoothTime);
+		ctx.rig->SetArmTarget(BossRig::Side::Right, raise, swing, smoothTime);
 	}
 
 	void FireShockwave(BossActionContext& ctx, const Vector3& landPos) {

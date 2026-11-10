@@ -12,8 +12,8 @@
 /// </summary>
 class BossBrainCommand : public IEnemyCommand {
 public:
-	BossBrainCommand(const Vector3& arenaCenter = { 0.0f, 0.0f, 0.0f }, float arenaRadius = 0.0f)
-		: arenaCenter_(arenaCenter), arenaRadius_(arenaRadius) {}
+	BossBrainCommand(const Vector3& arenaCenter = { 0.0f, 0.0f, 0.0f }, float arenaRadius = 0.0f, BossRig* rig = nullptr)
+		: arenaCenter_(arenaCenter), arenaRadius_(arenaRadius), rig_(rig) {}
 
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
 		BossActionContext bctx;
@@ -23,6 +23,7 @@ public:
 		bctx.billboardToPlayer = ctx.billboardToPlayer;
 		bctx.arenaCenter       = arenaCenter_;
 		bctx.arenaRadius       = arenaRadius_;
+		bctx.rig               = rig_;
 
 		brain_.Update(dt, bctx);
 
@@ -34,6 +35,8 @@ public:
 
 	// true の間は次の行動を選ばない（BossStateMachine::SetStandDown）
 	void SetStandDown(bool standDown) { brain_.SetStandDown(standDown); }
+	// 部位が壊れた：今の行動を打ち切ってひるむ（BossStateMachine::RequestStagger）
+	void RequestStagger(float seconds) { brain_.RequestStagger(seconds); }
 
 private:
 	// 予兆の点滅色をボス本体（現状は Primitive）へ反映。元の色は初回に控えて、重み 0 で元へ戻す
@@ -55,6 +58,7 @@ private:
 
 	Vector3 arenaCenter_{ 0.0f, 0.0f, 0.0f };
 	float   arenaRadius_ = 0.0f;
+	BossRig* rig_ = nullptr;
 	Vector4 baseColor_{ 1.0f, 1.0f, 1.0f, 1.0f };
 	bool    baseColorCaptured_ = false;
 	BossStateMachine brain_;

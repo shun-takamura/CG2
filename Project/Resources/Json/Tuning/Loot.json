@@ -24,6 +24,14 @@
       "color": [1.0, 0.95, 0.82, 1.0],
       "scale": 0.6,
       "spinSpeed": 1.5
+    },
+    {
+      "id": "GuardianPlate",
+      "displayName": "守護機の腕甲",
+      "prefab": "loot_armplate",
+      "color": [0.95, 0.6, 0.3, 1.0],
+      "scale": 0.5,
+      "spinSpeed": 2.0
     }
   ],
   "ether": {
@@ -38,6 +46,7 @@
     { "prefab": "HoverEnemy", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
     { "prefab": "rusher", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
     { "prefab": "turret", "ether": 15, "items": [ { "id": "StarShard", "chance": 0.5, "count": 1 }, { "id": "Cog", "chance": 0.3, "count": 1 } ] },
+    { "prefab": "boss_arm", "ether": 50, "items": [ { "id": "GuardianPlate", "chance": 1.0, "count": 1 }, { "id": "StarShard", "chance": 1.0, "count": 2 } ] },
     { "prefab": "carrier", "ether": 40, "items": [ { "id": "AstralCore", "chance": 1.0, "count": 1 }, { "id": "StarShard", "chance": 1.0, "count": 2 } ] }
   ],
   "boss": { "ether": 300, "items": [ { "id": "AstralCore", "chance": 1.0, "count": 3 }, { "id": "StarShard", "chance": 1.0, "count": 5 } ] },
