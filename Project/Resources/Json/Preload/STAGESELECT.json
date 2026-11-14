@@ -387,6 +387,14 @@
     {
       "path": "Resources/Models/Weapons/Shields/Middle/Export/ShieldMiddle_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Small/Export/ShieldSmall_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Small/Export/ShieldSmall_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -553,6 +561,10 @@
     {
       "dir": "Resources/Models/Weapons/Shields/Middle/Export",
       "file": "ShieldMiddle.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/Shields/Small/Export",
+      "file": "ShieldSmall.mesh"
     }
   ],
   "animatedModels": [

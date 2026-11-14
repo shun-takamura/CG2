@@ -240,6 +240,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Score\ShieldCatalog.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\LootCatalog.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\LootLedger.cpp" />
+    <ClCompile Include="DirectXGame\Game\Score\StageClearRecord.cpp" />
     <ClCompile Include="DirectXGame\Game\Score\CraftingCatalog.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Loot\LootDrops.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Loot\LootPickupLog.cpp" />
@@ -379,6 +380,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Score\ShieldCatalog.h" />
     <ClInclude Include="DirectXGame\Game\Score\LootCatalog.h" />
     <ClInclude Include="DirectXGame\Game\Score\LootLedger.h" />
+    <ClInclude Include="DirectXGame\Game\Score\StageClearRecord.h" />
     <ClInclude Include="DirectXGame\Game\Score\CraftingCatalog.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Loot\LootDrops.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Loot\LootPickupLog.h" />

@@ -56,6 +56,7 @@
 #include "Score/MainWeaponCatalog.h"
 #include "Score/ShieldCatalog.h"
 #include "Score/LootLedger.h"
+#include "Score/StageClearRecord.h"
 #include "Effect/BeamShieldRenderer.h"
 #include "Effect/BeamBladeRenderer.h"
 #include "ModelManager.h"
@@ -2753,6 +2754,10 @@ void StagePlayScene::OnImGuiTuning() {
 		LootLedger::GetInstance()->OnImGui();
 	}
 
+	if (ImGui::CollapsingHeader("Stage Clear Record (23)")) {
+		StageClearRecord::GetInstance()->OnImGui();
+	}
+
 	if (ImGui::CollapsingHeader("Score UI")) {
 		ImGui::Text("Score: %d", ScoreManager::GetInstance()->GetScore());
 		if (ImGui::Button("Reset Score")) ScoreManager::GetInstance()->Reset();
@@ -2891,6 +2896,9 @@ void StagePlayScene::Initialize() {
 	// 手に入れたアイテムとエーテルの集計も（リザルトが読む。22_ItemDrop.md）
 	LootLedger::GetInstance()->Reset();
 	lootLog_.Clear();
+	// クリアタイムと撃破の瞬間のキャプチャ（リザルトが読む。23_StageClear.md §2・§3）。
+	// ボス戦からのリトライでもここを通るので、タイムはその回の分だけになる
+	StageClearRecord::GetInstance()->ResetForNewRun();
 
 	// ゲームオーバー画面の「ボス戦からリトライ」要求とスナップショットを読み出す。
 	// このアタリで再取得されるまではチェックポイントを無効化しておく
@@ -3647,6 +3655,9 @@ void StagePlayScene::Update() {
 	if (phase_ == Phase::StageStart && UpdateStageStart()) {
 		return;
 	}
+	// クリアタイム（23 番 §2.1）：レールに出てからボス撃破まで。実時間（スローで伸ばさない）。
+	// ポーズ中とスタート演出中は上で return するので足されない。撃破で MarkCleared した後は足さない
+	StageClearRecord::GetInstance()->AddPlayTime(GetScaledDeltaTime(TimeGroup::UI));
 	// 雲の上の回り込みの間は操作を受け付けない（16 番 §1。レールは t=0 から進める）。バインドの無い入力マップ＝何も押されていない
 	static InputActionMap kNoInput;
 	// 着陸（谷の出口 → 闘技場）と、撃破 → STAGE CLEAR の間も同じ
@@ -3747,6 +3758,7 @@ void StagePlayScene::Update() {
 		// ボス撃破検出：スコア加点・撃破数カウント → STAGE CLEAR を見せてからリザルトへ。
 		// 残った敵の弾は消す（クリアの間は被弾もしない）
 		if (bossStage_->ConsumeBossDefeated()) {
+			StageClearRecord::GetInstance()->MarkCleared();   // クリアタイムを止める（23 番 §2）
 			ScoreManager::GetInstance()->AddScore(bossStage_->GetLastBossScoreValue());
 			ScoreManager::GetInstance()->AddKill();
 			LootLedger::GetInstance()->AddBossReward();   // ボスの報酬（右下に出て、リザルトの合計に入る）

@@ -20,24 +20,37 @@ LootLedger* LootLedger::GetInstance() {
 
 void LootLedger::Reset() {
 	items_.clear();
+	partBreakItems_.clear();
 	ether_ = 0;
 	pickups_.clear();
 }
 
-void LootLedger::Add(const std::string& itemId, int count) {
+namespace {
+	void AddEntry(std::vector<LootLedger::Entry>& list, const std::string& itemId, int count) {
+		for (LootLedger::Entry& e : list) {
+			if (e.itemId == itemId) {
+				e.count += count;
+				return;
+			}
+		}
+		list.push_back({ itemId, count });
+	}
+
+	int FindEntry(const std::vector<LootLedger::Entry>& list, const std::string& itemId) {
+		for (const LootLedger::Entry& e : list) {
+			if (e.itemId == itemId) return e.count;
+		}
+		return 0;
+	}
+}
+
+void LootLedger::Add(const std::string& itemId, int count, LootSource source) {
 	if (count <= 0 || itemId.empty()) return;
 	if (itemId == kEtherId) {
 		ether_ += count;
 	} else {
-		bool found = false;
-		for (Entry& e : items_) {
-			if (e.itemId == itemId) {
-				e.count += count;
-				found = true;
-				break;
-			}
-		}
-		if (!found) items_.push_back({ itemId, count });
+		AddEntry(items_, itemId, count);
+		if (source == LootSource::PartBreak) AddEntry(partBreakItems_, itemId, count);
 	}
 	pickups_.push_back({ itemId, count });
 	while (pickups_.size() > kMaxPendingPickups) pickups_.pop_front();
@@ -56,10 +69,16 @@ void LootLedger::AddBossReward() {
 
 int LootLedger::GetItemCount(const std::string& itemId) const {
 	if (itemId == kEtherId) return ether_;
-	for (const Entry& e : items_) {
-		if (e.itemId == itemId) return e.count;
-	}
-	return 0;
+	return FindEntry(items_, itemId);
+}
+
+int LootLedger::GetStageItemCount(const std::string& itemId) const {
+	return GetItemCount(itemId) - GetPartBreakItemCount(itemId);
+}
+
+int LootLedger::GetPartBreakItemCount(const std::string& itemId) const {
+	if (itemId == kEtherId) return 0;
+	return FindEntry(partBreakItems_, itemId);
 }
 
 bool LootLedger::PopPickup(LootPickup& out) {

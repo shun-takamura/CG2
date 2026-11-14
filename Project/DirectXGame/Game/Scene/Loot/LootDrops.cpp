@@ -24,7 +24,7 @@ float LootDrops::RandRange(float a, float b) {
 	return dist(rng_);
 }
 
-void LootDrops::DropFrom(const std::string& enemyPrefab, const Vector3& pos) {
+void LootDrops::DropFrom(const std::string& enemyPrefab, const Vector3& pos, LootSource source) {
 	const LootCatalog* catalog = LootCatalog::GetInstance();
 	const LootTable* table = catalog->FindTable(enemyPrefab);
 	if (!table || !host_) return;
@@ -37,7 +37,7 @@ void LootDrops::DropFrom(const std::string& enemyPrefab, const Vector3& pos) {
 	if (table->ether > 0) {
 		const int ether = DifficultyProfile::ScaleInt(table->ether, DifficultyProfile::GetInstance()->GetRewardScale());
 		const LootItemDef& e = catalog->GetEther();
-		Spawn(LootLedger::kEtherId, e.prefab, ether, e.scale, e.spinSpeed, pos, target);
+		Spawn(LootLedger::kEtherId, e.prefab, ether, e.scale, e.spinSpeed, pos, target, source);
 	}
 	// 素材：1 個ずつ落とす（拾うたびに右下の数が増えて見える）
 	for (const LootRoll& roll : table->rolls) {
@@ -45,22 +45,22 @@ void LootDrops::DropFrom(const std::string& enemyPrefab, const Vector3& pos) {
 		const LootItemDef* item = catalog->FindItem(roll.itemId);
 		if (!item) continue;
 		for (int i = 0; i < roll.count; ++i) {
-			Spawn(item->id, item->prefab, 1, item->scale, item->spinSpeed, pos, target);
+			Spawn(item->id, item->prefab, 1, item->scale, item->spinSpeed, pos, target, source);
 		}
 	}
 }
 
 void LootDrops::Spawn(const std::string& itemId, const std::string& prefab, int amount, float scale, float spinSpeed,
-	const Vector3& pos, const Vector3& target) {
+	const Vector3& pos, const Vector3& target, LootSource source) {
 	const LootMotionParams& m = LootCatalog::GetInstance()->GetMotion();
 	// 上限を越えたら見せずに拾ったことにする（取りこぼさない）
 	if (static_cast<int>(pieces_.size()) >= m.maxPieces || prefab.empty()) {
-		LootLedger::GetInstance()->Add(itemId, amount);
+		LootLedger::GetInstance()->Add(itemId, amount, source);
 		return;
 	}
 	IImGuiEditable* entity = host_->SpawnLootPiece(prefab, pos);
 	if (!entity) {
-		LootLedger::GetInstance()->Add(itemId, amount);
+		LootLedger::GetInstance()->Add(itemId, amount, source);
 		return;
 	}
 
@@ -68,6 +68,7 @@ void LootDrops::Spawn(const std::string& itemId, const std::string& prefab, int 
 	p.entity = entity;
 	p.itemId = itemId;
 	p.amount = amount;
+	p.source = source;
 	p.offset = Sub(pos, target);
 	// 弾ける向き：上半分の球の中でばらつかせる
 	const float yaw = RandRange(0.0f, kTwoPi);
@@ -126,7 +127,7 @@ void LootDrops::Update(float dt) {
 }
 
 void LootDrops::Collect(Piece& p) {
-	LootLedger::GetInstance()->Add(p.itemId, p.amount);
+	LootLedger::GetInstance()->Add(p.itemId, p.amount, p.source);
 	if (p.entity && host_) host_->DestroyLootPiece(p.entity);
 	p.entity = nullptr;
 }

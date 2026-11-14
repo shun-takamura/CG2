@@ -399,6 +399,9 @@
     <ClCompile Include="DirectXGame\Game\Score\LootLedger.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\StageClearRecord.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\CraftingCatalog.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
@@ -810,6 +813,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\LootLedger.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\StageClearRecord.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\CraftingCatalog.h">

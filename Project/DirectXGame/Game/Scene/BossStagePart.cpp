@@ -298,7 +298,7 @@ void BossStagePart::Update(float worldDt) {
 	Vector3 brokenPos;
 	while (rig_.PopBrokenArm(brokenSide, brokenPos)) {
 		if (brain_) brain_->RequestStagger(partStaggerSeconds_);
-		lootDrops_.DropFrom("boss_arm", brokenPos);
+		lootDrops_.DropFrom("boss_arm", brokenPos, LootSource::PartBreak);   // リザルトの「部位破壊報酬」
 	}
 	lootDrops_.Update(worldDt);
 

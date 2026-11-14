@@ -26,6 +26,8 @@ public:
 	DeathResult ApplyDeath();
 	/// <summary>「引き上げる」：賭け分を手元へ戻す</summary>
 	void Withdraw();
+	/// <summary>手元へ足す（リザルトで素材を売ったとき。23_StageClear.md §2）。所持が無限の扱いでも値は足す</summary>
+	void AddHand(float amount) { if (amount > 0.0f) hand_ += amount; }
 	/// <summary>初期値（JSON）に戻す</summary>
 	void Reset();
 	/// <summary>賭ける画面の決定：純度を決め、その消費を賭け分にする（前の賭け分は手元へ戻してから引く）</summary>
