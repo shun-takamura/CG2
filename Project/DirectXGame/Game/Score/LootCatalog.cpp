@@ -22,6 +22,11 @@ namespace {
 		d.color = ReadVec4(node["color"], d.color);
 		d.scale = static_cast<float>(node["scale"].AsDouble(d.scale));
 		d.spinSpeed = static_cast<float>(node["spinSpeed"].AsDouble(d.spinSpeed));
+		d.description = node["description"].AsString(d.description);
+		d.rarity = static_cast<int>(node["rarity"].AsInt(d.rarity));
+		if (d.rarity < 1) d.rarity = 1;
+		if (d.rarity > 5) d.rarity = 5;
+		d.sellPrice = static_cast<int>(node["sellPrice"].AsInt(d.sellPrice));
 		return d;
 	}
 

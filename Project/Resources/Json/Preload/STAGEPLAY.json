@@ -45,6 +45,14 @@
     {
       "path": "Resources/Shaders/Effect/BeamBlade.PS.hlsl",
       "profile": "ps_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Effect/BeamShield.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Effect/BeamShield.PS.hlsl",
+      "profile": "ps_6_0"
     }
   ],
   "textures": [
@@ -399,6 +407,14 @@
     {
       "path": "Resources/Models/Weapons/Shields/Big/Export/ShieldBig_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Small/Export/ShieldSmall_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/Shields/Small/Export/ShieldSmall_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -537,6 +553,10 @@
     {
       "dir": "Resources/Models/Weapons/Shields/Big/Export",
       "file": "ShieldBig.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/Shields/Small/Export",
+      "file": "ShieldSmall.mesh"
     }
   ],
   "animatedModels": [

@@ -1,5 +1,6 @@
 #pragma once
 #include "Vector3.h"
+#include "Score/LootLedger.h"
 
 #include <random>
 #include <string>
@@ -32,8 +33,11 @@ class LootDrops {
 public:
 	void Initialize(ILootDropsHost* host);
 
-	/// <summary>enemyPrefab の敵が pos で倒れた。表に無い敵は何も落とさない</summary>
-	void DropFrom(const std::string& enemyPrefab, const Vector3& pos);
+	/// <summary>
+	/// enemyPrefab の敵が pos で倒れた。表に無い敵は何も落とさない。
+	/// source は拾ったときの出どころ（ボスの部位破壊は PartBreak。リザルトで分けて見せる）
+	/// </summary>
+	void DropFrom(const std::string& enemyPrefab, const Vector3& pos, LootSource source = LootSource::Stage);
 	void Update(float dt);
 	/// <summary>落ちている物を全部拾ったことにして消す（フェーズが変わるとき）</summary>
 	void CollectAll();
@@ -48,6 +52,7 @@ private:
 		IImGuiEditable* entity = nullptr;
 		std::string itemId;   // LootLedger の id（エーテルは "Ether"）
 		int amount = 1;
+		LootSource source = LootSource::Stage;
 		Vector3 offset{};     // 吸い寄せる先からのずれ
 		Vector3 velocity{};   // 弾けた勢い
 		Vector3 rotate{};
@@ -57,7 +62,7 @@ private:
 	};
 
 	void Spawn(const std::string& itemId, const std::string& prefab, int amount, float scale, float spinSpeed,
-		const Vector3& pos, const Vector3& target);
+		const Vector3& pos, const Vector3& target, LootSource source);
 	void Collect(Piece& p);
 	float RandRange(float a, float b);
 

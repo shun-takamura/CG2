@@ -1,9 +1,12 @@
 {
-  "_comment": "22_ItemDrop.md。items＝素材の定義（prefab は落ちている間の見た目、color は拾ったときの表示とリザルトの印）。ether はエーテルの見た目。drops＝敵のプレハブ名ごとに落とす物（ether はエーテルの量、items は chance の確率で count 個）。boss は撃破でそのまま集計へ入る。motion は落ちた物の動き（秒・m）",
+  "_comment": "22_ItemDrop.md。items＝素材の定義（prefab は落ちている間の見た目、color は拾ったときの表示とリザルトの印、description と rarity(1〜5) はリザルトの説明欄、sellPrice はリザルトで売ったときの 1 個あたりのエーテル。23_StageClear.md §2）。ether はエーテルの見た目。drops＝敵のプレハブ名ごとに落とす物（ether はエーテルの量、items は chance の確率で count 個）。boss は撃破でそのまま集計へ入る。motion は落ちた物の動き（秒・m）",
   "items": [
     {
       "id": "Cog",
       "displayName": "天輪の歯車",
+      "description": "量産型の機兵を動かしていた小さな歯車。\nかすかにエーテルの光が残っている。",
+      "rarity": 1,
+      "sellPrice": 10,
       "prefab": "loot_cog",
       "color": [1.0, 0.78, 0.32, 1.0],
       "scale": 0.45,
@@ -12,6 +15,9 @@
     {
       "id": "StarShard",
       "displayName": "星晶のかけら",
+      "description": "エーテルが冷えて固まった結晶のかけら。\n機体の装甲を鍛えるのに使われる。",
+      "rarity": 2,
+      "sellPrice": 30,
       "prefab": "loot_shard",
       "color": [0.45, 0.9, 1.0, 1.0],
       "scale": 0.4,
@@ -20,6 +26,9 @@
     {
       "id": "AstralCore",
       "displayName": "天球の核",
+      "description": "大型の機兵の胸に収められていた動力の核。\n今もゆっくりと脈打っている。",
+      "rarity": 4,
+      "sellPrice": 150,
       "prefab": "loot_core",
       "color": [1.0, 0.95, 0.82, 1.0],
       "scale": 0.6,
@@ -28,6 +37,9 @@
     {
       "id": "GuardianPlate",
       "displayName": "守護機の腕甲",
+      "description": "闘技場を守る守護機の腕から剥がれた装甲。\n部位を壊したときにだけ手に入る。",
+      "rarity": 3,
+      "sellPrice": 100,
       "prefab": "loot_armplate",
       "color": [0.95, 0.6, 0.3, 1.0],
       "scale": 0.5,
@@ -36,6 +48,8 @@
   ],
   "ether": {
     "displayName": "エーテル",
+    "description": "光る液体。天球儀の器に集めて、純度を上げるのに使う。",
+    "rarity": 1,
     "prefab": "loot_ether",
     "color": [0.0, 0.641, 1.0, 1.0],
     "scale": 0.35,

@@ -12,6 +12,9 @@ struct LootItemDef {
 	Vector4 color{ 1.0f, 1.0f, 1.0f, 1.0f };  // 拾ったときの表示・リザルトの印の色
 	float scale = 0.5f;       // 落ちている間の大きさ
 	float spinSpeed = 3.0f;   // 回る速さ [rad/s]
+	std::string description;  // リザルトの説明欄（"\n" で改行。23_StageClear.md §2）
+	int rarity = 1;           // レア度（1〜5。リザルトの説明欄）
+	int sellPrice = 0;        // リザルトで売ったときの 1 個あたりのエーテル（0 なら売れない）
 };
 
 /// <summary>ドロップの 1 行：chance の確率で count 個落とす</summary>
