@@ -62,6 +62,11 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	captureRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
 
+	// 静止画の 1 枚（リザルトの背景など。ポストエフェクトの後の絵。最後のパスと同じ sRGB）
+	stillCaptureRT_ = std::make_unique<RenderTexture>();
+	stillCaptureRT_->Initialize(dxCore_, srvManager_, width, height,
+		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
+
 	CreateRootSignatures();
 	CreateBasePsoDesc();
 	InitializeEffects();
@@ -73,7 +78,7 @@ void PostEffect::Resize(uint32_t width, uint32_t height)
 	width_ = width;
 	height_ = height;
 	for (RenderTexture* rt : { renderTextureA_.get(), renderTextureB_.get(), idMaskRT_.get(),
-		distortionRT_.get(), bloomRT_.get(), captureRT_.get() }) {
+		distortionRT_.get(), bloomRT_.get(), captureRT_.get(), stillCaptureRT_.get() }) {
 		if (rt) rt->Resize(width, height);
 	}
 	if (bloom) bloom->Resize(width, height);
@@ -662,6 +667,13 @@ uint32_t PostEffect::GetCaptureSRVIndex() const
 	return captureRT_ ? captureRT_->GetSRVIndex() : 0u;
 }
 
+bool PostEffect::ConsumeStillCaptureDone()
+{
+	if (!stillCaptureDone_) return false;
+	stillCaptureDone_ = false;
+	return true;
+}
+
 void PostEffect::CaptureSceneForDisruptor(ID3D12GraphicsCommandList* commandList)
 {
 	if (!captureRT_ || !renderTextureA_) return;
@@ -731,6 +743,18 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* out
 		srvManager_->PreDraw();
 	};
 
+	// 静止画を撮るフレームは、最後のパスを stillCaptureRT_ に書いてから最終出力へコピーする
+	const bool stillCapture = stillCaptureRequested_ && stillCaptureRT_;
+	stillCaptureRequested_ = false;
+	auto bindLastPassRTV = [&]() {
+		if (stillCapture) {
+			stillCaptureRT_->BeginRender(commandList);
+			srvManager_->PreDraw();
+		} else {
+			bindFinalOutputRTV();
+		}
+	};
+
 	// ONになっているエフェクトを集める
 	std::vector<BaseFilterEffect*> activeEffects;
 	bool needsDepth = false;
@@ -761,15 +785,15 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* out
 	if (activeEffects.empty()) {
 		// outputTarget が指定されている場合は、ここで RTV を切り替えてから描画する
 		// （Swapchain出力時は呼び出し側で BeginDraw 済みなので RTV はセット済み）
-		if (useOutputTarget) {
-			bindFinalOutputRTV();
+		if (useOutputTarget || stillCapture) {
+			bindLastPassRTV();
 		}
 		DrawCopy(commandList, renderTextureA_.get());
 	}
 	// 1つだけ → 直接Swapchainに描画
 	else if (activeEffects.size() == 1) {
-		if (useOutputTarget) {
-			bindFinalOutputRTV();
+		if (useOutputTarget || stillCapture) {
+			bindLastPassRTV();
 		}
 		DrawEffect(commandList, activeEffects[0], renderTextureA_.get());
 	}
@@ -782,8 +806,8 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* out
 			bool isLast = (i == activeEffects.size() - 1);
 
 			if (isLast) {
-				// 最後のパス: 最終出力RTV（Swapchain or outputTarget）にセットして描画
-				bindFinalOutputRTV();
+				// 最後のパス: 最終出力RTV（Swapchain or outputTarget。撮るフレームは stillCaptureRT_）にセットして描画
+				bindLastPassRTV();
 				DrawEffect(commandList, activeEffects[i], currentInput);
 			}
 			else {
@@ -799,6 +823,14 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, RenderTexture* out
 				currentOutput = temp;
 			}
 		}
+	}
+
+	// 撮った絵を SRV に戻して、最終出力へそのままコピーする（画面の見た目は撮らないフレームと同じ）
+	if (stillCapture) {
+		stillCaptureRT_->EndRender(commandList);
+		bindFinalOutputRTV();
+		DrawCopy(commandList, stillCaptureRT_.get());
+		stillCaptureDone_ = true;
 	}
 
 	// outputTarget を使った場合は、PIXEL_SHADER_RESOURCE 状態に戻して
@@ -1054,4 +1086,5 @@ void PostEffect::Finalize()
 	if (distortionRT_)   distortionRT_->Finalize();
 	if (bloomRT_)        bloomRT_->Finalize();
 	if (captureRT_)      captureRT_->Finalize();
+	if (stillCaptureRT_) stillCaptureRT_->Finalize();
 }

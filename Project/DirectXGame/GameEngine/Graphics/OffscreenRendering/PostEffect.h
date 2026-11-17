@@ -118,6 +118,15 @@ public:
 	/// </summary>
 	void CaptureSceneForDisruptor(ID3D12GraphicsCommandList* commandList);
 
+	// ----- 静止画の 1 枚（ボス撃破の瞬間 → リザルトの背景。23_StageClear.md §3）-----
+	// ポストエフェクト（ブルーム・色調）を掛け終えた絵を stillCaptureRT_ に残す。シーンの切り替えをまたいで残る。
+	// このエンジンは UI もシーン RT に描くので、UI を除きたいなら撮るフレームはシーン側が UI を描かないこと。
+	/// <summary>次の Draw で最後のパスを stillCaptureRT_ に書き、それを最終出力へコピーする</summary>
+	void RequestStillCapture() { stillCaptureRequested_ = true; }
+	/// <summary>撮れた後に 1 度だけ true（Draw で記録した後）</summary>
+	bool ConsumeStillCaptureDone();
+	RenderTexture* GetStillCaptureRT() const { return stillCaptureRT_.get(); }
+
 	/// <summary>
 	/// ID Pass の開始：idMaskRT を RT としてバインドし 0 でクリア。シーン描画後・PostEffect Draw 前に呼ぶ。
 	/// </summary>
@@ -215,6 +224,11 @@ private:
 
 	// シーンキャプチャ RT（ディスラプター崩壊の破片用。renderTextureA_ のコピー先）
 	std::unique_ptr<RenderTexture> captureRT_;
+
+	// 静止画の 1 枚（ポストエフェクトの後の絵。RequestStillCapture）
+	std::unique_ptr<RenderTexture> stillCaptureRT_;
+	bool stillCaptureRequested_ = false;
+	bool stillCaptureDone_ = false;
 
 	// ルートシグネチャ（4種類）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> copyRootSignature_;

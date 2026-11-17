@@ -135,6 +135,9 @@
     <ClCompile Include="DirectXGame\Game\UI\ControlGuide.cpp">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\UI\StageClearBanner.cpp">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\UI\VerticalMenu.cpp">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClCompile>
@@ -277,6 +280,9 @@
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\BossStagePart.cpp">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\BossClearSequence.cpp">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\BossArenaWater.cpp">
@@ -443,6 +449,9 @@
     <ClInclude Include="DirectXGame\Game\UI\ControlGuide.h">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClInclude>
+    <ClInclude Include="DirectXGame\Game\UI\StageClearBanner.h">
+      <Filter>DirectXGame\Game\UI</Filter>
+    </ClInclude>
     <ClInclude Include="DirectXGame\Game\UI\VerticalMenu.h">
       <Filter>DirectXGame\Game\UI</Filter>
     </ClInclude>
@@ -585,6 +594,9 @@
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\BossStagePart.h">
+      <Filter>DirectXGame\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\BossClearSequence.h">
       <Filter>DirectXGame\Game\Scene</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\BossArenaWater.h">
