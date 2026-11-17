@@ -2310,6 +2310,7 @@ void StagePlayScene::OnImGuiTuning() {
 	}
 	if (railStage_) railStage_->OnImGuiTuning(changed); // 既存の Rail Camera / Wave Editor セクション
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
+	if (ImGui::CollapsingHeader("Stage Clear (23 B)")) clearSeq_.OnImGui();   // 撃破の段取り・STAGE CLEAR
 	if (bossWater_ && ImGui::CollapsingHeader("Boss Water")) bossWater_->OnImGui();
 
 	if (ImGui::CollapsingHeader("Skybox")) {
@@ -2899,6 +2900,7 @@ void StagePlayScene::Initialize() {
 	// クリアタイムと撃破の瞬間のキャプチャ（リザルトが読む。23_StageClear.md §2・§3）。
 	// ボス戦からのリトライでもここを通るので、タイムはその回の分だけになる
 	StageClearRecord::GetInstance()->ResetForNewRun();
+	clearSeq_.Reset();
 
 	// ゲームオーバー画面の「ボス戦からリトライ」要求とスナップショットを読み出す。
 	// このアタリで再取得されるまではチェックポイントを無効化しておく
@@ -3397,6 +3399,18 @@ void StagePlayScene::UpdateBossHpBarUI(float dt) {
 	bossHpBarRageMark_->Update();
 }
 
+void StagePlayScene::UpdateStageClearCapture() {
+	// 撃破のフレームに頼んだ 1 枚（PostEffect::RequestStillCapture）は、その Draw で撮れている。
+	// RT は PostEffect が持ち、シーンをまたいで残る。名前を付けて登録し直して、リザルトへ「有る」と渡す
+	auto* pe = Game::GetPostEffect();
+	if (!pe || !pe->ConsumeStillCaptureDone()) return;
+	RenderTexture* rt = pe->GetStillCaptureRT();
+	if (!rt) return;
+	constexpr const char* kCaptureName = "StageClearCapture";
+	TextureManager::GetInstance()->RegisterExternalTexture(kCaptureName, rt->GetResource(), rt->GetSRVIndex());
+	StageClearRecord::GetInstance()->SetCapture(kCaptureName, rt->GetSRVIndex(), rt->GetWidth(), rt->GetHeight());
+}
+
 void StagePlayScene::DrawBossHpBarUI() {
 	if (!bossHpBarVisible_ || phase_ != Phase::Boss) return;
 	bossHpBarBack_->Draw();
@@ -3662,7 +3676,7 @@ void StagePlayScene::Update() {
 	static InputActionMap kNoInput;
 	// 着陸（谷の出口 → 闘技場）と、撃破 → STAGE CLEAR の間も同じ
 	if (IsCloudTopIntroActive() || IsPlayerDying() || phase_ == Phase::Landing
-		|| (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing())) actions = &kNoInput;
+		|| (phase_ == Phase::Boss && clearSeq_.IsActive())) actions = &kNoInput;
 
 	// ----- ステージ進行ステートマシン（Rail → Landing → Boss）-----
 	if (phase_ == Phase::Rail && railStage_) {
@@ -3743,6 +3757,8 @@ void StagePlayScene::Update() {
 		} else if (prevPhase_ == Phase::Boss) {
 			bossBattleActive_ = false;           // 空を平常時へ戻す
 			if (bossStage_) bossStage_->Reset(); // ボス・地面・コントローラを破棄
+			if (clearSeq_.IsActive()) SetTimeScale(TimeGroup::World, 1.0f);
+			clearSeq_.Reset();
 			ApplyPlayerPose();
 		}
 		prevPhase_ = phase_;
@@ -3755,7 +3771,25 @@ void StagePlayScene::Update() {
 		bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
 		UpdateBossHpBarUI(GetScaledDeltaTime(TimeGroup::UI));
 
-		// ボス撃破検出：スコア加点・撃破数カウント → STAGE CLEAR を見せてからリザルトへ。
+		// 撃破の後の段取り（23 番 §4 B）。時間は実時間。撃破のフレームの Begin より前に進める（撮るフレームは時刻 0 のまま）
+		UpdateStageClearCapture();
+		if (clearSeq_.IsActive()) {
+			clearSeq_.Update(GetScaledDeltaTime(TimeGroup::UI));
+			if (clearSeq_.ConsumeCollapse()) bossStage_->CollapseDefeatedBoss();   // 手足が落ち、本体の大きな爆発
+			Vector3 burstPos;
+			std::string burstFx;
+			while (clearSeq_.PopBurst(burstPos, burstFx)) {
+				if (auto* em = EffectManager::GetInstance()) em->Play(burstFx, burstPos);
+				SoundManager::GetInstance()->Play2DSound("se_explode", 0.6f);
+			}
+			SetTimeScale(TimeGroup::World, clearSeq_.GetWorldTimeScale());
+			if (clearSeq_.ConsumeFinished()) {
+				SetTimeScale(TimeGroup::World, 1.0f);
+				SceneManager::GetInstance()->ChangeScene("RESULT");
+			}
+		}
+
+		// ボス撃破検出：スコア加点・撃破数カウント → 撃破の段取り（ヒットストップ → … → STAGE CLEAR → リザルト）。
 		// 残った敵の弾は消す（クリアの間は被弾もしない）
 		if (bossStage_->ConsumeBossDefeated()) {
 			StageClearRecord::GetInstance()->MarkCleared();   // クリアタイムを止める（23 番 §2）
@@ -3765,10 +3799,17 @@ void StagePlayScene::Update() {
 			for (auto& b : bullets_) {
 				if (b.primitive && Gameplay::Of(b.primitive).GetTag() == EntityTag::EnemyAttack) b.remainingLifetime = -1.0f;
 			}
-			bossStage_->BeginClear();
-		}
-		if (bossStage_->IsClearing() && bossStage_->UpdateClear(GetScaledDeltaTime(TimeGroup::UI))) {
-			SceneManager::GetInstance()->ChangeScene("RESULT");
+			// 飛行ユニットのスロー・揺れは持ち越さない（世界の時間はこの段取りが持つ）
+			if (flightUnit_) flightUnit_->Reset();
+			if (camera_) camera_->StopShake();
+			Vector3 bossCenter = bossStage_->GetBossStartPos();
+			bossStage_->GetDefeatedBossCenter(bossCenter);
+			clearSeq_.Begin(bossCenter, bossStage_->GetGroundY(), *camera_, StageClearRecord::GetInstance()->GetClearTime());
+			SetTimeScale(TimeGroup::World, clearSeq_.GetWorldTimeScale());   // ヒットストップ
+			// このフレームは HUD を描かないので、ポストエフェクトの後の絵をそのまま撮る（リザルトの背景）
+			if (clearSeq_.ConsumeCaptureRequest()) {
+				if (auto* pe = Game::GetPostEffect()) pe->RequestStillCapture();
+			}
 		}
 	}
 
@@ -3906,7 +3947,7 @@ void StagePlayScene::Update() {
 			bool camBtn = actions->IsPressed(static_cast<int>(Action::LockCamButton));
 			if (auto* m = input_->GetMouse(); m && m->IsButtonPressed(MouseInput::Button::Middle)) camBtn = true;
 			// 死亡演出の間はカメラを動かさない（右スティック・マウス・ボタンは actions を通らないのでここで切る。19 番 G3）
-			if (IsPlayerDying()) {
+			if (IsPlayerDying() || clearSeq_.IsActive()) {
 				camStickX = camStickY = camMouseDx = camMouseDy = 0.0f;
 				camBtn = false;
 			}
@@ -3937,6 +3978,8 @@ void StagePlayScene::Update() {
 					playerDeath_->ApplyCamera(*camera_);
 					camera_->Update();
 				}
+				// 撃破の段取り：その場 → ボスの斜め前へ寄る → 崩壊で少し引く（いちばん最後に上書きする）
+				if (clearSeq_.IsActive()) clearSeq_.ApplyCamera(*camera_);
 			}
 		} else if (phase_ == Phase::Landing && bossStage_) {
 			// 着陸中は自機の位置を BossStagePart::UpdateLanding が書く（カメラ基準の配置はしない）
@@ -5154,26 +5197,21 @@ void StagePlayScene::Draw() {
 	DrawDynamicAnimatedSkeletonDebug();
 
 	// スプライト
+	// 撃破の段取りの間は HUD を描かない（映画のような画面。最初のフレームはこのまま撮ってリザルトの背景にする）
+	const bool hideHud = clearSeq_.IsHudHidden();
 	spriteManager_->DrawSetting();
-	DrawDynamicSprites();
-	// 飛行ユニットのクールタイムのバー（必殺技ゲージの下）
-	if (flightUnit_ && flightUnit_->IsInitialized() && !IsCloudTopIntroActive()) flightUnit_->DrawUI();
-	if (reticle_ && !IsCloudTopIntroActive() && phase_ != Phase::Landing) reticle_->Draw();
+	if (!hideHud) {
+		DrawDynamicSprites();
+		// 飛行ユニットのクールタイムのバー（必殺技ゲージの下）
+		if (flightUnit_ && flightUnit_->IsInitialized() && !IsCloudTopIntroActive()) flightUnit_->DrawUI();
+		if (reticle_ && !IsCloudTopIntroActive() && phase_ != Phase::Landing) reticle_->Draw();
 
-	DrawBossHpBarUI();
+		DrawBossHpBarUI();
+	}
 
-	// STAGE CLEAR（ボス撃破の後。文字は下のスコア表示と同じ Flush でまとめて描く）
-	if (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing()) {
-		const float a = bossStage_->GetClearTextAlpha();
-		TextRenderer* tr = TextRenderer::GetInstance();
-		if (a > 0.0f && tr->IsInitialized()) {
-			constexpr const char* kClearText = "STAGE CLEAR";
-			constexpr float kScale = 3.0f;
-			const float w = tr->MeasureWidth(kClearText, kScale);
-			const Vector2 pos{ (static_cast<float>(WindowsApplication::kUIWidth) - w) * 0.5f,
-				static_cast<float>(WindowsApplication::kUIHeight) * 0.42f };
-			tr->DrawText(kClearText, pos, kScale, { 1.0f, 0.92f, 0.6f, a }, 3.0f, { 0.0f, 0.0f, 0.0f, a });
-		}
+	// 撃破の段取りの白いフラッシュと STAGE CLEAR（文字は下のスコア表示と同じ Flush でまとめて描く）
+	if (clearSeq_.IsActive()) {
+		clearSeq_.DrawOverlay(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 	}
 
 	// ポーズメニュー（文字は下のスコア表示と同じ Flush でまとめて描く）
@@ -5184,7 +5222,7 @@ void StagePlayScene::Draw() {
 		TextRenderer* tr = TextRenderer::GetInstance();
 		if (tr->IsInitialized()) {
 			// 操作ガイドの下地（右下まで広い）に重ならないよう、ガイドを開いている間は出さない
-			if (!controlGuide_.IsOpen()) {
+			if (!controlGuide_.IsOpen() && !hideHud) {
 				lootLog_.Draw(static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()));
 			}
 			// 上段「SCORE」ラベル + 下段に数値。ラベルと数値は独立に位置・サイズ・色を設定可。
@@ -5201,14 +5239,16 @@ void StagePlayScene::Draw() {
 			const float labelW = tr->MeasureWidth(labelStr, scoreLabelScale_);
 			const float numW   = tr->MeasureWidth(numBuf, scoreNumberScale_);
 
-			tr->DrawText(labelStr,
-				{ screenW - scoreLabelOffsetX_ - labelW, scoreLabelOffsetY_ },
-				scoreLabelScale_, scoreLabelColor_,
-				scoreLabelOutlineThickness_, scoreLabelOutlineColor_);
-			tr->DrawText(numBuf,
-				{ screenW - scoreNumberOffsetX_ - numW, scoreNumberOffsetY_ },
-				scoreNumberScale_, scoreNumberColor_,
-				scoreNumberOutlineThickness_, scoreNumberOutlineColor_);
+			if (!hideHud) {
+				tr->DrawText(labelStr,
+					{ screenW - scoreLabelOffsetX_ - labelW, scoreLabelOffsetY_ },
+					scoreLabelScale_, scoreLabelColor_,
+					scoreLabelOutlineThickness_, scoreLabelOutlineColor_);
+				tr->DrawText(numBuf,
+					{ screenW - scoreNumberOffsetX_ - numW, scoreNumberOffsetY_ },
+					scoreNumberScale_, scoreNumberColor_,
+					scoreNumberOutlineThickness_, scoreNumberOutlineColor_);
+			}
 			tr->Flush();
 		}
 	}
@@ -5791,7 +5831,7 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 	// ----- 敵攻撃との接触判定（敵弾＋突進）-----
 	// ジャスト回避中は完全スルー。それ以外は、回避ジャスト窓内の接触＝ジャスト回避成立、
 	// 各種無敵中＝ダメージ無効、いずれでもなければ通常被弾。死亡演出の間は当たらない。
-	const bool stageClearing = (phase_ == Phase::Boss && bossStage_ && bossStage_->IsClearing());
+	const bool stageClearing = (phase_ == Phase::Boss && clearSeq_.IsActive());
 	if (!justInv && !IsPlayerDying() && !stageClearing) {
 		const Vector3 playerPos = player_->GetTranslate();
 

@@ -262,22 +262,6 @@ bool BossStagePart::UpdateLanding(float dt) {
 	return false;
 }
 
-void BossStagePart::BeginClear() {
-	if (clearTimer_ < 0.0f) clearTimer_ = 0.0f;
-}
-
-bool BossStagePart::UpdateClear(float dt) {
-	if (clearTimer_ < 0.0f) return false;
-	clearTimer_ += dt;
-	return clearTimer_ >= clearDelay_ + clearTextFade_ + clearHold_;
-}
-
-float BossStagePart::GetClearTextAlpha() const {
-	if (clearTimer_ < 0.0f) return 0.0f;
-	if (clearTextFade_ <= 1e-3f) return clearTimer_ >= clearDelay_ ? 1.0f : 0.0f;
-	return SmoothStep01((clearTimer_ - clearDelay_) / clearTextFade_);
-}
-
 bool BossStagePart::ConsumeLandingTouchdown() {
 	if (!landingTouchdownEvent_) return false;
 	landingTouchdownEvent_ = false;
@@ -290,7 +274,8 @@ void BossStagePart::Update(float worldDt) {
 	CheckBossDefeated();
 
 	// ボスAI（敵コントローラ）駆動。静止ボスなので stageTimeSec は未使用（0 を渡す）。
-	host_->UpdateEnemyControllers(worldDt, host_->GetPlayer(), 0.0f);
+	// 倒れたボスを残している間は AI を止める（崩すまでその場で固まる）
+	if (!defeatedBoss_) host_->UpdateEnemyControllers(worldDt, host_->GetPlayer(), 0.0f);
 
 	// 手足：本体の動きに付け直し、部位のダメージを本体へ回す。腕が壊れたらひるませて素材を落とす
 	rig_.Update(worldDt);
@@ -304,19 +289,35 @@ void BossStagePart::Update(float worldDt) {
 
 	// 部位から回したダメージで本体が倒れることがある。掃除（実体の破棄）の前にもう一度見る
 	CheckBossDefeated();
-	host_->SweepDeadEntities();
+	// 倒れたボスを残している間は掃除しない（HP 0 の本体が破棄されてしまう）。崩す時に CollapseDefeatedBoss が掃除する
+	if (!defeatedBoss_) host_->SweepDeadEntities();
 }
 
 void BossStagePart::CheckBossDefeated() {
-	// 撃破検出：HP が尽きたら参照を切る（この後の SweepDeadEntities が実体を破棄＋death エフェクト）。
-	// 参照を切る前にスコア値をキャプチャしておく（切った後は Gameplay::Of(boss_) が参照できない）。
+	// 撃破検出：HP が尽きたら参照を切る。実体は defeatedBoss_ に残し、崩す（CollapseDefeatedBoss）まで消さない。
+	// 参照を切る前にスコア値をキャプチャしておく
 	if (boss_ && Gameplay::Of(boss_).GetHP().IsDead()) {
 		bossDefeatedScoreValue_ = Gameplay::Of(boss_).GetScoreValue();
 		bossJustDefeated_ = true;
+		defeatedBoss_ = boss_;
 		boss_ = nullptr;
-		brain_ = nullptr;   // この後の SweepDeadEntities でコントローラごと破棄される
-		rig_.BreakAll();    // 手足も外れて落ちる
+		brain_ = nullptr;   // 崩す時の SweepDeadEntities でコントローラごと破棄される
 	}
+}
+
+bool BossStagePart::GetDefeatedBossCenter(Vector3& out) const {
+	if (!defeatedBoss_) return false;
+	const Vector3* t = defeatedBoss_->GetEditableTranslate();
+	if (!t) return false;
+	out = *t;
+	return true;
+}
+
+void BossStagePart::CollapseDefeatedBoss() {
+	if (!defeatedBoss_ || !host_) return;
+	rig_.BreakAll();              // 手足が外れて落ちる
+	defeatedBoss_ = nullptr;
+	host_->SweepDeadEntities();   // HP 0 の本体を破棄＋死亡エフェクト（大きな爆発）・爆発音
 }
 
 void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const {
@@ -566,7 +567,7 @@ void BossStagePart::Reset() {
 	landingActive_ = false;
 	landingTouchedDown_ = false;
 	landingTouchdownEvent_ = false;
-	clearTimer_ = -1.0f;
+	defeatedBoss_ = nullptr;
 	boss_        = nullptr;
 	brain_       = nullptr;
 	bossSpawned_ = false;
@@ -608,11 +609,6 @@ void BossStagePart::OnImGuiTuning(bool& changed) {
 		ImGui::DragFloat("Player Lift (m)", &landingPlayerLift_, 0.5f, -20.0f, 100.0f, "%.1f");
 		ImGui::DragFloat("Player Back (m)", &landingPlayerBack_, 0.5f, -50.0f, 150.0f, "%.1f");
 		ImGui::DragFloat("Look Ahead (m)", &landingLookAhead_, 1.0f, 10.0f, 500.0f, "%.0f");
-
-		ImGui::SeparatorText("Clear (撃破 → STAGE CLEAR → リザルト)");
-		ImGui::DragFloat("Clear Delay (s)", &clearDelay_, 0.05f, 0.0f, 10.0f, "%.2f");
-		ImGui::DragFloat("Clear Text Fade (s)", &clearTextFade_, 0.05f, 0.0f, 5.0f, "%.2f");
-		ImGui::DragFloat("Clear Hold (s)", &clearHold_, 0.1f, 0.0f, 20.0f, "%.1f");
 
 		ImGui::SeparatorText("Knockback");
 		ImGui::DragFloat("Light Speed (bullet)", &knockLightSpeed_, 0.5f, 0.0f, 80.0f, "%.1f");

@@ -9,6 +9,7 @@
 #include "BoneSocket.h"
 #include "RailStagePart.h"
 #include "BossStagePart.h"
+#include "BossClearSequence.h"
 #include "StageStart/StageStartPart.h"
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
@@ -247,6 +248,10 @@ private:
 	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
 	// StagePlayScene は IBossStageHost 経由でのみこれを操作する。
 	std::unique_ptr<BossStagePart> bossStage_;
+	// ボス撃破からリザルトまでの段取り（ヒットストップ→スロー→寄るカメラ→崩壊→STAGE CLEAR。23_StageClear.md §4 B）
+	BossClearSequence clearSeq_;
+	// 撃破の瞬間の 1 枚が撮れたら、リザルトへ渡す（StageClearRecord::SetCapture）
+	void UpdateStageClearCapture();
 	// ボス戦の床（石畳＋薄い水）。Boss フェーズ中だけ更新・描画する
 	std::unique_ptr<BossArenaWater> bossWater_;
 	// 低空飛行の大河の水面。PSO はシーン初期化で作り、川のデータは雲の中で読む（13_RiverWater.md）

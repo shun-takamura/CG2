@@ -85,14 +85,14 @@ public:
 	// 自機の開始位置（足場の上）とボスの出る位置。アリーナの前（arenaYaw_）の向きに並ぶ
 	Vector3 GetPlayerStartPos() const;
 	Vector3 GetBossStartPos() const;
-	// ----- 撃破 → STAGE CLEAR → リザルト（演出は次週。今は「クリアした」と分かるところまで）-----
-	// 撃破の爆発を見せる間 → 文字が出る → しばらく表示。入力・被弾はホストが止める
-	void BeginClear();
-	// 進める（UI 時間）。リザルトへ移る時に true
-	bool UpdateClear(float dt);
-	bool IsClearing() const { return clearTimer_ >= 0.0f; }
-	// STAGE CLEAR の文字の不透明度（0..1）
-	float GetClearTextAlpha() const;
+	// ----- 撃破の後（23 番 §4 B。段取りは BossClearSequence、ここはボスの実体だけ）-----
+	// HP が 0 になったボスは、すぐには消さずに AI を止めて残す（寄るカメラで見せるため）。
+	// 倒れたボスが残っている間は敵コントローラも撃破の掃除も回さない
+	bool HasDefeatedBoss() const { return defeatedBoss_ != nullptr; }
+	// 倒れたボスの体の中心（残っていなければ false）
+	bool GetDefeatedBossCenter(Vector3& out) const;
+	// 崩す：手足を外して落とし、本体を破棄する（死亡エフェクト＝大きな爆発はこの破棄で出る）
+	void CollapseDefeatedBoss();
 	// Boss 離脱・シーン再入時のクリア（スポーン物・状態を破棄）。
 	void Reset();
 	// true の間、ボスは次の行動を選ばない（今の攻撃は最後までやる）。自機の死亡演出の間（19 番 G3）
@@ -181,7 +181,7 @@ private:
 
 	// 闘技場の寸法を読む（無ければ既定値のまま）
 	void LoadArenaGeometry();
-	// HP が尽きたら撃破として参照を切る（手足も外す）
+	// HP が尽きたら撃破として参照を切る（実体は defeatedBoss_ に残す。手足を外すのは CollapseDefeatedBoss）
 	void CheckBossDefeated();
 
 	// ----- 手足と部位破壊（22 番 §7.1）-----
@@ -198,11 +198,8 @@ private:
 	// ボス戦の最初のカメラ（自機の開始位置からボスの出る位置を向く）。Enter と着陸の終点で同じ姿勢にする
 	void ComputeStartCamera(Vector3& outEye, float& outYaw, float& outPitch) const;
 
-	// ----- 撃破 → クリア -----
-	float clearTimer_     = -1.0f; // < 0 で未開始
-	float clearDelay_     = 1.5f;  // 撃破の爆発を見せる [s]
-	float clearTextFade_  = 0.5f;  // 文字が出るまで [s]
-	float clearHold_      = 3.0f;  // 文字を見せる [s]（この後リザルトへ）
+	// ----- 撃破の後 -----
+	IImGuiEditable* defeatedBoss_ = nullptr; // HP 0 のまま残しているボス（CollapseDefeatedBoss で破棄）
 
 	// ----- 着陸 -----
 	bool  landingActive_      = false;
