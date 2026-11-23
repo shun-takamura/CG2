@@ -7,7 +7,20 @@
 #include "SessionLogger.h"
 
 namespace {
-    // フルパスからファイル名だけ取り出す（profile.log を読みやすくするため）
+    // 1 秒のミリ秒数
+    constexpr double kMsPerSecond = 1000.0;
+    // profile.log に書く時間 [ms] の小数点以下の桁数
+    constexpr int kMsPrecision = 3;
+    // profile.log に書くウィンドウの長さ [秒] の小数点以下の桁数
+    constexpr int kSecondsPrecision = 2;
+    // profile.log に書くカウンタの 1 フレーム平均の小数点以下の桁数
+    constexpr int kAveragePrecision = 2;
+    // profile.log に書くゲージの値の小数点以下の桁数
+    constexpr int kGaugePrecision = 3;
+
+    /// <summary>フルパスからファイル名だけ取り出す（profile.log を読みやすくするため）</summary>
+    /// <param name="path">パス</param>
+    /// <returns>ファイル名の先頭（nullptr なら空文字）</returns>
     const char* BaseName(const char* path) {
         if (!path) {
             return "";
@@ -21,6 +34,8 @@ namespace {
         return base;
     }
 
+    /// <summary>今の QueryPerformanceCounter の値</summary>
+    /// <returns>tick</returns>
     int64_t NowTicks() {
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
@@ -28,16 +43,16 @@ namespace {
     }
 }
 
-Profiler& Profiler::Instance() {
+Profiler* Profiler::GetInstance() {
     static Profiler instance;
-    return instance;
+    return &instance;
 }
 
 Profiler::Profiler() {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
     // tick → ms（1秒 = freq tick なので 1000ms / freq）
-    tickToMs_ = 1000.0 / static_cast<double>(freq.QuadPart);
+    tickToMs_ = kMsPerSecond / static_cast<double>(freq.QuadPart);
     windowStartTicks_ = NowTicks();
 }
 
@@ -217,7 +232,7 @@ void Profiler::FlushWindow() {
     }
 
     const double windowSec =
-        static_cast<double>(NowTicks() - windowStartTicks_) * tickToMs_ / 1000.0;
+        static_cast<double>(NowTicks() - windowStartTicks_) * tickToMs_ / kMsPerSecond;
 
     for (const auto& w : windowStats_) {
         const double avgMs =
@@ -226,15 +241,15 @@ void Profiler::FlushWindow() {
             (w.presentFrames > 0) ? (w.sumGpuMs / w.presentFrames) : 0.0;
 
         std::ostringstream oss;
-        oss << std::fixed << std::setprecision(3)
+        oss << std::fixed << std::setprecision(kMsPrecision)
             << "frame=" << frame_
-            << " window_s=" << std::setprecision(2) << windowSec
+            << " window_s=" << std::setprecision(kSecondsPrecision) << windowSec
             << " frames=" << windowFrames_
             << " section=" << w.name
             << " depth=" << w.depth
             << " present=" << w.presentFrames
             << " calls=" << w.totalCalls
-            << " sum_ms=" << std::setprecision(3) << w.sumCpuMs
+            << " sum_ms=" << std::setprecision(kMsPrecision) << w.sumCpuMs
             << " avg_ms=" << avgMs
             << " max_ms=" << w.maxCpuMs
             << " gpu_sum_ms=" << w.sumGpuMs
@@ -242,7 +257,7 @@ void Profiler::FlushWindow() {
             << " gpu_max_ms=" << w.maxGpuMs
             << " file=" << BaseName(w.file)
             << " line=" << w.line;
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
     }
 
@@ -253,13 +268,13 @@ void Profiler::FlushWindow() {
 
         std::ostringstream oss;
         oss << "frame=" << frame_
-            << " window_s=" << std::fixed << std::setprecision(2) << windowSec
+            << " window_s=" << std::fixed << std::setprecision(kSecondsPrecision) << windowSec
             << " frames=" << windowFrames_
             << " counter=" << wc.name
             << " total=" << wc.total
-            << " avg_per_frame=" << std::setprecision(2) << avgPerFrame
+            << " avg_per_frame=" << std::setprecision(kAveragePrecision) << avgPerFrame
             << " max_per_frame=" << wc.maxPerFrame;
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
     }
 
@@ -268,14 +283,14 @@ void Profiler::FlushWindow() {
         const double avg = (g.count > 0) ? (g.sum / g.count) : 0.0;
         std::ostringstream oss;
         oss << "frame=" << frame_
-            << " window_s=" << std::fixed << std::setprecision(2) << windowSec
+            << " window_s=" << std::fixed << std::setprecision(kSecondsPrecision) << windowSec
             << " frames=" << windowFrames_
             << " gauge=" << g.name
-            << " cur=" << std::setprecision(3) << g.last
+            << " cur=" << std::setprecision(kGaugePrecision) << g.last
             << " min=" << g.minv
             << " max=" << g.maxv
             << " avg=" << avg;
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Profile, SessionLogger::Level::Trace, oss.str());
     }
 

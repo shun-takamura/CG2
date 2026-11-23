@@ -42,6 +42,53 @@ namespace {
 		kRootCount
 	};
 }
+	// SRV のレジスタ（PS t0〜t10。t2 は使わない）
+	constexpr UINT kRegReflectionSrv = 0;     // t0：反射 RT
+	constexpr UINT kRegSkyCubeSrv = 1;        // t1：空の cubemap
+	constexpr UINT kRegShadowMapSrv = 3;      // t3：シャドウマップ
+	constexpr UINT kRegFloorSrv = 4;          // t4：床テクスチャ
+	constexpr UINT kRegCloudNoiseSrv = 5;     // t5：雲のノイズ
+	constexpr UINT kRegRippleHeightSrv = 6;   // t6：波の高さマップ
+	constexpr UINT kRegFloorNormalSrv = 7;    // t7：床の法線マップ
+	constexpr UINT kRegFloorHeightSrv = 8;    // t8：床のハイトマップ
+	constexpr UINT kRegCloudMokoSrv = 9;      // t9：雲のもこもこの高さ
+	constexpr UINT kRegRiverMapSrv = 10;      // t10：川のマップ
+	// CBV のレジスタ
+	constexpr UINT kRegTransformCb = 0;          // VS b0
+	constexpr UINT kRegParamsCb = 0;             // PS b0
+	constexpr UINT kRegDirectionalLightCb = 1;   // PS b1
+	constexpr UINT kRegShadowConstantsCb = 5;    // PS b5
+	constexpr UINT kRegFogCb = 6;                // PS b6
+	constexpr UINT kRegCloudCb = 7;              // PS b7
+	// 静的サンプラーの数（s0〜s4）と、雲のノイズのサンプラーの異方性の最大値
+	constexpr UINT kStaticSamplerCount = 5;
+	constexpr UINT kCloudNoiseMaxAnisotropy = 8;
+	// 川のマップの範囲の下限 [m]（0 割りを防ぐ）
+	constexpr float kMinRiverMapSize = 1e-3f;
+	// 水面の板の頂点の数（TriangleStrip の単位正方形）
+	constexpr int kQuadVertexCount = 4;
+	// smoothstep（3t² − 2t³）の係数
+	constexpr float kSmoothstepSquareCoef = 3.0f;
+	constexpr float kSmoothstepCubeCoef = 2.0f;
+	// 連続で出す波紋の揺らぎ（振幅 0.7〜1.0 倍・波長 0.8〜1.0 倍・間隔 0.8〜1.2 倍）
+	constexpr float kBurstAmplitudeJitterMin = 0.7f;
+	constexpr float kBurstAmplitudeJitterRange = 0.3f;
+	constexpr float kBurstWavelengthJitterMin = 0.8f;
+	constexpr float kBurstWavelengthJitterRange = 0.2f;
+	constexpr float kBurstIntervalJitterMin = 0.8f;
+	constexpr float kBurstIntervalJitterRange = 0.4f;
+	// 波紋の波長・波の束の長さの下限 [m]
+	constexpr float kMinRingWavelength = 0.05f;
+	constexpr float kMinRingPacketLength = 0.5f;
+	// 連続で出す波紋の間隔の下限 [秒]
+	constexpr float kMinBurstInterval = 0.1f;
+
+	// 乱数（線形合同法）の掛ける数と足す数
+	constexpr uint32_t kLcgMultiplier = 1664525u;
+	constexpr uint32_t kLcgIncrement = 1013904223u;
+	// 乱数の状態から 0〜1 を作る時に捨てる下位ビットの数と、使うビットの数
+	constexpr int kRandomDiscardBits = 8;
+	constexpr int kRandomUsedBits = 24;
 
 WaterSurface::WaterSurface() = default;
 WaterSurface::~WaterSurface() = default;
@@ -84,16 +131,16 @@ void WaterSurface::CreateRootSignature()
 		r.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 		return r;
 	};
-	D3D12_DESCRIPTOR_RANGE rangeReflection = makeRange(0);
-	D3D12_DESCRIPTOR_RANGE rangeSky = makeRange(1);
-	D3D12_DESCRIPTOR_RANGE rangeShadow = makeRange(3);
-	D3D12_DESCRIPTOR_RANGE rangeFloor = makeRange(4);
-	D3D12_DESCRIPTOR_RANGE rangeCloudNoise = makeRange(5);
-	D3D12_DESCRIPTOR_RANGE rangeRippleHeight = makeRange(6);
-	D3D12_DESCRIPTOR_RANGE rangeFloorNormal = makeRange(7);
-	D3D12_DESCRIPTOR_RANGE rangeFloorHeight = makeRange(8);
-	D3D12_DESCRIPTOR_RANGE rangeCloudMoko = makeRange(9);
-	D3D12_DESCRIPTOR_RANGE rangeRiverMap = makeRange(10);
+	D3D12_DESCRIPTOR_RANGE rangeReflection = makeRange(kRegReflectionSrv);
+	D3D12_DESCRIPTOR_RANGE rangeSky = makeRange(kRegSkyCubeSrv);
+	D3D12_DESCRIPTOR_RANGE rangeShadow = makeRange(kRegShadowMapSrv);
+	D3D12_DESCRIPTOR_RANGE rangeFloor = makeRange(kRegFloorSrv);
+	D3D12_DESCRIPTOR_RANGE rangeCloudNoise = makeRange(kRegCloudNoiseSrv);
+	D3D12_DESCRIPTOR_RANGE rangeRippleHeight = makeRange(kRegRippleHeightSrv);
+	D3D12_DESCRIPTOR_RANGE rangeFloorNormal = makeRange(kRegFloorNormalSrv);
+	D3D12_DESCRIPTOR_RANGE rangeFloorHeight = makeRange(kRegFloorHeightSrv);
+	D3D12_DESCRIPTOR_RANGE rangeCloudMoko = makeRange(kRegCloudMokoSrv);
+	D3D12_DESCRIPTOR_RANGE rangeRiverMap = makeRange(kRegRiverMapSrv);
 
 	auto setCbv = [](D3D12_ROOT_PARAMETER& p, UINT reg, D3D12_SHADER_VISIBILITY vis) {
 		p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -108,16 +155,16 @@ void WaterSurface::CreateRootSignature()
 	};
 
 	D3D12_ROOT_PARAMETER rootParameters[kRootCount] = {};
-	setCbv(rootParameters[kRootTransform], 0, D3D12_SHADER_VISIBILITY_VERTEX);
-	setCbv(rootParameters[kRootParams], 0, D3D12_SHADER_VISIBILITY_PIXEL);
-	setCbv(rootParameters[kRootDirectionalLight], 1, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootTransform], kRegTransformCb, D3D12_SHADER_VISIBILITY_VERTEX);
+	setCbv(rootParameters[kRootParams], kRegParamsCb, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootDirectionalLight], kRegDirectionalLightCb, D3D12_SHADER_VISIBILITY_PIXEL);
 	setTable(rootParameters[kRootReflection], &rangeReflection);
 	setTable(rootParameters[kRootSkyCube], &rangeSky);
 	setTable(rootParameters[kRootFloor], &rangeFloor);
-	setCbv(rootParameters[kRootShadowConstants], 5, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootShadowConstants], kRegShadowConstantsCb, D3D12_SHADER_VISIBILITY_PIXEL);
 	setTable(rootParameters[kRootShadowMap], &rangeShadow);
-	setCbv(rootParameters[kRootFog], 6, D3D12_SHADER_VISIBILITY_PIXEL);
-	setCbv(rootParameters[kRootCloud], 7, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootFog], kRegFogCb, D3D12_SHADER_VISIBILITY_PIXEL);
+	setCbv(rootParameters[kRootCloud], kRegCloudCb, D3D12_SHADER_VISIBILITY_PIXEL);
 	setTable(rootParameters[kRootCloudNoise], &rangeCloudNoise);
 	setTable(rootParameters[kRootRippleHeight], &rangeRippleHeight);
 	setTable(rootParameters[kRootFloorNormal], &rangeFloorNormal);
@@ -126,8 +173,8 @@ void WaterSurface::CreateRootSignature()
 	setTable(rootParameters[kRootRiverMap], &rangeRiverMap);
 
 	// s0 = 通常（ラップ）, s1 = シャドウ比較, s2 = シャドウ生深度, s3 = 反射 RT（クランプ）, s4 = 雲のノイズ（ラップ・異方性）
-	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
-	for (UINT i = 0; i < 5; ++i) {
+	D3D12_STATIC_SAMPLER_DESC samplers[kStaticSamplerCount] = {};
+	for (UINT i = 0; i < kStaticSamplerCount; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].MaxLOD = D3D12_FLOAT32_MAX;
@@ -147,7 +194,7 @@ void WaterSurface::CreateRootSignature()
 	samplers[3].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 	// Skybox の s4 と同じ設定（CloudSky.hlsli を共用するため）
 	samplers[4].Filter = D3D12_FILTER_ANISOTROPIC;
-	samplers[4].MaxAnisotropy = 8;
+	samplers[4].MaxAnisotropy = kCloudNoiseMaxAnisotropy;
 	samplers[4].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	samplers[4].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	samplers[4].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -243,8 +290,8 @@ void WaterSurface::SetRiverMap(const std::string& riverMapPath, const RiverMapIn
 	riverMapPath_ = riverMapPath;
 	params_.riverMapOrigin = { info.xMin, info.zMax };
 	params_.riverMapInvSize = {
-		1.0f / (std::max)(info.xMax - info.xMin, 1e-3f),
-		1.0f / (std::max)(info.zMax - info.zMin, 1e-3f) };
+		1.0f / (std::max)(info.xMax - info.xMin, kMinRiverMapSize),
+		1.0f / (std::max)(info.zMax - info.zMin, kMinRiverMapSize) };
 	params_.riverMaxDepth = info.maxDepth;
 	params_.riverMode = TextureManager::GetInstance()->IsGPUReady(riverMapPath_) ? 1 : 0;
 }
@@ -252,7 +299,7 @@ void WaterSurface::SetRiverMap(const std::string& riverMapPath, const RiverMapIn
 void WaterSurface::CreateVertexBuffer()
 {
 	// XZ 平面の単位正方形（TriangleStrip）。大きさと位置は World 行列で決める
-	const Vector3 vertices[4] = {
+	const Vector3 vertices[kQuadVertexCount] = {
 		{ -0.5f, 0.0f, -0.5f },
 		{ -0.5f, 0.0f,  0.5f },
 		{  0.5f, 0.0f, -0.5f },
@@ -261,7 +308,7 @@ void WaterSurface::CreateVertexBuffer()
 	vertexBuffer_ = dxCore_->CreateBufferResource(sizeof(vertices));
 	Vector3* mapped = nullptr;
 	vertexBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
-	for (int i = 0; i < 4; ++i) mapped[i] = vertices[i];
+	for (int i = 0; i < kQuadVertexCount; ++i) mapped[i] = vertices[i];
 	vertexBuffer_->Unmap(0, nullptr);
 
 	vertexBufferView_.BufferLocation = vertexBuffer_->GetGPUVirtualAddress();
@@ -341,7 +388,7 @@ void WaterSurface::Draw(const Camera& camera, const std::string& skyCubemapPath,
 	cmd->SetGraphicsRootDescriptorTable(kRootRiverMap, river ? tm->GetSrvHandleGPU(riverMapPath_) : floorSrv);
 
 	PEPPER_COUNT("DrawCall");
-	cmd->DrawInstanced(4, 1, 0, 0);
+	cmd->DrawInstanced(kQuadVertexCount, 1, 0, 0);
 }
 
 void WaterSurface::Update(float deltaTime)
@@ -355,7 +402,7 @@ void WaterSurface::Update(float deltaTime)
 	if (ambientBlendElapsed_ < ambientBlendDuration_) {
 		ambientBlendElapsed_ = (std::min)(ambientBlendElapsed_ + deltaTime, ambientBlendDuration_);
 		float t = ambientBlendElapsed_ / ambientBlendDuration_;
-		t = t * t * (3.0f - 2.0f * t);
+		t = t * t * (kSmoothstepSquareCoef - kSmoothstepCubeCoef * t);
 		params_.ambientRingScale = ambientFrom_ + (ambientTo_ - ambientFrom_) * t;
 	}
 
@@ -363,9 +410,9 @@ void WaterSurface::Update(float deltaTime)
 		burstTimer_ -= deltaTime;
 		if (burstTimer_ <= 0.0f) {
 			EmitRing(burstCenter_,
-				burstAmplitude_ * (0.7f + 0.3f * NextRandom01()),
-				burstWavelength_ * (0.8f + 0.2f * NextRandom01()));
-			burstTimer_ += burstInterval_ * (0.8f + 0.4f * NextRandom01());
+				burstAmplitude_ * (kBurstAmplitudeJitterMin + kBurstAmplitudeJitterRange * NextRandom01()),
+				burstWavelength_ * (kBurstWavelengthJitterMin + kBurstWavelengthJitterRange * NextRandom01()));
+			burstTimer_ += burstInterval_ * (kBurstIntervalJitterMin + kBurstIntervalJitterRange * NextRandom01());
 		}
 	}
 }
@@ -392,8 +439,8 @@ void WaterSurface::EmitRing(const Vector3& center, float amplitude, float wavele
 	ring.center = { center.x, center.z };
 	ring.emitTime = params_.time;
 	ring.amplitude = (std::max)(amplitude, 0.0f);
-	ring.wavelength = (std::max)(wavelength, 0.05f);
-	ring.packetLength = (std::max)(packetLength, 0.5f);
+	ring.wavelength = (std::max)(wavelength, kMinRingWavelength);
+	ring.packetLength = (std::max)(packetLength, kMinRingPacketLength);
 	ring.maxRadius = (std::max)(maxRadius, 1.0f);
 	nextRingSlot_ = (nextRingSlot_ + 1) % kMaxEmittedRings;
 }
@@ -402,7 +449,7 @@ void WaterSurface::StartRingBurst(const Vector3& center, float interval, float a
 {
 	bursting_ = true;
 	burstCenter_ = center;
-	burstInterval_ = (std::max)(interval, 0.1f);
+	burstInterval_ = (std::max)(interval, kMinBurstInterval);
 	burstAmplitude_ = amplitude;
 	burstWavelength_ = wavelength;
 	burstTimer_ = 0.0f; // 次の Update で即1発
@@ -453,8 +500,8 @@ void WaterSurface::DispatchSimulation()
 
 float WaterSurface::NextRandom01()
 {
-	randomState_ = randomState_ * 1664525u + 1013904223u;
-	return static_cast<float>(randomState_ >> 8) / static_cast<float>(1u << 24);
+	randomState_ = randomState_ * kLcgMultiplier + kLcgIncrement;
+	return static_cast<float>(randomState_ >> kRandomDiscardBits) / static_cast<float>(1u << kRandomUsedBits);
 }
 
 void WaterSurface::OnImGui()
@@ -539,13 +586,14 @@ void WaterSurface::OnImGui()
 	ImGui::Text("current: %.2f", params_.ambientRingScale);
 	ImGui::SeparatorText("Ripple Simulation (GPU)");
 	{
-		RippleSimulation::Settings& sim = rippleSimulation_->GetSettings();
+		RippleSimulation::Settings sim = rippleSimulation_->GetSettings();
 		ImGui::DragFloat("Sim Size [m]", &sim.simSize, 0.5f, 2.0f, 500.0f);
 		ImGui::DragFloat("Wave Speed [m/s]", &sim.waveSpeed, 0.05f, 0.05f, 20.0f);
 		ImGui::SliderFloat("Damping", &sim.damping, 0.9f, 1.0f, "%.4f");
 		ImGui::DragFloat("Steps / s", &sim.stepsPerSecond, 1.0f, 10.0f, 240.0f);
 		ImGui::SliderFloat("Edge Fade", &sim.edgeFade, 0.001f, 0.5f);
 		ImGui::DragFloat("Normal Scale", &sim.normalScale, 0.01f, 0.0f, 20.0f);
+		rippleSimulation_->SetSettings(sim);
 		ImGui::DragFloat("Max Slope (0=off)", &params_.simMaxSlope, 0.005f, 0.0f, 5.0f, "%.3f");
 		if (ImGui::Button("Clear Ripples")) rippleSimulation_->Clear();
 	}

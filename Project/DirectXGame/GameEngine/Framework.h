@@ -58,12 +58,14 @@ public:
 	/// ウィンドウのタイトルバーに出す文字列。
 	/// アプリ側で override して自分のゲーム名を返す。
 	/// </summary>
+	/// <returns>タイトル文字列（既定は L"ArcanaEngine"）</returns>
 	virtual const wchar_t* GetWindowTitle() const { return L"ArcanaEngine"; }
 
 	/// <summary>
 	/// exe に埋め込んだ ICON リソースの ID。0 なら Windows の既定アイコン。
 	/// アプリが .rc でアイコンを持つ場合に override する（Documents/13_AppIcon.md）。
 	/// </summary>
+	/// <returns>ICON リソースの ID（既定は 0）</returns>
 	virtual int GetWindowIconResourceId() const { return 0; }
 
 	/// <summary>
@@ -71,44 +73,75 @@ public:
 	/// 既定は nullptr。ゲーム側（Game）が自身の SceneManager を返すよう override する。
 	/// Framework はこの IF だけを通してシーンを Initialize/Update/Finalize する。
 	/// </summary>
+	/// <returns>シーン駆動の委譲先（既定は nullptr＝シーンを回さない）</returns>
 	virtual ISceneRunner* GetSceneRunner() { return nullptr; }
 
 	/// <summary>
-	/// 初期化
+	/// エンジン基盤（ウィンドウ・D3D12・アセットの読み込み経路・各マネージャ・入力）を作り、シーンランナーを初期化する。
+	/// コマンドライン引数（--seed / --replay / --use-pack / --no-dstorage / --exit-after 等）もここで読む。
+	/// 派生で override する時は先に基底を呼ぶ
 	/// </summary>
 	virtual void Initialize();
 
 	/// <summary>
-	/// 終了
+	/// シーンランナーと各マネージャを生成と逆順に解放し、ログを閉じる。
+	/// 初期化が途中で失敗した時も呼ばれるので、未生成のメンバは触らない
 	/// </summary>
 	virtual void Finalize();
 
 	/// <summary>
-	/// 毎フレーム更新
+	/// 1 フレーム分の更新（ウィンドウメッセージ・入力・シーンランナー・サウンド・リプレイ記録）。初回だけ起動の KPI をログに出す。
+	/// ウィンドウが閉じられた・--exit-after の時間が経った・リプレイが終わった時は終了リクエストを立てる
 	/// </summary>
 	virtual void Update();
 
-	/// <summary>
-	/// 描画
-	/// </summary>
+	/// <summary>1 フレーム分の描画。派生（Game）が実装する</summary>
 	virtual void Draw() = 0;
 
-	/// <summary>
-	/// 終了チェック
-	/// </summary>
+	/// <summary>終了リクエストが立っているか</summary>
+	/// <returns>終了するなら true</returns>
 	virtual bool IsEndRequest() { return endRequest_; }
 
 	/// <summary>
-	/// 実行
+	/// Initialize → (Update → Draw) のループ → Finalize を実行する。終了リクエストが立つまで戻らない。
+	/// Initialize の時点で終了リクエストが立っていればループに入らず終わる
 	/// </summary>
 	void Run();
 
 	/// <summary>
 	/// CSM シャドウマップ（全シーン共有）。ImGui 調整などから参照する。
 	/// </summary>
+	/// <returns>シャドウマップ（Initialize 前は nullptr）</returns>
 	ShadowMap* GetShadowMap() const { return shadowMap_.get(); }
 
 protected:
+	//====================
+	// 派生（Game）が使うエンジンの部品。持ち主は Framework で、派生は借りて使うだけ
+	//====================
+	/// <summary>ウィンドウ（フルスクリーン切り替えなど）</summary>
+	/// <returns>WindowsApplication</returns>
+	WindowsApplication* GetWinApp() const { return winApp_.get(); }
+	/// <summary>GPU リソースの作成・コマンドリスト・経過時間</summary>
+	/// <returns>DirectXCore</returns>
+	DirectXCore* GetDxCore() const { return dxCore_.get(); }
+	/// <summary>SRV（テクスチャの記述子）の確保</summary>
+	/// <returns>SRVManager</returns>
+	SRVManager* GetSRVManager() const { return srvManager_.get(); }
+	/// <summary>3D モデルの描画（影の設定・既定のカメラ）</summary>
+	/// <returns>Object3DManager</returns>
+	Object3DManager* GetObject3DManager() const { return object3DManager_.get(); }
+	/// <summary>キーボード・マウス・パッドと入力アクション</summary>
+	/// <returns>InputManager</returns>
+	InputManager* GetInput() const { return input_.get(); }
+
+	/// <summary>シーンを作る工場を渡す（持ち主は Framework になる）</summary>
+	/// <param name="factory">ゲームのシーンを作る工場</param>
+	void SetSceneFactory(std::unique_ptr<AbstractSceneFactory> factory);
+	/// <summary>渡したシーンの工場</summary>
+	/// <returns>工場（まだ渡していなければ nullptr）</returns>
+	AbstractSceneFactory* GetSceneFactory() const { return sceneFactory_.get(); }
+
+private:
 	// 終了リクエストフラグ
 	bool endRequest_ = false;
 

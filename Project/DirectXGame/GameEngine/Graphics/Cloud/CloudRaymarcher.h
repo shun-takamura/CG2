@@ -179,35 +179,57 @@ public:
 	};
 
 	CloudRaymarcher();
+	/// <summary>RT と 3D テクスチャの SRV の番号を全部返す（ステージごとに作られるので返さないと枠が尽きる）</summary>
 	~CloudRaymarcher();
 
+	/// <summary>ノイズ類（2D はリニアで、3D は自前で）を読み、ルートシグネチャ・3 本の PSO（歩く／積み重ね／重ねる）・RT・CB を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">RT と 3D テクスチャの SRV を確保する先</param>
+	/// <param name="screenWidth">シーン RT の幅 [px]（雲の RT はこれ × resolutionScale）</param>
+	/// <param name="screenHeight">シーン RT の高さ [px]</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t screenWidth, uint32_t screenHeight);
 
 	/// <summary>風のスクロールを進める。毎フレーム</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void Update(float deltaTime);
 	/// <summary>
 	/// Params の風に足す風 [m/s]（XZ。保存しない）。大きい形・もこもこ・マスクを同じだけ流す。
 	/// 使う側が毎フレーム決める（例：自機の進む向きと逆へ流して飛んでいる感じを出す）
 	/// </summary>
+	/// <param name="wind">足す風 [m/s]（XZ）</param>
 	void SetExtraWind(const Vector2& wind) { extraWind_ = wind; }
 
 	/// <summary>
 	/// 雲を描いてシーンに重ねる。不透明物（と水面）の後、半透明の前に呼ぶ。
 	/// 終わるとシーン RT と書き込み用の DSV・全画面のビューポートを貼り直して返す。
 	/// </summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="sceneTarget">重ねる先のシーン RT（nullptr なら何もしない）</param>
+	/// <param name="skyCubemapPath">空気遠近に使う空の cubemap のパス</param>
 	void Draw(const Camera& camera, RenderTexture* sceneTarget, const std::string& skyCubemapPath);
 
 	/// <summary>降下の線（縦穴の中心）。点は 16 個まで（それより多ければ間引く）。空ならくり抜かない</summary>
+	/// <param name="points">降下の線の点（2 点未満ならくり抜かない）</param>
 	void SetShaftPath(const std::vector<Vector3>& points);
 
 	/// <summary>太陽へ向かう向き</summary>
+	/// <param name="towardSun">太陽へ向かう向き（正規化して持つ）</param>
 	void SetSunDirection(const Vector3& towardSun);
 
-	Params& GetParams() { return params_; }
+	/// <summary>雲海の調整値（書き換える時はコピーして SetParams で戻す）</summary>
+	/// <returns>今の値</returns>
 	const Params& GetParams() const { return params_; }
+	/// <summary>雲海の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetParams(const Params& value) { params_ = value; }
 
+	/// <summary>JSON から調整値を読む（無いキーは今の値のまま。オブジェクトでなければ何もしない）</summary>
+	/// <param name="json">読む JSON オブジェクト</param>
 	void LoadFromJson(const JsonValue& json);
+	/// <summary>調整値を JSON に書く</summary>
+	/// <param name="json">書き込み先のオブジェクト</param>
 	void SaveToJson(JsonValue& json) const;
+	/// <summary>雲海の調整値の ImGui</summary>
 	void OnImGui();
 	/// <summary>確認用の表示の切り替え（雲海の面の陰影を項目ごとに映す）。保存しない</summary>
 	void OnImGuiDebugView();
@@ -267,14 +289,29 @@ private:
 	};
 	static_assert(sizeof(ConstantsForGPU) == 1088, "CloudRaymarch.hlsli の CloudRaymarchParams とサイズを合わせる");
 
+	/// <summary>ルートシグネチャを作る（[0]=PS b0 定数、[1]〜[8]=PS t0〜t7 のテーブル。s0=ラップ・異方性 / s1=クランプ・点 / s2=クランプ・線形）</summary>
 	void CreateRootSignature();
+	/// <summary>全画面三角形（PostProcess.VS）の PSO を作る（深度なし・DSV なし）</summary>
+	/// <param name="psPath">ピクセルシェーダのパス</param>
+	/// <param name="rtvFormat">1 枚目の RT の形式</param>
+	/// <param name="premultipliedBlend">true で乗算済み α でシーンに重ねる（シーンの α は残す）</param>
+	/// <param name="rtvFormat2">2 枚目の RT の形式（UNKNOWN なら 1 枚だけ）</param>
+	/// <returns>作った PSO</returns>
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(const wchar_t* psPath, DXGI_FORMAT rtvFormat, bool premultipliedBlend,
 		DXGI_FORMAT rtvFormat2 = DXGI_FORMAT_UNKNOWN);
+	/// <summary>雲の RT・代表の距離の RT・積み重ねの RT 2 枚を resolutionScale の大きさで作り直す（積み重ねは捨てる）</summary>
 	void CreateTarget();
 	/// <summary>3D テクスチャ（DDS、ボリューム）を読んで SRV を作る。TextureManager は 2D 専用なのでここで持つ</summary>
+	/// <param name="path">.vol（中身は 3D の DDS）のパス。読めなければ assert</param>
+	/// <param name="resource">作ったテクスチャの書き込み先</param>
+	/// <param name="srvIndex">確保した SRV 番号の書き込み先</param>
 	void LoadVolumeTexture(const char* path, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, uint32_t& srvIndex);
 	/// <summary>入口・出口（降下の線と上面・下面の交点）からの距離で B' の重みを決める</summary>
+	/// <param name="eye">カメラ位置</param>
+	/// <returns>B' の重み（0〜1。縦穴の中は volumeShaftWeight まで）</returns>
 	float ComputeVolumeWeight(const Vector3& eye) const;
+	/// <summary>調整値・カメラ・風のずれ・縦穴・前のフレームの ViewProj を GPU の定数に書く</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void WriteConstants(const Camera& camera);
 
 	DirectXCore* dxCore_ = nullptr;

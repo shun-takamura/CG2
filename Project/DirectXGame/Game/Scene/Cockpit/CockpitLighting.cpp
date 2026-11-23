@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "LightManager.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 
 #ifdef _DEBUG
@@ -13,21 +14,51 @@
 #endif
 
 namespace {
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
+	// 操縦桿の緑の輪・操作盤のボタン（CP_Glow）の発光色の初期値
+	constexpr Vector3 kDefaultGlowColor = { 0.25f, 1.0f, 0.45f };
+	// CP_Glow の発光の強さの初期値
+	constexpr float kDefaultGlowStrength = 0.9f;
+	// ペダルの光の帯（CP_Light）の発光色の初期値
+	constexpr Vector3 kDefaultLightColor = { 0.3f, 1.0f, 0.6f };
+	// CP_Light の発光の強さの初期値
+	constexpr float kDefaultLightStrength = 0.5f;
+	// 壁のモニター（CP_Screen）の発光色の初期値
+	constexpr Vector3 kDefaultScreenColor = { 0.2f, 1.0f, 0.5f };
+	// CP_Screen の発光の強さの初期値
+	constexpr float kDefaultScreenStrength = 0.25f;
+	// 足元の前のランプの位置（コクピットの軸から）[m] の初期値
+	constexpr Vector3 kDefaultFootLampOffset = { 0.0f, -0.3f, 0.6f };
+	// 足元の前のランプの明るさの初期値
+	constexpr float kDefaultFootLampIntensity = 1.5f;
+	// 足元の前のランプの届く半径 [m] の初期値
+	constexpr float kDefaultLampRadius = 2.0f;
+	// ランプの減衰の初期値
+	constexpr float kDefaultLampDecay = 2.0f;
+	// 頭の上のランプの位置（コクピットの軸から）[m] の初期値
+	constexpr Vector3 kDefaultHeadLampOffset = { 0.0f, 0.7f, 0.1f };
+	// 頭の上のランプの明るさの初期値
+	constexpr float kDefaultHeadLampIntensity = 0.8f;
+	// 頭の上のランプの届く半径 [m] の初期値
+	constexpr float kDefaultHeadLampRadius = 2.5f;
+	// ランプの色の初期値
+	constexpr Vector3 kDefaultLampColor = { 0.3f, 1.0f, 0.55f };
+	// 六角形の一つの大きさ（画面の高さ 900px のとき）[px] の初期値
+	constexpr float kDefaultHexCellPixels = 42.0f;
+	// 六角形の縁の帯の幅の初期値
+	constexpr float kDefaultHexBand = 0.12f;
+	// 六角形の現れ方のばらつきの初期値
+	constexpr float kDefaultHexJitter = 0.12f;
+	// 六角形の縁の色の初期値
+	constexpr Vector3 kDefaultHexColor = { 0.35f, 1.0f, 0.85f };
+	// ブルームの倍率の初期値
+	constexpr float kDefaultBloomScale = 3.0f;
+	// 六角形の大きさの基準にする画面の高さ [px]
+	constexpr float kHexReferenceScreenHeight = 900.0f;
 
-	Vector3 ReadVector3(const JsonValue& a, const Vector3& fallback) {
-		if (!a.IsArray() || a.Size() < 3) return fallback;
-		return { static_cast<float>(a[0].AsDouble(fallback.x)), static_cast<float>(a[1].AsDouble(fallback.y)),
-			static_cast<float>(a[2].AsDouble(fallback.z)) };
-	}
-
-	// 部位の名前のどれかを含むか
+	/// <summary>パスが部位の名前のどれかを含むかを返す</summary>
+	/// <param name="path">.mat のパス</param>
+	/// <param name="names">部位の名前の一覧（空の名前は無視）</param>
+	/// <returns>どれかを含めば true</returns>
 	bool MatchesAny(const std::string& path, const std::vector<std::string>& names) {
 		for (const std::string& name : names) {
 			if (!name.empty() && path.find(name) != std::string::npos) return true;
@@ -44,22 +75,22 @@ CockpitLighting::CockpitLighting() {
 void CockpitLighting::ResetToDefaults() {
 	// 操縦桿の緑の輪・操作盤のボタン（CP_Glow）、ペダルの光の帯（CP_Light）、壁のモニター（CP_Screen）
 	glowParts_ = {
-		{ "CP_Glow", { 0.25f, 1.0f, 0.45f }, 0.9f, true },
-		{ "CP_Light", { 0.3f, 1.0f, 0.6f }, 0.5f, true },
-		{ "CP_Screen", { 0.2f, 1.0f, 0.5f }, 0.25f, true },
+		{ "CP_Glow", kDefaultGlowColor, kDefaultGlowStrength, true },
+		{ "CP_Light", kDefaultLightColor, kDefaultLightStrength, true },
+		{ "CP_Screen", kDefaultScreenColor, kDefaultScreenStrength, true },
 	};
 	// 外を映す：壁のモニター・枠・開口部の内枠・ハッチと下の板（HT_*）。座席・操縦桿・ペダルは残る
 	monitorParts_ = { "CP_Screen", "CP_Frame", "BZ_Navy", "HT_" };
 	// 足元の前（操作盤のあたり）と頭の上
-	lamps_[0] = { { 0.0f, -0.3f, 0.6f }, 1.5f, 2.0f, 2.0f };
-	lamps_[1] = { { 0.0f, 0.7f, 0.1f }, 0.8f, 2.5f, 2.0f };
-	lampColor_ = { 0.3f, 1.0f, 0.55f };
+	lamps_[0] = { kDefaultFootLampOffset, kDefaultFootLampIntensity, kDefaultLampRadius, kDefaultLampDecay };
+	lamps_[1] = { kDefaultHeadLampOffset, kDefaultHeadLampIntensity, kDefaultHeadLampRadius, kDefaultLampDecay };
+	lampColor_ = kDefaultLampColor;
 	lampFollowSign_ = true;
-	hexCellPixels_ = 42.0f;
-	hexBand_ = 0.12f;
-	hexJitter_ = 0.12f;
-	hexColor_ = { 0.35f, 1.0f, 0.85f };
-	bloomScale_ = 3.0f;
+	hexCellPixels_ = kDefaultHexCellPixels;
+	hexBand_ = kDefaultHexBand;
+	hexJitter_ = kDefaultHexJitter;
+	hexColor_ = kDefaultHexColor;
+	bloomScale_ = kDefaultBloomScale;
 }
 
 void CockpitLighting::Initialize() {
@@ -112,7 +143,7 @@ void CockpitLighting::Apply(CockpitModel& cockpit, float level, float reveal, co
 	}
 
 	// 六角形：画面の中心から、画面の高さに合わせた大きさで
-	const float cellPixels = hexCellPixels_ * (std::max)(screenSize.y, 1.0f) / 900.0f;
+	const float cellPixels = hexCellPixels_ * (std::max)(screenSize.y, 1.0f) / kHexReferenceScreenHeight;
 	for (Object3DInstance* part : { cockpit.GetCockpit(), cockpit.GetHatch() }) {
 		ModelInstance* model = part ? part->GetModelInstance() : nullptr;
 		if (!model) continue;

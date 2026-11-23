@@ -3,6 +3,11 @@
 #include "Log.h"
 #include <cassert>
 
+namespace {
+    // 静的サンプラーの数（s0 WRAP/WRAP・s1 WRAP/CLAMP・s2 CLAMP/CLAMP）
+    constexpr int kStaticSamplerCount = 3;
+}
+
 PrimitivePipeline* PrimitivePipeline::GetInstance() {
     static PrimitivePipeline instance;
     return &instance;
@@ -72,36 +77,36 @@ void PrimitivePipeline::CreateRootSignature() {
     descriptorRangeMask[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeMask[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[4] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootCount] = {};
 
     // [0] VS: CBV(b0) - TransformationMatrix
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[0].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kRootTransform].Descriptor.ShaderRegister = 0;
 
     // [1] PS: CBV(b0) - Material
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootMaterial].Descriptor.ShaderRegister = 0;
 
     // [2] PS: DescriptorTable - Texture(t0)
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kRootTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootTexture].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
+    rootParameters[kRootTexture].DescriptorTable.NumDescriptorRanges = 1;
 
     // [3] PS: DescriptorTable - DissolveMask(t1)。全描画でwhite1x1かマスクを必ずbindする。
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRangeMask;
-    rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kRootDissolveMask].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootDissolveMask].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootDissolveMask].DescriptorTable.pDescriptorRanges = descriptorRangeMask;
+    rootParameters[kRootDissolveMask].DescriptorTable.NumDescriptorRanges = 1;
 
     // Sampler 3種類（material.samplerMode で PS 側が選択）
     //   s0: WRAP U  / WRAP V  （タイリング用）
     //   s1: WRAP U  / CLAMP V （Ring/Cylinder 用。中心側に白いリング型のアーティファクトが出るのを防ぐ）
     //   s2: CLAMP U / CLAMP V （非繰り返し）
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[3] = {};
-    for (int i = 0; i < 3; ++i) {
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[kStaticSamplerCount] = {};
+    for (int i = 0; i < kStaticSamplerCount; ++i) {
         staticSamplers[i].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
         staticSamplers[i].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
@@ -263,16 +268,16 @@ void PrimitivePipeline::CreateIdPassObjects() {
     // ----- Root Signature -----
     // [0] VS CBV(b0) = TransformationMatrix
     // [1] PS RootConstant(b0) = uint objectId
-    D3D12_ROOT_PARAMETER rootParams[2] = {};
-    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParams[0].Descriptor.ShaderRegister = 0;
+    D3D12_ROOT_PARAMETER rootParams[kIdRootCount] = {};
+    rootParams[kIdRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[kIdRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[kIdRootTransform].Descriptor.ShaderRegister = 0;
 
-    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[1].Constants.ShaderRegister = 0;
-    rootParams[1].Constants.RegisterSpace = 0;
-    rootParams[1].Constants.Num32BitValues = 1;
+    rootParams[kIdRootObjectId].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[kIdRootObjectId].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[kIdRootObjectId].Constants.ShaderRegister = 0;
+    rootParams[kIdRootObjectId].Constants.RegisterSpace = 0;
+    rootParams[kIdRootObjectId].Constants.Num32BitValues = 1;
 
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};
     rsDesc.NumParameters = _countof(rootParams);

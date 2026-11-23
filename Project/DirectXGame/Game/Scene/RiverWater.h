@@ -39,12 +39,22 @@ class AnimatedObject3DInstance;
 class RiverWater : public IImGuiEditable {
 public:
 	RiverWater();
+	/// <summary>まだ川のデータを読んでいる別スレッドがあれば、終わるまで待ってから破棄する</summary>
 	~RiverWater() override;
 
+	/// <summary>Hierarchy に出す名前</summary>
+	/// <returns>"RiverWater"</returns>
 	std::string GetName() const override { return "RiverWater"; }
+	/// <summary>Hierarchy に出す種類名</summary>
+	/// <returns>"Water"</returns>
 	std::string GetTypeName() const override { return "Water"; }
+	/// <summary>Inspector の中身（OnImGui と同じ）</summary>
 	void OnImGuiInspector() override { OnImGui(); }
 
+	/// <summary>重い初期化（大河モードの WaterSurface・反射 RT）と調整値の読み込みをする。川のデータはまだ読まない</summary>
+	/// <param name="dxCore">DirectX の基盤</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="object3DManager">3D オブジェクトの共通描画設定</param>
 	/// <param name="cloudLayer">映り込む空に重ねる遠景の雲（null 可）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
 		const CloudLayer* cloudLayer);
@@ -60,27 +70,38 @@ public:
 	/// <summary>航跡の波のシミュレーションを進める。シーン描画の最初（シーン RT を貼る前）に呼ぶ</summary>
 	void DispatchSimulation();
 
-	/// <summary>画面の水滴の濡れ具合の目標（＝航跡の波の強さ。川のロード前は 0）。StagePlayScene が雲の分とまとめて渡す</summary>
+	/// <summary>画面の水滴の濡れ具合の目標（＝航跡の波の強さ）。StagePlayScene が雲の分とまとめて渡す</summary>
+	/// <returns>濡れ具合の目標（川のロード前は 0）</returns>
 	float GetDropletTarget() const { return state_ == LoadState::Ready ? dropletTarget_ : 0.0f; }
 
-	/// <summary>シーク。ロード開始時刻より後へ飛んだら、その場で読み終える</summary>
+	/// <summary>シーク。ロード開始時刻より後へ飛んだら、その場で読み終える（航跡は切る）</summary>
+	/// <param name="stageSec">飛んだ先のステージ経過秒</param>
 	void Seek(float stageSec);
 
 	/// <summary>
 	/// 反射 RT を描く。シーン描画の最初（シーン RT を貼る前）に呼ぶ。呼んだ後は RT が反射 RT のままなので、
 	/// 呼び出し側でシーン RT を貼り直すこと。
 	/// </summary>
+	/// <param name="camera">描画に使うカメラ（水面で鏡映しにする）</param>
 	/// <param name="objects">シーンの Object3D。映すタグを持つ物だけを拾う</param>
 	/// <param name="animated">シーンのアニメーションするモデル（自機・敵など）。同じくタグで拾う</param>
 	void RenderReflection(const Camera& camera,
 		const std::vector<std::unique_ptr<Object3DInstance>>& objects,
 		const std::vector<std::unique_ptr<AnimatedObject3DInstance>>& animated);
 
-	/// <summary>不透明物の後・半透明物の前に呼ぶ。ルートシグネチャを替えるので後続は各自設定し直すこと</summary>
+	/// <summary>
+	/// 水面を描く（ロード済みで、カメラが水面より上にいる時だけ）。
+	/// 不透明物の後・半透明物の前に呼ぶ。ルートシグネチャを替えるので後続は各自設定し直すこと
+	/// </summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="skyCubemapPath">水面に映す空の cubemap のパス</param>
 	void Draw(const Camera& camera, const std::string& skyCubemapPath);
 
+	/// <summary>川のデータを読み終えて描けるか</summary>
+	/// <returns>描けるなら true</returns>
 	bool IsReady() const { return state_ == LoadState::Ready; }
 
+	/// <summary>ロードの状態・水面・反射・航跡の調整 UI（Debug のみ中身あり）</summary>
 	void OnImGui();
 
 private:
@@ -108,6 +129,8 @@ private:
 	/// 自機の航跡（13 番 §8）。波のシミュレーションの範囲を自機について動かし、
 	/// 前のフレームの位置からの線に沿って波源を入れる。水面に近く速いほど強い
 	/// </summary>
+	/// <param name="playerPosition">自機のワールド位置（null なら航跡を切る）</param>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateWake(const Vector3* playerPosition, float deltaTime);
 	/// <summary>航跡の続きを切る（シーク・ワープの後に前の位置から線を引かない）。波も消す</summary>
 	void ResetWake();
@@ -139,6 +162,7 @@ private:
 	float wakeLastSpeed_ = 0.0f;
 	float wakeLastFactor_ = 0.0f;
 
+	/// <summary>別スレッドで CPU フェーズ（RiverTerrain.json の解析と川のマップの読み込み）を始める</summary>
 	void StartLoad();
 	/// <summary>CPU フェーズの後：川のマップを GPU へ待たずに送る（FS 経路はその場で貼る）</summary>
 	void BeginUpload();
@@ -146,7 +170,9 @@ private:
 	void FinishLoadNow();
 	/// <summary>川のマップ（GPU まで済んだ物）を水面に貼る</summary>
 	void ApplyRiverMap();
+	/// <summary>水面・反射・航跡・ロード時刻の調整値を RiverWater.json から読む（無い・読めなければ今の値のまま）</summary>
 	void LoadTuning();
+	/// <summary>今の調整値を RiverWater.json へ書き出す</summary>
 	void SaveTuning() const;
 
 	std::unique_ptr<WaterSurface> water_;
@@ -171,6 +197,7 @@ private:
 	Vector3 testEffectLastPosition_{};
 	uint64_t testEffectLastHandle_ = 0;
 	float testEffectMarkerTimer_ = 0.0f;
+	/// <summary>反射の確認用に、カメラの前方の水面近くへテストのエフェクトを出す</summary>
 	void PlayTestEffect();
 
 	LoadState state_ = LoadState::NotStarted;

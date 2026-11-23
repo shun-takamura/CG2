@@ -83,6 +83,11 @@ namespace {
 		{"DPadRight", XINPUT_GAMEPAD_DPAD_RIGHT},
 	};
 
+	/// <summary>名前の表からコードに当たる名前を探す</summary>
+	/// <param name="table">名前の表</param>
+	/// <param name="count">表の要素数</param>
+	/// <param name="code">探すコード</param>
+	/// <returns>名前（無ければ空）</returns>
 	std::string_view FindName(const NameCodePair* table, size_t count, uint32_t code) {
 		for (size_t i = 0; i < count; ++i) {
 			if (table[i].code == code) return table[i].name;
@@ -90,6 +95,12 @@ namespace {
 		return {};
 	}
 
+	/// <summary>名前の表から名前に当たるコードを探す（大文字小文字は区別する）</summary>
+	/// <param name="table">名前の表</param>
+	/// <param name="count">表の要素数</param>
+	/// <param name="name">探す名前</param>
+	/// <param name="outCode">見つかったコードを書く先</param>
+	/// <returns>見つかったら true</returns>
 	bool FindCode(const NameCodePair* table, size_t count, std::string_view name, uint32_t& outCode) {
 		for (size_t i = 0; i < count; ++i) {
 			if (table[i].name == name) {

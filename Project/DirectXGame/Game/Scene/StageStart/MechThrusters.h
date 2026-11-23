@@ -29,24 +29,46 @@ public:
 	/// <summary>既定値の組（JSON に無いときに使う）。Catapult＝演出の 10.625 倍の機体、Player＝ゲームの自機（大きさ 1・向きに合わせる）</summary>
 	enum class Preset { Catapult, Player };
 
+	/// <summary>既定値の組で 4 基の付ける所（ボーン・ずらし・噴く向き）を決める</summary>
+	/// <param name="preset">Catapult＝演出の 10.625 倍の機体、Player＝ゲームの自機（大きさ 1・向きに合わせる）</param>
 	explicit MechThrusters(Preset preset = Preset::Catapult);
 	~MechThrusters();
 
 	/// <summary>全部止める（演出の終わり・一人称に切り替えたとき）</summary>
 	void StopAll();
-	/// <summary>sizes＝4 基それぞれの大きさ。mech のボーンから置く（mech が無ければ止める）</summary>
+	/// <summary>4 基を機体のボーンの位置に置き、大きさが変わった基は今のエフェクトを止めて別のを再生する（mech が無ければ止める）</summary>
+	/// <param name="mech">機体</param>
+	/// <param name="sizes">4 基それぞれの大きさ</param>
 	void Update(const AnimatedObject3DInstance* mech, const Sizes& sizes);
 
-	/// <summary>移動の入力から大きさを決める（機体確認・ゲーム中の移動。ポイント制、上のコメント）</summary>
+	/// <summary>移動の入力から大きさを決める（機体確認・ゲーム中の移動。ポイント制）</summary>
+	/// <param name="up">W（上）を押しているか</param>
+	/// <param name="left">A（左）を押しているか</param>
+	/// <param name="down">S（下）を押しているか</param>
+	/// <param name="right">D（右）を押しているか</param>
+	/// <returns>4 基の大きさ</returns>
 	Sizes FromMove(bool up, bool left, bool down, bool right) const;
-	/// <summary>移動の量（x 右・y 上、-1..1）から。各軸が moveThreshold を越えたらその向きを押したとみなす（ゲーム中の WASD・左スティック）</summary>
+	/// <summary>移動の量から大きさを決める。各軸が moveThreshold を越えたらその向きを押したとみなす（ゲーム中の WASD・左スティック）</summary>
+	/// <param name="x">右の量 -1〜1</param>
+	/// <param name="y">上の量 -1〜1</param>
+	/// <returns>4 基の大きさ</returns>
 	Sizes FromMoveAxis(float x, float y) const;
-	/// <summary>出力 0..1 から全部同じ大きさ（射出の SPACE。0 でも小から）</summary>
+	/// <summary>出力から全部同じ大きさを決める（射出の SPACE。0 でも小から）</summary>
+	/// <param name="thrust">出力 0〜1</param>
+	/// <returns>4 基の大きさ</returns>
 	Sizes FromThrust(float thrust) const;
+	/// <summary>4 基とも同じ大きさの組を作る</summary>
+	/// <param name="size">大きさ</param>
+	/// <returns>4 基の大きさ</returns>
 	static Sizes All(Size size) { return { size, size, size, size }; }
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "thrusters"／"playerThrusters"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
@@ -55,6 +77,9 @@ private:
 		Vector3 offset;              // ボーンの位置からのずらし [m]
 		Vector3 rotationDegrees;     // 噴く向き（-Y をこの角度で回す）
 	};
+	/// <summary>大きさに合うエフェクトの名前を返す</summary>
+	/// <param name="size">大きさ（Small / Medium / Large）</param>
+	/// <returns>エフェクトの名前</returns>
 	const std::string& EffectName(Size size) const;
 
 	std::array<Mount, kCount> mounts_;

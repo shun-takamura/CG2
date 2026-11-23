@@ -22,6 +22,16 @@ namespace {
 	// メインスレッドで GPU フェーズに使ってよい 1 フレームの時間（最低 1 件は進める）
 	constexpr double kGpuBudgetMs = 3.0;
 	constexpr const char* kManifestDir = "Resources/Json/Preload/";
+
+	// 残りを一度に全部送るときの GPU フェーズの時間（実質無制限）[ms]
+	constexpr double kUnlimitedBudgetMs = 1e9;
+	// 進み具合（0〜1）：テクスチャの CPU フェーズ中 / GPU フェーズが占める幅 / テクスチャ待ち / モデルの CPU / GPU / 待ち
+	constexpr float kProgressCpuTextures = 0.1f;
+	constexpr float kProgressGpuTexturesRange = 0.4f;
+	constexpr float kProgressWaitTextures = 0.5f;
+	constexpr float kProgressCpuModels = 0.6f;
+	constexpr float kProgressGpuModels = 0.7f;
+	constexpr float kProgressWaitModels = 0.9f;
 }
 
 ScenePreloader* ScenePreloader::GetInstance() {
@@ -109,13 +119,13 @@ void ScenePreloader::CompleteNow() {
 	JoinWorker();
 	if (stage_ == Stage::CpuTextures || stage_ == Stage::GpuTextures || stage_ == Stage::WaitTextures) {
 		// 残りのテクスチャをまとめて送り、1 回だけ待って仕上げる
-		UpdateGpuTextures(1e9);
+		UpdateGpuTextures(kUnlimitedBudgetMs);
 		FinishCompletedTextureBatches(true);
 		// モデルの CPU フェーズはまだ始めていない：シーンの Initialize が LoadModel で読む
 	}
 	else {
 		// モデルの CPU フェーズは JoinWorker で終わっている。残りの GPU フェーズをまとめて送り、1 回だけ待って仕上げる
-		UpdateGpuModels(1e9);
+		UpdateGpuModels(kUnlimitedBudgetMs);
 		FinishCompletedTextureBatches(true);
 	}
 	Finish();
@@ -124,14 +134,14 @@ void ScenePreloader::CompleteNow() {
 float ScenePreloader::GetProgress() const {
 	switch (stage_) {
 	case Stage::Idle:        return 0.0f;
-	case Stage::CpuTextures: return 0.1f;
+	case Stage::CpuTextures: return kProgressCpuTextures;
 	case Stage::GpuTextures:
-		return 0.1f + 0.4f * (manifest_.textures.empty() ? 1.0f
+		return kProgressCpuTextures + kProgressGpuTexturesRange * (manifest_.textures.empty() ? 1.0f
 			: static_cast<float>(nextTexture_) / static_cast<float>(manifest_.textures.size()));
-	case Stage::WaitTextures: return 0.5f;
-	case Stage::CpuModels:    return 0.6f;
-	case Stage::GpuModels:    return 0.7f;
-	case Stage::WaitModels:   return 0.9f;
+	case Stage::WaitTextures: return kProgressWaitTextures;
+	case Stage::CpuModels:    return kProgressCpuModels;
+	case Stage::GpuModels:    return kProgressGpuModels;
+	case Stage::WaitModels:   return kProgressWaitModels;
 	default:                  return 1.0f;
 	}
 }
@@ -249,7 +259,7 @@ void ScenePreloader::StartModels() {
 void ScenePreloader::Finish() {
 	if (stage_ == Stage::Done || stage_ == Stage::Idle) return;
 	stage_ = Stage::Done;
-	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 		std::format("LOAD kind=preload scene={} shaders={} textures={} models={} animated_models={} animations={} wall_ms={:.2f}",
 			sceneName_, manifest_.shaders.size(), manifest_.textures.size(), manifest_.models.size(),
 			pendingMeshes_.size(), manifest_.animations.size(), LoadProfiler::NowMs() - beginMs_));

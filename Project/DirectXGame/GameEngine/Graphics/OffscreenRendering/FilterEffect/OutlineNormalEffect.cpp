@@ -8,6 +8,10 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻す深度の重みの既定値
+	constexpr float kDefaultDepthWeight = 6.0f;
+}
 
 void OutlineNormalEffect::InitializeOutline(
 	DirectXCore* dxCore,
@@ -58,7 +62,7 @@ void OutlineNormalEffect::ShowImGui()
 
 void OutlineNormalEffect::ResetParams()
 {
-	depthWeight_ = 6.0f;
+	depthWeight_ = kDefaultDepthWeight;
 	normalWeight_ = 1.0f;
 	depthThreshold_ = 0.0f;
 	normalThreshold_ = 0.0f;
@@ -69,7 +73,13 @@ void OutlineNormalEffect::SetProjectionMatrix(const Matrix4x4& projection)
 	projectionInverse_ = Inverse(projection);
 }
 
+/// <summary>負の値を 0 に切り上げる</summary>
+/// <param name="v">値</param>
+/// <returns>0 以上にした値</returns>
 static inline float ClampPositive(float v) { return v < 0.0f ? 0.0f : v; }
+/// <summary>値を 0〜1 に切り詰める</summary>
+/// <param name="v">値</param>
+/// <returns>0〜1 にした値</returns>
 static inline float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
 void OutlineNormalEffect::SetDepthWeight(float v) { depthWeight_ = ClampPositive(v); }

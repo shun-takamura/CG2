@@ -1,6 +1,7 @@
 #include "ShieldCatalog.h"
 
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <cmath>
@@ -8,24 +9,13 @@
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Shield.json";
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+	// 割合を百分率にする倍率
+	constexpr float kPercentScale = 100.0f;
 	constexpr const char* kComment = "20_Loadout.md §2 盾（左手）。maxHpAdd はプレハブの HP 上限に足す（飛行ユニットの補正の前）。"
 		"damageCut は通常の被弾の軽減（0.2＝20%）、moveSpeedScale は移動速度の倍率。"
 		"grip は左手に付けるモデルのずらし（model を空にすると描かない）。beam があればビームシールド（offset＝発生装置の位置、モデルのローカル）";
-
-	void ReadVec3(const JsonValue& node, const char* key, Vector3& v) {
-		const JsonValue& a = node[key];
-		if (!a.IsArray() || a.Size() < 3) return;
-		v = { static_cast<float>(a[0].AsDouble(v.x)), static_cast<float>(a[1].AsDouble(v.y)),
-			static_cast<float>(a[2].AsDouble(v.z)) };
-	}
-
-	JsonValue MakeVec3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
 
 	// ビームの見た目の数値の欄（JSON のキーと BeamShieldAppearance のメンバ）
 	struct BeamField { const char* key; float BeamShieldAppearance::* member; };
@@ -47,9 +37,11 @@ namespace {
 		{ "flashDecay", &BeamShieldAppearance::flashDecay },
 	};
 
-	// 符号付きの割合（"+5%" / "-10%" / "±0%"）
+	/// <summary>割合を符号付きの百分率の文字列にする（"+5%" / "-10%" / "±0%"）</summary>
+	/// <param name="ratio">割合（0.05＝5%）</param>
+	/// <returns>百分率の文字列</returns>
 	std::string SignedPercent(float ratio) {
-		const int pct = static_cast<int>(std::lround(ratio * 100.0f));
+		const int pct = static_cast<int>(std::lround(ratio * kPercentScale));
 		if (pct == 0) return "±0%";
 		return (pct > 0 ? "+" : "") + std::to_string(pct) + "%";
 	}
@@ -94,7 +86,7 @@ int ShieldCatalog::IndexOf(const std::string& id) const {
 std::vector<ShieldStatLine> ShieldCatalog::GetStatLines(const ShieldDef& def) {
 	std::vector<ShieldStatLine> lines;
 	lines.push_back({ "HP 上限", def.maxHpAdd == 0 ? "±0" : ((def.maxHpAdd > 0 ? "+" : "") + std::to_string(def.maxHpAdd)) });
-	lines.push_back({ "被ダメージ軽減", std::to_string(static_cast<int>(std::lround(def.damageCut * 100.0f))) + "%" });
+	lines.push_back({ "被ダメージ軽減", std::to_string(static_cast<int>(std::lround(def.damageCut * kPercentScale))) + "%" });
 	lines.push_back({ "移動速度", SignedPercent(def.moveSpeedScale - 1.0f) });
 	return lines;
 }
@@ -125,18 +117,18 @@ bool ShieldCatalog::Load() {
 			d.bone = m["bone"].AsString(d.bone);
 		}
 		if (const JsonValue& g = s["grip"]; g.IsObject()) {
-			ReadVec3(g, "translate", d.gripTranslate);
-			ReadVec3(g, "rotate", d.gripRotate);
-			ReadVec3(g, "scale", d.gripScale);
+			d.gripTranslate = ReadVector3(g["translate"], d.gripTranslate);
+			d.gripRotate = ReadVector3(g["rotate"], d.gripRotate);
+			d.gripScale = ReadVector3(g["scale"], d.gripScale);
 		}
 		if (const JsonValue& b = s["beam"]; b.IsObject()) {
 			d.beam = true;
-			ReadVec3(b, "offset", d.beamOffset);
+			d.beamOffset = ReadVector3(b["offset"], d.beamOffset);
 			for (const BeamField& f : kBeamFields) {
 				d.beamLook.*f.member = static_cast<float>(b[f.key].AsDouble(d.beamLook.*f.member));
 			}
-			ReadVec3(b, "color", d.beamLook.color);
-			ReadVec3(b, "edgeColor", d.beamLook.edgeColor);
+			d.beamLook.color = ReadVector3(b["color"], d.beamLook.color);
+			d.beamLook.edgeColor = ReadVector3(b["edgeColor"], d.beamLook.edgeColor);
 		}
 		shields.push_back(std::move(d));
 	}
@@ -166,20 +158,20 @@ bool ShieldCatalog::Save() const {
 		m["bone"] = JsonValue(d.bone);
 		s["model"] = std::move(m);
 		JsonValue g = JsonValue::MakeObject();
-		g["translate"] = MakeVec3(d.gripTranslate);
-		g["rotate"] = MakeVec3(d.gripRotate);
-		g["scale"] = MakeVec3(d.gripScale);
+		g["translate"] = MakeVector3(d.gripTranslate);
+		g["rotate"] = MakeVector3(d.gripRotate);
+		g["scale"] = MakeVector3(d.gripScale);
 		s["grip"] = std::move(g);
 		if (d.beam) {
 			JsonValue b = JsonValue::MakeObject();
-			b["offset"] = MakeVec3(d.beamOffset);
+			b["offset"] = MakeVector3(d.beamOffset);
 			for (const BeamField& f : kBeamFields) b[f.key] = JsonValue(static_cast<double>(d.beamLook.*f.member));
-			b["color"] = MakeVec3(d.beamLook.color);
-			b["edgeColor"] = MakeVec3(d.beamLook.edgeColor);
+			b["color"] = MakeVector3(d.beamLook.color);
+			b["edgeColor"] = MakeVector3(d.beamLook.edgeColor);
 			s["beam"] = std::move(b);
 		}
 		list.Push(std::move(s));
 	}
 	root["shields"] = std::move(list);
-	return JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	return JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }

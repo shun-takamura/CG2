@@ -3,8 +3,17 @@
 #include "TextureManager.h"
 
 namespace {
-    // primitiveType（int）から MeshData を生成。EffectDef.h のmeshType値と互換。
-    // 0=Plane, 1=Box, 2=Sphere, 3=Ring, 4=Cylinder, 5=Helix, 6=Beam, 7=Lightning, 8=Hemisphere, 9=Frame
+    /// <summary>
+    /// primitiveType（EffectMeshType の値）から MeshData を生成する
+    /// </summary>
+    /// <param name="type">形状の番号（範囲外は Plane）</param>
+    /// <param name="ring">Ring の形状パラメータ</param>
+    /// <param name="cyl">Cylinder の形状パラメータ</param>
+    /// <param name="helix">Helix の形状パラメータ</param>
+    /// <param name="beam">Beam の形状パラメータ</param>
+    /// <param name="lightning">Lightning の形状パラメータ</param>
+    /// <param name="frame">Frame の形状パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData GenerateByType(int type,
                             const PrimitiveGenerator::RingParams& ring,
                             const PrimitiveGenerator::CylinderParams& cyl,
@@ -13,16 +22,16 @@ namespace {
                             const PrimitiveGenerator::LightningBoltParams& lightning,
                             const PrimitiveGenerator::FrameParams& frame) {
         switch (type) {
-        case 0: return PrimitiveGenerator::CreatePlane();
-        case 1: return PrimitiveGenerator::CreateBox();
-        case 2: return PrimitiveGenerator::CreateSphere();
-        case 3: return PrimitiveGenerator::CreateRing(ring);
-        case 4: return PrimitiveGenerator::CreateCylinder(cyl);
-        case 5: return PrimitiveGenerator::CreateHelix(helix);
-        case 6: return PrimitiveGenerator::CreateBeam(beam);
-        case 7: return PrimitiveGenerator::CreateLightningBolt(lightning);
-        case 8: return PrimitiveGenerator::CreateHemisphere();
-        case 9: return PrimitiveGenerator::CreateFrame(frame);
+        case EffectMeshType::Plane: return PrimitiveGenerator::CreatePlane();
+        case EffectMeshType::Box: return PrimitiveGenerator::CreateBox();
+        case EffectMeshType::Sphere: return PrimitiveGenerator::CreateSphere();
+        case EffectMeshType::Ring: return PrimitiveGenerator::CreateRing(ring);
+        case EffectMeshType::Cylinder: return PrimitiveGenerator::CreateCylinder(cyl);
+        case EffectMeshType::Helix: return PrimitiveGenerator::CreateHelix(helix);
+        case EffectMeshType::Beam: return PrimitiveGenerator::CreateBeam(beam);
+        case EffectMeshType::Lightning: return PrimitiveGenerator::CreateLightningBolt(lightning);
+        case EffectMeshType::Hemisphere: return PrimitiveGenerator::CreateHemisphere();
+        case EffectMeshType::Frame: return PrimitiveGenerator::CreateFrame(frame);
         default: return PrimitiveGenerator::CreatePlane();
         }
     }
@@ -40,10 +49,10 @@ void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& t
     // （弾のエフェクトを出すたびに同じ形を作り直さない）
     const char* sharedKey = nullptr;
     switch (primitiveType) {
-    case 0: sharedKey = "Plane"; break;
-    case 1: sharedKey = "Box"; break;
-    case 2: sharedKey = "Sphere"; break;
-    case 8: sharedKey = "Hemisphere"; break;
+    case EffectMeshType::Plane: sharedKey = "Plane"; break;
+    case EffectMeshType::Box: sharedKey = "Box"; break;
+    case EffectMeshType::Sphere: sharedKey = "Sphere"; break;
+    case EffectMeshType::Hemisphere: sharedKey = "Hemisphere"; break;
     default: break;
     }
     auto make = [&]() {

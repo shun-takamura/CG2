@@ -28,41 +28,73 @@ public:
 	EtherVesselRoom();
 	~EtherVesselRoom();
 
+	/// <summary>器・足元の水面・背景の板・カメラを用意する</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="spriteManager">背景の板に使う</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager, SpriteManager* spriteManager);
+	/// <summary>器の終了処理をする</summary>
 	void Finalize();
 
 	/// <summary>この部屋を描き始める前に 1 回：既定のカメラ・映り込みの IBL・フォグを切り替える</summary>
 	void Activate();
 
-	/// <summary>カメラの置き方。位置は器の原点から、回転は度（Rx·Ry の順。Y=180 で -Z を向く）</summary>
+	/// <summary>カメラの置き方を決める</summary>
+	/// <param name="offset">器の原点からの位置</param>
+	/// <param name="rotateDegrees">回転 [度]（Rx·Ry の順。Y=180 で -Z を向く）</param>
 	void SetCameraPose(const Vector3& offset, const Vector3& rotateDegrees);
+	/// <summary>部屋のカメラを返す</summary>
+	/// <returns>カメラ。Initialize 前は nullptr</returns>
 	Camera* GetCamera() const { return camera_.get(); }
+	/// <summary>器を返す</summary>
+	/// <returns>器。Initialize 前は nullptr</returns>
 	EtherVessel* GetVessel() const { return vessel_.get(); }
+	/// <summary>映り込みに使う IBL のパスを返す</summary>
+	/// <returns>パス</returns>
 	const std::string& GetIblPath() const { return iblPath_; }
+	/// <summary>器の原点（土台の脚の下。水面の真ん中）を返す</summary>
+	/// <returns>ワールド位置</returns>
 	const Vector3& GetOrigin() const { return origin_; }
 
-	/// <summary>器の足元の水面に波紋（選択肢のカーソル・値の調整などで）</summary>
+	/// <summary>器の足元の水面に波紋を立てる（選択肢のカーソル・値の調整などで）</summary>
 	void EmitCursorRing();
 
 	/// <summary>
 	/// 針の先の純度の札を TextRenderer に積む（Flush は呼ぶ側）。暗い箱に金の枠で「5.0」、上に小さく「純度」。
-	/// 札は針の先から、球の中心 → 針の先の向きへ offset [px] ずらす（針と一緒に文字盤の弧を動く）。賭ける画面とゲームオーバー画面で共用
+	/// 札は針と一緒に文字盤の弧を動く。賭ける画面とゲームオーバー画面で共用
 	/// </summary>
+	/// <param name="purity">表示する純度</param>
+	/// <param name="alpha">不透明度 0〜1（0 以下なら描かない）</param>
+	/// <param name="scale">札の大きさの倍率</param>
+	/// <param name="offset">針の先から、球の中心 → 針の先の向きへずらす量 [px]</param>
+	/// <param name="gold">枠と文字の金の色（RGB 0〜1）</param>
 	void DrawPurityTag(float purity, float alpha, float scale, float offset, const float (&gold)[3]) const;
-	/// <summary>ワールド → UI 座標。カメラの後ろなら false</summary>
+	/// <summary>ワールドの点を UI 座標へ投影する</summary>
+	/// <param name="world">ワールドの点</param>
+	/// <param name="out">UI 座標の受け取り先</param>
+	/// <returns>カメラの後ろなら false</returns>
 	bool ProjectToUi(const Vector3& world, Vector2& out) const;
 
+	/// <summary>カメラ・器・水面・背景を進める</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
-	/// <summary>波のシミュレーション → 背景 → 器 → 水面 → ガラス・支柱の光・糸。粒（DrawGlobalEffects）と文字は呼ぶ側が後に</summary>
+	/// <summary>波のシミュレーション → 背景 → 器 → 水面 → ガラス・支柱の光・糸の順に描く。粒（DrawGlobalEffects）と文字は呼ぶ側が後に</summary>
 	void Draw();
+	/// <summary>発光パスで器を描く</summary>
 	void DrawBloom();
 
+	/// <summary>調整値（GameOver.json の "background" / "water" / "vessel"）を読む</summary>
+	/// <param name="root">GameOver.json の根</param>
 	void LoadTuning(const JsonValue& root);
+	/// <summary>調整値を GameOver.json の根へ書く</summary>
+	/// <param name="root">書き込み先の根</param>
 	void SaveTuning(JsonValue& root) const;
-	/// <summary>水面・背景の ImGui</summary>
+	/// <summary>水面・背景の調整値の ImGui を表示する</summary>
 	void OnImGuiWater();
 
 private:
+	/// <summary>水面の調整値（深さ・空の映り込み・波紋・色・高さ）を水面へ反映する</summary>
 	void ApplyWaterTuning();
 
 	DirectXCore* dxCore_ = nullptr;

@@ -33,6 +33,9 @@ enum class MovementType {
 	Static,        // その場（カメラ相対固定）に即出現
 };
 
+/// <summary>移動方法を JSON 保存用の文字列にする</summary>
+/// <param name="m">移動方法</param>
+/// <returns>"ScreenHover" / "Drift" / "Static" / "SplineFollow"（不明なら "SplineFollow"）</returns>
 inline const char* MovementTypeToStr(MovementType m) {
 	switch (m) {
 	case MovementType::ScreenHover: return "ScreenHover";
@@ -42,6 +45,10 @@ inline const char* MovementTypeToStr(MovementType m) {
 	default:                        return "SplineFollow";
 	}
 }
+/// <summary>JSON の文字列から移動方法を読む</summary>
+/// <param name="s">移動方法の文字列</param>
+/// <param name="fallback">どれにも当たらない時の値</param>
+/// <returns>移動方法。読めなければ fallback</returns>
 inline MovementType MovementTypeFromStr(const std::string& s, MovementType fallback = MovementType::SplineFollow) {
 	if (s == "ScreenHover")  return MovementType::ScreenHover;
 	if (s == "Drift")        return MovementType::Drift;
@@ -55,6 +62,13 @@ inline MovementType MovementTypeFromStr(const std::string& s, MovementType fallb
 /// Object3D / Animated は modelDir + modelFile を、Primitive は primitiveParams を使う。
 /// </summary>
 struct PrefabDef {
+	/// <summary>JSON に bullet / melee などの指定が無い時に使う既定値（下のメンバーの初期値そのまま）</summary>
+	/// <returns>初期値だけが入った PrefabDef</returns>
+	static const PrefabDef& Defaults() {
+		static const PrefabDef defaults{};
+		return defaults;
+	}
+
 	std::string name;        // プリファブ名（ファイル名から取得）
 
 	// ----- 種別 -----

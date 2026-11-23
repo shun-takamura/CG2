@@ -10,13 +10,20 @@ class JsonValue;
 class IStageStreamingHost {
 public:
 	virtual ~IStageStreamingHost() = default;
-	/// <summary>取っておいた group の配置を今すぐ作る。作った数を返す</summary>
+	/// <summary>取っておいた group の配置を今すぐ作る</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>作った配置の数</returns>
 	virtual size_t CreateStreamGroup(const std::string& group) = 0;
 	/// <summary>まだ作っていない group の配置の数</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>まだ作っていない配置の数</returns>
 	virtual size_t GetPendingStreamEntityCount(const std::string& group) const = 0;
-	/// <summary>作った group の配置を消して「まだ作っていない」へ戻す（シークで戻れば作り直せる）。消した数を返す</summary>
+	/// <summary>作った group の配置を消して「まだ作っていない」へ戻す（シークで戻れば作り直せる）</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>消した配置の数</returns>
 	virtual size_t DestroyStreamGroup(const std::string& group) = 0;
 	/// <summary>プレハブのモデルを読んでおく（Wave で後から出る物。作るときに呼ぶのでマニフェストにも記録される）</summary>
+	/// <param name="prefabs">モデルを読んでおくプレハブ名の一覧</param>
 	virtual void WarmPrefabModels(const std::vector<std::string>& prefabs) = 0;
 };
 
@@ -33,21 +40,33 @@ public:
 /// </summary>
 class StageStreaming {
 public:
+	/// <summary>ホストとシーン名を受け取り、全グループを「待ち」に戻す</summary>
+	/// <param name="host">配置の作成・破棄を頼むホスト</param>
+	/// <param name="sceneName">シーン名（マニフェスト名 <シーン>@<グループ> に使う）</param>
 	void Initialize(IStageStreamingHost* host, const std::string& sceneName);
 
 	/// <summary>時刻表にあるグループか（無いグループの配置はすぐ作る）</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>時刻表にあれば true</returns>
 	bool HasGroup(const std::string& group) const;
 
-	/// <summary>Rail の間、毎フレーム。経過秒で先読みと作成を進める</summary>
+	/// <summary>Rail の間、毎フレーム。経過秒で先読みと作成・破棄を進める</summary>
+	/// <param name="stageSec">ステージの経過時間 [秒]</param>
 	void Update(float stageSec);
 	/// <summary>時刻に関係なく全部作る（着陸・ボス戦）。unloadSec のあるグループ（レールの間だけの物）は作らず、作ってあれば消す</summary>
 	void CreateAll();
 	/// <summary>シーク：unloadSec より後なら消す、showSec より後なら作る、preloadSec より後なら先読みを頼む</summary>
+	/// <param name="stageSec">飛んだ先のステージの経過時間 [秒]</param>
 	void Seek(float stageSec);
 
+	/// <summary>StagePlay.json の "streaming" からグループの時刻とプレハブを読む（JSON に無いグループは既定値のまま）</summary>
+	/// <param name="node">"streaming" のノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>全グループの時刻とプレハブを "streaming" のノードへ書く</summary>
+	/// <param name="node">書き込み先のノード（中身は作り直す）</param>
 	void SaveTuning(JsonValue& node) const;
-	/// <summary>値を書き換えたら true（呼ぶ側が保存する）</summary>
+	/// <summary>グループの状態と時刻の調整・今作る/今捨てるボタン（Debug のみ中身あり）</summary>
+	/// <returns>値を書き換えたら true（呼ぶ側が保存する）</returns>
 	bool OnImGui();
 
 private:
@@ -69,12 +88,23 @@ private:
 		double preloadBeginMs = 0.0;
 	};
 
+	/// <summary>グループの先読みのマニフェスト名</summary>
+	/// <param name="g">グループ</param>
+	/// <returns>"<シーン>@<グループ>"</returns>
 	std::string ManifestName(const Group& g) const { return sceneName_ + "@" + g.name; }
 	/// <summary>先読みが終わっていたら Ready にする</summary>
 	void PollPreload();
+	/// <summary>順番待ちのグループを 1 つ先読みに出す（一度に 1 本。マニフェストが無ければすぐ Ready）</summary>
 	void StartQueuedPreload();
+	/// <summary>グループの配置を作る（先読みの途中なら残りを済ませてから。Debug では読まれた物をマニフェストに記録）</summary>
+	/// <param name="index">groups_ の添字</param>
 	void Create(size_t index);
+	/// <summary>作ったグループの配置を消して Unloaded にする</summary>
+	/// <param name="index">groups_ の添字</param>
 	void Unload(size_t index);
+	/// <summary>状態の表示名（ImGui 用）</summary>
+	/// <param name="s">状態</param>
+	/// <returns>日本語の表示名</returns>
 	static const char* StateName(State s);
 
 	IStageStreamingHost* host_ = nullptr;

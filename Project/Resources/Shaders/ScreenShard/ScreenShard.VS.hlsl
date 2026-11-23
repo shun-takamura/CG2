@@ -1,4 +1,4 @@
-// DisruptorShard.VS.hlsl
+// ScreenShard.VS.hlsl
 // 崩壊の破片（反転世界の殻のかけら）。事前分割セルの三角形を、重心ローカル座標で受け取り、
 // per-cell の WVP（重心回転＋飛散移動×VP）でワールドへ飛ばす。UV は baked スクリーンUV をそのまま流す。
 

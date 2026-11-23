@@ -28,56 +28,100 @@ class EtherPillarFlow;
 class EtherVessel {
 public:
 	EtherVessel();
+	/// <summary>昇る粒のエフェクトを止める</summary>
 	~EtherVessel();
 
+	/// <summary>器のモデル・ガラスとエーテル・昇る糸・支柱の光を用意する</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager);
+	/// <summary>昇る粒のエフェクトを止める</summary>
 	void Finalize();
 
-	/// <summary>器の原点（土台の脚の下）のワールド位置</summary>
+	/// <summary>器の原点（土台の脚の下）を設定し、部品・ガラス・支柱の光へ伝える</summary>
+	/// <param name="origin">ワールド位置</param>
 	void SetOrigin(const Vector3& origin);
+	/// <summary>器の原点（土台の脚の下）を返す</summary>
+	/// <returns>ワールド位置</returns>
 	const Vector3& GetOrigin() const { return origin_; }
 
-	/// <summary>液体の量（体積の割合 0..1）</summary>
+	/// <summary>液体の量を設定する</summary>
+	/// <param name="fill">体積の割合 0〜1</param>
+	/// <param name="immediate">true ならすぐ、false なら少し遅れて寄る</param>
 	void SetFill(float fill, bool immediate);
-	/// <summary>難易度（0..1）。immediate=false なら針が「カチッ」と動き、光はゆっくり寄る</summary>
+	/// <summary>難易度を針の傾きと光の強さに変える</summary>
+	/// <param name="difficulty01">難易度 0〜1（I が 0、IX が 1）</param>
+	/// <param name="immediate">false なら針が「カチッ」と動き、光はゆっくり寄る</param>
 	void SetDifficulty01(float difficulty01, bool immediate);
-	/// <summary>光の強さに掛ける倍率（もう一度を選んだとき）</summary>
+	/// <summary>光の強さに掛ける倍率を設定する（もう一度を選んだとき）</summary>
+	/// <param name="boost">倍率（1 で難易度のまま）</param>
 	void SetGlowBoost(float boost);
-	/// <summary>球から天へ糸と粒を昇らせ続ける（rateScale は糸の本数の倍率）</summary>
+	/// <summary>球から天へ糸と粒を昇らせ続ける（出している途中なら何もしない）</summary>
+	/// <param name="rateScale">糸の本数の倍率</param>
 	void BeginRelease(float rateScale = 1.0f);
-	/// <summary>出している間の糸の本数の倍率（液面の下がる速さに合わせて毎フレーム変える）</summary>
+	/// <summary>出している間の糸の本数の倍率を設定する（液面の下がる速さに合わせて毎フレーム変える）</summary>
+	/// <param name="rateScale">糸の本数の倍率</param>
 	void SetReleaseRate(float rateScale) { releaseRateScale_ = rateScale; }
 	/// <summary>粒だけ先に止める（粒は寿命が長いので、液面が止まる少し前に止めると一緒に消える）</summary>
 	void StopReleaseParticles() { StopEffects(); }
+	/// <summary>糸と粒を昇らせるのをやめる</summary>
 	void StopRelease();
+	/// <summary>液面に波を立てる</summary>
+	/// <param name="strength">波の強さ</param>
 	void Splash(float strength);
 
+	/// <summary>支柱の溝の光を返す</summary>
+	/// <returns>支柱の溝の光。Initialize 前は nullptr</returns>
 	EtherPillarFlow* GetPillarFlow() const { return pillarFlow_.get(); }
+	/// <summary>ガラスの球の中心を返す</summary>
+	/// <returns>ワールド位置（ガラスが無ければ器の原点）</returns>
 	Vector3 GetSphereCenter() const;
-	/// <summary>今の針の先（ワールド）。賭ける画面の数値の札を針に付けるのに使う</summary>
+	/// <summary>今の針の先を返す（賭ける画面の数値の札を針に付けるのに使う）</summary>
+	/// <returns>ワールド位置</returns>
 	Vector3 GetPointerTipWorld() const;
-	/// <summary>針が今指している所（I が 0、IX が 1。動いている途中・行き過ぎも含む。0..1 の外へ出ることがある）</summary>
+	/// <summary>針が今指している所を返す（動いている途中・行き過ぎも含む）</summary>
+	/// <returns>I が 0、IX が 1（0〜1 の外へ出ることがある）</returns>
 	float GetNeedle01() const;
+	/// <summary>エーテルの色を返す</summary>
+	/// <returns>RGB 0〜1</returns>
 	const Vector3& GetEtherColor() const { return etherColor_; }
 
+	/// <summary>針（少し行き過ぎて戻る）・光・ガラス・糸・支柱の光を進める</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
-	/// <summary>波のシミュレーション。シーンの Draw の最初に呼ぶ</summary>
+	/// <summary>液面の波のシミュレーションを進める。シーンの Draw の最初に呼ぶ</summary>
 	void DispatchSimulation();
-	/// <summary>器のモデル（不透明）。Object3D の DrawSetting・ライトは呼ぶ側</summary>
+	/// <summary>器のモデル（不透明）を描く。Object3D の DrawSetting・ライトは呼ぶ側</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawOpaque(DirectXCore* dxCore);
-	/// <summary>不透明物の後：ガラスの球 → 支柱の光 → 糸（ルートシグネチャを替える）</summary>
+	/// <summary>不透明物の後に、ガラスの球 → 支柱の光 → 糸の順に描く（ルートシグネチャを替える）</summary>
+	/// <param name="camera">描画に使うカメラ（nullptr なら何もしない）</param>
+	/// <param name="environmentCubemapPath">映り込みに使う環境マップのパス</param>
 	void DrawTransparent(Camera* camera, const std::string& environmentCubemapPath);
+	/// <summary>発光パスでガラスの球・支柱の光・糸を描く</summary>
+	/// <param name="camera">描画に使うカメラ（nullptr なら何もしない）</param>
+	/// <param name="environmentCubemapPath">映り込みに使う環境マップのパス</param>
 	void DrawBloom(Camera* camera, const std::string& environmentCubemapPath);
 
+	/// <summary>調整値（GameOver.json の "vessel"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
-	/// <summary>ガラスの調整値は EtherVesselGlass.json（G5）に別に保存する</summary>
+	/// <summary>ガラスの調整値を EtherVesselGlass.json（G5）に別に保存する</summary>
 	void SaveGlassTuning() const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>EtherVesselGeometry.json の parts から器のモデル 5 部品を作る（読めなければ何もしない）</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
 	void LoadGeometry(Object3DManager* object3DManager);
+	/// <summary>液面のすぐ下から天へ昇る糸を 1 本出し、液面に小さな波紋を立てる</summary>
 	void EmitStrand();
+	/// <summary>昇る粒のエフェクトを止める</summary>
 	void StopEffects();
 
 	DirectXCore* dxCore_ = nullptr;

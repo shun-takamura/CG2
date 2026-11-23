@@ -18,6 +18,13 @@ const char* PrimitiveInstance::PrimitiveTypeToString(PrimitiveType type) {
     }
 }
 
+bool PrimitiveInstance::PrimitiveTypeFromInt(int value, PrimitiveType& outType) {
+    const int count = static_cast<int>(PrimitiveType::kCount);
+    if (value < 0 || value >= count) return false;
+    outType = static_cast<PrimitiveType>(value);
+    return true;
+}
+
 void PrimitiveInstance::Initialize(PrimitiveType type, const std::string& name) {
     primitiveType_ = type;
 

@@ -17,5 +17,6 @@ namespace CrashHandler {
     /// クラッシュ時に SessionLogger の mutex を触らないよう、ここでパスをキャッシュしておく。
     /// 未設定のままクラッシュした場合はカレントに crash_<時刻>.dmp を出す。
     /// </summary>
+    /// <param name="dir">出力先のフォルダ</param>
     void SetDumpDir(const std::string& dir);
 }

@@ -52,10 +52,14 @@ struct BoundingSphere
 {
 	Vector3 center{};
 	float radius = -1.0f;
+	/// <summary>大きさが分かっているか</summary>
+	/// <returns>radius が 0 以上なら true</returns>
 	bool IsValid() const { return radius >= 0.0f; }
 };
 
 /// <summary>頂点を全部包む球（中心 = AABB の中心）。cook_assets.py の _compute_bounding_sphere と同じ作り方</summary>
+/// <param name="vertices">頂点</param>
+/// <returns>包む球。頂点が無ければ無効（radius &lt; 0）</returns>
 BoundingSphere ComputeBoundingSphere(const std::vector<VertexData>& vertices);
 
 // 部位別マテリアル用のランタイム submesh。
@@ -131,13 +135,20 @@ class ModelInstance
 	// メンバ関数
 	//==============================
 public:
-	// 既存の同期ロード（CPU + GPU両方）
+	/// <summary>既存の同期ロード（CPU + GPU両方）。LoadCPU → InitializeGPU を続けて行う</summary>
+	/// <param name="modelManager">DirectXCore の取得元</param>
+	/// <param name="directorPath">モデルのあるディレクトリ</param>
+	/// <param name="filename">モデルのファイル名（.mesh か assimp で読める形式）</param>
 	void Initialize(ModelCore* modelManager, const std::string& directorPath, const std::string& filename);
 
-	// CPU フェーズのみ（Assimp パース）スレッド安全
+	/// <summary>CPU フェーズのみ（.mesh 直読みか Assimp パース）。スレッド安全。読み込み済みなら何もしない</summary>
+	/// <param name="directoryPath">モデルのあるディレクトリ</param>
+	/// <param name="filename">モデルのファイル名</param>
 	void LoadCPU(const std::string& directoryPath, const std::string& filename);
 
-	// GPU フェーズのみ（リソース作成）メインスレッドのみ。BeginGPUAsync → 待つ → FinishGPU を続けて行う
+	/// <summary>GPU フェーズのみ（リソース作成）メインスレッドのみ。BeginGPUAsync → 待つ → FinishGPU を続けて行う</summary>
+	/// <param name="modelCore">DirectXCore の取得元として覚える</param>
+	/// <param name="dxCore">バッファを作るのに使う</param>
 	void InitializeGPU(ModelCore* modelCore, DirectXCore* dxCore);
 
 	/// <summary>
@@ -145,90 +156,154 @@ public:
 	/// true = DirectStorage に積んだ。呼び出し側が DStorageManager::SubmitWithFence で送り、fence が終わってから FinishGPU を呼ぶ。
 	/// false = 待つ物は無い（FS 経路・空のモデル・済み）。GPUPending なら続けて FinishGPU を呼んでよい
 	/// </summary>
+	/// <param name="modelCore">DirectXCore の取得元として覚える</param>
+	/// <param name="dxCore">バッファを作るのに使う</param>
+	/// <returns>DirectStorage に積んだら true</returns>
 	bool BeginGPUAsync(ModelCore* modelCore, DirectXCore* dxCore);
 	/// <summary>GPU フェーズの後半（メインスレッドのみ）：バリアを積み、マテリアルとテクスチャを用意して GPUReady にする</summary>
+	/// <param name="dxCore">コマンドリストの取得元（GPUPending でなければ何もしない）</param>
 	void FinishGPU(DirectXCore* dxCore);
 
+	/// <summary>
+	/// 部位ごとに分割ドローする（GPUReady でない・空なら描かない）。Object3DManager のルートの
+	/// [0]=PS b0 マテリアル / [2]=PS t0 ベースカラー / [10]=PS t2 法線 / [15]=PS t4 ハイト / [16][17]=PS t6/t7 地形の層 を貼り替える
+	/// </summary>
+	/// <param name="dxCore">コマンドリストの取得元</param>
 	void Draw(DirectXCore* dxCore);
 
-	// ID Pass 用：VBV/IBV をバインドして DrawIndexedInstanced するだけの軽量版。
+	/// <summary>ID Pass 用：VBV/IBV をバインドして DrawIndexedInstanced するだけの軽量版</summary>
+	/// <param name="dxCore">コマンドリストの取得元</param>
 	void DrawIdPass(DirectXCore* dxCore);
 
-	// シャドウパス用：VBV/IBV をバインドして DrawIndexedInstanced するだけ（深度のみ）。
+	/// <summary>シャドウパス用：VBV/IBV をバインドして DrawIndexedInstanced するだけ（深度のみ）</summary>
+	/// <param name="dxCore">コマンドリストの取得元</param>
 	void DrawShadowPass(DirectXCore* dxCore);
 
-	// 発光パス用：submesh ごとにマテリアル（PS b0 = ルート[1]）とベースカラー（ルート[3]）を貼って描く。
-	// 発光している submesh だけ描く。includeAll なら全部（六角形のディゾルブの発光帯を光らせるとき）
+	/// <summary>
+	/// 発光パス用：submesh ごとにマテリアル（PS b0 = ルート[1]）とベースカラー（ルート[3]）を貼って描く。
+	/// 発光している submesh だけ描く。includeAll なら全部（六角形のディゾルブの発光帯を光らせるとき）
+	/// </summary>
+	/// <param name="dxCore">コマンドリストの取得元</param>
+	/// <param name="includeAll">発光していない部位も描くなら true</param>
 	void DrawBloomPass(DirectXCore* dxCore, bool includeAll);
 
-	// 部位の発光。.mat のパスに materialName を含む submesh 全部（空なら全部）に emissive を書く。書いた数を返す。
-	// textureWeight = 1 で発光にベースカラーのテクスチャを掛ける（文字を描いた板の文字だけを光らせる）
+	/// <summary>
+	/// 部位の発光。.mat のパスに materialName を含む submesh 全部（空なら全部）に emissive を書く。
+	/// textureWeight = 1 で発光にベースカラーのテクスチャを掛ける（文字を描いた板の文字だけを光らせる）
+	/// </summary>
+	/// <param name="materialName">.mat のパスに含む語</param>
+	/// <param name="emissive">発光の RGB</param>
+	/// <param name="textureWeight">ベースカラーを掛ける割合（0〜1）</param>
+	/// <returns>書いた部位の数</returns>
 	int SetEmissiveByMaterialName(const std::string& materialName, const Vector3& emissive, float textureWeight = 0.0f);
-	// 全 submesh の発光を 0 に戻す
+	/// <summary>全 submesh の発光を 0 に戻す</summary>
 	void ClearEmissive();
-	// 部位のベースカラーの差し替え。.mat のパスに materialName を含む submesh 全部に texturePath を貼る（読み込みもする）。
-	// 書いた数を返す（GPU の準備前・読めないテクスチャなら 0）。モデルはファイル名で共有なので、使い終わったら元へ戻すこと
+	/// <summary>
+	/// 部位のベースカラーの差し替え。.mat のパスに materialName を含む submesh 全部に texturePath を貼る（読み込みもする）。
+	/// モデルはファイル名で共有なので、使い終わったら元へ戻すこと
+	/// </summary>
+	/// <param name="materialName">.mat のパスに含む語</param>
+	/// <param name="texturePath">貼るテクスチャのパス</param>
+	/// <returns>書いた数（GPU の準備前・読めないテクスチャなら 0）</returns>
 	int SetTextureByMaterialName(const std::string& materialName, const std::string& texturePath);
-	// 発光している submesh があるか
+	/// <summary>発光している submesh があるか</summary>
+	/// <returns>あれば true</returns>
 	bool HasEmissive() const;
 
+	/// <summary>モデルデータを返す</summary>
+	/// <returns>モデルデータ（DirectStorage 経路では頂点・インデックスは空）</returns>
 	const ModelData& GetModelData() const { return modelData_; }
 
 	/// <summary>モデル空間の包む球。IsValid() が false なら大きさ不明</summary>
+	/// <returns>包む球</returns>
 	const BoundingSphere& GetBoundingSphere() const { return bounds_; }
 
 	// ---- インスタンシング描画（外部の専用レンダラが VBV/IBV とサブメッシュ情報を借りる）----
 	// 頂点/インデックスバッファはモデル全体で 1 本。サブメッシュは index 範囲でその部分を指す。
+	/// <summary>部位の表を返す（インスタンシング描画用）</summary>
+	/// <returns>部位の配列</returns>
 	const std::vector<RenderSubmesh>& GetSubmeshes() const { return submeshes_; }
+	/// <summary>モデル全体の頂点バッファビューを返す</summary>
+	/// <returns>VBV</returns>
 	const D3D12_VERTEX_BUFFER_VIEW&   GetVertexBufferView() const { return vertexBufferView_; }
+	/// <summary>モデル全体のインデックスバッファビューを返す</summary>
+	/// <returns>IBV</returns>
 	const D3D12_INDEX_BUFFER_VIEW&    GetIndexBufferView() const  { return indexBufferView_; }
 
-	// ImGui/PSO切り替えから Material にアクセスするためのGetter
+	/// <summary>ImGui/PSO切り替えから Material にアクセスするためのGetter</summary>
+	/// <returns>マテリアル（未作成なら nullptr）</returns>
 	Material* GetMaterialPointer() const { return material_; }
 
-	// Inspector からテクスチャを差し替える際に使う（GPU リソース作成は呼び出し側で行う）
+	/// <summary>Inspector からテクスチャを差し替える際に使う（GPU リソース作成は呼び出し側で行う）</summary>
+	/// <param name="filePath">テクスチャのパス</param>
 	void SetTextureFilePath(const std::string& filePath) {
 		textureFilePath_ = filePath;
 		modelData_.materialData.textureFilePath = filePath;
 		if (!submeshes_.empty()) submeshes_[0].textureFilePath = filePath;
 	}
+	/// <summary>先頭の部位のテクスチャのパスを返す</summary>
+	/// <returns>パス</returns>
 	const std::string& GetTextureFilePath() const { return textureFilePath_; }
 
-	// 法線マップの差し替え（GPU リソース作成・useNormalMap 反映は呼び出し側）
+	/// <summary>法線マップの差し替え（GPU リソース作成・useNormalMap 反映は呼び出し側）</summary>
+	/// <param name="filePath">法線マップのパス</param>
 	void SetNormalMapFilePath(const std::string& filePath) {
 		normalMapFilePath_ = filePath;
 		modelData_.materialData.normalMapFilePath = filePath;
 		if (!submeshes_.empty()) submeshes_[0].normalMapFilePath = filePath;
 	}
+	/// <summary>先頭の部位の法線マップのパスを返す</summary>
+	/// <returns>パス（無ければ空）</returns>
 	const std::string& GetNormalMapFilePath() const { return normalMapFilePath_; }
 
 	// ロード状態の確認
+	/// <summary>CPU フェーズが終わったか</summary>
+	/// <returns>CPUReady 以降なら true</returns>
 	bool IsCPUReady() const { return loadState_ >= LoadState::CPUReady; }
+	/// <summary>描ける状態か</summary>
+	/// <returns>GPUReady なら true</returns>
 	bool IsGPUReady() const { return loadState_ == LoadState::GPUReady; }
+	/// <summary>GPU の転送待ちか</summary>
+	/// <returns>GPUPending なら true</returns>
 	bool IsGPUPending() const { return loadState_ == LoadState::GPUPending; }
 
 private:
 
-	// 頂点データ作成
+	/// <summary>頂点バッファを作る（DirectStorage 経路は DEFAULT heap に作って読み込みを積むだけ）</summary>
+	/// <param name="dxCore">デバイスの取得元</param>
 	void CreateVertexData(DirectXCore* dxCore);
 
-	// マテリアルデータ作成
+	/// <summary>部位ごとのマテリアル CB を作って既定値で初期化する</summary>
+	/// <param name="dxCore">デバイスの取得元</param>
 	void CreateMaterialData(DirectXCore* dxCore);
 
-	// indexを作成
+	/// <summary>インデックスバッファを作る（DirectStorage 経路は DEFAULT heap に作って読み込みを積むだけ）</summary>
+	/// <param name="dxCore">デバイスの取得元</param>
 	void CreateIndexData(DirectXCore* dxCore);
 
-	// DirectStorage で転送した頂点・インデックスにバリアを積み、ビューを作る（FS 経路は Create* で済んでいるので何もしない）
+	/// <summary>DirectStorage で転送した頂点・インデックスにバリアを積み、ビューを作る（FS 経路は Create* で済んでいるので何もしない）</summary>
+	/// <param name="dxCore">コマンドリストの取得元</param>
 	void FinishBufferData(DirectXCore* dxCore);
 
+	/// <summary>assimp のノードを再帰的に Node へ変換する</summary>
+	/// <param name="node">assimp のノード</param>
+	/// <returns>変換した Node</returns>
 	Node ReadNode(aiNode* node);
 
-	//static ModelData LoadObjFile(const std::string& directorPath, const std::string& filename);
+	/// <summary>assimp でモデルを読み、頂点・インデックス・ノード階層を modelData_ に入れる</summary>
+	/// <param name="directoryPath">モデルのあるディレクトリ</param>
+	/// <param name="filename">モデルのファイル名</param>
 	void LoadModel(const std::string& directoryPath, const std::string& filename);
 
-	// .mesh バイナリ直読み（Cooker が生成したもの）
+	/// <summary>.mesh バイナリ（v3 / v4。Cooker が生成したもの）を直読みし、部位と .mat のテクスチャのパスを集める</summary>
+	/// <param name="directoryPath">.mesh のあるディレクトリ</param>
+	/// <param name="filename">.mesh のファイル名</param>
 	void LoadMeshBinary(const std::string& directoryPath, const std::string& filename);
 
+	/// <summary>.mtl を読み、map_Kd のテクスチャのパスを取り出す（開けなければ assert）</summary>
+	/// <param name="directoryPath">.mtl のあるディレクトリ</param>
+	/// <param name="filename">.mtl のファイル名</param>
+	/// <returns>テクスチャのパスを入れた MaterialData</returns>
 	static MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename);
 
 };

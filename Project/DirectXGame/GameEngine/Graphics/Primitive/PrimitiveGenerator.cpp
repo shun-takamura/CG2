@@ -1,7 +1,29 @@
 #include "PrimitiveGenerator.h"
+#include "MathUtility.h"
 #include <cmath>
 #include <random>
 #include <chrono>
+    // 折れ線として扱うのに要る点の数の下限
+    constexpr size_t kMinPolylinePoints = 2;
+
+namespace {
+    // 円・リング・球などの分割数の下限
+    constexpr uint32_t kMinCircleDivisions = 3;
+    // 箱の面の数と、1 面の角の数
+    constexpr int kBoxFaceCount = 6;
+    constexpr int kFaceCornerCount = 4;
+    // リングの半径方向の段の数（内径・fadeStart・fadeEnd・外径）と、その間の帯の数
+    constexpr int kRadiusRingCount = 4;
+    constexpr int kRadiusBandCount = 3;
+    // 枠の外寸がこれ以下なら UV の割る数を 1 にする
+    constexpr float kMinOuterSize = 1e-6f;
+    // フェードの距離がこれ以下ならフェードしない
+    constexpr float kMinFadeLength = 1e-6f;
+    // 長さがこれ未満のベクトル・区間は 0 とみなす
+    constexpr float kMinLength = 1e-6f;
+    // 向きの Y 成分の絶対値がこれを超えたら、上方向の基準を X 軸に替える（ほぼ真上・真下）
+    constexpr float kParallelUpThreshold = 0.99f;
+}
 
 namespace PrimitiveGenerator {
 
@@ -67,11 +89,11 @@ namespace PrimitiveGenerator {
 
         // 各面の定義（頂点4つ＋法線）
         struct FaceDef {
-            Vector3 p[4];   // 左下, 右下, 左上, 右上
+            Vector3 p[kFaceCornerCount];   // 左下, 右下, 左上, 右上
             Vector3 normal;
         };
 
-        FaceDef faces[6] = {
+        FaceDef faces[kBoxFaceCount] = {
             // +Z面（手前）
             { {{-hx,-hy, hz}, { hx,-hy, hz}, {-hx, hy, hz}, { hx, hy, hz}}, { 0, 0, 1} },
             // -Z面（奥）
@@ -87,15 +109,15 @@ namespace PrimitiveGenerator {
         };
 
         // UV（各面共通。左下、右下、左上、右上）
-        Vector2 uvs[4] = {
+        Vector2 uvs[kFaceCornerCount] = {
             {0.0f, 1.0f}, {1.0f, 1.0f}, {0.0f, 0.0f}, {1.0f, 0.0f}
         };
 
         // 6面ぶん頂点・インデックスを追加
-        for (int f = 0; f < 6; ++f) {
+        for (int f = 0; f < kBoxFaceCount; ++f) {
             uint32_t baseIdx = static_cast<uint32_t>(mesh.vertices.size());
 
-            for (int i = 0; i < 4; ++i) {
+            for (int i = 0; i < kFaceCornerCount; ++i) {
                 MeshVertex v{};
                 v.position = faces[f].p[i];
                 v.texcoord = uvs[i];
@@ -121,9 +143,9 @@ namespace PrimitiveGenerator {
         MeshData mesh;
 
         // 最小分割数チェック
-        if (divisions < 3) divisions = 3;
+        if (divisions < kMinCircleDivisions) divisions = kMinCircleDivisions;
 
-        const float radianPerDivide = 2.0f * 3.14159265358979323846f / static_cast<float>(divisions);
+        const float radianPerDivide = 2.0f * kPi / static_cast<float>(divisions);
 
         // 頂点を生成（分割ごとに外側・内側の頂点ペアを追加）
         for (uint32_t index = 0; index < divisions; ++index) {
@@ -183,7 +205,7 @@ namespace PrimitiveGenerator {
         MeshData mesh;
 
         uint32_t divisions = params.divisions;
-        if (divisions < 3) divisions = 3;
+        if (divisions < kMinCircleDivisions) divisions = kMinCircleDivisions;
 
         // 角度の正規化
         float startAngle = params.startAngle;
@@ -224,7 +246,7 @@ namespace PrimitiveGenerator {
         // t=fadeStart: innerColorのまま
         // t=fadeEnd: outerColorのまま
         // t=1: 外径（outerColor）
-        RadiusRing rings[4];
+        RadiusRing rings[kRadiusRingCount];
         rings[0].t = 0.0f;       rings[0].color = params.innerColor;
         rings[1].t = fadeStart;  rings[1].color = params.innerColor;
         rings[2].t = fadeEnd;    rings[2].color = params.outerColor;
@@ -261,7 +283,7 @@ namespace PrimitiveGenerator {
             // 4リング × 2頂点 = 8頂点を追加
             uint32_t baseIdx = static_cast<uint32_t>(mesh.vertices.size());
 
-            for (int r = 0; r < 4; ++r) {
+            for (int r = 0; r < kRadiusRingCount; ++r) {
                 float radiusCurrent = radiusFromT(rings[r].t, index);
                 float radiusNext = radiusFromT(rings[r].t, index + 1);  // 次角度の半径
                 float vCoord = 1.0f - rings[r].t;
@@ -292,7 +314,7 @@ namespace PrimitiveGenerator {
             }
 
             // 3つの帯（ring0-1、ring1-2、ring2-3）それぞれにtriangleを2つずつ
-            for (int r = 0; r < 3; ++r) {
+            for (int r = 0; r < kRadiusBandCount; ++r) {
                 uint32_t outerPair = baseIdx + r * 2;         // 外側ペア
                 uint32_t innerPair = baseIdx + (r + 1) * 2;   // 内側ペア
 
@@ -314,7 +336,7 @@ namespace PrimitiveGenerator {
         MeshData mesh;
 
         uint32_t divisions = params.divisions;
-        if (divisions < 3) divisions = 3;
+        if (divisions < kMinCircleDivisions) divisions = kMinCircleDivisions;
 
         const float halfHeight = params.height * 0.5f;
         const float angleRange = params.endAngle - params.startAngle;
@@ -391,9 +413,8 @@ namespace PrimitiveGenerator {
 
     MeshData CreateSphere(float radius, uint32_t divisions, const Vector4& color) {
         MeshData mesh;
-        if (divisions < 3) divisions = 3;
+        if (divisions < kMinCircleDivisions) divisions = kMinCircleDivisions;
 
-        const float kPi = 3.14159265358979323846f;
         const uint32_t latDivisions = divisions;          // 緯度方向（縦）
         const uint32_t lonDivisions = divisions * 2;      // 経度方向（横）
 
@@ -446,9 +467,8 @@ namespace PrimitiveGenerator {
 
     MeshData CreateHemisphere(float radius, uint32_t divisions, const Vector4& color) {
         MeshData mesh;
-        if (divisions < 3) divisions = 3;
+        if (divisions < kMinCircleDivisions) divisions = kMinCircleDivisions;
 
-        const float kPi = 3.14159265358979323846f;
         const uint32_t latDivisions = divisions;          // 緯度方向（縦）：頂点[0]→赤道[latDivisions]
         const uint32_t lonDivisions = divisions * 2;      // 経度方向（横）：全周
 
@@ -512,8 +532,8 @@ namespace PrimitiveGenerator {
         if (iw > ow)   iw = ow;
         if (ih > oh)   ih = oh;
 
-        const float fullW = (p.outerWidth  > 1e-6f) ? p.outerWidth  : 1.0f;
-        const float fullH = (p.outerHeight > 1e-6f) ? p.outerHeight : 1.0f;
+        const float fullW = (p.outerWidth  > kMinOuterSize) ? p.outerWidth  : 1.0f;
+        const float fullH = (p.outerHeight > kMinOuterSize) ? p.outerHeight : 1.0f;
 
         auto addVertex = [&](float x, float y) {
             MeshVertex v{};
@@ -543,9 +563,8 @@ namespace PrimitiveGenerator {
 
     MeshData CreateBeamFromPolyline(const std::vector<Vector3>& polyline, const BeamAppearance& app) {
         MeshData mesh;
-        if (polyline.size() < 2) return mesh;
+        if (polyline.size() < kMinPolylinePoints) return mesh;
 
-        const float kPi = 3.14159265358979323846f;
         const uint32_t planeCount = app.planeCount < 1 ? 1 : app.planeCount;
 
         auto length3 = [](const Vector3& v) {
@@ -553,7 +572,7 @@ namespace PrimitiveGenerator {
             };
         auto normalize3 = [&](const Vector3& v) -> Vector3 {
             float len = length3(v);
-            if (len < 1e-6f) return { 1.0f, 0.0f, 0.0f };
+            if (len < kMinLength) return { 1.0f, 0.0f, 0.0f };
             return { v.x / len, v.y / len, v.z / len };
             };
         auto cross3 = [](const Vector3& a, const Vector3& b) -> Vector3 {
@@ -582,7 +601,7 @@ namespace PrimitiveGenerator {
                 polyline[i].z - polyline[i - 1].z });
         }
         const float totalLen = cumLen.back();
-        if (totalLen < 1e-6f) return mesh;
+        if (totalLen < kMinLength) return mesh;
 
         // 各点での接線とその直交基底（right, up）を事前計算
         std::vector<Vector3> tangents(n), rights(n), ups(n);
@@ -596,7 +615,7 @@ namespace PrimitiveGenerator {
                 t = { polyline[i + 1].x - polyline[i - 1].x, polyline[i + 1].y - polyline[i - 1].y, polyline[i + 1].z - polyline[i - 1].z };
             }
             tangents[i] = normalize3(t);
-            Vector3 up = (std::abs(tangents[i].y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            Vector3 up = (std::abs(tangents[i].y) > kParallelUpThreshold) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
             rights[i] = normalize3(cross3(tangents[i], up));
             ups[i] = cross3(rights[i], tangents[i]);
         }
@@ -625,11 +644,11 @@ namespace PrimitiveGenerator {
 
                 // 両端フェード（αに焼き込み）
                 float fadeAlpha = 1.0f;
-                if (app.fadeStartLength > 1e-6f && cumLen[i] < app.fadeStartLength) {
+                if (app.fadeStartLength > kMinFadeLength && cumLen[i] < app.fadeStartLength) {
                     fadeAlpha *= cumLen[i] / app.fadeStartLength;
                 }
                 float distFromEnd = totalLen - cumLen[i];
-                if (app.fadeEndLength > 1e-6f && distFromEnd < app.fadeEndLength) {
+                if (app.fadeEndLength > kMinFadeLength && distFromEnd < app.fadeEndLength) {
                     fadeAlpha *= distFromEnd / app.fadeEndLength;
                 }
                 col.w *= fadeAlpha;
@@ -680,7 +699,9 @@ namespace PrimitiveGenerator {
     }
 
     namespace {
-        // 2つの MeshData を結合（v2 のインデックスをオフセット）
+        /// <summary>2つの MeshData を結合（src のインデックスを dst の頂点数だけずらす）</summary>
+        /// <param name="dst">追加先</param>
+        /// <param name="src">追加するメッシュ</param>
         void AppendMesh(MeshData& dst, const MeshData& src) {
             uint32_t baseIdx = static_cast<uint32_t>(dst.vertices.size());
             dst.vertices.insert(dst.vertices.end(), src.vertices.begin(), src.vertices.end());
@@ -690,8 +711,13 @@ namespace PrimitiveGenerator {
             }
         }
 
-        // 線分 (a,b) のフラクタル分割。生成された折れ線を out へ追加（始点を含む）
-        // depth=0 で end を含めて push する。
+        /// <summary>線分 (a,b) のフラクタル分割。生成された折れ線を out へ追加（a は含まず b は含む。オフセットは世代ごとに半分）</summary>
+        /// <param name="a">始点</param>
+        /// <param name="b">終点</param>
+        /// <param name="offsetAmount">中点を垂直方向にずらす最大量</param>
+        /// <param name="depth">残りの分割回数（0 で b だけ追加）</param>
+        /// <param name="rng">乱数生成器</param>
+        /// <param name="out">追加先</param>
         void SubdivideSegment(const Vector3& a, const Vector3& b,
                               float offsetAmount, uint32_t depth,
                               std::mt19937& rng,
@@ -702,27 +728,27 @@ namespace PrimitiveGenerator {
             }
             Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
             float len = std::sqrt(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
-            if (len < 1e-6f) {
+            if (len < kMinLength) {
                 out.push_back(b);
                 return;
             }
             // 線分に垂直な平面内でランダム方向を選ぶ
             Vector3 nDir = { dir.x / len, dir.y / len, dir.z / len };
-            Vector3 up = (std::abs(nDir.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            Vector3 up = (std::abs(nDir.y) > kParallelUpThreshold) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
             Vector3 right = {
                 nDir.y * up.z - nDir.z * up.y,
                 nDir.z * up.x - nDir.x * up.z,
                 nDir.x * up.y - nDir.y * up.x
             };
             float rLen = std::sqrt(right.x*right.x + right.y*right.y + right.z*right.z);
-            if (rLen < 1e-6f) { out.push_back(b); return; }
+            if (rLen < kMinLength) { out.push_back(b); return; }
             right = { right.x / rLen, right.y / rLen, right.z / rLen };
             Vector3 up2 = {
                 right.y * nDir.z - right.z * nDir.y,
                 right.z * nDir.x - right.x * nDir.z,
                 right.x * nDir.y - right.y * nDir.x
             };
-            std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * 3.14159265358979323846f);
+            std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * kPi);
             std::uniform_real_distribution<float> distOffset(-offsetAmount, offsetAmount);
             float theta = distAngle(rng);
             float mag = distOffset(rng);
@@ -741,7 +767,13 @@ namespace PrimitiveGenerator {
             SubdivideSegment(mid, b, nextOffset, depth - 1, rng, out);
         }
 
-        // 始点→終点のフラクタル折れ線を生成（始点を含み、終点を含む）
+        /// <summary>始点→終点のフラクタル折れ線を生成（始点を含み、終点を含む）</summary>
+        /// <param name="start">始点</param>
+        /// <param name="end">終点</param>
+        /// <param name="maxOffset">最初の世代の最大ずれ</param>
+        /// <param name="generations">分割回数</param>
+        /// <param name="rng">乱数生成器</param>
+        /// <returns>折れ線の点の列</returns>
         std::vector<Vector3> GenerateFractalPolyline(const Vector3& start, const Vector3& end,
                                                      float maxOffset, uint32_t generations,
                                                      std::mt19937& rng) {
@@ -768,7 +800,7 @@ namespace PrimitiveGenerator {
                       params.endPos.y - params.startPos.y,
                       params.endPos.z - params.startPos.z };
         float totalLen = std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
-        if (totalLen < 1e-6f) return mesh;
+        if (totalLen < kMinLength) return mesh;
         float maxOffset = totalLen * params.maxOffsetRatio;
 
         // 本線
@@ -780,7 +812,7 @@ namespace PrimitiveGenerator {
 
         // 枝：本線の隣接点 (i, i+1) で確率的に分岐
         // 枝の終点 = mid + Rotate(dir) * lengthScale * |segment|
-        if (params.branchProbability > 0.0f && mainPoly.size() >= 2) {
+        if (params.branchProbability > 0.0f && mainPoly.size() >= kMinPolylinePoints) {
             std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
             std::uniform_real_distribution<float> distAngle(-params.branchMaxAngle, params.branchMaxAngle);
 
@@ -804,18 +836,18 @@ namespace PrimitiveGenerator {
                 Vector3 b = mainPoly[i + 1];
                 Vector3 seg = { b.x - a.x, b.y - a.y, b.z - a.z };
                 float segLen = std::sqrt(seg.x*seg.x + seg.y*seg.y + seg.z*seg.z);
-                if (segLen < 1e-6f) continue;
+                if (segLen < kMinLength) continue;
 
                 // 軸まわりにランダム角度で回転（本線方向から少しズラす）
                 Vector3 nSeg = { seg.x / segLen, seg.y / segLen, seg.z / segLen };
-                Vector3 upRef = (std::abs(nSeg.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+                Vector3 upRef = (std::abs(nSeg.y) > kParallelUpThreshold) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
                 Vector3 axR = {
                     nSeg.y * upRef.z - nSeg.z * upRef.y,
                     nSeg.z * upRef.x - nSeg.x * upRef.z,
                     nSeg.x * upRef.y - nSeg.y * upRef.x
                 };
                 float arLen = std::sqrt(axR.x*axR.x + axR.y*axR.y + axR.z*axR.z);
-                if (arLen < 1e-6f) continue;
+                if (arLen < kMinLength) continue;
                 axR = { axR.x / arLen, axR.y / arLen, axR.z / arLen };
                 Vector3 axU = {
                     axR.y * nSeg.z - axR.z * nSeg.y,
@@ -825,7 +857,7 @@ namespace PrimitiveGenerator {
 
                 // 軸まわり回転 + 軸からの傾き
                 float tilt = distAngle(rng);
-                float roll = std::uniform_real_distribution<float>(0.0f, 2.0f * 3.14159265358979323846f)(rng);
+                float roll = std::uniform_real_distribution<float>(0.0f, 2.0f * kPi)(rng);
                 Vector3 tiltDir = {
                     nSeg.x * std::cos(tilt) + (axR.x * std::cos(roll) + axU.x * std::sin(roll)) * std::sin(tilt),
                     nSeg.y * std::cos(tilt) + (axR.y * std::cos(roll) + axU.y * std::sin(roll)) * std::sin(tilt),
@@ -871,9 +903,8 @@ namespace PrimitiveGenerator {
     MeshData CreateHelix(const HelixParams& params) {
         MeshData mesh;
 
-        const float kPi = 3.14159265358979323846f;
 
-        uint32_t circleSegments = params.circleSegments < 3 ? 3 : params.circleSegments;
+        uint32_t circleSegments = params.circleSegments < kMinCircleDivisions ? kMinCircleDivisions : params.circleSegments;
         uint32_t lengthSegments = params.lengthSegments < 1 ? 1 : params.lengthSegments;
 
         const float totalHeight = params.pitch * params.turns;
@@ -893,7 +924,7 @@ namespace PrimitiveGenerator {
 
         auto normalize3 = [](const Vector3& v) -> Vector3 {
             float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-            if (len < 1e-6f) return { 1.0f, 0.0f, 0.0f };
+            if (len < kMinLength) return { 1.0f, 0.0f, 0.0f };
             return { v.x / len, v.y / len, v.z / len };
             };
         auto cross3 = [](const Vector3& a, const Vector3& b) -> Vector3 {
@@ -935,7 +966,7 @@ namespace PrimitiveGenerator {
             Vector3 T = normalize3(tangent);
 
             // 安定したフレーム：Yワールドが接線とほぼ平行なときはXに切り替え
-            Vector3 up = (std::abs(T.y) > 0.99f) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+            Vector3 up = (std::abs(T.y) > kParallelUpThreshold) ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
             Vector3 N = normalize3(cross3(T, up));
             Vector3 B = cross3(N, T); // 既に正規直交
 

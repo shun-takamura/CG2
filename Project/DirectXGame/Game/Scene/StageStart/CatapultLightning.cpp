@@ -5,6 +5,7 @@
 #include "Primitive/MeshData.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 
@@ -13,34 +14,140 @@
 #endif
 
 namespace {
+	// 長さがこれ以下のベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-6f;
+	// 雷の 1 点あたりの頂点の数（左の縁・芯・右の縁）
+	constexpr int kVertsPerPoint = 3;
+	// 時間の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinFadeSeconds = 1e-3f;
+	// 雷を溝の底からわずかに浮かせる高さ [m]
+	constexpr float kBottomLift = 0.03f;
+	// 点け直しの雷を射出口の奥まで出し続ける余裕 [m]
+	constexpr float kSweepEndMargin = 2.0f;
+	// 左右のレール（固定台）の数
+	constexpr int kRailCount = 2;
+	// 点け直しの雷の始まりを溝の幅のどこまで散らすか（半幅に対する割合）
+	constexpr float kSweepStartSpread = 0.8f;
+	// 点け直しの雷の終わりの高さの最小 [m]
+	constexpr float kSweepRiseMin = 0.1f;
+	// 点け直しの雷の終わりの高さの最大 [m]
+	constexpr float kSweepRiseMax = 0.9f;
+	// 点け直しの雷が前へ伸びる長さの最大 [m]
+	constexpr float kSweepReachMax = 3.5f;
+	// 点け直しの雷の寿命の最小 [秒]
+	constexpr float kSweepLifeMin = 0.05f;
+	// 点け直しの雷の寿命の最大 [秒]
+	constexpr float kSweepLifeMax = 0.12f;
+	// 機体の近くに寄せる強さの下限
+	constexpr float kMinIdleNearBias = 0.1f;
+	// 左右どちらへ跳ねるかの確率
+	constexpr float kSideChance = 0.5f;
+	// 跳ね上がる大きい弧になる確率
+	constexpr float kBigArcChance = 0.5f;
+	// 放電の始まりを溝の幅のどこまで散らすか（半幅に対する割合）
+	constexpr float kIdleStartSpread = 0.6f;
+	// 大きい弧が溝の縁から外へ出る距離の最小 [m]
+	constexpr float kBigArcOutMin = 0.2f;
+	// 大きい弧が溝の縁から外へ出る距離の最大 [m]
+	constexpr float kBigArcOutMax = 1.5f;
+	// 大きい弧の高さの最小 [m]
+	constexpr float kBigArcHeightMin = 0.2f;
+	// 大きい弧の高さの倍率の基本
+	constexpr float kBigArcHeightBase = 0.6f;
+	// 大きい弧の高さの倍率に出力に応じて足す量
+	constexpr float kBigArcHeightThrust = 0.4f;
+	// 大きい弧の高さの倍率にさらに足す一定の量
+	constexpr float kBigArcHeightExtra = 0.4f;
+	// 大きい弧の前後のばらつき（±）[m]
+	constexpr float kBigArcSpreadZ = 2.0f;
+	// 小さい弧の終わりを溝の幅のどこに置くか（半幅に対する割合）
+	constexpr float kSmallArcReach = 0.9f;
+	// 小さい弧の終わりの高さの最大 [m]
+	constexpr float kSmallArcRise = 0.3f;
+	// 放電の寿命の最小 [秒]
+	constexpr float kIdleLifeMin = 0.05f;
+	// 放電の寿命の最大 [秒]
+	constexpr float kIdleLifeMax = 0.14f;
+	// 出力に応じて放電を太くする割合
+	constexpr float kIdleWidthThrust = 0.6f;
+	// 固定台の雷の上の端の高さの最大 [m]
+	constexpr float kClampTopMax = 0.4f;
+	// 固定台の雷の上の端の前後のばらつき（±）[m]
+	constexpr float kClampSpreadZ = 1.2f;
+	// 固定台の雷の下の端が後ろへ伸びる長さの最大 [m]
+	constexpr float kClampReachBack = 3.0f;
+	// 固定台の雷の下の端が前へ伸びる長さの最大 [m]
+	constexpr float kClampReachFront = 0.5f;
+	// 固定台の雷の寿命の最小 [秒]
+	constexpr float kClampLifeMin = 0.05f;
+	// 固定台の雷の寿命の最大 [秒]
+	constexpr float kClampLifeMax = 0.1f;
+	// この長さより短い区間にはレールを走る雷を出さない [m]
+	constexpr float kMinRunRange = 0.5f;
+	// レールを走る雷の左右のばらつき（±）[m]
+	constexpr float kRunSideSpread = 0.35f;
+	// レールを走る雷の始まりの高さの最大 [m]
+	constexpr float kRunStartRise = 0.1f;
+	// レールを走る雷の終わりの高さの最大 [m]
+	constexpr float kRunEndRise = 0.4f;
+	// レールを走る雷の寿命の最小 [秒]
+	constexpr float kRunLifeMin = 0.06f;
+	// レールを走る雷の寿命の最大 [秒]
+	constexpr float kRunLifeMax = 0.16f;
+	// 残る放電の両端を溝の幅のどこに置くか（半幅に対する割合）
+	constexpr float kTrailSpan = 0.9f;
+	// 残る放電の高さの最大 [m]
+	constexpr float kTrailRise = 0.3f;
+	// 残る放電の前後のばらつき（±）[m]
+	constexpr float kTrailSpreadZ = 1.5f;
+	// 残る放電の寿命の最小 [秒]
+	constexpr float kTrailLifeMin = 0.1f;
+	// 残る放電の寿命の最大 [秒]
+	constexpr float kTrailLifeMax = 0.25f;
+	// 残る放電・溜まる雷を太くする倍率
+	constexpr float kWideBoltScale = 1.5f;
+	// 射出中にレールを走る雷の明るさ
+	constexpr float kLaunchRunBrightness = 1.6f;
+	// 向きの Y がこれ以上なら上の向きの代わりに X 軸を使う
+	constexpr float kNearVerticalCos = 0.9f;
+
 	constexpr const char* kWhiteTexture = "Resources/Textures/white1x1.dds";
 	constexpr int kPointsPerBolt = CatapultLightning::kSegments + 1;
 	constexpr int kVertsPerBolt = kPointsPerBolt * 3;   // 帯の左の縁・芯・右の縁
 
+	/// <summary>2 つのベクトルを足す</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルを引く</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a − b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Mul(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 Cross(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>ベクトルの長さを求める</summary>
+	/// <param name="v">ベクトル</param>
+	/// <returns>長さ</returns>
 	float Len(const Vector3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 SafeNormalize(const Vector3& v, const Vector3& fallback) {
 		const float l = Len(v);
-		return l > 1e-6f ? Mul(v, 1.0f / l) : fallback;
-	}
-
-	void ReadVector4(const JsonValue& node, Vector4& value) {
-		if (!node.IsArray() || node.Size() < 4) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)), static_cast<float>(node[3].AsDouble(value.w)) };
-	}
-	JsonValue MakeVector4(const Vector4& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		node.Push(JsonValue(static_cast<double>(v.w)));
-		return node;
+		return l > kMinNormalizeLength ? Mul(v, 1.0f / l) : fallback;
 	}
 }
 
@@ -57,8 +164,8 @@ void CatapultLightning::Initialize(const StageStartGeometry& geometry) {
 	for (uint32_t b = 0; b < static_cast<uint32_t>(kMaxBolts); ++b) {
 		const uint32_t base = b * kVertsPerBolt;
 		for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(kPointsPerBolt); ++i) {
-			const uint32_t p = base + i * 3;
-			const uint32_t q = p + 3;
+			const uint32_t p = base + i * kVertsPerPoint;
+			const uint32_t q = p + kVertsPerPoint;
 			// 左の縁〜芯、芯〜右の縁の 2 枚
 			data.indices.insert(data.indices.end(), { p, q, p + 1, p + 1, q, q + 1 });
 			data.indices.insert(data.indices.end(), { p + 1, q + 1, p + 2, p + 2, q + 1, q + 2 });
@@ -91,7 +198,7 @@ void CatapultLightning::Jitter(Bolt& bolt) {
 	for (int i = 0; i < kPointsPerBolt; ++i) {
 		// 両端は動かさない（真ん中ほど大きくずらす）
 		const float u = static_cast<float>(i) / static_cast<float>(kSegments);
-		const float envelope = std::sin(u * 3.14159265f);
+		const float envelope = std::sin(u * kPi);
 		bolt.offsets[i][0] = Rand(-1.0f, 1.0f) * amp * envelope;
 		bolt.offsets[i][1] = Rand(-1.0f, 1.0f) * amp * envelope;
 	}
@@ -122,7 +229,7 @@ float CatapultLightning::LaunchLevelAt(float z) const {
 	const float length = (std::max)(geometry_.catapultTunnelEndZ - start, 1.0f);
 	const int b = std::clamp(static_cast<int>((z - start) / length * kPassBuckets), 0, kPassBuckets - 1);
 	if (passTime_[b] < 0.0f) return 1.0f;
-	return std::exp(-(launchTime_ - passTime_[b]) / (std::max)(afterFadeSeconds_, 1e-3f));
+	return std::exp(-(launchTime_ - passTime_[b]) / (std::max)(afterFadeSeconds_, kMinFadeSeconds));
 }
 
 bool CatapultLightning::CullByLaunch(float z, float& brightness) {
@@ -134,78 +241,78 @@ bool CatapultLightning::CullByLaunch(float z, float& brightness) {
 
 void CatapultLightning::SpawnSweep(float frontZ, float count) {
 	// 点け直しの先頭のすぐ後ろで、溝の底から前へ這うように伸びる雷
-	const float bottom = -geometry_.grooveDepth + 0.03f;
+	const float bottom = -geometry_.grooveDepth + kBottomLift;
 	const float gw = geometry_.grooveHalfWidth;
-	if (frontZ < geometry_.liftGrooveStartZ || frontZ > geometry_.catapultTunnelEndZ + 2.0f) return;
+	if (frontZ < geometry_.liftGrooveStartZ || frontZ > geometry_.catapultTunnelEndZ + kSweepEndMargin) return;
 	for (int n = 0; n < static_cast<int>(count); ++n) {
-		const float x = geometry_.railX[n % 2];
+		const float x = geometry_.railX[n % kRailCount];
 		const float z0 = frontZ - Rand(0.0f, sweepTail_);
-		Spawn({ x + Rand(-gw, gw) * 0.8f, bottom, z0 }, { x + Rand(-gw, gw), bottom + Rand(0.1f, 0.9f), z0 + Rand(1.0f, 3.5f) },
-			Rand(0.05f, 0.12f), sweepWidth_, 1.0f, false, 0.0f);
+		Spawn({ x + Rand(-gw, gw) * kSweepStartSpread, bottom, z0 }, { x + Rand(-gw, gw), bottom + Rand(kSweepRiseMin, kSweepRiseMax), z0 + Rand(1.0f, kSweepReachMax) },
+			Rand(kSweepLifeMin, kSweepLifeMax), sweepWidth_, 1.0f, false, 0.0f);
 	}
 }
 
 void CatapultLightning::SpawnIdle(float thrust, float count) {
 	// 溝のあちこちで細かく放電（機体の近くほど多い）。溝を横切る短い雷
-	const float bottom = -geometry_.grooveDepth + 0.03f;
+	const float bottom = -geometry_.grooveDepth + kBottomLift;
 	const float gw = geometry_.grooveHalfWidth;
 	const float start = geometry_.liftGrooveStartZ;
 	const float range = geometry_.catapultTunnelEndZ - start;
 	for (int n = 0; n < static_cast<int>(count); ++n) {
-		const float x = geometry_.railX[n % 2];
-		const float z = start + range * std::pow(Rand(0.0f, 1.0f), (std::max)(idleNearBias_, 0.1f));
-		const float side = Rand(0.0f, 1.0f) < 0.5f ? -1.0f : 1.0f;
+		const float x = geometry_.railX[n % kRailCount];
+		const float z = start + range * std::pow(Rand(0.0f, 1.0f), (std::max)(idleNearBias_, kMinIdleNearBias));
+		const float side = Rand(0.0f, 1.0f) < kSideChance ? -1.0f : 1.0f;
 		// 溝の底から溝の縁の外・上へ跳ね上がる弧（半分は溝を横切るだけの小さいもの）
-		const bool big = Rand(0.0f, 1.0f) < 0.5f;
-		const Vector3 a = { x + Rand(-gw, gw) * 0.6f, bottom, z };
+		const bool big = Rand(0.0f, 1.0f) < kBigArcChance;
+		const Vector3 a = { x + Rand(-gw, gw) * kIdleStartSpread, bottom, z };
 		const Vector3 b = big
-			? Vector3{ x + side * (gw + Rand(0.2f, 1.5f)), Rand(0.2f, idleArcHeight_) * (0.6f + 0.4f * thrust + 0.4f), z + Rand(-2.0f, 2.0f) }
-			: Vector3{ x + side * gw * 0.9f, bottom + Rand(0.0f, 0.3f), z + Rand(-1.0f, 1.0f) };
+			? Vector3{ x + side * (gw + Rand(kBigArcOutMin, kBigArcOutMax)), Rand(kBigArcHeightMin, idleArcHeight_) * (kBigArcHeightBase + kBigArcHeightThrust * thrust + kBigArcHeightExtra), z + Rand(-kBigArcSpreadZ, kBigArcSpreadZ) }
+			: Vector3{ x + side * gw * kSmallArcReach, bottom + Rand(0.0f, kSmallArcRise), z + Rand(-1.0f, 1.0f) };
 		float brightness = 1.0f + thrust;
 		if (CullByLaunch(z, brightness)) continue;
-		Spawn(a, b, Rand(0.05f, 0.14f), idleWidth_ * (1.0f + 0.6f * thrust), brightness, false, 0.0f);
+		Spawn(a, b, Rand(kIdleLifeMin, kIdleLifeMax), idleWidth_ * (1.0f + kIdleWidthThrust * thrust), brightness, false, 0.0f);
 	}
 }
 
 void CatapultLightning::SpawnClamp(float clampTravel, float count, float width, float brightness) {
 	// 固定台（溝にはまる台車）の底とレールのあいだ
-	const float bottom = -geometry_.grooveDepth + 0.03f;
+	const float bottom = -geometry_.grooveDepth + kBottomLift;
 	const float gw = geometry_.grooveHalfWidth;
 	for (int n = 0; n < static_cast<int>(count); ++n) {
-		const Vector3& clamp = geometry_.clamps[n % 2];
+		const Vector3& clamp = geometry_.clamps[n % kRailCount];
 		const float z = clamp.z + clampTravel;
-		Spawn({ clamp.x + Rand(-1.0f, 1.0f), Rand(0.0f, 0.4f), z + Rand(-1.2f, 1.2f) },
-			{ clamp.x + Rand(-gw, gw), bottom, z + Rand(-3.0f, 0.5f) },
-			Rand(0.05f, 0.1f), width, brightness, true, clampTravel);
+		Spawn({ clamp.x + Rand(-1.0f, 1.0f), Rand(0.0f, kClampTopMax), z + Rand(-kClampSpreadZ, kClampSpreadZ) },
+			{ clamp.x + Rand(-gw, gw), bottom, z + Rand(-kClampReachBack, kClampReachFront) },
+			Rand(kClampLifeMin, kClampLifeMax), width, brightness, true, clampTravel);
 	}
 }
 
 void CatapultLightning::SpawnRailRun(float zMin, float zMax, float count, float brightness) {
 	// 溝の底のレールに沿って縦に走る長い雷（レール全体に電気が走っている感じ）
-	const float bottom = -geometry_.grooveDepth + 0.03f;
-	if (zMax - zMin < 0.5f) return;
+	const float bottom = -geometry_.grooveDepth + kBottomLift;
+	if (zMax - zMin < kMinRunRange) return;
 	for (int n = 0; n < static_cast<int>(count); ++n) {
-		const float x = geometry_.railX[n % 2];
+		const float x = geometry_.railX[n % kRailCount];
 		const float length = Rand(runLengthMin_, runLengthMax_);
 		const float z0 = Rand(zMin, (std::max)(zMax - length * 0.5f, zMin));
 		const float z1 = (std::min)(z0 + length, zMax);
 		float b = brightness;
 		if (CullByLaunch((z0 + z1) * 0.5f, b)) continue;
-		Spawn({ x + Rand(-0.35f, 0.35f), bottom + Rand(0.0f, 0.1f), z0 }, { x + Rand(-0.35f, 0.35f), bottom + Rand(0.0f, 0.4f), z1 },
-			Rand(0.06f, 0.16f), runWidth_, b, false, 0.0f);
+		Spawn({ x + Rand(-kRunSideSpread, kRunSideSpread), bottom + Rand(0.0f, kRunStartRise), z0 }, { x + Rand(-kRunSideSpread, kRunSideSpread), bottom + Rand(0.0f, kRunEndRise), z1 },
+			Rand(kRunLifeMin, kRunLifeMax), runWidth_, b, false, 0.0f);
 	}
 }
 
 void CatapultLightning::SpawnTrail(float clampTravel, float count) {
 	// 射出中、走り抜けた固定台の後ろの溝に残る放電
-	const float bottom = -geometry_.grooveDepth + 0.03f;
+	const float bottom = -geometry_.grooveDepth + kBottomLift;
 	const float gw = geometry_.grooveHalfWidth;
 	for (int n = 0; n < static_cast<int>(count); ++n) {
-		const Vector3& clamp = geometry_.clamps[n % 2];
+		const Vector3& clamp = geometry_.clamps[n % kRailCount];
 		const float z = clamp.z + clampTravel - Rand(0.0f, trailLength_);
 		if (z < geometry_.liftGrooveStartZ) continue;
-		Spawn({ clamp.x - gw * 0.9f, bottom + Rand(0.0f, 0.3f), z }, { clamp.x + gw * 0.9f, bottom + Rand(0.0f, 0.3f), z + Rand(-1.5f, 1.5f) },
-			Rand(0.1f, 0.25f), idleWidth_ * 1.5f, 1.0f, false, 0.0f);
+		Spawn({ clamp.x - gw * kTrailSpan, bottom + Rand(0.0f, kTrailRise), z }, { clamp.x + gw * kTrailSpan, bottom + Rand(0.0f, kTrailRise), z + Rand(-kTrailSpreadZ, kTrailSpreadZ) },
+			Rand(kTrailLifeMin, kTrailLifeMax), idleWidth_ * kWideBoltScale, 1.0f, false, 0.0f);
 	}
 }
 
@@ -244,7 +351,7 @@ void CatapultLightning::Update(float deltaTime, const Drive& drive) {
 			1.0f + drive.thrust);
 		SpawnIdle(drive.thrust, take(idleCarry_, idleRate_ * (1.0f + idleThrustBoost_ * drive.thrust), deltaTime));
 		// SPACE で出力を上げるほど固定台の足元にも溜まる
-		SpawnClamp(drive.clampTravel, take(clampCarry_, chargeClampRate_ * drive.thrust, deltaTime), idleWidth_ * 1.5f, 1.0f);
+		SpawnClamp(drive.clampTravel, take(clampCarry_, chargeClampRate_ * drive.thrust, deltaTime), idleWidth_ * kWideBoltScale, 1.0f);
 	}
 	if (drive.launching) {
 		if (!launching_) {
@@ -264,7 +371,7 @@ void CatapultLightning::Update(float deltaTime, const Drive& drive) {
 			SpawnTrail(drive.clampTravel, take(trailCarry_, trailRate_, deltaTime));
 		}
 		// 溝の全長も走り続け、機体が通り過ぎた所から収まっていく（CullByLaunch で間引く）
-		SpawnRailRun(grooveStart, grooveEnd, take(runCarry_, runRate_ * (1.0f + runThrustBoost_), deltaTime), 1.6f);
+		SpawnRailRun(grooveStart, grooveEnd, take(runCarry_, runRate_ * (1.0f + runThrustBoost_), deltaTime), kLaunchRunBrightness);
 		SpawnIdle(1.0f, take(idleCarry_, idleRate_ * (1.0f + idleThrustBoost_), deltaTime));
 	} else {
 		launching_ = false;
@@ -287,11 +394,11 @@ void CatapultLightning::BuildVertices(const Vector3& cameraPos) {
 		const Vector3 a = Add(Add(origin_, bolt.a), { 0.0f, 0.0f, follow });
 		const Vector3 bEnd = Add(Add(origin_, bolt.b), { 0.0f, 0.0f, follow });
 		const Vector3 dir = SafeNormalize(Sub(bEnd, a), { 0.0f, 0.0f, 1.0f });
-		const Vector3 ref = std::fabs(dir.y) < 0.9f ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
+		const Vector3 ref = std::fabs(dir.y) < kNearVerticalCos ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
 		const Vector3 p1 = SafeNormalize(Cross(ref, dir), { 1.0f, 0.0f, 0.0f });
 		const Vector3 p2 = Cross(dir, p1);
 		// 出てすぐ明るく、消える前に暗く
-		const float t = bolt.age / (std::max)(bolt.life, 1e-3f);
+		const float t = bolt.age / (std::max)(bolt.life, kMinFadeSeconds);
 		const float fade = (1.0f - t) * (1.0f - t);
 		Vector3 points[kPointsPerBolt];
 		for (int i = 0; i < kPointsPerBolt; ++i) {
@@ -303,9 +410,9 @@ void CatapultLightning::BuildVertices(const Vector3& cameraPos) {
 			const Vector3 view = SafeNormalize(Sub(cameraPos, points[i]), { 0.0f, 1.0f, 0.0f });
 			const Vector3 side = Mul(SafeNormalize(Cross(tangent, view), p1), bolt.width * 0.5f);
 			const float k = bolt.brightness * fade;
-			MeshVertex& left = v[i * 3];
-			MeshVertex& core = v[i * 3 + 1];
-			MeshVertex& right = v[i * 3 + 2];
+			MeshVertex& left = v[i * kVertsPerPoint];
+			MeshVertex& core = v[i * kVertsPerPoint + 1];
+			MeshVertex& right = v[i * kVertsPerPoint + 2];
 			left.position = Sub(points[i], side);
 			core.position = points[i];
 			right.position = Add(points[i], side);
@@ -367,8 +474,8 @@ void CatapultLightning::LoadTuning(const JsonValue& node) {
 	read("jag", jag_);
 	read("afterFadeSeconds", afterFadeSeconds_);
 	read("jitterSeconds", jitterSeconds_);
-	ReadVector4(node["coreColor"], coreColor_);
-	ReadVector4(node["glowColor"], glowColor_);
+	coreColor_ = ReadVector4(node["coreColor"], coreColor_);
+	glowColor_ = ReadVector4(node["glowColor"], glowColor_);
 	read("bloomIntensity", bloomIntensity_);
 }
 

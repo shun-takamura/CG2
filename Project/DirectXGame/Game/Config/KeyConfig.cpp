@@ -18,14 +18,22 @@
 namespace {
 	constexpr const char* kDefaultPath = "Resources/Json/Setting/keyconfig.default.json";
 	constexpr const char* kUserPath    = "Resources/Json/Setting/keyconfig.user.json";
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
 
-	// 1行で「アクション名, スロット0, スロット1」をバインドするヘルパー
+	/// <summary>1 行で「アクション名, スロット0, スロット1」をバインドする</summary>
+	/// <param name="map">書き込み先のアクションマップ</param>
+	/// <param name="a">アクション</param>
+	/// <param name="primary">スロット 0 の入力</param>
+	/// <param name="secondary">スロット 1 の入力（省略で空＝割り当てなし）</param>
 	void Set(InputActionMap& map, Action a, PhysicalBinding primary, PhysicalBinding secondary = {}) {
 		map.Bind(static_cast<int>(a), 0, primary);
 		map.Bind(static_cast<int>(a), 1, secondary);
 	}
 
-	// バインド設定 -> JSON
+	/// <summary>バインド設定を JSON にする（アクション名 → 入力の文字列の配列）</summary>
+	/// <param name="map">書き出すアクションマップ</param>
+	/// <returns>JSON オブジェクト</returns>
 	JsonValue BuildBindingsJson(const InputActionMap& map) {
 		JsonValue bindings = JsonValue::MakeObject();
 		for (int i = 0; i < static_cast<int>(Action::Count); ++i) {
@@ -44,7 +52,9 @@ namespace {
 		return bindings;
 	}
 
-	// JSON -> バインド設定
+	/// <summary>JSON のバインド設定をアクションマップへ当てる。配列に無いスロットは割り当てを外す</summary>
+	/// <param name="bindings">アクション名 → 入力の文字列の配列（オブジェクトでなければ何もしない）</param>
+	/// <param name="map">書き込み先のアクションマップ</param>
 	void ApplyBindingsJson(const JsonValue& bindings, InputActionMap& map) {
 		if (!bindings.IsObject()) return;
 		const auto& obj = bindings.AsObject();
@@ -64,6 +74,11 @@ namespace {
 		}
 	}
 
+	/// <summary>キーコンフィグのファイルを 1 つ読み、バインドとオプションを当てる</summary>
+	/// <param name="path">読むファイルパス</param>
+	/// <param name="map">書き込み先のアクションマップ</param>
+	/// <param name="options">書き込み先のオプション</param>
+	/// <returns>読めたら true。ファイルが無い・パースに失敗したら false</returns>
 	bool TryLoadFile(const char* path, InputActionMap& map, KeyConfig::Options& options) {
 		if (!std::filesystem::exists(path)) return false;
 		auto result = JsonParser::ParseFile(path);
@@ -180,5 +195,5 @@ bool KeyConfig::SaveUser(const InputActionMap& map, const Options& options) {
 	opts["precisionAimMode"] = options.precisionAimMode;
 	root["options"] = std::move(opts);
 
-	return JsonWriter::WriteFile(kUserPath, root, { true, 2 });
+	return JsonWriter::WriteFile(kUserPath, root, { true, kJsonIndentWidth });
 }

@@ -59,6 +59,14 @@ namespace {
 	// 機体の正面（+Z）を前上から照らす（光の進む向き）
 	const Vector3 kSunLightDirection = { -0.191f, -0.815f, -0.547f };
 	const Vector4 kSunLightColor = { 1.0f, 0.96f, 0.9f, 1.0f };
+	// HUB の BGM の音量（0〜1）
+	constexpr float kHubBgmVolume = 0.5f;
+	// 所持エーテルの枠がチカチカして点き切るまで [秒]
+	constexpr float kHandPanelFlickerSeconds = 0.2f;
+	// 付け替えのタブ番号の最大（主武器 0／盾 1／飛行ユニット 2）
+	constexpr int kLastLoadoutSwapTab = 2;
+	// 調整値の JSON を書き出すときの字下げ [スペースの数]
+	constexpr int kTuningJsonIndentWidth = 2;
 }
 
 HubScene::HubScene(Entry entry) : entry_(entry) {}
@@ -69,44 +77,47 @@ void HubScene::Initialize() {
 
 	camera_ = std::make_unique<Camera>();
 	camera_->SetFarClip(kCameraFarClip);
-	object3DManager_->SetDefaultCamera(camera_.get());
-	skyboxManager_->SetDefaultCamera(camera_.get());
+	GetObject3DManager()->SetDefaultCamera(camera_.get());
+	GetSkyboxManager()->SetDefaultCamera(camera_.get());
 
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, kSkyboxPath);
+	skybox_->Initialize(GetSkyboxManager(), GetDxCore(), kSkyboxPath);
 	mech_ = std::make_unique<HubMechModel>();
-	mech_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_);
+	mech_->Initialize(GetObject3DManager(), GetSkinningComputeManager(), GetDxCore(), GetSRVManager());
 
 	// 神殿（回廊・足場・輪・扉・鏡の床）。機体も床に映す
 	temple_ = std::make_unique<HubTemple>();
-	temple_->Initialize(object3DManager_, dxCore_, srvManager_);
+	temple_->Initialize(GetObject3DManager(), GetDxCore(), GetSRVManager());
 	temple_->AddReflectionTarget(mech_->GetBody());
 	temple_->AddReflectionTarget(mech_->GetCockpit());
 	temple_->AddReflectionTarget(mech_->GetHatch());
 	// ③ のリフト（16_StageStart.md F2）。固定台は降りる前から機体の両脚の下に見えている（16 番 §2.1）
 	stageGeometry_.Load();
 	liftDescent_ = std::make_unique<HubLiftDescent>();
-	liftDescent_->Initialize(object3DManager_, dxCore_, stageGeometry_);
+	liftDescent_->Initialize(GetObject3DManager(), GetDxCore(), stageGeometry_);
 	temple_->AddReflectionTarget(liftDescent_->GetClamp(0));
 	temple_->AddReflectionTarget(liftDescent_->GetClamp(1));
 	// PBR の IBL（神殿を機体の胸の位置から撮ったもの）。無いと金属は真っ黒になる
-	object3DManager_->SetEnvironmentTexture(temple_->GetIblPath());
+	GetObject3DManager()->SetEnvironmentTexture(temple_->GetIblPath());
 	// 距離フォグはステージ（StageEnvironment）が点けたまま残るので、神殿では切る
-	object3DManager_->SetFogParams(Object3DManager::FogParams{});
+	GetObject3DManager()->SetFogParams(Object3DManager::FogParams{});
 
 	hatchSign_ = std::make_unique<HatchSign>();
-	hatchSign_->Initialize(object3DManager_, dxCore_, srvManager_);
+	hatchSign_->Initialize(GetObject3DManager(), GetDxCore(), GetSRVManager());
 	cockpitLighting_ = std::make_unique<CockpitLighting>();
 	cockpitLighting_->Initialize();
 	console_ = std::make_unique<CockpitConsole>();
 	console_->Initialize();
 	// 器の間（賭ける画面。19 番 §4.7）。器・水面は GameOver.json の値で作る
 	etherBet_ = std::make_unique<HubEtherBet>();
-	etherBet_->Initialize(dxCore_, srvManager_, object3DManager_, spriteManager_);
+	etherBet_->SetGameSession(GetGameSession());
+	etherBet_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), GetSpriteManager());
 	// 機体設定（20 番）：HUB の機体に今の装備を付けて見せる
 	loadoutScreen_ = std::make_unique<LoadoutScreen>();
+	loadoutScreen_->SetGameSession(GetGameSession());
 	loadoutAttachments_ = std::make_unique<LoadoutAttachments>();
-	loadoutAttachments_->Initialize(object3DManager_, skinningComputeManager_, dxCore_, srvManager_, camera_.get());
+	loadoutAttachments_->SetGameSession(GetGameSession());
+	loadoutAttachments_->Initialize(GetObject3DManager(), GetSkinningComputeManager(), GetDxCore(), GetSRVManager(), camera_.get());
 
 	LoadTuning();
 
@@ -140,7 +151,7 @@ void HubScene::Initialize() {
 	skybox_->Update(0.0f);
 	hatchSign_->Update(0.0f, mech_->GetPosition());
 
-	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", 0.5f);
+	SoundManager::GetInstance()->Play2DSoundLooped("bgm_title", kHubBgmVolume);
 	attractMenu_.Reset();
 	cockpitFromBoarding_ = false;
 }
@@ -158,7 +169,7 @@ void HubScene::Finalize() {
 }
 
 Vector2 HubScene::GetScreenSize() const {
-	return { static_cast<float>(dxCore_->GetUIWidth()), static_cast<float>(dxCore_->GetUIHeight()) };
+	return { static_cast<float>(GetDxCore()->GetUIWidth()), static_cast<float>(GetDxCore()->GetUIHeight()) };
 }
 
 bool HubScene::IsGlowAllowed() const {
@@ -211,7 +222,7 @@ void HubScene::EnterBet() {
 	attractMenu_.Reset();
 	etherBet_->Begin();
 	// 器の間の光：コクピットの緑の灯りを消し、外の光（平行光源）を素のまま当てる。ラジアルブラーは切る
-	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	const Vector2 renderSize = { static_cast<float>(GetDxCore()->GetRenderWidth()), static_cast<float>(GetDxCore()->GetRenderHeight()) };
 	cockpitLighting_->Apply(mech_->GetCockpitModel(), 0.0f, 0.0f, renderSize, hatchSign_->GetColor());
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(kSunLightDirection);
@@ -228,7 +239,7 @@ void HubScene::EnterBet() {
 
 void HubScene::UpdateBetting(float dt) {
 	const bool inputEnabled = !betLeaving_ && !SceneManager::GetInstance()->IsTransitioning();
-	const HubEtherBet::Result result = etherBet_->Update(dt, input_, inputEnabled, AttractMode::GetInstance()->IsEnabled());
+	const HubEtherBet::Result result = etherBet_->Update(dt, GetInput(), inputEnabled, AttractMode::GetInstance()->IsEnabled());
 	if (betLeaving_) return;
 	if (result == HubEtherBet::Result::Confirmed) LeaveBet(true);
 	if (result == HubEtherBet::Result::Canceled) LeaveBet(false);
@@ -248,9 +259,9 @@ void HubScene::ExitBet(bool descend) {
 	betLeaving_ = false;
 	state_ = State::Cockpit;
 	attractMenu_.Reset();
-	object3DManager_->SetDefaultCamera(camera_.get());
-	object3DManager_->SetEnvironmentTexture(temple_->GetIblPath());
-	object3DManager_->SetFogParams(Object3DManager::FogParams{});
+	GetObject3DManager()->SetDefaultCamera(camera_.get());
+	GetObject3DManager()->SetEnvironmentTexture(temple_->GetIblPath());
+	GetObject3DManager()->SetFogParams(Object3DManager::FogParams{});
 	if (descend) {
 		// 決めたらそのままリフトの降下へ（黒が明けるとステージ選択の UI がたたまれていく）
 		StartDescent();
@@ -287,9 +298,9 @@ void HubScene::UpdateLoadout(float dt) {
 	loadoutView_ = loadoutSequence_.Evaluate();
 
 	const bool inputEnabled = loadoutView_.inputEnabled && !SceneManager::GetInstance()->IsTransitioning();
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 	const Vector2 screen = GetScreenSize();
-	switch (loadoutScreen_->Update(input_, pointer, screen, inputEnabled)) {
+	switch (loadoutScreen_->Update(GetInput(), pointer, screen, inputEnabled)) {
 	case LoadoutScreen::Result::Equipped:
 		loadoutSwapTab_ = loadoutScreen_->GetTab();
 		loadoutSequence_.StartSwap();
@@ -317,7 +328,7 @@ void HubScene::UpdateLoadout(float dt) {
 		return;
 	}
 	float yaw = 0.0f;
-	if (ControllerInput* pad = input_->GetController(); pad && pad->IsConnected()) {
+	if (ControllerInput* pad = GetInput()->GetController(); pad && pad->IsConnected()) {
 		yaw += pad->GetRightStick().x * loadoutSequence_.GetOrbitStickSpeed() * dt;
 	}
 	if (pointer.valid && pointer.pressed) {
@@ -346,7 +357,7 @@ void HubScene::ApplyGlitch() {
 		}
 		return;
 	}
-	glitch->GetParams() = loadoutSequence_.GetGlitchParams();
+	glitch->SetParams(loadoutSequence_.GetGlitchParams());
 	glitch->SetIntensity(loadoutView_.glitch);
 	glitch->SetMaskMode(loadoutView_.glitchMask);
 	glitch->SetTime(loadoutSequence_.GetGlitchTime());
@@ -434,17 +445,17 @@ void HubScene::UpdateWaiting() {
 	// 白フェードで開いている途中などは入力を読まない
 	if (SceneManager::GetInstance()->IsTransitioning()) return;
 
-	auto* actions = input_->GetActionMap();
+	auto* actions = GetInput()->GetActionMap();
 	if (!actions) return;
 
 	const Vector2 screen = GetScreenSize();
 	menu_.SetPosition({ screen.x * 0.5f, screen.y * kMenuHeightRatio });
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 	VerticalMenu::Result result = menu_.Update(actions, &pointer);
 
 	// デモモード：神殿を見せてから「搭乗」を選ぶ（一周の始まり。タイトルへは戻らない）
 	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
-		if (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->hubWait, attract->menuConfirmDelay)
+		if (attractMenu_.Advance(GetDxCore()->GetDeltaTime(), attract->GetSettings().hubWait, attract->GetSettings().menuConfirmDelay)
 			== AttractMenuTimer::Step::Confirm && result == VerticalMenu::Result::None) {
 			menu_.SetSelectedIndex(kHubSortie);
 			SoundManager::GetInstance()->Play2DSound("se_ui_decide");
@@ -499,17 +510,17 @@ void HubScene::UpdateCockpit(float dt) {
 	}
 	if (leaving_ || SceneManager::GetInstance()->IsTransitioning()) return;
 
-	auto* actions = input_->GetActionMap();
+	auto* actions = GetInput()->GetActionMap();
 	if (!actions) return;
 	const CockpitReveal::State st = reveal_.Evaluate();
 	const bool inputEnabled = st.inputEnabled && reveal_.GetPhase() == CockpitReveal::Phase::Booting;
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 	CockpitConsole::Result result = console_->Update(actions, &pointer, GetScreenSize(), inputEnabled);
 
 	// デモモード：乗り込んで来ても、ポーズから戻って来ても「ステージ1」を選ぶ（ステージ選択から下を繰り返す）
 	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled() && inputEnabled) {
 		const CockpitConsole::Result pick = CockpitConsole::Result::Stage1;
-		switch (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->menuWait, attract->menuConfirmDelay)) {
+		switch (attractMenu_.Advance(GetDxCore()->GetDeltaTime(), attract->GetSettings().menuWait, attract->GetSettings().menuConfirmDelay)) {
 		case AttractMenuTimer::Step::MoveCursor:
 			console_->SelectItem(pick, true);
 			break;
@@ -564,7 +575,7 @@ void HubScene::FinishDisembark() {
 bool HubScene::IsSkipPressed() const {
 	// 乗り込み・HUB へ戻る所のスキップ：何か押したら（キー・マウスのボタン・パッドのボタン）。デモモード中・白フェード中は飛ばさない
 	if (AttractMode::GetInstance()->IsEnabled() || SceneManager::GetInstance()->IsTransitioning()) return false;
-	const InputActionMap* actions = input_ ? input_->GetActionMap() : nullptr;
+	const InputActionMap* actions = GetInput() ? GetInput()->GetActionMap() : nullptr;
 	return actions && actions->AnyInputTriggered();
 }
 
@@ -576,9 +587,9 @@ void HubScene::UpdateDescending(float dt) {
 	}
 	// デモモードは降下を LSHIFT の長押しのスキップで飛ばす（押し続けている扱い。2026-10-27 ユーザー）。skipDescent が false なら降下を見せる
 	const AttractMode* attract = AttractMode::GetInstance();
-	const bool attractSkip = attract->IsEnabled() && attract->skipDescent;
+	const bool attractSkip = attract->IsEnabled() && attract->GetSettings().skipDescent;
 	if (!leaving_ && skip_ && (!attract->IsEnabled() || attractSkip)) {
-		auto* actions = input_ ? input_->GetActionMap() : nullptr;
+		auto* actions = GetInput() ? GetInput()->GetActionMap() : nullptr;
 		const bool held = attractSkip || (actions && actions->IsPressed(static_cast<int>(Action::SkipIntro)));
 		if (skip_->Update(dt, held)) {
 			// 雲の上から始めるよう印を付けて、白フェードで StagePlay へ（2026-10-19 ユーザー）
@@ -617,14 +628,14 @@ void HubScene::UpdateDescending(float dt) {
 		handoff.sunColor = light->color;
 		handoff.sunIntensity = light->intensity;
 	}
-	handoff.iblPath = object3DManager_->GetEnvironmentTexturePath();
+	handoff.iblPath = GetObject3DManager()->GetEnvironmentTexturePath();
 	StageStartHandoff::Store(handoff);
 	leaving_ = true;
 	SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 }
 
 void HubScene::Draw() {
-	auto* commandList = dxCore_->GetCommandList();
+	auto* commandList = GetDxCore()->GetCommandList();
 
 	if (state_ == State::Betting) {
 		etherBet_->Draw();
@@ -640,7 +651,7 @@ void HubScene::Draw() {
 	if (temple_ && !loadoutBackdrop) temple_->RenderReflection(*camera_);
 
 	// シーンの RT とビューポートを戻す（シーン RT は描画解像度）
-	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	const Vector2 renderSize = { static_cast<float>(GetDxCore()->GetRenderWidth()), static_cast<float>(GetDxCore()->GetRenderHeight()) };
 	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, renderSize.x, renderSize.y, 0.0f, 1.0f };
 	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(renderSize.x), static_cast<LONG>(renderSize.y) };
 	// メニュー・コンソールの配置は UI の仮想解像度
@@ -650,7 +661,7 @@ void HubScene::Draw() {
 
 	// 空を最初に描く（深度書き込みなしの ReadOnly DSV）
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	auto readOnlyDsv = GetDxCore()->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (loadoutBackdrop) {
@@ -660,25 +671,25 @@ void HubScene::Draw() {
 			tr->Flush();
 		}
 	} else {
-		skyboxManager_->DrawSetting();
-		if (skybox_) skybox_->Draw(dxCore_);
+		GetSkyboxManager()->DrawSetting();
+		if (skybox_) skybox_->Draw(GetDxCore());
 	}
 
-	auto normalDsv = dxCore_->GetDsvHandle();
+	auto normalDsv = GetDxCore()->GetDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
-	object3DManager_->DrawSetting();
+	GetObject3DManager()->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
-	if (temple_ && !loadoutBackdrop) temple_->Draw(dxCore_);
-	if (liftDescent_ && !loadoutBackdrop) liftDescent_->Draw(dxCore_);
-	if (mech_) mech_->Draw(dxCore_);
+	if (temple_ && !loadoutBackdrop) temple_->Draw(GetDxCore());
+	if (liftDescent_ && !loadoutBackdrop) liftDescent_->Draw(GetDxCore());
+	if (mech_) mech_->Draw(GetDxCore());
 	// 機体設定：今の装備（体が見えている間だけ描く）
-	if (state_ == State::Loadout && loadoutAttachments_) loadoutAttachments_->Draw(dxCore_);
+	if (state_ == State::Loadout && loadoutAttachments_) loadoutAttachments_->Draw(GetDxCore());
 	// 鏡の床は不透明物の後（ルートシグネチャを替えるので、表示板の前に Object3D を貼り直す）
 	if (temple_ && !loadoutBackdrop) temple_->DrawFloor(*camera_);
-	object3DManager_->DrawSetting();
+	GetObject3DManager()->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
 	// 表示板は半透明なので最後に
-	if (hatchSign_ && !loadoutBackdrop) hatchSign_->Draw(dxCore_);
+	if (hatchSign_ && !loadoutBackdrop) hatchSign_->Draw(GetDxCore());
 	// ビームシールド（半透明。ルートシグネチャを替えるので最後に）
 	if (state_ == State::Loadout && loadoutAttachments_) loadoutAttachments_->DrawTransparent(*camera_);
 
@@ -708,7 +719,7 @@ void HubScene::Draw() {
 		loadoutScreen_->Draw(screen, loadoutView_.uiTime, loadoutView_.uiCollapse, loadoutAttachments_->GetFlightUnit(), false);
 		// 右上の所持エーテル（賭ける画面と同じ枠）。UI と一緒にチラついて出て、戻るときは消える
 		if (etherBet_ && loadoutView_.uiTime >= 0.0f) {
-			etherBet_->DrawHandPanel(CockpitReveal::Flicker(loadoutView_.uiTime, 0.2f) * (1.0f - loadoutView_.uiCollapse));
+			etherBet_->DrawHandPanel(CockpitReveal::Flicker(loadoutView_.uiTime, kHandPanelFlickerSeconds) * (1.0f - loadoutView_.uiCollapse));
 		}
 	}
 	// スキップの案内（左上）。デモモードでも出す（skipDescent ならゲージが溜まって飛ぶ所も見せる）
@@ -726,11 +737,11 @@ void HubScene::DrawBloomSources() {
 		return;
 	}
 	if (mech_ && cockpitLighting_) {
-		mech_->DrawBloom(dxCore_, cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
+		mech_->DrawBloom(GetDxCore(), cockpitLighting_->GetBloomScale(), cockpitLighting_->IsRevealing());
 	}
-	if (hatchSign_ && !(state_ == State::Loadout && !loadoutView_.templeVisible)) hatchSign_->DrawBloom(dxCore_);
-	if (liftDescent_) liftDescent_->DrawBloom(dxCore_, 1.0f);
-	if (state_ == State::Loadout && loadoutAttachments_) loadoutAttachments_->DrawBloom(dxCore_, *camera_);
+	if (hatchSign_ && !(state_ == State::Loadout && !loadoutView_.templeVisible)) hatchSign_->DrawBloom(GetDxCore());
+	if (liftDescent_) liftDescent_->DrawBloom(GetDxCore(), 1.0f);
+	if (state_ == State::Loadout && loadoutAttachments_) loadoutAttachments_->DrawBloom(GetDxCore(), *camera_);
 }
 
 bool HubScene::HasExtraIdPassObjects() const {
@@ -743,11 +754,11 @@ void HubScene::DrawExtraIdPassObjects() {
 	if (loadoutView_.glitchMask == GlitchEffect::MaskMode::Inside) {
 		static constexpr LoadoutAttachments::Part kSwapParts[] = {
 			LoadoutAttachments::Part::MainWeapon, LoadoutAttachments::Part::Shield, LoadoutAttachments::Part::FlightUnit };
-		loadoutAttachments_->DrawIdPass(dxCore_, kSwapParts[std::clamp(loadoutSwapTab_, 0, 2)]);
+		loadoutAttachments_->DrawIdPass(GetDxCore(), kSwapParts[std::clamp(loadoutSwapTab_, 0, kLastLoadoutSwapTab)]);
 		return;
 	}
-	if (AnimatedObject3DInstance* body = mech_ ? mech_->GetBody() : nullptr; body && body->GetVisible()) body->DrawIdPass(dxCore_);
-	loadoutAttachments_->DrawIdPass(dxCore_, LoadoutAttachments::Part::All);
+	if (AnimatedObject3DInstance* body = mech_ ? mech_->GetBody() : nullptr; body && body->GetVisible()) body->DrawIdPass(GetDxCore());
+	loadoutAttachments_->DrawIdPass(GetDxCore(), LoadoutAttachments::Part::All);
 }
 
 Camera* HubScene::GetCamera() {
@@ -816,7 +827,7 @@ void HubScene::ApplyPose() {
 	hatchSign_->SetVisibility(loadoutExterior ? 0.0f : (cockpitView ? st.signAlpha : 1.0f));
 	// コクピットの灯り・光る部位（表示板と同じ色）・外を映す六角形
 	// 六角形のディゾルブはシェーダの SV_Position（描画解像度のピクセル）で並べるので、描画解像度を渡す
-	const Vector2 renderSize = { static_cast<float>(dxCore_->GetRenderWidth()), static_cast<float>(dxCore_->GetRenderHeight()) };
+	const Vector2 renderSize = { static_cast<float>(GetDxCore()->GetRenderWidth()), static_cast<float>(GetDxCore()->GetRenderHeight()) };
 	cockpitLighting_->Apply(mech_->GetCockpitModel(), st.lightLevel, revealAmount, renderSize, hatchSign_->GetColor());
 
 }
@@ -876,7 +887,7 @@ void HubScene::SaveTuning() const {
 	if (console_) console_->SaveTuning(root["cockpitConsole"]);
 	loadoutSequence_.SaveTuning(root["loadout"]);
 	if (loadoutScreen_) loadoutScreen_->SaveTuning(root["loadoutScreen"]);
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kTuningJsonIndentWidth });
 }
 
 void HubScene::OnImGuiTuning() {

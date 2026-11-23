@@ -4,11 +4,6 @@
 #include "imgui.h"
 #endif
 
-StageClearRecord* StageClearRecord::GetInstance() {
-	static StageClearRecord instance;
-	return &instance;
-}
-
 void StageClearRecord::ResetForNewRun() {
 	clearTime_ = 0.0f;
 	cleared_ = false;

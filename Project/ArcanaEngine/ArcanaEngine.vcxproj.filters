@@ -159,7 +159,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
-    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp">
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.cpp">
@@ -575,7 +575,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
-    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h">
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.h">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeAppearance.h">
@@ -915,6 +915,9 @@
       <Filter>DirectXGame\GameEngine\Utility</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.h">
+      <Filter>DirectXGame\GameEngine\Utility\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonVector.h">
       <Filter>DirectXGame\GameEngine\Utility\Json</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.h">

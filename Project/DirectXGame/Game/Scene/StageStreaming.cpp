@@ -8,6 +8,23 @@
 #include <format>
 #include "imgui.h"
 
+namespace {
+	// ImGui：作り終えたグループの文字色 R
+	constexpr float kCreatedTextR = 0.4f;
+	// ImGui：作り終えたグループの文字色 G
+	constexpr float kCreatedTextG = 0.9f;
+	// ImGui：作り終えたグループの文字色 B
+	constexpr float kCreatedTextB = 0.4f;
+	// ImGui：まだ作っていないグループの文字色 R
+	constexpr float kPendingTextR = 0.9f;
+	// ImGui：まだ作っていないグループの文字色 G
+	constexpr float kPendingTextG = 0.7f;
+	// ImGui：まだ作っていないグループの文字色 B
+	constexpr float kPendingTextB = 0.3f;
+	// ImGui：秒数の入力欄の幅 [px]
+	constexpr float kTimeFieldWidth = 90.0f;
+}
+
 void StageStreaming::Initialize(IStageStreamingHost* host, const std::string& sceneName) {
 	host_ = host;
 	sceneName_ = sceneName;
@@ -66,7 +83,7 @@ void StageStreaming::PollPreload() {
 	Group& g = groups_[preloadingIndex_];
 	if (g.state == State::Preloading) {
 		g.state = State::Ready;
-		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+		SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=stream_preload group={} wall_ms={:.2f}", g.name, LoadProfiler::NowMs() - g.preloadBeginMs));
 	}
 	preloadingIndex_ = -1;
@@ -101,7 +118,7 @@ void StageStreaming::Create(size_t index) {
 	if (preloader->IsBusy()) {
 		const double start = LoadProfiler::NowMs();
 		preloader->CompleteNow();
-		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+		SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=stream_complete_now group={} wall_ms={:.2f}", g.name, LoadProfiler::NowMs() - start));
 	}
 	PollPreload();
@@ -123,7 +140,7 @@ void StageStreaming::Unload(size_t index) {
 	if (g.state != State::Created || !host_) return;
 	const double start = LoadProfiler::NowMs();
 	const size_t count = host_->DestroyStreamGroup(g.name);
-	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 		std::format("LOAD kind=stream_unload group={} count={} wall_ms={:.2f}", g.name, count, LoadProfiler::NowMs() - start));
 	g.state = State::Unloaded;
 }
@@ -197,18 +214,18 @@ bool StageStreaming::OnImGui() {
 		Group& g = groups_[i];
 		ImGui::PushID(static_cast<int>(i));
 		const bool created = g.state == State::Created;
-		ImGui::TextColored(created ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f) : ImVec4(0.9f, 0.7f, 0.3f, 1.0f),
+		ImGui::TextColored(created ? ImVec4(kCreatedTextR, kCreatedTextG, kCreatedTextB, 1.0f) : ImVec4(kPendingTextR, kPendingTextG, kPendingTextB, 1.0f),
 			"%-12s %s（まだ作っていない配置 %zu）", g.name.c_str(), StateName(g.state),
 			host_ ? host_->GetPendingStreamEntityCount(g.name) : size_t{ 0 });
-		ImGui::SetNextItemWidth(90.0f);
+		ImGui::SetNextItemWidth(kTimeFieldWidth);
 		ImGui::DragFloat("Preload (s)", &g.preloadSec, 0.5f, 0.0f, 1800.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::SameLine();
-		ImGui::SetNextItemWidth(90.0f);
+		ImGui::SetNextItemWidth(kTimeFieldWidth);
 		ImGui::DragFloat("Show (s)", &g.showSec, 0.5f, 0.0f, 1800.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::SameLine();
-		ImGui::SetNextItemWidth(90.0f);
+		ImGui::SetNextItemWidth(kTimeFieldWidth);
 		ImGui::DragFloat("Unload (s)", &g.unloadSec, 0.5f, 0.0f, 1800.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		if (!created) {

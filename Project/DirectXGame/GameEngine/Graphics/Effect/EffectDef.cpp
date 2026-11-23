@@ -1,11 +1,23 @@
 #include "EffectDef.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonWriter.h"
+
+namespace {
+    // カーブの隣り合う点の x の差がこれ以下なら補間せず左の点の値を使う
+    constexpr float kMinCurveSpan = 1e-6f;
+    // カーブとして補間するのに要る点の数の下限
+    constexpr size_t kMinCurvePoints = 2;
+    // 数値で書かれた BillboardMode の最大値（YAxis）
+    constexpr int kMaxBillboardModeIndex = 2;
+    // JSON を書き出す時の字下げの幅 [文字]
+    constexpr int kJsonIndentWidth = 2;
+}
 
 // アニメーションカーブの評価（区分線形）。enabled=false や点が2個未満なら t をそのまま返す＝恒等。
 float EffectCurve::Evaluate(float t) const {
-    if (!enabled || points.size() < 2) return t;
+    if (!enabled || points.size() < kMinCurvePoints) return t;
     if (t <= points.front().x) return points.front().y;
     if (t >= points.back().x)  return points.back().y;
     for (size_t i = 1; i < points.size(); ++i) {
@@ -13,7 +25,7 @@ float EffectCurve::Evaluate(float t) const {
             const Vector2& a = points[i - 1];
             const Vector2& b = points[i];
             float span = b.x - a.x;
-            float u = (span > 1e-6f) ? (t - a.x) / span : 0.0f;
+            float u = (span > kMinCurveSpan) ? (t - a.x) / span : 0.0f;
             return a.y + (b.y - a.y) * u;
         }
     }
@@ -23,58 +35,46 @@ float EffectCurve::Evaluate(float t) const {
 namespace {
     // ===== 小さなパースヘルパ =====
 
-    Vector3 AsVec3(const JsonValue& v, const Vector3& fallback) {
-        if (!v.IsArray() || v.Size() < 3) return fallback;
-        return {
-            static_cast<float>(v[0].AsDouble(fallback.x)),
-            static_cast<float>(v[1].AsDouble(fallback.y)),
-            static_cast<float>(v[2].AsDouble(fallback.z)),
-        };
-    }
-
-    Vector2 AsVec2(const JsonValue& v, const Vector2& fallback) {
-        if (!v.IsArray() || v.Size() < 2) return fallback;
-        return {
-            static_cast<float>(v[0].AsDouble(fallback.x)),
-            static_cast<float>(v[1].AsDouble(fallback.y)),
-        };
-    }
-
-    Vector4 AsVec4(const JsonValue& v, const Vector4& fallback) {
-        if (!v.IsArray() || v.Size() < 4) return fallback;
-        return {
-            static_cast<float>(v[0].AsDouble(fallback.x)),
-            static_cast<float>(v[1].AsDouble(fallback.y)),
-            static_cast<float>(v[2].AsDouble(fallback.z)),
-            static_cast<float>(v[3].AsDouble(fallback.w)),
-        };
-    }
-
+    /// <summary>数値を float として読む</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">数値でない時の値</param>
+    /// <returns>読んだ値。数値でなければ fallback</returns>
     float AsFloat(const JsonValue& v, float fallback) {
         if (!v.IsNumber()) return fallback;
         return static_cast<float>(v.AsDouble(fallback));
     }
 
-    // EffectCurve をパース。{ "enabled": bool, "points": [[x,y], ...] }
+    /// <summary>EffectCurve を読む（{ "enabled": bool, "points": [[x,y], ...] }。points は 2 点以上の時だけ置き換える）</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">オブジェクトでない時の値</param>
+    /// <returns>読んだカーブ。オブジェクトでなければ fallback</returns>
     EffectCurve AsCurve(const JsonValue& v, const EffectCurve& fallback) {
         if (!v.IsObject()) return fallback;
         EffectCurve c;
         if (v["enabled"].IsBool()) c.enabled = v["enabled"].AsBool(c.enabled);
         const JsonValue& pts = v["points"];
-        if (pts.IsArray() && pts.Size() >= 2) {
+        if (pts.IsArray() && pts.Size() >= kMinCurvePoints) {
             c.points.clear();
             for (size_t i = 0; i < pts.Size(); ++i) {
-                c.points.push_back(AsVec2(pts[i], { 0.0f, 0.0f }));
+                c.points.push_back(ReadVector2(pts[i], { 0.0f, 0.0f }));
             }
         }
         return c;
     }
 
+    /// <summary>数値を int として読む</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">数値でない時の値</param>
+    /// <returns>読んだ値。数値でなければ fallback</returns>
     int AsInt(const JsonValue& v, int fallback) {
         if (!v.IsNumber()) return fallback;
         return static_cast<int>(v.AsInt(fallback));
     }
 
+    /// <summary>数値を uint32_t として読む（負の値は 0）</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">数値でない時の値</param>
+    /// <returns>読んだ値。数値でなければ fallback</returns>
     uint32_t AsUInt(const JsonValue& v, uint32_t fallback) {
         if (!v.IsNumber()) return fallback;
         int64_t i = v.AsInt(static_cast<int64_t>(fallback));
@@ -82,6 +82,10 @@ namespace {
         return static_cast<uint32_t>(i);
     }
 
+    /// <summary>ビルボードの種類を読む（"None"/"Full"/"YAxis" の文字列か 0〜2 の数値）</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">どれにも当たらない時の値</param>
+    /// <returns>読んだ種類。読めなければ fallback</returns>
     BillboardMode AsBillboardMode(const JsonValue& v, BillboardMode fallback) {
         if (v.IsString()) {
             const std::string& s = v.AsString();
@@ -90,11 +94,15 @@ namespace {
             if (s == "YAxis") return BillboardMode::YAxis;
         } else if (v.IsNumber()) {
             int i = static_cast<int>(v.AsInt(static_cast<int64_t>(fallback)));
-            if (i >= 0 && i <= 2) return static_cast<BillboardMode>(i);
+            if (i >= 0 && i <= kMaxBillboardModeIndex) return static_cast<BillboardMode>(i);
         }
         return fallback;
     }
 
+    /// <summary>ライトの種類を読む（"Point"/"Spot"）</summary>
+    /// <param name="v">読む JSON 値</param>
+    /// <param name="fallback">どれにも当たらない時の値</param>
+    /// <returns>読んだ種類。読めなければ fallback</returns>
     EffectLightKind AsLightKind(const JsonValue& v, EffectLightKind fallback) {
         if (v.IsString()) {
             const std::string& s = v.AsString();
@@ -106,38 +114,50 @@ namespace {
 
     // ===== 形状パラメータのパース =====
 
+    /// <summary>枠の形状パラメータを読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseFrameParams(const JsonValue& o, PrimitiveGenerator::FrameParams& p) {
         if (!o.IsObject()) return;
         p.outerWidth  = AsFloat(o["outerWidth"],  p.outerWidth);
         p.outerHeight = AsFloat(o["outerHeight"], p.outerHeight);
         p.innerWidth  = AsFloat(o["innerWidth"],  p.innerWidth);
         p.innerHeight = AsFloat(o["innerHeight"], p.innerHeight);
-        p.color       = AsVec4(o["color"], p.color);
+        p.color       = ReadVector4(o["color"], p.color);
     }
 
+    /// <summary>リングの形状パラメータを読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseRingParams(const JsonValue& o, PrimitiveGenerator::RingParams& p) {
         if (!o.IsObject()) return;
         p.outerRadius = AsFloat(o["outerRadius"], p.outerRadius);
         p.innerRadius = AsFloat(o["innerRadius"], p.innerRadius);
         p.divisions   = AsUInt(o["divisions"], p.divisions);
-        p.innerColor  = AsVec4(o["innerColor"], p.innerColor);
-        p.outerColor  = AsVec4(o["outerColor"], p.outerColor);
+        p.innerColor  = ReadVector4(o["innerColor"], p.innerColor);
+        p.outerColor  = ReadVector4(o["outerColor"], p.outerColor);
         p.startAngle  = AsFloat(o["startAngle"], p.startAngle);
         p.endAngle    = AsFloat(o["endAngle"], p.endAngle);
     }
 
+    /// <summary>円柱の形状パラメータを読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseCylinderParams(const JsonValue& o, PrimitiveGenerator::CylinderParams& p) {
         if (!o.IsObject()) return;
         p.topRadius    = AsFloat(o["topRadius"], p.topRadius);
         p.bottomRadius = AsFloat(o["bottomRadius"], p.bottomRadius);
         p.height       = AsFloat(o["height"], p.height);
         p.divisions    = AsUInt(o["divisions"], p.divisions);
-        p.topColor     = AsVec4(o["topColor"], p.topColor);
-        p.bottomColor  = AsVec4(o["bottomColor"], p.bottomColor);
+        p.topColor     = ReadVector4(o["topColor"], p.topColor);
+        p.bottomColor  = ReadVector4(o["bottomColor"], p.bottomColor);
         p.startAngle   = AsFloat(o["startAngle"], p.startAngle);
         p.endAngle     = AsFloat(o["endAngle"], p.endAngle);
     }
 
+    /// <summary>ビーム／雷で共通の見た目（幅・板の枚数・フェード・色・UV）を読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="a">書き込み先（無いキーは元の値のまま）</param>
     void ParseBeamAppearance(const JsonValue& o, PrimitiveGenerator::BeamAppearance& a) {
         if (!o.IsObject()) return;
         a.startWidth      = AsFloat(o["startWidth"], a.startWidth);
@@ -145,24 +165,30 @@ namespace {
         a.planeCount      = AsUInt(o["planeCount"], a.planeCount);
         a.fadeStartLength = AsFloat(o["fadeStartLength"], a.fadeStartLength);
         a.fadeEndLength   = AsFloat(o["fadeEndLength"], a.fadeEndLength);
-        a.startColor      = AsVec4(o["startColor"], a.startColor);
-        a.endColor        = AsVec4(o["endColor"], a.endColor);
+        a.startColor      = ReadVector4(o["startColor"], a.startColor);
+        a.endColor        = ReadVector4(o["endColor"], a.endColor);
         if (o["uvWrapByLength"].IsBool()) a.uvWrapByLength = o["uvWrapByLength"].AsBool(a.uvWrapByLength);
         a.uvTilesPerUnit  = AsFloat(o["uvTilesPerUnit"], a.uvTilesPerUnit);
     }
 
+    /// <summary>ビームの形状パラメータ（端点・分割数・見た目）を読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseBeamParams(const JsonValue& o, PrimitiveGenerator::BeamParams& p) {
         if (!o.IsObject()) return;
-        p.startPos       = AsVec3(o["startPos"], p.startPos);
-        p.endPos         = AsVec3(o["endPos"], p.endPos);
+        p.startPos       = ReadVector3(o["startPos"], p.startPos);
+        p.endPos         = ReadVector3(o["endPos"], p.endPos);
         p.lengthSegments = AsUInt(o["lengthSegments"], p.lengthSegments);
         ParseBeamAppearance(o["appearance"], p.appearance);
     }
 
+    /// <summary>雷の形状パラメータ（端点・世代数・ずれ・枝分かれ・見た目）を読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseLightningParams(const JsonValue& o, PrimitiveGenerator::LightningBoltParams& p) {
         if (!o.IsObject()) return;
-        p.startPos          = AsVec3(o["startPos"], p.startPos);
-        p.endPos            = AsVec3(o["endPos"], p.endPos);
+        p.startPos          = ReadVector3(o["startPos"], p.startPos);
+        p.endPos            = ReadVector3(o["endPos"], p.endPos);
         p.generations       = AsUInt(o["generations"], p.generations);
         p.maxOffsetRatio    = AsFloat(o["maxOffsetRatio"], p.maxOffsetRatio);
         p.randomSeed        = AsUInt(o["randomSeed"], p.randomSeed);
@@ -174,6 +200,9 @@ namespace {
         ParseBeamAppearance(o["appearance"], p.appearance);
     }
 
+    /// <summary>らせんの形状パラメータを読む。オブジェクトでなければ何もしない</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="p">書き込み先（無いキーは元の値のまま）</param>
     void ParseHelixParams(const JsonValue& o, PrimitiveGenerator::HelixParams& p) {
         if (!o.IsObject()) return;
         p.startHelixRadius = AsFloat(o["startHelixRadius"], p.startHelixRadius);
@@ -184,12 +213,15 @@ namespace {
         p.turns            = AsFloat(o["turns"], p.turns);
         p.circleSegments   = AsUInt(o["circleSegments"], p.circleSegments);
         p.lengthSegments   = AsUInt(o["lengthSegments"], p.lengthSegments);
-        p.startColor       = AsVec4(o["startColor"], p.startColor);
-        p.endColor         = AsVec4(o["endColor"], p.endColor);
+        p.startColor       = ReadVector4(o["startColor"], p.startColor);
+        p.endColor         = ReadVector4(o["endColor"], p.endColor);
     }
 
     // ===== コンポーネント別パース =====
 
+    /// <summary>Primitive コンポーネント 1 個を読む</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="c">書き込み先（無いキーは既定値のまま）</param>
     void ParsePrimitive(const JsonValue& o, EffectPrimitiveComponent& c) {
         if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
         c.meshType   = AsInt(o["meshType"], c.meshType);
@@ -200,26 +232,26 @@ namespace {
         ParseBeamParams(o["beamParams"], c.beamParams);
         ParseLightningParams(o["lightningParams"], c.lightningParams);
         ParseFrameParams(o["frameParams"], c.frameParams);
-        c.offset     = AsVec3(o["offset"], c.offset);
-        c.rotate     = AsVec3(o["rotate"], c.rotate);
+        c.offset     = ReadVector3(o["offset"], c.offset);
+        c.rotate     = ReadVector3(o["rotate"], c.rotate);
         // 回転アニメーション
         if (o["randomRotateOnSpawn"].IsBool()) c.randomRotateOnSpawn = o["randomRotateOnSpawn"].AsBool(c.randomRotateOnSpawn);
-        c.randomRotateRange = AsVec3(o["randomRotateRange"], c.randomRotateRange);
-        c.rotateSpeed       = AsVec3(o["rotateSpeed"], c.rotateSpeed);
+        c.randomRotateRange = ReadVector3(o["randomRotateRange"], c.randomRotateRange);
+        c.rotateSpeed       = ReadVector3(o["rotateSpeed"], c.rotateSpeed);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
         c.lifetime   = AsFloat(o["lifetime"], c.lifetime);
-        c.startScale = AsVec3(o["startScale"], c.startScale);
-        c.endScale   = AsVec3(o["endScale"], c.endScale);
-        c.startColor = AsVec4(o["startColor"], c.startColor);
-        c.endColor   = AsVec4(o["endColor"], c.endColor);
+        c.startScale = ReadVector3(o["startScale"], c.startScale);
+        c.endScale   = ReadVector3(o["endScale"], c.endScale);
+        c.startColor = ReadVector4(o["startColor"], c.startColor);
+        c.endColor   = ReadVector4(o["endColor"], c.endColor);
         c.scaleCurve = AsCurve(o["scaleCurve"], c.scaleCurve);
         // Hue 回転
         if (o["hueShiftEnable"].IsBool()) c.hueShiftEnable = o["hueShiftEnable"].AsBool(c.hueShiftEnable);
         c.hueShiftSpeed = AsFloat(o["hueShiftSpeed"], c.hueShiftSpeed);
         // 位置アニメ
         if (o["usePositionAnim"].IsBool()) c.usePositionAnim = o["usePositionAnim"].AsBool(c.usePositionAnim);
-        c.startPos = AsVec3(o["startPos"], c.startPos);
-        c.endPos   = AsVec3(o["endPos"],   c.endPos);
+        c.startPos = ReadVector3(o["startPos"], c.startPos);
+        c.endPos   = ReadVector3(o["endPos"],   c.endPos);
         c.posCurve = AsCurve(o["posCurve"], c.posCurve);
         if (o["texturePath"].IsString()) c.texturePath = o["texturePath"].AsString();
         c.blendMode     = AsInt(o["blendMode"], c.blendMode);
@@ -235,9 +267,9 @@ namespace {
 
         // UV
         if (o["uvAutoScroll"].IsBool()) c.uvAutoScroll = o["uvAutoScroll"].AsBool(c.uvAutoScroll);
-        c.uvScrollSpeed = AsVec2(o["uvScrollSpeed"], c.uvScrollSpeed);
-        c.uvOffset      = AsVec2(o["uvOffset"],      c.uvOffset);
-        c.uvScale       = AsVec2(o["uvScale"],       c.uvScale);
+        c.uvScrollSpeed = ReadVector2(o["uvScrollSpeed"], c.uvScrollSpeed);
+        c.uvOffset      = ReadVector2(o["uvOffset"],      c.uvOffset);
+        c.uvScale       = ReadVector2(o["uvScale"],       c.uvScale);
         if (o["uvFlipU"].IsBool()) c.uvFlipU = o["uvFlipU"].AsBool(c.uvFlipU);
         if (o["uvFlipV"].IsBool()) c.uvFlipV = o["uvFlipV"].AsBool(c.uvFlipV);
 
@@ -251,9 +283,9 @@ namespace {
         if (o["distortionStrengthAnim"].IsBool()) c.distortionStrengthAnim = o["distortionStrengthAnim"].AsBool(c.distortionStrengthAnim);
         c.distortionEndStrength = AsFloat(o["distortionEndStrength"], c.distortionEndStrength);
         if (o["distortionUvAutoScroll"].IsBool()) c.distortionUvAutoScroll = o["distortionUvAutoScroll"].AsBool(c.distortionUvAutoScroll);
-        c.distortionUvScrollSpeed = AsVec2(o["distortionUvScrollSpeed"], c.distortionUvScrollSpeed);
-        c.distortionUvOffset      = AsVec2(o["distortionUvOffset"],      c.distortionUvOffset);
-        c.distortionUvScale       = AsVec2(o["distortionUvScale"],       c.distortionUvScale);
+        c.distortionUvScrollSpeed = ReadVector2(o["distortionUvScrollSpeed"], c.distortionUvScrollSpeed);
+        c.distortionUvOffset      = ReadVector2(o["distortionUvOffset"],      c.distortionUvOffset);
+        c.distortionUvScale       = ReadVector2(o["distortionUvScale"],       c.distortionUvScale);
         if (o["distortionUvFlipU"].IsBool()) c.distortionUvFlipU = o["distortionUvFlipU"].AsBool(c.distortionUvFlipU);
         if (o["distortionUvFlipV"].IsBool()) c.distortionUvFlipV = o["distortionUvFlipV"].AsBool(c.distortionUvFlipV);
 
@@ -275,10 +307,13 @@ namespace {
         c.dissolveCurve = AsCurve(o["dissolveCurve"], c.dissolveCurve);
         // アウトライン
         if (o["dissolveEdgeEnable"].IsBool()) c.dissolveEdgeEnable = o["dissolveEdgeEnable"].AsBool(c.dissolveEdgeEnable);
-        c.dissolveEdgeColor = AsVec4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
+        c.dissolveEdgeColor = ReadVector4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
         c.dissolveEdgeWidth = AsFloat(o["dissolveEdgeWidth"], c.dissolveEdgeWidth);
     }
 
+    /// <summary>Particle コンポーネント 1 個を読む</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="c">書き込み先（無いキーは既定値のまま）</param>
     void ParseParticle(const JsonValue& o, EffectParticleComponent& c) {
         if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
         if (o["gpuParticleGroupName"].IsString()) {
@@ -287,7 +322,7 @@ namespace {
         if (o["texturePath"].IsString()) {
             c.texturePath = o["texturePath"].AsString();
         }
-        c.offset     = AsVec3(o["offset"], c.offset);
+        c.offset     = ReadVector3(o["offset"], c.offset);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
         c.duration   = AsFloat(o["duration"], c.duration);
         c.burstCount = AsUInt(o["burstCount"], c.burstCount);
@@ -295,10 +330,10 @@ namespace {
         c.blendMode  = AsInt(o["blendMode"], c.blendMode);
         c.timeGroup  = AsInt(o["timeGroup"], c.timeGroup);
         c.colorMode  = AsInt(o["colorMode"], c.colorMode);
-        c.startColor = AsVec4(o["startColor"], c.startColor);
-        c.endColor   = AsVec4(o["endColor"], c.endColor);
-        c.scaleMin   = AsVec2(o["scaleMin"], c.scaleMin);
-        c.scaleMax   = AsVec2(o["scaleMax"], c.scaleMax);
+        c.startColor = ReadVector4(o["startColor"], c.startColor);
+        c.endColor   = ReadVector4(o["endColor"], c.endColor);
+        c.scaleMin   = ReadVector2(o["scaleMin"], c.scaleMin);
+        c.scaleMax   = ReadVector2(o["scaleMax"], c.scaleMax);
         if (o["uniformScale"].IsBool()) c.uniformScale = o["uniformScale"].AsBool(c.uniformScale);
         c.startScale = AsFloat(o["startScale"], c.startScale);
         c.endScale   = AsFloat(o["endScale"], c.endScale);
@@ -306,22 +341,22 @@ namespace {
         c.emitRadius       = AsFloat(o["emitRadius"], c.emitRadius);
         c.particleLifeTime = AsFloat(o["particleLifeTime"], c.particleLifeTime);
         c.emitShape        = AsInt(o["emitShape"], c.emitShape);
-        c.ringNormal       = AsVec3(o["ringNormal"], c.ringNormal);
+        c.ringNormal       = ReadVector3(o["ringNormal"], c.ringNormal);
         c.ringThickness    = AsFloat(o["ringThickness"], c.ringThickness);
         // 初速制御
         c.velocityMode   = AsInt(o["velocityMode"], c.velocityMode);
-        c.velocityDir    = AsVec3(o["velocityDir"], c.velocityDir);
+        c.velocityDir    = ReadVector3(o["velocityDir"], c.velocityDir);
         c.velocitySpeed  = AsFloat(o["velocitySpeed"], c.velocitySpeed);
         c.velocityJitter = AsFloat(o["velocityJitter"], c.velocityJitter);
         // 回転（3D姿勢）
         if (o["randomRotateOnSpawn"].IsBool()) c.randomRotateOnSpawn = o["randomRotateOnSpawn"].AsBool(c.randomRotateOnSpawn);
-        c.randomRotateRange = AsVec3(o["randomRotateRange"], c.randomRotateRange);
-        c.rotateSpeed       = AsVec3(o["rotateSpeed"], c.rotateSpeed);
+        c.randomRotateRange = ReadVector3(o["randomRotateRange"], c.randomRotateRange);
+        c.rotateSpeed       = ReadVector3(o["rotateSpeed"], c.rotateSpeed);
         // 周回（orbit）
         if (o["orbitEnabled"].IsBool()) c.orbitEnabled = o["orbitEnabled"].AsBool(c.orbitEnabled);
         c.orbitSpinSpeed   = AsFloat(o["orbitSpinSpeed"], c.orbitSpinSpeed);
         c.orbitTumbleSpeed = AsFloat(o["orbitTumbleSpeed"], c.orbitTumbleSpeed);
-        c.orbitTumbleAxis  = AsVec3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
+        c.orbitTumbleAxis  = ReadVector3(o["orbitTumbleAxis"], c.orbitTumbleAxis);
         if (o["orbitRadiusEnable"].IsBool()) c.orbitRadiusEnable = o["orbitRadiusEnable"].AsBool(c.orbitRadiusEnable);
         c.orbitRadiusEnd   = AsFloat(o["orbitRadiusEnd"], c.orbitRadiusEnd);
         c.orbitRadiusCurve = AsCurve(o["orbitRadiusCurve"], c.orbitRadiusCurve);
@@ -339,7 +374,7 @@ namespace {
         if (o["dissolveOutEnable"].IsBool()) c.dissolveOutEnable = o["dissolveOutEnable"].AsBool(c.dissolveOutEnable);
         c.dissolveOutStart = AsFloat(o["dissolveOutStart"], c.dissolveOutStart);
         if (o["dissolveEdgeEnable"].IsBool()) c.dissolveEdgeEnable = o["dissolveEdgeEnable"].AsBool(c.dissolveEdgeEnable);
-        c.dissolveEdgeColor = AsVec4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
+        c.dissolveEdgeColor = ReadVector4(o["dissolveEdgeColor"], c.dissolveEdgeColor);
         c.dissolveEdgeWidth = AsFloat(o["dissolveEdgeWidth"], c.dissolveEdgeWidth);
         // 多色グラデーションキー
         c.colorKeys.clear();
@@ -349,7 +384,7 @@ namespace {
                 const JsonValue& k = ck[i];
                 EffectColorKey key;
                 key.location = AsFloat(k["location"], key.location);
-                key.color    = AsVec4(k["color"], key.color);
+                key.color    = ReadVector4(k["color"], key.color);
                 c.colorKeys.push_back(key);
             }
         }
@@ -359,23 +394,29 @@ namespace {
         if (o["hueShiftRandomPhase"].IsBool()) c.hueShiftRandomPhase = o["hueShiftRandomPhase"].AsBool(c.hueShiftRandomPhase);
     }
 
+    /// <summary>Sound コンポーネント 1 個を読む</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="c">書き込み先（無いキーは既定値のまま）</param>
     void ParseSound(const JsonValue& o, EffectSoundComponent& c) {
         if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
         if (o["soundName"].IsString()) c.soundName = o["soundName"].AsString();
-        c.offset        = AsVec3(o["offset"], c.offset);
+        c.offset        = ReadVector3(o["offset"], c.offset);
         c.startTime     = AsFloat(o["startTime"], c.startTime);
         c.distanceScale = AsFloat(o["distanceScale"], c.distanceScale);
         c.volume        = AsFloat(o["volume"], c.volume);
     }
 
+    /// <summary>Light コンポーネント 1 個を読む</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="c">書き込み先（無いキーは既定値のまま）</param>
     void ParseLight(const JsonValue& o, EffectLightComponent& c) {
         if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
         c.kind           = AsLightKind(o["kind"], c.kind);
-        c.offset         = AsVec3(o["offset"], c.offset);
-        c.direction      = AsVec3(o["direction"], c.direction);
+        c.offset         = ReadVector3(o["offset"], c.offset);
+        c.direction      = ReadVector3(o["direction"], c.direction);
         c.startTime      = AsFloat(o["startTime"], c.startTime);
         c.lifetime       = AsFloat(o["lifetime"], c.lifetime);
-        c.color          = AsVec4(o["color"], c.color);
+        c.color          = ReadVector4(o["color"], c.color);
         c.startIntensity = AsFloat(o["startIntensity"], c.startIntensity);
         c.endIntensity   = AsFloat(o["endIntensity"], c.endIntensity);
         c.range          = AsFloat(o["range"], c.range);
@@ -457,27 +498,9 @@ namespace EffectDefIO {
     //=========================================================
 
     namespace {
-        JsonValue Vec2ToJson(const Vector2& v) {
-            JsonValue arr = JsonValue::MakeArray();
-            arr.Push(JsonValue(static_cast<double>(v.x)));
-            arr.Push(JsonValue(static_cast<double>(v.y)));
-            return arr;
-        }
-        JsonValue Vec3ToJson(const Vector3& v) {
-            JsonValue arr = JsonValue::MakeArray();
-            arr.Push(JsonValue(static_cast<double>(v.x)));
-            arr.Push(JsonValue(static_cast<double>(v.y)));
-            arr.Push(JsonValue(static_cast<double>(v.z)));
-            return arr;
-        }
-        JsonValue Vec4ToJson(const Vector4& v) {
-            JsonValue arr = JsonValue::MakeArray();
-            arr.Push(JsonValue(static_cast<double>(v.x)));
-            arr.Push(JsonValue(static_cast<double>(v.y)));
-            arr.Push(JsonValue(static_cast<double>(v.z)));
-            arr.Push(JsonValue(static_cast<double>(v.w)));
-            return arr;
-        }
+        /// <summary>EffectCurve を { "enabled", "points": [[x,y], ...] } にする</summary>
+        /// <param name="c">書き出すカーブ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue CurveToJson(const EffectCurve& c) {
             JsonValue o = JsonValue::MakeObject();
             o["enabled"] = c.enabled;
@@ -491,6 +514,9 @@ namespace EffectDefIO {
             o["points"] = std::move(pts);
             return o;
         }
+        /// <summary>ビルボードの種類を保存用の文字列にする</summary>
+        /// <param name="m">ビルボードの種類</param>
+        /// <returns>"None" / "Full" / "YAxis"（不明なら "Full"）</returns>
         const char* BillboardModeStr(BillboardMode m) {
             switch (m) {
             case BillboardMode::None:  return "None";
@@ -499,33 +525,45 @@ namespace EffectDefIO {
             }
             return "Full";
         }
+        /// <summary>ライトの種類を保存用の文字列にする</summary>
+        /// <param name="k">ライトの種類</param>
+        /// <returns>"Spot" か "Point"</returns>
         const char* LightKindStr(EffectLightKind k) {
             return k == EffectLightKind::Spot ? "Spot" : "Point";
         }
 
+        /// <summary>リングの形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue RingParamsToJson(const PrimitiveGenerator::RingParams& p) {
             JsonValue o = JsonValue::MakeObject();
             o["outerRadius"] = static_cast<double>(p.outerRadius);
             o["innerRadius"] = static_cast<double>(p.innerRadius);
             o["divisions"]   = static_cast<int64_t>(p.divisions);
-            o["innerColor"]  = Vec4ToJson(p.innerColor);
-            o["outerColor"]  = Vec4ToJson(p.outerColor);
+            o["innerColor"]  = MakeVector4(p.innerColor);
+            o["outerColor"]  = MakeVector4(p.outerColor);
             o["startAngle"]  = static_cast<double>(p.startAngle);
             o["endAngle"]    = static_cast<double>(p.endAngle);
             return o;
         }
+        /// <summary>円柱の形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue CylinderParamsToJson(const PrimitiveGenerator::CylinderParams& p) {
             JsonValue o = JsonValue::MakeObject();
             o["topRadius"]    = static_cast<double>(p.topRadius);
             o["bottomRadius"] = static_cast<double>(p.bottomRadius);
             o["height"]       = static_cast<double>(p.height);
             o["divisions"]    = static_cast<int64_t>(p.divisions);
-            o["topColor"]     = Vec4ToJson(p.topColor);
-            o["bottomColor"]  = Vec4ToJson(p.bottomColor);
+            o["topColor"]     = MakeVector4(p.topColor);
+            o["bottomColor"]  = MakeVector4(p.bottomColor);
             o["startAngle"]   = static_cast<double>(p.startAngle);
             o["endAngle"]     = static_cast<double>(p.endAngle);
             return o;
         }
+        /// <summary>ビーム／雷で共通の見た目を JSON にする</summary>
+        /// <param name="a">書き出す見た目</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue BeamAppearanceToJson(const PrimitiveGenerator::BeamAppearance& a) {
             JsonValue o = JsonValue::MakeObject();
             o["startWidth"]      = static_cast<double>(a.startWidth);
@@ -533,24 +571,30 @@ namespace EffectDefIO {
             o["planeCount"]      = static_cast<int64_t>(a.planeCount);
             o["fadeStartLength"] = static_cast<double>(a.fadeStartLength);
             o["fadeEndLength"]   = static_cast<double>(a.fadeEndLength);
-            o["startColor"]      = Vec4ToJson(a.startColor);
-            o["endColor"]        = Vec4ToJson(a.endColor);
+            o["startColor"]      = MakeVector4(a.startColor);
+            o["endColor"]        = MakeVector4(a.endColor);
             o["uvWrapByLength"]  = a.uvWrapByLength;
             o["uvTilesPerUnit"]  = static_cast<double>(a.uvTilesPerUnit);
             return o;
         }
+        /// <summary>ビームの形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue BeamParamsToJson(const PrimitiveGenerator::BeamParams& p) {
             JsonValue o = JsonValue::MakeObject();
-            o["startPos"]       = Vec3ToJson(p.startPos);
-            o["endPos"]         = Vec3ToJson(p.endPos);
+            o["startPos"]       = MakeVector3(p.startPos);
+            o["endPos"]         = MakeVector3(p.endPos);
             o["lengthSegments"] = static_cast<int64_t>(p.lengthSegments);
             o["appearance"]     = BeamAppearanceToJson(p.appearance);
             return o;
         }
+        /// <summary>雷の形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue LightningParamsToJson(const PrimitiveGenerator::LightningBoltParams& p) {
             JsonValue o = JsonValue::MakeObject();
-            o["startPos"]          = Vec3ToJson(p.startPos);
-            o["endPos"]            = Vec3ToJson(p.endPos);
+            o["startPos"]          = MakeVector3(p.startPos);
+            o["endPos"]            = MakeVector3(p.endPos);
             o["generations"]       = static_cast<int64_t>(p.generations);
             o["maxOffsetRatio"]    = static_cast<double>(p.maxOffsetRatio);
             o["randomSeed"]        = static_cast<int64_t>(p.randomSeed);
@@ -562,6 +606,9 @@ namespace EffectDefIO {
             o["appearance"]        = BeamAppearanceToJson(p.appearance);
             return o;
         }
+        /// <summary>らせんの形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue HelixParamsToJson(const PrimitiveGenerator::HelixParams& p) {
             JsonValue o = JsonValue::MakeObject();
             o["startHelixRadius"] = static_cast<double>(p.startHelixRadius);
@@ -572,17 +619,20 @@ namespace EffectDefIO {
             o["turns"]            = static_cast<double>(p.turns);
             o["circleSegments"]   = static_cast<int64_t>(p.circleSegments);
             o["lengthSegments"]   = static_cast<int64_t>(p.lengthSegments);
-            o["startColor"]       = Vec4ToJson(p.startColor);
-            o["endColor"]         = Vec4ToJson(p.endColor);
+            o["startColor"]       = MakeVector4(p.startColor);
+            o["endColor"]         = MakeVector4(p.endColor);
             return o;
         }
+        /// <summary>枠の形状パラメータを JSON にする</summary>
+        /// <param name="p">書き出すパラメータ</param>
+        /// <returns>JSON オブジェクト</returns>
         JsonValue FrameParamsToJson(const PrimitiveGenerator::FrameParams& p) {
             JsonValue o = JsonValue::MakeObject();
             o["outerWidth"]  = static_cast<double>(p.outerWidth);
             o["outerHeight"] = static_cast<double>(p.outerHeight);
             o["innerWidth"]  = static_cast<double>(p.innerWidth);
             o["innerHeight"] = static_cast<double>(p.innerHeight);
-            o["color"]       = Vec4ToJson(p.color);
+            o["color"]       = MakeVector4(p.color);
             return o;
         }
     }
@@ -606,24 +656,24 @@ namespace EffectDefIO {
             o["beamParams"]     = BeamParamsToJson(c.beamParams);
             o["lightningParams"] = LightningParamsToJson(c.lightningParams);
             o["frameParams"]    = FrameParamsToJson(c.frameParams);
-            o["offset"]     = Vec3ToJson(c.offset);
-            o["rotate"]     = Vec3ToJson(c.rotate);
+            o["offset"]     = MakeVector3(c.offset);
+            o["rotate"]     = MakeVector3(c.rotate);
             o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
-            o["randomRotateRange"]   = Vec3ToJson(c.randomRotateRange);
-            o["rotateSpeed"]         = Vec3ToJson(c.rotateSpeed);
+            o["randomRotateRange"]   = MakeVector3(c.randomRotateRange);
+            o["rotateSpeed"]         = MakeVector3(c.rotateSpeed);
             o["startTime"]  = static_cast<double>(c.startTime);
             o["lifetime"]   = static_cast<double>(c.lifetime);
-            o["startScale"] = Vec3ToJson(c.startScale);
-            o["endScale"]   = Vec3ToJson(c.endScale);
-            o["startColor"] = Vec4ToJson(c.startColor);
-            o["endColor"]   = Vec4ToJson(c.endColor);
+            o["startScale"] = MakeVector3(c.startScale);
+            o["endScale"]   = MakeVector3(c.endScale);
+            o["startColor"] = MakeVector4(c.startColor);
+            o["endColor"]   = MakeVector4(c.endColor);
             o["scaleCurve"] = CurveToJson(c.scaleCurve);
             o["hueShiftEnable"] = c.hueShiftEnable;
             o["hueShiftSpeed"]  = static_cast<double>(c.hueShiftSpeed);
             // 位置アニメ
             o["usePositionAnim"] = c.usePositionAnim;
-            o["startPos"]   = Vec3ToJson(c.startPos);
-            o["endPos"]     = Vec3ToJson(c.endPos);
+            o["startPos"]   = MakeVector3(c.startPos);
+            o["endPos"]     = MakeVector3(c.endPos);
             o["posCurve"]   = CurveToJson(c.posCurve);
             o["texturePath"] = c.texturePath;
             o["blendMode"]   = static_cast<int64_t>(c.blendMode);
@@ -637,9 +687,9 @@ namespace EffectDefIO {
             o["viewAngleFadePower"] = static_cast<double>(c.viewAngleFadePower);
             // UV
             o["uvAutoScroll"]   = c.uvAutoScroll;
-            o["uvScrollSpeed"]  = Vec2ToJson(c.uvScrollSpeed);
-            o["uvOffset"]       = Vec2ToJson(c.uvOffset);
-            o["uvScale"]        = Vec2ToJson(c.uvScale);
+            o["uvScrollSpeed"]  = MakeVector2(c.uvScrollSpeed);
+            o["uvOffset"]       = MakeVector2(c.uvOffset);
+            o["uvScale"]        = MakeVector2(c.uvScale);
             o["uvFlipU"]        = c.uvFlipU;
             o["uvFlipV"]        = c.uvFlipV;
             // Bloom
@@ -652,9 +702,9 @@ namespace EffectDefIO {
             o["distortionStrengthAnim"]  = c.distortionStrengthAnim;
             o["distortionEndStrength"]   = static_cast<double>(c.distortionEndStrength);
             o["distortionUvAutoScroll"]  = c.distortionUvAutoScroll;
-            o["distortionUvScrollSpeed"] = Vec2ToJson(c.distortionUvScrollSpeed);
-            o["distortionUvOffset"]      = Vec2ToJson(c.distortionUvOffset);
-            o["distortionUvScale"]       = Vec2ToJson(c.distortionUvScale);
+            o["distortionUvScrollSpeed"] = MakeVector2(c.distortionUvScrollSpeed);
+            o["distortionUvOffset"]      = MakeVector2(c.distortionUvOffset);
+            o["distortionUvScale"]       = MakeVector2(c.distortionUvScale);
             o["distortionUvFlipU"]       = c.distortionUvFlipU;
             o["distortionUvFlipV"]       = c.distortionUvFlipV;
             // Dissolve
@@ -668,7 +718,7 @@ namespace EffectDefIO {
             o["dissolveOutDuration"]  = static_cast<double>(c.dissolveOutDuration);
             o["dissolveCurve"]        = CurveToJson(c.dissolveCurve);
             o["dissolveEdgeEnable"]   = c.dissolveEdgeEnable;
-            o["dissolveEdgeColor"]    = Vec4ToJson(c.dissolveEdgeColor);
+            o["dissolveEdgeColor"]    = MakeVector4(c.dissolveEdgeColor);
             o["dissolveEdgeWidth"]    = static_cast<double>(c.dissolveEdgeWidth);
             primArr.Push(std::move(o));
         }
@@ -680,7 +730,7 @@ namespace EffectDefIO {
             o["displayName"] = c.displayName;
             o["gpuParticleGroupName"] = c.gpuParticleGroupName;
             o["texturePath"] = c.texturePath;
-            o["offset"]     = Vec3ToJson(c.offset);
+            o["offset"]     = MakeVector3(c.offset);
             o["startTime"]  = static_cast<double>(c.startTime);
             o["duration"]   = static_cast<double>(c.duration);
             o["burstCount"] = static_cast<int64_t>(c.burstCount);
@@ -688,29 +738,29 @@ namespace EffectDefIO {
             o["blendMode"]  = static_cast<int64_t>(c.blendMode);
             o["timeGroup"]  = static_cast<int64_t>(c.timeGroup);
             o["colorMode"]  = static_cast<int64_t>(c.colorMode);
-            o["startColor"] = Vec4ToJson(c.startColor);
-            o["endColor"]   = Vec4ToJson(c.endColor);
-            o["scaleMin"]   = Vec2ToJson(c.scaleMin);
-            o["scaleMax"]   = Vec2ToJson(c.scaleMax);
+            o["startColor"] = MakeVector4(c.startColor);
+            o["endColor"]   = MakeVector4(c.endColor);
+            o["scaleMin"]   = MakeVector2(c.scaleMin);
+            o["scaleMax"]   = MakeVector2(c.scaleMax);
             o["uniformScale"] = c.uniformScale;
             o["startScale"] = static_cast<double>(c.startScale);
             o["endScale"]   = static_cast<double>(c.endScale);
             o["emitRadius"]       = static_cast<double>(c.emitRadius);
             o["particleLifeTime"] = static_cast<double>(c.particleLifeTime);
             o["emitShape"]        = static_cast<int64_t>(c.emitShape);
-            o["ringNormal"]       = Vec3ToJson(c.ringNormal);
+            o["ringNormal"]       = MakeVector3(c.ringNormal);
             o["ringThickness"]    = static_cast<double>(c.ringThickness);
             o["velocityMode"]   = static_cast<int64_t>(c.velocityMode);
-            o["velocityDir"]    = Vec3ToJson(c.velocityDir);
+            o["velocityDir"]    = MakeVector3(c.velocityDir);
             o["velocitySpeed"]  = static_cast<double>(c.velocitySpeed);
             o["velocityJitter"] = static_cast<double>(c.velocityJitter);
             o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
-            o["randomRotateRange"]   = Vec3ToJson(c.randomRotateRange);
-            o["rotateSpeed"]         = Vec3ToJson(c.rotateSpeed);
+            o["randomRotateRange"]   = MakeVector3(c.randomRotateRange);
+            o["rotateSpeed"]         = MakeVector3(c.rotateSpeed);
             o["orbitEnabled"]     = c.orbitEnabled;
             o["orbitSpinSpeed"]   = static_cast<double>(c.orbitSpinSpeed);
             o["orbitTumbleSpeed"] = static_cast<double>(c.orbitTumbleSpeed);
-            o["orbitTumbleAxis"]  = Vec3ToJson(c.orbitTumbleAxis);
+            o["orbitTumbleAxis"]  = MakeVector3(c.orbitTumbleAxis);
             o["orbitRadiusEnable"] = c.orbitRadiusEnable;
             o["orbitRadiusEnd"]    = static_cast<double>(c.orbitRadiusEnd);
             o["orbitRadiusCurve"]  = CurveToJson(c.orbitRadiusCurve);
@@ -727,14 +777,14 @@ namespace EffectDefIO {
             o["dissolveOutEnable"]  = c.dissolveOutEnable;
             o["dissolveOutStart"]   = static_cast<double>(c.dissolveOutStart);
             o["dissolveEdgeEnable"] = c.dissolveEdgeEnable;
-            o["dissolveEdgeColor"]  = Vec4ToJson(c.dissolveEdgeColor);
+            o["dissolveEdgeColor"]  = MakeVector4(c.dissolveEdgeColor);
             o["dissolveEdgeWidth"]  = static_cast<double>(c.dissolveEdgeWidth);
             {
                 JsonValue ckArr = JsonValue::MakeArray();
                 for (const auto& k : c.colorKeys) {
                     JsonValue ko = JsonValue::MakeObject();
                     ko["location"] = static_cast<double>(k.location);
-                    ko["color"]    = Vec4ToJson(k.color);
+                    ko["color"]    = MakeVector4(k.color);
                     ckArr.Push(std::move(ko));
                 }
                 o["colorKeys"] = std::move(ckArr);
@@ -751,11 +801,11 @@ namespace EffectDefIO {
             JsonValue o = JsonValue::MakeObject();
             o["displayName"] = c.displayName;
             o["kind"]      = std::string(LightKindStr(c.kind));
-            o["offset"]    = Vec3ToJson(c.offset);
-            o["direction"] = Vec3ToJson(c.direction);
+            o["offset"]    = MakeVector3(c.offset);
+            o["direction"] = MakeVector3(c.direction);
             o["startTime"] = static_cast<double>(c.startTime);
             o["lifetime"]  = static_cast<double>(c.lifetime);
-            o["color"]     = Vec4ToJson(c.color);
+            o["color"]     = MakeVector4(c.color);
             o["startIntensity"] = static_cast<double>(c.startIntensity);
             o["endIntensity"]   = static_cast<double>(c.endIntensity);
             o["range"] = static_cast<double>(c.range);
@@ -770,7 +820,7 @@ namespace EffectDefIO {
             JsonValue o = JsonValue::MakeObject();
             o["displayName"] = c.displayName;
             o["soundName"]     = c.soundName;
-            o["offset"]        = Vec3ToJson(c.offset);
+            o["offset"]        = MakeVector3(c.offset);
             o["startTime"]     = static_cast<double>(c.startTime);
             o["distanceScale"] = static_cast<double>(c.distanceScale);
             o["volume"]        = static_cast<double>(c.volume);
@@ -778,7 +828,7 @@ namespace EffectDefIO {
         }
         root["sounds"] = std::move(soundArr);
 
-        return JsonWriter::WriteFile(filePath, root, { true, 2 });
+        return JsonWriter::WriteFile(filePath, root, { true, kJsonIndentWidth });
     }
 
 }

@@ -76,10 +76,14 @@ public:
 	LiquidGlassSphere();
 	~LiquidGlassSphere();
 
+	/// <summary>波紋のシミュレーション（球の大きさ向けの設定）・ルートシグネチャ・通常/発光の PSO・球のメッシュ・CB を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">波紋のシミュレーションの SRV/UAV を確保する先</param>
 	/// <param name="divisions">球の分割数（輪郭は真球で塗るので、多角形の粗さはほぼ見えない）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t divisions = 48);
 
 	/// <summary>液面の揺れ・量・波紋の時間を進める</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void Update(float deltaTime);
 	/// <summary>波のシミュレーションを進める。シーンの Draw の最初（SRV ヒープ設定後、球を描く前）に呼ぶ</summary>
 	void DispatchSimulation();
@@ -88,44 +92,76 @@ public:
 	/// 描画。シーン RT（本体 DSV）がバインド済みで、不透明物を描いた後に呼ぶ。
 	/// ルートシグネチャを替えるので、後で Object3D を描くなら DrawSetting し直すこと。
 	/// </summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	/// <param name="environmentCubemapPath">映り込みの cubemap（TextureManager で読み込み済みのもの）</param>
 	void Draw(const Camera& camera, const std::string& environmentCubemapPath);
 	/// <summary>発光 RT に光る分だけを加算で描く（シーンの DrawBloomSources から）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="environmentCubemapPath">映り込みの cubemap（TextureManager で読み込み済みのもの）</param>
 	void DrawBloomPass(const Camera& camera, const std::string& environmentCubemapPath);
 
+	/// <summary>球の中心を設定する</summary>
+	/// <param name="center">ワールド座標</param>
 	void SetCenter(const Vector3& center) { center_ = center; }
+	/// <summary>球の中心を返す</summary>
+	/// <returns>ワールド座標</returns>
 	const Vector3& GetCenter() const { return center_; }
+	/// <summary>球の半径を設定する</summary>
+	/// <param name="radius">半径 [m]</param>
 	void SetRadius(float radius) { radius_ = radius; }
+	/// <summary>球の半径を返す</summary>
+	/// <returns>半径 [m]</returns>
 	float GetRadius() const { return radius_; }
 
 	/// <summary>
 	/// 球の回転（ワールド、オイラー XYZ [rad]）。球の見た目は回っても変わらないが、
 	/// 前のフレームとの差（角速度）で液面が揺れる。X・Z 軸まわりだけが液面を傾ける
 	/// </summary>
+	/// <param name="rotation">オイラー XYZ [rad]</param>
 	void SetContainerRotation(const Vector3& rotation) { containerRotation_ = rotation; }
 
 	/// <summary>量（体積の割合 0..1）。immediate=false なら Motion::fillFollow で寄せる</summary>
+	/// <param name="amount">体積の割合（0〜1 に切り詰める）</param>
+	/// <param name="immediate">すぐにその量にするなら true</param>
 	void SetFill(float amount, bool immediate = false);
+	/// <summary>今の量を返す</summary>
+	/// <returns>体積の割合（0〜1）</returns>
 	float GetFill() const { return fill_; }
+	/// <summary>寄せている先の量を返す</summary>
+	/// <returns>体積の割合（0〜1）</returns>
 	float GetFillTarget() const { return fillTarget_; }
 
 	/// <summary>液面に波源を入れる（XZ はワールド。Y は無視）</summary>
+	/// <param name="position">波源の位置（ワールド）</param>
+	/// <param name="radius">波源の半径 [m]</param>
+	/// <param name="strength">波源の深さ [m]</param>
 	void AddRipple(const Vector3& position, float radius, float strength);
 	/// <summary>液面の傾きと揺れを止めて平らにする</summary>
 	void ResetMotion();
 
 	/// <summary>液面の法線（ワールド・上向き）</summary>
+	/// <returns>単位ベクトル</returns>
 	Vector3 GetSurfaceNormal() const;
 	/// <summary>中心から液面までの距離（液面の法線の向き）。-R=空 / +R=満杯</summary>
+	/// <returns>距離 [m]</returns>
 	float GetSurfaceOffset() const;
 
+	/// <summary>見た目の調整値を返す（書き換えると次の描画から効く）</summary>
+	/// <returns>見た目の調整値</returns>
 	Appearance& GetAppearance() { return appearance_; }
+	/// <summary>揺れと波紋の調整値を返す（書き換えると次の Update から効く）</summary>
+	/// <returns>揺れと波紋の調整値</returns>
 	Motion& GetMotion() { return motion_; }
+	/// <summary>液面の波紋のシミュレーションを返す</summary>
+	/// <returns>RippleSimulation</returns>
 	RippleSimulation* GetRippleSimulation() const { return rippleSimulation_.get(); }
 
 	/// <summary>体積の割合 → 底からの液面の高さ（半径 1 の球で 0..2）</summary>
+	/// <param name="amount">体積の割合（0〜1 に切り詰める）</param>
+	/// <returns>高さ（0〜2。二分法で解く）</returns>
 	static float FillToHeight(float amount);
 
+	/// <summary>見た目・揺れ・量の調整と波紋のテスト用の ImGui（Debug だけ）</summary>
 	void OnImGui();
 
 private:
@@ -171,13 +207,33 @@ private:
 		Matrix4x4 World;
 	};
 
+	/// <summary>ルートシグネチャを作る（[0]=VS b0 変換 / [1]=PS b0 Params / [2]=PS b1 平行光源（CBV）、[3]=PS t0 環境 cubemap / [4]=PS t1 波紋の高さ（テーブル）、s0=ラップ / s1=クランプ）</summary>
 	void CreateRootSignature();
+	/// <summary>球の PSO を作る（両面描画・深度は読むだけ）</summary>
+	/// <param name="bloomPass">true で発光 RT（R16G16B16A16_FLOAT・加算）用、false でシーン RT（sRGB・乗算済み α）用</param>
+	/// <returns>作った PSO</returns>
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(bool bloomPass);
+	/// <summary>半径 1 の球の頂点（位置だけ）とインデックスのバッファを作り、面が真球の外に来る倍率 meshScale_ を求める</summary>
+	/// <param name="divisions">分割数（最低 8）</param>
 	void CreateMesh(uint32_t divisions);
+	/// <summary>見た目の調整値・液面・波紋の参照情報を GPU 用の Params に書く</summary>
+	/// <param name="dst">書き込み先</param>
+	/// <param name="camera">カメラ位置の取り出し元</param>
+	/// <param name="bloomPass">発光パス用なら true</param>
 	void WriteParams(ParamsForGPU& dst, const Camera& camera, bool bloomPass) const;
+	/// <summary>変換と Params を CB に書き、ルートを全部貼って 1 回描く</summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="environmentCubemapPath">映り込みの cubemap のパス</param>
+	/// <param name="bloomPass">true で発光パス用の PSO と CB を使う</param>
 	void DrawImpl(const Camera& camera, const std::string& environmentCubemapPath, bool bloomPass);
+	/// <summary>球の角速度から液面の傾きをばね＋減衰で進め、回り方が変わった瞬間に縁へ波源を入れる</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateSlosh(float deltaTime);
+	/// <summary>静かな揺れ：ランダムな間隔で液面の円の中に小さな波源を落とす</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateAmbientRipples(float deltaTime);
+	/// <summary>線形合同法で次の乱数を出す</summary>
+	/// <returns>0 以上 1 未満の乱数</returns>
 	float NextRandom01();
 
 	DirectXCore* dxCore_ = nullptr;

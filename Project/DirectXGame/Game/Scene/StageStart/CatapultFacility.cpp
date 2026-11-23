@@ -6,6 +6,7 @@
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Hub/CockpitReveal.h"
 #include <algorithm>
 #include <cmath>
@@ -15,29 +16,49 @@
 #endif
 
 namespace {
+	// 天井のランプの高さ [m]
+	constexpr float kLampHeight = 21.0f;
+	// 後ろのランプを原点からどれだけ後ろ（−Z）に置くか [m]
+	constexpr float kRearLampZ = 6.0f;
+	// 手前の 2 つのランプの明るさ
+	constexpr float kLampNearIntensity = 1.2f;
+	// 手前の 2 つのランプの届く半径 [m]
+	constexpr float kLampNearRadius = 32.0f;
+	// ランプの減衰
+	constexpr float kLampDecay = 1.5f;
+	// 前のランプの Z [m]
+	constexpr float kFrontLampZ = 12.0f;
+	// 奥のランプの Z [m]
+	constexpr float kFarLampZ = 40.0f;
+	// 奥のランプの届く半径 [m]
+	constexpr float kFarLampRadius = 36.0f;
+	// 一番奥のランプの Z [m]
+	constexpr float kFarthestLampZ = 80.0f;
+	// 一番奥のランプの届く半径 [m]
+	constexpr float kFarthestLampRadius = 40.0f;
+	// ネオンが流れる速さの下限（これ以下なら一斉に点ける）
+	constexpr float kMinSweepSpeed = 1e-3f;
+	// 発進できないときに返す、決して来ない時刻 [秒]
+	constexpr float kNeverReadyTime = 1.0e9f;
+	// 縦穴の単位の高さの下限 [m]（0 で割らないように）
+	constexpr float kMinUnitHeight = 1e-3f;
+
 	// tools/BlenderPipeline/gen_catapult.py --export Assets/Models/Catapult を cook したもの（16 番 §2.1）
 	constexpr const char* kModelDir = "Resources/Models/Catapult";
 	constexpr const char* kLightMaterial = "Light";
 	// 縦穴の単位を置く枠の数（8m × 10 = 80m）
 	constexpr int kMaxShaftUnits = 10;
 
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Scale(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
-
-	// .mat のパスに name を含む submesh の色（ベースカラーに掛ける）。消えたネオンの板を暗くする
+	/// <summary>.mat のパスに name を含む submesh の色（ベースカラーに掛ける）を灰色にする。消えたネオンの板を暗くする</summary>
+	/// <param name="object">対象の 3D オブジェクト（nullptr なら何もしない）</param>
+	/// <param name="name">.mat のパスに含まれる文字</param>
+	/// <param name="gray">灰色の明るさ 0〜1</param>
 	void SetColorByMaterialName(Object3DInstance* object, const std::string& name, float gray) {
 		ModelInstance* model = object ? object->GetModelInstance() : nullptr;
 		if (!model) return;
@@ -46,7 +67,10 @@ namespace {
 		}
 	}
 
-	// .mat のパスに name を含む submesh の UV を U 方向へ u だけずらす
+	/// <summary>.mat のパスに name を含む submesh の UV を U 方向へずらす</summary>
+	/// <param name="object">対象の 3D オブジェクト（nullptr なら何もしない）</param>
+	/// <param name="name">.mat のパスに含まれる文字</param>
+	/// <param name="u">U 方向のずらし</param>
 	void SetUvOffsetU(Object3DInstance* object, const std::string& name, float u) {
 		ModelInstance* model = object ? object->GetModelInstance() : nullptr;
 		if (!model) return;
@@ -60,10 +84,10 @@ namespace {
 CatapultFacility::CatapultFacility() {
 	lampSlots_.fill(kInvalidLightSlot);
 	// 天井の近く（y 25 の少し下）に、リフトの所から射出口の方へ並べる
-	lamps_[0] = { { 0.0f, 21.0f, -6.0f }, 1.2f, 32.0f, 1.5f };
-	lamps_[1] = { { 0.0f, 21.0f, 12.0f }, 1.2f, 32.0f, 1.5f };
-	lamps_[2] = { { 0.0f, 21.0f, 40.0f }, 1.0f, 36.0f, 1.5f };
-	lamps_[3] = { { 0.0f, 21.0f, 80.0f }, 1.0f, 40.0f, 1.5f };
+	lamps_[0] = { { 0.0f, kLampHeight, -kRearLampZ }, kLampNearIntensity, kLampNearRadius, kLampDecay };
+	lamps_[1] = { { 0.0f, kLampHeight, kFrontLampZ }, kLampNearIntensity, kLampNearRadius, kLampDecay };
+	lamps_[2] = { { 0.0f, kLampHeight, kFarLampZ }, 1.0f, kFarLampRadius, kLampDecay };
+	lamps_[3] = { { 0.0f, kLampHeight, kFarthestLampZ }, 1.0f, kFarthestLampRadius, kLampDecay };
 }
 
 CatapultFacility::~CatapultFacility() = default;
@@ -134,13 +158,13 @@ void CatapultFacility::AdvanceReadySequence(float deltaTime) {
 float CatapultFacility::ReadySequenceSeconds() const {
 	float farZ = neonSweepOriginZ_;
 	for (const float z : geometry_.neonRowZ) farZ = (std::max)(farZ, z);
-	const float sweep = neonSweepSpeed_ > 1e-3f ? (farZ - neonSweepOriginZ_) / neonSweepSpeed_ : 0.0f;
+	const float sweep = neonSweepSpeed_ > kMinSweepSpeed ? (farZ - neonSweepOriginZ_) / neonSweepSpeed_ : 0.0f;
 	return neonOffSeconds_ + sweep + neonFlickerSeconds_;
 }
 
 float CatapultFacility::GetSweepFrontZ() const {
 	switch (readyPhase_) {
-	case ReadyPhase::Unable: return -1.0e9f;
+	case ReadyPhase::Unable: return -kNeverReadyTime;
 	case ReadyPhase::Ready:  return geometry_.catapultTunnelEndZ;
 	default: break;
 	}
@@ -149,7 +173,7 @@ float CatapultFacility::GetSweepFrontZ() const {
 
 float CatapultFacility::NeonLevelAt(float z) const {
 	if (readyPhase_ == ReadyPhase::Ready) return 1.0f;
-	const float delay = neonSweepSpeed_ > 1e-3f ? (std::max)(z - neonSweepOriginZ_, 0.0f) / neonSweepSpeed_ : 0.0f;
+	const float delay = neonSweepSpeed_ > kMinSweepSpeed ? (std::max)(z - neonSweepOriginZ_, 0.0f) / neonSweepSpeed_ : 0.0f;
 	return CockpitReveal::Flicker(readyTime_ - neonOffSeconds_ - delay, neonFlickerSeconds_);
 }
 
@@ -200,7 +224,7 @@ void CatapultFacility::Update(float lampLevel, float lcdScroll) {
 void CatapultFacility::PlaceShaftUnits() {
 	// 枠 k の下の端 y = base + H·k（k ≥ 0）。リフトより下はリフトの板で見えないので、リフトの裏から上だけ
 	const float base = geometry_.catapultShaftBaseY;
-	const float unitH = (std::max)(geometry_.shaftUnitHeight, 1e-3f);
+	const float unitH = (std::max)(geometry_.shaftUnitHeight, kMinUnitHeight);
 	const float low = (std::max)(base, liftY_ - geometry_.liftThickness);
 	const float high = liftY_ + unitsAboveLift_;
 	shaftUnitCount_ = 0;
@@ -283,24 +307,24 @@ void CatapultFacility::LoadTuning(const JsonValue& node) {
 	for (size_t i = 0; lamps.IsArray() && i < lamps.Size() && i < kLampCount; ++i) {
 		const JsonValue& l = lamps[i];
 		Lamp& lamp = lamps_[i];
-		ReadVector3(l["position"], lamp.position);
+		lamp.position = ReadVector3(l["position"], lamp.position);
 		lamp.intensity = static_cast<float>(l["intensity"].AsDouble(lamp.intensity));
 		lamp.radius = static_cast<float>(l["radius"].AsDouble(lamp.radius));
 		lamp.decay = static_cast<float>(l["decay"].AsDouble(lamp.decay));
 	}
 	Vector3 lampColor = { lampColor_.x, lampColor_.y, lampColor_.z };
-	ReadVector3(node["lampColor"], lampColor);
+	lampColor = ReadVector3(node["lampColor"], lampColor);
 	lampColor_ = { lampColor.x, lampColor.y, lampColor.z, 1.0f };
 	read("unitsAboveLift", unitsAboveLift_);
-	ReadVector3(node["lightEmissive"], lightEmissive_);
+	lightEmissive_ = ReadVector3(node["lightEmissive"], lightEmissive_);
 	read("lightEmissiveScale", lightEmissiveScale_);
 	read("exitLightScale", exitLightScale_);
 	exitOpenToSky_ = node["exitOpenToSky"].AsBool(exitOpenToSky_);
 	read("exitSkyBloom", exitSkyBloom_);
-	ReadVector3(node["neonColor"], neonColor_);
+	neonColor_ = ReadVector3(node["neonColor"], neonColor_);
 	read("neonScale", neonScale_);
 	read("lcdEmissiveScale", lcdEmissiveScale_);
-	ReadVector3(node["readyNeonColor"], readyNeonColor_);
+	readyNeonColor_ = ReadVector3(node["readyNeonColor"], readyNeonColor_);
 	read("readyNeonScale", readyNeonScale_);
 	read("neonOffColor", neonOffColor_);
 	read("neonOffSeconds", neonOffSeconds_);

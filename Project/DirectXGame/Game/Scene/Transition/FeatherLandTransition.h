@@ -173,28 +173,51 @@ public:
 	FeatherLandTransition() = default;
 	~FeatherLandTransition() override = default;
 
-	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth, float screenHeight) override;
+	/// <summary>羽根の描画・水面・定数バッファを解放する</summary>
 	void Finalize() override;
+	/// <summary>瞼で閉じたシーン・水面・浮かび上がりを全画面パスで描き、その上に羽根（雨＋大きい一枚）を描く</summary>
 	void Draw() override;
 
+	/// <summary>トランジションの種類を返す</summary>
+	/// <returns>TransitionType::FeatherLand</returns>
 	TransitionType GetType() const override { return TransitionType::FeatherLand; }
+	/// <summary>トランジション名を返す</summary>
+	/// <returns>"FeatherLand"</returns>
 	std::string GetName() const override { return "FeatherLand"; }
 
-	Settings& GetSettings() { return settings_; }
+	/// <summary>調整値を返す（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
+	const Settings& GetSettings() const { return settings_; }
+	/// <summary>調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
-	/// <summary>ImGui で調整</summary>
+	/// <summary>調整値を ImGui で調整する</summary>
 	void OnImGui();
 
-	// 調整値（Resources/Json/Tuning/Transition.json の GetName() の欄）
+	/// <summary>調整値を JSON から読む（Resources/Json/Tuning/Transition.json の GetName() の欄）</summary>
+	/// <param name="json">このトランジションの欄</param>
 	void LoadTuning(const JsonValue& json) override;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="json">書き込み先（このトランジションの欄）</param>
 	void SaveTuning(JsonValue& json) const override;
 
 protected:
+	/// <summary>羽根・カメラ・水面の状態を最初に戻す</summary>
 	void OnStartCover() override;
+	/// <summary>水面（ワールドの長さで解く設定）・水面の全画面パス・定数バッファ・羽根の描画（縁はオレンジ）を作る</summary>
+	void OnInitialize() override;
+	/// <summary>最低の覆う秒数が過ぎ、大きい一枚が振れの端に来たら覆い終える（大きい一枚がまだなら時間だけで）</summary>
+	/// <param name="dt">経過 [秒]（使わない）</param>
+	/// <returns>覆い終えたら true（ここでロードする）</returns>
 	bool UpdateCover(float dt) override;
+	/// <summary>浮かび上がりと大きい一枚のディゾルブが終わるのを待つ</summary>
+	/// <param name="dt">経過 [秒]（使わない）</param>
+	/// <returns>両方終わったら true</returns>
 	bool UpdateReveal(float dt) override;
+	/// <summary>何もしない（別の種類が覆った後に開く側だけ使うことは想定しない）</summary>
 	void SetFullyCovered() override;
+	/// <summary>雨と大きい一枚を出し、開く側の始まりで水面の高さを決めて、羽根・水面・カメラを進める</summary>
 	void UpdateVisual() override;
 
 private:
@@ -251,27 +274,54 @@ private:
 		float emergeDistortion;
 	};
 
+	/// <summary>雨の羽根を 1 枚、画面上端の少し上の中央寄りに出す</summary>
 	void SpawnFeather();
+	/// <summary>大きい一枚を画面上部の中央、上端の少し上に出す</summary>
 	void SpawnHero();
+	/// <summary>雨の羽根を落ち葉のように揺らして落とし、焼け落ちを進め、画面から出たものを捨てる</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateFeathers(float dt);
+	/// <summary>大きい一枚を左右に振れながら落とし、振れの端を見つけ、開く側では着地させて水面に浮かべる</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateHero(float dt);
+	/// <summary>仮想カメラを大きい一枚の高さへ追わせ、開く側では着地点を斜めに見下ろす位置へ寄せる</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateCamera(float dt);
-	// 着地後に水面を揺らし続ける（浮いた羽根の上下で出る波＋浮かび上がる間ぽつぽつ落ちる波）
+	/// <summary>着地後に水面を揺らし続ける（浮いた羽根の上下で出る波＋浮かび上がる間ぽつぽつ落ちる波）</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateWaterDisturbance(float dt);
-	// 開く側の経過秒（覆う・隠したままの間は 0）
+	/// <summary>開く側の経過秒を返す</summary>
+	/// <returns>経過 [秒]（覆う・隠したままの間は 0）</returns>
 	float RevealSeconds() const;
+	/// <summary>瞼の閉じ具合を返す</summary>
+	/// <returns>0（開いている）〜1（閉じ切った）。覆う側以外は 1</returns>
 	float EyelidClosure() const;
-	// 雨の濃さ 1→0（rainFadeStart から rainFadeTime かけて消える）
+	/// <summary>雨の濃さを返す（rainFadeStart から rainFadeTime かけて消える）</summary>
+	/// <returns>1→0。覆う側以外は 0</returns>
 	float RainAlpha() const;
+	/// <summary>水面の見え具合を返す（開く側でカメラが傾くのに合わせて増える）</summary>
+	/// <returns>0〜1</returns>
 	float WaterVisibility() const;
+	/// <summary>ゲームオーバー画面の浮かび上がりの進みを返す</summary>
+	/// <returns>0〜1。大きい一枚が着地する前は 0</returns>
 	float EmergeProgress() const;
+	/// <summary>大きい一枚のディゾルブの進みを返す</summary>
+	/// <returns>0〜1。大きい一枚が着地する前は 0</returns>
 	float DissolveProgress() const;
-	// 奥行き z の所で画面の上端になる高さ（カメラからの距離 z）
+	/// <summary>カメラからの距離 depth の所で、画面の中心から上端までの高さを求める</summary>
+	/// <param name="depth">カメラからの距離</param>
+	/// <returns>高さ（ワールドの長さ）</returns>
 	float VisibleHalfHeight(float depth) const;
-	// ワールドの点 → 仮想カメラの画面 UV
+	/// <summary>ワールドの点を仮想カメラの画面へ投影する</summary>
+	/// <param name="world">ワールドの点</param>
+	/// <returns>画面 UV</returns>
 	Vector2 ProjectToScreen(const Vector3& world) const;
-	// 羽根が仮想カメラの画面に映っているか（羽根の大きさの分だけ画面の外まで見る）
+	/// <summary>羽根が仮想カメラの画面に映っているかを返す（羽根の大きさの分だけ画面の外まで見る）</summary>
+	/// <param name="feather">調べる羽根</param>
+	/// <returns>映っていれば true</returns>
 	bool IsOnScreen(const FeatherRenderer::Feather& feather) const;
+	/// <summary>今の状態から水面の定数を作って定数バッファへ書く</summary>
+	/// <returns>書いた値（書き込み専用のメモリを読み返さないため）</returns>
 	WaterParamsForGPU WriteWaterParams();
 
 	FeatherRenderer renderer_;

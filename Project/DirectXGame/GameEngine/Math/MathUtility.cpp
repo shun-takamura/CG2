@@ -589,6 +589,11 @@ Matrix4x4 MakeRotateZMatrix(Vector3 rotate)
 	return rotateMatrixZ;
 }
 
+Matrix4x4 MakeCameraRotateMatrix(const Vector3& rotate)
+{
+	return Multiply(MakeRotateXMatrix(rotate), Multiply(MakeRotateYMatrix(rotate), MakeRotateZMatrix(rotate)));
+}
+
 Matrix4x4 MakeTranslateMatrix(Transform transform)
 {
 	//==================
@@ -653,11 +658,12 @@ float Length(const Vector3& vector)
 
 Vector3 Normalize(const Vector3& vector)
 {
-	Vector3 normalizedV;
-
-	normalizedV = { vector.x / Length(vector),vector.y / Length(vector),vector.z / Length(vector) };
-
-	return normalizedV;
+	const float length = Length(vector);
+	// 長さ 0 は向きが決まらないので、0 で割らずに 0 ベクトルを返す
+	if (length == 0.0f) {
+		return { 0.0f, 0.0f, 0.0f };
+	}
+	return { vector.x / length, vector.y / length, vector.z / length };
 }
 
 Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t)

@@ -83,30 +83,51 @@ public:
 	~CloudLayer();
 
 	/// <summary>もこもこの高さ（t9）は GetMokoTexturePath() の固定パスから読む</summary>
+	/// <param name="dxCore">CB を作るのに使う</param>
+	/// <param name="noiseTexturePath">雲のノイズ（t5）のパス</param>
 	void Initialize(DirectXCore* dxCore, const std::string& noiseTexturePath);
 
 	/// <summary>スクロールとしきい値の揺れを進め、CB を書き換える。空側のレイの原点（描画カメラの位置）もここで渡す</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
+	/// <param name="eyePosition">描画カメラの位置</param>
 	void Update(float deltaTime, const Vector3& eyePosition);
 
 	/// <summary>太陽の向き（光の進む向きではなく、太陽へ向かう向き）。陰影の向きと太陽の方向の明るさに使う</summary>
+	/// <param name="towardSun">太陽へ向かう向き（正規化して持つ）</param>
 	void SetSunDirection(const Vector3& towardSun);
 
-	Params& GetParams() { return params_; }
+	/// <summary>雲の層の調整値（書き換える時はコピーして SetParams で戻す）</summary>
+	/// <returns>今の値</returns>
+	const Params& GetParams() const { return params_; }
+	/// <summary>雲の層の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetParams(const Params& value) { params_ = value; }
 
+	/// <summary>雲の CB（b7 に挿す）のアドレスを返す</summary>
+	/// <returns>GPU アドレス</returns>
 	D3D12_GPU_VIRTUAL_ADDRESS GetConstantBufferAddress() const;
+	/// <summary>雲のノイズ（t5 に挿す）の SRV を返す</summary>
+	/// <returns>SRV のハンドル</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetNoiseSrvHandle() const;
 	/// <summary>もこもこの高さ（t9）。Skybox と水面だけが挿す（PBR の映り込みは使わない）</summary>
+	/// <returns>SRV のハンドル</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetMokoSrvHandle() const;
+	/// <summary>もこもこの高さのテクスチャの固定パスを返す</summary>
+	/// <returns>"Resources/Textures/Cloud/cloud_moko_height.dds"</returns>
 	static const char* GetMokoTexturePath();
 
+	/// <summary>雲の調整値の ImGui</summary>
 	void OnImGui();
 
 	//==============================
 	// 雲を描かないシーン用（Skybox / WaterSurface の既定）
 	//==============================
 	/// <summary>enabled=0 の CB を作る。雲を使わない PSO でもルートパラメータを空けないために挿す</summary>
+	/// <param name="dxCore">CB を作るのに使う</param>
+	/// <returns>中身を 0 で埋めた CB</returns>
 	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateDisabledConstantBuffer(DirectXCore* dxCore);
 	/// <summary>t5 を埋めるダミーテクスチャ（enabled=0 なのでシェーダは読まない）</summary>
+	/// <returns>"Resources/Textures/white1x1.dds"</returns>
 	static const char* GetFallbackTexturePath();
 
 private:

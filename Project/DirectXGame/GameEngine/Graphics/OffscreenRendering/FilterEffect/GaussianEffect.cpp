@@ -10,6 +10,12 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻すカーネルの一辺の既定値 [px]
+	constexpr int kDefaultKernelSize = 3;
+	// ガウスの標準偏差の下限（0 に近いと重みが計算できない）
+	constexpr float kMinSigma = 0.1f;
+}
 
 void GaussianEffect::Initialize(
 	DirectXCore* dxCore,
@@ -64,7 +70,7 @@ void GaussianEffect::ShowImGui()
 
 void GaussianEffect::ResetParams()
 {
-	kernelSize_ = 3;
+	kernelSize_ = kDefaultKernelSize;
 	sigma_ = 1.0f;
 }
 
@@ -77,5 +83,5 @@ void GaussianEffect::SetKernelSize(int size)
 
 void GaussianEffect::SetSigma(float sigma)
 {
-    sigma_ = (std::max)(0.1f, sigma);
+    sigma_ = (std::max)(kMinSigma, sigma);
 }

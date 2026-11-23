@@ -3,7 +3,20 @@
 #include "AssetLocator.h"
 #include "DStorageManager.h"
 #include <algorithm>
-//TextureManager* TextureManager::instance = nullptr;
+namespace {
+    // RGBA8 の 1 ピクセルのバイト数（= チャンネル数）
+    constexpr int kRGBA8BytesPerPixel = 4;
+    // ログ 1 行を組み立てる文字バッファの大きさ [byte]
+    constexpr int kLogBufferSize = 256;
+    // DirectStorage の読み込み結果のログ 1 行の文字バッファの大きさ [byte]
+    constexpr int kDStorageLogBufferSize = 512;
+    // HRESULT を 16 進で書く文字バッファの大きさ [byte]
+    constexpr int kHResultLogBufferSize = 64;
+    // 拡張子 ".dds" の文字数
+    constexpr int kDDSExtensionLength = 4;
+    // DDS のヘッダー（マジック 4 + 124 + DXT10 拡張 20 = 148B）を読む一時バッファの大きさ [byte]
+    constexpr int kDDSHeaderReadBufferSize = 200;
+}
 
 uint32_t TextureManager::kSRVIndexTop = 1;
 
@@ -12,9 +25,6 @@ void TextureManager::Initialize(SpriteManager* spriteManager, DirectXCore* dxCor
     spriteManager_ = spriteManager;
     dxCore_ = dxCore;
     srvManager_ = srvManager;
-
-    // SRVの数と同数
-    //textureDatas.reserve(SRVManager::kMaxSRVCount);
 }
 
 bool TextureManager::HasTexture(const std::string& filePath) const
@@ -60,7 +70,7 @@ void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r,
     }
 
     // 1x1ピクセルのテクスチャデータを作成
-    uint8_t pixelData[4] = { r, g, b, a };
+    uint8_t pixelData[kRGBA8BytesPerPixel] = { r, g, b, a };
 
     // ScratchImageを使って1x1テクスチャを作成
     DirectX::ScratchImage image;
@@ -78,7 +88,7 @@ void TextureManager::CreateSolidColorTexture(const std::string& name, uint8_t r,
     // ピクセルデータをコピー
     const DirectX::Image* img = image.GetImage(0, 0, 0);
     if (img && img->pixels) {
-        memcpy(img->pixels, pixelData, 4);
+        memcpy(img->pixels, pixelData, kRGBA8BytesPerPixel);
     }
 
     // テクスチャデータの作成
@@ -136,7 +146,7 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
         return;
     }
 
-    char buf[256];
+    char buf[kLogBufferSize];
     sprintf_s(buf, "CreateDynamicTexture: %s, %u x %u\n", name.c_str(), width, height);
     OutputDebugStringA(buf);
 
@@ -179,7 +189,7 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
 
     if (FAILED(hr))
     {
-        char buf[256];
+        char buf[kLogBufferSize];
         sprintf_s(buf, "TextureManager: CreateCommittedResource failed (0x%08X)\n", hr);
         OutputDebugStringA(buf);
         textureDatas.erase(name);
@@ -216,7 +226,7 @@ void TextureManager::CreateDynamicTexture(const std::string& name, uint32_t widt
 
     if (FAILED(hr))
     {
-        char buf[256];
+        char buf[kLogBufferSize];
         sprintf_s(buf, "TextureManager: CreateCommittedResource for upload failed (0x%08X)\n", hr);
         OutputDebugStringA(buf);
         textureDatas.erase(name);
@@ -283,7 +293,7 @@ void TextureManager::UpdateDynamicTexture(const std::string& name, const uint8_t
     }
 
     // 行ごとにコピー
-    uint32_t srcRowPitch = static_cast<uint32_t>(textureData.metadata.width * 4);
+    uint32_t srcRowPitch = static_cast<uint32_t>(textureData.metadata.width * kRGBA8BytesPerPixel);
     uint32_t dstRowPitch = footprint.Footprint.RowPitch;
 
     for (UINT row = 0; row < numRows; row++)
@@ -352,9 +362,9 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
         auto* loc = AssetLocator::GetInstance();
         auto* ds = DStorageManager::GetInstance();
         const bool isDDS =
-            filePath.size() >= 4 &&
-            (filePath.compare(filePath.size() - 4, 4, ".dds") == 0 ||
-             filePath.compare(filePath.size() - 4, 4, ".DDS") == 0);
+            filePath.size() >= kDDSExtensionLength &&
+            (filePath.compare(filePath.size() - kDDSExtensionLength, kDDSExtensionLength, ".dds") == 0 ||
+             filePath.compare(filePath.size() - kDDSExtensionLength, kDDSExtensionLength, ".DDS") == 0);
         if (isDDS && loc->IsPackMode() && ds->IsInitialized() && ds->GetPackFile()) {
             uint64_t packOffset = 0, uncompressedSize = 0, compressedSize = 0;
             uint8_t  compression = 0;
@@ -364,7 +374,7 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
                 // Open() の AssetHandle.size_ は compressed_size を指しているが、
                 // 先頭 148B は uncompressed 領域なので普通に ReadAt 可能。
                 AssetHandle h = loc->Open(filePath);
-                uint8_t headerBytes[200]{};
+                uint8_t headerBytes[kDDSHeaderReadBufferSize]{};
                 const uint32_t headerReadSize = static_cast<uint32_t>(
                     std::min<uint64_t>(sizeof(headerBytes), h.GetSize()));
                 if (h.IsValid() && h.ReadAt(0, headerBytes, headerReadSize)) {
@@ -405,7 +415,7 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
                             }
                             it->second.loadState = TextureData::LoadState::CPUReady;
                             {
-                                char dbg[512];
+                                char dbg[kDStorageLogBufferSize];
                                 sprintf_s(dbg,
                                     "[DS] %s w=%u h=%u mips=%u arr=%u fmt=%u "
                                     "comp=%u packOff=%llu hdrOff=%u dsOff=%llu "
@@ -444,8 +454,8 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
 
     DirectX::ScratchImage image{};
     HRESULT hr;
-    const bool isDDS = filePath.size() >= 4 &&
-        std::equal(filePath.end() - 4, filePath.end(), ".dds",
+    const bool isDDS = filePath.size() >= kDDSExtensionLength &&
+        std::equal(filePath.end() - kDDSExtensionLength, filePath.end(), ".dds",
                    [](char a, char b) {
                        return std::tolower(static_cast<unsigned char>(a))
                             == std::tolower(static_cast<unsigned char>(b));
@@ -459,7 +469,7 @@ void TextureManager::LoadTextureCPU(const std::string& filePath, bool linear)
             bytes.data(), bytes.size(), wicFlags, nullptr, image);
     }
     if (FAILED(hr)) {
-        char hrbuf[64];
+        char hrbuf[kHResultLogBufferSize];
         sprintf_s(hrbuf, " (hr=0x%08X)", static_cast<unsigned>(hr));
         OutputDebugStringA(("LoadTextureCPU: Decode failed for '" + filePath
                             + "'" + hrbuf + "\n").c_str());
@@ -731,10 +741,6 @@ void TextureManager::LoadTextureLinear(const std::string& filePath)
 
 TextureManager* TextureManager::GetInstance()
 {
-    //if (instance == nullptr) {
-        //instance = new TextureManager;
-    //}
-
     static TextureManager instance;
 
     return &instance;
@@ -771,9 +777,6 @@ uint32_t TextureManager::GetSrvIndex(const std::string& filePath)
 
 D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string& filePath)
 {
-    // デバッグ出力
-    //OutputDebugStringA(("GetSrvHandleGPU called with: " + filePath + "\n").c_str());
-
     auto it = textureDatas.find(filePath);
 
     if (it != textureDatas.end()) {
@@ -797,7 +800,5 @@ D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string& f
 
 void TextureManager::Finalize()
 {
-    //delete instance;
-    //instance = nullptr;
     textureDatas.clear();
 }

@@ -14,6 +14,9 @@
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
 #include "FlightUnit/FlightUnitPart.h"
+#include "Special/ISpecialMoveHost.h"
+#include "Special/ShatterlinePart.h"
+#include "Special/StormLockPart.h"
 #include "Loot/LootPickupLog.h"
 #include "StageEnvironment.h"
 #include "StageStreaming.h"
@@ -52,7 +55,7 @@ class BeamBladeRenderer;
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
 class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
-	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost {
+	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost, private ISpecialMoveHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -64,41 +67,188 @@ public:
 	StagePlayScene();
 	~StagePlayScene() override;
 
+	/// <summary>
+	/// カメラ・空・環境・レール・ボス戦・スタート演出・UI・自機などを作り、調整値と配置を読んでステージを始める。
+	/// HUB の降下の続き（③IN）から始める時は、降下に要らない物の初期化を後回しの段に積む
+	/// </summary>
 	void Initialize() override;
+	/// <summary>画面の水滴・必殺技の GPU リソース・各パートを片付ける（GPU の完了を待ってから解放する）</summary>
 	void Finalize() override;
+	/// <summary>
+	/// 1 フレームの更新（ポーズ → 後回しの初期化 → 段階の遷移 → カメラ・自機 → 照準・射撃・戦闘 → UI）。
+	/// トランジションで覆われている間は止める（最初の 1 回だけは行列を書くために通す）
+	/// </summary>
 	void Update() override;
+	/// <summary>水面のシミュレーション・反射 → 空 → 不透明物 → 水面・雲海 → 半透明・エフェクト → HUD・ポーズの順に描く（スタート演出の間は演出を描く）</summary>
 	void Draw() override;
+	/// <summary>ポストエフェクト（崩壊リビールの色反転）の後の最終 RT に Shatterline の破片を重ねて描く</summary>
+	/// <param name="commandList">描画先のコマンドリスト</param>
 	void DrawAfterPostEffect(ID3D12GraphicsCommandList* commandList) override;
 
-	// シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する。
+	/// <summary>シーンタイムラインのシーク。RailCamera の progress を経過秒から再計算する（Boss/Landing 中なら Rail へ戻す）</summary>
+	/// <param name="seconds">飛ぶ先のステージ経過秒</param>
 	void Seek(float seconds) override;
+	/// <summary>レールカメラの進行度</summary>
+	/// <returns>進行度 t（0〜1。レールが無ければ -1）</returns>
 	float GetCameraProgressT() const override;
-	// Rail 終了（Landing 遷移）トリガー秒。ImGuiManager の Scene Timeline パネルの Seek Max 表示に使う。
+	/// <summary>Rail 終了（Landing 遷移）トリガー秒。ImGuiManager の Scene Timeline パネルの Seek Max 表示に使う</summary>
+	/// <returns>トリガー秒 [秒]</returns>
 	float GetSeekMaxSeconds() const override;
 
+	/// <summary>シーンのカメラを取得</summary>
+	/// <returns>シーンのカメラ</returns>
 	Camera* GetCamera() override;
 
-	// 発光パス（スタート演出の照明の帯・ネオン・コクピットの灯り）
+	/// <summary>発光パス（スタート演出の照明の帯・ネオン・コクピットの灯り、羽根のディゾルブの縁、死亡演出の光）があるか</summary>
+	/// <returns>発光させる物があれば true</returns>
 	bool HasBloomSources() const override;
+	/// <summary>発光する物をブルームのマスクへ描く</summary>
 	void DrawBloomSources() override;
 
-	// Wave Editor 有効時、ビューポートへのプレハブドロップをウェーブエントリ追加として処理する。
-	// 戻り値 true でドロップを消費（通常の InstantiatePrefab を抑止）。Debug ビルドのみ機能。
+	/// <summary>
+	/// Wave Editor 有効時、ビューポートへのプレハブドロップをウェーブエントリ追加として処理する。Debug ビルドのみ機能。
+	/// </summary>
+	/// <param name="prefabName">ドロップしたプレハブ名</param>
+	/// <param name="relX">ビューポート内の横の位置（0〜1）</param>
+	/// <param name="relY">ビューポート内の縦の位置（0〜1）</param>
+	/// <returns>true でドロップを消費（通常の InstantiatePrefab を抑止）</returns>
 	bool OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY) override;
 
 protected:
 	// シーン配置（プレハブ・スプライン等）の保存/復元。
 	// 本体は GameScene 側に集約済みで、ここは StagePlay 固有の差分だけを差し込む。
 	// 呼ぶのは基底なので public にはしない（シーンの公開APIを増やさない流儀）。
+	/// <summary>JSON の "scene" に書く名前</summary>
+	/// <returns>"StagePlayScene"</returns>
 	std::string GetSceneJsonName() const override;
+	/// <summary>保存から外すエンティティか（プレイヤーはプレハブから復元するので外す。弾・攻撃判定・敵・ボス・崩れた部品・落とし物・HP/必殺ゲージの UI はランタイム実体）</summary>
+	/// <param name="entity">調べるエンティティ</param>
+	/// <param name="tag">そのエンティティのタグ</param>
+	/// <returns>true なら保存しない</returns>
 	bool ShouldSkipOnSave(const IImGuiEditable* entity, EntityTag tag) const override;
+	/// <summary>復元しないエントリか（過去の汚れた save 対策：一時オブジェクト・ランタイム敵が混ざっていても復元しない）</summary>
+	/// <param name="desc">読んだエントリ</param>
+	/// <returns>true なら復元しない</returns>
 	bool ShouldSkipOnLoad(const SceneEntityDesc& desc) const override;
+	/// <summary>読み込みでは作らず取っておくエントリか（ストリーミングの時刻表にあるグループだけ後で作る）</summary>
+	/// <param name="desc">読んだエントリ（streamGroup 付き）</param>
+	/// <returns>時刻表にあるグループなら true</returns>
 	bool ShouldStreamOnLoad(const SceneEntityDesc& desc) const override;
+	/// <summary>全エンティティが消えるので、それを指す参照とゲーム状態（敵のコントローラ・回避など）を落とす</summary>
 	void OnBeforeSceneLoad() override;
+	/// <summary>復元が終わった後に自機の貼り直し・レールの走行スプラインの取り直し・UI の建て直しをする</summary>
 	void OnAfterSceneLoad() override;
 
 private:
-	// 雲海の降下の縦穴をレールの降下区間から拾い直す（シーン読み込みでレールが差し替わった後に呼ぶ）
+	// ----- 1 フレームの更新の手順（Update がこの順に呼ぶ。中身は StagePlayScene.cpp の各関数のコメント）-----
+	/// <summary>Pause アクションでポーズを開閉し、ポーズ中はメニューだけを動かす</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <returns>ポーズを開閉したフレーム・ポーズ中は true（ゲームを進めない）</returns>
+	bool HandlePauseInput(class InputActionMap* actions);
+	/// <summary>後回しにした初期化：③IN の降下の間だけ 1 フレーム数 ms ずつ進め、それ以外の段階へ進んだら残りを全部済ませる</summary>
+	void AdvanceDeferredInit();
+#ifdef _DEBUG
+	/// <summary>DEBUG 専用ショートカット（F2=リザルト / F3=HUB / F4=段階送り）</summary>
+	/// <returns>シーンを切り替えたら true</returns>
+	bool HandleDebugShortcuts();
+#endif
+	/// <summary>ステージ進行ステートマシン（Rail → Landing → Boss）。遷移の条件だけを見る（入った時の処理は OnStagePhaseChanged）</summary>
+	/// <param name="actions">アクションの入力</param>
+	void UpdateStagePhase(class InputActionMap* actions);
+	/// <summary>段階が変わったフレームに 1 回：前の段階の片付けと、次の段階に入る処理</summary>
+	void OnStagePhaseChanged();
+	/// <summary>ボス戦の毎フレーム（ボス AI・HP バー・撃破 → STAGE CLEAR の段取り）</summary>
+	void UpdateBossBattle();
+	/// <summary>自機を置く前の基準カメラ（精密射撃の FOV・カメラ行列・デバッグカメラ）</summary>
+	/// <param name="actions">アクションの入力</param>
+	void UpdateBaseCamera(class InputActionMap* actions);
+	/// <summary>自機の移動（ボス戦は地上、それ以外はカメラ空間のオフセット）と、自機を置いた後で上書きするカメラ</summary>
+	/// <param name="actions">アクションの入力</param>
+	void UpdatePlayerMovement(class InputActionMap* actions);
+	/// <summary>移動入力（WASD / 左スティック）を読む</summary>
+	/// <returns>移動入力（x=右, y=上。-1..1）</returns>
+	Vector2 ReadMoveInput() const;
+	/// <summary>ボス戦：地上の移動・回避・分身カウンター → 向き → カメラ</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="moveDelta">移動入力（-1..1）</param>
+	/// <param name="dt">経過時間 [秒]（Player グループ）</param>
+	void UpdateBossPlayerMovement(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	/// <summary>
+	/// ボス戦の自機の向き（yaw のみ）を更新する。ジャスト回避スロー中は攻撃元（ボス）方向、通常時は移動入力方向（入力が無ければ保持）。
+	/// 実際の SetRotate は後段の照準（UpdateAimTarget）で適用する
+	/// </summary>
+	/// <param name="moveDelta">移動入力（-1..1）</param>
+	/// <param name="playerPos">自機の位置</param>
+	/// <param name="dt">経過時間 [秒]</param>
+	void UpdateBossPlayerFacing(const Vector2& moveDelta, const Vector3& playerPos, float dt);
+	/// <summary>ボス戦のカメラ（右スティック・マウスの look、L1 の短押し/長押し）と、その上に重ねる演出カメラ</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="playerPos">自機の位置</param>
+	/// <param name="dt">経過時間 [秒]</param>
+	void UpdateBossCamera(class InputActionMap* actions, const Vector3& playerPos, float dt);
+	/// <summary>レール：慣性付きの移動 → 回避 → 画面端・床で止める → ワールドに置く → 演出カメラ</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="moveDelta">移動入力（-1..1）</param>
+	/// <param name="dt">経過時間 [秒]（Player グループ）</param>
+	void UpdateRailPlayerMovement(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	/// <summary>
+	/// 速度で動かした候補のオフセットを、コライダーが画面端（+ マージン）と水面の床を越えない軸だけ採用する。
+	/// 拒否した軸は速度もゼロに（壁にぶつかった扱い）
+	/// </summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	void MoveRailPlayerInsideScreen(float dt);
+	/// <summary>
+	/// 追加回避の戻り：コライダー 8 角の最大 NDC で軸ごとに判定し、通常マージンを超えている軸だけ内側へ押し戻す
+	/// （ダッシュで取った別軸位置は維持）。全体が枠内に戻ったら派生を終える
+	/// </summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	void PushRailPlayerBackAfterDodge(float dt);
+	/// <summary>
+	/// オフセットから自機のワールド位置を出す。近接派生中は敵の手前まで詰め寄る位置で上書きし、
+	/// 体の中心まわりに回ったように足元の位置をずらす
+	/// </summary>
+	/// <returns>自機の足元のワールド位置</returns>
+	Vector3 ComputeRailPlayerWorldPos();
+	/// <summary>自機を置いた後に上書きするカメラ（精密射撃・ジャスト回避・必殺技・雲の上・死亡演出）</summary>
+	/// <param name="worldPos">自機のワールド位置</param>
+	void ApplyRailOverrideCameras(const Vector3& worldPos);
+	/// <summary>道中の環境（空・ライト・フォグのセクション、大河、画面の水滴、区間ごとのストリーミング）</summary>
+	void UpdateStageEnvironment();
+	/// <summary>Skybox の演出（必殺技の暗転・ボス戦の空）と更新。カメラが確定した後に呼ぶ</summary>
+	void UpdateSkyboxAfterCamera();
+	/// <summary>自機のスケルトンが更新された後に、骨に付ける物（武器・盾・飛行ユニット・羽根・スラスター）と死亡演出を進める</summary>
+	void UpdatePlayerAttachments();
+	/// <summary>レティクルの位置（ボス戦・雲の上は中央固定、それ以外はマウス/スティック）</summary>
+	void UpdateReticle();
+	/// <summary>照準（狙う敵・発射先・自機の向き・ロックオン表示）</summary>
+	void UpdateAimTarget();
+	/// <summary>自機の向き：狙う点をなめらかに追い、段階・演出ごとの決まった向きを優先する</summary>
+	/// <param name="desiredTarget">狙う点（ワールド）</param>
+	void UpdatePlayerFacing(const Vector3& desiredTarget);
+	/// <summary>ロックオン中の見た目：敵を囲む大きさと、弱近接 1 段目が届くか（届くなら近接用の絵）</summary>
+	/// <param name="hitEnemy">レティクルが敵に掛かっているか</param>
+	/// <param name="distToEnemy">カメラから敵の中心までの距離 [m]</param>
+	/// <param name="enemyRadius">敵のコライダーの半径 [m]</param>
+	/// <param name="enemyCenter">敵の中心（ワールド）</param>
+	void UpdateReticleLockDisplay(bool hitEnemy, float distToEnemy, float enemyRadius, const Vector3& enemyCenter);
+	/// <summary>射撃とチャージ（必殺技・行動ロック・被弾後の射撃禁止の間は撃たない）</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="gameFrozen">World が止まっているか（エディタの一時停止など）</param>
+	void UpdateShooting(class InputActionMap* actions, bool gameFrozen);
+	/// <summary>射撃ボタンを離している間にチャージを進める（1 段目＝外側のレティクルとエフェクト、2 段目＝差し替え）</summary>
+	/// <param name="dtP">経過時間 [秒]（Player グループ）</param>
+	void UpdateChargeLevel(float dtP);
+	/// <summary>1 発撃つ（チャージ段階で弾を選び、メイン武器・精密射撃の補正を掛ける）。撃ったらチャージを戻す</summary>
+	void FirePlayerShot();
+	/// <summary>近接・弾・飛行ユニット・被弾・必殺技（射撃より後。弾はこのフレームに撃った物も進める）</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="worldDt">世界の経過時間 [秒]</param>
+	/// <param name="gameFrozen">World が止まっているか</param>
+	void UpdateCombatAndSpecial(class InputActionMap* actions, float worldDt, bool gameFrozen);
+	/// <summary>state.log：SUNDAY のハング検知・スタック判定の基準（フレーム末尾の位置・HP・シーン）を書く</summary>
+	void WriteFrameStateLog();
+
+	/// <summary>雲海の降下の縦穴をレールの降下区間から拾い直す（シーン読み込みでレールが差し替わった後に呼ぶ）</summary>
 	void RebuildCloudShaft();
 
 	std::unique_ptr<Camera> camera_;
@@ -113,71 +263,143 @@ private:
 	std::unique_ptr<StageEnvironment> stageEnv_;
 
 	// ----- IRailStageHost 実装（private override。外部からは呼べない。RailStagePart 経由のみ）-----
+	/// <summary>指定プレハブから敵を1体スポーンし、指定スプラインに沿って進ませる（GameScene::SpawnEnemyOnSpline の委譲）</summary>
+	/// <param name="prefabName">敵のプレハブ名</param>
+	/// <param name="spline">沿わせるスプライン</param>
+	/// <param name="speed">スプラインの進み [t/秒]</param>
+	/// <param name="removeAtEnd">終端に着いたら破棄するなら true</param>
+	/// <param name="initialT">スプラインの始めの位置（0〜1）</param>
+	/// <param name="waveEntryIndex">Wave のエントリ番号</param>
+	/// <returns>出した敵。出せなければ nullptr</returns>
 	IImGuiEditable* SpawnEnemyOnSpline(const std::string& prefabName, SplineCurveActor* spline,
 		float speed, bool removeAtEnd, float initialT, int waveEntryIndex) override {
 		return GameScene::SpawnEnemyOnSpline(prefabName, spline, speed, removeAtEnd, initialT, waveEntryIndex);
 	}
+	/// <summary>指定プレハブをスプラインなしで指定座標に直接スポーンする（GameScene::SpawnEnemyAt の委譲）</summary>
+	/// <param name="prefabName">プレハブ名</param>
+	/// <param name="pos">置く位置（ワールド）</param>
+	/// <returns>出した実体。出せなければ nullptr</returns>
 	IImGuiEditable* SpawnEnemyAt(const std::string& prefabName, const Vector3& pos) override {
 		return GameScene::SpawnEnemyAt(prefabName, pos);
 	}
-	// unique_ptr<EnemyController> の値渡し（デストラクタ実体化）に完全型が要るため定義は .cpp。
+	/// <summary>
+	/// 敵コントローラを登録する（GameScene::RegisterEnemyController の委譲。IBossStageHost も満たす）。
+	/// unique_ptr<EnemyController> の値渡し（デストラクタ実体化）に完全型が要るため定義は .cpp
+	/// </summary>
+	/// <param name="ctrl">登録するコントローラ（所有権を移す）</param>
 	void RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) override;
+	/// <summary>スプラインに沿う敵を進める（GameScene::UpdateMovingEnemies の委譲）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateMovingEnemies(float dt) override { GameScene::UpdateMovingEnemies(dt); }
+	/// <summary>敵コントローラを更新する（GameScene::UpdateEnemyControllers の委譲。IBossStageHost も満たす）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="player">自機</param>
+	/// <param name="stageTimeSec">ステージの経過時間 [秒]</param>
 	void UpdateEnemyControllers(float dt, IImGuiEditable* player, float stageTimeSec) override {
 		GameScene::UpdateEnemyControllers(dt, player, stageTimeSec);
 	}
+	/// <summary>HP が尽きた動的エンティティを死亡エフェクト付きで破棄する（GameScene::SweepDeadEntities の委譲。IBossStageHost も満たす）</summary>
 	void SweepDeadEntities() override { GameScene::SweepDeadEntities(); }
+	/// <summary>シーンをまたいで残るプレイの状態を取得する（GameScene の物。IRailStageHost / IBossStageHost / IFlightUnitHost を満たす）</summary>
+	/// <returns>プレイの状態</returns>
+	GameSession* GetGameSession() const override { return GameScene::GetGameSession(); }
 	// ResetDodgeState() の override 宣言は下方の既存宣言（回避まわりのセクション）に付与済み。
-	// player_ は AnimatedObject3DInstance*（ヘッダでは前方宣言のみ＝IImGuiEditable への
-	// アップキャストができない）ため、定義は .cpp（完全型あり）に置く。
+	/// <summary>
+	/// 自機を取得する（IRailStageHost / IBossStageHost / IFlightUnitHost / ISpecialMoveHost を 1 つで満たす）。
+	/// player_ は AnimatedObject3DInstance*（ヘッダでは前方宣言のみ＝IImGuiEditable への
+	/// アップキャストができない）ため、定義は .cpp（完全型あり）に置く。
+	/// </summary>
+	/// <returns>自機。いなければ nullptr</returns>
 	IImGuiEditable* GetPlayer() const override;
+	/// <summary>時間グループの進む速さの倍率を返す（IRailStageHost / IFlightUnitHost を満たす）</summary>
+	/// <param name="g">対象の時間グループ</param>
+	/// <returns>倍率（1 で通常）</returns>
 	float GetTimeScale(TimeGroup g) const override { return Scene::GetTimeScale(g); }
+	/// <summary>時間グループの進む速さの倍率を設定する（IRailStageHost / IFlightUnitHost / ISpecialMoveHost を満たす）</summary>
+	/// <param name="g">対象の時間グループ</param>
+	/// <param name="scale">倍率（0 で停止、1 で通常）</param>
 	void SetTimeScale(TimeGroup g, float scale) override { Scene::SetTimeScale(g, scale); }
-	void ForEachMovingEnemy(const std::function<void(IImGuiEditable*, int)>& fn) override {
-		for (auto& m : movingEnemies_) {
-			if (!m.entity) continue;
-			fn(m.entity, m.waveEntryIndex);
-		}
-	}
-	void RegisterStationaryMovingEnemy(IImGuiEditable* entity, int waveEntryIndex) override {
-		MovingEnemy me{};
-		me.entity         = entity;
-		me.spline         = nullptr;
-		me.t              = 0.0f;
-		me.speed          = 0.0f;
-		me.removeAtEnd    = false;
-		me.waveEntryIndex = waveEntryIndex;
-		movingEnemies_.push_back(me);
-	}
-	// EnemyController の完全型が必要なため定義は .cpp（Enemy/EnemyController.h を include 済み）。
-	void LinkEnemyController(IImGuiEditable* entity, EnemyController* ctrl) override;
+	/// <summary>movingEnemies_ の中から (entity, waveEntryIndex) を列挙する（キー記録用）</summary>
+	/// <param name="fn">敵と Wave のエントリ番号を受け取る関数</param>
+	void ForEachMovingEnemy(const std::function<void(IImGuiEditable*, int)>& fn) override { ForEachMovingEnemyEntry(fn); }
+	/// <summary>カメラ相対（ScreenHover/Static）敵を movingEnemies_ へ登録する（spline=null/speed=0固定）</summary>
+	/// <param name="entity">敵</param>
+	/// <param name="waveEntryIndex">Wave のエントリ番号</param>
+	void RegisterStationaryMovingEnemy(IImGuiEditable* entity, int waveEntryIndex) override { AddStationaryMovingEnemy(entity, waveEntryIndex); }
+	/// <summary>対応する movingEnemies_ エントリへコントローラを紐付ける</summary>
+	/// <param name="entity">敵</param>
+	/// <param name="ctrl">その敵のコントローラ</param>
+	void LinkEnemyController(IImGuiEditable* entity, EnemyController* ctrl) override { AttachControllerToMovingEnemy(entity, ctrl); }
+	/// <summary>
+	/// waveEntryIndex_ が一致するコントローラへ退避を指示する。
+	/// EnemyController の完全型が必要なため定義は .cpp（Enemy/EnemyController.h を include 済み）
+	/// </summary>
+	/// <param name="waveEntryIndex">Wave のエントリ番号</param>
 	void TriggerRetreatForWaveEntry(int waveEntryIndex) override;
+	/// <summary>動的スプラインを名前で検索する（GameScene::FindDynamicSplineByName の委譲）</summary>
+	/// <param name="name">スプラインの名前</param>
+	/// <returns>見つかったスプライン。無ければ nullptr</returns>
 	SplineCurveActor* FindDynamicSplineByName(const std::string& name) override {
 		return GameScene::FindDynamicSplineByName(name);
 	}
+	/// <summary>動的スプラインの一覧（Wave Editor のスプライン選択コンボ用）</summary>
+	/// <returns>スプラインの一覧（読むだけ）</returns>
 	const std::vector<std::unique_ptr<SplineCurveActor>>& GetDynamicSplines() const override {
-		return dynamicSplines_;
+		return GetDynamicSplineList();
 	}
+	/// <summary>
+	/// レールカメラの走行スプラインをシーンから取得する。CameraPathSpline タグのものが
+	/// 無ければ defaultPoints を種にして新規作成する（シーン JSON に載り、エンジン内エディタ / Blender から編集できる）。
+	/// 所有はシーン側、戻り値は参照のみ
+	/// </summary>
+	/// <param name="defaultPoints">無い時に作るスプラインの制御点</param>
+	/// <returns>走行スプライン</returns>
 	SplineCurveActor* EnsureCameraPathSpline(const std::vector<Vector3>& defaultPoints) override;
+	/// <summary>Seek() 用：既存 STG エンティティ（弾/近接判定/敵/コントローラ）を一括破棄する</summary>
 	void ClearWaveRuntimeState() override;
+	/// <summary>谷の障害物が崩れた部品・落とし物・ボスの手足を消す（GameScene::DestroyDynamicEntity の委譲。IBossStageHost も満たす）</summary>
+	/// <param name="entity">消す実体</param>
 	void DestroyEntity(IImGuiEditable* entity) override { DestroyDynamicEntity(entity); }
 
 	// ----- IBossStageHost 実装（RegisterEnemyController/UpdateEnemyControllers/SweepDeadEntities/
 	//        GetPlayer は IRailStageHost と同一シグネチャのため上の override 1つで両方を満たす）-----
+	/// <summary>プレハブをスプラインなしで指定座標にスポーンする（ボス本体・手足・落とし物に流用）</summary>
+	/// <param name="prefabName">プレハブ名</param>
+	/// <param name="pos">置く位置（ワールド）</param>
+	/// <returns>出した実体。出せなければ nullptr</returns>
 	IImGuiEditable* SpawnPrefabAt(const std::string& prefabName, const Vector3& pos) override {
 		return GameScene::SpawnEnemyAt(prefabName, pos);
 	}
-	void ClearBossRuntimeState() override; // Enemy/Boss/Terrain タグ＋敵コントローラ掃除（定義は .cpp）
+	/// <summary>Enemy/Boss/Terrain タグの動的エンティティ＋敵コントローラを一括破棄（Reset/シーン再入用。定義は .cpp）</summary>
+	void ClearBossRuntimeState() override;
 
 	// ----- IStageStartHost 実装（private override。StageStartPart 経由のみ）-----
+	/// <summary>ゲームの自機（player_）を隠す。演出の間は演出専用の機体（新モデル）を描くので隠しておく</summary>
+	/// <param name="hidden">隠すなら true</param>
 	void SetPlayerHidden(bool hidden) override;
+	/// <summary>スタート演出を終えてレールへ渡す：フォグ・空・平行光源・IBL・カメラのクリップ面・自機の表示をステージの値に戻す</summary>
 	void RestoreStageEnvironment() override;
+	/// <summary>
+	/// 雲の上の場面（S4、F6）を始める：RestoreStageEnvironment の後に呼ぶ。レールを t=0 から進めながら、
+	/// ゲームの自機を右上前方から見るカメラで回り込んでレールのカメラへ合流させ、羽根を展開する（CloudTopIntro / PlayerWingUnit）
+	/// </summary>
 	void BeginCloudTop() override;
 
 	// ----- IStageStreamingHost 実装（private override。StageStreaming 経由のみ）-----
+	/// <summary>取っておいた group の配置を今すぐ作る（GameScene::LoadStreamGroup の委譲）</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>作った配置の数</returns>
 	size_t CreateStreamGroup(const std::string& group) override { return LoadStreamGroup(group); }
+	/// <summary>まだ作っていない group の配置の数（GameScene::GetPendingStreamCount の委譲）</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>まだ作っていない配置の数</returns>
 	size_t GetPendingStreamEntityCount(const std::string& group) const override { return GetPendingStreamCount(group); }
+	/// <summary>作った group の配置を消して「まだ作っていない」へ戻す（GameScene::UnloadStreamGroup の委譲）</summary>
+	/// <param name="group">streamGroup 名</param>
+	/// <returns>消した配置の数</returns>
 	size_t DestroyStreamGroup(const std::string& group) override { return UnloadStreamGroup(group); }
+	/// <summary>プレハブのモデルを読んでおく（GameScene::PreloadPrefabModels の委譲）</summary>
+	/// <param name="prefabs">モデルを読んでおくプレハブ名の一覧</param>
 	void WarmPrefabModels(const std::vector<std::string>& prefabs) override { PreloadPrefabModels(prefabs); }
 
 	// 区間ごとのストリーミングの時刻表（11 番 L9）。streamGroup 付きの配置を雲の中で裏で読み、決めた秒に作る
@@ -185,8 +407,10 @@ private:
 
 	// スタート演出（③IN〜雲の上。16_StageStart.md）。StagePlayScene は IStageStartHost 経由でのみこれを操作する。
 	std::unique_ptr<StageStartPart> stageStart_;
-	// スタート演出の Update / Draw（演出中は true を返し、レール・HUD は動かさない）
+	/// <summary>スタート演出を進める（演出中はレール・HUD は動かさない）</summary>
+	/// <returns>演出中は true（終わってレールへ渡したフレームは false）</returns>
 	bool UpdateStageStart();
+	/// <summary>スタート演出の場面（縦穴・カタパルト・表示板・機体）を描く</summary>
 	void DrawStageStart();
 	// 雲の上の場面（S4、16_StageStart.md F6）：自機の右上前方からレールのカメラへ回り込むカメラ（この間は操作を止める）と、自機の羽根
 	std::unique_ptr<CloudTopIntro> cloudTopIntro_;
@@ -195,54 +419,91 @@ private:
 	// 値で持つのは Initialize の前に LoadTuningFromJson が読むため。playerMoveInput_ はそのフレームの移動の入力（-1..1）
 	MechThrusters playerThrusters_{ MechThrusters::Preset::Player };
 	Vector2 playerMoveInput_{ 0.0f, 0.0f };
+	/// <summary>雲の上の回り込み（CloudTopIntro）の途中か（この間は操作を止める）</summary>
+	/// <returns>途中なら true</returns>
 	bool IsCloudTopIntroActive() const;
-	// 闘技場の水（足場の床・海）を動かして描くか。谷の出口から海が見えるので、ボス戦の前から
+	/// <summary>闘技場の水（足場の床・海）を動かして描くか。谷の出口から海が見えるので、ボス戦の前から</summary>
+	/// <returns>着陸・ボス戦の間か、レールで谷の出口に近づいていれば true</returns>
 	bool IsBossArenaVisible() const;
 
 	// ----- IPlayerDeathHost 実装（private override。PlayerDeathPart 経由のみ）-----
+	/// <summary>羽根（PlayerWingUnit）を開いた形のまま seconds 秒で焼け落とす（シューティング）</summary>
+	/// <param name="seconds">焼け落ちるまで [秒]</param>
 	void BurnPlayerWings(float seconds) override;
+	/// <summary>羽根の関節のワールド位置（焼け落ちの粒子を出す所）を集める。羽根が見えていなければ空</summary>
+	/// <param name="out">位置を追加する先</param>
 	void CollectWingBurnPoints(std::vector<Vector3>& out) override;
+	/// <summary>死亡演出を終えた：ゲームオーバー画面へ</summary>
 	void FinishPlayerDeath() override;
+	/// <summary>自機をいまのフェーズの姿勢（クリップ）へ戻す（プレビューの終わり・途中で打ち切ったとき。ボス戦の膝つきの後始末）</summary>
 	void RestorePlayerPose() override;
 	// 自機の死亡演出（19_GameOverAndDifficulty.md §1）。HP0 → 演出 → GAMEOVER。StagePlayScene は IPlayerDeathHost 経由でのみ操作される
 	std::unique_ptr<PlayerDeathPart> playerDeath_;
-	// 死亡演出の間（操作を受け付けない・被弾しない・射撃しない）
+	/// <summary>死亡演出の間か（操作を受け付けない・被弾しない・射撃しない）</summary>
+	/// <returns>演出中なら true</returns>
 	bool IsPlayerDying() const { return playerDeath_ && playerDeath_->IsActive(); }
-	// 死亡演出を始める（preview＝調整用。終わってもゲームオーバーへ行かない）
+	/// <summary>死亡演出を始める（被弾・回避の点滅を止め、レールなら羽根も焼く種類で）</summary>
+	/// <param name="preview">true＝調整用。終わってもゲームオーバーへ行かない</param>
 	void BeginPlayerDeath(bool preview);
 
 	// ----- IFlightUnitHost 実装（private override。FlightUnitPart 経由のみ。GetPlayer/GetTimeScale/SetTimeScale は上の override で満たす）-----
+	/// <summary>自機の体の中心（ファンネル・バリアの基準）を返す</summary>
+	/// <returns>ワールド座標</returns>
 	Vector3 GetFlightUnitAnchor() const override { return SpecialPlayerCenter(); }
+	/// <summary>レティクルが重なっている敵を返す</summary>
+	/// <returns>ロックオン中の生きている敵。無ければ nullptr</returns>
 	IImGuiEditable* GetReticleTarget() const override { return IsSpecialTargetAlive(lockedEnemy_) ? lockedEnemy_ : nullptr; }
+	/// <summary>レティクルの狙いの点を返す</summary>
+	/// <returns>弾の発射先（ワールド座標）</returns>
 	Vector3 GetReticleAimPoint() const override { return firingTarget_; }
+	/// <summary>画面に映っている敵（Enemy / Boss。敵弾は含めない）を集める</summary>
+	/// <param name="out">敵を追加する先</param>
 	void CollectOnScreenEnemies(std::vector<IImGuiEditable*>& out) override;
+	/// <summary>敵がまだ生きているかを返す（IFlightUnitHost / ISpecialMoveHost を満たす）</summary>
+	/// <param name="e">調べる敵</param>
+	/// <returns>生きていれば true</returns>
 	bool IsEnemyAlive(IImGuiEditable* e) const override { return IsSpecialTargetAlive(e); }
+	/// <summary>自機の通常弾と同じ弾を撃つ</summary>
+	/// <param name="from">撃ち出す位置（ワールド）</param>
+	/// <param name="dir">撃つ向き（ワールド）</param>
+	/// <param name="homingTarget">強ホーミングで追う敵。nullptr ならまっすぐ飛ぶ</param>
+	/// <param name="damageScale">自機の攻撃力に掛ける倍率</param>
 	void FireSupportBullet(const Vector3& from, const Vector3& dir, IImGuiEditable* homingTarget, float damageScale) override;
+	/// <summary>球の中の敵弾を消し、そのダメージの合計を返す（IFlightUnitHost / ISpecialMoveHost を満たす）</summary>
+	/// <param name="center">球の中心（ワールド）</param>
+	/// <param name="radius">球の半径 [m]</param>
+	/// <returns>消した敵弾のダメージの合計（難易度の倍率の前）</returns>
 	int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) override;
 	// 飛行ユニット（サブ武器。20_Loadout.md §3）。付けている系統は LoadoutState。シューティングとボス戦の両方で RB の技を使う
 	std::unique_ptr<FlightUnitPart> flightUnit_;
 	// 拾ったアイテムとエーテルを右下に出す（22_ItemDrop.md。落とす・拾うのは RailStagePart の LootDrops）
 	LootPickupLog lootLog_;
-	// 飛行ユニットの毎フレーム（RB の入力・技・クールタイム）
+	/// <summary>飛行ユニットの毎フレーム（RB の入力・技・クールタイム。時間を握る演出・World 停止の間は止める）</summary>
+	/// <param name="actions">アクションの入力</param>
 	void UpdateFlightUnit(class InputActionMap* actions);
-	// 自機の攻撃力（メイン武器の加算・攻撃系の補正込み）。射撃・近接・支援射撃で使う
+	/// <summary>自機の攻撃力（メイン武器の加算・攻撃系の補正込み）。射撃・近接・支援射撃で使う</summary>
+	/// <returns>攻撃力</returns>
 	int ScaledPlayerAttack() const;
-	// 右手のモデルを付けているメイン武器（LoadoutState）で作り直す。武器にモデルが無ければプレハブの weapon
+	/// <summary>右手のモデルを付けているメイン武器（LoadoutState）で作り直す。武器にモデルが無ければプレハブの weapon</summary>
 	void RebuildMainWeaponModel();
-	// 左手のモデルを付けている盾（LoadoutState）で作り直す。盾にモデルが無ければ描かない
+	/// <summary>左手のモデルを付けている盾（LoadoutState）で作り直す。盾にモデルが無ければ描かない</summary>
 	void RebuildShieldModel();
-	// 付けている盾の移動速度の倍率（盾なしは 1）
+	/// <summary>付けている盾の移動速度の倍率</summary>
+	/// <returns>倍率（盾なしは 1）</returns>
 	float ShieldMoveSpeedScale() const;
-	// 付けている盾がビームシールドで、いま描くか
+	/// <summary>付けている盾がビームシールドで、いま描くか</summary>
+	/// <returns>描くなら true</returns>
 	bool IsShieldBeamVisible() const;
-	// メイン武器のビームの刃をいま描くか（近接の間だけ伸びる）
+	/// <summary>メイン武器のビームの刃をいま描くか（近接の間だけ伸びる）</summary>
+	/// <returns>描くなら true</returns>
 	bool IsWeaponBladeVisible() const;
-	// STG の自機を照準へ向ける（上の基準はカメラの上。体の中心まわりのずらしは位置を作るときに掛ける）
+	/// <summary>STG の自機を照準へ向ける（上の基準はカメラの上。体の中心まわりのずらしは位置を作るときに掛ける）</summary>
+	/// <param name="toAim">自機から狙う点への向き（ワールド）</param>
 	void ApplyRailAimRotation(const Vector3& toAim);
-	// 自機の判定の姿勢（中心＝体の中心・軸＝自機の回転。STG の移動状態は前傾）を Gameplay に入れる。敵弾・接触・デバッグ描画が同じものを使う
+	/// <summary>自機の判定の姿勢（中心＝体の中心・軸＝自機の回転。STG の移動状態は前傾）を Gameplay に入れる。敵弾・接触・デバッグ描画が同じものを使う</summary>
 	void UpdatePlayerColliderPose();
 
-	// 自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦は Stand
+	/// <summary>自機（新モデル PlayerModel）の姿勢：レールは射出口のけり出し（Launch）の最後のコマ＝飛ぶ姿勢、ボス戦（着陸で足場に着いた後も）は Stand</summary>
 	void ApplyPlayerPose();
 
 	// STG（Boss）専用ロジック一式（ボス生成・ボスAI・地上移動・ロックオン追従カメラ）。
@@ -250,19 +511,19 @@ private:
 	std::unique_ptr<BossStagePart> bossStage_;
 	// ボス撃破からリザルトまでの段取り（ヒットストップ→スロー→寄るカメラ→崩壊→STAGE CLEAR。23_StageClear.md §4 B）
 	BossClearSequence clearSeq_;
-	// 撃破の瞬間の 1 枚が撮れたら、リザルトへ渡す（StageClearRecord::SetCapture）
+	/// <summary>撃破の瞬間の 1 枚が撮れたら、名前を付けて登録し直してリザルトへ渡す（StageClearRecord::SetCapture）</summary>
 	void UpdateStageClearCapture();
 	// ボス戦の床（石畳＋薄い水）。Boss フェーズ中だけ更新・描画する
 	std::unique_ptr<BossArenaWater> bossWater_;
 	// 低空飛行の大河の水面。PSO はシーン初期化で作り、川のデータは雲の中で読む（13_RiverWater.md）
 	std::unique_ptr<RiverWater> riverWater_;
 
-	// プレイヤー：dynamicAnimated_ が所有、ここは参照用ポインタ
+	// プレイヤー：シーンの動的な一覧（GetDynamicAnimated）が所有、ここは参照用ポインタ
 	// カメラのローカル空間で playerLocalOffset_ の位置に毎フレ配置する
 	AnimatedObject3DInstance* player_ = nullptr;
 
 	// 武器（ソケット追従）：プレイヤーの手ボーンに毎フレ追従させる。
-	// dynamicAnimated_ には入れず、順序制御のため明示的に Update/Draw する。
+	// シーンの動的な一覧には入れず、順序制御のため明示的に Update/Draw する。
 	std::unique_ptr<Object3DInstance> weapon_;
 	// 武器のランタイム追従ヘルパ。追従先ボーン/オフセット/enabled は毎フレ
 	// player の WeaponParams コンポーネント（Inspector 編集・プレハブ保存）から同期する。
@@ -290,7 +551,11 @@ private:
 	float   moveStateDelay_ = 1.0f;          // 最後の攻撃から移動状態になるまで [sec]
 	float   moveStateLeanDeg_ = 55.0f;       // 移動状態の当たり判定の前傾 [deg]（飛ぶ姿勢のモデルの体の角度に合わせる）
 	float   timeSinceAttack_ = 1000.0f;      // 最後の攻撃からの経過（Player の時間）
+	/// <summary>攻撃中か（最後に撃つ／近接を出してから moveStateDelay_ 秒以内と、近接の発生〜後隙中。チャージだけなら数えない）</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <returns>攻撃中なら true（移動速度を attackMoveSpeedScale_ 倍にする）</returns>
 	bool    IsPlayerAttacking(class InputActionMap* actions) const;
+	/// <summary>攻撃した印を付ける（最後の攻撃からの経過を 0 に戻す）</summary>
 	void    MarkPlayerAttack() { timeSinceAttack_ = 0.0f; }
 	int     playerBaseMaxHP_ = -1;           // 飛行ユニットの HP 上限の補正を掛ける前（プレハブの値。-1＝未取得）
 	Vector2 playerMoveSpeed_{ 5.0f, 5.0f };            // 入力1秒あたりのオフセット移動量（カメラ空間X/Y）
@@ -315,6 +580,8 @@ private:
 	float   idleSwayPosAmp_ = 0.12f;                          // カメラ上方向の上下振幅 [m]
 	float   idleSwaySpeed_ = 1.0f;                            // 揺れの速さ倍率
 	float   idleSwayTime_ = 0.0f;
+	/// <summary>Rail 中のカメラを、軸ごとに周期と位相をずらした sin で微小に揺らす（World 停止中は揺らさない）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void ApplyCameraIdleSway(float dt);
 	float aimConvergePx_ = 160.0f;        // 非ロック時、画面上この距離内の敵がいれば弾の収束点をその敵の深さに合わせる（視差で外れるのを防ぐ）
 	// レティクル外側パーツの中心からのオフセット範囲（pixel）
@@ -369,9 +636,15 @@ private:
 	float cameraFarClip_  = 5000.0f;
 	float reticleBaseStickSpeed_ = 1200.0f;    // 通常時レティクル感度（Initialize で取得）
 
+	/// <summary>精密射撃モード（LT / 右クリックのホールド）の補間値を進め、FOV・レティクル感度・周辺ぼかし/減光に反映する</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdatePrecisionAim(class InputActionMap* actions, float dt);
-	// プレイヤーのワールド位置を基準に、表示カメラを肩越し位置へ寄せる（向きは維持）。
-	// プレイヤー配置（基準カメラ）後に呼ぶ。precisionBlend_ で補間。
+	/// <summary>
+	/// プレイヤーのワールド位置を基準に、表示カメラを肩越し位置へ寄せる（向きは維持）。
+	/// プレイヤー配置（基準カメラ）後に呼ぶ。precisionBlend_ で補間。
+	/// </summary>
+	/// <param name="playerWorldPos">自機のワールド位置</param>
 	void ApplyPrecisionCamera(const Vector3& playerWorldPos);
 
 	// ----- チャージシステム -----
@@ -407,16 +680,24 @@ private:
 	// SpawnPendingMelee が phase_ で使い分ける。StagePlay.json "melee" に保存。
 	float meleeBossSizeScale_ = 0.5f;
 
+	/// <summary>近接の入力（弱は 4 段コンボ・強は単発）を受け、発生・コンボ受付・行動ロックのタイマーを進める</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateMeleeCombo(class InputActionMap* actions, float dt);
-	void SpawnPendingMelee();             // 発生待ちの近接判定を実際に spawn する
-	// aim 基底（前=自機→firingTarget、右=worldUp×前、上=前×右）を返す
+	/// <summary>発生待ちの近接判定を実際に spawn する（足元から meleeOriginHeight_ 持ち上げ、ボス戦は小さく）</summary>
+	void SpawnPendingMelee();
+	/// <summary>aim 基底（前=自機→firingTarget、右=worldUp×前、上=前×右）を求める。近接派生中は対象敵を直接向く</summary>
+	/// <param name="right">右の向き</param>
+	/// <param name="up">上の向き</param>
+	/// <param name="forward">前の向き</param>
 	void ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const;
 
 public:
 	/// <summary>
-	/// 近接攻撃の発生〜後隙中で、他の行動（射撃/回避/近接）が禁止されているか。
-	/// 将来の回避実装などからも参照する。
+	/// 近接攻撃の発生〜後隙中・回避の行動ロック・分身の選択中・必殺技中・雲の上の回り込み中で、
+	/// 他の行動（射撃/回避/近接）が禁止されているか。
 	/// </summary>
+	/// <returns>禁止されていれば true</returns>
 	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_ || IsCloudTopIntroActive(); }
 private:
 
@@ -459,21 +740,25 @@ private:
 	int   healAmount_      = 20; // デフォルトHealの回復量（大）
 	int   healSmallAmount_ = 5;  // 左派生の小回復量
 
-	// 必殺技の種別（装備制：傲慢サンダー or ディスラプターの2択、片方のみ持込）。
+	// 必殺技の種別（装備制：Storm Lock or Shatterline の2択、片方のみ持込）。
 	// 本来は発動ボタン共通（R3/F=Ultimate）だが、デバッグでは別キーで両方試せるよう分離する。
-	enum class SpecialKind { GoumanThunder, Disruptor };
-	SpecialKind equippedSpecial_ = SpecialKind::GoumanThunder; // 現在装備中の必殺技
+	enum class SpecialKind { StormLock, Shatterline };
+	SpecialKind equippedSpecial_ = SpecialKind::StormLock; // 現在装備中の必殺技
 
 	// 必殺技ゲージ（UI 未実装。ゲージ本体だけ先に持つ）
 	float specialGauge_         = 0.0f;   // 現在値（0..specialGaugeMax_）
 	float specialGaugeMax_      = 100.0f; // 装備中種別の実効上限（種別切替でミラー更新）
-	float specialGaugeMaxGouman_    = 100.0f; // 傲慢サンダーのゲージ上限
-	float specialGaugeMaxDisruptor_ = 120.0f; // ディスラプターのゲージ上限
+	float specialGaugeMaxStormLock_   = 100.0f; // Storm Lock のゲージ上限
+	float specialGaugeMaxShatterline_ = 120.0f; // Shatterline のゲージ上限
 	float dodgeSpecialGaugeGain_ = 8.0f;  // 追加回避1回ぶんの加算量
 	// 近接ヒットでの加算。弱コンボ（4段）の方が総量で貯まりやすいよう、1ヒットは弱>強
 	float meleeWeakGaugeGain_   = 3.0f;
 	float meleeStrongGaugeGain_ = 2.0f;
 	float meleeLateGaugeRate_   = 0.5f;  // 持続あて（出だし以外）の倍率
+	/// <summary>プレイヤー近接が敵/ボスに当たった直後に、弱・強と本あて・持続あてに応じて必殺技ゲージを足す</summary>
+	/// <param name="target">当たった相手</param>
+	/// <param name="prefabName">近接のプレハブ名（弱/強の見分けに使う）</param>
+	/// <param name="clean">本あて（出てから cleanWindow 以内）なら true</param>
 	void OnPlayerMeleeHit(IImGuiEditable* target, const std::string& prefabName, bool clean) override;
 
 	// クールタイム（両必殺技共通）。発動終了でタイマー開始、>0 の間は再発動不可。
@@ -564,8 +849,19 @@ private:
 	float jdBossCamSwingStartPitch_  = 0.0f;
 	float jdBossCamSwingStartRadius_ = 0.0f;
 
-	// 対象（ボス）中心の球面座標⇔ワールド座標の変換（近接カメラの最短経路回り込みで使用）。
+	/// <summary>ワールド座標を対象（ボス）中心の球面座標にする（近接カメラの最短経路回り込みで使用）</summary>
+	/// <param name="p">変換する点</param>
+	/// <param name="pivot">球の中心（対象の中心）</param>
+	/// <param name="outYaw">方位角 [rad]</param>
+	/// <param name="outPitch">仰俯角 [rad]</param>
+	/// <param name="outRadius">中心からの距離 [m]</param>
 	void ToSphericalAroundPivot(const Vector3& p, const Vector3& pivot, float& outYaw, float& outPitch, float& outRadius) const;
+	/// <summary>対象（ボス）中心の球面座標をワールド座標にする（ToSphericalAroundPivot の逆）</summary>
+	/// <param name="pivot">球の中心（対象の中心）</param>
+	/// <param name="yaw">方位角 [rad]</param>
+	/// <param name="pitch">仰俯角 [rad]</param>
+	/// <param name="radius">中心からの距離 [m]</param>
+	/// <returns>ワールド座標</returns>
 	Vector3 FromSphericalAroundPivot(const Vector3& pivot, float yaw, float pitch, float radius) const;
 
 	// 追加回避（Down）派生：許容枠を一時拡張＋戻し補間＋射撃禁止
@@ -582,27 +878,59 @@ private:
 	bool  bossFacingInit_ = false;          // 初回サンプリング済みフラグ
 	float bossFacingTurnSmoothTime_ = 0.10f; // 旋回の指数減衰時定数（小さいほど機敏）
 
+	/// <summary>ジャスト回避中のカメラ引き（精密カメラの後の eye から forward の逆へ下げ、FovY を広げる）</summary>
+	/// <param name="playerWorldPos">自機のワールド位置</param>
 	void ApplyJustDodgeCamera(const Vector3& playerWorldPos);
+	/// <summary>近接派生中のカメラ（STG は自機の左斜め後ろ、ボス戦はワープ後に最短ヨーで回り込む）で上書きする</summary>
+	/// <param name="playerWorldPos">自機のワールド位置</param>
 	void ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos);
+	/// <summary>分身カウンター派生のアクション（詰め寄り → 攻撃 → 戻り、追加回避の戻しなど）を進める</summary>
+	/// <param name="dt">経過時間 [秒]（実時間）</param>
 	void UpdateJustDodgeCounterAction(float dt);
+	/// <summary>分身カウンター派生のアクションを終える（止めていたワールドの時間を元のスローへ戻す）</summary>
 	void EndJustDodgeCounterAction();
+	/// <summary>4 方向の分身（半透明の自機と同じモデル・飛ぶ姿勢）を出す</summary>
 	void SpawnJustDodgeClones();
+	/// <summary>分身の分裂・集合のアニメと位置を進め、アクションボタンで方向を確定する</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="moveDelta">移動入力（-1..1。追加回避の方向に使う）</param>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateJustDodgeClones(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	/// <summary>分身をすべて破棄する</summary>
 	void ClearJustDodgeClones();
-	// アクションボタン (MeleeStrong=Up / MeleeWeak=Right / Dodge=Down / Heal=Left) で方向確定。
-	// 確定したら TriggerCloneCounterAction を呼んで true を返す。
+	/// <summary>
+	/// アクションボタン (MeleeStrong=Up / MeleeWeak=Right / Dodge=Down / Heal=Left) で方向確定。
+	/// 確定したら TriggerCloneCounterAction を呼ぶ。
+	/// </summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="moveDelta">移動入力（-1..1。追加回避の方向に使う）</param>
+	/// <returns>確定したら true</returns>
 	bool TrySelectCloneByAction(class InputActionMap* actions, const Vector2& moveDelta);
-	// 選ばれた分身を実体化（α=1）・残り3体を破棄・プレイヤーを分身位置へテレポート・該当アクションを発動。
+	/// <summary>選ばれた方向の派生を発動する（分身はすべて破棄し、プレイヤーを分身位置へテレポート・該当アクションを発動）</summary>
+	/// <param name="dir">確定した方向</param>
+	/// <param name="moveDelta">移動入力（-1..1。追加回避の方向に使う）</param>
 	void TriggerCloneCounterAction(CounterDir dir, const Vector2& moveDelta);
 
+	/// <summary>通常回避（ダッシュ＋無敵窓）の入力とタイマー（クールダウン・行動ロック・無敵）を進める</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="moveDelta">移動入力（-1..1。ダッシュの向き）</param>
+	/// <param name="dt">経過時間 [秒]（実時間）</param>
 	void UpdateDodge(class InputActionMap* actions, const Vector2& moveDelta, float dt);
+	/// <summary>デフォルトの回復（大回復・STG/ボスごとの回数制）。ジャスト回避演出中は発動しない</summary>
+	/// <param name="actions">アクションの入力</param>
 	void UpdateHeal(class InputActionMap* actions);
+	/// <summary>ジャスト回避を成立させる（加点・攻撃元のハイライトとグレースケール・World のスロー・分身の表示）</summary>
+	/// <param name="attacker">攻撃元</param>
 	void TriggerJustDodge(IImGuiEditable* attacker);
-	// 回避・ジャスト回避のランタイム状態を即時クリア（Seek / LoadScene で呼ぶ）。
-	// スロー・グレースケールが残るのを防ぐため TimeScale と PostEffect も元に戻す。
-	// IRailStageHost::ResetDodgeState() の override（RailStagePart::Seek() から host_ 経由で呼ばれる）。
+	/// <summary>
+	/// 回避・ジャスト回避のランタイム状態を即時クリア（Seek / LoadScene で呼ぶ）。
+	/// スロー・グレースケールが残るのを防ぐため TimeScale と PostEffect も元に戻す。
+	/// IRailStageHost::ResetDodgeState() の override（RailStagePart::Seek() から host_ 経由で呼ばれる）。
+	/// </summary>
 	void ResetDodgeState() override;
 
+	/// <summary>ジャスト回避演出（グレースケールの強さ・受付期限・フェードアウト）を進め、終わったら時間とポストエフェクトを戻す</summary>
+	/// <param name="dt">経過時間 [秒]（実時間）</param>
 	void UpdateJustDodgeEffect(float dt);
 
 public:
@@ -610,6 +938,8 @@ public:
 	/// ジャスト回避演出を発動する。プレイヤー + targetEnemy 以外のオブジェクトを
 	/// duration 秒間グレースケール化する（最初/最後で短くフェード）。
 	/// </summary>
+	/// <param name="targetEnemy">色を残す敵（攻撃元）</param>
+	/// <param name="duration">演出の長さ [秒]</param>
 	void PlayJustDodgeEffect(IImGuiEditable* targetEnemy, float duration = 1.5f);
 private:
 
@@ -637,11 +967,13 @@ private:
 	// （Landing の滞在時間は landingDuration_ だけで決まる）。
 	bool bossPreloadReady_ = true;
 
+	/// <summary>StagePlay.json から調整値を読み、各パート（レール・環境・ボス戦・必殺技など）にも渡す</summary>
 	void LoadTuningFromJson();
+	/// <summary>今の調整値と各パートの調整値を StagePlay.json へ書き出す</summary>
 	void SaveTuningToJson() const;
 
 public:
-	// ImGuiManager の "StagePlay Tuning" タブから呼ばれる中身（ImGui::Begin/End なし）
+	/// <summary>ImGuiManager の "StagePlay Tuning" タブから呼ばれる中身（ImGui::Begin/End なし。開いたら後回しの初期化を済ませる）</summary>
 	void OnImGuiTuning();
 private:
 
@@ -665,30 +997,45 @@ private:
 	bool   deferredInitActive_ = false;  // 降下中のフレームで進めている（ログを出す）
 	int    deferredInitFrames_ = 0;
 	double deferredInitWallMs_ = 0.0;
+	/// <summary>後回しの初期化が残っているか</summary>
+	/// <returns>残っていれば true</returns>
 	bool HasDeferredInit() const { return deferredInitNext_ < deferredInit_.size(); }
-	// 1 フレームに budgetMs まで進める（最低 1 段）
+	/// <summary>後回しの初期化を 1 フレームに budgetMs まで進める（最低 1 段）</summary>
+	/// <param name="budgetMs">このフレームに使ってよい時間 [ms]</param>
 	void UpdateDeferredInit(double budgetMs);
-	// 残りを今すぐ全部済ませる（降下以外の段階へ進む・ポーズ・シーク・調整の画面の前に）
+	/// <summary>後回しの初期化の残りを今すぐ全部済ませる（降下以外の段階へ進む・ポーズ・シーク・調整の画面の前に）</summary>
 	void CompleteDeferredInit();
+	/// <summary>後回しの初期化を 1 段進める（終わらない段は次にもう一度呼ぶ。読まれた物は先読みのマニフェストにも足す）</summary>
 	void RunDeferredInitStep();
 	bool deferredInitSkipFrame_ = false;  // 差し替えのフレーム（Initialize と同じフレーム）では段を進めない
 	bool deferredSceneLoaded_ = false;    // 後回しの段で配置を読んだか（UI の建て直しの判定）
 	// OnAfterSceneLoad の中身。後回しの段では別々のフレームで呼ぶ
+	/// <summary>復元されたエンティティから player_ を貼り直す</summary>
 	void RelinkPlayerAfterSceneLoad();
+	/// <summary>作り直された動的スプラインから、レールカメラの走行スプラインを取り直す（解放済みを指したまま走らないように）</summary>
 	void RebindRailAfterSceneLoad();
+	/// <summary>シーンの動的スプライトが全削除されたので UI スプライト（HP バー・必殺ゲージ）を建て直す</summary>
 	void RebuildUiAfterSceneLoad();
 	PauseView pauseView_ = PauseView::Main;
 	VerticalMenu pauseMenu_;
 	ControlGuide controlGuide_;   // ポーズの「操作ガイド」（開いている間はメニューの代わりに描く）
-	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため dynamicSprites_ 外で所有）
+	std::unique_ptr<SpriteInstance> pauseDimSprite_; // 背景を暗くする全画面スプライト（エディタ一覧に出さないため シーンの動的スプライトの外で所有）
+	/// <summary>ポーズを開く（メイン画面から）</summary>
 	void OpenPauseMenu();
+	/// <summary>ポーズを閉じる</summary>
 	void ClosePauseMenu();
+	/// <summary>ポーズの画面（メイン・確認）を切り替え、項目を並べ直す（確認は「いいえ」を既定にする）</summary>
+	/// <param name="view">次の画面</param>
 	void SetPauseView(PauseView view);
+	/// <summary>ポーズのメニューの入力（再開・操作ガイド・ステージセレクト・タイトル・確認）を読む</summary>
+	/// <param name="actions">アクションの入力</param>
 	void UpdatePauseMenu(class InputActionMap* actions);
+	/// <summary>背景を暗くしてポーズのメニュー（か操作ガイド）を描く</summary>
 	void DrawPauseMenu();
 
 	// ----- デモモード（AttractMode）：始まって数秒でゲームオーバー / ポーズ →「ステージセレクトに戻る」→「はい」-----
-	// ポーズのメニューを自動で選んだら true（このフレームは人の入力を読まない）
+	/// <summary>デモモードの自動進行（時間が来たら死ぬ、またはポーズを開いてメニューを自動で選ぶ）</summary>
+	/// <returns>ポーズのメニューを自動で選んだら true（このフレームは人の入力を読まない）</returns>
 	bool UpdateAttract();
 	float attractTime_ = 0.0f;       // 始まってからの実時間（トランジション中は数えない）
 	bool attractActed_ = false;      // このステージでのゲームオーバー / ポーズを済ませた
@@ -708,8 +1055,12 @@ private:
 	float bossHpBarHeight_ = 16.0f;
 	float bossHpBarPosY_ = 58.0f;
 	float bossHpDelaySpeed_ = 0.35f;   // 遅延ゲージが追う速さ（比率/秒）
+	/// <summary>ボス HP バーのスプライト（下地・遅延ゲージ・現在 HP・発狂ライン目盛り）を作る</summary>
 	void CreateBossHpBarUI();
+	/// <summary>ボスの HP の比率を読み、遅延ゲージを追わせてスプライトの大きさを更新する（ボス戦中だけ見せる）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateBossHpBarUI(float dt);
+	/// <summary>ボス HP バーを描く（ラベルはスコア表示と同じ Flush でまとめて描く）</summary>
 	void DrawBossHpBarUI();
 
 	// ----- プレイヤー被弾・無敵関連 -----
@@ -736,7 +1087,7 @@ private:
 		float roughness = 0.4f;
 		float baseGlow = 0.0f;
 	} playerLook_;
-	// 毎フレーム：自機の IBL・金属度・粗さ・発光（下地＋点滅）を書く
+	/// <summary>毎フレーム：自機の IBL・金属度・粗さ・発光（下地＋点滅＋死亡演出のエーテルの光）を書く</summary>
 	void ApplyPlayerLook();
 	float damageCameraShakeIntensity_ = 0.12f;  // 被弾シェイクの強度
 	float damageCameraShakeDuration_ = 0.25f;   // 被弾シェイクの継続秒
@@ -771,14 +1122,22 @@ private:
 	// ゲームオーバー状態
 	bool gameOverTriggered_ = false;
 
+	/// <summary>被弾の判定（ジャスト回避の成立・ノックバック）・無敵と点滅・射撃禁止・カメラの揺れ・HP 0 で死亡演出・HP バーを進める</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdatePlayerDamageAndUI(float deltaTime);
+	/// <summary>被弾した時の処理（HP を減らし、被弾音・無敵・射撃禁止・カメラの揺れを始める）</summary>
+	/// <param name="damageAmount">受けたダメージ</param>
 	void OnPlayerTakeDamage(int damageAmount);
+	/// <summary>HP バーのスプライト（赤の背景・緑の前景）を作る</summary>
 	void InitializeHPBarUI();
+	/// <summary>HP の比率で緑ゲージは即時、赤ゲージは遅れて追わせる</summary>
 	void UpdateHPBarUI();
 
-	// 無敵状態（ジャスト回避 / 回避無敵 / 被弾無敵 / 必殺技）を集約し、
-	// HP.enabled を切り替えて CollisionManager の自動ダメージも止める。
-	// シーン Update の終盤で呼ぶことで CollisionManager::Update より前に反映される。
+	/// <summary>
+	/// 無敵状態（ジャスト回避 / 回避無敵 / 被弾無敵 / 必殺技）を集約し、
+	/// HP.enabled を切り替えて CollisionManager の自動ダメージも止める。
+	/// シーン Update の終盤で呼ぶことで CollisionManager::Update より前に反映される。
+	/// </summary>
 	void RefreshPlayerHpInvincibility();
 
 	// ----- LightningRuntime 動作確認用テストパネル（Phase2B、必殺技実装後に削除予定）-----
@@ -800,390 +1159,106 @@ private:
 	float   specialSkyboxFadeOut_    = 0.6f;                     // 復帰にかける秒
 	float   bossSkyboxBlendDuration_ = 2.0f;                     // ボス突入/離脱のクロスフェード秒
 
-	// ----- 必殺技「傲慢サンダー」 -----
-	// Phase 1 (Barrier): バリア展開・プレイヤー強制位置・カメラ引き・無敵・バリア当たり判定
-	// Phase 2-5 は Step B-2 以降で追加
-	enum class SpecialPhase {
-		Idle,
-		Barrier,   // バリア展開（通常時間進行、バリア当たり判定）
-		Lockon,    // Step B-2: ワールド時間停止 + 順次ロックオン + チャージ
-		Fire,      // Step B-3: 時間停止解除 + サンダー発射
-		End,       // Step B-4: 終了猶予（バリア停止までの間）
-	};
-	SpecialPhase specialPhase_ = SpecialPhase::Idle;
-	float specialPhaseTimer_ = 0.0f;     // 現フェーズ内の経過秒
-	bool  specialActive_   = false;      // 発動中フラグ（Idle 以外で true）
-	float specialTimer_    = 0.0f;       // 発動開始からの総経過秒（デバッグ表示用）
-	float specialDuration_ = 5.0f;       // [互換] 旧 Step A の総時間（ImGui で残す、未使用化）
-
-	// Phase 1（バリア）
-	float specialBarrierRadius_   = 2.0f;   // バリア球半径
-	float specialBarrierDuration_ = 3.0f;   // Phase 1 の長さ（秒）
-	Vector4 specialBarrierColor_{ 1.0f, 0.8f, 0.3f, 0.10f }; // 薄い金（内膜）
-	bool  specialBarrierFillOn_ = false;    // 塗りつぶし半透明球を表示するか（既定 OFF、ワイヤ球のみ）
-
-	// プレイヤー強制位置・カメラ引き
-	Vector2 specialPlayerInputOffsetSaved_{ 0.0f, 0.0f }; // 復帰用に保存
+	// ----- 必殺技（両方に共通の状態。技ごとの段取り・演出・調整値は StormLockPart / ShatterlinePart）-----
+	bool  specialActive_ = false;      // 発動中フラグ
+	float specialTimer_  = 0.0f;       // 発動開始からの総経過秒（デバッグ表示用）
+	// 発動中は自機を画面中央へ寄せる。終わったら戻す用に取っておく
+	Vector2 specialPlayerInputOffsetSaved_{ 0.0f, 0.0f };
 	Vector2 specialPlayerVelocitySaved_  { 0.0f, 0.0f };
-	float   specialCamPullback_ = 8.0f;   // forward 逆方向（ジャスト回避と同じ既定）
-	float   specialCamFovAdd_   = 0.06f;  // FovY 加算
-	float   specialCamUpAdd_    = 1.5f;   // up 方向へ持ち上げ（プレイヤーが画面下寄りに）
-
-	// バリア可視化（半透明球プリミティブ）
-	std::unique_ptr<class EffectPrimitiveRenderer> specialBarrierVis_;
-
-	// 遅延削除キュー：GPU が前フレームの commandList を実行中に resource を Release すると
-	// D3D12 OBJECT_DELETED_WHILE_STILL_IN_USE になるため、数フレーム保持してから捨てる
-	struct SpecialTrashEntry {
-		std::unique_ptr<class EffectPrimitiveRenderer> renderer;
-		std::unique_ptr<class LightningRuntime> lightning;
-		int framesLeft = 4;
-	};
-	std::vector<SpecialTrashEntry> specialTrash_;
-
-	// ----- Phase 2（ロックオン + チャージ）-----
-	struct SpecialLockonTarget {
-		IImGuiEditable* entity = nullptr;        // 敵本体 or 突進敵
-		int   bulletIndex = -1;                   // 弾の場合の bullets_ インデックス（-1=敵）
-		int   patternIndex = 0;                   // 0=A(真上/左下/右下), 1=B(真下/右上/左上)
-		float startTime = 0.0f;                   // Phase 2 経過秒（このターゲットのロック開始時刻）
-		float radius = 0.5f;                      // 敵 collider 半径
-		bool  visualsCreated = false;             // 線・リング・キューブ生成済みか
-		std::unique_ptr<class EffectPrimitiveRenderer> lines[3];
-		std::unique_ptr<class EffectPrimitiveRenderer> ring;
-		std::unique_ptr<class EffectPrimitiveRenderer> cube;
-	};
-	std::vector<SpecialLockonTarget> specialLockonTargets_;
-	float specialLockonInterval_         = 0.075f;  // ロックオン開始間隔
-	float specialLockonDuration_         = 0.5f;    // 1体あたりロックオン完了までの秒
-	float specialLockonLineTravelTime_   = 0.2f;    // 線が敵中心へ集まる時間
-	float specialLockonLineHoldTime_     = 0.1f;    // 集まった後の停止時間（線消滅まで）
-	float specialLockonRingAppearTime_   = 0.2f;    // リング出現時刻（ロック開始から）
-	float specialLockonRingFadeoutTime_  = 0.1f;    // ロック完了後リングが消えるまでの時間
-	float specialChargeDuration_         = 1.5f;    // 全ロック後のチャージ秒
-	Vector4 specialLockonColor_{ 0.3f, 0.7f, 1.0f, 1.0f }; // 線・リングの青
-	Vector4 specialCubeColor_  { 1.0f, 0.5f, 0.0f, 0.5f }; // キューブのオレンジ
-	float specialLockonLineWidth_  = 0.04f;
-	float specialLockonRingThickness_ = 0.05f;
-	float specialPhase2Timer_ = 0.0f; // Phase 2 経過秒（ロック演出時刻基準）
-	bool  specialAllLockonComplete_ = false;
-	float specialChargeStartTime_   = 0.0f; // Phase2 内での全ロック完了時刻
-
-	// チャージ電撃（複数本がプレイヤー周囲のカプセル表面で短い弧を描く）
-	struct SpecialChargeBolt {
-		std::unique_ptr<class LightningRuntime> rt;
-		float nextRegenTime = 0.0f;  // 次に角度を再ランダム化する時刻（Phase 2 経過秒）
-		float angleBase = 0.0f;       // 現在の基準角度（ラジアン）
-	};
-	std::vector<SpecialChargeBolt> specialChargeBolts_;
-	int   specialChargeBoltCount_     = 4;       // 同時本数
-	float specialChargeRegenInterval_ = 0.1f;    // 1本ごとの再生成間隔
-	// 始点・終点の半径制御（プレイヤーカプセル形状を考慮し、スクリーン投影楕円で計算）
-	// 0 以下なら player の Collider.capsuleRadius / capsuleHeight から自動算出
-	float specialChargeStartRadiusH_  = 0.0f;    // 水平半径（=capsuleRadius 相当）
-	float specialChargeStartRadiusV_  = 0.0f;    // 垂直半径（=capsuleHeight/2 + capsuleRadius 相当）
-	float specialChargeMinLength_     = 0.6f;    // 終点 - 始点 の最小長
-
-	// ----- Phase 3（Fire = サンダー発射）-----
-	// ロック済み + 新規侵入のターゲットを順次サンダーで拘束し、ダメージティックで削る。
-	struct SpecialFireBolt {
-		std::unique_ptr<class LightningRuntime> rt;
-		IImGuiEditable* entity = nullptr;      // 対象（敵本体 or 弾の primitive ポインタ）
-		bool   isBullet = false;               // HP を持たない対象（敵弾）か
-		float  elapsed = 0.0f;                 // この対象に当て始めてからの経過秒
-		float  nextTickTime = 0.0f;            // 次のダメージティック時刻（elapsed 基準）
-		Vector3 lastTargetPos{ 0.0f, 0.0f, 0.0f }; // 最後に確認した対象位置（終点用）
-		bool   done = false;                   // 終了フラグ（trash へ回収予定）
-	};
-	std::vector<SpecialFireBolt> specialFireBolts_;
-	struct SpecialFireQueueItem { IImGuiEditable* entity = nullptr; bool isBullet = false; };
-	std::vector<SpecialFireQueueItem> specialFireQueue_;        // 処理待ちターゲット
-	std::unordered_set<IImGuiEditable*> specialFireProcessed_;  // 既に発射枠へ回した対象（再ロック防止）
-	float specialFireLaunchTimer_ = 0.0f;        // 次の発射までの残り秒
-	// Fire パラメータ（ImGui 調整 / JSON 保存）
-	int   specialFireSimultaneous_   = 3;        // 同時サンダー本数
-	float specialFireMinHold_        = 0.5f;     // 最低拘束時間（HP=0 でもこの秒数は当てる）
-	float specialFireMaxHold_        = 2.0f;     // 最高拘束時間（生存でも強制終了）
-	float specialFireTickInterval_   = 0.1f;     // ダメージティック間隔
-	int   specialFireTickDamage_     = 5;        // 1ティックダメージ
-	float specialFireLaunchInterval_ = 0.1f;     // 次の発射開始間隔
-	Vector4 specialFireColor_{ 0.5f, 0.8f, 1.0f, 1.0f }; // サンダーの色
-	// サンダーの見た目（敵へ飛んでいく感 vs 放電感のバランス調整）
-	float specialFireGrowTime_       = 0.08f;    // 始点→ターゲットへ伸びる時間（0で即全長）
-	float specialFireMaxOffsetRatio_ = 0.10f;    // ジグザグの暴れ幅（小=直線的＝飛んでる感）
-	float specialFireBranchProb_     = 0.30f;    // 枝分かれ確率（放電のパチパチ感）
-	float specialFireStartWidth_     = 0.10f;    // 始点(プレイヤー側)の太さ
-	float specialFireEndWidth_       = 0.05f;    // 終点(敵側)の太さ
-	float specialFireBoltLifetime_   = 0.08f;    // 1メッシュの寿命（小=高速にパチパチ再生成）
-
-	// ----- 光の翼（X字方向に「小さいパーティクル」を外向き噴出。アーム1本=GPUパーティクル群1つ）-----
-	// 将来プレイヤー常時装備へ流用予定。描画は GPUParticleManager が自動で行う。
-	bool    specialWingOn_          = true;
-	int     specialWingArmCount_    = 4;          // アーム本数（X字=4）
-	float   specialWingAngleOffset_ = 0.7853982f; // 配置の基準角(rad)。π/4 で X 字
-	float   specialWingSpeed_       = 6.0f;       // 外向き初速（実質長さ ≒ speed×life）
-	float   specialWingLife_        = 0.4f;       // 粒子寿命（秒）
-	int     specialWingBurstCount_  = 6;          // 1アーム・1フレームの粒子数（量）
-	float   specialWingJitter_      = 1.0f;       // 速度ゆらぎ
-	float   specialWingEmitRadius_  = 0.1f;       // 発生位置の散らばり（中心付近）
-	Vector2 specialWingScaleMin_{ 0.04f, 0.04f }; // めっちゃ小さい
-	Vector2 specialWingScaleMax_{ 0.10f, 0.10f };
-	Vector4 specialWingColorInner_{ 1.0f, 0.85f, 0.20f, 1.0f }; // 金（発生時）
-	Vector4 specialWingColorOuter_{ 1.0f, 0.40f, 0.85f, 0.0f };  // ピンク（寿命末でフェード）
-
-	// ----- Phase 4（End = 終了猶予）-----
-	float specialEndDuration_ = 1.0f;            // Fire 終了からバリア消失までの猶予秒
-
 	// 必殺技の演出中心：プレイヤー原点は足元なので、バリア球・電撃の中心を up 方向へ持ち上げて体の中心に合わせる。
 	// 0 以下なら player の Collider.offset.y（プレハブの足元→カプセル中心）を自動採用。
 	float specialPlayerCenterOffset_ = 0.0f;
+	// 自機の体を囲む楕円（画面に投影したカプセル）の半軸。雷・ビームの始点はこの表面から出す。
+	// 0 以下なら player の Collider.capsuleRadius / capsuleHeight から自動算出
+	float specialBodyEllipseH_ = 0.0f;   // 水平（=capsuleRadius 相当）
+	float specialBodyEllipseV_ = 0.0f;   // 垂直（=capsuleHeight/2 + capsuleRadius 相当）
 
-	// バリア本体エフェクト（エフェクトエディタ製）。名前が空でなく登録済みなら、これを再生して追従。
-	// 再生中はワイヤーフレーム球は描画しない（空 or 未登録ならワイヤー球にフォールバック）。
-	std::string  specialBarrierEffectName_   = "Barrier";
-	EffectHandle specialBarrierEffectHandle_ = kInvalidEffectHandle;
+	// ----- 必殺技 Storm Lock（範囲・多段・殲滅型）。シーンは ISpecialMoveHost 経由でだけ触られる -----
+	StormLockPart stormLock_;
 
-	// バリアの回転ワイヤーフレーム球（LineRenderer で経線・緯線を描画）。当たり判定の正確な範囲を可視化。
-	bool    specialBarrierWireframeOn_     = true;
-	Vector3 specialBarrierWireSpin_{ 0.0f, 0.0f, 0.0f };           // 各軸の累積回転角（rad、内部状態）
-	Vector3 specialBarrierWireSpinSpeed_{ 0.5f, 1.2f, 0.3f };      // 各軸の回転速度（rad/s、実時間）
-	int     specialBarrierWireMeridians_   = 8;      // 経線本数
-	int     specialBarrierWireParallels_   = 5;      // 緯線本数
-	int     specialBarrierWireSegments_    = 24;     // 1円の分割数
-	Vector4 specialBarrierWireColorGold_{ 1.0f, 0.84f, 0.15f, 0.9f }; // 経線=金
-	Vector4 specialBarrierWireColorPink_{ 1.0f, 0.35f, 0.80f, 0.9f }; // 緯線=ピンク
+	// ----- 必殺技 Shatterline（線・瞬間・最高単発火力型）-----
+	// 段取り・演出・調整値はすべて ShatterlinePart。シーンは ISpecialMoveHost 経由でだけ触られる
+	ShatterlinePart shatterline_;
+	// ----- ISpecialMoveHost 実装（private override。StormLockPart / ShatterlinePart 経由のみ。
+	//       GetPlayer / SetTimeScale / IsEnemyAlive / AbsorbEnemyBulletsInSphere は上の override で満たす）-----
+	/// <summary>必殺技の無敵を切り替える（Shatterline の後隙だけ false にして被弾できるようにする）</summary>
+	/// <param name="invincible">true で無敵</param>
+	void SetSpecialInvincible(bool invincible) override { specialInvincible_ = invincible; }
+	/// <summary>必殺技の無敵が有効かを返す</summary>
+	/// <returns>無敵中なら true</returns>
+	bool IsSpecialInvincible() const override { return specialInvincible_; }
+	/// <summary>自機の体の中心を返す</summary>
+	/// <returns>体の中心のワールド座標</returns>
+	Vector3 GetSpecialPlayerCenter() const override { return SpecialPlayerCenter(); }
+	/// <summary>体の中心から dir へ撃つときの銃口（体を囲む楕円の表面）を返す</summary>
+	/// <param name="playerCenter">自機の体の中心（ワールド）</param>
+	/// <param name="dir">撃つ向き（ワールド）</param>
+	/// <returns>銃口のワールド座標</returns>
+	Vector3 GetSpecialMuzzle(const Vector3& playerCenter, const Vector3& dir) const override { return SpecialBoltStart(playerCenter, dir); }
+	/// <summary>自機の体を囲む楕円の半軸を返す（調整値が 0 以下なら自機のコライダーのカプセルから求める）</summary>
+	/// <param name="horizontal">画面の横方向の半軸の受け取り先</param>
+	/// <param name="vertical">画面の縦方向の半軸の受け取り先</param>
+	void GetSpecialBodyEllipse(float& horizontal, float& vertical) const override;
+	/// <summary>レティクルの画面上の位置を返す</summary>
+	/// <returns>レティクルの位置（UI 座標）</returns>
+	Vector2 GetReticleScreenPos() const override;
+	/// <summary>生きている敵弾の一覧を集める</summary>
+	/// <param name="out">敵弾を追加する先</param>
+	void CollectEnemyBullets(std::vector<IImGuiEditable*>& out) override;
+	/// <summary>生きている敵本体（Enemy・Boss）の一覧を集める</summary>
+	/// <param name="out">敵本体を追加する先</param>
+	void CollectEnemies(std::vector<IImGuiEditable*>& out) override;
+	/// <summary>敵弾を消す</summary>
+	/// <param name="bullet">消す敵弾</param>
+	void DestroyEnemyBullet(IImGuiEditable* bullet) override;
+	/// <summary>HP を持たない敵をスコア・撃破数付きで消す（HP を持つ敵は HP を 0 にすれば通常の撃破の流れに乗る）</summary>
+	/// <param name="e">消す敵</param>
+	void DestroyEnemyWithScore(IImGuiEditable* e) override;
 
-	// バリアのパーティクル演出（GPU パーティクルを球状に連続バースト）。当たり判定は球プリミティブ側のまま。
-	// 球状ランダムは虫っぽくなるため既定 OFF。将来は外周リング沿い等に作り直す。
-	bool    specialBarrierParticleOn_   = false;
-	float   specialBarrierEmitInterval_ = 0.02f;   // バースト間隔（秒、実時間）
-	int     specialBarrierEmitCount_    = 10;      // 1バーストの粒子数
-	float   specialBarrierParticleLife_ = 0.5f;    // 粒子寿命（秒）
-	float   specialBarrierParticleRadiusScale_ = 1.0f; // 発生半径 = barrierRadius × これ
-	Vector2 specialBarrierParticleScaleMin_{ 0.06f, 0.06f };
-	Vector2 specialBarrierParticleScaleMax_{ 0.16f, 0.16f };
-	Vector4 specialBarrierParticleColor0_{ 0.5f, 0.85f, 1.0f, 1.0f }; // 発生時の色
-	Vector4 specialBarrierParticleColor1_{ 0.2f, 0.5f,  1.0f, 0.0f }; // 寿命末の色（フェード）
-	float   specialBarrierEmitAccum_  = 0.0f;      // 内部バーストタイマ
-	bool    specialBarrierGroupReady_ = false;     // GPU パーティクルグループ生成済み
-
-	// ----- 必殺技「ディスラプター」（線・瞬間・最高単発火力型）-----
-	// 傲慢サンダー（SpecialPhase）とは別のフェーズ機で進む。Step 2 はタイマーのみ（ビジュアルなし）。
-	enum class DisruptorPhase {
-		Idle,
-		Charge,    // Phase1 チャージ(収束)：World スロー＋無敵＋プレイヤー中央＋カメラ引き
-		Slash,     // Phase2 一閃：World 停止
-		Collapse,  // Phase3 崩壊：World 停止
-		Recover,   // Phase4 復帰＋後隙：World 再開・無敵なし・入力不可
-	};
-	DisruptorPhase disruptorPhase_      = DisruptorPhase::Idle;
-	float          disruptorPhaseTimer_ = 0.0f;  // 現フェーズ経過秒（実時間）
-	// フェーズ長（秒、実時間）
-	float disruptorChargeDuration_   = 2.5f;  // Phase1 チャージ（狙う猶予。ImGui/JSONで調整可）
-	float disruptorSlashDuration_    = 1.5f;  // Phase2 一閃＝発射ショットの表示尺（カメラ到達は門番で別途保証）。確認しやすいよう長め
-	float disruptorCollapseDuration_ = 2.5f;  // Phase3 崩壊（リビールの剥がれ時間も兼ねる。ゆっくり戻す）
-	float disruptorRecoverDuration_  = 2.0f;  // Phase4 後隙（無敵なし・入力不可）
-	float disruptorChargeTimeScale_  = 0.0f;  // チャージ中の World 時間倍率（0=停止＝敵が固定で狙いやすい。>0でスロー）
-	// Slash 中の発射タイミング：カメラが発射ショット位置へ回り込み切ってからビーム発射し、
-	// 発射から少し遅れて色反転を入れる（回り込み→発射→一瞬遅れて反転→崩壊 の順を保証）。
-	bool  disruptorFired_       = false;  // この一閃でビーム発射済みか（カメラ到達後に true）
-	float disruptorFireElapsed_ = 0.0f;   // 発射からの経過秒（色反転ディレイ／表示尺に使用）
-	float disruptorInvertDelay_ = 0.1f;   // 発射から色反転 ON までの遅れ（秒）
-	// Collapse：カメラが「狙うアングル」へ戻り切ってから断裂線走り込み＆崩壊を進める用のタイマー。
-	// カメラ復帰中（到達前）は進めない＝崩壊が発射ショットの後方から始まるのを防ぐ。
-	float disruptorCollapseRevealTimer_ = 0.0f;
-
-	// 照準（中央支点・1点置き・角度自由）。スクリーン空間、深度無視。
-	// 線は画面中央 (kUIWidth/2, kUIHeight/2) を支点に角度 θ だけで決まる。0=横一閃(水平)。
-	float disruptorAimAngle_     = 0.0f;   // 切断線の角度(rad)。チャージ中はレティクルへライブ追従
-	bool  disruptorAimConfirmed_ = false;  // 射撃ボタンで角度を確定したか
-	float disruptorLineWidthPx_  = 40.0f;  // (Step4) スクリーン空間の線への距離しきい値(px, 半幅)。可視化太さにも流用
-	int   disruptorBossDamage_   = 1000;   // (Step4) ボスへの固定ダメージ（+将来スタンゲージ削り）
-	Vector4 disruptorAimPreviewColor_{ 1.0f, 0.85f, 0.2f, 0.6f }; // 予測線（調整中）＝半透明の金
-	Vector4 disruptorAimConfirmColor_{ 0.6f, 0.4f, 1.0f, 1.0f };  // 確定線＝紫
-	float   disruptorPivotRadiusPx_  = 14.0f;                     // 中央支点マーカー（リング）の半径(px)
-	Vector4 disruptorPivotColor_{ 1.0f, 1.0f, 1.0f, 0.9f };       // 支点マーカー色（白）
-
-	// ディスラプターのカメラ演出（フェーズ別の目標姿勢を補間。詳細は下の Step5-A 群と ApplyDisruptorCamera）。
-	// 切断線は一閃でワールド空間へ焼き付くので、アングルを変えても線と敵がズレない。傲慢の specialCam* とは別管理。
-	float disruptorCamPullback_ = 8.0f;   // forward 逆方向への後退量（Charge 時）
-	float disruptorCamUpAdd_    = 1.5f;   // up 方向の持ち上げ（Charge 時）
-	float disruptorCamFovAdd_   = 0.06f;  // FovY 加算（Charge 時）
-	float disruptorCamEaseTime_ = 0.25f;  // 1フェーズ分のカメラ移動時間（秒・決定的smoothstep。これが終わるまで次フェーズへ進まない）
-	float disruptorCamBlend_    = 0.0f;   // 旧ランタイム（現在カメラ駆動には未使用。互換のため残置）
-
-	// Step5-A: フェーズ別の目標カメラ姿勢を補間する演出。
-	// Charge=後方引き(狙う) → Slash=左横やや前・あおり(発射ショット) → Collapse=後方復帰(断裂線が走り込む) → Recover=通常へ。
-	bool    disruptorCamActive_ = false;   // 演出中フラグ（EnterDisruptor/EndSpecialMove で切替）
-	bool    disruptorCamInit_   = false;   // 補間状態を実カメラで初期化済みか
-	Vector3 disruptorCamEyeCur_{ 0.0f, 0.0f, 0.0f };  // 補間中のカメラ位置
-	Vector3 disruptorCamLookCur_{ 0.0f, 0.0f, 0.0f }; // 補間中の注視点
-	float   disruptorCamFovCur_ = 0.0f;    // 補間中の FovY
-	// 決定的なフェーズ間移動（前の移動が完了してから次フェーズへ＝手続き形式）。秒数設定を変えても破綻しない。
-	DisruptorPhase disruptorCamMovePhase_ = DisruptorPhase::Idle; // 現在移動中の対象フェーズ（変化検出用）
-	Vector3 disruptorCamFromEye_{ 0.0f, 0.0f, 0.0f };  // 移動開始時のカメラ位置
-	Vector3 disruptorCamFromLook_{ 0.0f, 0.0f, 0.0f }; // 移動開始時の注視点
-	float   disruptorCamFromFov_   = 0.0f; // 移動開始時の FovY
-	float   disruptorCamMoveTimer_ = 0.0f; // 現フェーズ移動の経過秒
-	bool    disruptorCamArrived_   = false;// 現フェーズの目標姿勢へ到達したか（フェーズ遷移の門番）
-	// 発射ショット（Slash）：プレイヤー基準オフセット（左横やや前・あおり）
-	float   disruptorCamFireSide_   = 6.0f; // プレイヤー左方向の距離
-	float   disruptorCamFireFront_  = 5.0f; // 前方（画面奥）方向の距離
-	float   disruptorCamFireDown_   = 3.0f; // 下げ量（あおり）
-	float   disruptorCamFireLookUp_ = 0.5f; // 注視点の持ち上げ
-	float   disruptorCamFireFovAdd_ = 0.0f; // 発射ショットの FovY 加算
-	// Collapse：後方引き（Charge とは別値で管理）
-	float   disruptorCamCollapsePullback_ = 8.0f;
-	float   disruptorCamCollapseUpAdd_    = 1.5f;
-
-	// 一閃の瞬間に確定するワールド空間の切断線（カメラを引いても敵と一緒に世界に残る＝描いた通り）。
-	bool    disruptorCutWorldValid_ = false;
-	Vector3 disruptorCutWorldP1_{ 0.0f, 0.0f, 0.0f };
-	Vector3 disruptorCutWorldP2_{ 0.0f, 0.0f, 0.0f };
-	float   disruptorCutDepth_ = 40.0f;   // ヒット敵が無いときの焼き付け奥行き（敵があれば平均で上書き）
-
-	// ----- Step5-B: 発射ビーム / 衝撃波 / 断裂線ビジュアル（A案・FREEDOM風） -----
-	// 共通方式：衝撃波/断裂線はローカル空間でメッシュを1回生成し、SetRotate で発射方向へ向け、SetScale で伸長（再生成なし）。
-	// 発射ビーム（固定方向の一閃。Slash 中に筒先→全長へ伸びる transient）は EffectDef(DisruptorBeam) 化し
-	// EffectManager で再生＝色/サイズ/先細り/伸長カーブをエフェクトエディターで編集する。
-	std::string  disruptorBeamEffectName_ = "DisruptorBeam";    // Resources/Json/Effects/DisruptorBeam.json
-	EffectHandle disruptorBeamHandle_     = kInvalidEffectHandle; // ランタイム：再生中ビームのハンドル
-	// チャージ演出（収束パーティクル＋虹色光条など）。受付時間＝Charge フェーズ中だけプレイヤー中央で再生。
-	// 中身はエフェクトエディターで作る（loop=true で受付が伸びても保つ。Slash 入り/終了で Stop）。
-	std::string  disruptorChargeEffectName_ = "DisruptorCharge"; // Resources/Json/Effects/DisruptorCharge.json
-	EffectHandle disruptorChargeHandle_     = kInvalidEffectHandle; // ランタイム：再生中チャージ演出のハンドル
-	Vector3 disruptorBeamDir_{ 0.0f, 0.15f, 1.0f };  // 固定発射方向（ワールド。既定=前方やや上＝戦場へ）。狙い角度とは無関係
-	Vector3 disruptorBeamFireDir_{ 0.0f, 0.0f, 1.0f };// ランタイム：確定発射方向
-	Vector3 disruptorBeamMuzzle_{ 0.0f, 0.0f, 0.0f }; // ランタイム：筒先位置
-	// 衝撃波は EffectDef(DisruptorBeam) に Ring コンポーネントを足してエディターで作る（直書きは廃止）。
-	// 断裂線ビジュアル（細い Beam・仮。Collapse 中に P1[右]→P2[左] へ走り込む）
-	std::unique_ptr<class EffectPrimitiveRenderer> disruptorRift_;
-	// 案1：見た目を「判定帯（disruptorLineWidthPx_ 半幅px）」に一致させる。焼き付け深度で px→world 換算した
-	// 半幅(disruptorRiftBakedHalfWidth_)をビーム全幅に使い、scale で微調整（1.0=判定帯ぴったり）。
-	float   disruptorRiftWidthScale_   = 1.0f;       // 判定帯に対する太さ倍率
-	float   disruptorRiftBakedHalfWidth_ = 0.0f;     // ランタイム：焼き付け時に確定した world 半幅
-	Vector4 disruptorRiftColor_{ 0.6f, 0.4f, 1.0f, 1.0f };
-	float   disruptorRiftRevealTime_ = 0.45f;        // 右→左へ走り込む時間（Collapse 内・決定的）
-	float   disruptorRiftTimer_   = 0.0f;            // ランタイム
-	// 遅延キル：判定は Slash で収集し、断裂線が引き切った瞬間に一括キル（線＝判定の対応を見せる）
-	std::vector<IImGuiEditable*> disruptorPendingEnemies_;     // 収集した敵本体（Enemy/Boss）
-	std::vector<IImGuiEditable*> disruptorPendingBulletPrims_; // 収集した敵弾の primitive ポインタ
-	bool disruptorKillsDone_ = false;                          // この一閃のキルを実行済みか
-
-	// ----- Step6: 崩壊リビール＋色反転（PostEffect の DisruptorReveal を駆動）-----
-	// Collapse 中は World 停止＝ライブ／キャプチャ同一フレームなので、現フレームを
-	// 断裂線の領域マスクで反転（殻）／通常（剥がれた下の世界）に出し分けるだけで2層リビールが成立する。
-	// Slash=全画面反転(revealT=0) → Collapse で線から上下へ通常色が伝播(revealT 0→1) → Recover で OFF。
-	float disruptorRevealIntensity_    = 1.0f;   // 反転の強さ（1=完全反転）
-	// Collapse 入りからこの秒数は revealT=0（全画面反転＝断裂線が走り切るまで殻のまま）。
-	// 以後 [delay, disruptorCollapseDuration_] 区間で revealT 0→1（ゆっくり剥がれて下の通常色が戻る）。
-	float disruptorRevealStartDelay_   = 0.45f;
-	// 画面がこの割合まで通常色に戻ったら崩壊終了＝後隙(World再開)へ。破片は生かしたまま。
-	float disruptorCollapseEndAt_      = 0.9f;
-	float DisruptorCollapseRevealT() const; // Collapse の割れ進捗 0..1（smoothstep 済み・セルの割れ駆動に使用）
-	void  UpdateDisruptorReveal();               // 反転シェーダの ON/OFF（Slash 全反転＋Collapse ブリッジ全反転のみ）
-
-	// ----- 破片レンダラ（反転世界の殻のかけら）-----
-	// セル方式：未割れセル＝静止した反転シャードで“殻”、割れたセルは飛散（F3）。描画は DrawDisruptorFragments。
-	std::unique_ptr<class DisruptorShardRenderer> disruptorShards_; // セル描画（キャプチャ反転）
-	bool  disruptorCaptureDone_ = false;       // この崩壊でシーンキャプチャ済みか
-	// 見た目チューニング（殻・破片共通）
-	float   disruptorFragSpin_      = 6.0f;    // 破片の回転速度の上限(rad/s)
-	float   disruptorFragMinScale_  = 0.06f;   // 破片サイズ(1=発生時)がこの比まで縮んだら完全に消す
-	float   disruptorFragAlpha_     = 1.0f;    // 殻・破片の不透明度（1=反転スクリーンをそのまま貼る）
-	float   disruptorFragSatBoost_  = 1.6f;    // 反転色の彩度ブースト（1=そのまま, >1で色を強調）
-	static constexpr uint32_t kDisruptorShardCap_ = 2048; // 破片レンダラの per-cell 描画上限（Cell Count 上限以上に取る）
-	void DrawDisruptorFragments();                // 最終 RT へ描画（PostEffect 後＝二重反転回避。未割れ＝殻／割れ＝飛散）
-
-	// ----- F1: 事前分割セル（手続き Voronoi）＋割れ順プレビュー -----
-	// Slash→Collapse でスクリーン空間に種点を撒き、半平面クリップで各セルの凸多角形を作る（事前分割）。
-	// 種点はスクリーン空間固定＝エイム角θに非依存。同じ seed で同じ割れ方が再現される。
-	// 割れ順は「重心の切断線からの垂直距離」で決まり、リビール境界が来た片から順に割れる（飛散駆動はF3）。
-	struct DisruptorCell {
-		std::vector<Vector2> polyUV;          // セル凸多角形の頂点（スクリーンUV [0,1]）
-		Vector2 centroidUV{ 0.5f, 0.5f };     // 重心（スクリーンUV）
-	};
-	std::vector<DisruptorCell> disruptorCells_;
-	uint32_t disruptorFractureSeed_     = 1u;     // 割り方のシード（同値＝同じ割れ方）
-	bool     disruptorFractureSeedLock_ = false;  // true: 発動ごとにこの seed を使う / false: 毎回ランダム（使った値は seed に残す）
-	int      disruptorCellCount_        = 100;    // セル数（種点数）
-	// 割れ順プレビュー（デバッグ）
-	bool     disruptorCellDebugDraw_      = false; // セル境界線を LineRenderer で表示
-	float    disruptorCellPreviewRevealT_ = 0.0f;  // 手動スクラブ：この revealT まで割れたとみなして色分け
-	void BuildDisruptorCells();             // seed から種点スキャッタ→半平面クリップ→重心。disruptorCells_ を作る
-	void DrawDisruptorCellBordersDebug();   // セル境界線を LineRenderer へ（割れ順で色分け＋スクラブ）
-
-	// ----- F2: セルのワールド形状アップロード＋静止描画（baked UV 検証）-----
-	std::vector<Vector3> disruptorCellCentroidWorld_; // 各セル重心のワールド配置（rest）。F3 の飛散基準にも使う
-	bool disruptorCellMeshUploaded_ = false;          // この崩壊で SetCells 済みか
-	bool disruptorCellStaticDraw_   = false;          // F2: 割らずに全セルを静止描画（マッピング確認用）
-	void BuildDisruptorCellMeshesAndUpload();         // disruptorCells_ → ワールド三角形 → renderer SetCells（崩壊中1回）
-
-	// ----- F3: 割れ駆動（リビール境界が来たセルから順に飛散）-----
-	struct DisruptorCellRuntime {
-		bool    broken    = false;       // 既に割れて飛んだか
-		float   age       = 0.0f;        // broken からの経過秒
-		float   lifeDur   = 0.7f;        // 寿命（秒）
-		float   breakDist = 0.0f;        // 切断線からの垂直距離（割れ順の閾値、build 時に確定）
-		Vector3 vel{ 0.0f, 0.0f, 0.0f }; // 飛散速度（world）
-		Vector3 spin{ 0.0f, 0.0f, 0.0f };// 回転速度（rad/s）
-		Vector3 rot{ 0.0f, 0.0f, 0.0f }; // 現在回転
-		Vector3 offset{ 0.0f, 0.0f, 0.0f }; // 重心からの累積変位（world）
-	};
-	std::vector<DisruptorCellRuntime> disruptorCellRuntime_;
-	float disruptorCellMaxBreakDist_ = 1.0f; // 割れ閾値の正規化用（全画面を覆う最大垂直距離・build 時に確定）
-	// チューニング（飛散）。spin 上限/alpha/satBoost は既存 disruptorFrag* を流用。
-	float disruptorBreakFreeze_   = 0.12f; // 割れた直後この秒数は静止（バリン）
-	float disruptorBreakPopSpeed_ = 6.0f;  // 視点方向へ飛び出す速さ
-	float disruptorBreakSpread_   = 4.0f;  // ランダム拡散の速さ
-	float disruptorBreakGravity_  = 6.0f;  // 下方向（-Y）の重力加速
-	float disruptorBreakLifeMin_  = 0.5f;
-	float disruptorBreakLifeMax_  = 1.0f;
-	void UpdateDisruptorCells(float realDt); // 境界進行でセルを順に割り、飛散・回転・フェードを進める
-
-	void EnterDisruptor();                       // TriggerSpecialMove(Disruptor) から：Charge へ
-	void UpdateDisruptorMove(class InputActionMap* actions, float realDt); // 専用フェーズ機の更新
-	void EnterDisruptorPhase(DisruptorPhase p);  // フェーズ遷移＋World時間/無敵の切替
-	float DisruptorAngleFromReticle() const;     // 画面中央→レティクルの角度(rad)
-	void  DrawDisruptorAimLine();                // 切断線を LineRenderer(3D) へ積む（スクリーン端まで）
-	void  ExecuteDisruptorSlash();               // 一閃：線上の敵/敵弾を「収集」＋切断線焼き付け＋発射ビーム生成（キルは遅延）
-	void  ExecuteDisruptorKills();               // 収集した対象を一括キル（断裂線が引き切った瞬間に呼ぶ）
-	void  ApplyDisruptorCamera();                // Step5-A：フェーズ別の目標カメラ姿勢を補間して適用
-	void  BuildDisruptorFireVisuals();           // Step5-B：Slash 入りで発射ビーム＋衝撃波を生成
-	void  BuildDisruptorRift();                  // Step5-B：Collapse 入りで断裂線ビームを生成
-	void  UpdateDisruptorVisuals(float realDt);  // Step5-B：ビーム伸長／衝撃波／断裂走り込みのアニメ＋Update
-	void  TrashDisruptorVisual(std::unique_ptr<class EffectPrimitiveRenderer>& r); // 遅延削除キューへ移す
-
+	/// <summary>必殺技ゲージのスプライト（暗い背景・現在値）を作る</summary>
 	void InitializeSpecialGaugeUI();
+	/// <summary>必殺技ゲージの位置・幅・色（MAX なら黄色）を毎フレーム反映する</summary>
 	void UpdateSpecialGaugeUI();
+	/// <summary>必殺技の発動入力と、発動中の段取り（終わったら EndSpecialMove でクールタイムへ）・クールタイムを進める</summary>
+	/// <param name="actions">アクションの入力</param>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateSpecialMove(class InputActionMap* actions, float dt);
-	// 種別ごとのゲージ上限を返す
+	/// <summary>種別ごとのゲージ上限を返す</summary>
+	/// <param name="k">必殺技の種別</param>
+	/// <returns>ゲージ上限</returns>
 	float SpecialGaugeMaxFor(SpecialKind k) const {
-		return (k == SpecialKind::Disruptor) ? specialGaugeMaxDisruptor_ : specialGaugeMaxGouman_;
+		return (k == SpecialKind::Shatterline) ? specialGaugeMaxShatterline_ : specialGaugeMaxStormLock_;
 	}
-	void SetEquippedSpecial(SpecialKind k); // 装備切替＋specialGaugeMax_ ミラー更新＋ゲージクランプ
-	void TryTriggerSpecial(SpecialKind k);  // クールタイム/ゲージ条件を満たせば発動
-	void TriggerSpecialMove();              // 装備中種別を発動（無条件・ImGuiボタン/内部用）
-	void TriggerSpecialMove(SpecialKind k); // 種別を指定して発動（種別で分岐）
-	void EnterSpecialPhaseBarrier();
-	void UpdateSpecialPhaseBarrier(float worldDt);
-	void UpdateSpecialBarrier();   // バリア球のプレイヤー追従＋球内の敵弾消去（全フェーズ共通）
-	void DrawSpecialBarrierWireframe(const Vector3& center); // 回転ワイヤーフレーム球を LineRenderer へ積む
-	void UpdateSpecialWings();     // 光の翼：X字方向に小パーティクルを外向き噴出
-	void EnterSpecialPhaseLockon();
-	void UpdateSpecialPhaseLockon(float realDt);
-	void EnumerateLockonTargets();   // 画面内敵+敵弾を列挙してプレイヤー近い順にソート
-	void SpawnLockonVisuals(SpecialLockonTarget& t);
-	void UpdateLockonTargetVisuals(SpecialLockonTarget& t, float localTime);
-	void EnterSpecialPhaseFire();
-	void UpdateSpecialPhaseFire(float dt);
-	void EnterSpecialPhaseEnd();
-	void UpdateSpecialPhaseEnd(float dt);
-	bool IsSpecialTargetAlive(IImGuiEditable* e) const;          // 動的コンテナにポインタが生存しているか
-	void CollectScreenTargets(std::vector<std::pair<IImGuiEditable*, bool>>& out); // 画面内の敵/敵弾を列挙(entity,isBullet)
-	Vector3 SpecialBoltStart(const Vector3& playerPos, const Vector3& dir) const;  // プレイヤーカプセル表面の始点（楕円射影）
-	Vector3 SpecialPlayerCenter() const;  // 必殺技演出の中心（足元 + offset up = 体の中心）
+	/// <summary>装備切替＋specialGaugeMax_ ミラー更新＋ゲージクランプ</summary>
+	/// <param name="k">装備する種別</param>
+	void SetEquippedSpecial(SpecialKind k);
+	/// <summary>クールタイム/ゲージ条件を満たせば発動する</summary>
+	/// <param name="k">発動する種別</param>
+	void TryTriggerSpecial(SpecialKind k);
+	/// <summary>装備中種別を発動（無条件・ImGuiボタン/内部用）</summary>
+	void TriggerSpecialMove();
+	/// <summary>種別を指定して発動（種別で分岐。発動した種別を装備中に同期する）</summary>
+	/// <param name="k">発動する種別</param>
+	void TriggerSpecialMove(SpecialKind k);
+	/// <summary>動的コンテナにポインタが生存しているか</summary>
+	/// <param name="e">調べる実体</param>
+	/// <returns>まだシーンにあれば true</returns>
+	bool IsSpecialTargetAlive(IImGuiEditable* e) const;
+	/// <summary>画面内の敵/敵弾を列挙する（飛行ユニット用）</summary>
+	/// <param name="out">(実体, 敵弾なら true) を追加する先</param>
+	void CollectScreenTargets(std::vector<std::pair<IImGuiEditable*, bool>>& out);
+	/// <summary>自機の体を囲む楕円（画面に投影したカプセル）の表面の始点</summary>
+	/// <param name="playerPos">自機の体の中心（ワールド）</param>
+	/// <param name="dir">始点 → 対象の向き（正規化済み）</param>
+	/// <returns>始点のワールド座標</returns>
+	Vector3 SpecialBoltStart(const Vector3& playerPos, const Vector3& dir) const;
+	/// <summary>必殺技演出の中心（足元 + offset up = 体の中心。up はカメラの上）</summary>
+	/// <returns>体の中心のワールド座標</returns>
+	Vector3 SpecialPlayerCenter() const;
+	/// <summary>必殺技を終える（クールタイム開始・両方の技の段取りと演出を戻す・無敵フラグを既定へ・World の時間を戻す・自機を画面の中心へ戻す）</summary>
 	void EndSpecialMove();
+	/// <summary>必殺技中のカメラ（Shatterline は専用のシネマティック、Storm Lock は後ろ＋上へ引く）で上書きする</summary>
+	/// <param name="playerWorldPos">自機のワールド位置</param>
 	void ApplySpecialCamera(const Vector3& playerWorldPos);
 
 	// ゲージ UI（HP バーと同じスプライト2枚パターン）

@@ -39,28 +39,46 @@ public:
 	HubMechModel();
 	~HubMechModel();
 
+	/// <summary>本体（自機の新モデル、スキニング）とコクピット・ハッチを読み込み、今の位置・見え方を反映する</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="skinningComputeManager">スキニングの計算の管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager,
 		DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>位置・本体の表示・腕のクリップと時刻・胸の入口を反映して、本体とコクピットを更新する</summary>
 	void Update();
+	/// <summary>コクピットとハッチ、本体を描く（コクピットを先に）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	/// <summary>
-	/// 発光パス：コクピットとハッチの「光る分」と、胸の入口の光る縁を発光 RT に描く。
-	/// includeAll ならコクピットの発光していない部位も描く（六角形のディゾルブの発光帯を光らせる間）
-	/// </summary>
+	/// <summary>発光パス：コクピットとハッチの「光る分」と、胸の入口の光る縁を発光 RT に描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="bloomScale">発光 RT に書くときの倍率</param>
+	/// <param name="includeAll">true ならコクピットの発光していない部位も描く（六角形のディゾルブの発光帯を光らせる間）</param>
 	void DrawBloom(DirectXCore* dxCore, float bloomScale, bool includeAll);
 
-	// 神殿の鏡の床に映すため（HubTemple）
+	/// <summary>本体を返す（神殿の鏡の床に映すため。HubTemple）</summary>
+	/// <returns>本体。Initialize 前は nullptr</returns>
 	AnimatedObject3DInstance* GetBody() const { return body_.get(); }
-	// コクピットの中の見た目（灯り・発光・六角形）を部位のマテリアルで変えるため（CockpitLighting）
+	/// <summary>コクピットを返す（コクピットの中の見た目＝灯り・発光・六角形を部位のマテリアルで変えるため。CockpitLighting）</summary>
+	/// <returns>コクピット（Initialize 後に呼ぶこと）</returns>
 	CockpitModel& GetCockpitModel() const { return *cockpit_; }
+	/// <summary>コクピットの内装を返す</summary>
+	/// <returns>コクピットの内装</returns>
 	Object3DInstance* GetCockpit() const;
+	/// <summary>ハッチを返す</summary>
+	/// <returns>ハッチ</returns>
 	Object3DInstance* GetHatch() const;
 
-	/// <summary>ハッチの開き具合（1 = 開いて待っている、0 = 閉じ切り）</summary>
+	/// <summary>ハッチの開き具合を設定する</summary>
+	/// <param name="ratio">1 = 開いて待っている、0 = 閉じ切り</param>
 	void SetHatchOpenRatio(float ratio);
+	/// <summary>ハッチの開き具合を返す</summary>
+	/// <returns>1 = 開いて待っている、0 = 閉じ切り</returns>
 	float GetHatchOpenRatio() const;
 
-	/// <summary>腕のクリップと時刻・胸の入口の開き具合。反映は Update</summary>
+	/// <summary>腕のクリップと時刻・胸の入口の開き具合を設定する。反映は Update</summary>
+	/// <param name="pose">見え方</param>
 	void SetPose(const Pose& pose) { pose_ = pose; }
 
 	/// <summary>
@@ -68,20 +86,32 @@ public:
 	/// 床の映り込みも描かない（AnimatedObject3DInstance の表示フラグを見る）。
 	/// StagePlay の一人称も本体を描かないので、③ の切れ目の前後で見え方がそろう
 	/// </summary>
+	/// <param name="hidden">true で本体を隠す</param>
 	void SetBodyHidden(bool hidden) { bodyHidden_ = hidden; }
+	/// <summary>本体を隠しているかを返す</summary>
+	/// <returns>隠していれば true</returns>
 	bool IsBodyHidden() const { return bodyHidden_; }
 
-	/// <summary>機体の原点（足元の中央）。乗り込みのカメラのキーはこの原点からの相対で持つ</summary>
+	/// <summary>機体の原点（足元の中央）を返す。乗り込みのカメラのキーはこの原点からの相対で持つ</summary>
+	/// <returns>ワールド位置</returns>
 	const Vector3& GetPosition() const { return position_; }
-	/// <summary>③ のリフトの降下で機体ごと下げる（16_StageStart.md）。反映は Update</summary>
+	/// <summary>機体の原点を設定する（③ のリフトの降下で機体ごと下げる。16_StageStart.md）。反映は Update</summary>
+	/// <param name="position">ワールド位置</param>
 	void SetPosition(const Vector3& position) { position_ = position; }
 
+	/// <summary>調整値（Hub.json の "mech"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>腕のクリップを（変わったときだけ）読み込み、止めたまま pose_ の時刻にする</summary>
 	void ApplyArm();
+	/// <summary>胸の入口の開き具合を、胸の装甲の六角形のディゾルブにする（0 なら消す）</summary>
 	void ApplyChest();
 
 	std::unique_ptr<AnimatedModelInstance> bodyModel_;

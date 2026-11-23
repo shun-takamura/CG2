@@ -20,36 +20,58 @@ struct ID3D12GraphicsCommandList;
 /// </summary>
 class HatchSign {
 public:
+	/// <summary>調整値を既定にする</summary>
 	HatchSign();
 	~HatchSign();
+	/// <summary>調整値（位置・大きさ・色・発光）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>表示を描く RenderTexture を作って外部テクスチャとして登録し、板のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>板の発光を戻し（モデルはタイトルのロゴと共有）、外部テクスチャの登録と RenderTexture を解放する</summary>
 	void Finalize();
 
 	/// <summary>LOCK / UNLOCK を切り替える（変わった瞬間は表示がチラつく）</summary>
+	/// <param name="locked">true で HATCH LOCKED</param>
 	void SetLocked(bool locked);
-	/// <summary>見え方 0..1（0 で描かない）</summary>
+	/// <summary>見え方を設定する</summary>
+	/// <param name="visibility">0〜1（0 で描かない）</param>
 	void SetVisibility(float visibility) { visibility_ = visibility; }
-	/// <summary>今の表示の色（LOCKED は緑・UNLOCK は赤とピンクの間）。コクピットの灯りと光る部位もこの色にする</summary>
+	/// <summary>今の表示の色を返す。コクピットの灯りと光る部位もこの色にする</summary>
+	/// <returns>LOCKED は緑・UNLOCK は赤とピンクの間（RGB 0〜1）</returns>
 	Vector3 GetColor() const {
 		const Vector4& c = locked_ ? lockedColor_ : unlockColor_;
 		return { c.x, c.y, c.z };
 	}
+	/// <summary>時刻を進め、板を座ったパイロットの目からの位置に置いてマテリアルを整える</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="mechOrigin">機体の原点（足元の中央）のワールド位置</param>
 	void Update(float deltaTime, const Vector3& mechOrigin);
 
 	/// <summary>表示を RenderTexture に描く。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
+	/// <param name="commandList">描画のコマンドリスト</param>
 	void RenderSignTexture(ID3D12GraphicsCommandList* commandList);
 	/// <summary>板を描く（Object3DManager::DrawSetting の後。半透明なので最後に）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	/// <summary>発光パス</summary>
+	/// <summary>発光パスで板の文字の所を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawBloom(DirectXCore* dxCore);
 
+	/// <summary>調整値（Hub.json の "hatchSign"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>板のマテリアルを表示のテクスチャ・ライティングなし・文字の所だけ発光にする（GPU の準備ができてから）</summary>
 	void ApplyMaterial();
 
 	std::unique_ptr<RenderTexture> texture_;

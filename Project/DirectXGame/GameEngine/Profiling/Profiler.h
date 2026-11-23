@@ -12,15 +12,21 @@
 /// Profile カテゴリ（profile.log）へ書き出す。毎フレーム書くとログが爆発するため、
 /// 区間ごとに集計してウィンドウ終端でまとめて1行ずつ出力する。
 /// メインスレッド前提（区間スタックの順序保証のため）。
+/// シングルトンにする理由：計測の結果を 1 か所に集め、マクロ（PEPPER_SCOPE）からどこでも呼べるようにするため。
 /// </summary>
 class Profiler {
 public:
-    static Profiler& Instance();
+    /// <summary>唯一のインスタンス</summary>
+    /// <returns>インスタンス</returns>
+    static Profiler* GetInstance();
 
     /// <summary>
     /// 区間の計測開始。__FILE__/__LINE__ を一緒に記録し、後で該当箇所へ飛べるようにする。
     /// 同名区間は1フレーム内で合算（呼び出し回数も集計）。
     /// </summary>
+    /// <param name="name">区間名（静的な文字列）</param>
+    /// <param name="file">__FILE__</param>
+    /// <param name="line">__LINE__</param>
     void BeginSection(const char* name, const char* file, int line);
 
     /// <summary>
@@ -38,18 +44,24 @@ public:
     /// GPU 計測結果（区間名・ms）を現フレームの集計へ加算する。
     /// GpuProfiler がフレーム末リードバック時に呼ぶ。CPU と同名なら同じ行にまとまる。
     /// </summary>
+    /// <param name="name">区間名</param>
+    /// <param name="gpuMs">GPU 時間 [ms]</param>
     void AddGpuMs(const char* name, double gpuMs);
 
     /// <summary>
     /// 名前付きカウンタを n だけ増やす（DrawCall 回数など「個数」の計測）。
     /// 時間ではないので区間とは別系統。ウィンドウごとに total/avg/max を出す。
     /// </summary>
+    /// <param name="name">カウンタ名</param>
+    /// <param name="n">増やす量</param>
     void Count(const char* name, int64_t n = 1);
 
     /// <summary>
     /// 名前付きゲージに「現在値」をセットする（RAM/VRAM/オブジェクト数など、合計でなくレベル）。
     /// 毎フレーム上書き。ウィンドウごとに cur(最新)/min/max/avg を出す。
     /// </summary>
+    /// <param name="name">ゲージ名</param>
+    /// <param name="value">現在値</param>
     void SetGauge(const char* name, double value);
 
     /// <summary>
@@ -90,20 +102,38 @@ public:
         double avg = 0.0;
     };
 
+    /// <summary>直近の 1 秒ウィンドウの区間集計</summary>
+    /// <returns>区間ごとの集計</returns>
     const std::vector<LiveSection>& GetLiveSections() const { return liveSections_; }
+    /// <summary>直近の 1 秒ウィンドウのカウンタ集計</summary>
+    /// <returns>カウンタごとの集計</returns>
     const std::vector<LiveCounter>& GetLiveCounters() const { return liveCounters_; }
+    /// <summary>直近の 1 秒ウィンドウのゲージ集計</summary>
+    /// <returns>ゲージごとの集計</returns>
     const std::vector<LiveGauge>&   GetLiveGauges()   const { return liveGauges_; }
+    /// <summary>直近のウィンドウの長さ</summary>
+    /// <returns>長さ [秒]</returns>
     double GetLiveWindowSec()    const { return liveWindowSec_; }
+    /// <summary>直近のウィンドウのフレーム数</summary>
+    /// <returns>フレーム数</returns>
     int    GetLiveWindowFrames() const { return liveWindowFrames_; }
 
-    // フレーム時間（壁時計 ms、VSync 待ち込み）のリングバッファ。折れ線グラフ用。毎フレーム更新。
     static constexpr int kFrameRingSize = 240;
+    /// <summary>フレーム時間（壁時計、VSync 待ち込み）のリングバッファ。折れ線グラフ用。毎フレーム更新</summary>
+    /// <returns>kFrameRingSize 個のフレーム時間 [ms]</returns>
     const float* GetFrameMsRing() const { return frameMsRing_; }
+    /// <summary>リングバッファの要素数</summary>
+    /// <returns>kFrameRingSize</returns>
     int    GetFrameMsRingSize()   const { return kFrameRingSize; }
+    /// <summary>リングバッファで次に書く位置（＝最古のフレーム）</summary>
+    /// <returns>添字</returns>
     int    GetFrameMsRingHead()   const { return frameRingHead_; } // 次に書く位置(=最古)
+    /// <summary>直近のフレーム時間</summary>
+    /// <returns>フレーム時間 [ms]</returns>
     double GetLastFrameMs()       const { return lastFrameMs_; }
 
 private:
+    /// <summary>QPC の周波数を取り、ウィンドウの開始時刻を今にする</summary>
     Profiler();
     ~Profiler() = default;
     Profiler(const Profiler&) = delete;
@@ -168,6 +198,7 @@ private:
         int count = 0;
     };
 
+    /// <summary>現ウィンドウの集計を profile.log に書き出してライブ表示用に控え、リセットする</summary>
     void FlushWindow();  // 現ウィンドウを書き出してリセット
 
     static constexpr double kWindowMs = 1000.0;  // 集計ウィンドウ長（1秒）
@@ -218,11 +249,16 @@ private:
 /// </summary>
 class ProfileScope {
 public:
+    /// <summary>区間計測を始める</summary>
+    /// <param name="name">区間名</param>
+    /// <param name="file">__FILE__</param>
+    /// <param name="line">__LINE__</param>
     ProfileScope(const char* name, const char* file, int line) {
-        Profiler::Instance().BeginSection(name, file, line);
+        Profiler::GetInstance()->BeginSection(name, file, line);
     }
+    /// <summary>区間計測を閉じる</summary>
     ~ProfileScope() {
-        Profiler::Instance().EndSection();
+        Profiler::GetInstance()->EndSection();
     }
     ProfileScope(const ProfileScope&) = delete;
     ProfileScope& operator=(const ProfileScope&) = delete;

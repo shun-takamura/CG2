@@ -30,6 +30,7 @@
 #include "InputManager.h"
 #include "Config/GameActions.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Profiling/LoadProfiler.h"
 #include <algorithm>
 #include <cmath>
@@ -39,6 +40,43 @@
 #endif
 
 namespace {
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 受け渡しが無いときの外の光の倍率
+	constexpr float kFallbackSunScale = 0.2f;
+	// 受け渡しが無いときの縦の画角 [度]
+	constexpr float kFallbackFovYDegrees = 60.0f;
+	// 受け渡しが無いときの太陽の向き
+	constexpr Vector3 kFallbackSunDirection = { -0.191f, -0.815f, -0.547f };
+	// 受け渡しが無いときの太陽の色
+	constexpr Vector4 kFallbackSunColor = { 1.0f, 0.96f, 0.9f, 1.0f };
+	// 受け渡しが無いときの太陽の強さ
+	constexpr float kFallbackSunIntensity = 0.2f;
+	// 長さの下限 [m]（0 で割らないように）
+	constexpr float kMinLength = 1e-3f;
+	// 受け渡された降りる速さがこれ以下なら既定の速さを使う [m/秒]
+	constexpr float kMinDescentSpeed = 0.1f;
+	// 減速の長さがこれ以下なら減速しない [秒]
+	constexpr float kMinBrakeSeconds = 1e-4f;
+	// 表示を出し切った状態にするための十分先の時刻 [秒]
+	constexpr float kFullyShownTime = 10.0f;
+	// 画面の大きさが分からないときの縦横比の横
+	constexpr float kFallbackAspectWidth = 16.0f;
+	// 画面の大きさが分からないときの縦横比の縦
+	constexpr float kFallbackAspectHeight = 9.0f;
+	// 速さの下限 [m/秒]（0 で割らないように）
+	constexpr float kMinSpeed = 1e-3f;
+	// 時間の長さの下限 [秒]（これ以下ならすぐ終わったものとして扱う）
+	constexpr float kMinSeconds = 1e-3f;
+	// 三人称の注視点の遅れがこれ以下なら遅らせない [秒]
+	constexpr float kMinTargetLagSeconds = 1e-4f;
+	// モデルが無いときの背中の高さ [m]
+	constexpr float kFallbackBackHeight = 12.0f;
+	// Debug で始める所の選択肢の数
+	constexpr int kDebugStartCount = 3;
+
 	// HUB から IBL が来なかったときの縦穴の IBL（HubTemple と同じ）
 	constexpr const char* kFallbackIblPath = "Resources/Cubemaps/hub_temple_ibl.dds";
 	// 自機の新モデル（rig_player_mech.py --body-clips で書き出して cook。共有ノート player_model_export.md）
@@ -52,31 +90,28 @@ namespace {
 	// 射出口でのけり出し（0.9 秒：0.15 秒で沈む → 0.45 秒にけり出す → 最後のコマは飛ぶ姿勢）
 	constexpr const char* kMechLaunchClip = "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim";
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
-
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="u">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 	}
 
+	/// <summary>a から b へ t で線形補間する</summary>
+	/// <param name="a">t = 0 の値</param>
+	/// <param name="b">t = 1 の値</param>
+	/// <param name="t">補間の割合</param>
+	/// <returns>補間した値</returns>
 	Vector3 LerpVector3(const Vector3& a, const Vector3& b, float t) {
 		return { a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
 	}
 
 	constexpr const char* kDebugStartNames[] = { "cloudTop", "descent", "inspection" };
 
+	/// <summary>機体確認の項目の名前を返す（ImGui の表示用）</summary>
+	/// <param name="step">項目の番号 0〜2</param>
+	/// <returns>名前。範囲外なら空文字</returns>
 	const char* InspectionStepName(int step) {
 		switch (step) {
 		case 0: return "Checking";
@@ -86,6 +121,9 @@ namespace {
 		return "";
 	}
 
+	/// <summary>状態の名前を返す（ImGui の表示用）</summary>
+	/// <param name="state">状態</param>
+	/// <returns>名前。知らない値なら空文字</returns>
 	const char* StateName(StageStartPart::State state) {
 		switch (state) {
 		case StageStartPart::State::Descent:    return "Descent";
@@ -207,14 +245,14 @@ StageStartHandoff StageStartPart::MakeDefaultHandoff() const {
 	h.descentSpeed = defaultDescentSpeed_;
 	h.cockpitLightLevel = 1.0f;
 	h.revealAmount = 1.0f;
-	h.sunScale = 0.2f;
+	h.sunScale = kFallbackSunScale;
 	h.eyeOffset = CockpitModel::GetSeatedEye();
 	h.eyeYaw = 0.0f;
 	h.eyePitch = 0.0f;
-	h.fovY = DegToRad(60.0f);
-	h.sunDirection = { -0.191f, -0.815f, -0.547f };
-	h.sunColor = { 1.0f, 0.96f, 0.9f, 1.0f };
-	h.sunIntensity = 0.2f;
+	h.fovY = DegToRad(kFallbackFovYDegrees);
+	h.sunDirection = kFallbackSunDirection;
+	h.sunColor = kFallbackSunColor;
+	h.sunIntensity = kFallbackSunIntensity;
 	h.iblPath = kFallbackIblPath;
 	return h;
 }
@@ -243,12 +281,12 @@ void StageStartPart::BeginDescent(const StageStartHandoff& handoff) {
 
 	// 始めの高さ：カタパルトの縦穴の枠（下の端 y = base + H·k）でも、リフトの上面が枠の境目から shaftPhase 上にある所。
 	// HUB と同じ位相なので、切れ目で壁の板と光の帯の見え方がずれない
-	const float unitH = (std::max)(geometry_.shaftUnitHeight, 1e-3f);
+	const float unitH = (std::max)(geometry_.shaftUnitHeight, kMinLength);
 	const float phase = std::clamp(handoff_.shaftPhase, 0.0f, unitH);
 	startLiftY_ = geometry_.catapultShaftBaseY + unitH * static_cast<float>((std::max)(startUnitsAboveShaftBase_, 0)) + phase;
 
 	// 一定の速さで降り、最後の brakeDistance で smoothstep の形に減速して床（y=0）で止まる
-	cruiseSpeed_ = handoff_.descentSpeed > 0.1f ? handoff_.descentSpeed : defaultDescentSpeed_;
+	cruiseSpeed_ = handoff_.descentSpeed > kMinDescentSpeed ? handoff_.descentSpeed : defaultDescentSpeed_;
 	brakeDistance_ = std::clamp(brakeDistanceTuning_, 0.0f, startLiftY_);
 	cruiseSeconds_ = (startLiftY_ - brakeDistance_) / cruiseSpeed_;
 	brakeSeconds_ = 2.0f * brakeDistance_ / cruiseSpeed_;   // 速さ v·(1 − smoothstep(u)) の積分 = v·T/2
@@ -334,7 +372,7 @@ void StageStartPart::Finish() {
 float StageStartPart::DescentDistanceAt(float time) const {
 	if (time <= cruiseSeconds_) return cruiseSpeed_ * time;
 	const float cruise = startLiftY_ - brakeDistance_;
-	if (brakeSeconds_ <= 1e-4f) return startLiftY_;
+	if (brakeSeconds_ <= kMinBrakeSeconds) return startLiftY_;
 	const float u = std::clamp((time - cruiseSeconds_) / brakeSeconds_, 0.0f, 1.0f);
 	// ∫(1 − (3u² − 2u³)) = u − u³ + u⁴/2
 	return cruise + cruiseSpeed_ * brakeSeconds_ * (u - u * u * u + 0.5f * u * u * u * u);
@@ -358,7 +396,7 @@ void StageStartPart::UpdateInspection(InputManager* input, float deltaTime) {
 	const bool attract = attractMode->IsEnabled();
 	// デモモードの三人称の周：カタパルトに着いたら視点を切り替えてから機体確認を進める（降下 → 切り替え → 機体確認）
 	float attractCheckStart = boardAppearDelay_;
-	if (attract && attractMode->thirdPersonLap) {
+	if (attract && attractMode->IsThirdPersonLap()) {
 		if (view_ == View::FirstPerson && stateTime_ >= attractViewSwitchDelay_) {
 			view_ = View::ThirdPerson;
 			smoothedTargetValid_ = false;
@@ -420,7 +458,7 @@ void StageStartPart::UpdateBoard(float deltaTime, const Vector2& screenSize) {
 		}
 	} else if (state_ == State::Launch) {
 		// 発進の間も出しておく（給電ケーブルの PURGE を見せる）
-		appear = 10.0f;
+		appear = kFullyShownTime;
 		status = LaunchControlBoard::Status::Launch;
 	}
 	const bool charging = state_ == State::Inspection && inspectionStep_ == InspectionStep::Ready;
@@ -435,7 +473,7 @@ void StageStartPart::UpdateBoard(float deltaTime, const Vector2& screenSize) {
 			tachoAppear = stateTime_ - powerUpStartTime_;
 			mode = charging && launch_->IsCharged() ? LaunchTachometer::Mode::Ready : LaunchTachometer::Mode::Standby;
 		} else if (state_ == State::Launch) {
-			tachoAppear = 10.0f;
+			tachoAppear = kFullyShownTime;
 			mode = LaunchTachometer::Mode::Launch;
 		}
 		tachometer_->SetState(launch_->GetThrust(), launch_->GetRpm(), launch_->GetMaxRpm(), launch_->GetRedZone(), mode,
@@ -446,7 +484,7 @@ void StageStartPart::UpdateBoard(float deltaTime, const Vector2& screenSize) {
 	const Vector3 eye = { liftOrigin.x + thirdPersonEye_.x, liftOrigin.y + thirdPersonEye_.y, liftOrigin.z + thirdPersonEye_.z };
 	const Vector3 target = { liftOrigin.x + thirdPersonTarget_.x, liftOrigin.y + thirdPersonTarget_.y,
 		liftOrigin.z + thirdPersonTarget_.z };
-	const float aspect = screenSize.y > 1.0f ? screenSize.x / screenSize.y : 16.0f / 9.0f;
+	const float aspect = screenSize.y > 1.0f ? screenSize.x / screenSize.y : kFallbackAspectWidth / kFallbackAspectHeight;
 	board_->Update(deltaTime, { liftOrigin.x, liftOrigin.y, liftOrigin.z + MechTravel() }, eye, target,
 		DegToRad(thirdPersonFovDegrees_), aspect);
 	tachometer_->Update(deltaTime, { liftOrigin.x, liftOrigin.y, liftOrigin.z + MechTravel() }, eye, target,
@@ -499,10 +537,10 @@ void StageStartPart::UpdateThrusters() {
 float StageStartPart::SpeedFactor() const {
 	if (state_ != State::Launch) return 0.0f;
 	const float maxSpeed = launch_->GetMaxSpeed();
-	float factor = maxSpeed > 1e-3f ? SmoothStep01(launch_->GetSpeed() / maxSpeed) : 0.0f;
+	float factor = maxSpeed > kMinSpeed ? SmoothStep01(launch_->GetSpeed() / maxSpeed) : 0.0f;
 	// 射出口を抜けたら、白が引くのと同じ時間で線形に戻す（2026-10-19 ユーザー）
 	if (exitCrossTime_ >= 0.0f) {
-		const float u = glareAdaptSeconds_ > 1e-3f ? (stateTime_ - exitCrossTime_) / glareAdaptSeconds_ : 1.0f;
+		const float u = glareAdaptSeconds_ > kMinSeconds ? (stateTime_ - exitCrossTime_) / glareAdaptSeconds_ : 1.0f;
 		factor *= 1.0f - std::clamp(u, 0.0f, 1.0f);
 	}
 	return factor;
@@ -532,11 +570,11 @@ void StageStartPart::UpdateGlare() {
 	if (view_ != View::FirstPerson) return;
 	if (exitCrossTime_ < 0.0f) {
 		// 射出口に近づくほど白っぽく
-		const float u = glareDistance_ > 1e-3f ? 1.0f - toExit / glareDistance_ : 1.0f;
+		const float u = glareDistance_ > kMinLength ? 1.0f - toExit / glareDistance_ : 1.0f;
 		glare_ = glareMax_ * SmoothStep01(u);
 	} else {
 		// 抜けたら目が慣れるように引いていく
-		const float u = glareAdaptSeconds_ > 1e-3f ? (stateTime_ - exitCrossTime_) / glareAdaptSeconds_ : 1.0f;
+		const float u = glareAdaptSeconds_ > kMinSeconds ? (stateTime_ - exitCrossTime_) / glareAdaptSeconds_ : 1.0f;
 		glare_ = glareMax_ * (1.0f - SmoothStep01(u));
 	}
 }
@@ -557,9 +595,9 @@ void StageStartPart::DrawScreenOverlay(float screenWidth, float screenHeight) {
 float StageStartPart::SkipWhiteAlpha() const {
 	if (skipFadeTime_ < 0.0f) return 0.0f;
 	const float t = skipFadeTime_;
-	if (t < skipFadeIn_) return SmoothStep01(skipFadeIn_ > 1e-3f ? t / skipFadeIn_ : 1.0f);
+	if (t < skipFadeIn_) return SmoothStep01(skipFadeIn_ > kMinSeconds ? t / skipFadeIn_ : 1.0f);
 	if (t < skipFadeIn_ + skipFadeHold_) return 1.0f;
-	return 1.0f - SmoothStep01(skipFadeOut_ > 1e-3f ? (t - skipFadeIn_ - skipFadeHold_) / skipFadeOut_ : 1.0f);
+	return 1.0f - SmoothStep01(skipFadeOut_ > kMinSeconds ? (t - skipFadeIn_ - skipFadeHold_) / skipFadeOut_ : 1.0f);
 }
 
 void StageStartPart::UpdateOverlay(float deltaTime) {
@@ -676,7 +714,7 @@ void StageStartPart::ApplyCamera(float deltaTime) {
 	// 機体が射出口へ近づくほど射出口の光を弱める（ブルームのにじみに機体が埋もれないように）
 	{
 		const float toExit = geometry_.catapultTunnelEndZ - travel;
-		const float nearness = exitDimDistance_ > 1e-3f ? 1.0f - toExit / exitDimDistance_ : (toExit <= 0.0f ? 1.0f : 0.0f);
+		const float nearness = exitDimDistance_ > kMinLength ? 1.0f - toExit / exitDimDistance_ : (toExit <= 0.0f ? 1.0f : 0.0f);
 		facility_->SetExitLightLevel(1.0f + (exitDimNear_ - 1.0f) * SmoothStep01(nearness));
 	}
 	camera_->SetNearClip(nearClip_);
@@ -690,7 +728,7 @@ void StageStartPart::ApplyCamera(float deltaTime) {
 		const Vector3 eye = { liftOrigin.x + thirdPersonEye_.x, liftOrigin.y + thirdPersonEye_.y, liftOrigin.z + thirdPersonEye_.z };
 		const Vector3 offset = ThirdPersonTargetAt(travel);
 		const Vector3 target = { mechOrigin.x + offset.x, mechOrigin.y + offset.y, mechOrigin.z + offset.z };
-		if (!smoothedTargetValid_ || thirdPersonTargetLag_ <= 1e-4f) {
+		if (!smoothedTargetValid_ || thirdPersonTargetLag_ <= kMinTargetLagSeconds) {
 			smoothedTarget_ = target;
 			smoothedTargetValid_ = true;
 		} else {
@@ -725,7 +763,7 @@ Vector3 StageStartPart::CableAttachWorld() const {
 	const Vector3 liftOrigin = facility_->ToWorld({ 0.0f, facility_->GetLiftY(), 0.0f });
 	const Vector3& o = cable_->GetAttachOffset();
 	// 機体は +Z を向いて回さないので、ずらしはワールドの向きのまま足す
-	Vector3 bone = { liftOrigin.x, liftOrigin.y + 12.0f, liftOrigin.z + MechTravel() };   // モデルが無いときの背中の高さ
+	Vector3 bone = { liftOrigin.x, liftOrigin.y + kFallbackBackHeight, liftOrigin.z + MechTravel() };   // モデルが無いときの背中の高さ
 	if (mech_) {
 		const Matrix4x4 m = mech_->GetJointWorldMatrix(cable_->GetAttachBone());
 		bone = { m.m[3][0], m.m[3][1], m.m[3][2] };
@@ -737,10 +775,10 @@ Vector3 StageStartPart::ThirdPersonTargetAt(float travel) const {
 	// 機体（原点＝前へ走った分）がカメラの z を通る所が真横のキー
 	const float pass = (std::max)(thirdPersonEye_.z, 0.0f);
 	if (travel <= pass) {
-		const float u = pass > 1e-3f ? travel / pass : 1.0f;
+		const float u = pass > kMinLength ? travel / pass : 1.0f;
 		return LerpVector3(thirdPersonTarget_, thirdPersonPassTarget_, SmoothStep01(u));
 	}
-	const float u = thirdPersonFarDistance_ > 1e-3f ? (travel - pass) / thirdPersonFarDistance_ : 1.0f;
+	const float u = thirdPersonFarDistance_ > kMinLength ? (travel - pass) / thirdPersonFarDistance_ : 1.0f;
 	return LerpVector3(thirdPersonPassTarget_, thirdPersonFarTarget_, SmoothStep01(u));
 }
 
@@ -757,7 +795,7 @@ Vector3 StageStartPart::GetSkyViewOffset() const {
 void StageStartPart::ApplyLighting(const Vector2& screenSize) {
 	const float liftY = facility_->GetLiftY();
 	// 縦穴の付け根（カタパルトの天井）より下へ降りるほど外の光を弱める
-	const float ceiling = (std::max)(geometry_.catapultCeilingY, 1e-3f);
+	const float ceiling = (std::max)(geometry_.catapultCeilingY, kMinLength);
 	const float hall = std::clamp((ceiling - liftY) / ceiling, 0.0f, 1.0f);
 	if (auto* lm = LightManager::GetInstance(); lm && lm->GetDirectionalLightData()) {
 		lm->SetDirectionalLightDirection(handoff_.sunDirection);
@@ -845,7 +883,7 @@ void StageStartPart::LoadTuning(const JsonValue& node) {
 	auto read = [&node](const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	};
-	ReadVector3(node["origin"], origin_);
+	origin_ = ReadVector3(node["origin"], origin_);
 	startUnitsAboveShaftBase_ = static_cast<int>(node["startUnitsAboveShaftBase"].AsDouble(startUnitsAboveShaftBase_));
 	read("brakeDistance", brakeDistanceTuning_);
 	read("defaultDescentSpeed", defaultDescentSpeed_);
@@ -876,24 +914,24 @@ void StageStartPart::LoadTuning(const JsonValue& node) {
 	read("skipFadeOut", skipFadeOut_);
 	read("nearClip", nearClip_);
 	Vector3 sign = { cockpitSignColor_.x, cockpitSignColor_.y, cockpitSignColor_.z };
-	ReadVector3(node["cockpitSignColor"], sign);
+	sign = ReadVector3(node["cockpitSignColor"], sign);
 	cockpitSignColor_ = { sign.x, sign.y, sign.z, 1.0f };
 	read("lcdScrollSpeed", lcdScrollSpeed_);
-	ReadVector3(node["thirdPersonEye"], thirdPersonEye_);
-	ReadVector3(node["thirdPersonTarget"], thirdPersonTarget_);
-	ReadVector3(node["thirdPersonPassTarget"], thirdPersonPassTarget_);
-	ReadVector3(node["thirdPersonFarTarget"], thirdPersonFarTarget_);
+	thirdPersonEye_ = ReadVector3(node["thirdPersonEye"], thirdPersonEye_);
+	thirdPersonTarget_ = ReadVector3(node["thirdPersonTarget"], thirdPersonTarget_);
+	thirdPersonPassTarget_ = ReadVector3(node["thirdPersonPassTarget"], thirdPersonPassTarget_);
+	thirdPersonFarTarget_ = ReadVector3(node["thirdPersonFarTarget"], thirdPersonFarTarget_);
 	read("thirdPersonFarDistance", thirdPersonFarDistance_);
 	read("thirdPersonTargetLag", thirdPersonTargetLag_);
 	read("exitDimNear", exitDimNear_);
 	read("exitDimDistance", exitDimDistance_);
 	cloudsThroughExit_ = node["cloudsThroughExit"].AsBool(cloudsThroughExit_);
-	ReadVector3(node["skyAnchorOffset"], skyAnchorOffset_);
+	skyAnchorOffset_ = ReadVector3(node["skyAnchorOffset"], skyAnchorOffset_);
 	read("thirdPersonFovDegrees", thirdPersonFovDegrees_);
 	read("mechScale", mechScale_);
 	{
 		const std::string start = node["debugStart"].AsString(kDebugStartNames[static_cast<int>(debugStart_)]);
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < kDebugStartCount; ++i) {
 			if (start == kDebugStartNames[i]) debugStart_ = static_cast<DebugStart>(i);
 		}
 	}

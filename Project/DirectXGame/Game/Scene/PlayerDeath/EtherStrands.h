@@ -24,25 +24,44 @@ public:
 	EtherStrands();
 	~EtherStrands();
 
+	/// <summary>糸の枠と、全部の糸の帯を入れる動的メッシュを作る</summary>
 	void Initialize();
 	/// <summary>出ている糸を全部消す</summary>
 	void Reset();
-	/// <summary>糸の根元のアンカー（ワールド）。毎フレーム自機の位置を渡す</summary>
+	/// <summary>糸の根元のアンカーを設定する。毎フレーム自機の位置を渡す</summary>
+	/// <param name="anchor">ワールド位置</param>
 	void SetAnchor(const Vector3& anchor) { anchor_ = anchor; }
+	/// <summary>糸の根元のアンカーを返す</summary>
+	/// <returns>ワールド位置</returns>
 	const Vector3& GetAnchor() const { return anchor_; }
-	/// <summary>ワールドの root から糸を 1 本出す。scale は体の拡大率（長さ・太さ・振れ幅に掛ける）</summary>
+	/// <summary>ワールドの root から糸を 1 本出す（空きが無ければ出さない）</summary>
+	/// <param name="root">根元のワールド位置</param>
+	/// <param name="scale">体の拡大率（長さ・太さ・振れ幅に掛ける）</param>
 	void Emit(const Vector3& root, float scale);
+	/// <summary>糸の年齢を進め、寿命が来た糸を消す</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
+	/// <summary>出ている糸があるかを返す</summary>
+	/// <returns>1 本でもあれば true</returns>
 	bool HasAlive() const;
 
-	/// <summary>不透明物の後（PrimitivePipeline に切り替える）。帯はカメラへ向けて作る</summary>
+	/// <summary>カメラへ向けた帯を作って描く。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="etherColor">エーテルの色（RGB 0〜1）</param>
 	void Draw(Camera* camera, const Vector3& etherColor);
-	/// <summary>発光パス（Draw の後に呼ぶ。同じフレームの形を使う）</summary>
+	/// <summary>発光パスで描く（Draw の後に呼ぶ。同じフレームの形を使う）</summary>
 	void DrawBloom();
+	/// <summary>このフレームの帯を作り終えているかを返す</summary>
+	/// <returns>Draw で作った後なら true</returns>
 	bool IsBuilt() const { return built_; }
 
+	/// <summary>調整値（StagePlay.json の "playerDeath" → "strands"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 	static constexpr int kMaxStrands = 400;
@@ -67,9 +86,19 @@ private:
 		Vector3 flareDir;         // 昇るほど広がる向き（水平）
 	};
 
+	/// <summary>一様乱数を返す</summary>
+	/// <param name="lo">下限</param>
+	/// <param name="hi">上限</param>
+	/// <returns>lo〜hi の値</returns>
 	float Rand(float lo, float hi);
-	// 糸の高さ h（根元から）での横ずれ
+	/// <summary>糸の高さ h（根元から）での横ずれを求める（昇るほど振れ幅が増す）</summary>
+	/// <param name="s">糸</param>
+	/// <param name="h">根元からの高さ</param>
+	/// <returns>横ずれ（ワールド）</returns>
 	Vector3 SwayAt(const Strand& s, float h) const;
+	/// <summary>出ている糸から、カメラへ向けた帯の頂点を作る</summary>
+	/// <param name="cameraPos">カメラの位置（ワールド）</param>
+	/// <param name="etherColor">エーテルの色（RGB 0〜1）</param>
 	void BuildVertices(const Vector3& cameraPos, const Vector3& etherColor);
 
 	Vector3 anchor_ = { 0.0f, 0.0f, 0.0f };

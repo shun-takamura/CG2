@@ -1,6 +1,13 @@
 #include "ControllerInput.h"
 #include <cmath>
 
+namespace {
+	// トリガーの生の値の最大（XInput は 0〜255）
+	constexpr int kTriggerMaxValue = 255;
+	// スティックの生の値の最大（XInput は ±32767）
+	constexpr float kStickMaxValue = 32767.0f;
+}
+
 ControllerInput::ControllerInput(DWORD controllerIndex)
 	: controllerIndex_(controllerIndex)
 {
@@ -115,7 +122,7 @@ void ControllerInput::ProcessCurrentState() {
 			leftTrigger_ = 0.0f;
 		} else {
 			leftTrigger_ = static_cast<float>(rawLeftTrigger - deadZone_.leftTrigger) /
-				static_cast<float>(255 - deadZone_.leftTrigger);
+				static_cast<float>(kTriggerMaxValue - deadZone_.leftTrigger);
 		}
 
 		// 右トリガーの補正
@@ -124,7 +131,7 @@ void ControllerInput::ProcessCurrentState() {
 			rightTrigger_ = 0.0f;
 		} else {
 			rightTrigger_ = static_cast<float>(rawRightTrigger - deadZone_.rightTrigger) /
-				static_cast<float>(255 - deadZone_.rightTrigger);
+				static_cast<float>(kTriggerMaxValue - deadZone_.rightTrigger);
 		}
 	} else {
 		// 接続されていない場合は全ての値をリセット
@@ -171,15 +178,15 @@ ControllerInput::StickInput ControllerInput::ApplyCircularDeadZone(SHORT rawX, S
 	// デッドゾーン外にある場合
 	if (magnitude > static_cast<float>(deadZone)) {
 		// 最大値でクリップ（±32767）
-		if (magnitude > 32767.0f) {
-			magnitude = 32767.0f;
+		if (magnitude > kStickMaxValue) {
+			magnitude = kStickMaxValue;
 		}
 
 		// デッドゾーン分を差し引く
 		magnitude -= static_cast<float>(deadZone);
 
 		// 0.0～1.0 に正規化
-		result.magnitude = magnitude / (32767.0f - static_cast<float>(deadZone));
+		result.magnitude = magnitude / (kStickMaxValue - static_cast<float>(deadZone));
 
 		// 方向ベクトルを計算
 		float rawMagnitude = std::sqrt(static_cast<float>(rawX * rawX + rawY * rawY));

@@ -10,14 +10,14 @@ class DirectXCore;
 class SRVManager;
 
 /// <summary>
-/// ディスラプター崩壊の破片レンダラ（セル方式）。
+/// 画面を割る演出の破片レンダラ（セル方式）。
 /// 画面を事前分割した凸セル（多角形）を三角形化し、各頂点に baked UV（剥がれた画面位置）を持たせて
 /// 1本の連結頂点バッファにアップロードする（SetCells、崩壊開始に1回）。
 /// 描画は「割れたセルだけ」を per-cell の WVP（重心回転＋飛散移動）で 1 ドローコールずつ描く（Draw）。
 /// PS でシーンキャプチャを baked UV でサンプル→色反転＝破片が自分の場所の反転絵を持って飛ぶ。
 /// PostEffect の後に描く前提（深度なし・DSVなし）なので二重反転しない。
 /// </summary>
-class DisruptorShardRenderer
+class ScreenShardRenderer
 {
 public:
 	// 連結 VB の1頂点（pos=重心ローカル座標[world単位], uv=baked スクリーンUV）
@@ -37,23 +37,37 @@ public:
 		float     satBoost = 1.0f; // 反転色の彩度ブースト
 	};
 
+	/// <summary>ルートシグネチャ・PSO・セルごとの CB（256 バイト境界で maxCells 個）を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">キャプチャ SRV をバインドするのに使う</param>
+	/// <param name="maxCells">1 回の Draw で描けるセル数の上限（最低 1）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t maxCells);
+	/// <summary>CB と VB をアンマップして、すべての GPU リソースを解放する</summary>
 	void Finalize();
 
 	/// <summary>
 	/// 全セルの三角形を連結 VB にアップロードし、セルごとの頂点レンジを記録する（崩壊開始に1回）。
 	/// </summary>
+	/// <param name="cells">セルごとの三角形リスト（index が DrawItem::cellIndex になる）</param>
 	void SetCells(const std::vector<CellMesh>& cells);
 
 	/// <summary>
 	/// 現在バインドされている RTV（=PostEffect後の最終RT）に対し、capture をサンプルして割れたセルを描画する。
 	/// </summary>
+	/// <param name="viewProjection">カメラのビュープロジェクション行列</param>
+	/// <param name="captureSrvIndex">画面キャプチャの SRV 番号（ルート [1] の t0 にバインド）</param>
+	/// <param name="items">描くセル（maxCells を超えた分は描かない）</param>
 	void Draw(const Matrix4x4& viewProjection, uint32_t captureSrvIndex, const std::vector<DrawItem>& items);
 
 private:
+	/// <summary>ルートシグネチャを作る（[0]=b0 の ShardCB・全ステージ、[1]=PS t0 のキャプチャ SRV テーブル、s0=リニア・クランプ）</summary>
 	void CreateRootSignature();
+	/// <summary>PSO を作る（両面・α ブレンド・深度なし・DSV なし・sRGB の RT）</summary>
 	void CreatePipelineState();
+	/// <summary>セルごとの ShardCB を 256 バイト境界で maxCells 個並べたアップロードバッファを作ってマップする</summary>
 	void CreateConstantBuffer();
+	/// <summary>足りなければ VB を 1.5 倍以上の容量で作り直してマップする</summary>
+	/// <param name="vertexCount">必要な頂点数</param>
 	void EnsureVertexCapacity(uint32_t vertexCount);
 
 	// per-cell cbuffer（シェーダの ShardCB と同レイアウト）

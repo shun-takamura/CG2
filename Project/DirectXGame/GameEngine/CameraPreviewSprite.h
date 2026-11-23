@@ -5,20 +5,23 @@ class SpriteManager;
 class SpriteInstance;
 
 /// <summary>
-/// カメラキャプチャ映像をスプライトとして表示し、QRコード読み取りも行うヘルパークラス。
+/// カメラキャプチャ映像をスプライトとして表示するヘルパークラス（QR コードの読み取りは Scene が行う）。
 /// CameraCapture::OpenCamera() / CloseCamera() は外部（ImGuiなど）で呼ぶ前提。
 /// </summary>
 class CameraPreviewSprite
 {
 public:
-	// 不完全型 SpriteInstance を unique_ptr で持つため、デストラクタは .cpp で定義する
+	/// <summary>何もしない（不完全型 SpriteInstance を unique_ptr で持つため、.cpp で定義する）</summary>
 	CameraPreviewSprite();
+	/// <summary>スプライトを破棄する（不完全型 SpriteInstance を unique_ptr で持つため、.cpp で定義する）</summary>
 	~CameraPreviewSprite();
 
+	/// <summary>スプライトの描画に使うマネージャを受け取る</summary>
+	/// <param name="spriteManager">SpriteManager</param>
 	void Initialize(SpriteManager* spriteManager);
 
 	/// <summary>
-	/// カメラ開閉に合わせてスプライトのライフサイクルを管理し、QRコードをデコードする。
+	/// カメラが開いてテクスチャができたらスプライト（640×480、左上）を作り、閉じたら破棄する。
 	/// シーンのUpdate()内で呼ぶ。
 	/// </summary>
 	void Update();

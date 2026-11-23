@@ -1,45 +1,42 @@
 #pragma once
-#include <random>
-#include "Enemy/Boss/BossActionManager.h"
+#include <memory>
+#include "Enemy/Boss/IBossState.h"
 
 /// <summary>
-/// ボスの行動パターンを選ぶ本体。攻撃/移動をクールタイム＋重み付き抽選で切り替え、
-/// 一定リズムでの来襲にならないようにする。
+/// ボスの状態を持つ本体（ステートパターンのコンテキスト）。今の状態を 1 つだけ持ち、
+/// 状態が返した次の状態へ切り替える（どの状態へ行くかは状態クラス自身が決める）。
+/// 状態をまたぐ共有データ（クールタイム・乱数・発狂）は BossBrain として持ち、状態へ渡す。
 /// </summary>
 class BossStateMachine {
 public:
-	void Update(float dt, BossActionContext& ctx);
-	// true の間は次の行動を選ばない（今の行動は最後までやる）。自機の死亡演出の間（19 番 G3）
-	void SetStandDown(bool standDown) { standDown_ = standDown; }
-	// 部位が壊れた：次の Update で今の行動を打ち切り、seconds 秒ひるむ
+	/// <summary>待機（BossIdleState）から始める</summary>
+	BossStateMachine();
+	/// <summary>破棄（IBossState の派生を完全型で消すため .cpp で定義）</summary>
+	~BossStateMachine();
+
+	/// <summary>
+	/// 毎フレームの更新。今の状態の Update を呼び、次の状態が返ってきたら切り替える。
+	/// 部位破壊の要求があれば、その前に今の状態の OnPartBroken を呼んで移る先を決めさせる
+	/// </summary>
+	/// <param name="dt">World の経過時間 [秒]</param>
+	/// <param name="ctx">ボス・自機・シーン（共有データ brain はここで入れる）</param>
+	void Update(float dt, BossStateContext& ctx);
+
+	/// <summary>true の間は次の行動を選ばない（今の行動は最後までやる）。自機の死亡演出の間（19 番 G3）</summary>
+	/// <param name="standDown">選ばないなら true</param>
+	void SetStandDown(bool standDown) { brain_.standDown = standDown; }
+
+	/// <summary>部位が壊れた：次の Update で今の状態に知らせ、ひるむ</summary>
+	/// <param name="seconds">ひるむ時間 [秒]</param>
 	void RequestStagger(float seconds) { staggerRequest_ = seconds; }
 
 private:
-	void SelectNext(BossActionContext& ctx);
-	void StartAttack(BossActionContext& ctx, bool rage);
-	bool IsPlayerInMeleeRange(const BossActionContext& ctx) const;
-	bool IsRage(const BossActionContext& ctx) const;
+	/// <summary>状態を切り替える（今の状態の OnExit → 次の状態へ差し替え → 次の状態の OnEnter）</summary>
+	/// <param name="next">次の状態（nullptr は渡さない）</param>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void ChangeState(std::unique_ptr<IBossState> next, BossStateContext& ctx);
 
-	BossActionManager manager_;
-	std::mt19937 rng_{ std::random_device{}() };
-
-	float attackCooldown_     = 0.0f; // 攻撃終了後、次に攻撃を選べるまでの残り秒
-	float attackCooldownBase_ = 1.5f; // 攻撃選択のたびにこの値へ再セット
-	float attackChance_       = 0.5f; // クールタイム明け時、攻撃を選ぶ確率（残りは移動系から選ぶ）
-
-	// 発狂（HP 比率がこれ以下）：攻撃間隔を詰め、攻撃頻度・弾数を上げ、予兆を短くする
-	float rageHpRatio_           = 0.5f;
-	float rageAttackCooldown_    = 0.9f;
-	float rageAttackChance_      = 0.7f;
-	float rageTelegraphScale_    = 0.8f;
-	bool  rageEntered_           = false; // 発狂移行演出（咆哮）を一度だけ出すためのフラグ
-
-	float meleeRange_       = 9.0f; // このXZ距離以内なら近接攻撃を選択肢に入れる
-
-	float jumpCooldown_       = 0.0f; // ジャンプ飛び越え後、次に選べるまでの残り秒
-	float jumpCooldownBase_   = 4.0f; // 連発防止（飛び道具ほど頻発させない）
-	float jumpChance_         = 0.3f; // 攻撃不可時、移動系の中でジャンプを選ぶ確率（残りは接近移動）
-
-	bool standDown_ = false;
+	std::unique_ptr<IBossState> current_;
+	BossBrain brain_;
 	float staggerRequest_ = -1.0f; // >= 0 で次の Update にひるむ
 };

@@ -18,7 +18,7 @@ UIPointer UIPointer::FromInput(InputManager* input) {
 #ifdef _DEBUG
 	const float width = static_cast<float>(WindowsApplication::kUIWidth);
 	const float height = static_cast<float>(WindowsApplication::kUIHeight);
-	auto* vp = ImGuiManager::Instance().GetViewportWindow();
+	auto* vp = ImGuiManager::GetInstance()->GetViewportWindow();
 	if (!vp || !vp->IsHovered()) return pointer;
 	const ImVec2 imagePos = vp->GetImageScreenPos();
 	const ImVec2 imageSize = vp->GetImageScreenSize();

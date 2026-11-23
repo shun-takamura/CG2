@@ -8,6 +8,7 @@
 #include "MathUtility.h"
 #include "Material.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -17,6 +18,31 @@
 #endif
 
 namespace {
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 時間の長さの下限 [秒]（これ以下ならすぐ終わったものとして扱う）
+	constexpr float kMinSeconds = 1e-3f;
+	// スラスターごとに咳き込み始めをずらす幅の最大 [秒]
+	constexpr float kCoughStartJitter = 0.15f;
+	// 噴射の長さのばらつき（倍率）の最小
+	constexpr float kPuffLengthJitterMin = 0.6f;
+	// 噴射の長さのばらつき（倍率）の幅
+	constexpr float kPuffLengthJitterRange = 0.7f;
+	// 噴射の間のばらつき（倍率）の最小
+	constexpr float kGapJitterMin = 0.6f;
+	// 噴射の間のばらつき（倍率）の幅
+	constexpr float kGapJitterRange = 0.8f;
+	// 咳き込みの 1 回で先へ進める時間の下限 [秒]（調整値が 0 でも先へ進む）
+	constexpr float kMinCoughStep = 0.01f;
+	// 体の高さの最小・最大を求めるときの始めの値 [m]
+	constexpr float kHugeHeight = 1.0e30f;
+	// 拡大率がこれ以下ならノイズの細かさを割らない
+	constexpr float kMinScale = 1e-4f;
+	// ほどける面を足元のどれだけ下から始めるか（体の大きさ 1 のとき）[m]
+	constexpr float kUnravelStartMargin = 0.01f;
+
 	// エフェクト（Resources/Json/Effects）。displayName が kEtherPrefix で始まる部品はエーテルの色で塗る
 	constexpr const char* kAscendEffect = "PlayerEtherAscend";    // 昇る光の粒（ループ。ほどけ終わりで止める）
 	constexpr const char* kLightEffect = "PlayerEtherLight";      // エーテルの色の点光源
@@ -25,42 +51,44 @@ namespace {
 	// ボス戦の膝つき（rig_player_mech.py --body-clips の Kneel。1 回きり・最後のコマで止める）
 	constexpr const char* kKneelClip = "Resources/Models/Player/PlayerModel/PlayerModel_Kneel.anim";
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="u">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 	}
 
+	/// <summary>角度を −π〜π に収める</summary>
+	/// <param name="a">角度 [ラジアン]</param>
+	/// <returns>−π〜π の角度 [ラジアン]</returns>
 	float WrapAngle(float a) {
 		while (a > kPi) a -= 2.0f * kPi;
 		while (a < -kPi) a += 2.0f * kPi;
 		return a;
 	}
 
+	/// <summary>エーテル化の演出の名前（kEtherPrefix で始まる）かを返す</summary>
+	/// <param name="name">名前</param>
+	/// <returns>kEtherPrefix で始まれば true</returns>
 	bool IsEther(const std::string& name) {
 		return name.rfind(kEtherPrefix, 0) == 0;
 	}
 
+	/// <summary>色の RGB に tint を掛ける（α はそのまま）</summary>
+	/// <param name="color">掛ける色（書き換える）</param>
+	/// <param name="tint">RGB ごとの倍率</param>
 	void Tint(Vector4& color, const Vector3& tint) {
 		color.x *= tint.x;
 		color.y *= tint.y;
 		color.z *= tint.z;
 	}
 
+	/// <summary>行列の平行移動の成分を取り出す</summary>
+	/// <param name="m">行列</param>
+	/// <returns>位置</returns>
 	Vector3 Translation(const Matrix4x4& m) {
 		return { m.m[3][0], m.m[3][1], m.m[3][2] };
-	}
-
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
 	}
 }
 
@@ -122,18 +150,18 @@ void PlayerDeathPart::RestorePlayer() {
 
 void PlayerDeathPart::BuildCoughSchedule() {
 	std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-	const float span = (std::max)(coughEnd_ - coughStart_, 1e-3f);
+	const float span = (std::max)(coughEnd_ - coughStart_, kMinSeconds);
 	for (std::vector<Puff>& puffs : coughs_) {
 		puffs.clear();
 		// 基ごとに咳き込み始めをずらす。噴射は短く・間は長くなっていき、大はだんだん出なくなる
-		float t = coughStart_ + unit(random_) * 0.15f;
+		float t = coughStart_ + unit(random_) * kCoughStartJitter;
 		while (t < coughEnd_) {
 			const float p = (t - coughStart_) / span;
-			const float length = (coughPuffLong_ + (coughPuffShort_ - coughPuffLong_) * p) * (0.6f + 0.7f * unit(random_));
+			const float length = (coughPuffLong_ + (coughPuffShort_ - coughPuffLong_) * p) * (kPuffLengthJitterMin + kPuffLengthJitterRange * unit(random_));
 			const bool large = unit(random_) < coughLargeChance_ * (1.0f - p);
 			puffs.push_back({ t, (std::min)(t + length, coughEnd_), large ? MechThrusters::Size::Large : MechThrusters::Size::Small });
-			const float gap = (coughGapShort_ + (coughGapLong_ - coughGapShort_) * p) * (0.6f + 0.8f * unit(random_));
-			t += (std::max)(length + gap, 0.01f);   // 調整値が 0 でも先へ進む
+			const float gap = (coughGapShort_ + (coughGapLong_ - coughGapShort_) * p) * (kGapJitterMin + kGapJitterRange * unit(random_));
+			t += (std::max)(length + gap, kMinCoughStep);   // 調整値が 0 でも先へ進む
 		}
 	}
 }
@@ -215,8 +243,8 @@ bool PlayerDeathPart::RefreshBody(float& minY, float& maxY) {
 	if (count == 0) return false;
 	jointPositions_.resize(count);
 	jointParents_.resize(count);
-	minY = 1.0e30f;
-	maxY = -1.0e30f;
+	minY = kHugeHeight;
+	maxY = -kHugeHeight;
 	for (size_t i = 0; i < count; ++i) {
 		const Joint& joint = skeleton.joints[i];
 		jointPositions_[i] = Translation(player_->GetJointWorldMatrix(joint.name));
@@ -237,7 +265,7 @@ void PlayerDeathPart::ApplyDissolve(float planeHeight) {
 	d.height = planeHeight;
 	d.edgeWidth = edgeWidth_ * s;
 	d.edgeColor = { etherColor_.x * edgeIntensity_, etherColor_.y * edgeIntensity_, etherColor_.z * edgeIntensity_ };
-	d.noiseScale = s > 1e-4f ? noiseScale_ / s : noiseScale_;
+	d.noiseScale = s > kMinScale ? noiseScale_ / s : noiseScale_;
 	d.noiseAmplitude = noiseAmplitude_ * s;
 	player_->SetDissolvePlane(d);
 	dissolving_ = true;
@@ -266,7 +294,7 @@ void PlayerDeathPart::EmitStrands(float planeHeight, float deltaTime) {
 			Vector3 p = { a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u };
 			if (p.y < planeHeight - band || p.y > planeHeight + band) continue;
 			// 骨の線から水平に散らす（体の表面のあたりから出す）
-			const float angle = unit(random_) * 6.2831853f;
+			const float angle = unit(random_) * kTwoPi;
 			const float r = radius * std::sqrt(unit(random_));
 			p.x += std::cos(angle) * r;
 			p.z += std::sin(angle) * r;
@@ -326,9 +354,9 @@ void PlayerDeathPart::Update(float deltaTime) {
 		}
 		const float s = player_->GetScale().x;
 		// 面は足元の少し下（何も消えていない）から、頭の上へ縁とゆらぎが抜け切るまで上げる
-		const float from = minY - (noiseAmplitude_ + 0.01f) * s;
+		const float from = minY - (noiseAmplitude_ + kUnravelStartMargin) * s;
 		const float to = maxY + (edgeWidth_ + noiseAmplitude_) * s;
-		const float u = unravelSeconds_ > 1e-3f ? stateTime_ / unravelSeconds_ : 1.0f;
+		const float u = unravelSeconds_ > kMinSeconds ? stateTime_ / unravelSeconds_ : 1.0f;
 		planeHeight_ = from + (to - from) * SmoothStep01(u);
 		ApplyDissolve(planeHeight_);
 		EmitStrands(planeHeight_, deltaTime);
@@ -360,7 +388,7 @@ void PlayerDeathPart::DrawBloom(DirectXCore* dxCore) {
 void PlayerDeathPart::ApplyCamera(Camera& camera) const {
 	if (!IsActive() || !player_) return;
 	const float blendSeconds = kind_ == Kind::Boss ? bossCamOrbitSeconds_ : cameraBlendSeconds_;
-	const float w = blendSeconds > 1e-3f ? SmoothStep01(elapsed_ / blendSeconds) : 1.0f;
+	const float w = blendSeconds > kMinSeconds ? SmoothStep01(elapsed_ / blendSeconds) : 1.0f;
 	if (w <= 0.0f) return;
 	if (kind_ == Kind::Boss) {
 		ApplyBossCamera(camera, w);
@@ -372,7 +400,7 @@ void PlayerDeathPart::ApplyCamera(Camera& camera) const {
 float PlayerDeathPart::LookHeight(float from) const {
 	// 見上げる：ほどけ始め（Prelude＋Glow の後）から注視点を from から頭の上へ上げる
 	const float lookStart = PreludeSeconds() + glowSeconds_;
-	const float up = cameraLookUpSeconds_ > 1e-3f ? SmoothStep01((elapsed_ - lookStart) / cameraLookUpSeconds_) : 1.0f;
+	const float up = cameraLookUpSeconds_ > kMinSeconds ? SmoothStep01((elapsed_ - lookStart) / cameraLookUpSeconds_) : 1.0f;
 	return from + (cameraLookTo_ - from) * up;
 }
 
@@ -438,7 +466,7 @@ Vector3 PlayerDeathPart::GetBodyGlow() const {
 	float k = 0.0f;
 	switch (state_) {
 	case State::Glow:
-		k = glowSeconds_ > 1e-3f ? SmoothStep01(stateTime_ / glowSeconds_) : 1.0f;
+		k = glowSeconds_ > kMinSeconds ? SmoothStep01(stateTime_ / glowSeconds_) : 1.0f;
 		break;
 	case State::Unravel:
 		k = 1.0f;
@@ -480,7 +508,7 @@ void PlayerDeathPart::LoadTuning(const JsonValue& node) {
 	auto read = [&node](const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	};
-	ReadVector3(node["etherColor"], etherColor_);
+	etherColor_ = ReadVector3(node["etherColor"], etherColor_);
 	read("preludeRailSeconds", preludeRailSeconds_);
 	read("preludeBossSeconds", preludeBossSeconds_);
 	read("glowSeconds", glowSeconds_);

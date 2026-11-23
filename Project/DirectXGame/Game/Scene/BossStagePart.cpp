@@ -1,4 +1,5 @@
 #include "BossStagePart.h"
+#include "MathUtility.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,7 +10,7 @@
 #include "IImGuiEditable.h"
 #include "Components/Gameplay.h"
 #include "Enemy/EnemyController.h"
-#include "Enemy/IEnemyCommand.h"
+#include "Enemy/Commands/IEnemyCommand.h"
 #include "Enemy/Boss/BossBrainCommand.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
@@ -18,6 +19,35 @@
 #ifdef _DEBUG
 #include "imgui.h"
 #endif
+
+namespace {
+	// JSON の配列を Vector3 として読むのに要る要素数
+	constexpr size_t kVec3ComponentCount = 3;
+	// ボスの向きを求められなかったときのカメラの俯角 [rad]（下向き＋）
+	constexpr float kDefaultCamPitch = 0.15f;
+	// 3 次ベジェ（バーンスタイン多項式）の二項係数 3
+	constexpr float kCubicBezierBinomial = 3.0f;
+	// 3 次ベジェの接線（微分）の真ん中の項の係数
+	constexpr float kCubicBezierTangentMid = 6.0f;
+	// なめらかな補間 3x²−2x³ の x² の係数
+	constexpr float kSmoothStepCubicCoeff = 3.0f;
+	// 長さ・秒数がこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kTinyEpsilon = 1e-4f;
+	// 長さ・秒数がこれより小さければ 0 とみなす
+	constexpr float kNearZero = 1e-3f;
+	// 長さの 2 乗がこれ以下なら 0 とみなす
+	constexpr float kSquaredEpsilon = 1e-6f;
+	// 3 次ベジェの始点の速さは 3｜P1−P0｜/T なので、速さを合わせるには P1 を 速さ×T÷3 だけ先に置く
+	constexpr float kBezierStartSpeedDivisor = 3.0f;
+	// 着陸：見る点を自機へ移す速さ（全体の 1/1.2 の時間で移りきる）
+	constexpr float kLandingLookBlendSpeed = 1.2f;
+	// 着陸：自機の進む向きを取る曲線の位置の上限（終点は接線が 0 になるので手前で取る）
+	constexpr float kLandingTangentSampleMax = 0.98f;
+	// 着陸：自機がボスの方へ向き始める進み具合（着く前の 3 割）
+	constexpr float kLandingTurnToBossStart = 0.7f;
+	// 着陸：自機がボスの方へ向ききるまでの進み具合の幅
+	constexpr float kLandingTurnToBossSpan = 0.3f;
+}
 
 BossStagePart::BossStagePart()  = default;
 BossStagePart::~BossStagePart() = default;
@@ -54,6 +84,10 @@ bool BossStagePart::GetLootCollectPoint(Vector3& out) const {
 	return true;
 }
 
+GameSession* BossStagePart::GetGameSession() const {
+	return host_->GetGameSession();
+}
+
 void BossStagePart::LoadArenaGeometry() {
 	constexpr const char* kPath = "Resources/Json/Tuning/BossArenaGeometry.json";
 	if (!std::filesystem::exists(kPath)) return;
@@ -61,7 +95,7 @@ void BossStagePart::LoadArenaGeometry() {
 	if (!result.success) return;
 	const JsonValue& root = result.value;
 	const JsonValue& c = root["center"];
-	if (c.IsArray() && c.Size() >= 3) {
+	if (c.IsArray() && c.Size() >= kVec3ComponentCount) {
 		arenaCenter_ = { static_cast<float>(c[0].AsDouble(arenaCenter_.x)),
 			static_cast<float>(c[1].AsDouble(arenaCenter_.y)),
 			static_cast<float>(c[2].AsDouble(arenaCenter_.z)) };
@@ -83,13 +117,11 @@ void BossStagePart::Enter() {
 	if (boss_) {
 		// ボスAI：BossAttackCommand を1つ積んだ EnemyController をプログラム的に生成（Wave 非経由）。
 		auto ctrl = std::make_unique<EnemyController>();
-		ctrl->entity_            = boss_;
-		ctrl->billboardToPlayer_ = true;
 		std::vector<std::unique_ptr<IEnemyCommand>> cmds;
 		auto brain = std::make_unique<BossBrainCommand>(arenaCenter_, arenaRadius_, &rig_);
 		brain_ = brain.get();
 		cmds.push_back(std::move(brain));
-		ctrl->Init(std::move(cmds));
+		ctrl->Init(boss_, -1, true, EnemyWaveParams{}, std::move(cmds));
 		host_->RegisterEnemyController(std::move(ctrl));
 		// 手足（腕は壊せる部位）
 		rig_.Spawn(boss_);
@@ -110,36 +142,52 @@ void BossStagePart::Enter() {
 	snapTimer_ = -1.0f;
 	float y, p;
 	if (ComputeBossYawPitch(y, p)) { camYaw_ = y; camPitch_ = p; }
-	else { camYaw_ = 0.0f; camPitch_ = 0.15f; }
+	else { camYaw_ = 0.0f; camPitch_ = kDefaultCamPitch; }
 }
 
 namespace {
+	/// <summary>3 次ベジェの点</summary>
+	/// <param name="p">制御点 4 つ</param>
+	/// <param name="u">曲線の位置（0〜1）</param>
+	/// <returns>曲線上の点</returns>
 	Vector3 Bezier3(const Vector3 (&p)[4], float u) {
 		const float v = 1.0f - u;
-		const float a = v * v * v, b = 3.0f * v * v * u, c = 3.0f * v * u * u, d = u * u * u;
+		const float a = v * v * v, b = kCubicBezierBinomial * v * v * u, c = kCubicBezierBinomial * v * u * u, d = u * u * u;
 		return { a * p[0].x + b * p[1].x + c * p[2].x + d * p[3].x,
 			a * p[0].y + b * p[1].y + c * p[2].y + d * p[3].y,
 			a * p[0].z + b * p[1].z + c * p[2].z + d * p[3].z };
 	}
+	/// <summary>3 次ベジェの接線（u での微分）</summary>
+	/// <param name="p">制御点 4 つ</param>
+	/// <param name="u">曲線の位置（0〜1）</param>
+	/// <returns>接線（正規化しない）</returns>
 	Vector3 Bezier3Tangent(const Vector3 (&p)[4], float u) {
 		const float v = 1.0f - u;
-		const float a = 3.0f * v * v, b = 6.0f * v * u, c = 3.0f * u * u;
+		const float a = kCubicBezierBinomial * v * v, b = kCubicBezierTangentMid * v * u, c = kCubicBezierBinomial * u * u;
 		return { a * (p[1].x - p[0].x) + b * (p[2].x - p[1].x) + c * (p[3].x - p[2].x),
 			a * (p[1].y - p[0].y) + b * (p[2].y - p[1].y) + c * (p[3].y - p[2].y),
 			a * (p[1].z - p[0].z) + b * (p[2].z - p[1].z) + c * (p[3].z - p[2].z) };
 	}
-	// 始めは等速（s'(0)=1＝レールの速さのまま）、終わりは止まる（s'(1)=0）時間の写像
+	/// <summary>始めは等速（s'(0)=1＝レールの速さのまま）、終わりは止まる（s'(1)=0）時間の写像</summary>
+	/// <param name="t">進み具合（0〜1 に収める）</param>
+	/// <returns>写像した値</returns>
 	float EaseOutKeepStart(float t) {
 		t = std::clamp(t, 0.0f, 1.0f);
 		return t + t * t - t * t * t;
 	}
+	/// <summary>0〜1 のなめらかな補間（3x²−2x³）</summary>
+	/// <param name="x">進み具合（0〜1 に収める）</param>
+	/// <returns>補間した値</returns>
 	float SmoothStep01(float x) {
 		x = std::clamp(x, 0.0f, 1.0f);
-		return x * x * (3.0f - 2.0f * x);
+		return x * x * (kSmoothStepCubicCoeff - 2.0f * x);
 	}
+	/// <summary>角度を −π〜π に折り返す</summary>
+	/// <param name="a">角度 [rad]</param>
+	/// <returns>折り返した角度 [rad]</returns>
 	float WrapPi(float a) {
-		while (a > 3.14159265f) a -= 6.28318531f;
-		while (a < -3.14159265f) a += 6.28318531f;
+		while (a > kPi) a -= kTwoPi;
+		while (a < -kPi) a += kTwoPi;
 		return a;
 	}
 }
@@ -161,7 +209,7 @@ void BossStagePart::ComputeStartCamera(Vector3& outEye, float& outYaw, float& ou
 	const Vector3 bPos = GetBossStartPos();
 	Vector3 d{ bPos.x - focus.x, bPos.y - focus.y, bPos.z - focus.z };
 	const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-	if (len > 1e-4f) { d.x /= len; d.y /= len; d.z /= len; }
+	if (len > kTinyEpsilon) { d.x /= len; d.y /= len; d.z /= len; }
 	else { d = { 0.0f, 0.0f, 1.0f }; }
 	outYaw = std::atan2(d.x, d.z);
 	outPitch = std::clamp(-std::asin(std::clamp(d.y, -1.0f, 1.0f)), pitchMin_, pitchMax_);
@@ -182,7 +230,7 @@ void BossStagePart::BeginLanding() {
 	Vector3 fwd = camera_->GetForward();
 	fwd.y = 0.0f;
 	const float fl = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
-	if (fl < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; }
+	if (fl < kTinyEpsilon) { fwd = { 0.0f, 0.0f, 1.0f }; }
 	else { fwd.x /= fl; fwd.z /= fl; }
 	landingPlayerYaw_ = std::atan2(fwd.x, fwd.z);
 
@@ -193,7 +241,7 @@ void BossStagePart::BeginLanding() {
 
 	// 3 次ベジェの始点の速さ = 3|P1−P0|/T。レールの速さのまま出るように P1 を置く。
 	// 終点の手前の制御点は闘技場の後ろ上＝見下ろしながら降りてくる
-	const float lead = landingStartSpeed_ * landingDuration_ / 3.0f;
+	const float lead = landingStartSpeed_ * landingDuration_ / kBezierStartSpeedDivisor;
 	landingCam_[0] = eye0;
 	landingCam_[1] = { eye0.x + fwd.x * lead, eye0.y, eye0.z + fwd.z * lead };
 	landingCam_[2] = { eye1.x + backX * landingCamBack_, eye1.y + landingCamLift_, eye1.z + backZ * landingCamBack_ };
@@ -207,7 +255,7 @@ void BossStagePart::BeginLanding() {
 	if (IImGuiEditable* pl = host_->GetPlayer()) {
 		if (const Vector3* pp = pl->GetEditableTranslate()) p0 = *pp;
 	}
-	const float playerLead = landingStartSpeed_ * landingDuration_ * landingPlayerRatio_ / 3.0f;
+	const float playerLead = landingStartSpeed_ * landingDuration_ * landingPlayerRatio_ / kBezierStartSpeedDivisor;
 	landingPlayer_[0] = p0;
 	landingPlayer_[1] = { p0.x + fwd.x * playerLead, p0.y, p0.z + fwd.z * playerLead };
 	landingPlayer_[2] = { pEnd.x + backX * landingPlayerBack_, pEnd.y + landingPlayerLift_, pEnd.z + backZ * landingPlayerBack_ };
@@ -217,25 +265,25 @@ void BossStagePart::BeginLanding() {
 bool BossStagePart::UpdateLanding(float dt) {
 	if (!landingActive_ || !camera_ || !host_) return true;
 	landingTimer_ += dt;
-	const float t = (landingDuration_ > 1e-3f) ? landingTimer_ / landingDuration_ : 1.0f;
+	const float t = (landingDuration_ > kNearZero) ? landingTimer_ / landingDuration_ : 1.0f;
 
 	// カメラ：位置は曲線、向きは「進む先」から「自機の体の中心」へ見る点を移す
 	const Vector3 eye = Bezier3(landingCam_, EaseOutKeepStart(t));
-	const float lookBlend = SmoothStep01(t * 1.2f);
+	const float lookBlend = SmoothStep01(t * kLandingLookBlendSpeed);
 	const Vector3 look{
 		landingLookStart_.x + (landingFocusEnd_.x - landingLookStart_.x) * lookBlend,
 		landingLookStart_.y + (landingFocusEnd_.y - landingLookStart_.y) * lookBlend,
 		landingLookStart_.z + (landingFocusEnd_.z - landingLookStart_.z) * lookBlend };
 	Vector3 d{ look.x - eye.x, look.y - eye.y, look.z - eye.z };
 	const float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-	if (dl > 1e-4f) {
+	if (dl > kTinyEpsilon) {
 		d.x /= dl; d.y /= dl; d.z /= dl;
 		camera_->SetTranslate(eye);
 		camera_->SetRotate({ -std::asin(std::clamp(d.y, -1.0f, 1.0f)), std::atan2(d.x, d.z), 0.0f });
 	}
 
 	// 自機
-	const float tp = (landingPlayerRatio_ > 1e-3f) ? t / landingPlayerRatio_ : 1.0f;
+	const float tp = (landingPlayerRatio_ > kNearZero) ? t / landingPlayerRatio_ : 1.0f;
 	const float sp = EaseOutKeepStart(tp);
 	if (IImGuiEditable* pl = host_->GetPlayer()) {
 		if (Vector3* pp = pl->GetEditableTranslate()) *pp = Bezier3(landingPlayer_, sp);
@@ -245,9 +293,9 @@ bool BossStagePart::UpdateLanding(float dt) {
 		Vector3 e;
 		float yawEnd = 0.0f, pitchEnd = 0.0f;
 		ComputeStartCamera(e, yawEnd, pitchEnd);
-		const Vector3 tan = Bezier3Tangent(landingPlayer_, (std::min)(sp, 0.98f));
-		const float moveYaw = (tan.x * tan.x + tan.z * tan.z > 1e-6f) ? std::atan2(tan.x, tan.z) : landingPlayerYaw_;
-		const float w = SmoothStep01((tp - 0.7f) / 0.3f);
+		const Vector3 tan = Bezier3Tangent(landingPlayer_, (std::min)(sp, kLandingTangentSampleMax));
+		const float moveYaw = (tan.x * tan.x + tan.z * tan.z > kSquaredEpsilon) ? std::atan2(tan.x, tan.z) : landingPlayerYaw_;
+		const float w = SmoothStep01((tp - kLandingTurnToBossStart) / kLandingTurnToBossSpan);
 		landingPlayerYaw_ = moveYaw + WrapPi(yawEnd - moveYaw) * w;
 	}
 	if (tp >= 1.0f && !landingTouchedDown_) {
@@ -326,7 +374,7 @@ void BossStagePart::ComputeGroundBasis(Vector3& outForward, Vector3& outRight) c
 	if (camera_) fwd = camera_->GetForward();
 	fwd.y = 0.0f;
 	float flen = std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
-	if (flen < 1e-4f) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
+	if (flen < kTinyEpsilon) { fwd = { 0.0f, 0.0f, 1.0f }; flen = 1.0f; }
 	fwd.x /= flen; fwd.z /= flen;
 	outForward = fwd;
 	// right = cross(up, forward), up=(0,1,0)
@@ -337,7 +385,7 @@ void BossStagePart::ApplyDashImpulse(const Vector2& moveDelta) {
 	// 移動入力方向へ地上速度の初速を上乗せ（入力なしはその場）。以降は UpdatePlayerGroundMovement の
 	// 指数減衰で自然に walk 速度へ落ちる＝STG のダッシュ→減速と同じ手触りになる。
 	const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
-	if (mlen < 1e-3f) return;
+	if (mlen < kNearZero) return;
 	Vector3 fwd, right;
 	ComputeGroundBasis(fwd, right);
 	const float nx = moveDelta.x / mlen;
@@ -362,16 +410,16 @@ void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt,
 	float hop = 0.0f;
 	if (knockbackTimer_ > 0.0f) {
 		// 吹き飛びの間だけ放物線で浮かせる（着地で 0 に戻る）
-		if (knockbackDuration_ > 1e-4f) {
+		if (knockbackDuration_ > kTinyEpsilon) {
 			const float u = 1.0f - (std::max)(knockbackTimer_, 0.0f) / knockbackDuration_;
-			hop = knockbackHop_ * std::sin(3.14159265f * u);
+			hop = knockbackHop_ * std::sin(kPi * u);
 		}
 		knockbackTimer_ -= dt;
 		tvx = 0.0f;
 		tvz = 0.0f;
 		smooth = knockbackDecayTime_;
 	}
-	const float alpha = (smooth > 1e-4f) ? (1.0f - std::exp(-dt / smooth)) : 1.0f;
+	const float alpha = (smooth > kTinyEpsilon) ? (1.0f - std::exp(-dt / smooth)) : 1.0f;
 	groundVelocity_.x += (tvx - groundVelocity_.x) * alpha;
 	groundVelocity_.y += (tvz - groundVelocity_.y) * alpha;
 
@@ -384,7 +432,7 @@ void BossStagePart::UpdatePlayerGroundMovement(IImGuiEditable* player, float dt,
 	const float dx = pos.x - arenaCenter_.x;
 	const float dz = pos.z - arenaCenter_.z;
 	const float d2 = dx * dx + dz * dz;
-	if (d2 > arenaRadius_ * arenaRadius_ && d2 > 1e-6f) {
+	if (d2 > arenaRadius_ * arenaRadius_ && d2 > kSquaredEpsilon) {
 		const float d = std::sqrt(d2);
 		const float s = arenaRadius_ / d;
 		pos.x = arenaCenter_.x + dx * s;
@@ -404,13 +452,13 @@ void BossStagePart::ApplyKnockback(const Vector3& attackerPos, bool heavy) {
 	float dx = pp->x - attackerPos.x;
 	float dz = pp->z - attackerPos.z;
 	float len = std::sqrt(dx * dx + dz * dz);
-	if (len < 1e-3f) {
+	if (len < kNearZero) {
 		// 真上から等で方向が取れないときはカメラの後ろ向きへ
 		Vector3 fwd, right;
 		ComputeGroundBasis(fwd, right);
 		dx = -fwd.x; dz = -fwd.z;
 		len = std::sqrt(dx * dx + dz * dz);
-		if (len < 1e-3f) return;
+		if (len < kNearZero) return;
 	}
 	const float speed = heavy ? knockHeavySpeed_ : knockLightSpeed_;
 	groundVelocity_ = { dx / len * speed, dz / len * speed };
@@ -431,7 +479,7 @@ bool BossStagePart::ComputeBossYawPitch(float& outYaw, float& outPitch) const {
 	const Vector3 focus{ pPos.x, pPos.y + camFocusHeight_, pPos.z };
 	Vector3 d{ bPos.x - focus.x, bPos.y - focus.y, bPos.z - focus.z };
 	const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-	if (len < 1e-4f) return false;
+	if (len < kTinyEpsilon) return false;
 	d.x /= len; d.y /= len; d.z /= len;
 	outYaw   = std::atan2(d.x, d.z);
 	outPitch = -std::asin(std::clamp(d.y, -1.0f, 1.0f));
@@ -445,8 +493,8 @@ void BossStagePart::RequestTargetSnap() {
 	snapFromPitch_ = camPitch_;
 	// yaw は最短経路になるよう from を基準に補正
 	float dy = y - snapFromYaw_;
-	while (dy >  3.14159265f) dy -= 6.28318531f;
-	while (dy < -3.14159265f) dy += 6.28318531f;
+	while (dy >  kPi) dy -= kTwoPi;
+	while (dy < -kPi) dy += kTwoPi;
 	snapToYaw_   = snapFromYaw_ + dy;
 	snapToPitch_ = p;
 	snapTimer_   = 0.0f;
@@ -480,8 +528,8 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 		float y, p;
 		if (ComputeBossYawPitch(y, p)) {
 			float dy = y - camYaw_;
-			while (dy >  3.14159265f) dy -= 6.28318531f;
-			while (dy < -3.14159265f) dy += 6.28318531f;
+			while (dy >  kPi) dy -= kTwoPi;
+			while (dy < -kPi) dy += kTwoPi;
 			const float k = std::clamp(lockSpringGain_ * dt, 0.0f, 1.0f);
 			camYaw_   += dy * k;
 			camPitch_  = std::clamp(camPitch_ + (p - camPitch_) * k, pitchMin_, pitchMax_);
@@ -491,9 +539,9 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 	// 3) 一瞬スナップ（ターゲットカメラ）。進行中は yaw/pitch を上書き。
 	if (snapTimer_ >= 0.0f) {
 		snapTimer_ += dt;
-		float u = (snapDuration_ > 1e-4f) ? (snapTimer_ / snapDuration_) : 1.0f;
+		float u = (snapDuration_ > kTinyEpsilon) ? (snapTimer_ / snapDuration_) : 1.0f;
 		if (u >= 1.0f) { u = 1.0f; }
-		const float s = u * u * (3.0f - 2.0f * u); // smoothstep
+		const float s = u * u * (kSmoothStepCubicCoeff - 2.0f * u); // smoothstep
 		camYaw_   = snapFromYaw_   + (snapToYaw_   - snapFromYaw_)   * s;
 		camPitch_ = std::clamp(snapFromPitch_ + (snapToPitch_ - snapFromPitch_) * s, pitchMin_, pitchMax_);
 		if (u >= 1.0f) snapTimer_ = -1.0f; // 完了：以降はフリー/ロックの現在値として継続
@@ -514,7 +562,7 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 	//    戻しは時定数でなめらかに。
 	const float minEyeY = groundY_ + camGroundClearance_;
 	float targetDist = camDistance_;
-	if (forward.y > 1e-4f) {
+	if (forward.y > kTinyEpsilon) {
 		const float fitDist = (focus.y - minEyeY) / forward.y;
 		if (fitDist < targetDist) targetDist = (std::max)(fitDist, camMinDistance_);
 	}
@@ -529,7 +577,7 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 		const float pu = px * ux + pz * uz;
 		const float pp = px * px + pz * pz;
 		const float r2 = camArenaRadius_ * camArenaRadius_;
-		if (uu > 1e-6f && pp < r2) {
+		if (uu > kSquaredEpsilon && pp < r2) {
 			const float fitDist = (-pu + std::sqrt(pu * pu - uu * (pp - r2))) / uu;
 			if (fitDist < targetDist) targetDist = (std::max)(fitDist, camMinDistance_);
 		}
@@ -537,7 +585,7 @@ void BossStagePart::UpdateCamera(float dt, float stickX, float stickY, float mou
 	if (camEffectiveDistance_ < 0.0f || targetDist < camEffectiveDistance_) {
 		camEffectiveDistance_ = targetDist;
 	} else {
-		const float a = (camDistanceReturnTime_ > 1e-4f) ? (1.0f - std::exp(-dt / camDistanceReturnTime_)) : 1.0f;
+		const float a = (camDistanceReturnTime_ > kTinyEpsilon) ? (1.0f - std::exp(-dt / camDistanceReturnTime_)) : 1.0f;
 		camEffectiveDistance_ += (targetDist - camEffectiveDistance_) * a;
 	}
 

@@ -3,6 +3,7 @@
 #include "Object3DInstance.h"
 #include "ModelInstance.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -12,27 +13,26 @@
 #endif
 
 namespace {
+	// 時間の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinSeconds = 1e-3f;
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 長さの下限 [m]（0 で割らないように）
+	constexpr float kMinLength = 1e-3f;
+
 	// tools/BlenderPipeline/gen_catapult.py --export Assets/Models/Catapult を cook したもの（16 番 §2.1）
 	constexpr const char* kModelDir = "Resources/Models/Catapult";
 	constexpr const char* kLightMaterial = "Light";
 	// 縦穴の単位を置く枠の数（8m × 10 = 80m。unitsAboveLift_ の上限はこれで決まる）
 	constexpr int kMaxShaftUnits = 10;
 
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Scale(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
-
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
 }
 
 HubLiftDescent::HubLiftDescent() = default;
@@ -96,7 +96,7 @@ bool HubLiftDescent::ConsumeReleaseImpact() {
 float HubLiftDescent::DistanceAt(float time) const {
 	const float t = time - releaseTime_;
 	if (t <= 0.0f) return 0.0f;
-	const float a = (std::max)(accelSeconds_, 1e-3f);
+	const float a = (std::max)(accelSeconds_, kMinSeconds);
 	if (t < a) {
 		// 速さを smoothstep で上げる（v·u²(3−2u)）。その積分 v·a·(u³ − u⁴/2)
 		const float u = t / a;
@@ -108,25 +108,25 @@ float HubLiftDescent::DistanceAt(float time) const {
 float HubLiftDescent::SpeedAt(float time) const {
 	const float t = time - releaseTime_;
 	if (t <= 0.0f) return 0.0f;
-	const float a = (std::max)(accelSeconds_, 1e-3f);
+	const float a = (std::max)(accelSeconds_, kMinSeconds);
 	if (t >= a) return descentSpeed_;
 	const float u = t / a;
-	return descentSpeed_ * u * u * (3.0f - 2.0f * u);
+	return descentSpeed_ * u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 }
 
 float HubLiftDescent::GetUiCollapse() const {
 	if (!playing_ && !previewing_) return 0.0f;
-	return std::clamp(GetTime() / (std::max)(uiCollapseSeconds_, 1e-3f), 0.0f, 1.0f);
+	return std::clamp(GetTime() / (std::max)(uiCollapseSeconds_, kMinSeconds), 0.0f, 1.0f);
 }
 
 float HubLiftDescent::GetSunScale() const {
-	const float k = std::clamp(DistanceAt(GetTime()) / (std::max)(sunFadeDepth_, 1e-3f), 0.0f, 1.0f);
+	const float k = std::clamp(DistanceAt(GetTime()) / (std::max)(sunFadeDepth_, kMinLength), 0.0f, 1.0f);
 	return 1.0f + (shaftSunScale_ - 1.0f) * k;
 }
 
 StageStartHandoff HubLiftDescent::MakeHandoff() const {
 	StageStartHandoff handoff;
-	const float unitH = (std::max)(geometry_.shaftUnitHeight, 1e-3f);
+	const float unitH = (std::max)(geometry_.shaftUnitHeight, kMinLength);
 	handoff.liftY = GetMechY();
 	float phase = std::fmod(handoff.liftY + geometry_.shaftTopCollarDepth, unitH);
 	if (phase < 0.0f) phase += unitH;
@@ -152,7 +152,7 @@ void HubLiftDescent::ApplyPose() {
 	// 縦穴の単位：床の下に決まった枠（単位 k の下の端 y = −c − H(k+1)）があり、リフトの近くの枠だけに置く。
 	// リフトより下はリフトの板で見えないので、リフトの裏まででよい
 	const float c = geometry_.shaftTopCollarDepth;
-	const float unitH = (std::max)(geometry_.shaftUnitHeight, 1e-3f);
+	const float unitH = (std::max)(geometry_.shaftUnitHeight, kMinLength);
 	const float high = (std::min)(-c, mechY + unitsAboveLift_);
 	const float low = mechY - geometry_.liftThickness;
 	const int kMin = (std::max)(0, static_cast<int>(std::floor((-c - high) / unitH)));
@@ -207,9 +207,9 @@ void HubLiftDescent::LoadTuning(const JsonValue& node) {
 	read("unitsAboveLift", unitsAboveLift_);
 	read("releaseShakeIntensity", releaseShakeIntensity_);
 	read("releaseShakeSeconds", releaseShakeSeconds_);
-	ReadVector3(node["bandEmissive"], bandEmissive_);
+	bandEmissive_ = ReadVector3(node["bandEmissive"], bandEmissive_);
 	read("bandEmissiveScale", bandEmissiveScale_);
-	ReadVector3(node["clampNeonColor"], clampNeonColor_);
+	clampNeonColor_ = ReadVector3(node["clampNeonColor"], clampNeonColor_);
 	read("clampNeonScale", clampNeonScale_);
 	ApplyPose();
 }

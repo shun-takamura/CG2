@@ -4,6 +4,7 @@
 #include "Cloud/CloudLayer.h"
 #include "Cloud/CloudRaymarcher.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "LightManager.h"
 #include "MathUtility.h"
 #include "Object3DManager.h"
@@ -25,17 +26,45 @@ namespace {
 	constexpr float kCloudHeight = 1500.0f;
 	// 雲の層の上下の端で画面の水滴を強めていく幅 [m]（入りきってから濡れきる）
 	constexpr float kCloudDropletEdge = 60.0f;
+	// 幅・秒数がこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kNearZero = 1e-3f;
+	// 長さがこれ以下なら向きを変えない
+	constexpr float kTinyEpsilon = 1e-4f;
+	// なめらかな補間 3x²−2x³ の x² の係数
+	constexpr float kSmoothStepCubicCoeff = 3.0f;
+	// 光の向きの長さがこれ以下なら正規化しない
+	constexpr float kSquaredEpsilon = 1e-6f;
+	// 「Add Section」で足すセクションを前のセクションの何秒後に置くか [秒]（1 セクション＝1 分）
+	constexpr float kNewSectionIntervalSec = 60.0f;
 
+	/// <summary>線形補間</summary>
+	/// <param name="a">始めの値</param>
+	/// <param name="b">終わりの値</param>
+	/// <param name="t">割合（0〜1）</param>
+	/// <returns>補間した値</returns>
 	float Lerp1(float a, float b, float t) { return a + (b - a) * t; }
 
+	/// <summary>Vector3 の成分ごとの線形補間</summary>
+	/// <param name="a">始めの値</param>
+	/// <param name="b">終わりの値</param>
+	/// <param name="t">割合（0〜1）</param>
+	/// <returns>補間した値</returns>
 	Vector3 Lerp3(const Vector3& a, const Vector3& b, float t) {
 		return { Lerp1(a.x, b.x, t), Lerp1(a.y, b.y, t), Lerp1(a.z, b.z, t) };
 	}
 
+	/// <summary>Vector4 の成分ごとの線形補間</summary>
+	/// <param name="a">始めの値</param>
+	/// <param name="b">終わりの値</param>
+	/// <param name="t">割合（0〜1）</param>
+	/// <returns>補間した値</returns>
 	Vector4 Lerp4(const Vector4& a, const Vector4& b, float t) {
 		return { Lerp1(a.x, b.x, t), Lerp1(a.y, b.y, t), Lerp1(a.z, b.z, t), Lerp1(a.w, b.w, t) };
 	}
 
+	/// <summary>セクションの素の環境値を取り出す</summary>
+	/// <param name="s">セクション</param>
+	/// <returns>そのセクションの環境値</returns>
 	StageEnvValues ToValues(const StageSection& s) {
 		StageEnvValues v{};
 		v.skyTint = s.skyboxTint;
@@ -49,10 +78,21 @@ namespace {
 		return v;
 	}
 
+	/// <summary>Vector3 が完全に同じか</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>全成分が等しければ true</returns>
 	bool SameVec3(const Vector3& a, const Vector3& b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
+	/// <summary>Vector4 が完全に同じか</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>全成分が等しければ true</returns>
 	bool SameVec4(const Vector4& a, const Vector4& b) { return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w; }
 
-	// 前回書き込んだ値と同じか。同じならライト等に書き込まない（区間の途中で外から変えた値を潰さないため）
+	/// <summary>前回書き込んだ値と同じか。同じならライト等に書き込まない（区間の途中で外から変えた値を潰さないため）</summary>
+	/// <param name="a">比べる環境値</param>
+	/// <param name="b">比べる環境値</param>
+	/// <returns>全部の値が等しければ true</returns>
 	bool SameValues(const StageEnvValues& a, const StageEnvValues& b) {
 		return SameVec4(a.skyTint, b.skyTint) && SameVec3(a.lightDir, b.lightDir)
 			&& SameVec4(a.lightColor, b.lightColor) && a.lightIntensity == b.lightIntensity
@@ -60,6 +100,11 @@ namespace {
 			&& a.fogFar == b.fogFar && a.fogDensity == b.fogDensity;
 	}
 
+	/// <summary>2 つの環境値を値ごとに線形補間する</summary>
+	/// <param name="a">始めの環境値</param>
+	/// <param name="b">終わりの環境値</param>
+	/// <param name="t">割合（0〜1）</param>
+	/// <returns>補間した環境値</returns>
 	StageEnvValues BlendValues(const StageEnvValues& a, const StageEnvValues& b, float t) {
 		StageEnvValues v{};
 		v.skyTint = Lerp4(a.skyTint, b.skyTint, t);
@@ -71,42 +116,6 @@ namespace {
 		v.fogFar = Lerp1(a.fogFar, b.fogFar, t);
 		v.fogDensity = Lerp1(a.fogDensity, b.fogDensity, t);
 		return v;
-	}
-
-	Vector3 ReadVec3(const JsonValue& j, const Vector3& fallback) {
-		if (!j.IsArray() || j.Size() < 3) return fallback;
-		return {
-			static_cast<float>(j[0].AsDouble(fallback.x)),
-			static_cast<float>(j[1].AsDouble(fallback.y)),
-			static_cast<float>(j[2].AsDouble(fallback.z)),
-		};
-	}
-
-	Vector4 ReadVec4(const JsonValue& j, const Vector4& fallback) {
-		if (!j.IsArray() || j.Size() < 4) return fallback;
-		return {
-			static_cast<float>(j[0].AsDouble(fallback.x)),
-			static_cast<float>(j[1].AsDouble(fallback.y)),
-			static_cast<float>(j[2].AsDouble(fallback.z)),
-			static_cast<float>(j[3].AsDouble(fallback.w)),
-		};
-	}
-
-	JsonValue WriteVec3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
-
-	JsonValue WriteVec4(const Vector4& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		a.Push(JsonValue(static_cast<double>(v.w)));
-		return a;
 	}
 
 } // namespace
@@ -130,7 +139,11 @@ StageEnvironment::~StageEnvironment() = default;
 void StageEnvironment::InitializeClouds(DirectXCore* dxCore) {
 	cloudLayer_ = std::make_unique<CloudLayer>();
 	cloudLayer_->Initialize(dxCore, kCloudNoisePath);
-	cloudLayer_->GetParams().height = kCloudHeight;
+	{
+		CloudLayer::Params params = cloudLayer_->GetParams();
+		params.height = kCloudHeight;
+		cloudLayer_->SetParams(params);
+	}
 	if (skybox_) skybox_->SetCloudLayer(cloudLayer_.get());
 	if (object3DManager_) object3DManager_->SetCloudLayer(cloudLayer_.get());
 }
@@ -153,7 +166,7 @@ void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition)
 	if (raymarcher_) {
 		// 自機の進む向きと逆へ流す。降下の前に止める
 		const float span = cloudFlow_.fadeEndSec - cloudFlow_.fadeStartSec;
-		const float fade = span > 1e-3f
+		const float fade = span > kNearZero
 			? 1.0f - std::clamp((stageSec_ - cloudFlow_.fadeStartSec) / span, 0.0f, 1.0f)
 			: (stageSec_ < cloudFlow_.fadeEndSec ? 1.0f : 0.0f);
 		const float s = cloudFlow_.speed * fade;
@@ -164,7 +177,7 @@ void StageEnvironment::UpdateClouds(float deltaTime, const Vector3& eyePosition)
 
 void StageEnvironment::SetCloudFlowDirection(const Vector2& forwardXZ) {
 	const float len = std::sqrt(forwardXZ.x * forwardXZ.x + forwardXZ.y * forwardXZ.y);
-	if (len > 1e-4f) cloudFlowForward_ = { forwardXZ.x / len, forwardXZ.y / len };
+	if (len > kTinyEpsilon) cloudFlowForward_ = { forwardXZ.x / len, forwardXZ.y / len };
 }
 
 void StageEnvironment::DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget) {
@@ -172,11 +185,12 @@ void StageEnvironment::DrawRaymarchClouds(const Camera& camera, RenderTexture* s
 	const float visibility = RaymarchVisibility();
 	if (visibility <= 0.0f) return;   // 消えきったらパスごと止める
 	// 濃さは描く間だけ掛ける（JSON・ImGui の Opacity は書き換えない）
-	CloudRaymarcher::Params& params = raymarcher_->GetParams();
-	const float opacity = params.opacity;
-	params.opacity = opacity * visibility;
+	const CloudRaymarcher::Params original = raymarcher_->GetParams();
+	CloudRaymarcher::Params faded = original;
+	faded.opacity = original.opacity * visibility;
+	raymarcher_->SetParams(faded);
 	raymarcher_->Draw(camera, sceneTarget, skybox_->GetCubemapFilePath());
-	params.opacity = opacity;
+	raymarcher_->SetParams(original);
 }
 
 float StageEnvironment::RaymarchVisibility() const {
@@ -190,8 +204,8 @@ float StageEnvironment::GetCloudDropletTarget(const Vector3& eyePosition) const 
 	const CloudRaymarcher::Params& p = raymarcher_->GetParams();
 	if (!p.enabled || p.opacity <= 0.0f) return 0.0f;
 	auto smooth = [](float edge0, float edge1, float x) {
-		const float t = std::clamp((x - edge0) / (std::max)(edge1 - edge0, 1e-3f), 0.0f, 1.0f);
-		return t * t * (3.0f - 2.0f * t);
+		const float t = std::clamp((x - edge0) / (std::max)(edge1 - edge0, kNearZero), 0.0f, 1.0f);
+		return t * t * (kSmoothStepCubicCoeff - 2.0f * t);
 	};
 	const float y = eyePosition.y;
 	const float inside = smooth(p.bottom, p.bottom + kCloudDropletEdge, y)
@@ -292,7 +306,7 @@ void StageEnvironment::ApplyValues(const StageEnvValues& v, bool applyTint) {
 	if (lm && lm->GetDirectionalLightData()) {
 		Vector3 dir = v.lightDir;
 		const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-		if (len > 1e-6f) dir = { dir.x / len, dir.y / len, dir.z / len };
+		if (len > kSquaredEpsilon) dir = { dir.x / len, dir.y / len, dir.z / len };
 		lm->SetDirectionalLightDirection(dir);
 		lm->SetDirectionalLightColor(v.lightColor);
 		lm->SetDirectionalLightIntensity(v.lightIntensity);
@@ -392,13 +406,13 @@ void StageEnvironment::LoadFromJson(const JsonValue& root) {
 		s.blendSec = static_cast<float>(o["blendSec"].AsDouble(s.blendSec));
 		if (o["skyboxPath"].IsString()) s.skyboxPath = o["skyboxPath"].AsString();
 		if (o["iblPath"].IsString()) s.iblPath = o["iblPath"].AsString();
-		s.skyboxTint = ReadVec4(o["skyboxTint"], s.skyboxTint);
+		s.skyboxTint = ReadVector4(o["skyboxTint"], s.skyboxTint);
 
-		s.lightDir = ReadVec3(o["lightDir"], s.lightDir);
-		s.lightColor = ReadVec4(o["lightColor"], s.lightColor);
+		s.lightDir = ReadVector3(o["lightDir"], s.lightDir);
+		s.lightColor = ReadVector4(o["lightColor"], s.lightColor);
 		s.lightIntensity = static_cast<float>(o["lightIntensity"].AsDouble(s.lightIntensity));
 
-		s.fogColor = ReadVec4(o["fogColor"], s.fogColor);
+		s.fogColor = ReadVector4(o["fogColor"], s.fogColor);
 		s.fogNear = static_cast<float>(o["fogNear"].AsDouble(s.fogNear));
 		s.fogFar = static_cast<float>(o["fogFar"].AsDouble(s.fogFar));
 		s.fogDensity = static_cast<float>(o["fogDensity"].AsDouble(s.fogDensity));
@@ -420,13 +434,13 @@ void StageEnvironment::SaveToJson(JsonValue& root) const {
 		o["blendSec"] = static_cast<double>(s.blendSec);
 		o["skyboxPath"] = JsonValue(s.skyboxPath);
 		o["iblPath"] = JsonValue(s.iblPath);
-		o["skyboxTint"] = WriteVec4(s.skyboxTint);
+		o["skyboxTint"] = MakeVector4(s.skyboxTint);
 
-		o["lightDir"] = WriteVec3(s.lightDir);
-		o["lightColor"] = WriteVec4(s.lightColor);
+		o["lightDir"] = MakeVector3(s.lightDir);
+		o["lightColor"] = MakeVector4(s.lightColor);
 		o["lightIntensity"] = static_cast<double>(s.lightIntensity);
 
-		o["fogColor"] = WriteVec4(s.fogColor);
+		o["fogColor"] = MakeVector4(s.fogColor);
 		o["fogNear"] = static_cast<double>(s.fogNear);
 		o["fogFar"] = static_cast<double>(s.fogFar);
 		o["fogDensity"] = static_cast<double>(s.fogDensity);
@@ -473,7 +487,7 @@ void StageEnvironment::OnImGuiTuning(bool& changed, const std::function<void(flo
 
 	if (ImGui::Button("Add Section")) {
 		StageSection s{};
-		s.startSec = sections_.empty() ? 0.0f : sections_.back().startSec + 60.0f;
+		s.startSec = sections_.empty() ? 0.0f : sections_.back().startSec + kNewSectionIntervalSec;
 		s.name = "Section" + std::to_string(sections_.size());
 		sections_.push_back(std::move(s));
 		selected_ = static_cast<int>(sections_.size()) - 1;

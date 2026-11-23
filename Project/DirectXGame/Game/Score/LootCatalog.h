@@ -50,29 +50,50 @@ struct LootMotionParams {
 /// <summary>
 /// アイテムとドロップの表（22_ItemDrop.md）。Resources/Json/Tuning/Loot.json を読む。
 /// 落とす（LootDrops）・集計（LootLedger）・表示（LootPickupLog・リザルト・装備画面）は JSON を直接読まずここを呼ぶ。
+/// シングルトンにする理由：JSON を一度だけ読む、読むだけのデータの表のため。
 /// </summary>
 class LootCatalog {
 public:
+	/// <summary>唯一のインスタンスを取得する</summary>
+	/// <returns>インスタンス</returns>
 	static LootCatalog* GetInstance();
 
+	/// <summary>アイテムの種類の数を取得する</summary>
+	/// <returns>種類の数</returns>
 	int GetItemCount() const { return static_cast<int>(items_.size()); }
-	/// <summary>範囲外なら nullptr</summary>
+	/// <summary>番号でアイテムの定義を取得する</summary>
+	/// <param name="index">番号</param>
+	/// <returns>アイテムの定義。範囲外なら nullptr</returns>
 	const LootItemDef* GetItem(int index) const;
+	/// <summary>id でアイテムの定義を引く</summary>
+	/// <param name="id">アイテムの id</param>
+	/// <returns>アイテムの定義。見つからなければ nullptr</returns>
 	const LootItemDef* FindItem(const std::string& id) const;
-	/// <summary>見つからなければ -1</summary>
+	/// <summary>id からアイテムの番号を引く</summary>
+	/// <param name="id">アイテムの id</param>
+	/// <returns>番号。見つからなければ -1</returns>
 	int IndexOf(const std::string& id) const;
-	/// <summary>エーテル（落ちている間の見た目と表示名）</summary>
+	/// <summary>エーテルの定義（落ちている間の見た目と表示名）を取得する</summary>
+	/// <returns>エーテルの定義</returns>
 	const LootItemDef& GetEther() const { return ether_; }
 
-	/// <summary>敵のプレハブ名で引く。表に無ければ nullptr（落とさない）</summary>
+	/// <summary>敵のプレハブ名でドロップの表を引く</summary>
+	/// <param name="prefab">敵のプレハブ名</param>
+	/// <returns>ドロップの表。表に無ければ nullptr（落とさない）</returns>
 	const LootTable* FindTable(const std::string& prefab) const;
-	/// <summary>ボスの報酬（撃破でそのまま集計へ入れる）</summary>
+	/// <summary>ボスの報酬（撃破でそのまま集計へ入れる）を取得する</summary>
+	/// <returns>ボスの報酬の表</returns>
 	const LootTable& GetBossTable() const { return boss_; }
+	/// <summary>落ちた物の動きの調整値を取得する</summary>
+	/// <returns>動きの調整値</returns>
 	const LootMotionParams& GetMotion() const { return motion_; }
 
+	/// <summary>Resources/Json/Tuning/Loot.json を読む</summary>
+	/// <returns>読めたら true。ファイルが無い・パースに失敗したら false</returns>
 	bool Load();
 
 private:
+	/// <summary>エーテルの既定の見た目を入れてから表を読み込む</summary>
 	LootCatalog();
 	~LootCatalog() = default;
 	LootCatalog(const LootCatalog&) = delete;

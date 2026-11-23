@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <random>
 #include <cassert>
-#include <cstdio>
 #include <Windows.h>
 
 #ifdef _DEBUG
@@ -20,6 +19,11 @@
 #endif
 
 namespace {
+	// 色の 1 成分の最大値（0〜255）
+	constexpr int kColorChannelMax = 255;
+	// 調整値の JSON を書き出すときの字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Transition.json";
 }
 
@@ -47,7 +51,7 @@ void TransitionManager::Initialize(SpriteManager* spriteManager, DirectXCore* dx
 	screenHeight_ = screenHeight;
 
 	// トランジション用の白テクスチャを生成（トランジション初期化より先に！）
-	TextureManager::GetInstance()->CreateSolidColorTexture("Resources/Textures/white1x1.dds", 255, 255, 255, 255);
+	TextureManager::GetInstance()->CreateSolidColorTexture("Resources/Textures/white1x1.dds", kColorChannelMax, kColorChannelMax, kColorChannelMax, kColorChannelMax);
 
 	// テクスチャが正しく生成されたか確認
 	if (!TextureManager::GetInstance()->HasTexture("Resources/Textures/white1x1.dds")) {
@@ -104,7 +108,7 @@ void TransitionManager::SaveTuning() const {
 			root[pair.second->GetName()] = std::move(json);
 		}
 	}
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }
 
 void TransitionManager::Finalize() {
@@ -147,16 +151,6 @@ void TransitionManager::RequestSkip() {
 }
 
 void TransitionManager::Draw() {
-	// デバッグ出力
-	static int drawCount = 0;
-	drawCount++;
-	if (drawCount % 60 == 0) {
-		char buf[128];
-		sprintf_s(buf, "TransitionManager::Draw - currentTransition_=%s\n",
-			currentTransition_ ? "exists" : "null");
-		OutputDebugStringA(buf);
-	}
-
 	if (currentTransition_) {
 		currentTransition_->Draw();
 	}
@@ -175,19 +169,6 @@ void TransitionManager::StartTransition(TransitionType coverType, TransitionType
 	const std::string& fromScene, const std::string& toScene, std::function<void()> onSceneChange) {
 	const TransitionType type = coverType;
 
-#ifdef DEBUG
-
-	// デバッグ出力
-	OutputDebugStringA("=== StartTransition called ===\n");
-	if (type == TransitionType::Stripe) {
-		OutputDebugStringA("Type: Stripe\n");
-	} else if (type == TransitionType::Fade) {
-		OutputDebugStringA("Type: Fade\n");
-	} else {
-		OutputDebugStringA("Type: Unknown\n");
-	}
-
-#endif // DEBUG
 	// 既にトランジション中なら無視
 	if (IsTransitioning()) {
 		OutputDebugStringA("Already transitioning, ignored\n");
@@ -209,7 +190,6 @@ void TransitionManager::StartTransition(TransitionType coverType, TransitionType
 		return;
 	}
 
-	OutputDebugStringA("Transition found, starting...\n");
 	currentTransition_ = it->second.get();
 
 	// 開く側：同じ種類なら覆う側がそのまま開く。kRevealByScene なら開く演出なし（行き先のシーンが自分で開く）。
@@ -237,7 +217,6 @@ void TransitionManager::StartTransition(TransitionType coverType, TransitionType
 
 	// トランジション開始
 	currentTransition_->Start(onSceneChange, coverPlaysReveal);
-	OutputDebugStringA("Transition started!\n");
 }
 
 void TransitionManager::StartCoveredByScene(TransitionType revealType,

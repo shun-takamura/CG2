@@ -3,9 +3,9 @@
 #include <iomanip>
 #include <sstream>
 
-LogBuffer& LogBuffer::Instance() {
+LogBuffer* LogBuffer::GetInstance() {
     static LogBuffer instance;
-    return instance;
+    return &instance;
 }
 
 void LogBuffer::Add(const std::string& message, Level level) {

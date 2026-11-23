@@ -18,7 +18,6 @@
 #include "Transform.h"
 #include "Vector4.h"
 #include "TextureManager.h"
-#include "ModelManager.h"
 #include "PepperMacros.h"
 #include <algorithm>
 #include <cmath>
@@ -28,6 +27,15 @@
 #include "ViewportWindow.h"
 #include "imgui.h"
 #endif
+
+namespace {
+	// シーンカメラのギズモで、近平面から遠端を表示する長さの上限（実際の遠端は長すぎるため）
+	constexpr float kGizmoFarDisplayLength = 4.0f;
+	// 視錐台の 1 つの面の角の数
+	constexpr int kFrustumCornerCount = 4;
+	// 上方向マーカーの先端の高さ（近平面の高さの半分に対する倍率）
+	constexpr float kUpMarkerHeightScale = 1.5f;
+}
 
 Scene::Scene() = default;
 
@@ -159,7 +167,7 @@ void Scene::UpdateDebugCameraIfActive() {
 
 #ifdef USE_IMGUI
 	// Scene ビューポートにマウスがホバーしているときだけ入力を受け取る
-	auto* vp = ImGuiManager::Instance().GetViewportWindow();
+	auto* vp = ImGuiManager::GetInstance()->GetViewportWindow();
 	bool acceptInput = vp && vp->IsHovered();
 	if (acceptInput) {
 		ImGuiIO& io = ImGui::GetIO();
@@ -167,7 +175,7 @@ void Scene::UpdateDebugCameraIfActive() {
 		const float panSpeed   = 0.01f;
 		const float zoomSpeed  = 1.0f;
 		// ギズモのハンドルをドラッグ中はカメラ回転を抑止する
-		const bool gizmoDragging = ImGuiManager::Instance().GetGizmo().IsDragging();
+		const bool gizmoDragging = ImGuiManager::GetInstance()->GetGizmo().IsDragging();
 		if (!gizmoDragging && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
 			ImVec2 d = io.MouseDelta;
 			debugCamera_->Orbit(d.x * orbitSpeed, d.y * orbitSpeed);
@@ -209,19 +217,19 @@ void Scene::DrawSceneCameraGizmo() {
 	const float fovY = sceneCameraSnapshot_.fovY;
 	const float aspect = sceneCameraSnapshot_.aspectRatio;
 	// 遠端は実値だと長すぎるので、表示用に縮める
-	const float displayFar = std::min(fz, nz + 4.0f);
+	const float displayFar = std::min(fz, nz + kGizmoFarDisplayLength);
 	const float nh = nz * std::tan(fovY * 0.5f);
 	const float nw = nh * aspect;
 	const float fh = displayFar * std::tan(fovY * 0.5f);
 	const float fw = fh * aspect;
 
-	Vector3 nearLocal[4] = {
+	Vector3 nearLocal[kFrustumCornerCount] = {
 		{ -nw, -nh, nz },
 		{  nw, -nh, nz },
 		{  nw,  nh, nz },
 		{ -nw,  nh, nz },
 	};
-	Vector3 farLocal[4] = {
+	Vector3 farLocal[kFrustumCornerCount] = {
 		{ -fw, -fh, displayFar },
 		{  fw, -fh, displayFar },
 		{  fw,  fh, displayFar },
@@ -232,8 +240,8 @@ void Scene::DrawSceneCameraGizmo() {
 		return TransformCoordinate(p, worldMat);
 		};
 
-	Vector3 nearWorld[4], farWorld[4];
-	for (int i = 0; i < 4; ++i) {
+	Vector3 nearWorld[kFrustumCornerCount], farWorld[kFrustumCornerCount];
+	for (int i = 0; i < kFrustumCornerCount; ++i) {
 		nearWorld[i] = toWorld(nearLocal[i]);
 		farWorld[i]  = toWorld(farLocal[i]);
 	}
@@ -243,19 +251,19 @@ void Scene::DrawSceneCameraGizmo() {
 	const Vector4 colUp      = { 0.3f, 1.0f, 0.3f, 1.0f };
 
 	// 近平面の四角形
-	for (int i = 0; i < 4; ++i) {
-		lr->AddLine(nearWorld[i], nearWorld[(i + 1) % 4], colFrustum);
+	for (int i = 0; i < kFrustumCornerCount; ++i) {
+		lr->AddLine(nearWorld[i], nearWorld[(i + 1) % kFrustumCornerCount], colFrustum);
 	}
 	// 遠平面の四角形
-	for (int i = 0; i < 4; ++i) {
-		lr->AddLine(farWorld[i], farWorld[(i + 1) % 4], colFrustum);
+	for (int i = 0; i < kFrustumCornerCount; ++i) {
+		lr->AddLine(farWorld[i], farWorld[(i + 1) % kFrustumCornerCount], colFrustum);
 	}
 	// 近⇔遠を接続
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < kFrustumCornerCount; ++i) {
 		lr->AddLine(nearWorld[i], farWorld[i], colFrustum);
 	}
 	// カメラ位置から近平面の四隅へ
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < kFrustumCornerCount; ++i) {
 		lr->AddLine(apex, nearWorld[i], colFrustum);
 	}
 	// 上方向マーカー（近平面上辺の中央から少し上に三角形を作る）
@@ -264,7 +272,7 @@ void Scene::DrawSceneCameraGizmo() {
 		(nearWorld[2].y + nearWorld[3].y) * 0.5f,
 		(nearWorld[2].z + nearWorld[3].z) * 0.5f,
 	};
-	Vector3 upTip = toWorld({ 0.0f, nh * 1.5f, nz });
+	Vector3 upTip = toWorld({ 0.0f, nh * kUpMarkerHeightScale, nz });
 	lr->AddLine(nearWorld[3], upTip, colUp);
 	lr->AddLine(nearWorld[2], upTip, colUp);
 	lr->AddLine(topMid, upTip, colUp);
@@ -299,13 +307,20 @@ float Scene::GetScaledDeltaTime(TimeGroup g) const
 // ヘッダ内インラインだと TU 間で COMDAT 衝突を起こすケースがあるので cpp に置く
 // ====================================================================
 
-void Scene::AddDynamicObject(const std::string& dirPath, const std::string& filename,
+Object3DInstance* Scene::AddDynamicObject(const std::string& dirPath, const std::string& filename,
 	const Vector3& worldPos) {
 	auto obj = std::make_unique<Object3DInstance>();
 	obj->Initialize(object3DManager_, dxCore_, dirPath, filename);
 	obj->SetCamera(GetCamera());
 	obj->SetTranslate(worldPos);
-	object3DInstances_.push_back(std::move(obj));
+	return AdoptDynamicObject(std::move(obj));
+}
+
+Object3DInstance* Scene::AdoptDynamicObject(std::unique_ptr<Object3DInstance> object) {
+	if (!object) return nullptr;
+	Object3DInstance* raw = object.get();
+	object3DInstances_.push_back(std::move(object));
+	return raw;
 }
 
 void Scene::RemoveDynamicObject(const std::string& name) {
@@ -317,11 +332,18 @@ void Scene::RemoveDynamicObject(const std::string& name) {
 	}
 }
 
-void Scene::AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) {
+SpriteInstance* Scene::AddDynamicSprite(const std::string& texturePath, float clientX, float clientY) {
 	auto sprite = std::make_unique<SpriteInstance>();
 	sprite->Initialize(spriteManager_, texturePath);
 	sprite->SetPosition({ clientX, clientY });
+	return AdoptDynamicSprite(std::move(sprite));
+}
+
+SpriteInstance* Scene::AdoptDynamicSprite(std::unique_ptr<SpriteInstance> sprite) {
+	if (!sprite) return nullptr;
+	SpriteInstance* raw = sprite.get();
 	dynamicSprites_.push_back(std::move(sprite));
+	return raw;
 }
 
 void Scene::RemoveDynamicSprite(const std::string& name) {
@@ -333,7 +355,7 @@ void Scene::RemoveDynamicSprite(const std::string& name) {
 	}
 }
 
-void Scene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
+AnimatedObject3DInstance* Scene::AddDynamicAnimated(const std::string& dirPath, const std::string& filename,
 	const Vector3& worldPos) {
 	auto model = std::make_unique<AnimatedModelInstance>();
 	model->Initialize(ModelManager::GetInstance()->GetModelCore(), dirPath, filename);
@@ -344,8 +366,10 @@ void Scene::AddDynamicAnimated(const std::string& dirPath, const std::string& fi
 	obj->SetSourcePath(dirPath, filename);
 	obj->SetTranslate(worldPos);
 
+	AnimatedObject3DInstance* raw = obj.get();
 	dynamicAnimatedModels_.push_back(std::move(model));
 	dynamicAnimated_.push_back(std::move(obj));
+	return raw;
 }
 
 void Scene::RemoveDynamicAnimated(const std::string& name) {
@@ -357,24 +381,25 @@ void Scene::RemoveDynamicAnimated(const std::string& name) {
 	}
 }
 
-void Scene::AddDynamicPrimitive(int primitiveType, const Vector3& worldPos) {
-	const int kCount = static_cast<int>(PrimitiveInstance::PrimitiveType::kCount);
-	if (primitiveType < 0 || primitiveType >= kCount) return;
-
-	const auto type = static_cast<PrimitiveInstance::PrimitiveType>(primitiveType);
-
+PrimitiveInstance* Scene::AddDynamicPrimitive(PrimitiveInstance::PrimitiveType primitiveType, const Vector3& worldPos) {
 	// 同名衝突を避けて連番を付ける（例: "Box (1)"）
-	const std::string name = MakeUniqueDynamicName(PrimitiveInstance::PrimitiveTypeToString(type), dynamicPrimitives_);
+	const std::string name = MakeUniqueDynamicName(PrimitiveInstance::PrimitiveTypeToString(primitiveType), dynamicPrimitives_);
 
 	auto prim = std::make_unique<PrimitiveInstance>();
-	prim->Initialize(type, name);
+	prim->Initialize(primitiveType, name);
 	prim->SetCamera(GetCamera());
 	prim->SetTranslate(worldPos);
+	PrimitiveInstance* raw = prim.get();
 	dynamicPrimitives_.push_back(std::move(prim));
+	return raw;
 }
 
 void Scene::DestroyDynamicEntity(IImGuiEditable* e) {
-	if (!e) return;
+	ReleaseDynamicEntity(e);
+}
+
+bool Scene::ReleaseDynamicEntity(IImGuiEditable* e) {
+	if (!e) return false;
 
 	// Primitive
 	{
@@ -383,7 +408,7 @@ void Scene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (it != dynamicPrimitives_.end()) {
 			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(it->release()));
 			dynamicPrimitives_.erase(it);
-			return;
+			return true;
 		}
 	}
 	// Object3D
@@ -393,7 +418,7 @@ void Scene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (it != object3DInstances_.end()) {
 			deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(it->release()));
 			object3DInstances_.erase(it);
-			return;
+			return true;
 		}
 	}
 	// Animated
@@ -403,9 +428,36 @@ void Scene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (it != dynamicAnimated_.end()) {
 			deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(it->release()));
 			dynamicAnimated_.erase(it);
-			return;
+			return true;
 		}
 	}
+	return false;
+}
+
+void Scene::DestroyDynamicEntitiesIf(const std::function<bool(IImGuiEditable* e)>& shouldDestroy) {
+	// 当てはまる物を遅延破棄キューへ移し、空になった枠を詰める
+	auto sweep = [this, &shouldDestroy](auto& items) {
+		for (auto& item : items) {
+			if (item && shouldDestroy(item.get())) DeferDelete(std::move(item));
+		}
+		items.erase(std::remove(items.begin(), items.end(), nullptr), items.end());
+	};
+	sweep(dynamicPrimitives_);
+	sweep(object3DInstances_);
+	sweep(dynamicAnimated_);
+}
+
+void Scene::ClearAllDynamicEntities() {
+	// 破棄は次フレームに回す（コマンドリスト記録中のリソースを先に消さないため）
+	auto clearAll = [this](auto& items) {
+		for (auto& item : items) DeferDelete(std::move(item));
+		items.clear();
+	};
+	clearAll(object3DInstances_);
+	clearAll(dynamicAnimated_);
+	clearAll(dynamicAnimatedModels_);
+	clearAll(dynamicSprites_);
+	clearAll(dynamicPrimitives_);
 }
 
 bool Scene::IsDynamicEntityAlive(IImGuiEditable* e) const {

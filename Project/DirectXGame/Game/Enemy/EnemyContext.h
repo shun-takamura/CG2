@@ -55,6 +55,8 @@ struct EnemyContext {
 	/// 画面外から撃たれると理不尽なので、ボス以外の攻撃はこれを通す。
 	/// 視錐台が作れていない場合は true（＝従来どおり撃つ）にして安全側に倒す。
 	/// </summary>
+	/// <param name="worldPos">攻撃する敵の位置（ワールド）</param>
+	/// <returns>画面内（視錐台と onScreenMargin の球が交わる）なら true。視錐台が無ければ true</returns>
 	bool CanAttackFrom(const Vector3& worldPos) const {
 		if (!hasViewFrustum) return true;
 		return viewFrustum.IntersectsSphere(worldPos, onScreenMargin);

@@ -11,19 +11,16 @@
 class IImGuiWindow {
 public:
     /// <summary>
-    /// コンストラクタ
+    /// 名前を決めて開いた状態で作る
     /// </summary>
     /// <param name="name">ウィンドウ名</param>
     IImGuiWindow(const std::string& name) 
         : name_(name), isOpen_(true) {}
 
-    /// <summary>
-    /// デストラクタ
-    /// </summary>
     virtual ~IImGuiWindow() = default;
 
     /// <summary>
-    /// 描画処理（共通）
+    /// 開いていればウィンドウを出して OnDraw を呼ぶ（_DEBUG の時だけ。閉じるボタンで isOpen_ が false になる）
     /// </summary>
     void Draw() {
 
@@ -45,28 +42,32 @@ public:
     }
 
     /// <summary>
-    /// 初期サイズを設定（FirstUseEver）
+    /// 初めて出す時のウィンドウの大きさを設定する（ImGui の ini に記録があればそちらが優先）
     /// </summary>
+    /// <param name="size">大きさ [px]（0 以下なら指定しない）</param>
     void SetInitialSize(const ImVec2& size) { initialSize_ = size; }
 
     /// <summary>
-    /// ウィンドウ名を取得
+    /// ウィンドウ名（ImGui の ID を兼ねる）
     /// </summary>
+    /// <returns>ウィンドウ名</returns>
     const std::string& GetName() const { return name_; }
 
     /// <summary>
     /// ウィンドウが開いているか
     /// </summary>
+    /// <returns>開いていれば true</returns>
     bool IsOpen() const { return isOpen_; }
 
     /// <summary>
-    /// ウィンドウの表示/非表示を設定
+    /// ウィンドウの表示/非表示を設定する
     /// </summary>
+    /// <param name="open">表示するなら true</param>
     void SetOpen(bool open) { isOpen_ = open; }
 
 protected:
     /// <summary>
-    /// 派生クラスが実装する描画処理
+    /// ウィンドウの中身を描く。派生クラスが実装する（Begin / End は Draw が済ませている）
     /// </summary>
     virtual void OnDraw() = 0;
 
@@ -80,10 +81,14 @@ protected:
 /// </summary>
 class CallbackWindow : public IImGuiWindow {
 public:
+    /// <summary>名前と、ウィンドウの中身を描く関数を受け取る</summary>
+    /// <param name="name">ウィンドウ名</param>
+    /// <param name="draw">中身を描く関数（空なら何も描かない）</param>
     CallbackWindow(const std::string& name, std::function<void()> draw)
         : IImGuiWindow(name), draw_(std::move(draw)) {}
 
 protected:
+    /// <summary>受け取った関数で中身を描く</summary>
     void OnDraw() override {
         if (draw_) draw_();
     }

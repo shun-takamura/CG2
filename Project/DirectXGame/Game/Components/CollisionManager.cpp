@@ -12,6 +12,15 @@
 
 using CollisionGeometry::WorldData;
 
+namespace {
+	// コライダーの姿勢の軸の数（X/Y/Z）
+	constexpr int kAxisCount = 3;
+	// 当たっている間のデバッグ表示の色の緑・青の成分（赤っぽく見せる）
+	constexpr float kHitColorGreenBlue = 0.15f;
+	// 球・カプセルのデバッグ表示の分割数
+	constexpr int kDebugShapeSegments = 16;
+}
+
 CollisionManager* CollisionManager::GetInstance() {
 	static CollisionManager instance;
 	return &instance;
@@ -19,9 +28,9 @@ CollisionManager* CollisionManager::GetInstance() {
 
 bool CollisionManager::GetWorldData(IImGuiEditable* e, const Collider& c, WorldData& out) {
 	const GameplayComponents& g = Gameplay::Of(e);
-	if (g.hasColliderPose) {
-		out.center = g.colliderPoseCenter;
-		for (int i = 0; i < 3; ++i) out.axes[i] = g.colliderPoseAxes[i];
+	if (g.HasColliderPose()) {
+		out.center = g.GetColliderPoseCenter();
+		for (int i = 0; i < kAxisCount; ++i) out.axes[i] = g.GetColliderPoseAxes()[i];
 		return true;
 	}
 	return CollisionGeometry::TryGetWorldData(e, c, out);
@@ -113,7 +122,7 @@ void CollisionManager::DrawDebug() {
 
 		Vector4 color;
 		if (c.isCollidingThisFrame) {
-			color = { 1.0f, 0.15f, 0.15f, 1.0f };
+			color = { 1.0f, kHitColorGreenBlue, kHitColorGreenBlue, 1.0f };
 		} else {
 			float r, g, b, a;
 			GetTagColor(Gameplay::Of(e).GetTag(), r, g, b, a);
@@ -122,13 +131,13 @@ void CollisionManager::DrawDebug() {
 
 		switch (c.shape) {
 		case ColliderShape::Sphere:
-			DebugDraw::Sphere(w.center, c.radius, color, 16);
+			DebugDraw::Sphere(w.center, c.radius, color, kDebugShapeSegments);
 			break;
 		case ColliderShape::OBB:
 			DebugDraw::OBB(w.center, w.axes, c.halfExtents, color);
 			break;
 		case ColliderShape::Capsule:
-			DebugDraw::Capsule(w.center, w.axes, c.capsuleHeight, c.capsuleRadius, color, 16);
+			DebugDraw::Capsule(w.center, w.axes, c.capsuleHeight, c.capsuleRadius, color, kDebugShapeSegments);
 			break;
 		}
 	}

@@ -23,6 +23,7 @@ class HubLiftDescent;
 class HubEtherBet;
 class LoadoutAttachments;
 class LoadoutScreen;
+class StageStartSkip;
 
 /// <summary>
 /// ハブシーン（神殿。17_HubScene.md）。**ステージ選択（コクピット）もこのシーンの中**（2026-10-13 統合。18 番 ①「C で決まったこと」）。
@@ -43,8 +44,6 @@ class LoadoutScreen;
 /// 神殿（17 番 H1・H2）は HubTemple（天球儀の聖堂・鏡の大理石の床）。丸窓から見える空はタイトルの空。
 /// 調整値は Resources/Json/Tuning/Hub.json（ImGui の「Hub Tuning」で保存 / 読み直し）。
 /// </summary>
-class StageStartSkip;
-
 class HubScene : public GameScene {
 public:
 	enum class Entry {
@@ -53,21 +52,37 @@ public:
 		Disembark,   // 真っ暗なコクピットから灯りを点けて降りる（⑦。SceneFactory が前のシーンで決める）
 	};
 
+	/// <summary>入口を受け取る（Initialize で入口に合わせた状態から始める）</summary>
+	/// <param name="entry">入口（神殿で待機・コクピットの起動・真っ暗なコクピットから降りる）</param>
 	explicit HubScene(Entry entry = Entry::Temple);
 	~HubScene() override;
 
+	/// <summary>カメラ・空・機体・神殿・リフト・コクピットの部品・器の間・機体設定を作り、調整値を読んで入口の状態から始める</summary>
 	void Initialize() override;
+	/// <summary>BGM・ラジアルブラー・自分が点けたノイズを止め、コクピットの灯り・表示板・器の間を片付ける</summary>
 	void Finalize() override;
+	/// <summary>今の状態を進め、見え方（視点・ハッチ・光・床の穴）を反映する（トランジションで覆われている間は止める）</summary>
 	void Update() override;
+	/// <summary>
+	/// 表示板・床の反射を RT へ描いてから、空（機体設定では暗い背景）→ 神殿・リフト・機体 → 鏡の床 → 表示板 → UI の順に描く。
+	/// 器の間の間は器の間だけを描く
+	/// </summary>
 	void Draw() override;
 
+	/// <summary>今のカメラを取得</summary>
+	/// <returns>器の間の間は器の間のカメラ、ほかはシーンのカメラ</returns>
 	Camera* GetCamera() override;
 
+	/// <summary>発光を足すか（トランジションの上に光が乗らないよう、遷移中は出さない）</summary>
+	/// <returns>発光してよく、コクピットの灯りと表示板があれば true</returns>
 	bool HasBloomSources() const override;
+	/// <summary>機体の光る部位・表示板・リフト・装備（器の間の間は器の間）をブルームのマスクへ描く</summary>
 	void DrawBloomSources() override;
 
-	// 機体設定のノイズを機体だけ・機体以外にかけるため、機体と装備を ID マスクに描く
+	/// <summary>機体設定のノイズを機体だけ・機体以外にかけるため、機体と装備を ID マスクに描くか</summary>
+	/// <returns>機体設定でマスク付きのノイズを出している間 true</returns>
 	bool HasExtraIdPassObjects() const override;
+	/// <summary>ID マスクへ描く（付け替えは替えた部分だけ、神殿を消す・戻す間は機体全体と装備）</summary>
 	void DrawExtraIdPassObjects() override;
 
 	/// <summary>調整値の ImGui（Game.cpp の「Hub Tuning」窓から呼ぶ）</summary>
@@ -85,43 +100,67 @@ private:
 		Loadout,     // 機体設定（装備画面。20 番）。コクピットから外へカメラを切り替え、神殿をノイズで消して機体と UI だけにする
 	};
 
-	// タイトルへ戻る（白フェード）
+	/// <summary>タイトルへ戻る（白フェード）</summary>
 	void ChangeToTitle();
 
+	/// <summary>シーンと各部品の調整値を Hub.json から読む（無い・読めなければ今の値のまま）</summary>
 	void LoadTuning();
+	/// <summary>シーンと各部品の調整値を Hub.json へ書き出す</summary>
 	void SaveTuning() const;
 
+	/// <summary>待機のメニュー（「搭乗」で乗り込み、キャンセル・「タイトルに戻る」でタイトルへ）。デモモードは「搭乗」を自動で選ぶ</summary>
 	void UpdateWaiting();
+	/// <summary>コクピットの起動・ステージ選択・シャットダウンを進める（ステージ1 → 器の間、機体設定、HUB に戻る）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateCockpit(float dt);
+	/// <summary>降りる時間軸を進める（何か押したら降り終わった所まで飛ばす）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateDisembarking(float dt);
 	/// <summary>降り終わった所（待機の視点）へ。降り終わり・スキップの両方から</summary>
 	void FinishDisembark();
-	/// <summary>乗り込み・HUB へ戻る所のスキップ（何か押した）。デモモード中・白フェード中は false</summary>
+	/// <summary>乗り込み・HUB へ戻る所のスキップ（何か押した）</summary>
+	/// <returns>何か押したら true。デモモード中・白フェード中は false</returns>
 	bool IsSkipPressed() const;
+	/// <summary>タイトルからの入場を進め、歩き終えたら待機へ（入場中は入力を読まない）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateEntering(float dt);
+	/// <summary>リフトの降下を進め、先読みが済んだら縦穴の状態を渡して StagePlay へ差し替える（LSHIFT 長押しで雲の上へスキップ）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateDescending(float dt);
-	// ③：ステージを決めてリフトの降下を始める
+	/// <summary>③：ステージを決めてリフトの降下を始める（StagePlay の先読みも始める）</summary>
 	void StartDescent();
-	// 器の間（19 番 §4.7）：黒フェードで行き来する。シーンは切り替えず、フェードが覆い切った所で中身を差し替える
+	/// <summary>器の間（19 番 §4.7）へ黒フェードで向かう。シーンは切り替えず、フェードが覆い切った所で EnterBet が中身を差し替える</summary>
 	void StartBet();
+	/// <summary>器の間に入る（灯り・光・ブラーを器の間用にし、StagePlay の先読みを始める）。フェードが覆い切った所で呼ばれる</summary>
 	void EnterBet();
+	/// <summary>器の間を進め、決定・キャンセルで黒フェードして戻る</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateBetting(float dt);
+	/// <summary>器の間から黒フェードで戻り始める（覆い切った所で ExitBet）</summary>
+	/// <param name="descend">決定して戻るなら true（戻ったらリフトの降下へ）</param>
 	void LeaveBet(bool descend);
+	/// <summary>器の間からコクピットの中へ戻す（カメラ・IBL・フォグを戻す）。フェードが覆い切った所で呼ばれる</summary>
+	/// <param name="descend">true ならそのままリフトの降下を始める</param>
 	void ExitBet(bool descend);
-	// 機体設定（20 番）：コクピットの「機体設定」から入り、戻るとコクピットへ
+	/// <summary>機体設定（20 番）に入る：コクピットの「機体設定」から。ノイズの山でカメラを外へ切り替える</summary>
 	void StartLoadout();
+	/// <summary>機体設定の時間軸と装備画面の入力（付け替え・段階・戻る・タブのカメラ・機体を回す）を進め、終われば コクピットへ戻る</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void UpdateLoadout(float dt);
-	// 機体設定の間だけノイズ（GlitchEffect）を出す。ほかの状態では自分が点けた分だけ切る
+	/// <summary>機体設定の間だけノイズ（GlitchEffect）を出す。ほかの状態では自分が点けた分だけ切る</summary>
 	void ApplyGlitch();
 
-	// 今の見え方をカメラ・ハッチ・光・コクピットへ反映する
+	/// <summary>今の見え方をカメラ・ハッチ・光・コクピットへ反映する</summary>
 	void ApplyPose();
+	/// <summary>コクピットに入って起動を始める（視点は乗り込みの最後の姿勢）</summary>
 	void EnterCockpit();
-	// ⑦：閉じたコクピットの真っ暗から灯りを点け、終わったら降りる
+	/// <summary>⑦：閉じたコクピットの真っ暗から灯りを点け、終わったら降りる</summary>
 	void EnterArrive();
-	// UI の仮想解像度（メニュー・コンソールの配置用。描画解像度ではない）
+	/// <summary>UI の仮想解像度（メニュー・コンソールの配置用。描画解像度ではない）</summary>
+	/// <returns>UI の幅と高さ [px]</returns>
 	Vector2 GetScreenSize() const;
-	// 発光（コクピットの部位・表示板・UI の文字）を出してよいか（トランジションの上に光が乗らないよう、遷移中は出さない）
+	/// <summary>発光（コクピットの部位・表示板・UI の文字）を出してよいか（トランジションの上に光が乗らないよう、遷移中は出さない）</summary>
+	/// <returns>トランジション中でなければ true</returns>
 	bool IsGlowAllowed() const;
 
 	Entry entry_ = Entry::Temple;

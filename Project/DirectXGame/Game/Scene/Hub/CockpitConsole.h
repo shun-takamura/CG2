@@ -25,33 +25,70 @@ public:
 		BackToHub,   // 「HUB に戻る」かキャンセル
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	CockpitConsole();
+	/// <summary>調整値（色・大きさ・メニューの位置など）を既定に戻す</summary>
 	void ResetToDefaults();
+	/// <summary>メニューの項目を作る（チュートリアルはステージができるまで選べない）</summary>
 	void Initialize();
 
-	/// <summary>入力を読む（inputEnabled の間だけ）。screenSize はメニューの位置（マウスの当たり）に使う</summary>
+	/// <summary>メニューを置き直し、inputEnabled の間だけ入力を読む</summary>
+	/// <param name="actions">入力アクション（nullptr なら読まない）</param>
+	/// <param name="pointer">マウスの当たり</param>
+	/// <param name="screenSize">画面の大きさ [px]（メニューの位置に使う）</param>
+	/// <param name="inputEnabled">入力を受け付けるか</param>
+	/// <returns>決定した項目（キャンセルは BackToHub）。何も決まらなければ None</returns>
 	Result Update(InputActionMap* actions, const UIPointer* pointer, const Vector2& screenSize, bool inputEnabled);
 
-	/// <summary>カーソルを item（Stage1 / Loadout / BackToHub）の行へ動かす（デモモードの自動選択）。playSound でカーソルの音を鳴らす</summary>
+	/// <summary>カーソルを item の行へ動かす（デモモードの自動選択）</summary>
+	/// <param name="item">Stage1 / Loadout / BackToHub</param>
+	/// <param name="playSound">true ならカーソルの音を鳴らす</param>
 	void SelectItem(Result item, bool playSound);
 
-	/// <summary>
-	/// 積む（Flush は呼び出し側）。backgroundAlpha / menuTime / collapse は CockpitReveal::State の値、
-	/// time は回る計器用の経過秒。glow が false なら発光の層には積まない（トランジション中など）
-	/// </summary>
+	/// <summary>背景とメニューを TextRenderer に積む（Flush は呼び出し側）</summary>
+	/// <param name="screenSize">画面の大きさ [px]</param>
+	/// <param name="backgroundAlpha">背景 UI の出 0〜1（CockpitReveal::State の値）</param>
+	/// <param name="menuTime">メニューが出始めてからの秒 [秒]（負はまだ。CockpitReveal::State の値）</param>
+	/// <param name="collapse">シャットダウンで潰れる進み 0〜1（CockpitReveal::State の値）</param>
+	/// <param name="time">回る計器用の経過 [秒]</param>
+	/// <param name="glow">false なら発光の層には積まない（トランジション中など）</param>
 	void Draw(const Vector2& screenSize, float backgroundAlpha, float menuTime, float collapse, float time, bool glow);
 
+	/// <summary>調整値（Hub.json の "cockpitConsole"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
-	// 通常の層と発光の層の両方に積む（glowStrength 倍した色で光らせる。0 なら光らせない）
+	/// <summary>文字を通常の層と発光の層の両方に積む</summary>
+	/// <param name="text">文字列</param>
+	/// <param name="pos">位置 [px]</param>
+	/// <param name="scale">文字の大きさの倍率</param>
+	/// <param name="color">色</param>
+	/// <param name="glowStrength">発光の層に積む色の倍率（0 なら光らせない）</param>
 	void Text(std::string_view text, const Vector2& pos, float scale, const Vector4& color, float glowStrength);
+	/// <summary>塗りつぶしの四角を通常の層と発光の層の両方に積む</summary>
+	/// <param name="pos">左上 [px]</param>
+	/// <param name="size">大きさ [px]</param>
+	/// <param name="color">色</param>
+	/// <param name="glowStrength">発光の層に積む色の倍率（0 なら光らせない）</param>
 	void Rect(const Vector2& pos, const Vector2& size, const Vector4& color, float glowStrength);
 
+	/// <summary>背景（上下の枠の線・中央の円の計器・飾りの文字）を積む</summary>
+	/// <param name="screen">画面の大きさ [px]</param>
+	/// <param name="alpha">出 0〜1</param>
+	/// <param name="time">回る計器用の経過 [秒]</param>
 	void DrawBackground(const Vector2& screen, float alpha, float time);
+	/// <summary>メニューを積む</summary>
+	/// <param name="screen">画面の大きさ [px]</param>
+	/// <param name="menuTime">メニューが出始めてからの秒 [秒]</param>
 	void DrawMenu(const Vector2& screen, float menuTime);
+	/// <summary>メニューの大きさ・行の高さ・位置を画面に合わせて設定する</summary>
+	/// <param name="screen">画面の大きさ [px]</param>
 	void PlaceMenu(const Vector2& screen);
 
 	VerticalMenu menu_;

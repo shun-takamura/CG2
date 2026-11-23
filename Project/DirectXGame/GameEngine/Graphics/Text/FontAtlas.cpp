@@ -16,8 +16,30 @@ struct FontAtlas::FontInfoStorage {
 };
 
 namespace {
-	// 行を計算するヘルパ：D3D12 の RowPitch は 256 byte 単位
+	/// <summary>値を a の倍数に切り上げる（D3D12 の RowPitch は 256 byte 単位なので行の計算に使う）</summary>
+	/// <param name="v">値</param>
+	/// <param name="a">境界（2 の累乗）</param>
+	/// <returns>切り上げた値</returns>
 	uint32_t AlignUp(uint32_t v, uint32_t a) { return (v + (a - 1)) & ~(a - 1); }
+	// 空白（U+0020）。グリフの形が無くても有効な文字として扱う
+	constexpr int kCodepointSpace = 0x20;
+	// ASCII の印字できる文字の範囲（U+0020〜U+007E）
+	constexpr int kAsciiPrintableFirst = 0x20;
+	constexpr int kAsciiPrintableLast = 0x7E;
+	// ひらがなの範囲（U+3040〜U+309F）
+	constexpr int kHiraganaFirst = 0x3040;
+	constexpr int kHiraganaLast = 0x309F;
+	// カタカナの範囲（U+30A0〜U+30FF）
+	constexpr int kKatakanaFirst = 0x30A0;
+	constexpr int kKatakanaLast = 0x30FF;
+	// 最初に焼いておく全角記号
+	constexpr uint32_t kCodepointIdeographicComma = 0x3001u;     // 、
+	constexpr uint32_t kCodepointIdeographicFullStop = 0x3002u;  // 。
+	constexpr uint32_t kCodepointLeftCornerBracket = 0x300Cu;    // 「
+	constexpr uint32_t kCodepointRightCornerBracket = 0x300Du;   // 」
+	constexpr uint32_t kCodepointFullwidthExclamation = 0xFF01u; // ！
+	constexpr uint32_t kCodepointFullwidthQuestion = 0xFF1Fu;    // ？
+	constexpr uint32_t kCodepointFullwidthYen = 0xFFE5u;         // ￥
 } // namespace
 
 bool FontAtlas::Initialize(DirectXCore* dxCore, SRVManager* srvManager,
@@ -119,7 +141,7 @@ bool FontAtlas::BakeGlyph(uint32_t codepoint, GlyphInfo& out)
 		out.width = out.height = 0;
 		out.u0 = out.v0 = out.u1 = out.v1 = 0.0f;
 		out.xoff = out.yoff = 0;
-		out.valid = (codepoint == 0x20);
+		out.valid = (codepoint == kCodepointSpace);
 		return true;
 	}
 
@@ -273,16 +295,16 @@ void FontAtlas::EnsureShaderResourceState(ID3D12GraphicsCommandList* cmd)
 	TransitionTo(cmd, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
-void FontAtlas::PreloadDefaultCharset(ID3D12GraphicsCommandList* /*cmd*/)
+void FontAtlas::PreloadDefaultCharset([[maybe_unused]] ID3D12GraphicsCommandList* cmd)
 {
 	// ASCII 印字可能領域
-	for (uint32_t cp = 0x20; cp <= 0x7E; ++cp) GetOrBake(cp);
+	for (uint32_t cp = kAsciiPrintableFirst; cp <= kAsciiPrintableLast; ++cp) GetOrBake(cp);
 	// ひらがな (U+3040-U+309F)
-	for (uint32_t cp = 0x3040; cp <= 0x309F; ++cp) GetOrBake(cp);
+	for (uint32_t cp = kHiraganaFirst; cp <= kHiraganaLast; ++cp) GetOrBake(cp);
 	// カタカナ (U+30A0-U+30FF)
-	for (uint32_t cp = 0x30A0; cp <= 0x30FF; ++cp) GetOrBake(cp);
+	for (uint32_t cp = kKatakanaFirst; cp <= kKatakanaLast; ++cp) GetOrBake(cp);
 	// 全角記号でよく使う一部
-	for (uint32_t cp : { 0x3001u, 0x3002u, 0x300Cu, 0x300Du, 0xFF01u, 0xFF1Fu, 0xFFE5u }) {
+	for (uint32_t cp : { kCodepointIdeographicComma, kCodepointIdeographicFullStop, kCodepointLeftCornerBracket, kCodepointRightCornerBracket, kCodepointFullwidthExclamation, kCodepointFullwidthQuestion, kCodepointFullwidthYen }) {
 		GetOrBake(cp);
 	}
 	// cmd 経由の Flush は呼び出し側で行う（最初のフレームの TextRenderer::PreDraw 等）

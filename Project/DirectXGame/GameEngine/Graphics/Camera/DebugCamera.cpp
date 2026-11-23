@@ -2,11 +2,15 @@
 #include "Transform.h"
 #include <algorithm>
 #include <cmath>
+namespace {
+    // Initialize で戻すピボットからの距離 [m]
+    constexpr float kDefaultDistance = 10.0f;
+}
 
 void DebugCamera::Initialize() {
     matRot_   = MakeIdentity4x4();
     pivot_    = { 0.0f, 0.0f, 0.0f };
-    distance_ = 10.0f;
+    distance_ = kDefaultDistance;
     Update();
 }
 

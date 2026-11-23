@@ -10,12 +10,83 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 操作盤がたたまれる長さの初期値 [秒]
+	constexpr float kDefaultConsoleCollapseSeconds = 0.35f;
+	// 装備画面へ切り替わる時刻の初期値 [秒]
+	constexpr float kDefaultCutTime = 0.45f;
+	// 切り替えのノイズが強まる長さの初期値 [秒]
+	constexpr float kDefaultCutRise = 0.2f;
+	// 切り替えのノイズが弱まる長さの初期値 [秒]
+	constexpr float kDefaultCutFall = 0.3f;
+	// 神殿を隠す時刻の初期値 [秒]
+	constexpr float kDefaultTempleHideTime = 1.05f;
+	// 神殿を隠すノイズが強まる長さの初期値 [秒]
+	constexpr float kDefaultTempleRise = 0.35f;
+	// 神殿を隠すノイズが弱まる長さの初期値 [秒]
+	constexpr float kDefaultTempleFall = 0.35f;
+	// 装備画面の UI が出るまでの遅れの初期値 [秒]
+	constexpr float kDefaultUiDelay = 0.25f;
+	// 入力を受け付けるまでの遅れの初期値 [秒]
+	constexpr float kDefaultInputDelay = 0.35f;
+	// 装備画面の UI がたたまれる長さの初期値 [秒]
+	constexpr float kDefaultUiCollapseSeconds = 0.3f;
+	// 戻るときに神殿を見せる時刻の初期値 [秒]
+	constexpr float kDefaultTempleShowTime = 0.55f;
+	// 戻るときにコクピットへ切り替わる時刻の初期値 [秒]
+	constexpr float kDefaultLeaveCutTime = 1.05f;
+	// 操作盤が戻るまでの遅れの初期値 [秒]
+	constexpr float kDefaultConsoleReturnDelay = 0.1f;
+	// 装備を替えたときのノイズが一番強くなる時刻の初期値 [秒]
+	constexpr float kDefaultSwapPeakTime = 0.12f;
+	// 装備を替えたときのノイズが弱まる長さの初期値 [秒]
+	constexpr float kDefaultSwapFall = 0.3f;
+	// 装備を替えたときのノイズの強さの初期値
+	constexpr float kDefaultSwapIntensity = 0.85f;
+	// メイン武器（右前）・盾（左前）を見るカメラの回り込む角度 [度]
+	constexpr float kSideShotYawDegrees = 35.0f;
+	// 前から見るカメラの見下ろす角度 [度]
+	constexpr float kFrontShotPitchDegrees = 4.0f;
+	// カメラの見る点からの距離 [m]
+	constexpr float kShotDistance = 30.0f;
+	// 前から見るカメラの見る点の高さ [m]
+	constexpr float kFrontShotHeight = 10.5f;
+	// 飛行ユニット（真後ろ）を見るカメラの回り込む角度 [度]
+	constexpr float kBackShotYawDegrees = 180.0f;
+	// 真後ろから見るカメラの見下ろす角度 [度]
+	constexpr float kBackShotPitchDegrees = 8.0f;
+	// 真後ろから見るカメラの見る点の高さ [m]
+	constexpr float kBackShotHeight = 11.5f;
+	// カメラが次の位置へ回り込む長さの初期値 [秒]
+	constexpr float kDefaultTweenSeconds = 0.6f;
+	// カメラの縦の画角の初期値 [度]
+	constexpr float kDefaultFovYDegrees = 40.0f;
+	// スティックでカメラを回す速さの初期値 [度/秒]
+	constexpr float kDefaultOrbitStickSpeed = 120.0f;
+	// マウスのドラッグでカメラを回す速さの初期値 [度/px]
+	constexpr float kDefaultOrbitDragSpeed = 0.3f;
+	// 床の輪の半径の初期値 [m]
+	constexpr float kDefaultFloorRingRadius = 7.0f;
+	// 半回りの角度 [度]（差を −180..180 に詰める）
+	constexpr float kHalfTurnDegrees = 180.0f;
+	// 一回りの角度 [度]
+	constexpr float kFullTurnDegrees = 360.0f;
+
+	/// <summary>0〜1 に切る</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 の値</returns>
 	float Clamp01(float t) {
 		return std::clamp(t, 0.0f, 1.0f);
 	}
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep(float t) {
 		t = Clamp01(t);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
 }
 
@@ -24,33 +95,33 @@ HubLoadoutSequence::HubLoadoutSequence() {
 }
 
 void HubLoadoutSequence::ResetToDefaults() {
-	consoleCollapseSeconds_ = 0.35f;
-	cutTime_ = 0.45f;
-	cutRise_ = 0.2f;
-	cutFall_ = 0.3f;
-	templeHideTime_ = 1.05f;
-	templeRise_ = 0.35f;
-	templeFall_ = 0.35f;
-	uiDelay_ = 0.25f;
-	inputDelay_ = 0.35f;
-	uiCollapseSeconds_ = 0.3f;
-	templeShowTime_ = 0.55f;
-	leaveCutTime_ = 1.05f;
-	consoleReturnDelay_ = 0.1f;
-	swapPeakTime_ = 0.12f;
-	swapFall_ = 0.3f;
-	swapIntensity_ = 0.85f;
+	consoleCollapseSeconds_ = kDefaultConsoleCollapseSeconds;
+	cutTime_ = kDefaultCutTime;
+	cutRise_ = kDefaultCutRise;
+	cutFall_ = kDefaultCutFall;
+	templeHideTime_ = kDefaultTempleHideTime;
+	templeRise_ = kDefaultTempleRise;
+	templeFall_ = kDefaultTempleFall;
+	uiDelay_ = kDefaultUiDelay;
+	inputDelay_ = kDefaultInputDelay;
+	uiCollapseSeconds_ = kDefaultUiCollapseSeconds;
+	templeShowTime_ = kDefaultTempleShowTime;
+	leaveCutTime_ = kDefaultLeaveCutTime;
+	consoleReturnDelay_ = kDefaultConsoleReturnDelay;
+	swapPeakTime_ = kDefaultSwapPeakTime;
+	swapFall_ = kDefaultSwapFall;
+	swapIntensity_ = kDefaultSwapIntensity;
 	cutIntensity_ = 1.0f;
 	templeIntensity_ = 1.0f;
 	glitchParams_ = GlitchEffect::Params{};
-	shots_[0] = { 35.0f, 4.0f, 30.0f, 10.5f };    // メイン武器：右前
-	shots_[1] = { -35.0f, 4.0f, 30.0f, 10.5f };   // 盾：左前
-	shots_[2] = { 180.0f, 8.0f, 30.0f, 11.5f };   // 飛行ユニット：真後ろ
-	tweenSeconds_ = 0.6f;
-	fovYDegrees_ = 40.0f;
-	orbitStickSpeed_ = 120.0f;
-	orbitDragSpeed_ = 0.3f;
-	floorRingRadius_ = 7.0f;
+	shots_[0] = { kSideShotYawDegrees, kFrontShotPitchDegrees, kShotDistance, kFrontShotHeight };    // メイン武器：右前
+	shots_[1] = { -kSideShotYawDegrees, kFrontShotPitchDegrees, kShotDistance, kFrontShotHeight };   // 盾：左前
+	shots_[2] = { kBackShotYawDegrees, kBackShotPitchDegrees, kShotDistance, kBackShotHeight };   // 飛行ユニット：真後ろ
+	tweenSeconds_ = kDefaultTweenSeconds;
+	fovYDegrees_ = kDefaultFovYDegrees;
+	orbitStickSpeed_ = kDefaultOrbitStickSpeed;
+	orbitDragSpeed_ = kDefaultOrbitDragSpeed;
+	floorRingRadius_ = kDefaultFloorRingRadius;
 }
 
 void HubLoadoutSequence::StartEnter() {
@@ -208,9 +279,9 @@ void HubLoadoutSequence::SetShot(int tab, bool immediate) {
 	// 回り込む角度は差を -180..180 に詰めて、近い方を回る（ドラッグで何周回っていても）
 	tweenFrom_ = camera_;
 	tweenTo_ = target;
-	float delta = std::fmod(target.yawDegrees - camera_.yawDegrees + 180.0f, 360.0f);
-	if (delta < 0.0f) delta += 360.0f;
-	tweenTo_.yawDegrees = camera_.yawDegrees + delta - 180.0f;
+	float delta = std::fmod(target.yawDegrees - camera_.yawDegrees + kHalfTurnDegrees, kFullTurnDegrees);
+	if (delta < 0.0f) delta += kFullTurnDegrees;
+	tweenTo_.yawDegrees = camera_.yawDegrees + delta - kHalfTurnDegrees;
 	tweenTime_ = 0.0f;
 }
 

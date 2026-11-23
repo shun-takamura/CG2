@@ -183,5 +183,4 @@ void WindowsApplication::SetFullscreen(bool fullscreen) {
 
 void WindowsApplication::Finalize(){
     CloseWindow(hwnd_);
-    CoUninitialize();
 }

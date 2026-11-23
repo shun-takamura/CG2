@@ -1,0 +1,63 @@
+{
+  "scene": "DEMO",
+  "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
+  "shaders": [],
+  "textures": [
+    {
+      "path": "Resources/Cubemaps/passendorf_snow_8k.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/white1x1.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Animated/SneakWalk/white.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Animated/Walk/white.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/gradationLine.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Enemy/enemy.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Player/player2.dds",
+      "linear": false
+    }
+  ],
+  "models": [
+    {
+      "dir": "Resources/Models/Animated/SneakWalk",
+      "file": "sneakWalk.mesh"
+    },
+    {
+      "dir": "Resources/Models/Enemy",
+      "file": "enemy.mesh"
+    },
+    {
+      "dir": "Resources/Models/Player",
+      "file": "player2.mesh"
+    }
+  ],
+  "animatedModels": [
+    {
+      "dir": "Resources/Models/Animated/SneakWalk",
+      "file": "sneakWalk.mesh"
+    },
+    {
+      "dir": "Resources/Models/Animated/Walk",
+      "file": "walk.mesh"
+    }
+  ],
+  "animations": [
+    "Resources/Models/Animated/SneakWalk/sneakWalk.anim",
+    "Resources/Models/Animated/Walk/walk.anim"
+  ]
+}

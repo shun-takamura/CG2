@@ -1,7 +1,8 @@
 #include "IImGuiEditable.h"
 
 namespace {
-    // 0 を予約とし、1..255 を循環で配布する（uint8 が一周しても挙動はする）
+    /// <summary>次の ObjectID を配る（0 を予約とし、1..255 を循環で配る）</summary>
+    /// <returns>ID（1..255）</returns>
     uint8_t NextObjectId() {
         static uint8_t s_counter = 0; // 1 から始めるため pre-increment
         ++s_counter;

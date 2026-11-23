@@ -43,6 +43,9 @@
     <Filter Include="DirectXGame\Game\Scene\PlayerDeath">
       <UniqueIdentifier>{7c3e9a41-5d2b-4f8e-9b16-0a4c2e19d7f3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Special">
+      <UniqueIdentifier>{9d661c28-a2df-4000-a88b-860a244bd7b5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\FlightUnit">
       <UniqueIdentifier>{3f6b2d8e-91a4-4c57-b0e3-6d2a8f4c1e95}</UniqueIdentifier>
     </Filter>
@@ -195,6 +198,12 @@
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.cpp">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Special\StormLockPart.cpp">
+      <Filter>DirectXGame\Game\Scene\Special</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Special\ShatterlinePart.cpp">
+      <Filter>DirectXGame\Game\Scene\Special</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.cpp">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
     </ClCompile>
@@ -327,7 +336,10 @@
     <ClCompile Include="DirectXGame\Game\Enemy\EnemyCommandFactory.cpp">
       <Filter>DirectXGame\Game\Enemy</Filter>
     </ClCompile>
-    <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossActionManager.cpp">
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\IBossState.cpp">
+      <Filter>DirectXGame\Game\Enemy\Boss</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossIdleState.cpp">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.cpp">
@@ -388,6 +400,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\EtherState.cpp">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Score\GameSession.cpp">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Score\LoadoutState.cpp">
@@ -508,6 +523,15 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\PlayerDeathPart.h">
       <Filter>DirectXGame\Game\Scene\PlayerDeath</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Special\ISpecialMoveHost.h">
+      <Filter>DirectXGame\Game\Scene\Special</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Special\StormLockPart.h">
+      <Filter>DirectXGame\Game\Scene\Special</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Special\ShatterlinePart.h">
+      <Filter>DirectXGame\Game\Scene\Special</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitPart.h">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
@@ -680,8 +704,8 @@
     <ClInclude Include="DirectXGame\Game\Config\KeyConfig.h">
       <Filter>DirectXGame\Game\Config</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\IEnemyCommand.h">
-      <Filter>DirectXGame\Game\Enemy</Filter>
+    <ClInclude Include="DirectXGame\Game\Enemy\Commands\IEnemyCommand.h">
+      <Filter>DirectXGame\Game\Enemy\Commands</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\EnemyContext.h">
       <Filter>DirectXGame\Game\Enemy</Filter>
@@ -716,10 +740,10 @@
     <ClInclude Include="DirectXGame\Game\Enemy\Commands\WanderInScreenCommand.h">
       <Filter>DirectXGame\Game\Enemy\Commands</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Boss\IBossAction.h">
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\IBossState.h">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClInclude>
-    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossActionManager.h">
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossIdleState.h">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.h">
@@ -732,6 +756,12 @@
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackRanged.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossRageRoar.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossStagger.h">
       <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossMoveApproach.h">
@@ -810,6 +840,9 @@
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\EtherState.h">
+      <Filter>DirectXGame\Game\Score</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Score\GameSession.h">
       <Filter>DirectXGame\Game\Score</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Score\LoadoutState.h">

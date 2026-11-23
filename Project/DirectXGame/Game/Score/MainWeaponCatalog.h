@@ -37,34 +37,55 @@ struct MainWeaponDef {
 	BeamBladeAppearance bladeLook;
 	int price = 0;            // 購入を入れるときのための予約（今は使わない）
 
-	/// <summary>チャージ段階（playerChargeLevel_：-1/0＝通常、1 以上＝チャージ）に合う弾の倍率</summary>
+	/// <summary>チャージ段階に合う弾の倍率を取得する</summary>
+	/// <param name="chargeLevel">チャージ段階（playerChargeLevel_：-1/0＝通常、1 以上＝チャージ）</param>
+	/// <returns>通常弾かチャージ弾の倍率</returns>
 	const MainWeaponShot& ShotFor(float chargeLevel) const { return chargeLevel >= 1.0f ? charge : normal; }
 };
 
 /// <summary>
 /// メイン武器の一覧（20_Loadout.md §1）。Resources/Json/Tuning/MainWeapon.json を読む。
 /// 装備画面は JSON を直接読まず、ここの GetCount / GetDef を呼ぶ。付けている武器は LoadoutState が id で持つ。
+/// シングルトンにする理由：JSON を一度だけ読む、読むだけのデータの表のため。
 /// </summary>
 class MainWeaponCatalog {
 public:
+	/// <summary>唯一のインスタンスを取得する</summary>
+	/// <returns>インスタンス</returns>
 	static MainWeaponCatalog* GetInstance();
 
+	/// <summary>武器の数を取得する</summary>
+	/// <returns>武器の数</returns>
 	int GetCount() const { return static_cast<int>(weapons_.size()); }
-	/// <summary>範囲外なら nullptr</summary>
+	/// <summary>番号で武器の定義を取得する</summary>
+	/// <param name="index">番号</param>
+	/// <returns>武器の定義。範囲外なら nullptr</returns>
 	const MainWeaponDef* GetDef(int index) const;
-	/// <summary>Debug の調整用（握り・刃を ImGui で触る）</summary>
+	/// <summary>番号で武器の定義を書き換えられる形で取得する（Debug の調整用。握り・刃を ImGui で触る）</summary>
+	/// <param name="index">番号</param>
+	/// <returns>武器の定義。範囲外なら nullptr</returns>
 	MainWeaponDef* GetDefMutable(int index);
+	/// <summary>id で武器の定義を引く</summary>
+	/// <param name="id">武器の id</param>
+	/// <returns>武器の定義。見つからなければ nullptr</returns>
 	const MainWeaponDef* Find(const std::string& id) const;
-	/// <summary>見つからなければ -1</summary>
+	/// <summary>id から武器の番号を引く</summary>
+	/// <param name="id">武器の id</param>
+	/// <returns>番号。見つからなければ -1</returns>
 	int IndexOf(const std::string& id) const;
-	/// <summary>最初に付けている武器（JSON の default。無ければ先頭）</summary>
+	/// <summary>最初に付けている武器の id を取得する</summary>
+	/// <returns>JSON の default。無ければ先頭の武器の id</returns>
 	const std::string& GetDefaultId() const { return defaultId_; }
 
+	/// <summary>Resources/Json/Tuning/MainWeapon.json を読む</summary>
+	/// <returns>読めたら true</returns>
 	bool Load();
 	/// <summary>今の値を MainWeapon.json へ書く（Debug の握り・刃の調整用）</summary>
+	/// <returns>書けたら true</returns>
 	bool Save() const;
 
 private:
+	/// <summary>一覧を読み込む</summary>
 	MainWeaponCatalog();
 	~MainWeaponCatalog() = default;
 	MainWeaponCatalog(const MainWeaponCatalog&) = delete;

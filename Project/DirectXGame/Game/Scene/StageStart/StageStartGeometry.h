@@ -51,7 +51,9 @@ struct StageStartGeometry {
 	std::string lcdTextureUnable = "Resources/Models/Catapult/LcdLaunchUnable.dds";
 	std::string lcdTextureReady = "Resources/Models/Catapult/LcdLaunchReady.dds";
 
-	/// <summary>JSON を読む。ファイルが無い・壊れていれば false（値は既定のまま）</summary>
+	/// <summary>JSON を読む（値は既定のまま上書き）</summary>
+	/// <param name="path">JSON のパス</param>
+	/// <returns>ファイルが無い・壊れていれば false</returns>
 	bool Load(const std::string& path = kPath);
 };
 
@@ -81,8 +83,14 @@ struct StageStartHandoff {
 	std::string iblPath;              // 縦穴で使っている IBL（HUB の神殿のもの）
 	bool skipToCloudTop = false;      // HUB の降下中にスキップした（StagePlay は雲の上から。白フェードで差し替える）
 
+	/// <summary>渡す値をしまう（HubScene が ChangeScene の直前に呼ぶ）</summary>
+	/// <param name="handoff">渡す値</param>
 	static void Store(const StageStartHandoff& handoff);
-	/// <summary>渡された値があれば out に入れて true（以後は空）</summary>
+	/// <summary>渡された値を取り出す（以後は空）</summary>
+	/// <param name="out">値の受け取り先</param>
+	/// <returns>渡された値があれば true</returns>
 	static bool Take(StageStartHandoff& out);
+	/// <summary>まだ取り出していない値があるかを返す</summary>
+	/// <returns>あれば true</returns>
 	static bool HasPending();
 };

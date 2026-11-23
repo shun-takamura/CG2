@@ -1,4 +1,5 @@
 #include "Reticle.h"
+#include "MathUtility.h"
 
 #include "SpriteInstance.h"
 
@@ -13,6 +14,15 @@ Reticle::~Reticle() = default;
 #include <cmath>
 #include <array>
 
+namespace {
+	// 外側パーツの枚数（4 方向）
+	constexpr int kOuterPartCount = 4;
+	// これより短い時間・幅は 0 とみなす
+	constexpr float kNearZero = 1e-4f;
+	// チャージアニメの時間が 0 以下で渡されたときの時間 [秒]
+	constexpr float kDefaultChargeEasingDuration = 0.3f;
+}
+
 void Reticle::Initialize(SpriteManager* spriteManager, const std::string& texturePath) {
 	sprite_ = std::make_unique<SpriteInstance>();
 	sprite_->Initialize(spriteManager, texturePath, "Reticle");
@@ -24,13 +34,13 @@ void Reticle::Initialize(SpriteManager* spriteManager, const std::string& textur
 
 	// 外側パーツ（4枚）を初期化
 	// アンカーポイント (0.0, 1.0) = 左下基準。各パーツに 90 度ずつ回転を設定して 4 方向に配置する
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < kOuterPartCount; ++i) {
 		outerParticles_[i] = std::make_unique<SpriteInstance>();
 		outerParticles_[i]->Initialize(spriteManager, "Resources/Textures/reticle_outside.dds", "ReticleOuter" + std::to_string(i));
 		outerParticles_[i]->SetAnchorPoint({ 0.0f, 1.0f });
 		outerParticles_[i]->SetSize({ lockOnMinPxOutside_, lockOnMinPxOutside_ });//仮で最小値で置く
 		// 0°/90°/180°/270° (rad) で各パーツの向きを固定
-		outerParticles_[i]->SetRotation(i * 3.14159265f * 0.5f);
+		outerParticles_[i]->SetRotation(i * kPi * 0.5f);
 	}
 
 	ResetToCenter();
@@ -74,7 +84,7 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 	if (lockedOn_) {
 		targetSize = std::clamp(lockOnTargetSizePx_, lockOnMinPx_, lockOnMaxPx_);
 	}
-	if (sizeSmoothTime_ > 1e-4f) {
+	if (sizeSmoothTime_ > kNearZero) {
 		const float alpha = 1.0f - std::exp(-deltaTime / sizeSmoothTime_);
 		currentSizePx_ += (targetSize - currentSizePx_) * alpha;
 	} else {
@@ -90,7 +100,7 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 		// 内側レティクルのサイズ範囲（lockOnMinPx_ ～ lockOnMaxPx_）を 0～1 に正規化
 		// 非ロックオン時 = 0、ロックオンで敵が近いほど 1 に近づく
 		const float denom = (lockOnMaxPx_ - lockOnMinPx_);
-		const float t = (denom > 1e-4f)
+		const float t = (denom > kNearZero)
 			? std::clamp((currentSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
 			: 0.0f;
 
@@ -107,7 +117,7 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 
 		// 4 方向（右上 / 右下 / 左下 / 左上）にアンカーポイントを配置
 		// 各パーツの回転は Initialize 時に 0°/90°/180°/270° で固定済み
-		const Vector2 anchorOffsets[4] = {
+		const Vector2 anchorOffsets[kOuterPartCount] = {
 			{ +offset, -offset }, // パーツ 0: 中心の右上
 			{ +offset, +offset }, // パーツ 1: 中心の右下
 			{ -offset, +offset }, // パーツ 2: 中心の左下
@@ -116,7 +126,7 @@ void Reticle::Update(bool mouseHovered, const Vector2& mouseClient, bool mouseMo
 
 		// スプライトサイズ = min→max を拡大率で補間
 		const float outerSize = outerSizeMinPx_ + t * (outerSizeMaxPx_ - outerSizeMinPx_);
-		for (int i = 0; i < 4; ++i) {
+		for (int i = 0; i < kOuterPartCount; ++i) {
 			Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
 			outerParticles_[i]->SetPosition(partPos);
 			outerParticles_[i]->SetSize({ outerSize, outerSize });
@@ -131,7 +141,7 @@ void Reticle::Draw() {
 
 	// チャージ中なら外側パーツも描画
 	if (chargeLevel_ >= 0.0f) {
-		for (int i = 0; i < 4; ++i) {
+		for (int i = 0; i < kOuterPartCount; ++i) {
 			if (outerParticles_[i]) outerParticles_[i]->Draw();
 		}
 	}
@@ -157,19 +167,19 @@ void Reticle::StartChargeAnimation(float startRadius, float endRadius, float dur
 	outerRadius_ = startRadius;
 	outerChargeEasingStart_ = startRadius;
 	outerChargeEasingEnd_ = endRadius;
-	outerChargeEasingDuration_ = duration > 0.0f ? duration : 0.3f;
+	outerChargeEasingDuration_ = duration > 0.0f ? duration : kDefaultChargeEasingDuration;
 	outerChargeEasingElapsed_ = 0.0f;
 	outerRotation_ = 0.0f;
 
 	// 即座に最新の position_ で各パーツの位置を反映（前回フレームの古い位置で1フレーム描画される問題を回避）
 	// 内側レティクルのサイズ範囲を 0～1 に正規化
 	const float denom = (lockOnMaxPx_ - lockOnMinPx_);
-	const float t = (denom > 1e-4f)
+	const float t = (denom > kNearZero)
 		? std::clamp((currentSizePx_ - lockOnMinPx_) / denom, 0.0f, 1.0f)
 		: 0.0f;
 	// オフセット = min→max 補間 + チャージ開始時の広がり（startRadius）
 	const float offset = lockOnMinPxOutside_ + t * (lockOnMaxPxOutside_ - lockOnMinPxOutside_) + startRadius;
-	const Vector2 anchorOffsets[4] = {
+	const Vector2 anchorOffsets[kOuterPartCount] = {
 		{ +offset, -offset },
 		{ +offset, +offset },
 		{ -offset, +offset },
@@ -177,7 +187,7 @@ void Reticle::StartChargeAnimation(float startRadius, float endRadius, float dur
 	};
 	// サイズ = min→max 補間
 	const float outerSize = outerSizeMinPx_ + t * (outerSizeMaxPx_ - outerSizeMinPx_);
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < kOuterPartCount; ++i) {
 		if (!outerParticles_[i]) continue;
 		Vector2 partPos{ position_.x + anchorOffsets[i].x, position_.y + anchorOffsets[i].y };
 		outerParticles_[i]->SetPosition(partPos);

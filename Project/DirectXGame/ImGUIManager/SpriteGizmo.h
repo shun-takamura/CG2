@@ -12,7 +12,7 @@ class IImGuiEditable;
 class SpriteGizmo {
 public:
     /// <summary>
-    /// ギズモを描画＆操作する
+    /// 選択中のオブジェクトの 2D 位置に中央・X・Y のハンドルを描き、ドラッグで動かす（2D 位置を持たなければ何もしない）
     /// </summary>
     /// <param name="selected">選択中のオブジェクト（Sprite想定）</param>
     /// <param name="imagePos">ゲーム画像のスクリーン上の左上位置</param>
@@ -25,15 +25,27 @@ public:
 
 private:
     /// <summary>
-    /// Sprite座標 → スクリーン座標
+    /// Sprite の座標（UI の仮想解像度）を、ビューポートに描いたゲーム画像のスクリーン座標にする
     /// </summary>
+    /// <param name="spritePos">Sprite の座標</param>
+    /// <param name="imagePos">ゲーム画像のスクリーン上の左上位置</param>
+    /// <param name="imageSize">ゲーム画像のスクリーン上のサイズ</param>
+    /// <param name="clientW">UI の仮想解像度の幅</param>
+    /// <param name="clientH">UI の仮想解像度の高さ</param>
+    /// <returns>スクリーン座標</returns>
     ImVec2 SpriteToScreen(const Vector2& spritePos,
                           ImVec2 imagePos, ImVec2 imageSize,
                           float clientW, float clientH);
 
     /// <summary>
-    /// スクリーン座標 → Sprite座標
+    /// ビューポートに描いたゲーム画像のスクリーン座標を、Sprite の座標（UI の仮想解像度）にする
     /// </summary>
+    /// <param name="screenPos">スクリーン座標</param>
+    /// <param name="imagePos">ゲーム画像のスクリーン上の左上位置</param>
+    /// <param name="imageSize">ゲーム画像のスクリーン上のサイズ</param>
+    /// <param name="clientW">UI の仮想解像度の幅</param>
+    /// <param name="clientH">UI の仮想解像度の高さ</param>
+    /// <returns>Sprite の座標</returns>
     Vector2 ScreenToSprite(ImVec2 screenPos,
                            ImVec2 imagePos, ImVec2 imageSize,
                            float clientW, float clientH);

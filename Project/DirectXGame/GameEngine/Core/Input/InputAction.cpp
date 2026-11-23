@@ -9,6 +9,11 @@ const InputActionMap::Slots InputActionMap::kEmptySlots{};
 namespace {
 	// LT/RT を「押下」とみなす閾値
 	constexpr float kTriggerThreshold = 0.5f;
+
+	// DirectInput のキーの数（DIK の 0〜255）
+	constexpr int kKeyCount = 256;
+	// DirectInput のキー状態で「押されている」を表すビット
+	constexpr int kKeyPressedBit = 0x80;
 }
 
 void InputActionMap::SetDevices(KeyboardInput* keyboard, MouseInput* mouse, ControllerInput* gamepad) {
@@ -79,8 +84,8 @@ bool InputActionMap::IsReleased(int actionId) const {
 bool InputActionMap::AnyInputTriggered() const {
 	// キーボード: 全256キーをスキャン
 	if (keyboard_) {
-		for (int i = 0; i < 256; ++i) {
-			if ((keyboard_->keys_[i] & 0x80) && !(keyboard_->preKeys_[i] & 0x80)) {
+		for (int i = 0; i < kKeyCount; ++i) {
+			if ((keyboard_->keys_[i] & kKeyPressedBit) && !(keyboard_->preKeys_[i] & kKeyPressedBit)) {
 				return true;
 			}
 		}
@@ -166,7 +171,7 @@ bool InputActionMap::IsBindingReleased(const PhysicalBinding& b) const {
 	case InputDevice::Keyboard:
 		// KeyboardInput には Released 用APIが無い。前フレキー状態を直接見る
 		if (!keyboard_) return false;
-		return (keyboard_->preKeys_[b.code] & 0x80) && !(keyboard_->keys_[b.code] & 0x80);
+		return (keyboard_->preKeys_[b.code] & kKeyPressedBit) && !(keyboard_->keys_[b.code] & kKeyPressedBit);
 	case InputDevice::Mouse: {
 		if (!mouse_) return false;
 		return mouse_->IsButtonReleased(static_cast<MouseInput::Button>(b.code));

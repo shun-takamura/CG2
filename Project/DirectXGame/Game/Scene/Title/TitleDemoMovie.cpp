@@ -26,11 +26,20 @@ namespace {
 	// 1 フレームの経過時間の上限（ロードなどで止まったときに一気に進めない）
 	constexpr float kMaxDeltaSeconds = 0.1f;
 
+	/// <summary>JSON のキーの値を float として読む</summary>
+	/// <param name="j">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="fallback">数でないときの値</param>
+	/// <returns>読んだ値</returns>
 	float ReadFloat(const JsonValue& j, const char* key, float fallback) {
 		const JsonValue& v = j[key];
 		return v.IsNumber() ? static_cast<float>(v.AsDouble(fallback)) : fallback;
 	}
 
+	/// <summary>経過時間を長さに対する割合にする</summary>
+	/// <param name="time">経過 [秒]</param>
+	/// <param name="duration">長さ [秒]</param>
+	/// <returns>0〜1。長さが 0 以下なら 1</returns>
 	float Ratio(float time, float duration) {
 		return (duration > 0.0f) ? std::clamp(time / duration, 0.0f, 1.0f) : 1.0f;
 	}
@@ -68,7 +77,7 @@ void TitleDemoMovie::LoadTuning() {
 	if (!std::filesystem::exists(kTuningPath)) return;
 	auto result = JsonParser::ParseFile(kTuningPath);
 	if (!result.success) {
-		LogBuffer::Instance().Add(std::string("TitleDemoMovie: JSON を読めない: ") + kTuningPath, LogBuffer::Level::Warning);
+		LogBuffer::GetInstance()->Add(std::string("TitleDemoMovie: JSON を読めない: ") + kTuningPath, LogBuffer::Level::Warning);
 		return;
 	}
 	const JsonValue& root = result.value;
@@ -103,7 +112,7 @@ void TitleDemoMovie::StartNow() {
 	if (state_ != State::Idle) return;
 	// 映像はフェードの後で開く（裏で再生が進んで冒頭が欠けないように）。ここでは在るかだけ見る
 	if (!std::filesystem::exists(moviePath)) {
-		LogBuffer::Instance().Add("TitleDemoMovie: 動画が無い: " + moviePath, LogBuffer::Level::Warning);
+		LogBuffer::GetInstance()->Add("TitleDemoMovie: 動画が無い: " + moviePath, LogBuffer::Level::Warning);
 		idleTime_ = 0.0f;
 		return;
 	}
@@ -145,7 +154,7 @@ void TitleDemoMovie::Update(bool canIdle) {
 		// 触った・映像が読めなくなった・タイトルが別の所へ動いた → タイトルへ戻る
 		const bool failed = (state_ == State::Playing) && player_->HasFailed();
 		if (activity || failed || !canIdle) {
-			if (failed) LogBuffer::Instance().Add("TitleDemoMovie: 動画を読めない: " + moviePath, LogBuffer::Level::Warning);
+			if (failed) LogBuffer::GetInstance()->Add("TitleDemoMovie: 動画を読めない: " + moviePath, LogBuffer::Level::Warning);
 			// フェードインの途中なら、今の黒の濃さから戻す
 			const float alpha = (state_ == State::FadeIn) ? Ratio(stateTime_, fadeInSeconds) : 1.0f;
 			player_->Stop();

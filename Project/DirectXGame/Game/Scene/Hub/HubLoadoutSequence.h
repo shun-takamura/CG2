@@ -35,42 +35,76 @@ public:
 		bool inputEnabled = false;      // 装備の UI の入力を受け付ける
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	HubLoadoutSequence();
+	/// <summary>調整値（入る・出る・付け替えの秒数、ノイズ、カメラ）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>コクピットから機体設定へ入り始める（カメラはメイン武器のタブの位置から）</summary>
 	void StartEnter();
+	/// <summary>機体設定からコクピットへ出始める</summary>
 	void StartLeave();
-	/// <summary>付け替えのノイズ（入れ替えは ConsumeSwapPeak が true になったフレーム）</summary>
+	/// <summary>付け替えのノイズを始める（入れ替えは ConsumeSwapPeak が true になったフレーム）</summary>
 	void StartSwap();
+	/// <summary>Idle に戻す</summary>
 	void Stop();
+	/// <summary>時刻を進め、段階を移し、カメラをタブの位置へ寄せる</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
 
+	/// <summary>今の段階を返す</summary>
+	/// <returns>段階</returns>
 	Phase GetPhase() const { return phase_; }
+	/// <summary>行き来か機体設定の途中かを返す</summary>
+	/// <returns>Idle・Finished 以外なら true</returns>
 	bool IsActive() const { return phase_ != Phase::Idle && phase_ != Phase::Finished; }
+	/// <summary>コクピットに戻り切ったかを返す（持ち主がコクピットの状態へ戻す）</summary>
+	/// <returns>Finished なら true</returns>
 	bool IsFinished() const { return phase_ == Phase::Finished; }
+	/// <summary>今の時刻の見え方（カメラの内外・神殿の表示・UI の出と潰れ・ノイズ）を求める</summary>
+	/// <returns>見え方</returns>
 	View Evaluate() const;
-	/// <summary>付け替えのノイズが山のてっぺんを越えたフレームだけ true（モデルを入れ替える）</summary>
+	/// <summary>付け替えのノイズが山のてっぺんを越えたフレームだけ true を返す（モデルを入れ替える）。返したら下ろす</summary>
+	/// <returns>越えたフレームなら true</returns>
 	bool ConsumeSwapPeak();
 
-	/// <summary>機体のまわりを回す（右スティック・ドラッグ）。yaw は度。タブのカメラへ動いている途中ならそこで止める</summary>
+	/// <summary>機体のまわりを回す（右スティック・ドラッグ）。タブのカメラへ動いている途中ならそこで止める</summary>
+	/// <param name="yawDegrees">回す角度 [度]</param>
 	void Orbit(float yawDegrees);
-	/// <summary>
-	/// タブ（0 メイン武器 / 1 盾 / 2 飛行ユニット）の見やすい位置へカメラを動かす。回り込む角度は近い方を回る。
-	/// immediate なら補間せずにその位置へ
-	/// </summary>
+	/// <summary>タブの見やすい位置へカメラを動かす。回り込む角度は近い方を回る</summary>
+	/// <param name="tab">0 メイン武器 / 1 盾 / 2 飛行ユニット</param>
+	/// <param name="immediate">true なら補間せずにその位置へ</param>
 	void SetShot(int tab, bool immediate);
+	/// <summary>右スティックで回す速さを返す</summary>
+	/// <returns>速さ [度/秒]</returns>
 	float GetOrbitStickSpeed() const { return orbitStickSpeed_; }
+	/// <summary>ドラッグで回す速さを返す</summary>
+	/// <returns>速さ [度/px]</returns>
 	float GetOrbitDragSpeed() const { return orbitDragSpeed_; }
-	/// <summary>外のカメラ。mechOrigin は機体の原点（足元の中央）、正面は +Z</summary>
+	/// <summary>外のカメラを求める（機体の正面は +Z）</summary>
+	/// <param name="mechOrigin">機体の原点（足元の中央）のワールド位置</param>
+	/// <param name="eye">カメラの位置の受け取り先</param>
+	/// <param name="rotate">カメラの回転 [ラジアン] の受け取り先</param>
+	/// <param name="fovY">縦の画角 [ラジアン] の受け取り先</param>
 	void GetCamera(const Vector3& mechOrigin, Vector3& eye, Vector3& rotate, float& fovY) const;
-	/// <summary>足元の輪（背景）の中心の高さと半径 [m]（機体の原点から）</summary>
+	/// <summary>足元の輪（背景）の半径を返す（機体の原点から）</summary>
+	/// <returns>半径 [m]</returns>
 	float GetFloorRingRadius() const { return floorRingRadius_; }
 	static constexpr int kShotCount = 3;
+	/// <summary>ノイズの模様を動かす経過時間を返す</summary>
+	/// <returns>経過 [秒]</returns>
 	float GetGlitchTime() const { return glitchTime_; }
+	/// <summary>ノイズの見た目の値を返す（HubScene が GlitchEffect へ渡す）</summary>
+	/// <returns>ノイズの値</returns>
 	const GlitchEffect::Params& GetGlitchParams() const { return glitchParams_; }
 
+	/// <summary>調整値（Hub.json の "loadout"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
@@ -81,11 +115,26 @@ private:
 		float distance = 30.0f;     // 見る点からの距離 [m]
 		float height = 10.5f;       // 見る点の高さ [m]
 	};
+	/// <summary>2 つのカメラの位置を補間する</summary>
+	/// <param name="a">k = 0 の位置</param>
+	/// <param name="b">k = 1 の位置</param>
+	/// <param name="k">補間の割合</param>
+	/// <returns>補間した位置</returns>
 	static Shot LerpShot(const Shot& a, const Shot& b, float k);
 
-	// center を山のてっぺんにした強さ（rise 秒で 0→peak、fall 秒で peak→0）
+	/// <summary>center を山のてっぺんにしたノイズの強さを求める（rise 秒で 0→peak、fall 秒で peak→0）</summary>
+	/// <param name="t">時刻 [秒]</param>
+	/// <param name="center">てっぺんの時刻 [秒]</param>
+	/// <param name="rise">上がる秒数 [秒]</param>
+	/// <param name="fall">下がる秒数 [秒]</param>
+	/// <param name="peak">てっぺんの強さ</param>
+	/// <returns>強さ</returns>
 	static float Bump(float t, float center, float rise, float fall, float peak);
+	/// <summary>入るときに装備の UI が出始める時刻を返す</summary>
+	/// <returns>時刻 [秒]</returns>
 	float EnterUiStart() const { return templeHideTime_ + uiDelay_; }
+	/// <summary>出るときにコンソールが戻り切る時刻を返す</summary>
+	/// <returns>時刻 [秒]</returns>
 	float LeaveEnd() const { return leaveCutTime_ + consoleReturnDelay_ + consoleCollapseSeconds_; }
 
 	Phase phase_ = Phase::Idle;

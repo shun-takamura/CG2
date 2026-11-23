@@ -29,27 +29,29 @@
     GpuStatsScope PEPPER_CONCAT(pepperGpuStatsScope_, __LINE__)((commandList), (name))
 
 // 名前付きカウンタ（DrawCall 回数など「個数」）。描画呼び出しの直前などに1行。
-#define PEPPER_COUNT(name) Profiler::Instance().Count((name), 1)
-#define PEPPER_COUNT_N(name, n) Profiler::Instance().Count((name), (n))
+#define PEPPER_COUNT(name) Profiler::GetInstance()->Count((name), 1)
+#define PEPPER_COUNT_N(name, n) Profiler::GetInstance()->Count((name), (n))
 
 // 名前付きゲージ（RAM/VRAM/オブジェクト数など「現在値のレベル」）。
-#define PEPPER_GAUGE(name, value) Profiler::Instance().SetGauge((name), (value))
+#define PEPPER_GAUGE(name, value) Profiler::GetInstance()->SetGauge((name), (value))
 
 // RAM/VRAM を継続サンプリング（OS問い合わせは内部で1秒throttle）。フレームループで毎フレーム1回。
-#define PEPPER_SAMPLE_MEMORY() MemoryProbe::Instance().Sample()
+#define PEPPER_SAMPLE_MEMORY() MemoryProbe::GetInstance()->Sample()
 
 // 1フレーム分の集計をウィンドウへ畳み込み、1秒ごとに profile.log へ書き出す。フレームループ末尾で1回。
-#define PEPPER_END_FRAME() Profiler::Instance().EndFrame()
+#define PEPPER_END_FRAME() Profiler::GetInstance()->EndFrame()
 
 // 未出力ウィンドウを強制書き出し。終了処理で1回。
-#define PEPPER_FLUSH() Profiler::Instance().Flush()
+#define PEPPER_FLUSH() Profiler::GetInstance()->Flush()
 
 // GPU 計測の初期化（device/queue）。DirectXCore::Initialize 末尾で1回。
-#define PEPPER_GPU_INIT(device, queue) GpuProfiler::Instance().Initialize((device), (queue))
+#define PEPPER_GPU_INIT(device, queue) GpuProfiler::GetInstance()->Initialize((device), (queue))
 // タイムスタンプの解決。コマンドリストを Close する直前に。
-#define PEPPER_GPU_RESOLVE(commandList) GpuProfiler::Instance().ResolveTimestamps((commandList))
+#define PEPPER_GPU_RESOLVE(commandList) GpuProfiler::GetInstance()->ResolveTimestamps((commandList))
 // GPU 完了待ちの後にリードバックして Profiler へ反映。
-#define PEPPER_GPU_READBACK() GpuProfiler::Instance().ReadbackAndReport()
+#define PEPPER_GPU_READBACK() GpuProfiler::GetInstance()->ReadbackAndReport()
+// GPU 計測の終了（クエリヒープ等の解放）。DirectXCore::Finalize で1回。
+#define PEPPER_GPU_FINALIZE() GpuProfiler::GetInstance()->Finalize()
 
 #else
 
@@ -65,5 +67,6 @@
 #define PEPPER_GPU_INIT(device, queue) ((void)0)
 #define PEPPER_GPU_RESOLVE(commandList) ((void)0)
 #define PEPPER_GPU_READBACK() ((void)0)
+#define PEPPER_GPU_FINALIZE() ((void)0)
 
 #endif // USE_PEPPER

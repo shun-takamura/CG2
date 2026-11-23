@@ -9,6 +9,13 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻す既定値（深度の重み・縁の強さ・点滅の速さ [Hz]・点滅の暗い側の明るさ）
+	constexpr float kDefaultDepthWeight = 6.0f;
+	constexpr float kDefaultEdgeStrength = 1.5f;
+	constexpr float kDefaultBlinkHz = 3.0f;
+	constexpr float kDefaultMinIntensity = 0.35f;
+}
 
 void MaskedOutlineEffect::InitializeMaskedOutline(
 	DirectXCore* dxCore,
@@ -74,13 +81,13 @@ void MaskedOutlineEffect::ResetParams()
 {
 	colorFire_ = { 1.0f, 0.0f, 0.0f, 1.0f };
 	colorIce_ = { 0.0f, 0.0f, 1.0f, 1.0f };
-	depthWeight_ = 6.0f;
+	depthWeight_ = kDefaultDepthWeight;
 	normalWeight_ = 1.0f;
 	depthThreshold_ = 0.0f;
 	normalThreshold_ = 0.0f;
-	edgeStrength_ = 1.5f;
-	blinkHz_ = 3.0f;
-	minIntensity_ = 0.35f;
+	edgeStrength_ = kDefaultEdgeStrength;
+	blinkHz_ = kDefaultBlinkHz;
+	minIntensity_ = kDefaultMinIntensity;
 }
 
 void MaskedOutlineEffect::SetProjectionMatrix(const Matrix4x4& projection)

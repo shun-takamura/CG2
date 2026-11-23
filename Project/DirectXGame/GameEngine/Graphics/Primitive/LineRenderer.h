@@ -8,6 +8,10 @@
 
 class Camera;
 
+/// <summary>
+/// 線分をまとめて積み、1 回の描画で描く。
+/// シングルトンにする理由：線の頂点バッファと PSO を 1 組だけ持ち、デバッグ表示などどこからでも線を積めるようにするため。
+/// </summary>
 class LineRenderer {
 public:
     // 描画対象パス。Scene と EffectEditor で頂点バッファ・CB を分けるため。
@@ -17,18 +21,30 @@ public:
         Count,
     };
 
+    /// <summary>シングルトンを返す</summary>
+    /// <returns>唯一のインスタンス</returns>
     static LineRenderer* GetInstance();
 
+    /// <summary>ルートシグネチャ・PSO と、パスごとの頂点バッファ・ViewProjection CB を作る</summary>
+    /// <param name="dxCore">デバイスとコマンドリストの取得元</param>
     void Initialize(DirectXCore* dxCore);
+    /// <summary>PSO・ルートシグネチャ・パスごとのリソースを解放する</summary>
     void Finalize();
 
-    // 描画前に呼ぶ
+    /// <summary>パスのカメラを設定する（描画前に呼ぶ）</summary>
+    /// <param name="camera">ViewProjection を取るカメラ</param>
+    /// <param name="pass">対象のパス</param>
     void SetCamera(Camera* camera, Pass pass = Pass::Main) { passes_[static_cast<int>(pass)].camera = camera; }
 
-    // 線を1本追加する（毎フレーム呼ぶ→Draw→自動クリア）
+    /// <summary>線を1本追加する（毎フレーム呼ぶ→Draw→自動クリア）。上限を超えた分は捨てて 1 回だけ警告する</summary>
+    /// <param name="start">始点のワールド座標</param>
+    /// <param name="end">終点のワールド座標</param>
+    /// <param name="color">線の色</param>
+    /// <param name="pass">積むパス</param>
     void AddLine(const Vector3& start, const Vector3& end, const Vector4& color, Pass pass = Pass::Main);
 
-    // たまった線をまとめて描画してクリア
+    /// <summary>たまった線をまとめて描画してクリア（カメラ未設定なら描かずにクリア）</summary>
+    /// <param name="pass">描くパス</param>
     void Draw(Pass pass = Pass::Main);
 
 private:
@@ -37,7 +53,9 @@ private:
     LineRenderer(const LineRenderer&) = delete;
     LineRenderer& operator=(const LineRenderer&) = delete;
 
+    /// <summary>ルートシグネチャを作る（[0]=VS b0 の ViewProjection、ルート CBV）</summary>
     void CreateRootSignature();
+    /// <summary>線リストの PSO を作る（α ブレンド・深度テストなし・sRGB の RT）</summary>
     void CreatePipelineState();
 
     // 1 パス・1 フレームあたりの上限。スプライン（1 区間 24 分割）を数十本出すと 4096 では足りず、
@@ -62,6 +80,8 @@ private:
         uint32_t lineCount = 0;
     };
 
+    /// <summary>1 パス分の頂点バッファ（kMaxVertexCount 個）と ViewProjection CB を作ってマップする</summary>
+    /// <param name="s">作る先のパス</param>
     void CreatePassResources(PassState& s);
 
     DirectXCore* dxCore_ = nullptr;

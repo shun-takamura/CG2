@@ -6,6 +6,7 @@
 #include "MathUtility.h"
 #include "Quaternion.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 
 #include <cmath>
 
@@ -14,32 +15,42 @@
 #endif
 
 namespace {
+	// 向きと真下の内積がこれより大きければ、すでに真下を向いているとみなす
+	constexpr float kAlreadyDownCos = 0.9999f;
+	// 回転軸の長さがこれ以下なら X 軸を使う（真上を向いているとき）
+	constexpr float kMinAxisLength = 1e-5f;
+	// 背中のスラスターの左右の位置（Spine2 から）[m]
+	constexpr float kBackMountOffsetX = 1.3f;
+	// 背中のスラスターの高さ（Spine2 から）[m]
+	constexpr float kBackMountOffsetY = 0.6f;
+	// 背中のスラスターを後ろへずらす量（Spine2 から）[m]
+	constexpr float kBackMountOffsetZ = 2.2f;
+	// 背中のスラスターの X 軸まわりの傾き [度]
+	constexpr float kBackMountTiltDegrees = 70.0f;
+	// ふくらはぎのスラスターの位置（足首から）[m]
+	constexpr Vector3 kCalfMountOffset = { 0.0f, 1.5f, -1.6f };
+	// ふくらはぎのスラスターの X 軸まわりの傾き [度]
+	constexpr float kCalfMountTiltDegrees = 60.0f;
+	// スラスターの大きさの段階の最大（0 = 小、1 = 中、2 = 大）
+	constexpr int kMaxThrustLevel = 2;
+
 	const char* kMountNames[MechThrusters::kCount] = { "Back L", "Back R", "Calf L", "Calf R" };
 	const char* kMountKeys[MechThrusters::kCount] = { "backLeft", "backRight", "calfLeft", "calfRight" };
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
-
-	/// <summary>エフェクトの -Y（噴く向き）を dir へ向けるオイラー角（EffectInstance の MakeRotateMatrix(Vector3) の規約）。
-	/// 筒は Y まわりに対称なので最短の回転でよい。回転の向きの規約に頼らず、回した結果で符号を確かめる</summary>
+	/// <summary>
+	/// エフェクトの -Y（噴く向き）を dir へ向けるオイラー角を求める（EffectInstance の MakeRotateMatrix(Vector3) の規約）。
+	/// 筒は Y まわりに対称なので最短の回転でよい。回転の向きの規約に頼らず、回した結果で符号を確かめる
+	/// </summary>
+	/// <param name="dir">噴かせたい向き（長さは問わない）</param>
+	/// <returns>オイラー角 [ラジアン]。すでに -Y を向いていれば 0</returns>
 	Vector3 EulerAimingDown(const Vector3& dir) {
 		const Vector3 from = { 0.0f, -1.0f, 0.0f };
 		const Vector3 to = Normalize(dir);
 		const float c = Dot(from, to);
-		if (c > 0.9999f) return { 0.0f, 0.0f, 0.0f };
+		if (c > kAlreadyDownCos) return { 0.0f, 0.0f, 0.0f };
 		Vector3 axis = { from.y * to.z - from.z * to.y, from.z * to.x - from.x * to.z, from.x * to.y - from.y * to.x };
 		const float axisLength = std::sqrt(Dot(axis, axis));
-		axis = axisLength > 1e-5f ? Vector3{ axis.x / axisLength, axis.y / axisLength, axis.z / axisLength } : Vector3{ 1.0f, 0.0f, 0.0f };
+		axis = axisLength > kMinAxisLength ? Vector3{ axis.x / axisLength, axis.y / axisLength, axis.z / axisLength } : Vector3{ 1.0f, 0.0f, 0.0f };
 		const float angle = std::acos(c < -1.0f ? -1.0f : c);
 		Quaternion q = MakeRotateAxisAngleQuaternion(axis, angle);
 		if (Dot(TransformMatrix(from, MakeRotateMatrix(q)), to) < 0.0f) q = MakeRotateAxisAngleQuaternion(axis, -angle);
@@ -51,11 +62,11 @@ MechThrusters::MechThrusters(Preset preset) {
 	// 機体は +Z を向く（左手系）ので機体の左は −X・右は +X（2026-10-19 実機：+X を左にしていて背中の左右が逆だった）。
 	// 噴く向きは -Y を X まわりに回して後ろ下へ（70° で後ろ寄り）
 	// 背中は背中の装甲の外へ（Spine2 から後ろ 1.3m では胴体に埋もれた。2026-10-19 実機）
-	mounts_[kBackLeft] = { "mixamorig:Spine2", { -1.3f, 0.6f, -2.2f }, { 70.0f, 0.0f, 0.0f } };
-	mounts_[kBackRight] = { "mixamorig:Spine2", { 1.3f, 0.6f, -2.2f }, { 70.0f, 0.0f, 0.0f } };
+	mounts_[kBackLeft] = { "mixamorig:Spine2", { -kBackMountOffsetX, kBackMountOffsetY, -kBackMountOffsetZ }, { kBackMountTiltDegrees, 0.0f, 0.0f } };
+	mounts_[kBackRight] = { "mixamorig:Spine2", { kBackMountOffsetX, kBackMountOffsetY, -kBackMountOffsetZ }, { kBackMountTiltDegrees, 0.0f, 0.0f } };
 	// ふくらはぎは脚の表面の外へ（後ろ 0.8m では脚のメッシュに埋もれて光が隠れた。2026-10-19 実機）
-	mounts_[kCalfLeft] = { "mixamorig:LeftFoot", { 0.0f, 1.5f, -1.6f }, { 60.0f, 0.0f, 0.0f } };
-	mounts_[kCalfRight] = { "mixamorig:RightFoot", { 0.0f, 1.5f, -1.6f }, { 60.0f, 0.0f, 0.0f } };
+	mounts_[kCalfLeft] = { "mixamorig:LeftFoot", kCalfMountOffset, { kCalfMountTiltDegrees, 0.0f, 0.0f } };
+	mounts_[kCalfRight] = { "mixamorig:RightFoot", kCalfMountOffset, { kCalfMountTiltDegrees, 0.0f, 0.0f } };
 	if (preset == Preset::Player) {
 		// ゲームの自機は大きさ 1（演出の機体の 1/10.625）。ずらしも同じ比で縮め、エフェクトは縮めた版。
 		// ずらしは機体の向き（+Z が前）で持ち、機体の回転で回す
@@ -133,7 +144,7 @@ MechThrusters::Sizes MechThrusters::FromMove(bool up, bool left, bool down, bool
 	if (right) { level[kBackLeft] += 1; level[kCalfLeft] += 1; level[kBackRight] -= 1; level[kCalfRight] -= 1; }
 	Sizes s{};
 	for (int i = 0; i < kCount; ++i) {
-		const int l = level[i] < 0 ? 0 : (level[i] > 2 ? 2 : level[i]);
+		const int l = level[i] < 0 ? 0 : (level[i] > kMaxThrustLevel ? kMaxThrustLevel : level[i]);
 		s[i] = l == 0 ? Size::Small : (l == 1 ? Size::Medium : Size::Large);
 	}
 	return s;
@@ -163,8 +174,8 @@ void MechThrusters::LoadTuning(const JsonValue& node) {
 		const JsonValue& m = node[kMountKeys[i]];
 		if (!m.IsObject()) continue;
 		mounts_[i].bone = m["bone"].AsString(mounts_[i].bone);
-		ReadVector3(m["offset"], mounts_[i].offset);
-		ReadVector3(m["rotationDegrees"], mounts_[i].rotationDegrees);
+		mounts_[i].offset = ReadVector3(m["offset"], mounts_[i].offset);
+		mounts_[i].rotationDegrees = ReadVector3(m["rotationDegrees"], mounts_[i].rotationDegrees);
 	}
 }
 

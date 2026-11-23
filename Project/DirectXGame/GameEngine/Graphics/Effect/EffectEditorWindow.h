@@ -21,10 +21,17 @@ class IEditorSelection;
 /// </summary>
 class EffectEditorWindow : public IImGuiWindow {
 public:
+    /// <summary>依存を受け取り、初期サイズ 640×480 のウィンドウを作る（RT は Initialize で作る）</summary>
+    /// <param name="dxCore">デバイス・コマンドリスト・深度の取得元</param>
+    /// <param name="srvManager">プレビュー RT の SRV を確保する先</param>
+    /// <param name="selection">エディタの選択状態（ImGuiManager が実装）</param>
     EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager, IEditorSelection* selection);
+    /// <summary>Finalize で RT と PostEffect を解放する</summary>
     ~EffectEditorWindow() override;
 
+    /// <summary>プレビュー用カメラの初期化・512×512 の RT 作成・空のエフェクトで編集を始める（PostEffect は遅延生成）</summary>
     void Initialize();
+    /// <summary>PostEffect とすべてのプレビュー RT（破棄待ちも含む）を解放する</summary>
     void Finalize();
 
     /// <summary>
@@ -32,39 +39,66 @@ public:
     /// </summary>
     void Render();
 
+    /// <summary>プレビュー用のカメラを返す</summary>
+    /// <returns>エディタ所有のカメラ</returns>
     Camera* GetCamera() { return &camera_; }
 
     // ===== editBuffer アクセス（Editable から呼ばれる） =====
+    /// <summary>編集中のエフェクト定義を返す</summary>
+    /// <returns>editBuffer</returns>
     EffectDef&       GetEditBuffer()       { return editBuffer_; }
+    /// <summary>編集中のエフェクト定義を返す（読み取り専用）</summary>
+    /// <returns>editBuffer</returns>
     const EffectDef& GetEditBuffer() const { return editBuffer_; }
+    /// <summary>editBuffer を未保存の変更ありにする</summary>
     void MarkEditBufferDirty() { editBufferDirty_ = true; }
 
     // ===== コンポーネント操作 =====
-    // Primitive を追加する場合は meshType（0=Plane..7=Lightning）で形状を確定する。
+    /// <summary>既定値のコンポーネントを末尾に追加して Editable を作り直す</summary>
+    /// <param name="kind">追加する種類</param>
+    /// <param name="meshType">Primitive の時の形状（0=Plane..7=Lightning）。他の種類では無視</param>
     void AddComponent(EffectComponentEditable::Kind kind, int meshType = 0);
-    // 即時削除ではなく、次の OnDraw 冒頭で削除する（OnImGuiInspector 中の self-destroy 回避）
+    /// <summary>削除を予約する。即時削除ではなく、次の OnDraw 冒頭で削除する（OnImGuiInspector 中の self-destroy 回避）</summary>
+    /// <param name="kind">削除する種類</param>
+    /// <param name="index">種類ごとの配列内の位置</param>
     void RemoveComponent(EffectComponentEditable::Kind kind, int index);
-    // 指定コンポーネントの複製を末尾に追加（同じく次フレーム冒頭で安全に処理）
+    /// <summary>指定コンポーネントの複製を末尾に追加する予約をする（次フレーム冒頭で処理。Particle はグループ名をユニーク化）</summary>
+    /// <param name="kind">複製する種類</param>
+    /// <param name="index">種類ごとの配列内の位置</param>
     void DuplicateComponent(EffectComponentEditable::Kind kind, int index);
 
-    // Editable 一覧（EffectHierarchyWindow から参照される）
+    /// <summary>Editable 一覧を返す（EffectHierarchyWindow から参照される）</summary>
+    /// <returns>editBuffer のコンポーネントごとの Editable</returns>
     const std::vector<std::unique_ptr<EffectComponentEditable>>& GetEditables() const { return editables_; }
 
+    /// <summary>編集中のエフェクト名を返す</summary>
+    /// <returns>editBuffer の name</returns>
     const std::string& GetCurrentName() const { return editBuffer_.name; }
 
 protected:
+    /// <summary>保留中の削除・複製を処理し、定義選択/保存/再生/シークの UI とプレビュー画像を描く（Debug だけ）</summary>
     void OnDraw() override;
 
 private:
+    /// <summary>サイズが変わった時だけプレビュー用 RT 一式を作り直す。古い RT は GPU 参照中の可能性があるので次の Render 冒頭で解放する</summary>
+    /// <param name="width">RT の幅 [px]</param>
+    /// <param name="height">RT の高さ [px]</param>
     void EnsureRenderTextureSize(uint32_t width, uint32_t height);
-    // 自前 PostEffect を遅延生成（初回利用時。起動時は TextureManager 未準備でクラッシュするため）。
+    /// <summary>自前 PostEffect を遅延生成する（初回利用時。起動時は TextureManager 未準備でクラッシュするため）</summary>
     void EnsurePostEffect();
+    /// <summary>プレビュー上にマウスがある時、左ドラッグで周回・中ドラッグで平行移動・ホイールで寄り引き</summary>
     void HandleMouseInput();
+    /// <summary>プレビューパスの LineRenderer に XZ 平面のグリッド（±10m、1m 刻み、軸は色付き）を積む</summary>
     void AddGridLines();
 
+    /// <summary>登録済みの定義を editBuffer にコピーして編集を始める。見つからなければ新規にする</summary>
+    /// <param name="defName">EffectManager に登録された定義名</param>
     void LoadIntoBuffer(const std::string& defName);
+    /// <summary>"Untitled"・長さ 1 秒の空の定義で editBuffer を置き換える</summary>
     void NewEffect();
+    /// <summary>名前欄の名前で保存する。編集元と同じ名前なら上書き、違えば衝突時に EffectManager がサフィックスを付ける</summary>
     void SaveCurrent();
+    /// <summary>editBuffer の全コンポーネント分の Editable を作り直し、選択中だった kind+index を選び直す</summary>
     void RebuildEditables();
 
     DirectXCore* dxCore_ = nullptr;

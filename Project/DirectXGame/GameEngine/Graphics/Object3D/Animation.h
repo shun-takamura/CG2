@@ -47,11 +47,20 @@ struct Animation {
 // 関数宣言
 // =====================================
 
-// アニメーションファイルを読み込む
+/// <summary>assimp でアニメーションファイルを読み込む（先頭のアニメーションだけ。無ければ assert）</summary>
+/// <param name="directoryPath">ファイルのあるディレクトリ</param>
+/// <param name="filename">ファイル名</param>
+/// <returns>読んだアニメーション（時刻は秒）</returns>
 Animation LoadAnimationFile(const std::string& directoryPath, const std::string& filename);
 
-// 任意の時刻のVector3値を計算（線形補間）
+/// <summary>任意の時刻のVector3値を計算（線形補間。範囲外は端のキーの値）</summary>
+/// <param name="keyframes">キーフレーム（空は assert）</param>
+/// <param name="time">時刻 [秒]</param>
+/// <returns>補間した値</returns>
 Vector3 CalculateValue(const std::vector<KeyframeVector3>& keyframes, float time);
 
-// 任意の時刻のQuaternion値を計算（球面線形補間）
+/// <summary>任意の時刻のQuaternion値を計算（球面線形補間。範囲外は端のキーの値）</summary>
+/// <param name="keyframes">キーフレーム（空は assert）</param>
+/// <param name="time">時刻 [秒]</param>
+/// <returns>補間した値</returns>
 Quaternion CalculateValue(const std::vector<KeyframeQuaternion>& keyframes, float time);

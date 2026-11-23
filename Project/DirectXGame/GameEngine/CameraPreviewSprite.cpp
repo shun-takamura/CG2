@@ -4,6 +4,13 @@
 #include "SpriteInstance.h"
 #include "SpriteManager.h"
 
+namespace {
+	// カメラのプレビューを出すスプライトの幅 [px]
+	constexpr float kPreviewWidth = 640.0f;
+	// カメラのプレビューを出すスプライトの高さ [px]
+	constexpr float kPreviewHeight = 480.0f;
+}
+
 CameraPreviewSprite::CameraPreviewSprite() = default;
 CameraPreviewSprite::~CameraPreviewSprite() = default;
 
@@ -23,7 +30,7 @@ void CameraPreviewSprite::Update()
 		sprite_ = std::make_unique<SpriteInstance>();
 		sprite_->Initialize(spriteManager_, CameraCapture::GetTextureName(), "CameraPreview");
 		sprite_->SetPosition({ 0.0f, 0.0f });
-		sprite_->SetSize({ 640.0f, 480.0f });
+		sprite_->SetSize({ kPreviewWidth, kPreviewHeight });
 		sprite_->SetTextureLeftTop({ 0.0f, 0.0f });
 		sprite_->SetTextureSize({
 			static_cast<float>(cam->GetFrameWidth()),

@@ -1,23 +1,46 @@
 #include "DebugDraw.h"
+#include "MathUtility.h"
 
 #include "LineRenderer.h"
 
 #include <cmath>
 
 namespace {
-	constexpr float kPi = 3.14159265358979323846f;
+	// スプラインを引くのに要る制御点の数の下限
+	constexpr size_t kMinSplinePoints = 2;
+	// 円・カプセルの分割数の下限
+	constexpr int kMinSegments = 4;
+	// 箱の頂点番号のうち Z の符号を決めるビット（1=X、2=Y、4=Z）
+	constexpr int kCornerBitZ = 4;
+	// Catmull-Rom の t² の項の p1・p2 の係数（2p0 − 5p1 + 4p2 − p3）
+	constexpr float kCatmullRomT2CoefP1 = 5.0f;
+	constexpr float kCatmullRomT2CoefP2 = 4.0f;
+	// Catmull-Rom の t³ の項の p1・p2 の係数（−p0 + 3p1 − 3p2 + p3）
+	constexpr float kCatmullRomT3CoefInner = 3.0f;
+	// 箱の頂点の数と辺の数
+	constexpr int kBoxCornerCount = 8;
+	constexpr int kBoxEdgeCount = 12;
 
+	/// <summary>ベクトルの和</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	inline Vector3 Add(const Vector3& a, const Vector3& b) {
 		return { a.x + b.x, a.y + b.y, a.z + b.z };
 	}
+	/// <summary>ベクトルの差</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a - b</returns>
 	inline Vector3 Sub(const Vector3& a, const Vector3& b) {
 		return { a.x - b.x, a.y - b.y, a.z - b.z };
 	}
+	/// <summary>ベクトルのスカラー倍</summary>
+	/// <param name="a">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>a × s</returns>
 	inline Vector3 Scale(const Vector3& a, float s) {
 		return { a.x * s, a.y * s, a.z * s };
-	}
-	inline Vector3 Lerp(const Vector3& a, const Vector3& b, float t) {
-		return { a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
 	}
 }
 
@@ -28,7 +51,7 @@ namespace DebugDraw {
 	}
 
 	void Sphere(const Vector3& center, float radius, const Vector4& color, int segments) {
-		if (segments < 4) segments = 4;
+		if (segments < kMinSegments) segments = kMinSegments;
 		auto* lr = LineRenderer::GetInstance();
 		const float step = 2.0f * kPi / static_cast<float>(segments);
 
@@ -60,7 +83,7 @@ namespace DebugDraw {
 
 	void AABB(const Vector3& min, const Vector3& max, const Vector4& color) {
 		// 8頂点
-		Vector3 c[8] = {
+		Vector3 c[kBoxCornerCount] = {
 			{min.x, min.y, min.z}, {max.x, min.y, min.z},
 			{max.x, max.y, min.z}, {min.x, max.y, min.z},
 			{min.x, min.y, max.z}, {max.x, min.y, max.z},
@@ -68,7 +91,7 @@ namespace DebugDraw {
 		};
 		auto* lr = LineRenderer::GetInstance();
 		// 底面・上面・縦
-		const int edges[12][2] = {
+		const int edges[kBoxEdgeCount][2] = {
 			{0,1},{1,2},{2,3},{3,0}, // 底面
 			{4,5},{5,6},{6,7},{7,4}, // 上面
 			{0,4},{1,5},{2,6},{3,7}, // 縦
@@ -84,11 +107,11 @@ namespace DebugDraw {
 		Vector3 hz = Scale(axes[2], halfSize.z);
 
 		// 8頂点を構築 (符号の組み合わせ ±hx ±hy ±hz)
-		Vector3 c[8];
-		for (int i = 0; i < 8; ++i) {
+		Vector3 c[kBoxCornerCount];
+		for (int i = 0; i < kBoxCornerCount; ++i) {
 			float sx = (i & 1) ? 1.0f : -1.0f;
 			float sy = (i & 2) ? 1.0f : -1.0f;
-			float sz = (i & 4) ? 1.0f : -1.0f;
+			float sz = (i & kCornerBitZ) ? 1.0f : -1.0f;
 			Vector3 p = center;
 			p = Add(p, Scale(hx, sx));
 			p = Add(p, Scale(hy, sy));
@@ -97,7 +120,7 @@ namespace DebugDraw {
 		}
 		auto* lr = LineRenderer::GetInstance();
 		// インデックスは bit パターン: 0=---, 1=+--, 2=-+-, 3=++-, 4=--+, 5=+-+, 6=-++, 7=+++
-		const int edges[12][2] = {
+		const int edges[kBoxEdgeCount][2] = {
 			{0,1},{2,3},{4,5},{6,7}, // X方向
 			{0,2},{1,3},{4,6},{5,7}, // Y方向
 			{0,4},{1,5},{2,6},{3,7}, // Z方向
@@ -142,7 +165,7 @@ namespace DebugDraw {
 	void CatmullRomSpline(const std::vector<Vector3>& controlPoints,
 		const Vector4& color, int samplesPerSegment) {
 		const size_t n = controlPoints.size();
-		if (n < 2) return;
+		if (n < kMinSplinePoints) return;
 		if (samplesPerSegment < 1) samplesPerSegment = 1;
 
 		// セグメントごとに 4 制御点を取り出してサンプリング。端は重複させる。
@@ -168,16 +191,16 @@ namespace DebugDraw {
 				Vector3 cur;
 				cur.x = 0.5f * ((2.0f * p1.x) +
 					(-p0.x + p2.x) * t +
-					(2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x) * t2 +
-					(-p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x) * t3);
+					(2.0f * p0.x - kCatmullRomT2CoefP1 * p1.x + kCatmullRomT2CoefP2 * p2.x - p3.x) * t2 +
+					(-p0.x + kCatmullRomT3CoefInner * p1.x - kCatmullRomT3CoefInner * p2.x + p3.x) * t3);
 				cur.y = 0.5f * ((2.0f * p1.y) +
 					(-p0.y + p2.y) * t +
-					(2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y) * t2 +
-					(-p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y) * t3);
+					(2.0f * p0.y - kCatmullRomT2CoefP1 * p1.y + kCatmullRomT2CoefP2 * p2.y - p3.y) * t2 +
+					(-p0.y + kCatmullRomT3CoefInner * p1.y - kCatmullRomT3CoefInner * p2.y + p3.y) * t3);
 				cur.z = 0.5f * ((2.0f * p1.z) +
 					(-p0.z + p2.z) * t +
-					(2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z) * t2 +
-					(-p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z) * t3);
+					(2.0f * p0.z - kCatmullRomT2CoefP1 * p1.z + kCatmullRomT2CoefP2 * p2.z - p3.z) * t2 +
+					(-p0.z + kCatmullRomT3CoefInner * p1.z - kCatmullRomT3CoefInner * p2.z + p3.z) * t3);
 				lr->AddLine(prev, cur, color);
 				prev = cur;
 			}
@@ -187,7 +210,7 @@ namespace DebugDraw {
 	void Capsule(const Vector3& center, const Vector3 axes[3],
 		float height, float radius, const Vector4& color, int segments)
 	{
-		if (segments < 4) segments = 4;
+		if (segments < kMinSegments) segments = kMinSegments;
 		auto* lr = LineRenderer::GetInstance();
 		const float step = 2.0f * kPi / static_cast<float>(segments);
 

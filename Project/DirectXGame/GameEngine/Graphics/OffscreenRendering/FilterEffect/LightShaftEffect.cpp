@@ -12,6 +12,15 @@
 namespace {
 	// シェーダのループ上限（LightShaft.PS.hlsl の kMaxSamples と合わせる）
 	constexpr uint32_t kMaxSamples = 128;
+	// ResetParams で戻す既定値
+	constexpr float kDefaultLightU = 0.5f;           // 光源の画面上の位置 U（真ん中）
+	constexpr float kDefaultLightV = 0.5f;           // 光源の画面上の位置 V（真ん中）
+	constexpr float kDefaultColorG = 0.92f;          // 光の色の G（R は 1。少し暖色）
+	constexpr float kDefaultColorB = 0.78f;          // 光の色の B
+	constexpr float kDefaultDensity = 0.9f;          // 光の筋を伸ばす長さの割合
+	constexpr float kDefaultDecay = 0.97f;           // 1 サンプルごとの減衰
+	constexpr float kDefaultWeight = 0.04f;          // 1 サンプルの重み
+	constexpr uint32_t kDefaultSampleCount = 64;     // サンプル数
 }
 
 void LightShaftEffect::InitializeMasked(
@@ -76,13 +85,13 @@ void LightShaftEffect::ShowImGui()
 
 void LightShaftEffect::ResetParams()
 {
-	lightUV_ = { 0.5f, 0.5f };
-	color_ = { 1.0f, 0.92f, 0.78f };
+	lightUV_ = { kDefaultLightU, kDefaultLightV };
+	color_ = { 1.0f, kDefaultColorG, kDefaultColorB };
 	intensity_ = 1.0f;
-	density_ = 0.9f;
-	decay_ = 0.97f;
-	weight_ = 0.04f;
-	sampleCount_ = 64;
+	density_ = kDefaultDensity;
+	decay_ = kDefaultDecay;
+	weight_ = kDefaultWeight;
+	sampleCount_ = kDefaultSampleCount;
 	targetId_ = 1;
 }
 

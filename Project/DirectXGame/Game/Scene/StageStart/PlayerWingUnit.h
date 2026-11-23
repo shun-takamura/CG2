@@ -28,41 +28,70 @@ public:
 	~PlayerWingUnit();
 
 	/// <summary>羽根のモデルを読む（ファイルが無ければ何もしない）</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="skinningComputeManager">スキニングの計算の管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager, DirectXCore* dxCore,
 		SRVManager* srvManager);
 
-	/// <summary>delay 秒後に展開を始める（たたんだ形・半径 0 から）</summary>
+	/// <summary>たたんだ形・半径 0 から展開を始める</summary>
+	/// <param name="delay">展開を始めるまでの秒 [秒]</param>
 	void Deploy(float delay = 0.0f);
 	/// <summary>たたみながら先から消える</summary>
 	void Stow();
-	/// <summary>開いた形のまま seconds 秒で焼け落ちる（死亡演出）。焼け切ったら Hidden</summary>
+	/// <summary>開いた形のまま焼け落ちる（死亡演出）。焼け切ったら Hidden</summary>
+	/// <param name="seconds">焼け切るまでの秒 [秒]</param>
 	void Burn(float seconds);
 	/// <summary>すぐ見えなくする</summary>
 	void Hide();
 	/// <summary>すぐ開いた形で見せる（デバッグ）</summary>
 	void ShowDeployed();
+	/// <summary>今の状態を返す</summary>
+	/// <returns>状態</returns>
 	State GetState() const { return state_; }
 	/// <summary>羽根の関節のワールド位置を out に入れる（焼け落ちの粒子を出す所）。見えていなければ空</summary>
+	/// <param name="out">位置を追加する先</param>
 	void CollectJointPositions(std::vector<Vector3>& out) const;
-	/// <summary>体の点滅の発光（被弾・回避無敵）。羽根の下地に足す</summary>
+	/// <summary>体の点滅の発光（被弾・回避無敵）を設定する。羽根の下地に足す</summary>
+	/// <param name="glow">発光の色</param>
 	void SetBlinkGlow(const Vector3& glow) { blinkGlow_ = glow; }
 
 	/// <summary>体のボーンに付けて行列・ディゾルブを作る。体の Update（スケルトン）の後、カメラが決まった後に呼ぶ</summary>
+	/// <param name="body">体（ゲームの自機）</param>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(AnimatedObject3DInstance* body, float deltaTime);
+	/// <summary>見えている間だけ羽根を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	// ID マスクへ（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）
+	/// <summary>ID マスクへ描く（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawIdPass(DirectXCore* dxCore);
-	/// <summary>ディゾルブの縁を光らせている間</summary>
+	/// <summary>ディゾルブの縁を光らせている間かを返す</summary>
+	/// <returns>光らせていれば true</returns>
 	bool HasBloom() const;
+	/// <summary>発光パスでディゾルブの縁を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawBloom(DirectXCore* dxCore);
 
+	/// <summary>調整値（StagePlay.json の "playerWings"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>羽根を描くかを返す</summary>
+	/// <returns>モデルがあり、Hidden でなく、体が見えていれば true</returns>
 	bool IsDrawn() const;
+	/// <summary>Spine2 を中心にした点からの距離のディゾルブをかける（1 以上なら外す）</summary>
+	/// <param name="radiusRatio">見えている半径の割合 0〜1</param>
 	void ApplyDissolve(float radiusRatio);
+	/// <summary>焼け落ちのノイズのディゾルブ（縁はオレンジ）をかける</summary>
+	/// <param name="progress">焼けた割合 0〜1</param>
 	void ApplyBurn(float progress);
 
 	std::unique_ptr<AnimatedModelInstance> model_;

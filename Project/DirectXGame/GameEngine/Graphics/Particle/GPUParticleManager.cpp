@@ -13,6 +13,72 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+    // グラデーションを有効にするのに要るキーの数の下限（これ未満は start/end の 2 色補間）
+    constexpr uint32_t kMinGradientKeys = 2;
+
+namespace {
+    // 初期化・発射・更新 CS で共通のルートパラメータの番号（u0〜u2 のテーブル）
+    enum ComputeRootParam : UINT {
+        kComputeRootParticles = 0,      // u0：粒子
+        kComputeRootFreeListIndex = 1,  // u1：FreeListIndex
+        kComputeRootFreeList = 2,       // u2：FreeList
+        kInitRootCount = 3,             // 初期化 CS のルートパラメータの数
+    };
+    // 発射 CS のルートパラメータの番号（テーブル 3 本の後ろ）
+    enum EmitRootParam : UINT {
+        kEmitRootEmitter = 3,   // b0：Emitter
+        kEmitRootPerFrame = 4,  // b1：PerFrame
+        kEmitRootCount = 5,
+    };
+    // 更新 CS のルートパラメータの番号（テーブル 3 本の後ろ）
+    enum UpdateRootParam : UINT {
+        kUpdateRootPerFrame = 3,  // b0：PerFrame
+        kUpdateRootGradient = 4,  // b1：Gradient
+        kUpdateRootOrbit = 5,     // b2：Orbit
+        kUpdateRootCount = 6,
+    };
+
+    // 初期化・発射・更新 CS の UAV のレジスタ（u0〜u2）
+    constexpr UINT kRegParticleUav = 0;
+    constexpr UINT kRegFreeListIndexUav = 1;
+    constexpr UINT kRegFreeListUav = 2;
+    // 発射 CS の CBV のレジスタ（b0 Emitter / b1 PerFrame）
+    constexpr UINT kRegEmitEmitterCb = 0;
+    constexpr UINT kRegEmitPerFrameCb = 1;
+    // 更新 CS の CBV のレジスタ（b0 PerFrame / b1 Gradient / b2 Orbit）
+    constexpr UINT kRegUpdatePerFrameCb = 0;
+    constexpr UINT kRegUpdateGradientCb = 1;
+    constexpr UINT kRegUpdateOrbitCb = 2;
+    // 描画のレジスタ（VS t0 粒子 / PS t0 テクスチャ / PS t1 ディゾルブマスク / VS b0 PerView / PS b0 Material / PS b2 Dissolve / s0）
+    constexpr UINT kRegDrawParticleSrv = 0;
+    constexpr UINT kRegDrawTextureSrv = 0;
+    constexpr UINT kRegDrawDissolveMaskSrv = 1;
+    constexpr UINT kRegDrawPerViewCb = 0;
+    constexpr UINT kRegDrawMaterialCb = 0;
+    constexpr UINT kRegDrawDissolveCb = 2;
+    constexpr UINT kRegDrawSampler = 0;
+
+    // 粒子・FreeListIndex・FreeList の 3 本のバッファ（まとめてバリアを張る数）
+    constexpr int kParticleBufferCount = 3;
+    // 粒子 1 枚の板の頂点の数（2 三角形）
+    constexpr int kQuadVertexCount = 6;
+    // 定数バッファを 256 バイト境界へ切り上げるためのマスク
+    constexpr int kConstantBufferAlignMask = 255;
+    // 発射の既定のスケールの範囲（幅・高さ共通）
+    constexpr float kDefaultScaleMin = 0.1f;
+    constexpr float kDefaultScaleMax = 0.5f;
+    // 発射の既定の 1 回あたりの数と間隔 [秒]
+    constexpr int kDefaultEmitCount = 10;
+    constexpr float kDefaultEmitFrequency = 0.5f;
+    // 粒子の寿命の下限 [秒]（0 割りを防ぐ）
+    constexpr float kMinParticleLifeTime = 0.0001f;
+    // 移動カーブ LUT のサンプル数と、それを詰める float4 の数・1 個あたりのサンプル数
+    constexpr int kMotionLutSampleCount = 32;
+    constexpr int kMotionLutVec4Count = 8;
+    constexpr int kMotionLutSamplesPerVec4 = 4;
+    // 周回の中心がこれ以上一気に動いたらワープとみなして差分を渡さない [m]
+    constexpr float kMaxOrbitCenterJump = 50.0f;
+}
 
 void GPUParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 {
@@ -102,7 +168,7 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
 {
     // スケール範囲なしの版は現状のCB既定値（0.1〜0.5, uniform=true）に委譲
     BurstEmit(name, position, count, radius, colorMode, startColor, endColor,
-              Vector2{ 0.1f, 0.1f }, Vector2{ 0.5f, 0.5f }, true);
+              Vector2{ kDefaultScaleMin, kDefaultScaleMin }, Vector2{ kDefaultScaleMax, kDefaultScaleMax }, true);
 }
 
 void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& position, uint32_t count, float radius,
@@ -133,7 +199,7 @@ void GPUParticleManager::BurstEmit(const std::string& name, const Vector3& posit
     e.scaleMin = scaleMin;
     e.scaleMax = scaleMax;
     e.uniformScale = uniformScale ? 1u : 0u;
-    e.particleLifeTime = (particleLifeTime > 0.0001f) ? particleLifeTime : 0.0001f;
+    e.particleLifeTime = (particleLifeTime > kMinParticleLifeTime) ? particleLifeTime : kMinParticleLifeTime;
     e.lifeScaleStart = lifeScaleStart;
     e.lifeScaleEnd = lifeScaleEnd;
     e.rotRandomRange = { rotRandomRange.x, rotRandomRange.y, rotRandomRange.z, 0.0f };
@@ -208,14 +274,14 @@ void GPUParticleManager::SetGroupConverge(const std::string& name, bool enable, 
     o.convergeCenter = center;
 }
 
-void GPUParticleManager::SetGroupMotionLUT(const std::string& name, const float lut32[32])
+void GPUParticleManager::SetGroupMotionLUT(const std::string& name, const float lut32[kMotionLutSampleCount])
 {
     auto it = groups_.find(name);
     if (it == groups_.end() || !it->second.orbitData) return;
     auto& o = *it->second.orbitData;
     // 32 サンプルを float4[8] にパック（.x..w=連続4サンプル）
-    for (int i = 0; i < 8; ++i) {
-        o.motionLUT[i] = { lut32[i * 4 + 0], lut32[i * 4 + 1], lut32[i * 4 + 2], lut32[i * 4 + 3] };
+    for (int i = 0; i < kMotionLutVec4Count; ++i) {
+        o.motionLUT[i] = { lut32[i * kMotionLutSamplesPerVec4 + 0], lut32[i * kMotionLutSamplesPerVec4 + 1], lut32[i * kMotionLutSamplesPerVec4 + 2], lut32[i * kMotionLutSamplesPerVec4 + 3] };
     }
 }
 
@@ -226,7 +292,7 @@ void GPUParticleManager::SetEmitterGradient(const std::string& name, const std::
     auto& g = *it->second.gradientData;
     const uint32_t n = (keys.size() < kMaxGradientKeys) ? static_cast<uint32_t>(keys.size()) : kMaxGradientKeys;
     // 2個未満は無効化（粒子の start/end 2色補間に戻す）
-    g.keyCount = (n >= 2) ? n : 0;
+    g.keyCount = (n >= kMinGradientKeys) ? n : 0;
     for (uint32_t i = 0; i < n; ++i) {
         g.keyLoc[i]   = { keys[i].first, 0.0f, 0.0f, 0.0f };
         g.keyColor[i] = keys[i].second;
@@ -354,15 +420,15 @@ void GPUParticleManager::DrawGroupBloom(GPUParticleGroup& g, ID3D12Resource* per
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
-    srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
-    commandList->SetGraphicsRootConstantBufferView(1, perViewCB->GetGPUVirtualAddress());
-    commandList->SetGraphicsRootConstantBufferView(2, g.bloomMaterialResource->GetGPUVirtualAddress());
-    srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
-    commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
-    srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootParticles, g.particleSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootPerView, perViewCB->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootMaterial, g.bloomMaterialResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootTexture, g.textureSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootDissolve, g.dissolveResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootDissolveMask, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
 
     PEPPER_COUNT("DrawCall");
-    commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+    commandList->DrawInstanced(kQuadVertexCount, kMaxParticles, 0, 0);
 }
 
 void GPUParticleManager::SetGroupReflect(const std::string& name, bool reflect)
@@ -396,15 +462,15 @@ void GPUParticleManager::DrawReflection(const Matrix4x4& mirroredView, const Mat
         commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
-        srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
-        commandList->SetGraphicsRootConstantBufferView(1, g.perViewReflectionResource->GetGPUVirtualAddress());
-        commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
-        srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
-        commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
-        srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
+        srvManager_->SetGraphicsRootDescriptorTable(kDrawRootParticles, g.particleSrvIndex);
+        commandList->SetGraphicsRootConstantBufferView(kDrawRootPerView, g.perViewReflectionResource->GetGPUVirtualAddress());
+        commandList->SetGraphicsRootConstantBufferView(kDrawRootMaterial, materialResource_->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(kDrawRootTexture, g.textureSrvIndex);
+        commandList->SetGraphicsRootConstantBufferView(kDrawRootDissolve, g.dissolveResource->GetGPUVirtualAddress());
+        srvManager_->SetGraphicsRootDescriptorTable(kDrawRootDissolveMask, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
 
         PEPPER_COUNT("DrawCall");
-        commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+        commandList->DrawInstanced(kQuadVertexCount, kMaxParticles, 0, 0);
     }
 }
 
@@ -471,7 +537,7 @@ void GPUParticleManager::UpdateGroupSim(GPUParticleGroup& g, float dt)
         if (o.enabled > 0.5f) {
             if (g.hasLastOrbitCenter) {
                 const Vector3 d{ o.center.x - g.lastOrbitCenter.x, o.center.y - g.lastOrbitCenter.y, o.center.z - g.lastOrbitCenter.z };
-                if (d.x * d.x + d.y * d.y + d.z * d.z < 50.0f * 50.0f) o.centerDelta = d;
+                if (d.x * d.x + d.y * d.y + d.z * d.z < kMaxOrbitCenterJump * kMaxOrbitCenterJump) o.centerDelta = d;
             }
             g.lastOrbitCenter = o.center;
             g.hasLastOrbitCenter = true;
@@ -592,7 +658,7 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
     //   共通:      Emit CS -> UAV barrier -> Update CS -> UAV -> NPS -> Draw
     if (!g.initializedOnGPU) {
         // COMMON -> UAV へ遷移
-        D3D12_RESOURCE_BARRIER toUav[3] = {};
+        D3D12_RESOURCE_BARRIER toUav[kParticleBufferCount] = {};
         toUav[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         toUav[0].Transition.pResource = g.particleResource.Get();
         toUav[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
@@ -608,19 +674,19 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
         toUav[2].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
         toUav[2].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         toUav[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        commandList->ResourceBarrier(3, toUav);
+        commandList->ResourceBarrier(kParticleBufferCount, toUav);
 
         DispatchInitializeCS(g);
 
         // Init後のUAVバリアでEmit前の書き込みを保証
-        D3D12_RESOURCE_BARRIER initUavBarrier[3] = {};
+        D3D12_RESOURCE_BARRIER initUavBarrier[kParticleBufferCount] = {};
         initUavBarrier[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         initUavBarrier[0].UAV.pResource = g.particleResource.Get();
         initUavBarrier[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         initUavBarrier[1].UAV.pResource = g.freeListIndexResource.Get();
         initUavBarrier[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         initUavBarrier[2].UAV.pResource = g.freeListResource.Get();
-        commandList->ResourceBarrier(3, initUavBarrier);
+        commandList->ResourceBarrier(kParticleBufferCount, initUavBarrier);
 
         g.initializedOnGPU = true;
         // ここでは Particle は UAV 状態（NPS には行っていない）
@@ -633,14 +699,14 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
     DispatchEmitCS(g);
 
     {
-        D3D12_RESOURCE_BARRIER barriers[3] = {};
+        D3D12_RESOURCE_BARRIER barriers[kParticleBufferCount] = {};
         barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         barriers[0].UAV.pResource = g.particleResource.Get();
         barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         barriers[1].UAV.pResource = g.freeListIndexResource.Get();
         barriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         barriers[2].UAV.pResource = g.freeListResource.Get();
-        commandList->ResourceBarrier(3, barriers);
+        commandList->ResourceBarrier(kParticleBufferCount, barriers);
     }
 
     // Update
@@ -655,16 +721,16 @@ void GPUParticleManager::SimulateAndDrawGroup(GPUParticleGroup& g, ID3D12Resourc
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
-    srvManager_->SetGraphicsRootDescriptorTable(0, g.particleSrvIndex);
-    commandList->SetGraphicsRootConstantBufferView(1, perViewCB->GetGPUVirtualAddress());
-    commandList->SetGraphicsRootConstantBufferView(2, materialResource_->GetGPUVirtualAddress());
-    srvManager_->SetGraphicsRootDescriptorTable(3, g.textureSrvIndex);
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootParticles, g.particleSrvIndex);
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootPerView, perViewCB->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootMaterial, materialResource_->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootTexture, g.textureSrvIndex);
     // [5] PS b2: Dissolve（per-group）、[6] PS t1: マスク（未設定時は white1x1）
-    commandList->SetGraphicsRootConstantBufferView(5, g.dissolveResource->GetGPUVirtualAddress());
-    srvManager_->SetGraphicsRootDescriptorTable(6, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
+    commandList->SetGraphicsRootConstantBufferView(kDrawRootDissolve, g.dissolveResource->GetGPUVirtualAddress());
+    srvManager_->SetGraphicsRootDescriptorTable(kDrawRootDissolveMask, g.hasDissolveMask ? g.dissolveMaskSrvIndex : whiteSrvIndex_);
 
     PEPPER_COUNT("DrawCall");
-    commandList->DrawInstanced(6, kMaxParticles, 0, 0);
+    commandList->DrawInstanced(kQuadVertexCount, kMaxParticles, 0, 0);
 }
 
 void GPUParticleManager::OnImGui()
@@ -721,9 +787,9 @@ void GPUParticleManager::DispatchInitializeCS(GPUParticleGroup& g)
     commandList->SetComputeRootSignature(initRootSig_.Get());
     commandList->SetPipelineState(initPSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootParticles, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeListIndex, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeList, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
 
     commandList->Dispatch(1, 1, 1);
 }
@@ -734,11 +800,11 @@ void GPUParticleManager::DispatchEmitCS(GPUParticleGroup& g)
     commandList->SetComputeRootSignature(emitRootSig_.Get());
     commandList->SetPipelineState(emitPSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
-    commandList->SetComputeRootConstantBufferView(3, g.emitterResource->GetGPUVirtualAddress());
-    commandList->SetComputeRootConstantBufferView(4, g.perFrameResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootDescriptorTable(kComputeRootParticles, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeListIndex, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeList, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
+    commandList->SetComputeRootConstantBufferView(kEmitRootEmitter, g.emitterResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootConstantBufferView(kEmitRootPerFrame, g.perFrameResource->GetGPUVirtualAddress());
 
     commandList->Dispatch(1, 1, 1);
 }
@@ -749,12 +815,12 @@ void GPUParticleManager::DispatchUpdateCS(GPUParticleGroup& g)
     commandList->SetComputeRootSignature(updateRootSig_.Get());
     commandList->SetPipelineState(updatePSO_.Get());
 
-    commandList->SetComputeRootDescriptorTable(0, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
-    commandList->SetComputeRootDescriptorTable(1, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
-    commandList->SetComputeRootDescriptorTable(2, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
-    commandList->SetComputeRootConstantBufferView(3, g.perFrameResource->GetGPUVirtualAddress());
-    commandList->SetComputeRootConstantBufferView(4, g.gradientResource->GetGPUVirtualAddress());
-    commandList->SetComputeRootConstantBufferView(5, g.orbitResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootDescriptorTable(kComputeRootParticles, srvManager_->GetGPUDescriptorHandle(g.particleUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeListIndex, srvManager_->GetGPUDescriptorHandle(g.freeListIndexUavIndex));
+    commandList->SetComputeRootDescriptorTable(kComputeRootFreeList, srvManager_->GetGPUDescriptorHandle(g.freeListUavIndex));
+    commandList->SetComputeRootConstantBufferView(kUpdateRootPerFrame, g.perFrameResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootConstantBufferView(kUpdateRootGradient, g.gradientResource->GetGPUVirtualAddress());
+    commandList->SetComputeRootConstantBufferView(kUpdateRootOrbit, g.orbitResource->GetGPUVirtualAddress());
 
     commandList->Dispatch(1, 1, 1);
 }
@@ -803,16 +869,16 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
     g.emitterResource->Map(0, nullptr, reinterpret_cast<void**>(&g.emitterData));
     g.emitterData->translate = { 0.0f, 0.0f, 0.0f };
     g.emitterData->radius = 1.0f;
-    g.emitterData->count = 10;
-    g.emitterData->frequency = 0.5f;
+    g.emitterData->count = kDefaultEmitCount;
+    g.emitterData->frequency = kDefaultEmitFrequency;
     g.emitterData->frequencyTime = 0.0f;
     g.emitterData->emit = 0;
     g.emitterData->colorMode = 0;
     g.emitterData->baseVelocity = { 0.0f, 0.0f, 0.0f };
     g.emitterData->startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
     g.emitterData->endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
-    g.emitterData->scaleMin = { 0.1f, 0.1f };
-    g.emitterData->scaleMax = { 0.5f, 0.5f };
+    g.emitterData->scaleMin = { kDefaultScaleMin, kDefaultScaleMin };
+    g.emitterData->scaleMax = { kDefaultScaleMax, kDefaultScaleMax };
     g.emitterData->uniformScale = 1;
     g.emitterData->particleLifeTime = 1.0f;
     g.emitterData->velocityMode = 0.0f;
@@ -827,12 +893,12 @@ void GPUParticleManager::CreateGroupResources(GPUParticleGroup& g, const std::st
 
     // Gradient CB（Update CS b1）。既定 keyCount=0（無効＝粒子の start/end 2色補間）
     // CBV は 256 バイト境界なのでサイズを 256 の倍数に丸める
-    g.gradientResource = dxCore_->CreateBufferResource((sizeof(ParticleGradient) + 255) & ~static_cast<size_t>(255));
+    g.gradientResource = dxCore_->CreateBufferResource((sizeof(ParticleGradient) + kConstantBufferAlignMask) & ~static_cast<size_t>(kConstantBufferAlignMask));
     g.gradientResource->Map(0, nullptr, reinterpret_cast<void**>(&g.gradientData));
     *g.gradientData = ParticleGradient{};
 
     // Orbit CB（Update CS b2）。既定 enabled=0（従来の velocity 直線移動）
-    g.orbitResource = dxCore_->CreateBufferResource((sizeof(ParticleOrbit) + 255) & ~static_cast<size_t>(255));
+    g.orbitResource = dxCore_->CreateBufferResource((sizeof(ParticleOrbit) + kConstantBufferAlignMask) & ~static_cast<size_t>(kConstantBufferAlignMask));
     g.orbitResource->Map(0, nullptr, reinterpret_cast<void**>(&g.orbitData));
     *g.orbitData = ParticleOrbit{};
 
@@ -941,36 +1007,36 @@ void GPUParticleManager::CreateInitializePipeline()
     HRESULT hr;
 
     D3D12_DESCRIPTOR_RANGE rangeParticle[1] = {};
-    rangeParticle[0].BaseShaderRegister = 0;
+    rangeParticle[0].BaseShaderRegister = kRegParticleUav;
     rangeParticle[0].NumDescriptors = 1;
     rangeParticle[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeParticle[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeListIndex[1] = {};
-    rangeListIndex[0].BaseShaderRegister = 1;
+    rangeListIndex[0].BaseShaderRegister = kRegFreeListIndexUav;
     rangeListIndex[0].NumDescriptors = 1;
     rangeListIndex[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeListIndex[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeList[1] = {};
-    rangeList[0].BaseShaderRegister = 2;
+    rangeList[0].BaseShaderRegister = kRegFreeListUav;
     rangeList[0].NumDescriptors = 1;
     rangeList[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[3] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
-    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+    D3D12_ROOT_PARAMETER rootParameters[kInitRootCount] = {};
+    rootParameters[kComputeRootParticles].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootParticles].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootParticles].DescriptorTable.pDescriptorRanges = rangeParticle;
+    rootParameters[kComputeRootParticles].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeListIndex].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeListIndex].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.pDescriptorRanges = rangeListIndex;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeList].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeList].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeList].DescriptorTable.pDescriptorRanges = rangeList;
+    rootParameters[kComputeRootFreeList].DescriptorTable.NumDescriptorRanges = 1;
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
@@ -1005,42 +1071,42 @@ void GPUParticleManager::CreateEmitPipeline()
     HRESULT hr;
 
     D3D12_DESCRIPTOR_RANGE rangeParticle[1] = {};
-    rangeParticle[0].BaseShaderRegister = 0;
+    rangeParticle[0].BaseShaderRegister = kRegParticleUav;
     rangeParticle[0].NumDescriptors = 1;
     rangeParticle[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeParticle[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeListIndex[1] = {};
-    rangeListIndex[0].BaseShaderRegister = 1;
+    rangeListIndex[0].BaseShaderRegister = kRegFreeListIndexUav;
     rangeListIndex[0].NumDescriptors = 1;
     rangeListIndex[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeListIndex[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeList[1] = {};
-    rangeList[0].BaseShaderRegister = 2;
+    rangeList[0].BaseShaderRegister = kRegFreeListUav;
     rangeList[0].NumDescriptors = 1;
     rangeList[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[5] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
-    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[3].Descriptor.ShaderRegister = 0;
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[4].Descriptor.ShaderRegister = 1;
+    D3D12_ROOT_PARAMETER rootParameters[kEmitRootCount] = {};
+    rootParameters[kComputeRootParticles].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootParticles].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootParticles].DescriptorTable.pDescriptorRanges = rangeParticle;
+    rootParameters[kComputeRootParticles].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeListIndex].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeListIndex].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.pDescriptorRanges = rangeListIndex;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeList].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeList].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeList].DescriptorTable.pDescriptorRanges = rangeList;
+    rootParameters[kComputeRootFreeList].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kEmitRootEmitter].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kEmitRootEmitter].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kEmitRootEmitter].Descriptor.ShaderRegister = kRegEmitEmitterCb;
+    rootParameters[kEmitRootPerFrame].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kEmitRootPerFrame].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kEmitRootPerFrame].Descriptor.ShaderRegister = kRegEmitPerFrameCb;
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
@@ -1075,45 +1141,45 @@ void GPUParticleManager::CreateUpdatePipeline()
     HRESULT hr;
 
     D3D12_DESCRIPTOR_RANGE rangeParticle[1] = {};
-    rangeParticle[0].BaseShaderRegister = 0;
+    rangeParticle[0].BaseShaderRegister = kRegParticleUav;
     rangeParticle[0].NumDescriptors = 1;
     rangeParticle[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeParticle[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeListIndex[1] = {};
-    rangeListIndex[0].BaseShaderRegister = 1;
+    rangeListIndex[0].BaseShaderRegister = kRegFreeListIndexUav;
     rangeListIndex[0].NumDescriptors = 1;
     rangeListIndex[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeListIndex[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeList[1] = {};
-    rangeList[0].BaseShaderRegister = 2;
+    rangeList[0].BaseShaderRegister = kRegFreeListUav;
     rangeList[0].NumDescriptors = 1;
     rangeList[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     rangeList[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[6] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticle;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[1].DescriptorTable.pDescriptorRanges = rangeListIndex;
-    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = rangeList;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[3].Descriptor.ShaderRegister = 0; // PerFrame b0
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[4].Descriptor.ShaderRegister = 1; // Gradient b1
-    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[5].Descriptor.ShaderRegister = 2; // Orbit b2
+    D3D12_ROOT_PARAMETER rootParameters[kUpdateRootCount] = {};
+    rootParameters[kComputeRootParticles].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootParticles].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootParticles].DescriptorTable.pDescriptorRanges = rangeParticle;
+    rootParameters[kComputeRootParticles].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeListIndex].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeListIndex].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.pDescriptorRanges = rangeListIndex;
+    rootParameters[kComputeRootFreeListIndex].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kComputeRootFreeList].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kComputeRootFreeList].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kComputeRootFreeList].DescriptorTable.pDescriptorRanges = rangeList;
+    rootParameters[kComputeRootFreeList].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kUpdateRootPerFrame].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kUpdateRootPerFrame].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kUpdateRootPerFrame].Descriptor.ShaderRegister = kRegUpdatePerFrameCb; // PerFrame b0
+    rootParameters[kUpdateRootGradient].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kUpdateRootGradient].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kUpdateRootGradient].Descriptor.ShaderRegister = kRegUpdateGradientCb; // Gradient b1
+    rootParameters[kUpdateRootOrbit].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kUpdateRootOrbit].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kUpdateRootOrbit].Descriptor.ShaderRegister = kRegUpdateOrbitCb; // Orbit b2
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
@@ -1148,51 +1214,48 @@ void GPUParticleManager::CreateDrawPipeline()
     HRESULT hr;
 
     D3D12_DESCRIPTOR_RANGE rangeParticleSrv[1] = {};
-    rangeParticleSrv[0].BaseShaderRegister = 0;
+    rangeParticleSrv[0].BaseShaderRegister = kRegDrawParticleSrv;
     rangeParticleSrv[0].NumDescriptors = 1;
     rangeParticleSrv[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     rangeParticleSrv[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_DESCRIPTOR_RANGE rangeTexture[1] = {};
-    rangeTexture[0].BaseShaderRegister = 0;
+    rangeTexture[0].BaseShaderRegister = kRegDrawTextureSrv;
     rangeTexture[0].NumDescriptors = 1;
     rangeTexture[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     rangeTexture[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // ディゾルブマスク（t1）
     D3D12_DESCRIPTOR_RANGE rangeMask[1] = {};
-    rangeMask[0].BaseShaderRegister = 1;
+    rangeMask[0].BaseShaderRegister = kRegDrawDissolveMaskSrv;
     rangeMask[0].NumDescriptors = 1;
     rangeMask[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     rangeMask[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[7] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = rangeParticleSrv;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[1].Descriptor.ShaderRegister = 0;
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].Descriptor.ShaderRegister = 0;
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[3].DescriptorTable.pDescriptorRanges = rangeTexture;
-    rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[4].Descriptor.ShaderRegister = 1;
-    // [5] PS: CBV(b2) - Dissolve（per-group）
-    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[5].Descriptor.ShaderRegister = 2;
-    // [6] PS: DescriptorTable - DissolveMask(t1)。未設定時は white1x1 を必ずバインド。
-    rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[6].DescriptorTable.pDescriptorRanges = rangeMask;
-    rootParameters[6].DescriptorTable.NumDescriptorRanges = 1;
+    D3D12_ROOT_PARAMETER rootParameters[kDrawRootCount] = {};
+    rootParameters[kDrawRootParticles].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kDrawRootParticles].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kDrawRootParticles].DescriptorTable.pDescriptorRanges = rangeParticleSrv;
+    rootParameters[kDrawRootParticles].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kDrawRootPerView].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kDrawRootPerView].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kDrawRootPerView].Descriptor.ShaderRegister = kRegDrawPerViewCb;
+    rootParameters[kDrawRootMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kDrawRootMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kDrawRootMaterial].Descriptor.ShaderRegister = kRegDrawMaterialCb;
+    rootParameters[kDrawRootTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kDrawRootTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kDrawRootTexture].DescriptorTable.pDescriptorRanges = rangeTexture;
+    rootParameters[kDrawRootTexture].DescriptorTable.NumDescriptorRanges = 1;
+    // PS: CBV(b2) - Dissolve（per-group）
+    rootParameters[kDrawRootDissolve].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kDrawRootDissolve].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kDrawRootDissolve].Descriptor.ShaderRegister = kRegDrawDissolveCb;
+    // PS: DescriptorTable - DissolveMask(t1)。未設定時は white1x1 を必ずバインド。
+    rootParameters[kDrawRootDissolveMask].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kDrawRootDissolveMask].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kDrawRootDissolveMask].DescriptorTable.pDescriptorRanges = rangeMask;
+    rootParameters[kDrawRootDissolveMask].DescriptorTable.NumDescriptorRanges = 1;
 
     D3D12_STATIC_SAMPLER_DESC sampler[1] = {};
     sampler[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -1201,7 +1264,7 @@ void GPUParticleManager::CreateDrawPipeline()
     sampler[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     sampler[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     sampler[0].MaxLOD = D3D12_FLOAT32_MAX;
-    sampler[0].ShaderRegister = 0;
+    sampler[0].ShaderRegister = kRegDrawSampler;
     sampler[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -1335,7 +1398,7 @@ void GPUParticleManager::CreateDrawPipeline()
 
 void GPUParticleManager::CreateVertexData()
 {
-    vertexResource_ = dxCore_->CreateBufferResource(sizeof(VertexData) * 6);
+    vertexResource_ = dxCore_->CreateBufferResource(sizeof(VertexData) * kQuadVertexCount);
 
     VertexData* vertexData = nullptr;
     vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
@@ -1367,7 +1430,7 @@ void GPUParticleManager::CreateVertexData()
     vertexResource_->Unmap(0, nullptr);
 
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = sizeof(VertexData) * 6;
+    vertexBufferView_.SizeInBytes = sizeof(VertexData) * kQuadVertexCount;
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
 }
 

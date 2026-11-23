@@ -13,7 +13,27 @@
 #include "ControllerInput.h"
 
 namespace {
-    // "key=value" トークンから value 文字列を返す（先頭が key= でなければ空）
+    // ログの数字を読むときの基数（10 進数）
+    constexpr int kDecimalBase = 10;
+    // session.log の "seed=" の文字数
+    constexpr size_t kSeedKeyLength = 5;
+    // input.log の "kb=" / "mouse=" / "pad=" の文字数
+    constexpr size_t kKeyboardPrefixLength = 3;
+    constexpr size_t kMousePrefixLength = 6;
+    constexpr size_t kPadPrefixLength = 4;
+    // mouse= の項目の数（dx, dy, wheel, ボタン）
+    constexpr size_t kMouseFieldCount = 4;
+    // pad= の項目の数（接続, lx, ly, rx, ry, lt, rt, ボタン）
+    constexpr size_t kPadFieldCount = 8;
+    // DirectInput のキーの数（DIK の 0〜255）
+    constexpr int kKeyCount = 256;
+    // DirectInput のキー状態で「押されている」を表すビット
+    constexpr int kKeyPressedBit = 0x80;
+
+    /// <summary>"key=value" のトークンから value を取り出す</summary>
+    /// <param name="token">トークン</param>
+    /// <param name="key">"key=" の形のキー</param>
+    /// <returns>value（先頭が key でなければ空）</returns>
     std::string ValueOf(const std::string& token, const char* key) {
         const size_t klen = std::char_traits<char>::length(key);
         if (token.size() >= klen && token.compare(0, klen, key) == 0) {
@@ -22,22 +42,24 @@ namespace {
         return std::string();
     }
 
-    // カンマ区切りを int に分解
+    /// <summary>カンマ区切りの文字列を整数の列にする（空の項目は飛ばす）</summary>
+    /// <param name="s">カンマ区切りの文字列</param>
+    /// <returns>整数の列</returns>
     std::vector<long> SplitCsv(const std::string& s) {
         std::vector<long> out;
         if (s.empty()) return out;
         std::stringstream ss(s);
         std::string item;
         while (std::getline(ss, item, ',')) {
-            if (!item.empty()) out.push_back(std::strtol(item.c_str(), nullptr, 10));
+            if (!item.empty()) out.push_back(std::strtol(item.c_str(), nullptr, kDecimalBase));
         }
         return out;
     }
 }
 
-ReplaySystem& ReplaySystem::Instance() {
+ReplaySystem* ReplaySystem::GetInstance() {
     static ReplaySystem instance;
-    return instance;
+    return &instance;
 }
 
 void ReplaySystem::InitializeRecord(uint32_t seed) {
@@ -60,7 +82,7 @@ void ReplaySystem::InitializeReplay(const std::string& dir) {
         while (std::getline(sess, line)) {
             const size_t p = line.find("seed=");
             if (p != std::string::npos) {
-                loadedSeed_ = static_cast<uint32_t>(std::strtoul(line.c_str() + p + 5, nullptr, 10));
+                loadedSeed_ = static_cast<uint32_t>(std::strtoul(line.c_str() + p + kSeedKeyLength, nullptr, kDecimalBase));
                 hasLoadedSeed_ = true;
                 break;
             }
@@ -81,19 +103,19 @@ void ReplaySystem::InitializeReplay(const std::string& dir) {
             std::string v;
             if (!(v = ValueOf(token, "dt=")).empty()) {
                 rec.dt = std::strtof(v.c_str(), nullptr);
-            } else if (token.compare(0, 3, "kb=") == 0) {
-                for (long code : SplitCsv(token.substr(3))) {
-                    if (code >= 0 && code < 256) rec.keys[code] = 0x80;
+            } else if (token.compare(0, kKeyboardPrefixLength, "kb=") == 0) {
+                for (long code : SplitCsv(token.substr(kKeyboardPrefixLength))) {
+                    if (code >= 0 && code < kKeyCount) rec.keys[code] = kKeyPressedBit;
                 }
-            } else if (token.compare(0, 6, "mouse=") == 0) {
-                auto m = SplitCsv(token.substr(6));
-                if (m.size() >= 4) {
+            } else if (token.compare(0, kMousePrefixLength, "mouse=") == 0) {
+                auto m = SplitCsv(token.substr(kMousePrefixLength));
+                if (m.size() >= kMouseFieldCount) {
                     rec.mdx = static_cast<int32_t>(m[0]); rec.mdy = static_cast<int32_t>(m[1]);
                     rec.mwheel = static_cast<int32_t>(m[2]); rec.mbtn = static_cast<int>(m[3]);
                 }
-            } else if (token.compare(0, 4, "pad=") == 0) {
-                auto p = SplitCsv(token.substr(4));
-                if (p.size() >= 8) {
+            } else if (token.compare(0, kPadPrefixLength, "pad=") == 0) {
+                auto p = SplitCsv(token.substr(kPadPrefixLength));
+                if (p.size() >= kPadFieldCount) {
                     rec.padConnected = (p[0] != 0);
                     rec.lx = static_cast<int16_t>(p[1]); rec.ly = static_cast<int16_t>(p[2]);
                     rec.rx = static_cast<int16_t>(p[3]); rec.ry = static_cast<int16_t>(p[4]);
@@ -117,8 +139,8 @@ void ReplaySystem::RecordFrame(float dt, InputManager* input) {
     line += " kb=";
     if (KeyboardInput* kb = input->GetKeyboard()) {
         bool first = true;
-        for (int i = 0; i < 256; ++i) {
-            if (kb->keys_[i] & 0x80) {
+        for (int i = 0; i < kKeyCount; ++i) {
+            if (kb->keys_[i] & kKeyPressedBit) {
                 if (!first) line += ",";
                 line += std::to_string(i);
                 first = false;
@@ -153,7 +175,7 @@ void ReplaySystem::RecordFrame(float dt, InputManager* input) {
         line += "0,0,0,0,0,0,0,0";
     }
 
-    SessionLogger::Instance().Write(
+    SessionLogger::GetInstance()->Write(
         SessionLogger::Category::Input, SessionLogger::Level::Trace, line);
 
     ++frame_;

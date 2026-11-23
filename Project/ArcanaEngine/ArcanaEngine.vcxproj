@@ -79,7 +79,7 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.cpp" />
-    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.cpp" />
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldRenderer.cpp" />
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\PrecisionBlurEffect.cpp" />
@@ -250,7 +250,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedOutlineEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\DistortionEffect.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\ColorInvertEffect.h" />
-    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\DisruptorShardRenderer.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeAppearance.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamShieldAppearance.h" />
@@ -364,6 +364,7 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\RandomGenerator.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\CrashHandler.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonValue.h" />
+    <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonVector.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonParser.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Utility\Json\JsonWriter.h" />
     <ClInclude Include="..\DirectXGame\GameEngine\Level\LevelData.h" />

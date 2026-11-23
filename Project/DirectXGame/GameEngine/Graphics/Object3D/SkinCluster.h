@@ -82,14 +82,23 @@ struct SkinCluster {
     std::vector<int32_t> jointSkelToSkeletonRemap;
 };
 
-// SkinClusterを生成する。
-// model->UseDirectStorage() が true なら影響度バッファを pack から DStorage で直接ロードし、
-// 入力頂点バッファは AnimatedModelInstance 側のものを共用する。
+/// <summary>
+/// SkinClusterを生成する（パレット・影響度・入力頂点・出力頂点の SRV/UAV と頂点数の CB）。
+/// model->UseDirectStorage() が true なら影響度バッファを pack から DStorage で直接ロードし、
+/// 入力頂点バッファは AnimatedModelInstance 側のものを共用する。
+/// </summary>
+/// <param name="dxCore">デバイスの取得元</param>
+/// <param name="srvManager">SRV/UAV を確保する先（解放は呼び出し側）</param>
+/// <param name="skeleton">骨</param>
+/// <param name="model">頂点と影響度の取り出し元</param>
+/// <returns>生成した SkinCluster</returns>
 SkinCluster CreateSkinCluster(
     DirectXCore* dxCore,
     SRVManager* srvManager,
     const Skeleton& skeleton,
     AnimatedModelInstance* model);
 
-// SkinClusterを毎フレーム更新する
+/// <summary>SkinClusterを毎フレーム更新する（骨の行列 × 逆バインド行列でパレットを書く）</summary>
+/// <param name="skinCluster">更新する SkinCluster</param>
+/// <param name="skeleton">今の姿勢の骨</param>
 void UpdateSkinCluster(SkinCluster& skinCluster, const Skeleton& skeleton);

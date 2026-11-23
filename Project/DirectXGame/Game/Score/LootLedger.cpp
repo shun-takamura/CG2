@@ -11,12 +11,11 @@
 namespace {
 	// 表示が取り出さない場面（表示の無いシーン）で列が伸び続けないように
 	constexpr size_t kMaxPendingPickups = 64;
+	// デバッグのボタンで足すエーテルの量
+	constexpr int kDebugEtherAdd = 50;
 }
 
-LootLedger* LootLedger::GetInstance() {
-	static LootLedger instance;
-	return &instance;
-}
+LootLedger::LootLedger(const DifficultyProfile* difficultyProfile) : difficultyProfile_(difficultyProfile) {}
 
 void LootLedger::Reset() {
 	items_.clear();
@@ -26,6 +25,10 @@ void LootLedger::Reset() {
 }
 
 namespace {
+	/// <summary>一覧のアイテムに個数を足す（無ければ行を足す）</summary>
+	/// <param name="list">足す一覧</param>
+	/// <param name="itemId">アイテムの id</param>
+	/// <param name="count">足す個数</param>
 	void AddEntry(std::vector<LootLedger::Entry>& list, const std::string& itemId, int count) {
 		for (LootLedger::Entry& e : list) {
 			if (e.itemId == itemId) {
@@ -36,6 +39,10 @@ namespace {
 		list.push_back({ itemId, count });
 	}
 
+	/// <summary>一覧からアイテムの個数を引く</summary>
+	/// <param name="list">引く一覧</param>
+	/// <param name="itemId">アイテムの id</param>
+	/// <returns>個数。無ければ 0</returns>
 	int FindEntry(const std::vector<LootLedger::Entry>& list, const std::string& itemId) {
 		for (const LootLedger::Entry& e : list) {
 			if (e.itemId == itemId) return e.count;
@@ -59,7 +66,7 @@ void LootLedger::Add(const std::string& itemId, int count, LootSource source) {
 void LootLedger::AddBossReward() {
 	const LootTable& boss = LootCatalog::GetInstance()->GetBossTable();
 	if (boss.ether > 0) {
-		Add(kEtherId, DifficultyProfile::ScaleInt(boss.ether, DifficultyProfile::GetInstance()->GetRewardScale()));
+		Add(kEtherId, DifficultyProfile::ScaleInt(boss.ether, difficultyProfile_->GetRewardScale()));
 	}
 	for (const LootRoll& roll : boss.rolls) {
 		// ボスは確率 1 の想定。1 未満の行も一応ふる（毎回同じでよいので乱数の種は持たない）
@@ -101,7 +108,7 @@ void LootLedger::OnImGui() {
 	}
 	ImGui::Text("%s : %d", catalog->GetEther().displayName.c_str(), ether_);
 	ImGui::SameLine();
-	if (ImGui::SmallButton("+50")) Add(kEtherId, 50);
+	if (ImGui::SmallButton("+50")) Add(kEtherId, kDebugEtherAdd);
 	if (ImGui::Button("Reset Loot")) Reset();
 	if (ImGui::Button("Reload Loot.json")) LootCatalog::GetInstance()->Load();
 #endif

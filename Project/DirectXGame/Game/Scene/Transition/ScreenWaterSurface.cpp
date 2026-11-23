@@ -13,6 +13,20 @@
 #endif
 
 namespace {
+	// 波を解く範囲の一辺の下限（画面の幅の何倍か）
+	constexpr float kMinSimSize = 0.1f;
+	// 追加分を除いたテクスチャの数（取り込んだ画面と波の高さ）
+	constexpr int kBuiltinTextureCount = 2;
+	// 静的サンプラーの数
+	constexpr int kStaticSamplerCount = 2;
+	// 光の向きの長さがこれ以下なら真上からにする
+	constexpr float kMinLightDirectionLength = 1e-4f;
+
+	/// <summary>リソース全体の状態遷移のバリアを 1 つ積む</summary>
+	/// <param name="cmd">コマンドリスト</param>
+	/// <param name="resource">対象のリソース</param>
+	/// <param name="before">遷移前の状態</param>
+	/// <param name="after">遷移後の状態</param>
 	void Barrier(ID3D12GraphicsCommandList* cmd, ID3D12Resource* resource,
 		D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
 		D3D12_RESOURCE_BARRIER barrier{};
@@ -81,11 +95,12 @@ Vector2 ScreenWaterSurface::ToWidthSpace(const Vector2& uv) const {
 }
 
 void ScreenWaterSurface::ApplyRippleSettings() {
-	RippleSimulation::Settings& r = ripple_.GetSettings();
-	r.simSize = (std::max)(settings_.simSize, 0.1f);
+	RippleSimulation::Settings r = ripple_.GetSettings();
+	r.simSize = (std::max)(settings_.simSize, kMinSimSize);
 	r.waveSpeed = settings_.waveSpeed;
 	r.damping = settings_.damping;
 	r.stepsPerSecond = settings_.stepsPerSecond;
+	ripple_.SetSettings(r);
 	// 画面の中心を波の範囲の中心に置く（3D の水面として使うときはワールド XZ の中心）
 	ripple_.SetCenter(useWorldCenter_ ? worldCenter_ : ToWidthSpace({ 0.5f, 0.5f }));
 }
@@ -151,7 +166,7 @@ void ScreenWaterSurface::EndDraw(ID3D12GraphicsCommandList* cmd, RenderTexture* 
 Microsoft::WRL::ComPtr<ID3D12RootSignature> ScreenWaterSurface::CreateRootSignature(UINT extraTextureCount) const {
 	// テクスチャはヒープ上で並んでいないので1枚ずつ別のテーブルにする
 	constexpr UINT kMaxTextures = 8;
-	const UINT textureCount = 2 + extraTextureCount;
+	const UINT textureCount = kBuiltinTextureCount + extraTextureCount;
 	assert(textureCount <= kMaxTextures);
 	D3D12_DESCRIPTOR_RANGE ranges[kMaxTextures] = {};
 	D3D12_ROOT_PARAMETER params[1 + kMaxTextures] = {};
@@ -170,8 +185,8 @@ Microsoft::WRL::ComPtr<ID3D12RootSignature> ScreenWaterSurface::CreateRootSignat
 		p.DescriptorTable.NumDescriptorRanges = 1;
 	}
 
-	D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
-	for (UINT i = 0; i < 2; ++i) {
+	D3D12_STATIC_SAMPLER_DESC samplers[kStaticSamplerCount] = {};
+	for (UINT i = 0; i < kStaticSamplerCount; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -267,7 +282,7 @@ ScreenWaterSurface::ConstantsForGPU ScreenWaterSurface::GetConstants() const {
 	c.refraction = settings_.refraction;
 	const Vector2& l = settings_.lightDirection;
 	const float len = std::sqrt(l.x * l.x + l.y * l.y);
-	c.lightDirection = (len > 1e-4f) ? Vector2{ l.x / len, l.y / len } : Vector2{ 0.0f, -1.0f };
+	c.lightDirection = (len > kMinLightDirectionLength) ? Vector2{ l.x / len, l.y / len } : Vector2{ 0.0f, -1.0f };
 	c.highlight = settings_.highlight;
 	c.aspect = GetAspect();
 	return c;

@@ -15,10 +15,51 @@
 #endif
 
 namespace {
+	// なめらかな補間 3x²−2x³ の x² の係数
+	constexpr float kSmoothStepCubicCoeff = 3.0f;
+	// これより小さい長さ・秒数は 0 とみなす（0 割りを避ける）
+	constexpr float kNearZero = 1e-3f;
+	// 小さな爆発の間隔の下限 [秒]（0 で無限に出ないように）
+	constexpr float kMinBurstInterval = 0.02f;
+	// xorshift32 の 1 回目の左シフト量 [bit]
+	constexpr int kXorShiftShiftA = 13;
+	// xorshift32 の右シフト量 [bit]
+	constexpr int kXorShiftShiftB = 17;
+	// xorshift32 の 2 回目の左シフト量 [bit]
+	constexpr int kXorShiftShiftC = 5;
+	// 乱数の下位 24 bit（float で正確に表せる範囲）を取るマスク兼最大値
+	constexpr uint32_t kRand24BitMask = 0xFFFFFFu;
+	// 見る向きの長さがこれ以下なら向きを決めない
+	constexpr float kLookDirEpsilon = 1e-4f;
+	// カメラの揺れ：X の速さ [rad/秒]
+	constexpr float kShakeFreqX = 53.0f;
+	// カメラの揺れ：Y の速さ [rad/秒]
+	constexpr float kShakeFreqY = 61.0f;
+	// カメラの揺れ：Y の位相のずれ [rad]
+	constexpr float kShakePhaseY = 1.3f;
+	// カメラの揺れ：Z の速さ [rad/秒]
+	constexpr float kShakeFreqZ = 47.0f;
+	// カメラの揺れ：Z の位相のずれ [rad]
+	constexpr float kShakePhaseZ = 2.1f;
+	// 崩壊のフラッシュは最初のフラッシュの何倍の長さで消すか
+	constexpr float kCollapseFlashTimeScale = 1.5f;
+	/// <summary>0〜1 に収める</summary>
+	/// <param name="x">値</param>
+	/// <returns>0〜1 に収めた値</returns>
 	float Clamp01(float x) { return (std::clamp)(x, 0.0f, 1.0f); }
-	float SmoothStep01(float x) { x = Clamp01(x); return x * x * (3.0f - 2.0f * x); }
+	/// <summary>0〜1 のなめらかな補間（3x²−2x³）</summary>
+	/// <param name="x">進み具合（0〜1 に収める）</param>
+	/// <returns>補間した値</returns>
+	float SmoothStep01(float x) { x = Clamp01(x); return x * x * (kSmoothStepCubicCoeff - 2.0f * x); }
+	/// <summary>3 次のイーズアウト</summary>
+	/// <param name="x">進み具合（0〜1 に収める）</param>
+	/// <returns>補間した値</returns>
 	float EaseOutCubic(float x) { x = Clamp01(x); const float u = 1.0f - x; return 1.0f - u * u * u; }
-	// a から b へ、角度の近い回りで t だけ進める
+	/// <summary>a から b へ、角度の近い回りで t だけ進める</summary>
+	/// <param name="a">始めの角度 [rad]</param>
+	/// <param name="b">目標の角度 [rad]</param>
+	/// <param name="t">進める割合（0〜1）</param>
+	/// <returns>補間した角度 [rad]</returns>
 	float LerpAngle(float a, float b, float t) {
 		float d = std::fmod(b - a, 2.0f * kPi);
 		if (d > kPi) d -= 2.0f * kPi;
@@ -48,7 +89,7 @@ void BossClearSequence::Begin(const Vector3& bossCenter, float groundY, const Ca
 	float dx = startEye_.x - bossCenter_.x;
 	float dz = startEye_.z - bossCenter_.z;
 	const float len = std::sqrt(dx * dx + dz * dz);
-	if (len < 1e-3f) { dx = 0.0f; dz = -1.0f; } else { dx /= len; dz /= len; }
+	if (len < kNearZero) { dx = 0.0f; dz = -1.0f; } else { dx /= len; dz /= len; }
 	const float c = std::cos(shotYawOffset_), s = std::sin(shotYawOffset_);
 	shotDir_ = { dx * c + dz * s, 0.0f, -dx * s + dz * c };
 }
@@ -82,7 +123,7 @@ void BossClearSequence::Update(float uiDt) {
 		burstTimer_ -= uiDt;
 		if (burstTimer_ <= 0.0f) {
 			pending_.push_back({ time_, RandomAround(burstRadius_, burstHeight_), false });
-			burstTimer_ += (std::max)(burstInterval_, 0.02f);
+			burstTimer_ += (std::max)(burstInterval_, kMinBurstInterval);
 		}
 		if (stageTime_ >= slowTime_) {
 			stage_ = Stage::Collapse;
@@ -127,7 +168,7 @@ float BossClearSequence::GetWorldTimeScale() const {
 	case Stage::Collapse:
 	case Stage::Banner:
 	case Stage::Done: {
-		if (collapseTime_ < 0.0f || restoreTime_ <= 1e-3f) return 1.0f;
+		if (collapseTime_ < 0.0f || restoreTime_ <= kNearZero) return 1.0f;
 		const float p = SmoothStep01((time_ - collapseTime_) / restoreTime_);
 		return slowScale_ + (1.0f - slowScale_) * p;
 	}
@@ -167,10 +208,10 @@ bool BossClearSequence::PopBurst(Vector3& outPos, std::string& outEffect) {
 
 float BossClearSequence::Rand01() {
 	// xorshift32（演出の散らばりだけなので軽いもので足りる）
-	rng_ ^= rng_ << 13;
-	rng_ ^= rng_ >> 17;
-	rng_ ^= rng_ << 5;
-	return static_cast<float>(rng_ & 0xFFFFFFu) / static_cast<float>(0xFFFFFFu);
+	rng_ ^= rng_ << kXorShiftShiftA;
+	rng_ ^= rng_ >> kXorShiftShiftB;
+	rng_ ^= rng_ << kXorShiftShiftC;
+	return static_cast<float>(rng_ & kRand24BitMask) / static_cast<float>(kRand24BitMask);
 }
 
 Vector3 BossClearSequence::RandomAround(float radius, float height) {
@@ -183,7 +224,7 @@ Vector3 BossClearSequence::RandomAround(float radius, float height) {
 float BossClearSequence::ShakeAmplitude() const {
 	float amp = 0.0f;
 	if (stage_ == Stage::HitStop && time_ > 0.0f) amp = hitStopShake_;
-	if (collapseTime_ >= 0.0f && collapseShakeTime_ > 1e-3f) {
+	if (collapseTime_ >= 0.0f && collapseShakeTime_ > kNearZero) {
 		const float p = (time_ - collapseTime_) / collapseShakeTime_;
 		if (p < 1.0f) amp = (std::max)(amp, collapseShake_ * (1.0f - p) * (1.0f - p));
 	}
@@ -196,7 +237,7 @@ void BossClearSequence::ComputeShot(Vector3& outEye, Vector3& outLook, float t) 
 	const float c = std::cos(orbit), s = std::sin(orbit);
 	const Vector3 dir{ shotDir_.x * c + shotDir_.z * s, 0.0f, -shotDir_.x * s + shotDir_.z * c };
 	float dist = shotDistance_;
-	if (collapseTime_ >= 0.0f && pullBackTime_ > 1e-3f) {
+	if (collapseTime_ >= 0.0f && pullBackTime_ > kNearZero) {
 		dist += pullBack_ * EaseOutCubic((t - collapseTime_) / pullBackTime_);
 	}
 	outEye = { bossCenter_.x + dir.x * dist, bossCenter_.y + shotHeight_, bossCenter_.z + dir.z * dist };
@@ -208,7 +249,7 @@ void BossClearSequence::ApplyCamera(Camera& camera) const {
 
 	// ① はその場（撮った絵と同じ構図）、② で寄る、③ 以降は寄った構図のまま
 	float blend = 0.0f;
-	if (stage_ == Stage::Slow) blend = SmoothStep01(slowTime_ > 1e-3f ? stageTime_ / slowTime_ : 1.0f);
+	if (stage_ == Stage::Slow) blend = SmoothStep01(slowTime_ > kNearZero ? stageTime_ / slowTime_ : 1.0f);
 	else if (stage_ != Stage::HitStop) blend = 1.0f;
 
 	Vector3 shotEye, look;
@@ -222,7 +263,7 @@ void BossClearSequence::ApplyCamera(Camera& camera) const {
 	Vector3 d{ look.x - shotEye.x, look.y - shotEye.y, look.z - shotEye.z };
 	const float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
 	float shotPitch = 0.0f, shotYaw = startRot_.y;
-	if (dl > 1e-4f) {
+	if (dl > kLookDirEpsilon) {
 		d = { d.x / dl, d.y / dl, d.z / dl };
 		shotPitch = -std::asin((std::clamp)(d.y, -1.0f, 1.0f));
 		shotYaw = std::atan2(d.x, d.z);
@@ -235,9 +276,9 @@ void BossClearSequence::ApplyCamera(Camera& camera) const {
 	// 揺れ（世界が止まっていても実時間で揺れる）
 	const float amp = ShakeAmplitude();
 	if (amp > 0.0f) {
-		eye.x += amp * std::sin(time_ * 53.0f);
-		eye.y += amp * std::sin(time_ * 61.0f + 1.3f);
-		eye.z += amp * std::sin(time_ * 47.0f + 2.1f);
+		eye.x += amp * std::sin(time_ * kShakeFreqX);
+		eye.y += amp * std::sin(time_ * kShakeFreqY + kShakePhaseY);
+		eye.z += amp * std::sin(time_ * kShakeFreqZ + kShakePhaseZ);
 	}
 	eye.y = (std::max)(eye.y, groundY_ + minEyeAboveGround_);
 
@@ -253,9 +294,9 @@ void BossClearSequence::DrawOverlay(float screenW, float screenH) const {
 
 	// 白いフラッシュ。撮るフレーム（time_ == 0）は出さない
 	float flash = 0.0f;
-	if (time_ > 0.0f && flashTime_ > 1e-3f && time_ < flashTime_) flash = flashAlpha_ * (1.0f - time_ / flashTime_);
-	if (collapseTime_ >= 0.0f && flashTime_ > 1e-3f) {
-		const float ct = (time_ - collapseTime_) / (flashTime_ * 1.5f);
+	if (time_ > 0.0f && flashTime_ > kNearZero && time_ < flashTime_) flash = flashAlpha_ * (1.0f - time_ / flashTime_);
+	if (collapseTime_ >= 0.0f && flashTime_ > kNearZero) {
+		const float ct = (time_ - collapseTime_) / (flashTime_ * kCollapseFlashTimeScale);
 		if (ct < 1.0f) flash = (std::max)(flash, collapseFlashAlpha_ * (1.0f - ct));
 	}
 	if (flash > 0.0f) tr->DrawRect({ 0.0f, 0.0f }, { screenW, screenH }, { 1.0f, 1.0f, 1.0f, flash });

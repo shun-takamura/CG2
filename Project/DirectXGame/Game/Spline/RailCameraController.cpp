@@ -9,17 +9,31 @@
 #include <cmath>
 
 namespace {
+	// これより短いベクトルは長さ 0 とみなす
+	constexpr float kNearZeroLength = 1e-6f;
+	// 最低高さのなめらかさの下限（0 割りを防ぐ）[m]
+	constexpr float kMinYSoftnessFloor = 1e-4f;
+	// これより短いピッチのフェード・回転キーの間隔は 0 とみなす
+	constexpr float kNearZeroProgress = 1e-6f;
+
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <returns>単位ベクトル。長さがほぼ 0 なら +Z</returns>
 	Vector3 SafeNormalize(const Vector3& v) {
 		float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-		if (len < 1e-6f) return { 0.0f, 0.0f, 1.0f };
+		if (len < kNearZeroLength) return { 0.0f, 0.0f, 1.0f };
 		return { v.x / len, v.y / len, v.z / len };
 	}
 
-	// オイラー角→クオータニオン。カメラの SetRotate と EulerFromQuaternion が使う
-	// MakeRotateMatrix(Vector3)=Rz*Ry*Rx 規約に一致させる。
-	// MakeRotateMatrix(Multiply(a,b)) = M(b)*M(a) の逆順合成になるため、
-	// Rz*Ry*Rx を得るには qx→qy→qz の順で Multiply する（engine の QuaternionFromEuler は
-	// 逆順で Rx*Ry*Rz になり、ここでは使えない）。
+	/// <summary>
+	/// オイラー角をクォータニオンにする。カメラの SetRotate と EulerFromQuaternion が使う
+	/// MakeRotateMatrix(Vector3)=Rz*Ry*Rx 規約に一致させる。
+	/// MakeRotateMatrix(Multiply(a,b)) = M(b)*M(a) の逆順合成になるため、
+	/// Rz*Ry*Rx を得るには qx→qy→qz の順で Multiply する（engine の QuaternionFromEuler は
+	/// 逆順で Rx*Ry*Rz になり、ここでは使えない）
+	/// </summary>
+	/// <param name="e">オイラー角 [ラジアン]（pitch/yaw/roll）</param>
+	/// <returns>クォータニオン</returns>
 	Quaternion EulerToQuatZYX(const Vector3& e) {
 		Quaternion qx = MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, e.x);
 		Quaternion qy = MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, e.y);
@@ -48,7 +62,7 @@ void RailCameraController::Update(float deltaTime) {
 	if (minYEnabled_ && progress_ >= minYStartT_ && progress_ <= minYEndT_) {
 		// なめらかな max(y, minY)。y が minY より十分上なら y のまま
 		const float d = eye.y - minY_;
-		const float k = (std::max)(minYSoftness_, 1e-4f);
+		const float k = (std::max)(minYSoftness_, kMinYSoftnessFloor);
 		eye.y = minY_ + 0.5f * (d + std::sqrt(d * d + k * k));
 	}
 
@@ -67,7 +81,7 @@ void RailCameraController::Update(float deltaTime) {
 				  0.0f };
 		if (pitchBias_ != 0.0f && progress_ >= pitchStartT_ && progress_ <= pitchEndT_) {
 			float w = 1.0f;
-			if (pitchFadeT_ > 1e-6f) {
+			if (pitchFadeT_ > kNearZeroProgress) {
 				const float edge = (std::min)(progress_ - pitchStartT_, pitchEndT_ - progress_) / pitchFadeT_;
 				const float u = std::clamp(edge, 0.0f, 1.0f);
 				w = u * u * (3.0f - 2.0f * u);
@@ -91,7 +105,7 @@ void RailCameraController::Update(float deltaTime) {
 			const CameraRotKey* A = keys[i].get();
 			const CameraRotKey* B = keys[i + 1].get();
 			const float denom = B->t - A->t;
-			float u = denom > 1e-6f ? (progress_ - A->t) / denom : 0.0f;
+			float u = denom > kNearZeroProgress ? (progress_ - A->t) / denom : 0.0f;
 			u = std::clamp(u, 0.0f, 1.0f);
 			const float uu = A->easeToNext.Evaluate(u);
 			const Quaternion q = Slerp(EulerToQuatZYX(A->rotate),

@@ -33,22 +33,87 @@ namespace {
 	constexpr float kTextScale = 0.76f;
 	constexpr float kTextLineHeight = 32.0f;
 
+	// 配置の基準の UI 座標の大きさ [px]
+	constexpr float kLayoutWidth = 1600.0f;
+	constexpr float kLayoutHeight = 900.0f;
+	// 表の列の数（操作・キーボード・パッド）
+	constexpr int kColumnCount = 3;
+	// 下地の上下の線の太さ [px]
+	constexpr float kAccentLineThickness = 3.0f;
+	// 文字のアウトラインの太さ [px]
+	constexpr float kOutlineThickness = 2.0f;
+	// 読み込めなかったときの文言の高さ [px]
+	constexpr float kErrorTextY = 120.0f;
+	// 見出し（ガイド全体の題）の高さ [px] と倍率
+	constexpr float kTitleY = 82.0f;
+	constexpr float kTitleScale = 0.8f;
+	// ページの題の高さ [px]・倍率・アウトラインの太さ [px]
+	constexpr float kPageTitleY = 112.0f;
+	constexpr float kPageTitleScale = 1.4f;
+	constexpr float kPageTitleOutlineThickness = 3.0f;
+	// ページ番号の右端からの空き [px] と高さ [px]
+	constexpr float kCounterRightMargin = 40.0f;
+	constexpr float kCounterY = 122.0f;
+	// 表・説明の書き始めの高さ [px]
+	constexpr float kBodyTopY = 185.0f;
+	// 表の列見出しの倍率
+	constexpr float kHeaderScale = 0.7f;
+	// 列見出しの行の高さ [px]
+	constexpr float kHeaderHeight = 32.0f;
+	// 列見出しの下の線の太さ [px] と、線の下の空き [px]
+	constexpr float kHeaderRuleThickness = 2.0f;
+	constexpr float kHeaderRuleGap = 12.0f;
+	// 補足の字下げ [px]
+	constexpr float kNoteIndent = 20.0f;
+	// 表の後ろの空き [px]
+	constexpr float kTableBottomGap = 14.0f;
+	// 説明の段落の間の空き [px]
+	constexpr float kParagraphGap = 6.0f;
+	// 操作の案内の下端からの高さ [px]
+	constexpr float kFooterBottomOffset = 42.0f;
+
 	const Vector4 kWhite{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Vector4 kGray{ 0.72f, 0.74f, 0.78f, 1.0f };
 	const Vector4 kKeyColor{ 1.0f, 0.85f, 0.4f, 1.0f };
 	const Vector4 kAccent{ 1.0f, 0.85f, 0.2f, 1.0f };
 	const Vector4 kBlack{ 0.0f, 0.0f, 0.0f, 1.0f };
+	// 下地の色
+	const Vector4 kPanelColor{ 0.04f, 0.06f, 0.10f, 0.88f };
+	// 列見出しの下の線の色
+	const Vector4 kHeaderRuleColor{ 1.0f, 1.0f, 1.0f, 0.35f };
 
-	// UTF-8 の 1 文字のバイト数（先頭バイトから）
+	// UTF-8 の 1 バイト文字の上限（これ未満なら 1 バイト）
+	constexpr int kUtf8SingleByteLimit = 0x80;
+	// UTF-8 の 2 バイト文字の先頭バイト：右へずらす量・ずらした値・バイト数
+	constexpr int kUtf8TwoByteShift = 5;
+	constexpr int kUtf8TwoBytePattern = 0x6;
+	constexpr int kUtf8TwoByteLength = 2;
+	// UTF-8 の 3 バイト文字の先頭バイト：右へずらす量・ずらした値・バイト数
+	constexpr int kUtf8ThreeByteShift = 4;
+	constexpr int kUtf8ThreeBytePattern = 0xE;
+	constexpr int kUtf8ThreeByteLength = 3;
+	// UTF-8 の 4 バイト文字の先頭バイト：右へずらす量・ずらした値・バイト数
+	constexpr int kUtf8FourByteShift = 3;
+	constexpr int kUtf8FourBytePattern = 0x1E;
+	constexpr int kUtf8FourByteLength = 4;
+
+	/// <summary>UTF-8 の 1 文字のバイト数を先頭バイトから求める</summary>
+	/// <param name="lead">文字の先頭バイト</param>
+	/// <returns>バイト数（1〜4。不正なバイトは 1）</returns>
 	size_t CodepointLength(unsigned char lead) {
-		if (lead < 0x80) return 1;
-		if ((lead >> 5) == 0x6) return 2;
-		if ((lead >> 4) == 0xE) return 3;
-		if ((lead >> 3) == 0x1E) return 4;
+		if (lead < kUtf8SingleByteLimit) return 1;
+		if ((lead >> kUtf8TwoByteShift) == kUtf8TwoBytePattern) return kUtf8TwoByteLength;
+		if ((lead >> kUtf8ThreeByteShift) == kUtf8ThreeBytePattern) return kUtf8ThreeByteLength;
+		if ((lead >> kUtf8FourByteShift) == kUtf8FourBytePattern) return kUtf8FourByteLength;
 		return 1;
 	}
 
-	// maxWidth に収まるよう 1 文字単位で折り返す
+	/// <summary>maxWidth に収まるよう 1 文字単位で折り返す</summary>
+	/// <param name="tr">幅を測る TextRenderer</param>
+	/// <param name="text">折り返す文字列（UTF-8）</param>
+	/// <param name="scale">文字の倍率</param>
+	/// <param name="maxWidth">1 行の最大の幅 [px]</param>
+	/// <returns>行の列（空文字列なら空の 1 行）</returns>
 	std::vector<std::string> Wrap(TextRenderer* tr, const std::string& text, float scale, float maxWidth) {
 		std::vector<std::string> lines;
 		std::string current;
@@ -81,8 +146,8 @@ bool ControlGuide::Load() {
 	const JsonValue& root = result.value;
 
 	title_ = root["title"].AsString(title_);
-	if (const JsonValue& cols = root["columns"]; cols.IsArray() && cols.Size() >= 3) {
-		for (size_t c = 0; c < 3; ++c) columns_[c] = cols[c].AsString(columns_[c]);
+	if (const JsonValue& cols = root["columns"]; cols.IsArray() && cols.Size() >= kColumnCount) {
+		for (size_t c = 0; c < kColumnCount; ++c) columns_[c] = cols[c].AsString(columns_[c]);
 	}
 
 	const JsonValue& list = root["pages"];
@@ -146,74 +211,74 @@ void ControlGuide::Draw(float screenW, float screenH) const {
 	if (!tr->IsInitialized()) return;
 
 	// 1600×900 基準の配置を画面の大きさに合わせて真ん中に置く
-	const float offsetX = (screenW - 1600.0f) * 0.5f;
-	const float offsetY = (screenH - 900.0f) * 0.5f;
+	const float offsetX = (screenW - kLayoutWidth) * 0.5f;
+	const float offsetY = (screenH - kLayoutHeight) * 0.5f;
 	auto at = [&](float x, float y) { return Vector2{ x + offsetX, y + offsetY }; };
 
 	// 下地と上下の線
-	tr->DrawRect(at(kPanelLeft, kPanelTop), { kPanelRight - kPanelLeft, kPanelBottom - kPanelTop }, { 0.04f, 0.06f, 0.10f, 0.88f });
-	tr->DrawRect(at(kPanelLeft, kPanelTop), { kPanelRight - kPanelLeft, 3.0f }, kAccent);
-	tr->DrawRect(at(kPanelLeft, kPanelBottom - 3.0f), { kPanelRight - kPanelLeft, 3.0f }, kAccent);
+	tr->DrawRect(at(kPanelLeft, kPanelTop), { kPanelRight - kPanelLeft, kPanelBottom - kPanelTop }, kPanelColor);
+	tr->DrawRect(at(kPanelLeft, kPanelTop), { kPanelRight - kPanelLeft, kAccentLineThickness }, kAccent);
+	tr->DrawRect(at(kPanelLeft, kPanelBottom - kAccentLineThickness), { kPanelRight - kPanelLeft, kAccentLineThickness }, kAccent);
 
 	if (pages_.empty()) {
-		tr->DrawText("操作ガイドを読み込めませんでした", at(kContentLeft, 120.0f), 1.0f, kWhite, 2.0f, kBlack);
+		tr->DrawText("操作ガイドを読み込めませんでした", at(kContentLeft, kErrorTextY), 1.0f, kWhite, kOutlineThickness, kBlack);
 		return;
 	}
 	const Page& page = pages_[static_cast<size_t>(pageIndex_)];
 
 	// 見出し・ページ番号
-	tr->DrawText(title_, at(kContentLeft, 82.0f), 0.8f, kGray, 2.0f, kBlack);
-	tr->DrawText(page.title, at(kContentLeft, 112.0f), 1.4f, kWhite, 3.0f, kBlack);
+	tr->DrawText(title_, at(kContentLeft, kTitleY), kTitleScale, kGray, kOutlineThickness, kBlack);
+	tr->DrawText(page.title, at(kContentLeft, kPageTitleY), kPageTitleScale, kWhite, kPageTitleOutlineThickness, kBlack);
 	const std::string counter = std::to_string(pageIndex_ + 1) + " / " + std::to_string(pages_.size());
 	const float counterW = tr->MeasureWidth(counter, 1.0f);
-	tr->DrawText(counter, at(kPanelRight - 40.0f - counterW, 122.0f), 1.0f, kAccent, 2.0f, kBlack);
+	tr->DrawText(counter, at(kPanelRight - kCounterRightMargin - counterW, kCounterY), 1.0f, kAccent, kOutlineThickness, kBlack);
 
-	float y = 185.0f;
+	float y = kBodyTopY;
 
 	// 表
 	if (!page.rows.empty()) {
-		for (int c = 0; c < 3; ++c) {
-			tr->DrawText(columns_[static_cast<size_t>(c)], at(kColumnX[c], y), 0.7f, kGray, 2.0f, kBlack);
+		for (int c = 0; c < kColumnCount; ++c) {
+			tr->DrawText(columns_[static_cast<size_t>(c)], at(kColumnX[c], y), kHeaderScale, kGray, kOutlineThickness, kBlack);
 		}
-		y += 32.0f;
-		tr->DrawRect(at(kContentLeft, y), { kContentWidth, 2.0f }, { 1.0f, 1.0f, 1.0f, 0.35f });
-		y += 12.0f;
+		y += kHeaderHeight;
+		tr->DrawRect(at(kContentLeft, y), { kContentWidth, kHeaderRuleThickness }, kHeaderRuleColor);
+		y += kHeaderRuleGap;
 
 		for (const Row& row : page.rows) {
-			const std::string* cells[3] = { &row.action, &row.keyboard, &row.pad };
+			const std::string* cells[kColumnCount] = { &row.action, &row.keyboard, &row.pad };
 			size_t lineCount = 1;
-			for (int c = 0; c < 3; ++c) {
+			for (int c = 0; c < kColumnCount; ++c) {
 				const std::vector<std::string> lines = Wrap(tr, *cells[c], kCellScale, kColumnWidth[c]);
 				const Vector4& color = (c == 0) ? kWhite : kKeyColor;
 				for (size_t l = 0; l < lines.size(); ++l) {
-					tr->DrawText(lines[l], at(kColumnX[c], y + kCellLineHeight * static_cast<float>(l)), kCellScale, color, 2.0f, kBlack);
+					tr->DrawText(lines[l], at(kColumnX[c], y + kCellLineHeight * static_cast<float>(l)), kCellScale, color, kOutlineThickness, kBlack);
 				}
 				lineCount = (std::max)(lineCount, lines.size());
 			}
 			y += kCellLineHeight * static_cast<float>(lineCount);
 			if (!row.note.empty()) {
-				for (const std::string& line : Wrap(tr, row.note, kNoteScale, kContentWidth - 20.0f)) {
-					tr->DrawText(line, at(kContentLeft + 20.0f, y), kNoteScale, kGray, 2.0f, kBlack);
+				for (const std::string& line : Wrap(tr, row.note, kNoteScale, kContentWidth - kNoteIndent)) {
+					tr->DrawText(line, at(kContentLeft + kNoteIndent, y), kNoteScale, kGray, kOutlineThickness, kBlack);
 					y += kNoteLineHeight;
 				}
 			}
 			y += kRowGap;
 		}
-		y += 14.0f;
+		y += kTableBottomGap;
 	}
 
 	// 説明の文
 	for (const std::string& text : page.lines) {
 		for (const std::string& line : Wrap(tr, text, kTextScale, kContentWidth)) {
-			tr->DrawText(line, at(kContentLeft, y), kTextScale, kWhite, 2.0f, kBlack);
+			tr->DrawText(line, at(kContentLeft, y), kTextScale, kWhite, kOutlineThickness, kBlack);
 			y += kTextLineHeight;
 		}
-		y += 6.0f;
+		y += kParagraphGap;
 	}
 
 	// 操作の案内
 	const char* footer = "← → / 十字キー左右・左クリック：ページ送り　　Esc / BackSpace / B：ポーズに戻る";
 	const float footerScale = 0.66f;
 	const float footerW = tr->MeasureWidth(footer, footerScale);
-	tr->DrawText(footer, at((1600.0f - footerW) * 0.5f, kPanelBottom - 42.0f), footerScale, kGray, 2.0f, kBlack);
+	tr->DrawText(footer, at((kLayoutWidth - footerW) * 0.5f, kPanelBottom - kFooterBottomOffset), footerScale, kGray, kOutlineThickness, kBlack);
 }

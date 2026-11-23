@@ -2,6 +2,7 @@
 
 #include "Glass/LiquidGlassSphere.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <algorithm>
@@ -12,28 +13,25 @@
 #endif
 
 namespace {
+	// 調整値の JSON を書き出すときの字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/EtherVesselGlass.json";
 	// G4 の gen_ether_vessel.py が書く寸法（手で直さない）
 	constexpr const char* kGeometryPath = "Resources/Json/Tuning/EtherVesselGeometry.json";
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
-
+	/// <summary>JSON のキーの値を float として読む（無ければ今の値のまま）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">読み込み先</param>
 	void ReadFloat(const JsonValue& node, const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	}
 
+	/// <summary>float の値を JSON のキーへ書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">書く値</param>
 	void WriteFloat(JsonValue& node, const char* key, float value) {
 		node[key] = JsonValue(static_cast<double>(value));
 	}
@@ -58,7 +56,7 @@ void EtherVesselGlass::LoadGeometry() {
 	const auto result = JsonParser::ParseFile(kGeometryPath);
 	if (!result.success) return;
 	const JsonValue& sphere = result.value["sphere"];
-	ReadVector3(sphere["center"], sphereCenter_);
+	sphereCenter_ = ReadVector3(sphere["center"], sphereCenter_);
 	ReadFloat(sphere, "radius", sphereRadius_);
 }
 
@@ -115,9 +113,9 @@ bool EtherVesselGlass::LoadTuning() {
 
 	LiquidGlassSphere::Appearance& a = sphere_->GetAppearance();
 	const JsonValue& glass = root["glass"];
-	ReadVector3(glass["tint"], a.glassTint);
+	a.glassTint = ReadVector3(glass["tint"], a.glassTint);
 	ReadFloat(glass, "fresnelF0", a.fresnelF0);
-	ReadVector3(glass["rimColor"], a.rimColor);
+	a.rimColor = ReadVector3(glass["rimColor"], a.rimColor);
 	ReadFloat(glass, "rimPower", a.rimPower);
 	ReadFloat(glass, "reflectionIntensity", a.reflectionIntensity);
 	ReadFloat(glass, "specularIntensity", a.specularIntensity);
@@ -128,12 +126,12 @@ bool EtherVesselGlass::LoadTuning() {
 	ReadFloat(glass, "rimBloom", a.rimBloom);
 
 	const JsonValue& liquid = root["liquid"];
-	ReadVector3(liquid["color"], a.liquidColor);
+	a.liquidColor = ReadVector3(liquid["color"], a.liquidColor);
 	ReadFloat(liquid, "density", a.liquidDensity);
 	ReadFloat(liquid, "absorption", a.liquidAbsorption);
 	ReadFloat(liquid, "coreWhite", a.coreWhite);
 	ReadFloat(liquid, "corePower", a.corePower);
-	ReadVector3(liquid["surfaceColor"], a.surfaceColor);
+	a.surfaceColor = ReadVector3(liquid["surfaceColor"], a.surfaceColor);
 	ReadFloat(liquid, "surfaceIntensity", a.surfaceIntensity);
 	ReadFloat(liquid, "meniscusWidth", a.meniscusWidth);
 	ReadFloat(liquid, "meniscusIntensity", a.meniscusIntensity);
@@ -210,7 +208,7 @@ void EtherVesselGlass::SaveTuning() const {
 	WriteFloat(motion, "ambientRippleRadius", m.ambientRippleRadius);
 	WriteFloat(motion, "ambientRippleSpread", m.ambientRippleSpread);
 
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }
 
 void EtherVesselGlass::OnImGui() {

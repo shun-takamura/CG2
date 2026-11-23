@@ -21,32 +21,61 @@ public:
 		bool  valid = false;
 	};
 
-	// 初期化。ttfPath は AssetLocator::Open で読める形式（例 "Resources/Fonts/MPLUS1p-Medium.ttf"）。
-	// pixelHeight は bake 解像度。atlasSize はテクスチャ一辺の画素数（正方）。
+	/// <summary>
+	/// TTF を読み込んでフォントの寸法を求め、R8_UNORM のアトラステクスチャ（DEFAULT ヒープ）と SRV を作る
+	/// </summary>
+	/// <param name="dxCore">DirectXCoreへのポインタ</param>
+	/// <param name="srvManager">アトラスの SRV を確保する SRVManager</param>
+	/// <param name="ttfPath">AssetLocator::Open で読める形式のフォントのパス（例 "Resources/Fonts/MPLUS1p-Medium.ttf"）</param>
+	/// <param name="pixelHeight">bake 解像度（グリフの高さ [px]）</param>
+	/// <param name="atlasSize">テクスチャ一辺の画素数（正方）</param>
+	/// <returns>成功なら true。フォントの読み込み・解析・テクスチャ作成に失敗したら false</returns>
 	bool Initialize(DirectXCore* dxCore, SRVManager* srvManager,
 		const std::string& ttfPath, int pixelHeight, int atlasSize);
 
+	/// <summary>SRV を返し、アトラス・フォント情報・bake 待ち・グリフ表を解放する</summary>
 	void Finalize();
 
-	// グリフを取得（未 bake なら bake してから返す）。失敗で valid=false が返る。
+	/// <summary>グリフを取得（未 bake なら距離フィールドを bake して bake 待ちに積んでから返す）</summary>
+	/// <param name="codepoint">Unicode のコードポイント</param>
+	/// <returns>グリフ情報。フォントに無い・アトラスが一杯なら valid=false（空白は valid で大きさ 0）</returns>
 	const GlyphInfo& GetOrBake(uint32_t codepoint);
 
-	// 蓄積した bake をアトラステクスチャに反映。フレーム描画前に呼ぶ。
+	/// <summary>蓄積した bake を UPLOAD バッファ経由でアトラステクスチャに反映する（COPY_DEST に遷移する）。フレーム描画前に呼ぶ</summary>
+	/// <param name="cmd">コピーを積むコマンドリスト</param>
 	void FlushPendingUploads(ID3D12GraphicsCommandList* cmd);
 
-	// アトラスを PIXEL_SHADER_RESOURCE 状態に置く（描画前バリア用）。
+	/// <summary>アトラスを PIXEL_SHADER_RESOURCE 状態に置く（描画前バリア用）</summary>
+	/// <param name="cmd">バリアを積むコマンドリスト</param>
 	void EnsureShaderResourceState(ID3D12GraphicsCommandList* cmd);
 
+	/// <summary>アトラスの SRV インデックスを返す</summary>
+	/// <returns>SRV インデックス</returns>
 	uint32_t GetSrvIndex() const { return srvIndex_; }
+	/// <summary>bake 解像度を返す</summary>
+	/// <returns>グリフの高さ [px]</returns>
 	int      GetPixelHeight() const { return pixelHeight_; }
+	/// <summary>アトラスの一辺を返す</summary>
+	/// <returns>画素数</returns>
 	int      GetAtlasSize() const { return atlasSize_; }
+	/// <summary>ベースラインから上端までの高さを返す</summary>
+	/// <returns>アセント [px]</returns>
 	float    GetAscent() const { return scaledAscent_; }
+	/// <summary>ベースラインから下端までを返す（下向きなので負）</summary>
+	/// <returns>ディセント [px]</returns>
 	float    GetDescent() const { return scaledDescent_; }
+	/// <summary>行間の追加分を返す</summary>
+	/// <returns>ラインギャップ [px]</returns>
 	float    GetLineGap() const { return scaledLineGap_; }
+	/// <summary>1 行ぶん下へ進む量を返す</summary>
+	/// <returns>アセント − ディセント ＋ ラインギャップ [px]</returns>
 	float    GetLineAdvance() const { return scaledAscent_ - scaledDescent_ + scaledLineGap_; }
 
-	// 既定文字セット（ASCII + 仮名）を bake してアトラスに反映する。
-	// Initialize 直後に呼ぶ想定（フレームのコマンドリストが必要）。
+	/// <summary>
+	/// 既定文字セット（ASCII・ひらがな・カタカナ・よく使う全角記号）を bake して bake 待ちに積む。
+	/// テクスチャへの反映は呼び出し側の FlushPendingUploads で行う
+	/// </summary>
+	/// <param name="cmd">未使用（nullptr でよい）</param>
 	void PreloadDefaultCharset(ID3D12GraphicsCommandList* cmd);
 
 private:
@@ -83,6 +112,15 @@ private:
 
 	std::unordered_map<uint32_t, GlyphInfo> glyphs_;
 
+	/// <summary>
+	/// グリフの距離フィールド（SDF）を作り、シェルフパッキングでアトラス上の場所を決めて bake 待ちに積む
+	/// </summary>
+	/// <param name="codepoint">Unicode のコードポイント</param>
+	/// <param name="out">求めた UV・大きさ・オフセット・送り幅を書き込む先</param>
+	/// <returns>書けたら true。フォント未読み込み・SDF 作成失敗・アトラスが一杯なら false</returns>
 	bool BakeGlyph(uint32_t codepoint, GlyphInfo& out);
+	/// <summary>アトラスのリソース状態を遷移する（今と同じなら何もしない）</summary>
+	/// <param name="cmd">バリアを積むコマンドリスト</param>
+	/// <param name="newState">遷移先の状態</param>
 	void TransitionTo(ID3D12GraphicsCommandList* cmd, D3D12_RESOURCE_STATES newState);
 };

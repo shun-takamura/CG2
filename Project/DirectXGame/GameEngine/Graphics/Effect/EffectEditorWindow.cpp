@@ -18,7 +18,31 @@ namespace {
     constexpr uint32_t kRtSizeStep = 32;
     constexpr uint32_t kRtMin = 128;
     constexpr uint32_t kRtMax = 2048;
+    // エディタのウィンドウの最初の大きさ [px]
+    constexpr int kInitialWindowWidth = 640;
+    constexpr int kInitialWindowHeight = 480;
+    // プレビューのカメラの注視点からの距離 [m]
+    constexpr float kPreviewCameraDistance = 10.0f;
+    // プレビューのカメラの最初の見下ろし角 [ラジアン]
+    constexpr float kPreviewCameraPitch = 0.5f;
+    // プレビュー RT の最初の一辺 [px]
+    constexpr int kDefaultPreviewRtSize = 512;
+    // グリッドの太い線を引く間隔 [本]
+    constexpr int kGridMajorInterval = 5;
+    // コンボ・入力欄の幅 [px]
+    constexpr float kComboWidth = 160.0f;
+    // 未保存の変更があることを示す文字の色
+    constexpr ImVec4 kModifiedTextColor = ImVec4(1, 0.7f, 0.2f, 1);
+    // シークバーの長さの下限 [秒]（0 割りを防ぐ）
+    constexpr float kMinSeekDuration = 0.0001f;
+    // シークバーの表示文字列の長さ
+    constexpr size_t kSeekLabelBufferSize = 32;
+    // グループ名がかぶった時に付ける番号の最初の値（"_2" から）
+    constexpr int kFirstDuplicateSuffix = 2;
 
+    /// <summary>プレビュー RT の一辺を 128〜2048 に収め、32 の倍数へ切り捨てる</summary>
+    /// <param name="v">表示領域の幅か高さ [px]</param>
+    /// <returns>RT の一辺 [px]</returns>
     uint32_t SnapRtSize(float v) {
         if (v < (float)kRtMin) return kRtMin;
         if (v > (float)kRtMax) return kRtMax;
@@ -29,7 +53,7 @@ namespace {
 
 EffectEditorWindow::EffectEditorWindow(DirectXCore* dxCore, SRVManager* srvManager, IEditorSelection* selection)
     : IImGuiWindow("EffectEditor"), dxCore_(dxCore), srvManager_(srvManager), selection_(selection) {
-    SetInitialSize(ImVec2(640, 480));
+    SetInitialSize(ImVec2(kInitialWindowWidth, kInitialWindowHeight));
 }
 
 EffectEditorWindow::~EffectEditorWindow() {
@@ -40,10 +64,10 @@ void EffectEditorWindow::Initialize() {
     debugCamera_.Initialize();
     debugCamera_.SetAspectRatio(1.0f);
     debugCamera_.SetPivot({ 0.0f, 0.0f, 0.0f });
-    debugCamera_.SetDistance(10.0f);
-    debugCamera_.Orbit(0.0f, 0.5f);
+    debugCamera_.SetDistance(kPreviewCameraDistance);
+    debugCamera_.Orbit(0.0f, kPreviewCameraPitch);
 
-    EnsureRenderTextureSize(512, 512);
+    EnsureRenderTextureSize(kDefaultPreviewRtSize, kDefaultPreviewRtSize);
 
     // 自前 PostEffect はここでは作らない。Initialize() は ImGuiManager::Initialize 段階で
     // 呼ばれ、その時点では TextureManager の SRVManager がまだ未設定。PostEffect 内の
@@ -58,7 +82,7 @@ void EffectEditorWindow::EnsurePostEffect() {
     // distortion 合成パス用の RS/PSO を用意する。RunDistortionForPreview は外部 SRV と
     // dxCore 共有深度のみ使い内部 RT は使わないので、サイズはプレビュー既定で十分。
     postEffect_ = std::make_unique<PostEffect>();
-    postEffect_->Initialize(dxCore_, srvManager_, 512, 512);
+    postEffect_->Initialize(dxCore_, srvManager_, kDefaultPreviewRtSize, kDefaultPreviewRtSize);
 }
 
 void EffectEditorWindow::Finalize() {
@@ -160,9 +184,9 @@ void EffectEditorWindow::AddGridLines() {
 
     for (int i = -halfCount; i <= halfCount; ++i) {
         float p = i * step;
-        Vector4 c = (i == 0) ? colorAxisZ : ((i % 5 == 0) ? colorMajor : colorMinor);
+        Vector4 c = (i == 0) ? colorAxisZ : ((i % kGridMajorInterval == 0) ? colorMajor : colorMinor);
         lr->AddLine({ p, 0.0f, -extent }, { p, 0.0f, extent }, c, LineRenderer::Pass::Preview);
-        c = (i == 0) ? colorAxisX : ((i % 5 == 0) ? colorMajor : colorMinor);
+        c = (i == 0) ? colorAxisX : ((i % kGridMajorInterval == 0) ? colorMajor : colorMinor);
         lr->AddLine({ -extent, 0.0f, p }, { extent, 0.0f, p }, c, LineRenderer::Pass::Preview);
     }
 }
@@ -363,7 +387,7 @@ void EffectEditorWindow::OnDraw() {
                             return false;
                         };
                         std::string candidate = base;
-                        for (int n = 2; used(candidate); ++n) {
+                        for (int n = kFirstDuplicateSuffix; used(candidate); ++n) {
                             candidate = base + "_" + std::to_string(n);
                         }
                         copy.gpuParticleGroupName = candidate;
@@ -417,7 +441,7 @@ void EffectEditorWindow::OnDraw() {
         if ((mergeSel.empty() || std::find(defs.begin(), defs.end(), mergeSel) == defs.end()) && !defs.empty()) {
             mergeSel = defs.front();
         }
-        ImGui::SetNextItemWidth(160.0f);
+        ImGui::SetNextItemWidth(kComboWidth);
         if (ImGui::BeginCombo("##mergeSrc", mergeSel.c_str())) {
             for (const auto& name : defs) {
                 if (ImGui::Selectable(name.c_str(), name == mergeSel)) mergeSel = name;
@@ -440,7 +464,7 @@ void EffectEditorWindow::OnDraw() {
     ImGui::InputText("Name", editNameInput_, IM_ARRAYSIZE(editNameInput_));
     if (ImGui::Button("Save")) SaveCurrent();
     ImGui::SameLine();
-    if (editBufferDirty_) ImGui::TextColored(ImVec4(1, 0.7f, 0.2f, 1), "(modified)");
+    if (editBufferDirty_) ImGui::TextColored(kModifiedTextColor, "(modified)");
 
     ImGui::DragFloat("Total Duration", &editBuffer_.totalDuration, 0.05f, 0.0f, 60.0f);
     if (ImGui::Checkbox("Loop", &editBuffer_.loop)) {
@@ -485,7 +509,7 @@ void EffectEditorWindow::OnDraw() {
     }
 
     // 再生速度
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(kComboWidth);
     ImGui::DragFloat("Speed", &previewSpeed_, 0.01f, 0.0f, 4.0f, "%.2fx");
     if (previewSpeed_ < 0.0f) previewSpeed_ = 0.0f;
 
@@ -497,7 +521,7 @@ void EffectEditorWindow::OnDraw() {
     }
     if (previewDistortion_ && postEffect_ && postEffect_->distortion) {
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(160.0f);
+        ImGui::SetNextItemWidth(kComboWidth);
         float strength = postEffect_->distortion->GetStrength();
         if (ImGui::DragFloat("Strength", &strength, 0.005f, 0.0f, 2.0f, "%.3f")) {
             postEffect_->distortion->SetStrength(strength);
@@ -512,7 +536,7 @@ void EffectEditorWindow::OnDraw() {
     }
     if (previewBloom_ && postEffect_ && postEffect_->bloom) {
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(160.0f);
+        ImGui::SetNextItemWidth(kComboWidth);
         float intensity = postEffect_->bloom->GetIntensity();
         if (ImGui::DragFloat("Intensity##PreviewBloom", &intensity, 0.01f, 0.0f, 4.0f, "%.2f")) {
             postEffect_->bloom->SetIntensity(intensity);
@@ -527,10 +551,10 @@ void EffectEditorWindow::OnDraw() {
         if (!inst) previewHandle_ = 0; // 再生終了で無効化
         float elapsed = inst ? inst->GetElapsedTime() : 0.0f;
         float total   = inst ? inst->GetTotalDuration() : editBuffer_.totalDuration;
-        if (total < 0.0001f) total = 0.0001f;
+        if (total < kMinSeekDuration) total = kMinSeekDuration;
 
         float seekT = std::clamp(elapsed, 0.0f, total);
-        char fmt[32];
+        char fmt[kSeekLabelBufferSize];
         std::snprintf(fmt, sizeof(fmt), "%.2f / %.2f s", seekT, total);
         if (ImGui::SliderFloat("Seek", &seekT, 0.0f, total, fmt)) {
             if (inst) em->SeekPreview(std::clamp(seekT, 0.0f, total));

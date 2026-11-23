@@ -8,6 +8,7 @@
 #include "Material.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <string>
 
@@ -16,6 +17,21 @@
 #endif
 
 namespace {
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 焼け落ちる長さの下限 [秒]
+	constexpr float kMinBurnSeconds = 0.01f;
+	// クリップの最後のコマに止めるための十分先の時刻 [秒]
+	constexpr float kPastEndAnimationTime = 1.0e3f;
+	// 拡大率がこれ以下ならノイズの細かさを割らない
+	constexpr float kMinScale = 1e-4f;
+	// ディゾルブの長さの下限 [秒]（これ以下なら即座に切り替える）
+	constexpr float kMinDissolveSeconds = 1e-3f;
+	// 焼け始めてから下地のオレンジが最大になるまでの速さ（焼けの進みの逆数）
+	constexpr float kBurnGlowRampRate = 4.0f;
+
 	// rig_player_mech.py --export-wings で書き出して cook（共有ノート player_model_export.md）
 	constexpr const char* kWingDir = "Resources/Models/Player/PlayerWings";
 	constexpr const char* kWingFile = "PlayerWings.mesh";
@@ -28,25 +44,17 @@ namespace {
 	constexpr float kSocketOffsetY = -1.17778f;
 	constexpr float kSocketOffsetZ = -0.29778f;
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="u">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 	}
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
-
+	/// <summary>状態の名前を返す（ImGui の表示用）</summary>
+	/// <param name="state">状態</param>
+	/// <returns>名前。知らない値なら空文字</returns>
 	const char* StateName(PlayerWingUnit::State state) {
 		switch (state) {
 		case PlayerWingUnit::State::Hidden:    return "Hidden";
@@ -99,7 +107,7 @@ void PlayerWingUnit::Burn(float seconds) {
 	state_ = State::Burning;
 	stateTime_ = 0.0f;
 	delay_ = 0.0f;
-	burnSeconds_ = (std::max)(seconds, 0.01f);
+	burnSeconds_ = (std::max)(seconds, kMinBurnSeconds);
 }
 
 void PlayerWingUnit::CollectJointPositions(std::vector<Vector3>& out) const {
@@ -128,7 +136,7 @@ void PlayerWingUnit::ShowDeployed() {
 	// 開いた形＝基本の姿勢＝Deploy の最後のコマ
 	wings_->PlayAnimation(kDeployClip, 0.0f);
 	wings_->SetLoop(false);
-	wings_->SetAnimationTime(1.0e3f);
+	wings_->SetAnimationTime(kPastEndAnimationTime);
 	state_ = State::Deployed;
 	stateTime_ = 0.0f;
 	delay_ = 0.0f;
@@ -153,7 +161,7 @@ void PlayerWingUnit::ApplyDissolve(float radiusRatio) {
 	d.radius = (radiusMax_ + edgeWidth_) * s * (std::max)(radiusRatio, 0.0f);
 	d.edgeWidth = edgeWidth_ * s;
 	d.edgeColor = edgeColor_;
-	d.noiseScale = s > 1e-4f ? noiseScale_ / s : noiseScale_;
+	d.noiseScale = s > kMinScale ? noiseScale_ / s : noiseScale_;
 	d.noiseAmplitude = noiseAmplitude_ * s;
 	wings_->SetDissolveSphere(d);
 	dissolving_ = true;
@@ -166,7 +174,7 @@ void PlayerWingUnit::ApplyBurn(float progress) {
 	d.edgeWidth = burnEdgeWidth_;
 	d.edgeColor = { burnEdgeColor_.x * burnEdgeIntensity_, burnEdgeColor_.y * burnEdgeIntensity_,
 		burnEdgeColor_.z * burnEdgeIntensity_ };
-	d.noiseScale = s > 1e-4f ? burnNoiseScale_ / s : burnNoiseScale_;
+	d.noiseScale = s > kMinScale ? burnNoiseScale_ / s : burnNoiseScale_;
 	wings_->SetDissolveNoise(d);
 	dissolving_ = true;
 }
@@ -192,12 +200,12 @@ void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 			wings_->Play();
 		}
 		stateTime_ += deltaTime;
-		radiusRatio = dissolveInSeconds_ > 1e-3f ? SmoothStep01(stateTime_ / dissolveInSeconds_) : 1.0f;
+		radiusRatio = dissolveInSeconds_ > kMinDissolveSeconds ? SmoothStep01(stateTime_ / dissolveInSeconds_) : 1.0f;
 		if (radiusRatio >= 1.0f && !wings_->IsPlaying()) state_ = State::Deployed;
 		break;
 	case State::Stowing:
 		stateTime_ += deltaTime;
-		radiusRatio = dissolveOutSeconds_ > 1e-3f ? 1.0f - SmoothStep01(stateTime_ / dissolveOutSeconds_) : 0.0f;
+		radiusRatio = dissolveOutSeconds_ > kMinDissolveSeconds ? 1.0f - SmoothStep01(stateTime_ / dissolveOutSeconds_) : 0.0f;
 		if (radiusRatio <= 0.0f) {
 			Hide();
 			return;
@@ -231,7 +239,7 @@ void PlayerWingUnit::Update(AnimatedObject3DInstance* body, float deltaTime) {
 		wings_->SetMaterialColor({ c.x * albedoGain_, c.y * albedoGain_, c.z * albedoGain_, c.w });
 	}
 	// 燃えている間は下地にオレンジを足す（焼け始めから強まる）
-	const float glowK = burnProgress >= 0.0f ? burnGlow_ * (std::min)((1.0f - burnProgress) * 4.0f, 1.0f) : 0.0f;
+	const float glowK = burnProgress >= 0.0f ? burnGlow_ * (std::min)((1.0f - burnProgress) * kBurnGlowRampRate, 1.0f) : 0.0f;
 	wings_->SetEmissive({ baseGlow_ + blinkGlow_.x + burnEdgeColor_.x * glowK, baseGlow_ + blinkGlow_.y + burnEdgeColor_.y * glowK,
 		baseGlow_ + blinkGlow_.z + burnEdgeColor_.z * glowK });
 	if (burnProgress >= 0.0f) {
@@ -269,9 +277,9 @@ void PlayerWingUnit::LoadTuning(const JsonValue& node) {
 	read("dissolveInSeconds", dissolveInSeconds_);
 	read("dissolveOutSeconds", dissolveOutSeconds_);
 	read("radiusMax", radiusMax_);
-	ReadVector3(node["rootOffset"], rootOffset_);
+	rootOffset_ = ReadVector3(node["rootOffset"], rootOffset_);
 	read("edgeWidth", edgeWidth_);
-	ReadVector3(node["edgeColor"], edgeColor_);
+	edgeColor_ = ReadVector3(node["edgeColor"], edgeColor_);
 	read("noiseScale", noiseScale_);
 	read("noiseAmplitude", noiseAmplitude_);
 	read("bloomScale", bloomScale_);
@@ -281,7 +289,7 @@ void PlayerWingUnit::LoadTuning(const JsonValue& node) {
 	read("roughness", roughness_);
 	read("baseGlow", baseGlow_);
 	read("albedoGain", albedoGain_);
-	ReadVector3(node["burnEdgeColor"], burnEdgeColor_);
+	burnEdgeColor_ = ReadVector3(node["burnEdgeColor"], burnEdgeColor_);
 	read("burnEdgeIntensity", burnEdgeIntensity_);
 	read("burnEdgeWidth", burnEdgeWidth_);
 	read("burnNoiseScale", burnNoiseScale_);

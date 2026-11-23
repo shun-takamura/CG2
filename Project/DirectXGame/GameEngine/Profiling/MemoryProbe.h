@@ -8,10 +8,13 @@ struct IDXGIAdapter3;
 /// プロセスのRAM（WorkingSet/Private）とVRAM使用量を継続サンプリングし、
 /// Profiler のゲージへ流すプローブ（シングルトン）。
 /// OS への問い合わせは重いので1秒に1回だけ行い、ゲージ更新は毎フレーム（キャッシュ値）。
+/// シングルトンにする理由：RAM / VRAM の測定を 1 か所で間引いて行うため。
 /// </summary>
 class MemoryProbe {
 public:
-    static MemoryProbe& Instance();
+    /// <summary>唯一のインスタンス</summary>
+    /// <returns>インスタンス</returns>
+    static MemoryProbe* GetInstance();
 
     /// <summary>毎フレーム呼ぶ。1秒経過時のみOS問い合わせ、毎フレーム Profiler::SetGauge する。</summary>
     void Sample();
@@ -22,6 +25,8 @@ private:
     MemoryProbe(const MemoryProbe&) = delete;
     MemoryProbe& operator=(const MemoryProbe&) = delete;
 
+    /// <summary>VRAM 取得用のアダプタを初回だけ作る（一度失敗したら以後は試さない）</summary>
+    /// <returns>アダプタがあれば true</returns>
     bool EnsureAdapter();  // VRAM 取得用アダプタの遅延生成
 
     Microsoft::WRL::ComPtr<IDXGIAdapter3> adapter_;

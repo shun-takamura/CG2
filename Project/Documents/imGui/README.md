@@ -77,7 +77,7 @@ int WINAPI WinMain(...) {
     srvManager->Initialize(dxCore);
 
     // ImGui初期化
-    ImGuiManager::Instance().Initialize(
+    ImGuiManager::GetInstance()->Initialize(
         winApp->GetHwnd(), 
         dxCore, 
         srvManager
@@ -92,7 +92,7 @@ int WINAPI WinMain(...) {
     // ゲームループ
     while (/* ... */) {
         // ゲーム処理の前にImGuiフレーム開始
-        ImGuiManager::Instance().BeginFrame();
+        ImGuiManager::GetInstance()->BeginFrame();
 
         // ログ出力例
         Debug::Log("フレーム更新");
@@ -108,13 +108,13 @@ int WINAPI WinMain(...) {
         // ... 3D/2D描画 ...
 
         // ImGui描画（最後に呼ぶ）
-        ImGuiManager::Instance().EndFrame();
+        ImGuiManager::GetInstance()->EndFrame();
 
         dxCore->EndDraw();
     }
 
     // 終了処理
-    ImGuiManager::Instance().Shutdown();
+    ImGuiManager::GetInstance()->Shutdown();
     // ... 他の終了処理 ...
 }
 ```

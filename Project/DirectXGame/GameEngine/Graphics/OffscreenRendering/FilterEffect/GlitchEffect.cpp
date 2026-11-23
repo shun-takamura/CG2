@@ -9,6 +9,13 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ずれ方が変わる間隔の下限 [s]（0 で割らないため）
+	constexpr float kMinJitterInterval = 0.001f;
+	// 描画解像度が取れない時に使う画面の縦横比（16:9）
+	constexpr float kFallbackAspectWidth = 16.0f;
+	constexpr float kFallbackAspectHeight = 9.0f;
+}
 
 void GlitchEffect::InitializeMasked(
 	DirectXCore* dxCore,
@@ -41,10 +48,10 @@ void GlitchEffect::UpdateConstantBuffer()
 	if (!constantBufferMappedPtr_) return;
 	ParamsCB cb{};
 	cb.intensity = std::clamp(intensity_, 0.0f, 1.0f);
-	const float interval = (std::max)(params_.jitterInterval, 0.001f);
+	const float interval = (std::max)(params_.jitterInterval, kMinJitterInterval);
 	cb.seed = std::floor(time_ / interval);
 	cb.maskMode = static_cast<int>(maskMode_);
-	cb.aspect = 16.0f / 9.0f;
+	cb.aspect = kFallbackAspectWidth / kFallbackAspectHeight;
 	if (dxCore_ && dxCore_->GetRenderHeight() > 0) {
 		cb.aspect = static_cast<float>(dxCore_->GetRenderWidth()) / static_cast<float>(dxCore_->GetRenderHeight());
 	}

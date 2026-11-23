@@ -35,12 +35,15 @@ class AnimatedObject3DInstance;
 class IStageStartHost {
 public:
 	virtual ~IStageStartHost() = default;
-	// ゲームの自機（player_）を隠す。演出の間は演出専用の機体（新モデル）を描くので隠しておく
+	/// <summary>ゲームの自機（player_）を隠す。演出の間は演出専用の機体（新モデル）を描くので隠しておく</summary>
+	/// <param name="hidden">true で隠す</param>
 	virtual void SetPlayerHidden(bool hidden) = 0;
-	// スタート演出を終えてレールへ渡す：フォグ・空・平行光源・IBL・カメラのクリップ面・自機の表示をステージの値に戻す
+	/// <summary>スタート演出を終えてレールへ渡す：フォグ・空・平行光源・IBL・カメラのクリップ面・自機の表示をステージの値に戻す</summary>
 	virtual void RestoreStageEnvironment() = 0;
-	// 雲の上の場面（S4、F6）を始める：RestoreStageEnvironment の後に呼ぶ。レールを t=0 から進めながら、
-	// ゲームの自機を右上前方から見るカメラで回り込んでレールのカメラへ合流させ、羽根を展開する（CloudTopIntro / PlayerWingUnit）
+	/// <summary>
+	/// 雲の上の場面（S4、F6）を始める：RestoreStageEnvironment の後に呼ぶ。レールを t=0 から進めながら、
+	/// ゲームの自機を右上前方から見るカメラで回り込んでレールのカメラへ合流させ、羽根を展開する（CloudTopIntro / PlayerWingUnit）
+	/// </summary>
 	virtual void BeginCloudTop() = 0;
 };
 
@@ -72,119 +75,200 @@ public:
 		ThirdPerson,
 	};
 
+	/// <summary>施設・コクピット・灯り・機体確認・表示板などの部品を作る</summary>
 	StageStartPart();
 	~StageStartPart();
 
+	/// <summary>寸法を読み、施設・コクピット・表示板・タコメーター・雷・ケーブルを用意し、カタパルトの IBL を先に読んでおく（三人称の機体は InitializeMech）</summary>
+	/// <param name="host">シーンへの窓口</param>
+	/// <param name="camera">演出で動かすカメラ</param>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="skinningComputeManager">使わない（機体は InitializeMech で作る）</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(IStageStartHost* host, Camera* camera, Object3DManager* object3DManager, DirectXCore* dxCore,
 		SkinningComputeManager* skinningComputeManager, SRVManager* srvManager);
 	/// <summary>三人称で映す機体を作る（重いので StagePlay が後回しの段で呼ぶ。2 回目以降は何もしない）</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="skinningComputeManager">スキニングの計算の管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void InitializeMech(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager,
 		DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>ラジアルブラー・スラスター・灯りを止め、表示板とタコメーターを片付ける（共有の板はタコメーターを先に）</summary>
 	void Finalize();
 
 	/// <summary>③IN：HUB から渡された値で降下の続きから始める</summary>
+	/// <param name="handoff">HUB から渡された値</param>
 	void BeginDescent(const StageStartHandoff& handoff);
 	/// <summary>HUB を通らずに来た：雲の上から始める</summary>
 	void BeginFromCloudTop();
 	/// <summary>降下を飛ばし、カタパルトに着いて止まった所（機体確認の頭）から始める（デバッグ）</summary>
+	/// <param name="handoff">HUB から渡された値（MakeDefaultHandoff の値でもよい）</param>
 	void BeginInspection(const StageStartHandoff& handoff);
 	/// <summary>途中で打ち切ってレールへ渡す（デバッグの F4・シーク）</summary>
 	void Skip() { if (active_) Finish(); }
-	/// <summary>HUB を通らずに降下から流すときの値（デバッグ。目の位置は座ったパイロットの目）</summary>
+	/// <summary>HUB を通らずに降下から流すときの値を作る（デバッグ。目の位置は座ったパイロットの目）</summary>
+	/// <returns>受け渡しの値</returns>
 	StageStartHandoff MakeDefaultHandoff() const;
 
 	/// <summary>進行とカメラの構え（位置・向き）を決める。この後にシーンがカメラの行列を作り（揺れも足す）、LateUpdate を呼ぶ</summary>
+	/// <param name="input">入力</param>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="screenSize">画面の大きさ [px]</param>
 	void Update(InputManager* input, float deltaTime, const Vector2& screenSize);
 	/// <summary>
 	/// カメラの行列ができた後に、施設・コクピット・機体・ケーブル・表示板の行列を作る。
 	/// Object3DInstance::Update はその時のカメラで WVP を作るので、先に作ると 1 フレーム前のカメラになり、
 	/// 射出で速く進むと一人称のコクピット（椅子）が前へずれて見えた（2026-10-19 実機）
 	/// </summary>
-	/// renderSize は描画解像度（DirectXCore::GetRenderWidth/Height。コクピットの六角形のディゾルブが画面のピクセルで並べるため）
-	void LateUpdate(float deltaTime, const Vector2& renderSize);
-	/// <summary>表示板の中身を RenderTexture へ。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="screenSize">描画解像度（DirectXCore::GetRenderWidth/Height。コクピットの六角形のディゾルブが画面のピクセルで並べるため）</param>
+	void LateUpdate(float deltaTime, const Vector2& screenSize);
+	/// <summary>表示板とタコメーターの中身を RenderTexture へ描く。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
+	/// <param name="commandList">描画のコマンドリスト</param>
 	void RenderBoardTexture(ID3D12GraphicsCommandList* commandList);
 	/// <summary>
-	/// 画面の上に重ねるもの（スキップの案内・スキップの白フェード・一人称で射出口に近づくまぶしさ）。
-	/// TextRenderer に積む（Flush はシーン）。スキップの白は演出が終わった後（レール）も開き切るまで描く
+	/// 画面の上に重ねるもの（スキップの案内・スキップの白フェード・一人称で射出口に近づくまぶしさ）を TextRenderer に積む（Flush はシーン）。
+	/// スキップの白は演出が終わった後（レール）も開き切るまで描く
 	/// </summary>
+	/// <param name="screenWidth">画面の幅 [px]</param>
+	/// <param name="screenHeight">画面の高さ [px]</param>
 	void DrawScreenOverlay(float screenWidth, float screenHeight);
-	/// <summary>スキップの白フェードを進める（演出の外でも毎フレーム呼ぶ）</summary>
+	/// <summary>スキップの白フェードを進め、覆い切ったら雲の上へ飛ぶ（演出の外でも毎フレーム呼ぶ）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void UpdateOverlay(float deltaTime);
-	/// <summary>不透明物（Object3D の DrawSetting・BindLights の後）。表示板（半透明。一人称は宙に浮く板・三人称は立てたパネル）も最後に描く</summary>
+	/// <summary>施設と、一人称ならコクピット・三人称なら機体とケーブル・雷を描く（Object3D の DrawSetting・BindLights の後）。表示板（半透明）は最後に描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
+	/// <summary>発光パスに描く物があるかを返す</summary>
+	/// <returns>演出中なら true</returns>
 	bool HasBloom() const;
+	/// <summary>発光パスで施設・コクピット（一人称）・雷・表示板とタコメーターを描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawBloom(DirectXCore* dxCore);
 
-	/// <summary>演出中（StagePlay はこの間レール・HUD を動かさない）</summary>
+	/// <summary>演出中かを返す（StagePlay はこの間レール・HUD を動かさない）</summary>
+	/// <returns>演出中なら true</returns>
 	bool IsActive() const { return active_; }
+	/// <summary>今の段階を返す</summary>
+	/// <returns>段階</returns>
 	State GetState() const { return state_; }
+	/// <summary>今の視点を返す</summary>
+	/// <returns>一人称か三人称</returns>
 	View GetView() const { return view_; }
 
+	/// <summary>調整値（StagePlay.json の "stageStart"）と部品ごとの調整値を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
-	/// <summary>Hub.json の "cockpitLighting"</summary>
+	/// <summary>コクピットの灯りの調整値（Hub.json の "cockpitLighting"）を読む</summary>
+	/// <param name="node">"cockpitLighting" の欄</param>
 	void LoadCockpitTuning(const JsonValue& node);
+	/// <summary>調整値とデバッグの ImGui を表示する</summary>
 	void OnImGui();
 
-	/// <summary>射出口の向こうに見せる雲の上の点（ワールド。StagePlay がレールの t=0 のカメラ位置を渡す）</summary>
+	/// <summary>射出口の向こうに見せる雲の上の点を設定する（StagePlay がレールの t=0 のカメラ位置を渡す）</summary>
+	/// <param name="anchor">ワールド位置</param>
 	void SetSkyAnchor(const Vector3& anchor) { skyAnchor_ = anchor; }
-	/// <summary>射出口の向こうに雲海を描くか（射出口を空に開けているときだけ）</summary>
+	/// <summary>射出口の向こうに雲海を描くかを返す（射出口を空に開けているときだけ）</summary>
+	/// <returns>描くなら true</returns>
 	bool DrawsCloudsThroughExit() const;
 	/// <summary>
-	/// 雲海を描く仮のカメラのずらし量。今のカメラの位置にこれを足すと、射出口（床の中心）が雲の上の点に重なる。
+	/// 雲海を描く仮のカメラのずらし量を返す。今のカメラの位置にこれを足すと、射出口（床の中心）が雲の上の点に重なる。
 	/// 向き・画角は同じなので、トンネルの壁の深度で雲が隠れ、射出口の穴からだけ雲海が見える
 	/// </summary>
+	/// <returns>ずらし量（ワールド）</returns>
 	Vector3 GetSkyViewOffset() const;
 
 	/// <summary>デバッグ：HUB を通らずに来たとき（Debug の初期シーンなど）にどこから始めるか（StagePlay.json、Debug ビルドだけ効く）</summary>
 	enum class DebugStart { CloudTop, Descent, Inspection };
+	/// <summary>HUB を通らずに来たとき（Debug の初期シーンなど）にどこから始めるかを返す（StagePlay.json、Debug ビルドだけ効く）</summary>
+	/// <returns>始める所</returns>
 	DebugStart GetDebugStart() const { return debugStart_; }
 
 private:
+	/// <summary>段階を移し、その段階の始まりの処理（機体確認のやり直し・射出の開始など）をする</summary>
+	/// <param name="state">次の段階</param>
 	void Enter(State state);
+	/// <summary>演出を終えてレールへ渡す（機体を隠し、灯りを返し、ステージの環境へ戻す）</summary>
 	void Finish();
 	// 機体確認（S1、F4）：項目を確認中 → 全部 CLEAR（カタパルトのネオンを点け直す）→ LAUNCH READY（SPACE でブースト）
 	enum class InspectionStep { Checking, PowerUp, Ready };
+	/// <summary>機体確認：項目を確認中 → 全部 CLEAR（ネオンを点け直す）→ LAUNCH READY を進める</summary>
+	/// <param name="input">入力</param>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void UpdateInspection(InputManager* input, float deltaTime);
+	/// <summary>表示板とタコメーターの状態と置き場所を更新する</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="screenSize">画面の大きさ [px]</param>
 	void UpdateBoard(float deltaTime, const Vector2& screenSize);
-	// 4 基のスラスター：機体確認は WASD、充電後は SPACE の出力、射出中は大。一人称では噴かさない
+	/// <summary>4 基のスラスターを噴かす（機体確認は WASD、充電後は SPACE の出力、射出中は大。一人称では噴かさない）</summary>
 	void UpdateThrusters();
-	// 電磁カタパルトの雷：ネオンの点け直しと一緒に伸び、点き切った後は溝で放電（SPACE で強く）、射出中は固定台の足元
+	/// <summary>電磁カタパルトの雷を進める（ネオンの点け直しと一緒に伸び、点き切った後は溝で放電・SPACE で強く、射出中は固定台の足元）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void UpdateLightning(float deltaTime);
-	// 固定台の前進量（レールの終わりで止まる）
+	/// <summary>固定台の前進量を返す（レールの終わりで止まる）</summary>
+	/// <returns>前進量 [m]</returns>
 	float ClampTravel() const;
-	// 三人称のパネル（表示板・タコメーター）を消しているか（射出が始まったら）
+	/// <summary>三人称のパネル（表示板・タコメーター）を消しているかを返す（射出が始まったら）</summary>
+	/// <returns>消していれば true</returns>
 	bool ArePanelsHidden() const;
-	// 射出の速さの割合 0..1（画角・ラジアルブラー）。射出口を抜けたら白が引くのと同じ時間で線形に 0 へ戻す
+	/// <summary>射出の速さの割合を返す（画角・ラジアルブラー）。射出口を抜けたら白が引くのと同じ時間で線形に 0 へ戻す</summary>
+	/// <returns>0〜1</returns>
 	float SpeedFactor() const;
-	// 射出の速さに合わせたラジアルブラー（一人称。演出の外では切る）
+	/// <summary>射出の速さに合わせたラジアルブラーをかける（一人称。演出の外では切る）</summary>
 	void ApplyRadialBlur();
-	// 一人称の射出口のまぶしさ（glare_）を進める
+	/// <summary>一人称の射出口のまぶしさ（glare_）を進める</summary>
 	void UpdateGlare();
-	// スキップ：白で覆い切ったら雲の上へ（演出の物を片付けて CloudTop へ）
+	/// <summary>スキップ：演出の物を止めて雲の上（CloudTop）へ移る（白で覆い切ったときに呼ぶ）</summary>
 	void JumpToCloudTop();
+	/// <summary>スキップの白フェードの濃さを返す</summary>
+	/// <returns>0〜1（スキップしていなければ 0）</returns>
 	float SkipWhiteAlpha() const;
-	// 演出の間だけポイントライト（カタパルト・コクピット）を借りる
+	/// <summary>演出の間だけポイントライト（カタパルト・コクピット）を借りる（借りていれば何もしない）</summary>
 	void AcquireLights();
+	/// <summary>借りたポイントライトを返し、共有のマテリアル（コクピットの発光・六角形、液晶の UV）も元に戻す</summary>
 	void ReleaseLights();
-	// 降下：時刻 t までに降りた距離・その時の速さ（閉じた式）
+	/// <summary>降下：時刻までに降りた距離を求める（閉じた式）</summary>
+	/// <param name="time">時刻 [秒]</param>
+	/// <returns>距離 [m]</returns>
 	float DescentDistanceAt(float time) const;
+	/// <summary>降下を進め、カタパルトの階で減速して止まったら揺らし、落ち着いたら機体確認へ移る</summary>
+	/// <param name="deltaTime">経過 [秒]（使わない。時刻は Update で進む）</param>
 	void UpdateDescent(float deltaTime);
 	// 三人称の機体の姿勢：Stand（直立のループ）→ Ignite（前傾へ、1 回）→ Catapult（前傾の保持のループ）
 	// → 射出口でけり出す（Launch、1 回。最後のコマ＝飛ぶ姿勢で止める。Fly は使わない＝2026-10-19 ユーザー決定）
 	enum class MechPose { Stand, Ignite, Catapult, Launch };
+	/// <summary>三人称の機体の姿勢のクリップを再生する</summary>
+	/// <param name="pose">姿勢</param>
 	void PlayMechPose(MechPose pose);
+	/// <summary>三人称の機体のアニメーションを進める（Ignite が終わったら前傾の保持 Catapult へ）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void UpdateMechPose(float deltaTime);
+	/// <summary>一人称（座った目）・三人称（床の近くから機体を見上げて見送る）のカメラの構えを決める</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void ApplyCamera(float deltaTime);
-	// 機体が前（+Z）へ走った距離（発進の分＋デバッグのプレビュー）
+	/// <summary>機体が前（+Z）へ走った距離を返す（発進の分＋デバッグのプレビュー）</summary>
+	/// <returns>距離 [m]</returns>
 	float MechTravel() const { return mechTravel_ + previewTravel_; }
-	// 三人称の注視点（機体から見た点）。前進量で始め → 真横 → 奥のキーを補間する
+	/// <summary>三人称の注視点（機体から見た点）を求める。前進量で始め → 真横 → 奥のキーを補間する</summary>
+	/// <param name="travel">機体の前進量 [m]</param>
+	/// <returns>機体から見た注視点</returns>
 	Vector3 ThirdPersonTargetAt(float travel) const;
+	/// <summary>平行光源の強さ・IBL（縦穴／カタパルト）・施設の灯り・コクピットの灯りを今の高さと視点に合わせる</summary>
+	/// <param name="screenSize">画面の大きさ [px]（コクピットの六角形に使う）</param>
 	void ApplyLighting(const Vector2& screenSize);
-	// 給電ケーブル（F5）：付け根（カタパルトの後ろの壁）と機体側の端（背中のボーン＋ずらし）
+	/// <summary>給電ケーブルの付け根（カタパルトの後ろの壁）を返す</summary>
+	/// <returns>ワールド位置</returns>
 	Vector3 CableAnchorWorld() const;
+	/// <summary>給電ケーブルの機体側の端（背中のボーン＋ずらし）を返す</summary>
+	/// <returns>ワールド位置</returns>
 	Vector3 CableAttachWorld() const;
+	/// <summary>IBL を差し替える（読み込んでから。空・同じなら何もしない）</summary>
+	/// <param name="path">IBL のパス</param>
 	void SetEnvironmentTexture(const std::string& path);
 
 	IStageStartHost* host_ = nullptr;

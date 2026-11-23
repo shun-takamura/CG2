@@ -2,6 +2,19 @@
 #include <imgui.h>
 #include <cassert>
 
+namespace {
+    // カメラが開かれるまで待つ間の 1 回の眠り [ms]
+    constexpr int kDeviceWaitSleepMs = 10;
+    // BGRA の 1 画素のうち、アルファが入っている位置 [byte]
+    constexpr uint32_t kAlphaByteOffset = 3;
+    // BGRA の 1 画素の大きさ [byte]
+    constexpr uint32_t kBytesPerPixel = 4;
+    // 不透明のアルファ値（0〜255）
+    constexpr int kOpaqueAlpha = 255;
+    // カメラが見つからないときの文字の色（橙）
+    constexpr ImVec4 kNoDeviceTextColor = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);
+}
+
 CameraCapture* CameraCapture::GetInstance()
 {
     static CameraCapture instance;
@@ -39,7 +52,7 @@ void CameraCapture::CaptureThreadFunc()
         // SourceReaderがなければ待機（カメラが開かれるまで）
         if (!sourceReader_)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(kDeviceWaitSleepMs));
             continue;
         }
 
@@ -93,10 +106,10 @@ void CameraCapture::CaptureThreadFunc()
 
                     // カメラのBGRA形式ではアルファが0の場合があるため
                     // 4バイトごと（BGRA）の4番目（A）を255に
-                    for (uint32_t i = 3; i < currentLength; i += 4)
+                    for (uint32_t i = kAlphaByteOffset; i < currentLength; i += kBytesPerPixel)
                     {
                         // アルファ値を255に設定
-                        frameBufferThread_[i] = 255;
+                        frameBufferThread_[i] = kOpaqueAlpha;
                     }
 
                     // 新しいフレームが準備できたことをフラグで通知
@@ -419,7 +432,7 @@ void CameraCapture::LogDevicesToImGui()
 
     if (devices_.empty())
     {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No camera devices found");
+        ImGui::TextColored(kNoDeviceTextColor, "No camera devices found");
     } else
     {
         ImGui::Text("Found %zu device(s):", devices_.size());

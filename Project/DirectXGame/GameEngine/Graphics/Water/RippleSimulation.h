@@ -36,16 +36,22 @@ public:
 		float normalScale = 1.0f;       // 高さの傾きを法線に足す倍率
 	};
 
+	/// <summary>確保した SRV/UAV の番号を返す</summary>
 	~RippleSimulation();
 
+	/// <summary>高さマップ 2 枚（R32G32_FLOAT、SRV/UAV）・ルートシグネチャ・PSO・刻みごとの CB を作る（作り直し時は前の番号を返してから）</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">SRV/UAV を確保する先</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
 
 	/// <summary>時間を進める（実際の計算は Dispatch でまとめて行う）</summary>
+	/// <param name="deltaTime">経過時間 [秒]（溜める量は 1 フレームの最大刻み数ぶんまで）</param>
 	void Update(float deltaTime);
 
 	/// <summary>
 	/// 波源を入れる（その位置を中心にガウス形にへこませる）。1フレーム kMaxImpulsesPerFrame 個まで。
 	/// </summary>
+	/// <param name="position">波源の位置（ワールド。XZ だけ使い、範囲外は無視）</param>
 	/// <param name="radius">へこみの半径 [m]</param>
 	/// <param name="strength">へこみの深さ [m] 相当（正でへこむ）</param>
 	void AddImpulse(const Vector3& position, float radius, float strength);
@@ -57,23 +63,34 @@ public:
 	void Dispatch();
 
 	/// <summary>最新の高さマップ（PS 読み取り可能な状態）</summary>
+	/// <returns>R=今の高さ / G=1つ前の高さ の SRV</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetHeightSrvHandle() const;
 
+	/// <summary>シミュレーションする範囲の中心を設定する</summary>
+	/// <param name="centerXZ">ワールドの XZ</param>
 	void SetCenter(const Vector2& centerXZ) { center_ = centerXZ; }
 	/// <summary>
 	/// 高さマップが表す範囲の中心。PS はこれで UV を出すこと。
 	/// スクロールが無効なら SetCenter の値、有効なら Dispatch でテクセルの格子にそろえた値
 	/// </summary>
+	/// <returns>ワールドの XZ</returns>
 	const Vector2& GetCenter() const { return scrollWithCenter_ ? gridCenter_ : center_; }
 
 	/// <summary>
 	/// true で波をワールドに残し、範囲だけを中心について動かす（既定 false＝波も中心と一緒に動く）。
 	/// 切り替えた時は水面を平らに戻す
 	/// </summary>
+	/// <param name="enabled">波をワールドに残すなら true</param>
 	void SetScrollWithCenter(bool enabled);
+	/// <summary>波をワールドに残す設定か</summary>
+	/// <returns>残すなら true</returns>
 	bool IsScrollWithCenter() const { return scrollWithCenter_; }
-	Settings& GetSettings() { return settings_; }
+	/// <summary>さざ波の計算の調整値（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
 	const Settings& GetSettings() const { return settings_; }
+	/// <summary>さざ波の計算の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
 	/// <summary>水面を平らに戻す（次の Dispatch で消す）</summary>
 	void Clear() { clearRequested_ = true; }
@@ -96,11 +113,17 @@ private:
 		Impulse impulses[kMaxImpulsesPerFrame];
 	};
 
+	/// <summary>高さマップ 2 枚と、それぞれの SRV・UAV を作る</summary>
 	void CreateTextures();
-	// 確保した SRV/UAV の番号を返す（シーンを作るたびに作られるので、返さないと 512 枠を食い潰す）
+	/// <summary>確保した SRV/UAV の番号を返す（シーンを作るたびに作られるので、返さないと 512 枠を食い潰す）</summary>
 	void FreeDescriptors();
+	/// <summary>ルートシグネチャを作る（[0]=b0 SimParams（CBV）/ [1]=t0 1つ前の状態 / [2]=u0 次の状態（テーブル））</summary>
 	void CreateRootSignature();
+	/// <summary>波の CS（RippleSimulation.CS）の PSO を作る</summary>
 	void CreatePipelineState();
+	/// <summary>高さマップのリソース状態を遷移させる（同じ状態なら何もしない）</summary>
+	/// <param name="index">0 か 1</param>
+	/// <param name="after">遷移後の状態</param>
 	void Transition(uint32_t index, D3D12_RESOURCE_STATES after);
 
 	DirectXCore* dxCore_ = nullptr;
@@ -120,7 +143,9 @@ private:
 	std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, kMaxStepsPerFrame> paramsResources_;
 	std::array<SimParamsForGPU*, kMaxStepsPerFrame> paramsData_{};
 
-	/// <summary>溜まった波源（ワールド XZ）を、今の範囲の UV に直して刻みの CB に詰める。返り値は詰めた数</summary>
+	/// <summary>溜まった波源（ワールド XZ）を、今の範囲の UV に直して刻みの CB に詰める</summary>
+	/// <param name="out">書き込み先（kMaxImpulsesPerFrame 個分）</param>
+	/// <returns>詰めた数（今の範囲の外に出た波源は捨てる）</returns>
 	uint32_t BuildImpulses(Impulse* out) const;
 
 	// AddImpulse で溜める波源。UV にするのは Dispatch（スクロールで範囲が動いた後）

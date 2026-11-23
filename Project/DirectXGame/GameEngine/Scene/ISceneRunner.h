@@ -19,6 +19,13 @@ public:
 	virtual ~ISceneRunner() = default;
 
 	/// <summary>各マネージャを受け取り初期化する。</summary>
+	/// <param name="spriteManager">スプライト描画のマネージャ</param>
+	/// <param name="object3DManager">3D モデル描画のマネージャ</param>
+	/// <param name="skyboxManager">Skybox 描画のマネージャ</param>
+	/// <param name="dxCore">DirectX の基盤</param>
+	/// <param name="srvManager">SRV 確保のマネージャ</param>
+	/// <param name="input">入力のマネージャ</param>
+	/// <param name="skinningComputeManager">スキニングのコンピュートシェーダのマネージャ</param>
 	virtual void Initialize(
 		SpriteManager* spriteManager,
 		Object3DManager* object3DManager,

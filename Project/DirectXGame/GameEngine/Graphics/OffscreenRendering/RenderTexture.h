@@ -17,14 +17,15 @@ class RenderTexture
 {
 public:
 	/// <summary>
-	/// 初期化
+	/// RENDER_TARGET 状態のテクスチャ（DEFAULT ヒープ、クリア値付き）と専用の RTV ヒープを作り、
+	/// SRVManager から SRV を 1 つ確保する
 	/// </summary>
 	/// <param name="dxCore">DirectXCoreへのポインタ</param>
 	/// <param name="srvManager">SRVManagerへのポインタ</param>
-	/// <param name="width">テクスチャの幅</param>
-	/// <param name="height">テクスチャの高さ</param>
+	/// <param name="width">テクスチャの幅 [px]</param>
+	/// <param name="height">テクスチャの高さ [px]</param>
 	/// <param name="format">テクスチャフォーマット（デフォルトはSRGB）</param>
-	/// <param name="clearColor">クリア時の色（RGBA、0.0〜1.0）</param>
+	/// <param name="clearColor">クリア時の色（RGBA、0.0〜1.0）。nullptr なら既定色 (0.1, 0.25, 0.5, 1)</param>
 	void Initialize(
 		DirectXCore* dxCore,
 		SRVManager* srvManager,
@@ -36,7 +37,7 @@ public:
 
 	/// <summary>
 	/// このRenderTextureへの描画を開始する
-	/// リソースバリアをRENDER_TARGETに遷移し、RTVをセットする
+	/// リソースバリアをRENDER_TARGETに遷移し、クリア色でクリアして RTV・ビューポート・シザーをセットする
 	/// </summary>
 	/// <param name="commandList">コマンドリスト</param>
 	/// <param name="dsvHandle">深度ステンシルビューのハンドル（nullptrで深度なし）</param>
@@ -53,10 +54,12 @@ public:
 	/// 大きさを変えて作り直す（描画解像度の変更用）。SRV の番号はそのまま使い回すので、
 	/// 番号を覚えている側は何もしなくてよい。GPU が古いリソースを使い終わってから呼ぶこと
 	/// </summary>
+	/// <param name="width">新しい幅 [px]（0 なら何もしない）</param>
+	/// <param name="height">新しい高さ [px]（0 なら何もしない）</param>
 	void Resize(uint32_t width, uint32_t height);
 
 	/// <summary>
-	/// 終了処理
+	/// SRV の番号を SRVManager に返し、リソースと RTV ヒープを解放する
 	/// </summary>
 	void Finalize();
 
@@ -65,46 +68,42 @@ public:
 	/// <summary>
 	/// SRVインデックスを取得（シェーダーでテクスチャとして使う際に必要）
 	/// </summary>
+	/// <returns>SRV インデックス。未割り当てなら UINT32_MAX</returns>
 	uint32_t GetSRVIndex() const { return srvIndex_; }
 
-	/// <summary>
-	/// テクスチャリソースを取得
-	/// </summary>
+	/// <summary>テクスチャリソースを返す</summary>
+	/// <returns>リソース（未作成・解放後は nullptr）</returns>
 	ID3D12Resource* GetResource() const { return resource_.Get(); }
 
-	/// <summary>
-	/// RTVハンドルを取得
-	/// </summary>
+	/// <summary>RTV の CPU ハンドルを返す</summary>
+	/// <returns>RTV ハンドル</returns>
 	D3D12_CPU_DESCRIPTOR_HANDLE GetRTVHandle() const { return rtvHandle_; }
 
-	/// <summary>
-	/// テクスチャの幅を取得
-	/// </summary>
+	/// <summary>テクスチャの幅を返す</summary>
+	/// <returns>幅 [px]</returns>
 	uint32_t GetWidth() const { return width_; }
 
-	/// <summary>
-	/// テクスチャの高さを取得
-	/// </summary>
+	/// <summary>テクスチャの高さを返す</summary>
+	/// <returns>高さ [px]</returns>
 	uint32_t GetHeight() const { return height_; }
 
-	/// <summary>
-	/// クリアカラーを取得
-	/// </summary>
+	/// <summary>クリアカラーを返す</summary>
+	/// <returns>要素 4 の配列（RGBA）</returns>
 	const float* GetClearColor() const { return clearColor_; }
 
 private:
 	/// <summary>
-	/// レンダーテクスチャ用のリソースを作成する
+	/// レンダーテクスチャ用のリソースを作成する（DEFAULT ヒープ・ALLOW_RENDER_TARGET・初期状態 RENDER_TARGET・クリア値付き）
 	/// </summary>
 	void CreateResource();
 
 	/// <summary>
-	/// RTV（レンダーターゲットビュー）を作成する
+	/// 1 枚分の RTV ヒープを作り、そこに RTV（レンダーターゲットビュー）を作成する
 	/// </summary>
 	void CreateRTV();
 
 	/// <summary>
-	/// SRV（シェーダーリソースビュー）を作成する
+	/// SRVManager から番号を確保して SRV（シェーダーリソースビュー）を作成する
 	/// </summary>
 	void CreateSRV();
 

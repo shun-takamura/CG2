@@ -32,28 +32,46 @@ public:
 		float sunScale = 1.0f;         // 閉じたコクピットに漏れる外の光の倍率（帰着の真っ暗の間だけ 0。墨の黒から途切れずにつなぐ）
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	CockpitReveal();
+	/// <summary>調整値（各段階の秒数・灯りの強さなど）を既定に戻す</summary>
 	void ResetToDefaults();
 
-	void Reset();           // 乗り込む前（Idle）に戻す
-	void StartBoot();       // 閉じ切った所から起動する
-	void StartShutdown();   // 起動し終えた所からシャットダウンする
-	void StartArrive();     // 真っ暗なコクピットから灯りを点ける（⑦。終わったら Off）
+	/// <summary>乗り込む前（Idle）に戻す</summary>
+	void Reset();
+	/// <summary>閉じ切った所から起動する</summary>
+	void StartBoot();
+	/// <summary>起動し終えた所からシャットダウンする</summary>
+	void StartShutdown();
+	/// <summary>真っ暗なコクピットから灯りを点ける（⑦。終わったら Off）</summary>
+	void StartArrive();
+	/// <summary>時刻を進め、段階の終わりで次の段階へ移る</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
 
+	/// <summary>今の段階を返す</summary>
+	/// <returns>段階</returns>
 	Phase GetPhase() const { return phase_; }
-	/// <summary>シャットダウン（または帰着）が終わった。持ち主はここから降りる</summary>
+	/// <summary>シャットダウン（または帰着）が終わったかを返す。持ち主はここから降りる</summary>
+	/// <returns>Off なら true</returns>
 	bool IsShutdownFinished() const { return phase_ == Phase::Off; }
+	/// <summary>今の段階と時刻から見え方を求める</summary>
+	/// <returns>灯り・外の透け具合・UI の出・表示板などの見え方</returns>
 	State Evaluate() const;
 
-	/// <summary>
-	/// 蛍光灯が点くようなチカチカ（0..1）。t &lt; 0 は 0、seconds を過ぎたら 1。
-	/// コクピットの UI・表示板の切り替わりでも使う
-	/// </summary>
+	/// <summary>蛍光灯が点くようなチカチカを求める（コクピットの UI・表示板の切り替わりでも使う）</summary>
+	/// <param name="t">点き始めてからの経過 [秒]</param>
+	/// <param name="seconds">点き切るまでの秒数 [秒]</param>
+	/// <returns>0〜1。t &lt; 0 は 0、seconds を過ぎたら 1</returns>
 	static float Flicker(float t, float seconds);
 
+	/// <summary>調整値（Hub.json の "cockpitReveal"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:

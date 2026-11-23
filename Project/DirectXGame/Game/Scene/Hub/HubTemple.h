@@ -29,39 +29,57 @@ public:
 	HubTemple();
 	~HubTemple();
 
+	/// <summary>殻・時計の門と針と歯車・天球儀の輪・扉を読み込み、IBL・床の映り込み・鏡の床を用意する</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, SRVManager* srvManager);
 	/// <summary>輪・針・歯車を回し、床の時間を進める</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
 
 	/// <summary>床に映す物を足す（機体など）</summary>
+	/// <param name="target">映す物</param>
 	void AddReflectionTarget(Object3DInstance* target);
 	/// <summary>床に映す物から外す（コクピットの中で機体の本体を隠している間など）</summary>
+	/// <param name="target">外す物</param>
 	void RemoveReflectionTarget(Object3DInstance* target);
 	/// <summary>
 	/// アニメーションする物（機体の本体＝自機の新モデル）を床に映す。外す口は無いので、隠すときは
 	/// AnimatedObject3DInstance::SetVisible(false)（映り込みの描画も表示フラグを見る）
 	/// </summary>
+	/// <param name="target">映す物</param>
 	void AddReflectionTarget(AnimatedObject3DInstance* target);
-	/// <summary>
-	/// 床の反射 RT を描く。シーン RT を貼る前に呼ぶ（呼んだ後は RTV/DSV が反射 RT のままなので貼り直すこと）
-	/// </summary>
+	/// <summary>床の反射 RT を描く。シーン RT を貼る前に呼ぶ（呼んだ後は RTV/DSV が反射 RT のままなので貼り直すこと）</summary>
+	/// <param name="camera">シーンのカメラ</param>
 	void RenderReflection(const Camera& camera);
-	/// <summary>神殿の不透明物（Object3D の DrawSetting・BindLights の後）</summary>
+	/// <summary>神殿の不透明物を描く（Object3D の DrawSetting・BindLights の後）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	/// <summary>鏡の床。不透明物を描いた後に呼ぶ（ルートシグネチャを替えるので、後で Object3D を描くなら DrawSetting し直す）</summary>
+	/// <summary>鏡の床を描く。不透明物を描いた後に呼ぶ（ルートシグネチャを替えるので、後で Object3D を描くなら DrawSetting し直す）</summary>
+	/// <param name="camera">シーンのカメラ</param>
 	void DrawFloor(const Camera& camera);
 
 	/// <summary>
 	/// 床に八角形の穴を開ける / 閉じる（③ のリフト。16_StageStart.md §2）。
-	/// 寸法は StageStartGeometry（halfWidth・chamfer）。リフトが床の高さにある間は開けないこと（機体の映り込みが消える）
+	/// リフトが床の高さにある間は開けないこと（機体の映り込みが消える）
 	/// </summary>
+	/// <param name="open">true で開ける</param>
+	/// <param name="halfWidth">八角形の半幅 [m]（StageStartGeometry）</param>
+	/// <param name="chamfer">八角形の角の面取り [m]（StageStartGeometry）</param>
 	void SetFloorHole(bool open, float halfWidth, float chamfer);
 
-	/// <summary>神殿の IBL（無ければタイトルの空の IBL）。Object3DManager::SetEnvironmentTexture に渡す</summary>
+	/// <summary>神殿の IBL のパスを返す（無ければタイトルの空の IBL）。Object3DManager::SetEnvironmentTexture に渡す</summary>
+	/// <returns>パス</returns>
 	const std::string& GetIblPath() const { return iblPath_; }
 
+	/// <summary>調整値（Hub.json の "temple"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
@@ -82,7 +100,9 @@ private:
 		float angle = 0.0f;
 	};
 
+	/// <summary>タイトルの扉を表の面を神殿の中へ向けて置き、共有のマテリアルからタイトル用の値（ディゾルブ・雲の映り込み・環境光）を外す</summary>
 	void ApplyDoor();
+	/// <summary>床の調整値（フレネルの F0・反射の強さ・環境光）を鏡の床へ反映する</summary>
 	void ApplyFloorParams();
 
 	std::unique_ptr<Object3DInstance> shell_;

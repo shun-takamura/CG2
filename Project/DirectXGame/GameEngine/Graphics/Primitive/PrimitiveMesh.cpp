@@ -10,6 +10,13 @@
 #include <unordered_map>
 
 namespace {
+    // カメラとの水平距離がこれ未満なら Z+ を向ける（Y 軸ビルボード）
+    constexpr float kMinHorizontalLength = 1e-5f;
+    // ディゾルブの縁の既定の太さ（マスク値での幅）
+    constexpr float kDefaultDissolveEdgeWidth = 0.05f;
+    // ディゾルブの縁の既定の発光色の G・B（R・A は 1）
+    constexpr float kDefaultDissolveEdgeColorG = 0.4f;
+    constexpr float kDefaultDissolveEdgeColorB = 0.1f;
     // InitializeShared の形ごとの頂点・インデックス（ComPtr なので各メッシュと共有で持つ）
     struct SharedGeometry {
         Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
@@ -19,6 +26,8 @@ namespace {
         uint32_t vertexCount = 0;
         uint32_t indexCount = 0;
     };
+    /// <summary>InitializeShared の形ごとの共有バッファを持つ表を返す（関数内 static）</summary>
+    /// <returns>形のキー → 共有ジオメトリ</returns>
     std::unordered_map<std::string, SharedGeometry>& SharedGeometryCache() {
         static std::unordered_map<std::string, SharedGeometry> cache;
         return cache;
@@ -197,7 +206,7 @@ Matrix4x4 PrimitiveMesh::BuildWorldMatrixFromMatrices(const Matrix4x4& viewMatri
         float fx = cameraPos.x - transform_.translate.x;
         float fz = cameraPos.z - transform_.translate.z;
         float len = std::sqrt(fx * fx + fz * fz);
-        if (len < 1e-5f) { fx = 0.0f; fz = 1.0f; }
+        if (len < kMinHorizontalLength) { fx = 0.0f; fz = 1.0f; }
         else             { fx /= len; fz /= len; }
         billboardMat.m[0][0] = fz;   billboardMat.m[0][1] = 0.0f; billboardMat.m[0][2] = -fx;
         billboardMat.m[1][0] = 0.0f; billboardMat.m[1][1] = 1.0f; billboardMat.m[1][2] = 0.0f;
@@ -236,7 +245,7 @@ Matrix4x4 PrimitiveMesh::BuildWorldMatrix(Camera* camera) const {
         float fx = camPos.x - transform_.translate.x;
         float fz = camPos.z - transform_.translate.z;
         float len = std::sqrt(fx * fx + fz * fz);
-        if (len < 1e-5f) { fx = 0.0f; fz = 1.0f; }
+        if (len < kMinHorizontalLength) { fx = 0.0f; fz = 1.0f; }
         else             { fx /= len; fz /= len; }
         billboardMat.m[0][0] = fz;   billboardMat.m[0][1] = 0.0f; billboardMat.m[0][2] = -fx;
         billboardMat.m[1][0] = 0.0f; billboardMat.m[1][1] = 1.0f; billboardMat.m[1][2] = 0.0f;
@@ -262,24 +271,24 @@ void PrimitiveMesh::Draw() {
 
     // [0] VS: TransformationMatrix (b0) — メイン用CB
     commandList->SetGraphicsRootConstantBufferView(
-        0, transformResource_->GetGPUVirtualAddress());
+        PrimitivePipeline::kRootTransform, transformResource_->GetGPUVirtualAddress());
 
     // [1] PS: Material (b0)
     commandList->SetGraphicsRootConstantBufferView(
-        1, materialResource_->GetGPUVirtualAddress());
+        PrimitivePipeline::kRootMaterial, materialResource_->GetGPUVirtualAddress());
 
     // [2] PS: テクスチャ（設定されている場合のみ）
     if (hasTexture_) {
         SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
         commandList->SetGraphicsRootDescriptorTable(
-            2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
+            PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
     }
 
     // [3] PS: ディゾルブマスク（t1）。未設定時は white1x1 を必ずバインド。
     {
         SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
         uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
-        commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+        commandList->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(maskIdx));
     }
 
     // 描画
@@ -301,9 +310,9 @@ void PrimitiveMesh::DrawIdPass(uint32_t objectId) {
     cmd->IASetIndexBuffer(&indexBufferView_);
 
     // VS CBV b0 = TransformationMatrix
-    cmd->SetGraphicsRootConstantBufferView(0, transformResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kIdRootTransform, transformResource_->GetGPUVirtualAddress());
     // PS Root Constant b0 = objectId
-    cmd->SetGraphicsRoot32BitConstant(1, objectId, 0);
+    cmd->SetGraphicsRoot32BitConstant(PrimitivePipeline::kIdRootObjectId, objectId, 0);
 
     PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -324,16 +333,16 @@ void PrimitiveMesh::DrawDistortionPass(uint32_t normalMapSrvIndex) {
     cmd->IASetIndexBuffer(&indexBufferView_);
 
     // [0] VS: TransformationMatrix (b0) — メイン用CBを共用
-    cmd->SetGraphicsRootConstantBufferView(0, transformResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootTransform, transformResource_->GetGPUVirtualAddress());
 
     // [1] PS: Material (b0) — Distortion 専用 CB
-    cmd->SetGraphicsRootConstantBufferView(1, distortionMaterialResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootMaterial, distortionMaterialResource_->GetGPUVirtualAddress());
 
     // [2] PS: Texture (t0) — ノーマルマップ
     SRVManager* srvManager = pp->GetSRVManager();
-    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
     // [3] PS: t1 — Distortion パスでは未使用だがルートシグネチャ上必須。white1x1 をバインド。
-    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
 
     PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -354,14 +363,14 @@ void PrimitiveMesh::DrawDistortionPassPreview(uint32_t normalMapSrvIndex) {
     cmd->IASetIndexBuffer(&indexBufferView_);
 
     // VS CBV = プレビュー用 WVP
-    cmd->SetGraphicsRootConstantBufferView(0, transformPreviewResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootTransform, transformPreviewResource_->GetGPUVirtualAddress());
     // PS CBV = Distortion 専用 Material
-    cmd->SetGraphicsRootConstantBufferView(1, distortionMaterialResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootMaterial, distortionMaterialResource_->GetGPUVirtualAddress());
     // PS SRV = ノーマルマップ
     SRVManager* srvManager = pp->GetSRVManager();
-    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(normalMapSrvIndex));
     // t1（未使用だが必須）→ white1x1
-    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(whiteSrvIndex_));
 
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
@@ -396,11 +405,11 @@ void PrimitiveMesh::DrawBloomPassImpl(ID3D12Resource* transformResource, float i
     cmd->IASetVertexBuffers(0, 1, &vertexBufferView_);
     cmd->IASetIndexBuffer(&indexBufferView_);
 
-    cmd->SetGraphicsRootConstantBufferView(0, transformResource->GetGPUVirtualAddress());
-    cmd->SetGraphicsRootConstantBufferView(1, bloomMaterialResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootTransform, transformResource->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootMaterial, bloomMaterialResource_->GetGPUVirtualAddress());
     SRVManager* srvManager = pp->GetSRVManager();
-    cmd->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(hasTexture_ ? textureSrvIndex_ : whiteSrvIndex_));
-    cmd->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(hasTexture_ ? textureSrvIndex_ : whiteSrvIndex_));
+    cmd->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_));
 
     PEPPER_COUNT("DrawCall");
     cmd->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -420,22 +429,22 @@ void PrimitiveMesh::DrawPreview() {
 
     // [0] VS: TransformationMatrix (b0) — プレビュー用CB
     commandList->SetGraphicsRootConstantBufferView(
-        0, transformPreviewResource_->GetGPUVirtualAddress());
+        PrimitivePipeline::kRootTransform, transformPreviewResource_->GetGPUVirtualAddress());
 
     commandList->SetGraphicsRootConstantBufferView(
-        1, materialResource_->GetGPUVirtualAddress());
+        PrimitivePipeline::kRootMaterial, materialResource_->GetGPUVirtualAddress());
 
     if (hasTexture_) {
         SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
         commandList->SetGraphicsRootDescriptorTable(
-            2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
+            PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
     }
 
     // [3] PS: ディゾルブマスク（t1）。未設定時は white1x1 を必ずバインド。
     {
         SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
         uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
-        commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+        commandList->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(maskIdx));
     }
 
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -457,14 +466,14 @@ void PrimitiveMesh::DrawReflection(const Matrix4x4& mirroredView, const Matrix4x
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
     commandList->IASetIndexBuffer(&indexBufferView_);
 
-    commandList->SetGraphicsRootConstantBufferView(0, transformReflectionResource_->GetGPUVirtualAddress());
-    commandList->SetGraphicsRootConstantBufferView(1, materialResource_->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootTransform, transformReflectionResource_->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(PrimitivePipeline::kRootMaterial, materialResource_->GetGPUVirtualAddress());
     SRVManager* srvManager = PrimitivePipeline::GetInstance()->GetSRVManager();
     if (hasTexture_) {
-        commandList->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
+        commandList->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootTexture, srvManager->GetGPUDescriptorHandle(textureSrvIndex_));
     }
     const uint32_t maskIdx = hasDissolveMask_ ? dissolveMaskSrvIndex_ : whiteSrvIndex_;
-    commandList->SetGraphicsRootDescriptorTable(3, srvManager->GetGPUDescriptorHandle(maskIdx));
+    commandList->SetGraphicsRootDescriptorTable(PrimitivePipeline::kRootDissolveMask, srvManager->GetGPUDescriptorHandle(maskIdx));
 
     PEPPER_COUNT("DrawCall");
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
@@ -585,8 +594,8 @@ void PrimitiveMesh::CreateMaterialResource() {
     materialData_->dissolveEnable = 0;
     materialData_->dissolveThreshold = 0.0f;
     materialData_->dissolveEdgeEnable = 0;
-    materialData_->dissolveEdgeWidth = 0.05f;
-    materialData_->dissolveEdgeColor = { 1.0f, 0.4f, 0.1f, 1.0f };
+    materialData_->dissolveEdgeWidth = kDefaultDissolveEdgeWidth;
+    materialData_->dissolveEdgeColor = { 1.0f, kDefaultDissolveEdgeColorG, kDefaultDissolveEdgeColorB, 1.0f };
 
     // t1 既定マスク（white1x1）を確保。マスク未設定でも t1 は常にバインドする必要があるため。
     TextureManager::GetInstance()->LoadTexture("Resources/Textures/white1x1.dds");

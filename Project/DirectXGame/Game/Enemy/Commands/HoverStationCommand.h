@@ -1,6 +1,6 @@
 #pragma once
 #include <cmath>
-#include "Enemy/IEnemyCommand.h"
+#include "Enemy/Commands/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
 #include "Scene/GameScene.h"
@@ -16,7 +16,10 @@
 /// </summary>
 class HoverStationCommand : public IEnemyCommand {
 public:
-	void OnEnter(IImGuiEditable*, EnemyContext& ctx) override {
+	/// <summary>スプライン追従を切り離し、停止時間を ctx から受け取って飛来から始める</summary>
+	/// <param name="entity">動かす敵（このコマンドでは使わない）</param>
+	/// <param name="ctx">敵の入力と結果の書き込み先</param>
+	void OnEnter([[maybe_unused]] IImGuiEditable* entity, EnemyContext& ctx) override {
 		arrived_         = false;
 		holdElapsed_     = 0.0f;
 		holdDuration_    = ctx.hoverHoldDuration;
@@ -26,6 +29,10 @@ public:
 		ctx.billboardToPlayer = true;
 	}
 
+	/// <summary>カメラ相対の停止点へ飛来し、着いたらそこにロックして射撃間隔ごとに自機を撃つ</summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="entity">敵</param>
+	/// <param name="ctx">敵の入力と結果の書き込み先</param>
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
 		holdDuration_ = ctx.hoverHoldDuration;
 		ctx.useFreeVelocity   = false;
@@ -47,7 +54,7 @@ public:
 			const float dy = target.y - pos->y;
 			const float dz = target.z - pos->z;
 			const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-			if (dist <= 0.25f) {
+			if (dist <= kArriveDistance) {
 				arrived_ = true;
 				*pos = target;
 			} else {
@@ -75,7 +82,7 @@ public:
 						if (ppos) {
 							Vector3 d{ ppos->x - pos->x, ppos->y - pos->y, ppos->z - pos->z };
 							const float dlen = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-							if (dlen > 0.01f) {
+							if (dlen > kNearZeroLength) {
 								d = { d.x / dlen, d.y / dlen, d.z / dlen };
 								ctx.scene->SpawnEnemyBullet(*pos, d, -1.0f, -1.0f, "EnemyBullet", ctx.player);
 							}
@@ -86,16 +93,24 @@ public:
 		}
 	}
 
+	/// <summary>停止して攻撃する時間が終わったか</summary>
+	/// <returns>停止点に着いてから hoverHoldDuration が過ぎたら true</returns>
 	bool IsFinished() const override { return arrived_ && holdElapsed_ >= holdDuration_; }
 
 private:
+	// 停止位置までこの距離に入ったら到着とみなす [m]
+	static constexpr float kArriveDistance = 0.25f;
+	// これより自機に近いときは撃たない（向きが決まらない）[m]
+	static constexpr float kNearZeroLength = 0.01f;
 	bool  arrived_      = false;
 	float holdElapsed_  = 0.0f;
 	float holdDuration_ = 6.0f;
 	int   lastShotIdx_  = -1;
 
-	// カメラローカルオフセット（x=右 / y=上 / z=前方深度）をワールド座標へ。
-	// ワールド行列の各行が正規直交基底（右/上/前）。
+	/// <summary>カメラローカルのオフセットをワールド座標へ移す（ワールド行列の各行を右/上/前の正規直交基底として使う）</summary>
+	/// <param name="cam">基準のカメラ</param>
+	/// <param name="off">オフセット（x=右 / y=上 / z=前方深度）</param>
+	/// <returns>ワールド位置</returns>
 	static Vector3 CameraLocalToWorld(Camera* cam, const Vector3& off) {
 		const Matrix4x4& w = cam->GetWorldMatrix();
 		const Vector3 camPos = cam->GetTranslate();

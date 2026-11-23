@@ -7,6 +7,17 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+    // ResetParams で戻す既定値（強さ・暗くなり方の指数・広がりの倍率）
+    constexpr float kDefaultIntensity = 0.5f;
+    constexpr float kDefaultPower = 0.8f;
+    constexpr float kDefaultScale = 16.0f;
+    // SetPower で受け付ける指数の範囲
+    constexpr float kMinPower = 0.1f;
+    constexpr float kMaxPower = 3.0f;
+    // SetScale で受け付ける倍率の上限（下限は 1）
+    constexpr float kMaxScale = 50.0f;
+}
 
 void VignetteEffect::Initialize(
     DirectXCore* dxCore,
@@ -57,9 +68,9 @@ void VignetteEffect::ShowImGui() {
 }
 
 void VignetteEffect::ResetParams() {
-    intensity_ = 0.5f;
-    power_ = 0.8f;
-    scale_ = 16.0f;
+    intensity_ = kDefaultIntensity;
+    power_ = kDefaultPower;
+    scale_ = kDefaultScale;
 }
 
 void VignetteEffect::SetIntensity(float intensity) {
@@ -68,10 +79,10 @@ void VignetteEffect::SetIntensity(float intensity) {
 
 void VignetteEffect::SetPower(float power)
 {
-    power_= std::clamp(power, 0.1f, 3.0f);
+    power_= std::clamp(power, kMinPower, kMaxPower);
 }
 
 void VignetteEffect::SetScale(float scale)
 {
-    scale_ = std::clamp(scale, 1.0f, 50.0f);
+    scale_ = std::clamp(scale, 1.0f, kMaxScale);
 }

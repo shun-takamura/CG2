@@ -22,21 +22,84 @@ namespace {
 	constexpr const char* kArmDebrisPrefab = "boss_arm_debris";
 	constexpr const char* kBreakEffect = "Explosion_00";
 
+	// 左右の数（腕・脚）
+	constexpr int kSideCount = 2;
+	// これより短いベクトル・水平成分は長さ 0 とみなす
+	constexpr float kNearZeroLength = 1e-6f;
+	// 回転軸の長さがこれより短いときは X 軸を使う
+	constexpr float kNearZeroAxisLength = 1e-5f;
+	// これより短い寄る時間は即座に寄せる [秒]
+	constexpr float kMinSmoothTime = 1e-4f;
+	// これより短い経過時間では歩きを更新しない [秒]
+	constexpr float kMinWalkDeltaTime = 1e-5f;
+	// 胴の向きが本体の向きへ寄る時間 [秒]
+	constexpr float kBodyYawSmoothTime = 0.08f;
+	// 接地とみなす高さの余裕 [m]
+	constexpr float kGroundedTolerance = 0.3f;
+	// 足踏みが最大になる移動の速さ [m/s]
+	constexpr float kFullWalkSpeed = 6.0f;
+	// 足踏みの強さが目標へ寄る時間 [秒]
+	constexpr float kWalkAmountSmoothTime = 0.15f;
+	// 歩幅の下限 [m]（0 割りを防ぐ）
+	constexpr float kMinStrideLength = 0.1f;
+	// 待機中の腕の揺れの速さ [rad/秒]
+	constexpr float kIdleSwaySpeed = 1.7f;
+	// 待機中の腕の揺れの左右のずれ [rad]
+	constexpr float kIdleSwaySidePhase = 1.3f;
+	// 待機中に腕が構えへ寄る時間 [秒]
+	constexpr float kIdleArmSmoothTime = 0.2f;
+	// 腕が壊れたときに弾く向きの前方成分（外向き 1 に対して）
+	constexpr float kBreakKickForward = 0.3f;
+	// 腕が壊れたときに破片を弾く水平の速さ [m/s]
+	constexpr float kBreakKickHorizontalSpeed = 5.0f;
+	// 腕が壊れたときに破片を弾く上向きの速さ [m/s]
+	constexpr float kBreakKickUpSpeed = 8.0f;
+	// 拳の破片の弾く水平の速さの倍率（腕の破片に対して）
+	constexpr float kFistKickHorizontalScale = 1.2f;
+	// 拳の破片の弾く上向きの速さの倍率（腕の破片に対して）
+	constexpr float kFistKickUpScale = 0.9f;
+	// 撃破で脚が破片になるときの上向きの速さ [m/s]
+	constexpr float kLegDebrisUpSpeed = 4.0f;
+	// 破片の回転の速さ [rad/秒]
+	constexpr float kDebrisSpinSpeed = 6.0f;
+	// 破片が止まる床の高さ（足場からの高さ）[m]
+	constexpr float kDebrisFloorOffset = 0.5f;
+	// 破片が床で跳ね返るときの縦の速さの倍率
+	constexpr float kDebrisBounceRestitution = 0.25f;
+	// 破片が床に当たったときの横の速さの倍率
+	constexpr float kDebrisBounceFriction = 0.6f;
+	// 破片が床に当たったときの回転の速さの倍率
+	constexpr float kDebrisBounceSpinDamping = 0.5f;
+
+	/// <summary>左右の符号</summary>
+	/// <param name="side">左右</param>
+	/// <returns>右なら +1、左なら −1</returns>
 	float SideSign(BossRig::Side side) { return side == BossRig::Side::Right ? 1.0f : -1.0f; }
 
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <returns>単位ベクトル。長さがほぼ 0 なら真下 (0, −1, 0)</returns>
 	Vector3 SafeNormalize(const Vector3& v) {
 		const float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-		return l > 1e-6f ? Vector3{ v.x / l, v.y / l, v.z / l } : Vector3{ 0.0f, -1.0f, 0.0f };
+		return l > kNearZeroLength ? Vector3{ v.x / l, v.y / l, v.z / l } : Vector3{ 0.0f, -1.0f, 0.0f };
 	}
 
+	/// <summary>指数で目標へ寄せる時の、このフレームの補間率を求める</summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="smoothTime">寄る時間の目安 [秒]（0 に近ければ即座に寄る）</param>
+	/// <returns>補間率（0〜1）</returns>
 	float ExpBlend(float dt, float smoothTime) {
-		return smoothTime > 1e-4f ? 1.0f - std::exp(-dt / smoothTime) : 1.0f;
+		return smoothTime > kMinSmoothTime ? 1.0f - std::exp(-dt / smoothTime) : 1.0f;
 	}
 
-	// 回転を当てる。当たり判定（CollisionGeometry）はオイラー角を MakeRotateMatrix（Rz·Ry·Rx）で組み、
-	// ローカル +Y が手足の向きになる。描画は組み方が違い（MakeAffineMatrix のオイラーは Rx·Ry·Rz、
-	// QuaternionFromEuler は転置になる）、ピッチとヨーが混ざると見た目だけ向きがずれる（メモ「回転順の罠」）。
-	// 描画には「+Y を手足の向きへ回す軸と角度」のクォータニオンを渡す（実機で確認、2026-11-10）
+	/// <summary>
+	/// 実体に回転を当てる。当たり判定（CollisionGeometry）はオイラー角を MakeRotateMatrix（Rz·Ry·Rx）で組み、
+	/// ローカル +Y が手足の向きになる。描画は組み方が違い（MakeAffineMatrix のオイラーは Rx·Ry·Rz、
+	/// QuaternionFromEuler は転置になる）、ピッチとヨーが混ざると見た目だけ向きがずれる（メモ「回転順の罠」）。
+	/// 描画には「+Y を手足の向きへ回す軸と角度」のクォータニオンを渡す（実機で確認、2026-11-10）
+	/// </summary>
+	/// <param name="e">回転を当てる実体（nullptr なら何もしない）</param>
+	/// <param name="rot">当たり判定用のオイラー角 [ラジアン]</param>
 	void ApplyRotate(IImGuiEditable* e, const Vector3& rot) {
 		if (!e) return;
 		e->SetRotate(rot);
@@ -47,7 +110,7 @@ namespace {
 		// 軸 = Y × dir、角度 = acos(dir.y)
 		Vector3 axis{ dir.z, 0.0f, -dir.x };
 		const float len = std::sqrt(axis.x * axis.x + axis.z * axis.z);
-		if (len < 1e-5f) {
+		if (len < kNearZeroAxisLength) {
 			axis = { 1.0f, 0.0f, 0.0f };
 		} else {
 			axis.x /= len;
@@ -57,9 +120,12 @@ namespace {
 		prim->GetMesh().SetRotateQuaternion(MakeRotateAxisAngleQuaternion(axis, angle));
 	}
 
+	/// <summary>角度を −π〜π に収める</summary>
+	/// <param name="a">角度 [ラジアン]</param>
+	/// <returns>収めた角度 [ラジアン]</returns>
 	float WrapAngle(float a) {
-		while (a > 3.14159265f) a -= 6.28318531f;
-		while (a < -3.14159265f) a += 6.28318531f;
+		while (a > kPi) a -= kTwoPi;
+		while (a < -kPi) a += kTwoPi;
 		return a;
 	}
 }
@@ -82,7 +148,7 @@ void BossRig::Spawn(IImGuiEditable* body) {
 	walkPhase_ = 0.0f;
 	walkAmount_ = 0.0f;
 
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		Arm& a = arms_[i];
 		a = Arm{};
 		a.arm = host_->SpawnRigPiece(kArmPrefab, *bp);
@@ -92,6 +158,10 @@ void BossRig::Spawn(IImGuiEditable* body) {
 		l = Leg{};
 		l.leg = host_->SpawnRigPiece(kLegPrefab, *bp);
 		if (l.leg) l.lastHp = Gameplay::Of(l.leg).GetHP().currentHP;
+		// 部位のダメージは本体へ流れるので、多段ヒットの重複判定は本体単位で数える
+		for (IImGuiEditable* piece : { a.arm, a.fist, l.leg }) {
+			if (piece) Gameplay::Of(piece).SetDamageOwner(body_);
+		}
 	}
 	Update(0.0f);
 }
@@ -145,7 +215,7 @@ Vector3 BossRig::RotateYAxisTo(const Vector3& dir) {
 	// MakeRotateMatrix(Rz·Ry·Rx) の 2 行目（ローカル +Y）は x = 0 のとき (−sin z·cos y, cos z, sin z·sin y)
 	const Vector3 d = SafeNormalize(dir);
 	const float z = std::acos(std::clamp(d.y, -1.0f, 1.0f));
-	const float y = (std::abs(d.x) + std::abs(d.z) > 1e-6f) ? std::atan2(d.z, -d.x) : 0.0f;
+	const float y = (std::abs(d.x) + std::abs(d.z) > kNearZeroLength) ? std::atan2(d.z, -d.x) : 0.0f;
 	return { 0.0f, y, z };
 }
 
@@ -200,36 +270,36 @@ void BossRig::Update(float dt) {
 	// ----- 胴の位置・向き・歩き -----
 	bodyPos_ = *bp;
 	if (const Vector3* r = body_->GetEditableRotate()) {
-		bodyYaw_ += WrapAngle(r->y - bodyYaw_) * ExpBlend(dt, 0.08f);
+		bodyYaw_ += WrapAngle(r->y - bodyYaw_) * ExpBlend(dt, kBodyYawSmoothTime);
 	}
-	if (hasPrevBody_ && dt > 1e-5f) {
+	if (hasPrevBody_ && dt > kMinWalkDeltaTime) {
 		const float dx = bodyPos_.x - prevBodyPos_.x;
 		const float dz = bodyPos_.z - prevBodyPos_.z;
 		const float dist = std::sqrt(dx * dx + dz * dz);
-		const bool grounded = bodyPos_.y <= groundY_ + bodyHeight_ + 0.3f;
-		const float target = grounded ? std::clamp(dist / dt / 6.0f, 0.0f, 1.0f) : 0.0f;
-		walkAmount_ += (target - walkAmount_) * ExpBlend(dt, 0.15f);
-		walkPhase_ += dist / (std::max)(strideLength_, 0.1f) * 6.28318531f;
+		const bool grounded = bodyPos_.y <= groundY_ + bodyHeight_ + kGroundedTolerance;
+		const float target = grounded ? std::clamp(dist / dt / kFullWalkSpeed, 0.0f, 1.0f) : 0.0f;
+		walkAmount_ += (target - walkAmount_) * ExpBlend(dt, kWalkAmountSmoothTime);
+		walkPhase_ += dist / (std::max)(strideLength_, kMinStrideLength) * kTwoPi;
 	}
 	prevBodyPos_ = bodyPos_;
 	hasPrevBody_ = true;
 
 	// ----- 部位のダメージを本体へ・腕が壊れたか -----
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		Arm& a = arms_[i];
 		if (a.arm && !a.broken && ForwardDamage(a.arm, a.lastHp, false) <= 0) BreakArm(static_cast<Side>(i));
 		if (legs_[i].leg) ForwardDamage(legs_[i].leg, legs_[i].lastHp, true);
 	}
 
 	// ----- 腕 -----
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		const Side side = static_cast<Side>(i);
 		Arm& a = arms_[i];
 		if (!a.arm) continue;
 		if (!a.targetSet) {
-			a.targetRaise = idleRaise_ + idleSwayAmp_ * std::sin(time_ * 1.7f + static_cast<float>(i) * 1.3f);
+			a.targetRaise = idleRaise_ + idleSwayAmp_ * std::sin(time_ * kIdleSwaySpeed + static_cast<float>(i) * kIdleSwaySidePhase);
 			a.targetSwing = 0.0f;
-			a.smoothTime = 0.2f;
+			a.smoothTime = kIdleArmSmoothTime;
 		}
 		const float k = ExpBlend(dt, a.smoothTime);
 		a.raise += (a.targetRaise - a.raise) * k;
@@ -252,7 +322,7 @@ void BossRig::Update(float dt) {
 	}
 
 	// ----- 脚（足踏み）-----
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		Leg& l = legs_[i];
 		if (!l.leg) continue;
 		const float s = SideSign(static_cast<Side>(i));
@@ -280,10 +350,10 @@ void BossRig::BreakArm(Side side) {
 	SoundManager::GetInstance()->Play2DSound("se_explode");
 
 	// 外へ弾かれて落ちる破片（見た目だけ）に置き換える
-	const Vector3 out = ToWorldDir({ SideSign(side), 0.0f, 0.3f });
-	const Vector3 kick{ out.x * 5.0f, 8.0f, out.z * 5.0f };
+	const Vector3 out = ToWorldDir({ SideSign(side), 0.0f, kBreakKickForward });
+	const Vector3 kick{ out.x * kBreakKickHorizontalSpeed, kBreakKickUpSpeed, out.z * kBreakKickHorizontalSpeed };
 	SpawnDebris(kArmDebrisPrefab, armPos, armRot, kick);
-	SpawnDebris(kFistPrefab, fist, armRot, { kick.x * 1.2f, kick.y * 0.9f, kick.z * 1.2f });
+	SpawnDebris(kFistPrefab, fist, armRot, { kick.x * kFistKickHorizontalScale, kick.y * kFistKickUpScale, kick.z * kFistKickHorizontalScale });
 
 	if (host_) {
 		host_->DestroyRigPiece(a.arm);
@@ -295,7 +365,7 @@ void BossRig::BreakArm(Side side) {
 }
 
 void BossRig::BreakAll() {
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		if (arms_[i].arm && !arms_[i].broken) {
 			BreakArm(static_cast<Side>(i));
 		}
@@ -304,7 +374,7 @@ void BossRig::BreakAll() {
 			Vector3 pos = bodyPos_, rot{};
 			if (const Vector3* t = l.leg->GetEditableTranslate()) pos = *t;
 			if (const Vector3* r = l.leg->GetEditableRotate()) rot = *r;
-			SpawnDebris(kArmDebrisPrefab, pos, rot, { 0.0f, 4.0f, 0.0f });
+			SpawnDebris(kArmDebrisPrefab, pos, rot, { 0.0f, kLegDebrisUpSpeed, 0.0f });
 			if (host_) host_->DestroyRigPiece(l.leg);
 			l.leg = nullptr;
 		}
@@ -322,7 +392,7 @@ void BossRig::SpawnDebris(const std::string& prefab, const Vector3& pos, const V
 	Debris d;
 	d.entity = e;
 	d.velocity = kick;
-	d.spin = 6.0f;
+	d.spin = kDebrisSpinSpeed;
 	d.spinAngle = rotate.x;
 	d.yaw = rotate.y;
 	d.life = debrisLife_;
@@ -341,13 +411,13 @@ void BossRig::UpdateDebris(float dt) {
 		t->y += d.velocity.y * dt;
 		t->z += d.velocity.z * dt;
 		// 足場の上で止まる（転がるように少しだけ滑る）
-		const float floorY = groundY_ + 0.5f;
+		const float floorY = groundY_ + kDebrisFloorOffset;
 		if (t->y < floorY) {
 			t->y = floorY;
-			if (d.velocity.y < 0.0f) d.velocity.y = -d.velocity.y * 0.25f;
-			d.velocity.x *= 0.6f;
-			d.velocity.z *= 0.6f;
-			d.spin *= 0.5f;
+			if (d.velocity.y < 0.0f) d.velocity.y = -d.velocity.y * kDebrisBounceRestitution;
+			d.velocity.x *= kDebrisBounceFriction;
+			d.velocity.z *= kDebrisBounceFriction;
+			d.spin *= kDebrisBounceSpinDamping;
 		}
 		d.spinAngle += d.spin * dt;
 		if (const Vector3* r = d.entity->GetEditableRotate()) {
@@ -365,7 +435,7 @@ void BossRig::UpdateDebris(float dt) {
 
 void BossRig::OnImGui() {
 #ifdef _DEBUG
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < kSideCount; ++i) {
 		const Arm& a = arms_[i];
 		const char* name = i == 0 ? "Left Arm" : "Right Arm";
 		if (a.arm) {

@@ -7,23 +7,36 @@
 #pragma comment(lib, "dbghelp.lib")
 
 namespace {
+    // ファイル名用の時刻の文字列のバッファの大きさ [byte]
+    constexpr int kTimeStampBufferSize = 32;
+    // シンボル名を受け取るバッファの大きさ [byte] と、そこに入れる名前の最大の長さ
+    constexpr int kSymbolNameBufferSize = 256;
+    constexpr int kMaxSymbolNameLength = 255;
+    // 書き出すスタックの最大の段数
+    constexpr int kMaxStackFrames = 64;
+
     // ダンプ出力先（SetDumpDir でセッションフォルダをキャッシュ）。
     // 起動時に設定し、クラッシュ時に読むだけ＝set-once 運用なので生グローバルで持つ。
     std::string g_dumpDir;
 
-    // YYYYMMDD_HHMMSS（フォルダ未確定時のフォールバック名用）
+    /// <summary>今の時刻をファイル名用の文字列にする（フォルダ未確定時のフォールバック名用）</summary>
+    /// <returns>YYYYMMDD_HHMMSS</returns>
     std::string TimeStampForFile() {
         SYSTEMTIME st;
         GetLocalTime(&st);
-        char buf[32];
+        char buf[kTimeStampBufferSize];
         wsprintfA(buf, "%04d%02d%02d_%02d%02d%02d",
             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
         return buf;
     }
 
-    // クラッシュしたスレッドのスタックを .pdb でシンボル化して
-    // 関数名 + file:line のテキストに書き出す（SUNDAY のローカルLLM原因究明用）。
-    // dbghelp は CreateFile/StackWalk64 を使うため、クラッシュ時でも比較的安全。
+    /// <summary>
+    /// クラッシュしたスレッドのスタックを .pdb でシンボル化して
+    /// 関数名 + file:line のテキストに書き出す（SUNDAY のローカルLLM原因究明用）。
+    /// dbghelp は CreateFile/StackWalk64 を使うため、クラッシュ時でも比較的安全。ファイルを開けなければ何もしない
+    /// </summary>
+    /// <param name="ep">例外の情報</param>
+    /// <param name="path">書き出すパス</param>
     void WriteStackTrace(EXCEPTION_POINTERS* ep, const std::string& path) {
         FILE* fp = nullptr;
         if (fopen_s(&fp, path.c_str(), "w") != 0 || !fp) {
@@ -48,12 +61,12 @@ namespace {
         frame.AddrFrame.Offset = context.Rbp;    frame.AddrFrame.Mode = AddrModeFlat;
         frame.AddrStack.Offset = context.Rsp;    frame.AddrStack.Mode = AddrModeFlat;
 
-        char symBuf[sizeof(SYMBOL_INFO) + 256] = {};
+        char symBuf[sizeof(SYMBOL_INFO) + kSymbolNameBufferSize] = {};
         SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(symBuf);
         sym->SizeOfStruct = sizeof(SYMBOL_INFO);
-        sym->MaxNameLen = 255;
+        sym->MaxNameLen = kMaxSymbolNameLength;
 
-        for (int i = 0; i < 64; ++i) {
+        for (int i = 0; i < kMaxStackFrames; ++i) {
             if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &frame, &context,
                     nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) {
                 break;
@@ -84,6 +97,12 @@ namespace {
         std::fclose(fp);
     }
 
+    /// <summary>
+    /// トップレベル例外フィルタ。minidump（crash.dmp）とシンボル付きスタックトレース（crash_stack.txt）を
+    /// セッションフォルダ（未設定ならカレントに時刻入りの名前）へ書き出す
+    /// </summary>
+    /// <param name="ep">例外の情報</param>
+    /// <returns>EXCEPTION_EXECUTE_HANDLER（ダンプを出したらプロセスを終了させる）</returns>
     LONG WINAPI TopLevelExceptionFilter(EXCEPTION_POINTERS* ep) {
         // 出力先：セッションフォルダが分かっていれば crash.dmp、無ければカレントへ
         const std::string path = g_dumpDir.empty()

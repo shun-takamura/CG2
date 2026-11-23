@@ -16,6 +16,7 @@
 #include "TextRenderer.h"
 #include "MathUtility.h"   // kPi
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Vector4.h"
 #include <cmath>
 #include <cstdio>
@@ -25,6 +26,43 @@
 #endif
 
 namespace {
+	// Vector3・色の JSON 配列に要る要素の数
+	constexpr int kVector3ComponentCount = 3;
+	// カメラの位置の既定（後ろへ下げる距離）[m]
+	constexpr float kDefaultCameraZ = 10.0f;
+	// 水面に出す輪の束の長さ（波長の数）
+	constexpr float kRingPacketLength = 2.5f;
+	// カメラからの奥行きがこれ以下なら画面に投影しない
+	constexpr float kMinViewDepth = 0.01f;
+	// 向きの長さがこれ以下なら上向きにする
+	constexpr float kMinDirectionLength = 1e-3f;
+	// 純度の札の左右の余白 [px]
+	constexpr float kTagPaddingX = 14.0f;
+	// 純度の札の上下の余白 [px]
+	constexpr float kTagPaddingY = 4.0f;
+	// 純度の札の暗い塗りの緑
+	constexpr float kTagFillGreen = 0.01f;
+	// 純度の札の暗い塗りの青
+	constexpr float kTagFillBlue = 0.03f;
+	// 純度の札の暗い塗りの不透明度
+	constexpr float kTagFillAlpha = 0.75f;
+	// 純度の札の金の枠の太さ [px]
+	constexpr float kTagFrameThickness = 2.0f;
+	// 純度の数字の縁取りの太さ
+	constexpr float kTagOutlineWidth = 2.0f;
+	// 「純度」の文字と札の間 [px]
+	constexpr float kNameGap = 4.0f;
+	// 「純度」の文字の赤
+	constexpr float kNameRed = 0.85f;
+	// 「純度」の文字の緑
+	constexpr float kNameGreen = 0.88f;
+	// 「純度」の文字の青
+	constexpr float kNameBlue = 0.92f;
+	// 「純度」の文字の縁取りの太さ
+	constexpr float kNameOutlineWidth = 1.5f;
+	// 「純度」の文字の縁取りの不透明度
+	constexpr float kNameOutlineAlpha = 0.8f;
+
 	// 器の映り込み。神殿の IBL（無ければタイトルの空）
 	constexpr const char* kIblPath = "Resources/Cubemaps/hub_temple_ibl.dds";
 	constexpr const char* kFallbackIblPath = "Resources/Cubemaps/title_clear_sky_ibl.dds";
@@ -39,28 +77,30 @@ namespace {
 	// TextRenderer のフォントの高さ（Framework::Initialize の MPLUS1p 32px）
 	constexpr float kFontPixelHeight = 32.0f;
 
+	/// <summary>JSON のキーの値を float として読む（無ければ今の値のまま）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">読み込み先</param>
 	void ReadFloat(const JsonValue& node, const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	}
+	/// <summary>float の値を JSON のキーへ書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">書く値</param>
 	void WriteFloat(JsonValue& node, const char* key, float value) {
 		node[key] = JsonValue(static_cast<double>(value));
 	}
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
+	/// <summary>要素 3 つの JSON 配列を RGB の配列として読む（配列でない・要素が足りないときは今の値のまま）</summary>
+	/// <param name="node">読み込み元の配列</param>
+	/// <param name="value">読み込み先</param>
 	void ReadColor3(const JsonValue& node, float (&value)[3]) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		for (int i = 0; i < 3; ++i) value[i] = static_cast<float>(node[static_cast<size_t>(i)].AsDouble(value[i]));
+		if (!node.IsArray() || node.Size() < kVector3ComponentCount) return;
+		for (int i = 0; i < kVector3ComponentCount; ++i) value[i] = static_cast<float>(node[static_cast<size_t>(i)].AsDouble(value[i]));
 	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
+	/// <summary>RGB の配列を要素 3 つの JSON 配列にする</summary>
+	/// <param name="c">書き出す色</param>
+	/// <returns>[r, g, b] の配列</returns>
 	JsonValue MakeColor3(const float (&c)[3]) {
 		return MakeVector3({ c[0], c[1], c[2] });
 	}
@@ -76,7 +116,7 @@ void EtherVesselRoom::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 	spriteManager_ = spriteManager;
 
 	camera_ = std::make_unique<Camera>();
-	camera_->SetTranslate({ 0.0f, 0.0f, -10.0f });
+	camera_->SetTranslate({ 0.0f, 0.0f, -kDefaultCameraZ });
 	camera_->SetRotate({ 0.0f, 0.0f, 0.0f });
 
 	iblPath_ = AssetLocator::GetInstance()->Exists(kIblPath) ? kIblPath : kFallbackIblPath;
@@ -100,7 +140,11 @@ void EtherVesselRoom::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 	water_->Initialize(dxCore_, srvManager, object3DManager_, kFloorTexturePath);
 	water_->SetSize(kWaterSize);
 	water_->SetFollowCamera(true);
-	water_->GetParams().floorTiling = 1.0f / kFloorTileMeters;
+	{
+		WaterSurface::Params p = water_->GetParams();
+		p.floorTiling = 1.0f / kFloorTileMeters;
+		water_->SetParams(p);
+	}
 	water_->SetFloorMaps(kFloorNormalMapPath, kFloorHeightMapPath, kFloorParallaxDepth);
 	water_->SetRippleCenter(origin_);
 	ApplyWaterTuning();   // JSON が無くても既定値を水面へ
@@ -124,12 +168,12 @@ void EtherVesselRoom::SetCameraPose(const Vector3& offset, const Vector3& rotate
 }
 
 void EtherVesselRoom::EmitCursorRing() {
-	water_->EmitRing(origin_, cursorRingAmplitude_, cursorRingWavelength_, 2.5f, cursorRingRadius_);
+	water_->EmitRing(origin_, cursorRingAmplitude_, cursorRingWavelength_, kRingPacketLength, cursorRingRadius_);
 }
 
 bool EtherVesselRoom::ProjectToUi(const Vector3& world, Vector2& out) const {
 	const Vector3 view = TransformCoordinate(world, camera_->GetViewMatrix());
-	if (view.z <= 0.01f) return false;
+	if (view.z <= kMinViewDepth) return false;
 	const Vector3 ndc = TransformCoordinate(world, camera_->GetViewProjectionMatrix());
 	const float w = static_cast<float>(dxCore_->GetUIWidth());
 	const float h = static_cast<float>(dxCore_->GetUIHeight());
@@ -144,40 +188,45 @@ void EtherVesselRoom::DrawPurityTag(float purity, float alpha, float scale, floa
 	if (!ProjectToUi(vessel_->GetPointerTipWorld(), tip) || !ProjectToUi(vessel_->GetSphereCenter(), center)) return;
 	Vector2 dir{ tip.x - center.x, tip.y - center.y };
 	const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-	dir = len > 1e-3f ? Vector2{ dir.x / len, dir.y / len } : Vector2{ 0.0f, -1.0f };
+	dir = len > kMinDirectionLength ? Vector2{ dir.x / len, dir.y / len } : Vector2{ 0.0f, -1.0f };
 	const Vector2 tag{ tip.x + dir.x * offset, tip.y + dir.y * offset };
 	const Vector4 goldColor{ gold[0], gold[1], gold[2], alpha };
 	char buf[16];
 	std::snprintf(buf, sizeof(buf), "%.1f", purity);
 	const float textH = kFontPixelHeight * scale;
 	const float textW = tr->MeasureWidth(buf, scale);
-	const float padX = 14.0f;
-	const float padY = 4.0f;
+	const float padX = kTagPaddingX;
+	const float padY = kTagPaddingY;
 	const Vector2 boxPos{ tag.x - textW * 0.5f - padX, tag.y - textH * 0.5f - padY };
 	const Vector2 boxSize{ textW + padX * 2.0f, textH + padY * 2.0f };
-	tr->DrawRect(boxPos, boxSize, { 0.0f, 0.01f, 0.03f, 0.75f * alpha });
-	tr->DrawRect(boxPos, { boxSize.x, 2.0f }, goldColor);
-	tr->DrawRect({ boxPos.x, boxPos.y + boxSize.y - 2.0f }, { boxSize.x, 2.0f }, goldColor);
-	tr->DrawRect(boxPos, { 2.0f, boxSize.y }, goldColor);
-	tr->DrawRect({ boxPos.x + boxSize.x - 2.0f, boxPos.y }, { 2.0f, boxSize.y }, goldColor);
-	tr->DrawText(buf, { tag.x - textW * 0.5f, tag.y - textH * 0.5f }, scale, { 1.0f, 1.0f, 1.0f, alpha }, 2.0f, goldColor);
+	tr->DrawRect(boxPos, boxSize, { 0.0f, kTagFillGreen, kTagFillBlue, kTagFillAlpha * alpha });
+	tr->DrawRect(boxPos, { boxSize.x, kTagFrameThickness }, goldColor);
+	tr->DrawRect({ boxPos.x, boxPos.y + boxSize.y - kTagFrameThickness }, { boxSize.x, kTagFrameThickness }, goldColor);
+	tr->DrawRect(boxPos, { kTagFrameThickness, boxSize.y }, goldColor);
+	tr->DrawRect({ boxPos.x + boxSize.x - kTagFrameThickness, boxPos.y }, { kTagFrameThickness, boxSize.y }, goldColor);
+	tr->DrawText(buf, { tag.x - textW * 0.5f, tag.y - textH * 0.5f }, scale, { 1.0f, 1.0f, 1.0f, alpha }, kTagOutlineWidth, goldColor);
 	// 呼び方は札の上に小さく
 	constexpr const char* kName = "純度";
 	const float nameScale = scale * 0.5f;
 	const float nameW = tr->MeasureWidth(kName, nameScale);
-	tr->DrawText(kName, { tag.x - nameW * 0.5f, boxPos.y - kFontPixelHeight * nameScale - 4.0f }, nameScale,
-		{ 0.85f, 0.88f, 0.92f, alpha }, 1.5f, { 0.0f, 0.0f, 0.0f, alpha * 0.8f });
+	tr->DrawText(kName, { tag.x - nameW * 0.5f, boxPos.y - kFontPixelHeight * nameScale - kNameGap }, nameScale,
+		{ kNameRed, kNameGreen, kNameBlue, alpha }, kNameOutlineWidth, { 0.0f, 0.0f, 0.0f, alpha * kNameOutlineAlpha });
 }
 
 void EtherVesselRoom::Update(float deltaTime) {
-	water_->GetParams().waterColor = { waterColor_.x, waterColor_.y, waterColor_.z, 1.0f };
+	{
+		// 色は ImGui で触っている間も毎フレーム反映する
+		WaterSurface::Params p = water_->GetParams();
+		p.waterColor = { waterColor_.x, waterColor_.y, waterColor_.z, 1.0f };
+		water_->SetParams(p);
+	}
 	water_->Update(deltaTime);
 	vessel_->Update(deltaTime);
 
 	if (EtherPillarFlow* flow = vessel_->GetPillarFlow()) {
 		// 支柱を下りた光が泉に着いたら、足元の水面に波紋
 		for (int n = 0; n < flow->GetArrivals(); ++n) {
-			water_->EmitRing(origin_, arrivalRingAmplitude_, cursorRingWavelength_, 2.5f, cursorRingRadius_);
+			water_->EmitRing(origin_, arrivalRingAmplitude_, cursorRingWavelength_, kRingPacketLength, cursorRingRadius_);
 		}
 		// 支柱を昇った光が球に着いたら、液面が小さく揺れる（賭ける）
 		if (flow->GetTopArrivals() > 0 && topArrivalSplash_ > 0.0f) vessel_->Splash(topArrivalSplash_);
@@ -219,12 +268,13 @@ void EtherVesselRoom::DrawBloom() {
 }
 
 void EtherVesselRoom::ApplyWaterTuning() {
-	WaterSurface::Params& p = water_->GetParams();
+	WaterSurface::Params p = water_->GetParams();
 	p.depth = waterDepth_;
 	p.skyIntensity = waterSkyIntensity_;
 	p.ringAmplitude = waterRingAmplitude_;
 	p.ringInterval = waterRingInterval_;
 	p.waterColor = { waterColor_.x, waterColor_.y, waterColor_.z, 1.0f };
+	water_->SetParams(p);
 	water_->SetWaterHeight(origin_.y + waterHeight_);
 }
 
@@ -233,7 +283,7 @@ void EtherVesselRoom::LoadTuning(const JsonValue& root) {
 	const JsonValue& water = root["water"];
 	ReadFloat(water, "height", waterHeight_);
 	ReadFloat(water, "depth", waterDepth_);
-	ReadVector3(water["color"], waterColor_);
+	waterColor_ = ReadVector3(water["color"], waterColor_);
 	ReadFloat(water, "skyIntensity", waterSkyIntensity_);
 	ReadFloat(water, "ringAmplitude", waterRingAmplitude_);
 	ReadFloat(water, "ringInterval", waterRingInterval_);
@@ -266,13 +316,15 @@ void EtherVesselRoom::SaveTuning(JsonValue& root) const {
 
 void EtherVesselRoom::OnImGuiWater() {
 #ifdef _DEBUG
-	WaterSurface::Params& p = water_->GetParams();
-	if (ImGui::DragFloat("Height [m]", &waterHeight_, 0.005f, -1.0f, 2.0f)) water_->SetWaterHeight(origin_.y + waterHeight_);
-	if (ImGui::DragFloat("Depth [m]", &waterDepth_, 0.01f, 0.0f, 5.0f)) p.depth = waterDepth_;
+	// どれかを動かしたら、調整値をまとめて水面へ反映する
+	bool changed = false;
+	changed |= ImGui::DragFloat("Height [m]", &waterHeight_, 0.005f, -1.0f, 2.0f);
+	changed |= ImGui::DragFloat("Depth [m]", &waterDepth_, 0.01f, 0.0f, 5.0f);
 	ImGui::ColorEdit3("Water Color", &waterColor_.x, ImGuiColorEditFlags_Float);
-	if (ImGui::DragFloat("Sky Intensity", &waterSkyIntensity_, 0.01f, 0.0f, 3.0f)) p.skyIntensity = waterSkyIntensity_;
-	if (ImGui::DragFloat("Ambient Ring Amplitude", &waterRingAmplitude_, 0.0005f, 0.0f, 0.1f, "%.4f")) p.ringAmplitude = waterRingAmplitude_;
-	if (ImGui::DragFloat("Ambient Ring Interval", &waterRingInterval_, 0.05f, 0.1f, 30.0f)) p.ringInterval = waterRingInterval_;
+	changed |= ImGui::DragFloat("Sky Intensity", &waterSkyIntensity_, 0.01f, 0.0f, 3.0f);
+	changed |= ImGui::DragFloat("Ambient Ring Amplitude", &waterRingAmplitude_, 0.0005f, 0.0f, 0.1f, "%.4f");
+	changed |= ImGui::DragFloat("Ambient Ring Interval", &waterRingInterval_, 0.05f, 0.1f, 30.0f);
+	if (changed) ApplyWaterTuning();
 	ImGui::DragFloat("Cursor Ring Amplitude", &cursorRingAmplitude_, 0.0005f, 0.0f, 0.2f, "%.4f");
 	ImGui::DragFloat("Cursor Ring Wavelength", &cursorRingWavelength_, 0.005f, 0.01f, 3.0f);
 	ImGui::DragFloat("Cursor Ring Radius", &cursorRingRadius_, 0.05f, 0.1f, 50.0f);

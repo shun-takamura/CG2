@@ -35,14 +35,23 @@ public:
 	GameOverScene();
 	~GameOverScene() override;
 
+	/// <summary>器の間を用意し、選択肢を決め、死んだ分のエーテルと難易度を入口で黙って減らして流れを始める</summary>
 	void Initialize() override;
+	/// <summary>器の間を片付ける</summary>
 	void Finalize() override;
+	/// <summary>流れ・選択・カメラの引き・器の間・純度の札のフェードを進める</summary>
 	void Update() override;
+	/// <summary>器の間 → エフェクトの粒 → 純度の札 → 選択肢の順に描く</summary>
 	void Draw() override;
 
+	/// <summary>器の間のカメラを取得</summary>
+	/// <returns>器の間のカメラ（器の間が無ければ nullptr）</returns>
 	Camera* GetCamera() override;
 
+	/// <summary>発光を足すか（トランジションの間は羽根・波紋を隠してしまうので光らせない）</summary>
+	/// <returns>器の間があり、トランジション中でなければ true</returns>
 	bool HasBloomSources() const override;
+	/// <summary>器の間の発光する物をブルームのマスクへ描く</summary>
 	void DrawBloomSources() override;
 
 private:
@@ -56,14 +65,25 @@ private:
 		Leaving,  // シーンを切り替え中
 	};
 
+	/// <summary>流れを 1 浮かび上がるから始め直す（器を死ぬ前の液面・針に戻す）</summary>
 	void StartFlow();
+	/// <summary>流れの段（浮かび上がる→減る→収まる→選択肢→再挑戦/引き上げる）を進め、終わればシーンを切り替える</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateFlow(float deltaTime);
+	/// <summary>トランジションが明けたら、液面のすぐ上の近い位置から遠い位置へカメラを引く</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateCamera(float deltaTime);
+	/// <summary>選択肢のキー・パッド・マウスの入力を読む（減る途中の決定は選択肢まで早送り。トランジション明けのフレームは読まない）</summary>
 	void UpdateChoose();
-	/// <summary>デモモードの自動選択。選んだら true（そのフレームは人の入力を読まない）</summary>
+	/// <summary>デモモードの自動選択（「もう一度」か、回数を超えたら「引き上げる」）</summary>
+	/// <returns>選んだら（カーソルを動かしたフレームも）true（そのフレームは人の入力を読まない）</returns>
 	bool UpdateAttract();
+	/// <summary>減る・収まるを飛ばして選択肢まで早送りする（液面・針は減った後へ）</summary>
 	void SkipToChoose();
+	/// <summary>選択肢を決定する（引き上げるならエーテルを戻して泉へ下ろし、再挑戦なら光を強める段へ）</summary>
+	/// <param name="option">決定した選択肢</param>
 	void Confirm(Option option);
+	/// <summary>選択肢の後ろの暗い帯と、選択肢の文字（選んだ物は白に金の縁と下線）を描く</summary>
 	void DrawOptions();
 	/// <summary>針の先の純度の札。数字は針が今指している値（行き過ぎの間も死ぬ前〜後の範囲に収める）</summary>
 	void DrawPurityTag();
@@ -74,14 +94,26 @@ private:
 		float width = 0.0f;
 		float height = 0.0f;
 	};
+	/// <summary>選択肢を横に中央そろえで並べた時の四角を求める</summary>
+	/// <param name="rects">選択肢ごとの四角の書き込み先（options_ と同じ並び。文字を描けない時は空）</param>
 	void LayoutOptions(std::vector<OptionRect>& rects) const;
-	/// <summary>その位置にある選択肢の番号（無ければ -1）。当たりは文字の四角に hitPadding を足した範囲</summary>
+	/// <summary>その位置にある選択肢の番号。当たりは文字の四角に hitPadding を足した範囲</summary>
+	/// <param name="position">マウスの位置（UI 座標）</param>
+	/// <returns>選択肢の番号（無ければ -1）</returns>
 	int HitOption(const Vector2& position) const;
+	/// <summary>選択肢の表示名（負けを感じさせる言葉は使わない）</summary>
+	/// <param name="option">選択肢</param>
+	/// <returns>表示名（チェックポイントが無ければ Restart は「もう一度」）</returns>
 	const char* OptionLabel(Option option) const;
+	/// <summary>カーソルを動かした合図に、器の液面へ波紋を出す</summary>
 	void EmitCursorRing();
 
+	/// <summary>カメラ・流れ・文字の調整値と器の間の調整値を GameOver.json から読む</summary>
+	/// <returns>読めたら true（ファイルが無い・読めなければ false で今の値のまま）</returns>
 	bool LoadTuning();
+	/// <summary>今の調整値を GameOver.json へ書き出す</summary>
 	void SaveTuning() const;
+	/// <summary>流れの再生・調整値の編集・保存の ImGui 窓（Debug のみ中身あり）</summary>
 	void OnImGui();
 
 	// 器の間（器・足元の水面・背景の板・カメラ）

@@ -37,41 +37,49 @@ struct CameraDeviceInfo
 /// - キャプチャスレッド: カメラからの映像取得を担当
 /// 
 /// これにより、カメラ取得の待ち時間がゲームのFPSに影響しない
+/// シングルトンにする理由：Web カメラのデバイスは 1 台を 1 か所で開いて共有するため。
 /// </summary>
 class CameraCapture
 {
 public:
     /// <summary>
     /// シングルトンインスタンスを取得
-    /// どこからでも CameraCapture::GetInstance() でアクセスできる
     /// </summary>
+    /// <returns>インスタンス</returns>
     static CameraCapture* GetInstance();
 
+    /// <summary>接続されているカメラを列挙する（起動時に 1 回）</summary>
     void Initialize();
+    /// <summary>カメラを閉じてキャプチャスレッドを止め、列挙したデバイスを捨てる</summary>
     void Finalize();
 
     /// <summary>
     /// カメラ映像をDirectXテクスチャに転送する
-    /// 毎フレームDraw()の最初で呼ぶ
+    /// 毎フレーム Draw() の最初で呼ぶ。初めてのフレームで動的テクスチャを作る（カメラが開いていなければ何もしない）
     /// </summary>
     void UpdateTexture();
 
     /// <summary>
     /// カメラテクスチャの識別名を取得
-    /// SpriteInstanceでテクスチャを指定するときに使う
+    /// SpriteInstance でテクスチャを指定するときに使う
     /// </summary>
+    /// <returns>テクスチャ名</returns>
     static const std::string& GetTextureName() { return kCameraTextureName_; }
 
     /// <summary>
     /// PCに接続されているカメラデバイスを列挙する
     /// </summary>
     void EnumerateDevices();
+    /// <summary>列挙したカメラデバイスの一覧</summary>
+    /// <returns>一覧</returns>
     const std::vector<CameraDeviceInfo>& GetDevices() const { return devices_; }
 
     /// <summary>
     /// 指定したインデックスのカメラを開く
-    /// これを呼ぶとキャプチャスレッドが開始される
+    /// 開いていたカメラは先に閉じる。これを呼ぶとキャプチャスレッドが開始される
     /// </summary>
+    /// <param name="deviceIndex">EnumerateDevices で並んだ番号</param>
+    /// <returns>開けたら true（番号が範囲外・デバイスや読み取り器を作れなかったら false）</returns>
     bool OpenCamera(uint32_t deviceIndex);
 
     /// <summary>
@@ -80,15 +88,23 @@ public:
     /// </summary>
     void CloseCamera();
 
+    /// <summary>カメラが開いているか</summary>
+    /// <returns>開いていれば true</returns>
     bool IsOpened() const { return isOpened_; }
 
     /// <summary>
     /// 現在のフレームデータを取得（QRコード読み取りなどで使用）
     /// </summary>
+    /// <returns>BGRA 32bit の画素（カメラが開いていない・まだ届いていなければ空）</returns>
     const std::vector<uint8_t>& GetFrameData() const { return frameBufferMain_; }
+    /// <summary>フレームの幅</summary>
+    /// <returns>幅 [px]</returns>
     uint32_t GetFrameWidth() const { return frameWidth_; }
+    /// <summary>フレームの高さ</summary>
+    /// <returns>高さ [px]</returns>
     uint32_t GetFrameHeight() const { return frameHeight_; }
 
+    /// <summary>カメラデバイスの一覧を ImGui に表示する（USE_IMGUI の時だけ）</summary>
     void LogDevicesToImGui();
 
 private:
@@ -138,7 +154,7 @@ private:
 
     /// <summary>
     /// キャプチャスレッドで実行される関数
-    /// カメラからフレームを取得し続ける
+    /// カメラからフレームを取得し続け、届いたらスレッド側のバッファへ写す（threadRunning_ が false になるまで）
     /// </summary>
     void CaptureThreadFunc();
 };

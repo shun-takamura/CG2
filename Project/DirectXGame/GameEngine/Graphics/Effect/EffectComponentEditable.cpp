@@ -1,6 +1,8 @@
 #include "EffectComponentEditable.h"
 #include "EffectEditorWindow.h"
 #include "EffectDef.h"
+#include "EffectPrimitiveRenderer.h"
+#include "GPUParticleManager.h"
 #include "CurveEditorWidget.h"
 #include "MathUtility.h"
 #include "EditorDropPayload.h"   // SPRITE_DROP_PAYLOAD_TYPE / SpriteDropPayload
@@ -21,6 +23,18 @@ namespace {
     // カーブ編集UIは EffectUI::DrawCurveEditor（CurveEditorWidget）へ切り出した。
     // レールカメラの緩急カーブ編集でも共用するため共有ウィジェット化している。
     using EffectUI::DrawCurveEditor;
+    // 既定の表示名（"<Kind> #<index>"）を作る文字列の長さ
+    constexpr size_t kDefaultNameBufferSize = 64;
+    // 名前の入力欄の文字列の長さ
+    constexpr size_t kNameBufferSize = 128;
+    // テクスチャのパスの入力欄の文字列の長さ
+    constexpr size_t kPathBufferSize = 256;
+    // 注意書きの文字の色（オレンジ）
+    constexpr ImVec4 kWarningTextColor = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
+    // 色のキーの位置の入力欄の幅 [px]
+    constexpr float kColorKeyLocationWidth = 90.0f;
+    // 「Reset」で戻す歪みの強さ
+    constexpr float kDefaultDistortionStrength = 0.5f;
 }
 
 EffectComponentEditable::EffectComponentEditable(EffectEditorWindow* owner, Kind kind, int index)
@@ -41,7 +55,7 @@ std::string EffectComponentEditable::GetName() const {
     }
     if (dn && !dn->empty()) return *dn;
 
-    char def[64];
+    char def[kDefaultNameBufferSize];
     switch (kind_) {
     case Kind::Primitive: std::snprintf(def, sizeof(def), "Primitive #%d", index_); break;
     case Kind::Particle:  std::snprintf(def, sizeof(def), "Particle #%d",  index_); break;
@@ -156,9 +170,9 @@ void EffectComponentEditable::OnImGuiInspector() {
         }
 
         // ===== Geometry（Ring / Cylinder / Helix / Beam / Lightning / Frame のみ。PrimitiveInstance Inspector と同等） =====
-        if (c.meshType == 3 || c.meshType == 4 || c.meshType == 5 || c.meshType == 6 || c.meshType == 7 || c.meshType == 9) {
+        if (c.meshType == EffectMeshType::Ring || c.meshType == EffectMeshType::Cylinder || c.meshType == EffectMeshType::Helix || c.meshType == EffectMeshType::Beam || c.meshType == EffectMeshType::Lightning || c.meshType == EffectMeshType::Frame) {
             if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (c.meshType == 3) { // Ring
+                if (c.meshType == EffectMeshType::Ring) { // Ring
                     auto& rp = c.ringParams;
                     dirty |= ImGui::DragFloat("Outer Radius", &rp.outerRadius, 0.01f, 0.0f, 100.0f);
                     dirty |= ImGui::DragFloat("Inner Radius", &rp.innerRadius, 0.01f, 0.0f, 100.0f);
@@ -171,7 +185,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     dirty |= ImGui::ColorEdit4("Outer Color", &rp.outerColor.x);
                     dirty |= ImGui::SliderAngle("Start Angle", &rp.startAngle, 0.0f, 360.0f);
                     dirty |= ImGui::SliderAngle("End Angle",   &rp.endAngle,   0.0f, 360.0f);
-                } else if (c.meshType == 4) { // Cylinder
+                } else if (c.meshType == EffectMeshType::Cylinder) { // Cylinder
                     auto& cp = c.cylinderParams;
                     dirty |= ImGui::DragFloat("Top Radius",    &cp.topRadius,    0.01f, 0.0f, 100.0f);
                     dirty |= ImGui::DragFloat("Bottom Radius", &cp.bottomRadius, 0.01f, 0.0f, 100.0f);
@@ -185,7 +199,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     dirty |= ImGui::ColorEdit4("Bottom Color", &cp.bottomColor.x);
                     dirty |= ImGui::SliderAngle("Start Angle", &cp.startAngle, 0.0f, 360.0f);
                     dirty |= ImGui::SliderAngle("End Angle",   &cp.endAngle,   0.0f, 360.0f);
-                } else if (c.meshType == 5) { // Helix
+                } else if (c.meshType == EffectMeshType::Helix) { // Helix
                     auto& hp = c.helixParams;
                     dirty |= ImGui::DragFloat("Start Helix Radius", &hp.startHelixRadius, 0.01f, 0.0f, 100.0f);
                     dirty |= ImGui::DragFloat("End Helix Radius",   &hp.endHelixRadius,   0.01f, 0.0f, 100.0f);
@@ -205,7 +219,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     }
                     dirty |= ImGui::ColorEdit4("Start Color", &hp.startColor.x);
                     dirty |= ImGui::ColorEdit4("End Color",   &hp.endColor.x);
-                } else if (c.meshType == 6) { // Beam
+                } else if (c.meshType == EffectMeshType::Beam) { // Beam
                     auto& bp = c.beamParams;
                     auto& app = bp.appearance;
                     dirty |= ImGui::DragFloat3("Start Pos", &bp.startPos.x, 0.05f);
@@ -228,7 +242,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     dirty |= ImGui::ColorEdit4("End Color##Beam",   &app.endColor.x);
                     dirty |= ImGui::Checkbox("UV Wrap By Length", &app.uvWrapByLength);
                     dirty |= ImGui::DragFloat("UV Tiles Per Unit", &app.uvTilesPerUnit, 0.01f, 0.0f, 100.0f);
-                } else if (c.meshType == 9) { // Frame（額縁）
+                } else if (c.meshType == EffectMeshType::Frame) { // Frame（額縁）
                     auto& fp = c.frameParams;
                     dirty |= ImGui::DragFloat("Outer Width",  &fp.outerWidth,  0.01f, 0.0f, 100.0f);
                     dirty |= ImGui::DragFloat("Outer Height", &fp.outerHeight, 0.01f, 0.0f, 100.0f);
@@ -406,7 +420,7 @@ void EffectComponentEditable::OnImGuiInspector() {
                     c.distortionUvScale  = { 1.0f, 1.0f };
                     c.distortionUvFlipU = false;
                     c.distortionUvFlipV = false;
-                    c.distortionStrength = 0.5f;
+                    c.distortionStrength = kDefaultDistortionStrength;
                     dirty = true;
                 }
 
@@ -491,18 +505,18 @@ void EffectComponentEditable::OnImGuiInspector() {
     else if (kind_ == Kind::Particle) {
         if (index_ < 0 || index_ >= static_cast<int>(buf.particles.size())) { ImGui::Text("(removed)"); return; }
         auto& c = buf.particles[index_];
-        char nameBuf[128];
+        char nameBuf[kNameBufferSize];
         std::snprintf(nameBuf, sizeof(nameBuf), "%s", c.gpuParticleGroupName.c_str());
         if (ImGui::InputText("Group Name", nameBuf, sizeof(nameBuf))) {
             c.gpuParticleGroupName = nameBuf;
             dirty = true;
         }
         if (c.gpuParticleGroupName.empty()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Group Name が空だと描画されません。任意の名前を入力してください");
+            ImGui::TextColored(kWarningTextColor, "Group Name が空だと描画されません。任意の名前を入力してください");
         } else {
             ImGui::TextDisabled("(未登録の名前なら下の Texture Path で自動生成)");
         }
-        char texBuf[256];
+        char texBuf[kPathBufferSize];
         std::snprintf(texBuf, sizeof(texBuf), "%s", c.texturePath.c_str());
         if (ImGui::InputText("Texture Path", texBuf, sizeof(texBuf))) {
             c.texturePath = texBuf;
@@ -550,7 +564,7 @@ void EffectComponentEditable::OnImGuiInspector() {
         // ===== Rotation（3D姿勢。ビルボード None で有効） =====
         ImGui::SeparatorText("Rotation (3D)");
         if (c.billboardMode != BillboardMode::None) {
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Billboard を None にすると3D回転が有効（破片タンブル）");
+            ImGui::TextColored(kWarningTextColor, "Billboard を None にすると3D回転が有効（破片タンブル）");
         }
         dirty |= ImGui::Checkbox("Random Rotate On Spawn", &c.randomRotateOnSpawn);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("出現時に各軸 ±範囲のランダム初期姿勢を粒子ごとに与える");
@@ -572,7 +586,7 @@ void EffectComponentEditable::OnImGuiInspector() {
         ImGui::Separator();
         const char* colorModeNames[] = { "Random", "Fixed" };
         dirty |= ImGui::Combo("Color Mode", &c.colorMode, colorModeNames, IM_ARRAYSIZE(colorModeNames));
-        if (c.colorMode == 1) {
+        if (c.colorMode == GPUParticleManager::kColorModeFixed) {
             dirty |= ImGui::ColorEdit4("Start Color", &c.startColor.x);
             dirty |= ImGui::ColorEdit4("End Color",   &c.endColor.x);
 
@@ -584,7 +598,7 @@ void EffectComponentEditable::OnImGuiInspector() {
             int removeIdx = -1;
             for (size_t k = 0; k < c.colorKeys.size(); ++k) {
                 ImGui::PushID(static_cast<int>(k));
-                ImGui::SetNextItemWidth(90.0f);
+                ImGui::SetNextItemWidth(kColorKeyLocationWidth);
                 dirty |= ImGui::DragFloat("##loc", &c.colorKeys[k].location, 0.005f, 0.0f, 1.0f, "Loc %.2f");
                 ImGui::SameLine();
                 dirty |= ImGui::ColorEdit4("##col", &c.colorKeys[k].color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreviewHalf);
@@ -649,15 +663,15 @@ void EffectComponentEditable::OnImGuiInspector() {
         ImGui::Separator();
         const char* velModeNames[] = { "Random (全方向)", "Directional (方向固定)", "Radial (放射/外向き)", "Tangential (接線/公転)" };
         dirty |= ImGui::Combo("Velocity Mode", &c.velocityMode, velModeNames, IM_ARRAYSIZE(velModeNames));
-        if (c.velocityMode == 1) {
+        if (c.velocityMode == GPUParticleManager::kVelocityDirectional) {
             dirty |= ImGui::DragFloat3("Velocity Dir", &c.velocityDir.x, 0.01f);
             dirty |= ImGui::DragFloat("Velocity Speed", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
             dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
-        } else if (c.velocityMode == 2) {
+        } else if (c.velocityMode == GPUParticleManager::kVelocityRadial) {
             dirty |= ImGui::DragFloat("Velocity Speed (放射)", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
             dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
             ImGui::TextDisabled("(中心から外向きに噴出。Emit Radius は小さめ推奨)");
-        } else if (c.velocityMode == 3) {
+        } else if (c.velocityMode == GPUParticleManager::kVelocityTangent) {
             dirty |= ImGui::DragFloat("Velocity Speed (公転)", &c.velocitySpeed, 0.05f, 0.0f, 200.0f);
             dirty |= ImGui::DragFloat("Velocity Jitter", &c.velocityJitter, 0.02f, 0.0f, 50.0f);
             dirty |= ImGui::DragFloat3("Ring Normal (軸)", &c.ringNormal.x, 0.01f);
@@ -787,7 +801,7 @@ void EffectComponentEditable::OnImGuiInspector() {
     else if (kind_ == Kind::Sound) {
         if (index_ < 0 || index_ >= static_cast<int>(buf.sounds.size())) { ImGui::Text("(removed)"); return; }
         auto& c = buf.sounds[index_];
-        char nameBuf[128];
+        char nameBuf[kNameBufferSize];
         std::snprintf(nameBuf, sizeof(nameBuf), "%s", c.soundName.c_str());
         if (ImGui::InputText("Sound Name", nameBuf, sizeof(nameBuf))) {
             c.soundName = nameBuf;

@@ -8,7 +8,6 @@
 
 // 前方宣言
 class DebugCamera;
-class SpriteInstance;
 class Object3DInstance;
 class Skybox;
 class Camera;
@@ -23,7 +22,7 @@ class DemoScene :public GameScene
 {
 public:
 	/// <summary>
-	/// コンストラクタ
+	/// 乱数（HitEffect の向き）の種を決める
 	/// </summary>
 	DemoScene();
 
@@ -33,34 +32,42 @@ public:
 	~DemoScene() override;
 
 	/// <summary>
-	/// 初期化
+	/// JSON のセルフテスト・カメラ・Skybox・アニメーションモデル・サウンドを用意し、demo.json があれば配置を読む
 	/// </summary>
 	void Initialize() override;
 
 	/// <summary>
-	/// 終了処理
+	/// 動的エンティティと HitEffect を捨てる
 	/// </summary>
 	void Finalize() override;
 
 	/// <summary>
-	/// 更新
+	/// 技術確認用の更新（DebugDraw・入力のログ・2D/3D サウンド・HitEffect・オブジェクトとエフェクトの更新）
 	/// </summary>
 	void Update() override;
 
 	/// <summary>
-	/// 描画
+	/// Skybox → 3D オブジェクト → パーティクル・エフェクト → デバッグ線 → スプライトの順に描く
 	/// </summary>
 	void Draw() override;
 
+	/// <summary>シーンのカメラを取得</summary>
+	/// <returns>シーンのカメラ</returns>
 	Camera* GetCamera() override { return camera_.get(); }
 
 #ifdef USE_IMGUI
+	/// <summary>動的オブジェクト判定。GameScene の判定に加えてアニメーションモデル（sneakWalk）も対象にする</summary>
+	/// <param name="editable">調べるエンティティ</param>
+	/// <returns>シーンの動的オブジェクトなら true</returns>
 	bool IsDynamicObject(IImGuiEditable* editable) const override;
 #endif
 
 protected:
-	// シーン保存/読込の本体は GameScene 側に集約済み。
-	// DemoScene は固有の除外・後処理が無いので、JSON に書く名前だけ返す。
+	/// <summary>
+	/// JSON の "scene" に書く名前（シーン保存/読込の本体は GameScene 側に集約済み。
+	/// DemoScene は固有の除外・後処理が無いので、名前だけ返す）
+	/// </summary>
+	/// <returns>"DemoScene"</returns>
 	std::string GetSceneJsonName() const override;
 
 private:
@@ -69,16 +76,9 @@ private:
 
 	// 動的エンティティ群（Object3D / Sprite / Animated / Spline / Primitive）は GameScene に集約済み
 
-	// スプライト関連
-	std::unique_ptr<SpriteInstance> sprite_;
-	std::vector<std::unique_ptr<SpriteInstance>> sprites_;
-
 	// アニメーション付きモデル
 	std::unique_ptr<AnimatedModelInstance> sneakWalk;
 	std::unique_ptr<AnimatedObject3DInstance> sneakWalkInstance_;
-
-	std::unique_ptr<AnimatedModelInstance> animatedCubeModel_;
-	std::unique_ptr<AnimatedObject3DInstance> animatedCubeInstance_;
 
 	// 天球(Skybox)
 	std::unique_ptr<Skybox> skybox_;
@@ -89,8 +89,6 @@ private:
 	// Primitiveメッシュ（動作確認用）
 	std::unique_ptr<PrimitiveMesh> testPrimitive_;
 	std::unique_ptr<PrimitiveMesh> testPrimitiveBox_;
-	std::unique_ptr<PrimitiveMesh> testRing_;
-	std::unique_ptr<PrimitiveMesh> testCylinder_;
 
 	// Plane版HitEffect用の1枚分のデータ
 	struct HitEffectPlane {
@@ -104,9 +102,6 @@ private:
 	std::vector<HitEffectPlane> hitEffectPlanes_;
 
 	// GPUParticleManager は Game が共通保持（Game::GetGPUParticleManager()）
-
-	// パーティクル用タイマー
-	float emitTimer_ = 0.0f;
 
 	// HitEffect用のタイマー
 	float hitEffectTimer_ = 0.0f;

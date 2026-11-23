@@ -1,11 +1,15 @@
 #include "BaseFilterEffect.h"
 #include "DirectXCore.h"
 #include <cassert>
+namespace {
+	// 定数バッファの大きさを 256 バイト境界へ切り上げるためのマスク（256 - 1）
+	constexpr uint32_t kConstantBufferAlignMask = 0xFF;
+}
 
 void BaseFilterEffect::CreateConstantBuffer(DirectXCore* dxCore, uint32_t dataSize)
 {
 	// 256バイトアライメント
-	uint32_t bufferSize = (dataSize + 0xFF) & ~0xFF;
+	uint32_t bufferSize = (dataSize + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
 
 	D3D12_HEAP_PROPERTIES heapProps{};
 	heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;

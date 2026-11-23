@@ -9,9 +9,16 @@
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "dxgi.lib")
 
-MemoryProbe& MemoryProbe::Instance() {
+namespace {
+    // メモリの使用量を問い合わせる間隔 [ms]
+    constexpr unsigned long long kQueryIntervalMs = 1000;
+    // 1 MB のバイト数
+    constexpr double kBytesPerMB = 1024.0 * 1024.0;
+}
+
+MemoryProbe* MemoryProbe::GetInstance() {
     static MemoryProbe instance;
-    return instance;
+    return &instance;
 }
 
 MemoryProbe::~MemoryProbe() = default;
@@ -39,15 +46,15 @@ bool MemoryProbe::EnsureAdapter() {
 
 void MemoryProbe::Sample() {
     const unsigned long long now = GetTickCount64();
-    if (lastQueryMs_ == 0 || now - lastQueryMs_ >= 1000) {
+    if (lastQueryMs_ == 0 || now - lastQueryMs_ >= kQueryIntervalMs) {
         lastQueryMs_ = now;
 
         // RAM（WorkingSet / Private）
         PROCESS_MEMORY_COUNTERS_EX pmc{};
         if (GetProcessMemoryInfo(GetCurrentProcess(),
                 reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
-            ramWsMb_ = static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
-            ramPrivMb_ = static_cast<double>(pmc.PrivateUsage) / (1024.0 * 1024.0);
+            ramWsMb_ = static_cast<double>(pmc.WorkingSetSize) / kBytesPerMB;
+            ramPrivMb_ = static_cast<double>(pmc.PrivateUsage) / kBytesPerMB;
         }
 
         // VRAM（ローカルメモリの現在使用量）
@@ -55,13 +62,13 @@ void MemoryProbe::Sample() {
             DXGI_QUERY_VIDEO_MEMORY_INFO info{};
             if (SUCCEEDED(adapter_->QueryVideoMemoryInfo(
                     0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
-                vramMb_ = static_cast<double>(info.CurrentUsage) / (1024.0 * 1024.0);
+                vramMb_ = static_cast<double>(info.CurrentUsage) / kBytesPerMB;
             }
         }
     }
 
     // ゲージは毎フレーム更新（各ウィンドウに必ず値が入るように）
-    Profiler::Instance().SetGauge("RAM_WS_MB", ramWsMb_);
-    Profiler::Instance().SetGauge("RAM_Priv_MB", ramPrivMb_);
-    Profiler::Instance().SetGauge("VRAM_MB", vramMb_);
+    Profiler::GetInstance()->SetGauge("RAM_WS_MB", ramWsMb_);
+    Profiler::GetInstance()->SetGauge("RAM_Priv_MB", ramPrivMb_);
+    Profiler::GetInstance()->SetGauge("VRAM_MB", vramMb_);
 }

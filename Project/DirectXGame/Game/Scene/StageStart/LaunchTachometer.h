@@ -31,41 +31,101 @@ public:
 		Launch,    // 射出中
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	LaunchTachometer();
 	~LaunchTachometer();
+	/// <summary>調整値（色・セグメント・板の置き場所）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>中身を描く RenderTexture を作って外部テクスチャとして登録し、一人称と三人称の板のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>外部テクスチャの登録と RenderTexture・板を解放する（共有の板のモデルの発光は LaunchControlBoard::Finalize が戻す）</summary>
 	void Finalize();
 
-	/// <summary>
-	/// thrust＝出力 0..1、rpm / maxRpm＝回転数、redZone＝赤の始まり（出力）、modeTime＝今の Mode に入ってからの秒、
-	/// appearTime＝出始めてからの秒（負で出さない）
-	/// </summary>
+	/// <summary>表示の状態を設定する</summary>
+	/// <param name="thrust">出力 0〜1</param>
+	/// <param name="rpm">回転数</param>
+	/// <param name="maxRpm">最大の回転数</param>
+	/// <param name="redZone">赤の始まり（出力 0〜1）</param>
+	/// <param name="mode">表示の段階</param>
+	/// <param name="modeTime">今の Mode に入ってからの秒 [秒]</param>
+	/// <param name="appearTime">出始めてからの秒 [秒]（負で出さない）</param>
 	void SetState(float thrust, float rpm, float maxRpm, float redZone, Mode mode, float modeTime, float appearTime);
-	/// <summary>LaunchControlBoard::Update と同じ引数（一人称は座った目から、三人称はカメラの画面の位置から置く）</summary>
+	/// <summary>一人称の板（座った目から）と三人称のパネル（カメラの画面の位置から）を置く。LaunchControlBoard::Update と同じ引数</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="mechOrigin">機体の原点（ワールド）</param>
+	/// <param name="thirdPersonEye">三人称のカメラの目（前進 0 のとき、ワールド）</param>
+	/// <param name="thirdPersonTarget">三人称のカメラの注視点（前進 0 のとき、ワールド）</param>
+	/// <param name="fovY">三人称のカメラの縦の画角 [ラジアン]</param>
+	/// <param name="aspect">三人称のカメラの縦横比（幅 / 高さ）</param>
 	void Update(float deltaTime, const Vector3& mechOrigin, const Vector3& thirdPersonEye, const Vector3& thirdPersonTarget,
 		float fovY, float aspect);
 
 	/// <summary>中身を RenderTexture に描く。シーンの RT を描き始める前に呼ぶ</summary>
+	/// <param name="commandList">描画のコマンドリスト</param>
 	void RenderMeterTexture(ID3D12GraphicsCommandList* commandList);
+	/// <summary>メーターの絵を貼ってから、一人称なら浮く板、三人称ならパネルを描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="firstPerson">一人称なら true</param>
 	void Draw(DirectXCore* dxCore, bool firstPerson);
+	/// <summary>発光パスで板を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="firstPerson">一人称なら true</param>
 	void DrawBloom(DirectXCore* dxCore, bool firstPerson);
+	/// <summary>メーターを出しているかを返す</summary>
+	/// <returns>出していれば true</returns>
 	bool IsShown() const { return appearTime_ >= 0.0f; }
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "tachometer"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 	static constexpr float kSize = 600.0f;
 
 private:
+	/// <summary>メーターの中身（LED のセグメント・針・数字・状態）を積む</summary>
 	void DrawContents();
+	/// <summary>文字を積む</summary>
+	/// <param name="text">文字列</param>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="size">文字の高さ [px]</param>
+	/// <param name="color">色</param>
 	void Text(std::string_view text, float x, float y, float size, const Vector4& color);
+	/// <summary>文字を横の中央にそろえて積む</summary>
+	/// <param name="text">文字列</param>
+	/// <param name="cx">中央の x [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="size">文字の高さ [px]</param>
+	/// <param name="color">色</param>
 	void TextCentered(std::string_view text, float cx, float y, float size, const Vector4& color);
+	/// <summary>塗りつぶしの四角を積む</summary>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="w">幅 [px]</param>
+	/// <param name="h">高さ [px]</param>
+	/// <param name="color">色</param>
 	void Rect(float x, float y, float w, float h, const Vector4& color);
+	/// <summary>四角の枠線（4 辺）を積む</summary>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="w">幅 [px]</param>
+	/// <param name="h">高さ [px]</param>
+	/// <param name="thickness">線の太さ [px]</param>
+	/// <param name="color">色</param>
 	void Frame(float x, float y, float w, float h, float thickness, const Vector4& color);
+	/// <summary>板のマテリアルをライティングなし・発光ありにする（GPU の準備ができてから）</summary>
 	void ApplyMaterial();
+	/// <summary>板のモデル（確認パネルと共有）にメーターの絵を貼る（GPU の準備ができてから）</summary>
+	/// <param name="target">貼る板</param>
 	void BindTexture(Object3DInstance& target);
 
 	float alpha_ = 1.0f;

@@ -5,6 +5,11 @@
 #include <cstdio>
 #include <string>
 
+namespace {
+    // 名前の入力欄のバッファの大きさ [byte]
+    constexpr int kNameBufferSize = 256;
+}
+
 void InspectorWindow::OnDraw() {
 #ifdef _DEBUG
 
@@ -18,7 +23,7 @@ void InspectorWindow::OnDraw() {
 
     // ----- 名前編集 -----
     {
-        char nameBuf[256];
+        char nameBuf[kNameBufferSize];
         const std::string current = selected->GetName();
         std::snprintf(nameBuf, sizeof(nameBuf), "%s", current.c_str());
         if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf),

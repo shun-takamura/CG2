@@ -144,6 +144,10 @@ public:
 	WaterSurface();
 	~WaterSurface();
 
+	/// <summary>波のシミュレーション・床と雲のダミーのテクスチャ・ルートシグネチャ・不透明の PSO・板・CB を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">波のシミュレーションの SRV/UAV を確保する先</param>
+	/// <param name="object3DManager">シャドウ・フォグの CB / SRV の取得元</param>
 	/// <param name="floorTexturePath">水底の床。空文字なら床を使わない（大河モード用。代わりのテクスチャで埋める）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
 		const std::string& floorTexturePath);
@@ -160,10 +164,15 @@ public:
 	/// 川のマップ（R=水深 / maxDepth、GB=流れ）を挿して大河モードにする。
 	/// テクスチャは GPU フェーズまで済ませておくこと。InitializeRiverMode の後に呼ぶ。
 	/// </summary>
+	/// <param name="riverMapPath">川のマップのパス（GPU 未完了なら大河モードにならない）</param>
+	/// <param name="info">マップとワールド座標の対応</param>
 	void SetRiverMap(const std::string& riverMapPath, const RiverMapInfo& info);
+	/// <summary>大河モードか</summary>
+	/// <returns>大河モードなら true</returns>
 	bool IsRiverMode() const { return params_.riverMode != 0; }
 
 	/// <summary>波の時間を進める（待機中の波の倍率の補間、連続発射もここで進む）</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void Update(float deltaTime);
 
 	//==============================
@@ -173,13 +182,18 @@ public:
 	/// ランダムに出る波（待機中の波）の振幅倍率を変える。1=既定、0=無し。
 	/// blendSeconds > 0 なら現在値から滑らかに補間する。
 	/// </summary>
+	/// <param name="scale">振幅倍率（負なら 0）</param>
+	/// <param name="blendSeconds">補間にかける時間 [秒]（0 以下で即座）</param>
 	void SetAmbientRingScale(float scale, float blendSeconds = 0.0f);
+	/// <summary>待機中の波の振幅倍率を返す</summary>
+	/// <returns>今の倍率</returns>
 	float GetAmbientRingScale() const { return params_.ambientRingScale; }
 
 	/// <summary>
 	/// 大きな波を1発出す。中心から外へ広がり、maxRadius に届くと消える。
 	/// 速度と距離減衰は待機中の波と共通（Params::ringSpeed / ringFalloff）。
 	/// </summary>
+	/// <param name="center">波の中心（ワールド。Y は無視）</param>
 	/// <param name="amplitude">高さ [m] 相当（待機中の波の ringAmplitude と同じ単位）</param>
 	/// <param name="wavelength">波長 [m]</param>
 	/// <param name="packetLength">束の長さ（波長の数）</param>
@@ -191,12 +205,19 @@ public:
 	/// 大きな波を連続で出し始める（開始時に1発、その後 interval 秒ごと）。
 	/// 間隔 ±20%・振幅 0.7〜1.0 倍・波長 0.8〜1.0 倍でばらつかせる。
 	/// </summary>
+	/// <param name="center">波の中心（ワールド。Y は無視）</param>
+	/// <param name="interval">発射の間隔 [秒]（最小 0.1）</param>
+	/// <param name="amplitude">高さ [m] 相当</param>
+	/// <param name="wavelength">波長 [m]</param>
 	void StartRingBurst(const Vector3& center, float interval, float amplitude, float wavelength);
 	/// <summary>新しく出すのをやめる。出た波は外へ広がって自然に消える</summary>
 	void StopRingBurst() { bursting_ = false; }
+	/// <summary>連続発射中か</summary>
+	/// <returns>発射中なら true</returns>
 	bool IsRingBursting() const { return bursting_; }
 
 	/// <summary>EmitRing で出した波のうち、まだ水面に残っている数</summary>
+	/// <returns>束の後端が maxRadius を越えていない波の数</returns>
 	int GetActiveEmittedRingCount() const;
 
 	//==============================
@@ -205,32 +226,56 @@ public:
 	/// <summary>
 	/// その位置にガウス形のへこみを入れて波を立てる（マウスでなぞる等）。範囲は波紋の中心まわり simSize 四方。
 	/// </summary>
+	/// <param name="position">波源の位置（ワールド。XZ だけ使う）</param>
+	/// <param name="radius">へこみの半径 [m]</param>
+	/// <param name="strength">へこみの深さ [m] 相当（正でへこむ）</param>
 	void AddRippleImpulse(const Vector3& position, float radius, float strength);
 	/// <summary>シミュレーションを進める。シーンの Draw の最初（水面・反射を描く前）に呼ぶ</summary>
 	void DispatchSimulation();
+	/// <summary>波のシミュレーションを返す</summary>
+	/// <returns>RippleSimulation</returns>
 	RippleSimulation* GetRippleSimulation() const { return rippleSimulation_.get(); }
 
 	/// <summary>
 	/// 描画。シーン RT（本体 DSV）がバインド済みで、不透明物を描いた後に呼ぶ。
 	/// reflection が nullptr / 未準備なら空の反射だけになる。
 	/// </summary>
+	/// <param name="camera">描画に使うカメラ（followCamera 時は真下を中心にする）</param>
+	/// <param name="skyCubemapPath">空の cubemap のパス（PS t1）</param>
+	/// <param name="reflection">反射（PS t0。nullptr 可）</param>
 	void Draw(const Camera& camera, const std::string& skyCubemapPath, const WaterReflection* reflection);
 
-	Params& GetParams() { return params_; }
+	/// <summary>水面の調整値（書き換える時はコピーして SetParams で戻す）</summary>
+	/// <returns>今の値</returns>
+	const Params& GetParams() const { return params_; }
+	/// <summary>水面の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetParams(const Params& value) { params_ = value; }
+	/// <summary>水面の高さを設定する（WaterReflection と揃える）</summary>
+	/// <param name="height">y [m]</param>
 	void SetWaterHeight(float height) { params_.waterHeight = height; }
 	/// <summary>水面の一辺の長さ [m]。followCamera 時はカメラの真下を中心にする</summary>
+	/// <param name="size">一辺 [m]</param>
 	void SetSize(float size) { size_ = size; }
+	/// <summary>水面の中心をカメラの真下に付いていかせるか設定する</summary>
+	/// <param name="follow">付いていかせるなら true</param>
 	void SetFollowCamera(bool follow) { followCamera_ = follow; }
+	/// <summary>followCamera でない時の水面の中心を設定する</summary>
+	/// <param name="center">ワールド座標（Y は無視）</param>
 	void SetCenter(const Vector3& center) { center_ = center; }
 	/// <summary>
 	/// 水底の床に法線マップとハイトマップ（視差）を足す。空文字ならその機能は使わない。
 	/// 床のテクスチャ 1 枚の長さは Params::floorTiling（[回/m]）で合わせること。
 	/// </summary>
+	/// <param name="normalMapPath">床の法線マップのパス（PS t7。空なら使わない）</param>
+	/// <param name="heightMapPath">床のハイトマップのパス（PS t8。空なら使わない）</param>
 	/// <param name="parallaxDepth">凹凸の深さ（UV 1 あたり。深さ[m] ÷ テクスチャ1枚の長さ[m]）</param>
 	void SetFloorMaps(const std::string& normalMapPath, const std::string& heightMapPath, float parallaxDepth);
 	/// <summary>同心円のさざ波の中心（ワールド座標。Y は無視）</summary>
+	/// <param name="center">ワールド座標</param>
 	void SetRippleCenter(const Vector3& center) { params_.rippleCenter = { center.x, center.z }; }
 	/// <summary>映り込む空に遠景の雲を重ねる（null で外す）。Skybox と同じ CloudLayer を渡すこと</summary>
+	/// <param name="cloudLayer">遠景の雲（PS b7 / t5 / t9）</param>
 	void SetCloudLayer(const CloudLayer* cloudLayer) { cloudLayer_ = cloudLayer; }
 
 	/// <summary>
@@ -241,13 +286,20 @@ public:
 	/// <param name="halfWidth">正方形の半分の幅 H [m]</param>
 	/// <param name="chamfer">角を落とす量 C [m]</param>
 	void SetOctagonHole(const Vector3& center, float halfWidth, float chamfer);
+	/// <summary>八角形の穴を消す</summary>
 	void ClearHole() { params_.holeEnabled = 0; }
 	/// <summary>円（中心 XZ・半径）の中だけ描く。radius &lt;= 0 で無効</summary>
+	/// <param name="center">円の中心（ワールド。Y は無視）</param>
+	/// <param name="radius">半径 [m]</param>
 	void SetKeepCircle(const Vector3& center, float radius) { params_.keepCenter = { center.x, center.z }; params_.keepRadius = radius; }
 	/// <summary>ワールド Z がこれより手前（小さい）所は描かない（海岸より陸側に水を張らない）</summary>
+	/// <param name="minZ">ワールド Z [m]</param>
 	void SetClipMinZ(float minZ) { params_.clipMinZ = minZ; }
+	/// <summary>八角形の穴が開いているか</summary>
+	/// <returns>開いていれば true</returns>
 	bool HasHole() const { return params_.holeEnabled != 0; }
 
+	/// <summary>水面の調整値・波の発射・大河モードの確認の ImGui（Debug だけ）</summary>
 	void OnImGui();
 
 private:
@@ -256,9 +308,18 @@ private:
 		Matrix4x4 World;
 	};
 
+	/// <summary>
+	/// ルートシグネチャを作る。[0]=VS b0 変換 / [1]=PS b0 Params / [2]=PS b1 平行光源 / [3]=t0 反射 RT / [4]=t1 空の cubemap /
+	/// [5]=t4 床 / [6]=b5 シャドウ定数 / [7]=t3 シャドウマップ / [8]=b6 フォグ / [9]=b7 雲 / [10]=t5 雲のノイズ /
+	/// [11]=t6 波の高さ / [12]=t7 床の法線 / [13]=t8 床のハイト / [14]=t9 雲のもこもこ / [15]=t10 川のマップ（テクスチャはすべて PS）。
+	/// s0=ラップ / s1=シャドウ比較 / s2=シャドウ生深度 / s3=反射 RT（クランプ）/ s4=雲のノイズ（異方性）
+	/// </summary>
 	void CreateRootSignature();
+	/// <summary>水面の PSO を作る（sRGB の RT）</summary>
 	/// <param name="premultipliedAlpha">true なら大河モード用（乗算済み α のブレンド）</param>
+	/// <returns>作った PSO</returns>
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(bool premultipliedAlpha);
+	/// <summary>XZ 平面の単位正方形（TriangleStrip の 4 頂点）の頂点バッファを作る</summary>
 	void CreateVertexBuffer();
 
 	DirectXCore* dxCore_ = nullptr;
@@ -284,7 +345,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> disabledCloudResource_;
 	const CloudLayer* cloudLayer_ = nullptr;
 
-	// 0..1 の乱数（演出用。再現性は不要なので簡易な LCG）
+	/// <summary>0..1 の乱数（演出用。再現性は不要なので簡易な LCG）</summary>
+	/// <returns>0 以上 1 未満の乱数</returns>
 	float NextRandom01();
 
 	Params params_;

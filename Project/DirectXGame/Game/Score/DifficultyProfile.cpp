@@ -15,7 +15,17 @@
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/DifficultyProfile.json";
+	// これより狭い純度の区間は端の倍率をそのまま使う
+	constexpr float kMinPurityRange = 1e-4f;
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+	// 倍率を決める純度の点の数（I・V・IX）
+	constexpr int kCurvePointCount = 3;
 
+	/// <summary>I・V・IX の倍率を読む。オブジェクトでなければ何もしない</summary>
+	/// <param name="root">読む JSON のルート</param>
+	/// <param name="key">項目のキー</param>
+	/// <param name="c">書き込み先（無いキーは元の値のまま）</param>
 	void ReadCurve(const JsonValue& root, const char* key, DifficultyProfile::Curve& c) {
 		const JsonValue& node = root[key];
 		if (!node.IsObject()) return;
@@ -23,6 +33,10 @@ namespace {
 		c.atMid = static_cast<float>(node["V"].AsDouble(c.atMid));
 		c.atMax = static_cast<float>(node["IX"].AsDouble(c.atMax));
 	}
+	/// <summary>I・V・IX の倍率を書く</summary>
+	/// <param name="root">書き込み先の JSON のルート</param>
+	/// <param name="key">項目のキー</param>
+	/// <param name="c">書く倍率</param>
 	void WriteCurve(JsonValue& root, const char* key, const DifficultyProfile::Curve& c) {
 		JsonValue node = JsonValue::MakeObject();
 		node["I"] = JsonValue(static_cast<double>(c.atMin));
@@ -32,12 +46,7 @@ namespace {
 	}
 }
 
-DifficultyProfile* DifficultyProfile::GetInstance() {
-	static DifficultyProfile instance;
-	return &instance;
-}
-
-DifficultyProfile::DifficultyProfile() {
+DifficultyProfile::DifficultyProfile(const EtherState* etherState) : etherState_(etherState) {
 	LoadTuning();
 }
 
@@ -47,20 +56,20 @@ int DifficultyProfile::ScaleInt(int base, float scale) {
 }
 
 float DifficultyProfile::Evaluate(const Curve& c) const {
-	return EvaluateAt(c, EtherState::GetInstance()->GetDifficulty());
+	return EvaluateAt(c, etherState_->GetDifficulty());
 }
 
 float DifficultyProfile::EvaluateAt(const Curve& c, float purity) const {
-	const EtherState* ether = EtherState::GetInstance();
+	const EtherState* ether = etherState_;
 	const float lo = ether->GetDifficultyMin();
 	const float hi = ether->GetDifficultyMax();
 	const float mid = std::clamp(midPurity_, lo, hi);
 	const float p = std::clamp(purity, lo, hi);
 	if (p <= mid) {
-		const float t = (mid - lo) > 1e-4f ? (p - lo) / (mid - lo) : 1.0f;
+		const float t = (mid - lo) > kMinPurityRange ? (p - lo) / (mid - lo) : 1.0f;
 		return c.atMin + (c.atMid - c.atMin) * t;
 	}
-	const float t = (hi - mid) > 1e-4f ? (p - mid) / (hi - mid) : 0.0f;
+	const float t = (hi - mid) > kMinPurityRange ? (p - mid) / (hi - mid) : 0.0f;
 	return c.atMid + (c.atMax - c.atMid) * t;
 }
 
@@ -87,13 +96,13 @@ void DifficultyProfile::SaveTuning() const {
 	WriteCurve(root, "damage", damage_);
 	WriteCurve(root, "shootInterval", shootInterval_);
 	WriteCurve(root, "bossCooldown", bossCooldown_);
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }
 
 void DifficultyProfile::OnImGui() {
 #ifdef _DEBUG
 	// 純度そのものは Ether State の「Place Bet」で変える。体力・射撃の間隔はその後にスポーンした敵から効く
-	const float purity = EtherState::GetInstance()->GetDifficulty();
+	const float purity = etherState_->GetDifficulty();
 	ImGui::Text("Purity %.1f  ->  EnemyHP x%.2f  BossHP x%.2f  Damage x%.2f", purity,
 		GetEnemyHpScale(), GetBossHpScale(), GetDamageScale());
 	ImGui::Text("ShootInterval x%.2f  BossCooldown x%.2f  Reward x%.2f (G7)",
@@ -101,7 +110,7 @@ void DifficultyProfile::OnImGui() {
 	ImGui::SeparatorText("I / V / IX");
 	ImGui::DragFloat("V Purity##Difficulty", &midPurity_, 0.1f, 1.0f, 9.0f, "%.1f");
 	auto curve = [](const char* label, Curve& c) {
-		float v[3] = { c.atMin, c.atMid, c.atMax };
+		float v[kCurvePointCount] = { c.atMin, c.atMid, c.atMax };
 		if (ImGui::DragFloat3(label, v, 0.01f, 0.05f, 10.0f, "%.2f")) {
 			c.atMin = v[0]; c.atMid = v[1]; c.atMax = v[2];
 		}

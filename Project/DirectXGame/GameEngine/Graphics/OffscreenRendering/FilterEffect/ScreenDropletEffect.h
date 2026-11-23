@@ -52,6 +52,11 @@ public:
         float sizeDryTime = 3.0f;       // 大きさに使う濡れ具合が下がる速さ。乾く間に見えている水滴が縮まないよう、薄れて消える方を先にする
     };
 
+    /// <summary>ScreenDroplet.PS の PSO を effect 用ルートシグネチャ（t0＋b0）で作り、値を既定に戻してから定数バッファを作る</summary>
+    /// <param name="dxCore">DirectXCoreへのポインタ</param>
+    /// <param name="copyRootSignature">未使用</param>
+    /// <param name="effectRootSignature">PSO に使う cbuffer あり用ルートシグネチャ</param>
+    /// <param name="basePsoDesc">共通のパイプラインステート設定</param>
     void Initialize(
         DirectXCore* dxCore,
         ID3D12RootSignature* copyRootSignature,
@@ -59,29 +64,51 @@ public:
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
     ) override;
 
+    /// <summary>今のモードの Settings・時間・濡れ具合を範囲内に切り詰めて定数バッファへ書き込む</summary>
     void UpdateConstantBuffer() override;
+    /// <summary>状態の表示・モードごとの値の編集・プレビュー・JSON の保存/再読み込みを ImGui で行う</summary>
     void ShowImGui() override;
+    /// <summary>両モードの Settings を既定値に戻し、重力モード・濡れ具合 0・プレビュー解除にする</summary>
     void ResetParams() override;
 
+    /// <summary>エフェクト名を返す</summary>
+    /// <returns>"ScreenDroplet"</returns>
     std::string GetName() const override { return "ScreenDroplet"; }
+    /// <summary>定数バッファを使う</summary>
+    /// <returns>常に true</returns>
     bool NeedsCBuffer() const override { return true; }
 
     /// <summary>
     /// 毎フレーム呼ぶ（呼び出し元は 1 か所にまとめること）。濡れ具合を target（0..1）へ追いかけ、水滴の時間を進める。
     /// mode が今と違えば、乾ききってから切り替える。濡れ具合が 0 より大きい間だけ有効にする
     /// </summary>
+    /// <param name="deltaTime">経過時間 [秒]（負は 0）</param>
+    /// <param name="targetWetness">目標の濡れ具合（0〜1 に切り詰める）</param>
+    /// <param name="mode">水滴の流れ方のモード</param>
     void Update(float deltaTime, float targetWetness, Mode mode);
 
     /// <summary>水滴を消して無効にする（シーンを抜ける時など）</summary>
     void Clear();
 
     /// <summary>モードごとの値を JSON から読む（無ければ既定値のまま）。Save はこのパスに書く</summary>
+    /// <param name="path">設定 JSON のパス</param>
     void LoadSettings(const std::string& path);
+    /// <summary>両モードの値を LoadSettings で受け取ったパスへ JSON で書き出す（パスが空なら何もしない）</summary>
     void SaveSettings() const;
 
+    /// <summary>今の濡れ具合を返す</summary>
+    /// <returns>濡れ具合（0〜1）</returns>
     float GetWetness() const { return wetness_; }
+    /// <summary>今のモードを返す</summary>
+    /// <returns>モード</returns>
     Mode GetMode() const { return mode_; }
+    /// <summary>指定したモードの調整値を返す（書き換え可）</summary>
+    /// <param name="mode">モード</param>
+    /// <returns>そのモードの Settings への参照</returns>
     Settings& GetSettings(Mode mode) { return settings_[static_cast<int>(mode)]; }
+    /// <summary>指定したモードの調整値を返す</summary>
+    /// <param name="mode">モード</param>
+    /// <returns>そのモードの Settings への参照</returns>
     const Settings& GetSettings(Mode mode) const { return settings_[static_cast<int>(mode)]; }
 
 private:
@@ -118,7 +145,11 @@ private:
     };
 
     /// <summary>モードごとの既定値（重力はクラスの既定、放射は霧雨向け）</summary>
+    /// <param name="mode">モード</param>
+    /// <returns>そのモードの既定の Settings</returns>
     static Settings DefaultSettings(Mode mode);
+    /// <summary>今のモードの調整値を返す</summary>
+    /// <returns>今のモードの Settings への参照</returns>
     const Settings& Current() const { return settings_[static_cast<int>(mode_)]; }
 
     Settings settings_[static_cast<int>(Mode::Count)];

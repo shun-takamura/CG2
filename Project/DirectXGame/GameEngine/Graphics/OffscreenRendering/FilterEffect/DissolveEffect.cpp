@@ -7,6 +7,13 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻す既定値（境目の幅・境目の色の G / B（R は 1）・ノイズの細かさ）
+	constexpr float kDefaultEdgeWidth = 0.03f;
+	constexpr float kDefaultEdgeColorG = 0.4f;
+	constexpr float kDefaultEdgeColorB = 0.3f;
+	constexpr float kDefaultNoiseScale = 16.0f;
+}
 
 void DissolveEffect::InitializeMasked(
 	DirectXCore* dxCore,
@@ -118,17 +125,17 @@ void DissolveEffect::ShowImGui()
 void DissolveEffect::ResetParams()
 {
 	threshold_ = 0.0f;
-	edgeWidth_ = 0.03f;
+	edgeWidth_ = kDefaultEdgeWidth;
 	edgeColor_[0] = 1.0f;
-	edgeColor_[1] = 0.4f;
-	edgeColor_[2] = 0.3f;
+	edgeColor_[1] = kDefaultEdgeColorG;
+	edgeColor_[2] = kDefaultEdgeColorB;
 	edgeIntensity_ = 1.0f;
 	fillColor_[0] = 0.0f;
 	fillColor_[1] = 0.0f;
 	fillColor_[2] = 0.0f;
 	fillIntensity_ = 1.0f;
 	maskMode_ = MaskMode::Texture;
-	noiseScale_ = 16.0f;
+	noiseScale_ = kDefaultNoiseScale;
 	noiseTime_ = 0.0f;
 }
 

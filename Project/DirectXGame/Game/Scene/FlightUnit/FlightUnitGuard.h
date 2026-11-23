@@ -14,39 +14,88 @@ class EffectPrimitiveRenderer;
 /// </summary>
 class FlightUnitGuard : public FlightUnitSkill {
 public:
+	/// <summary>パーツの開いた形・閉じた形と、背中の 2 基の付ける所の初期値を決める</summary>
 	FlightUnitGuard();
 	~FlightUnitGuard() override;
 
+	/// <summary>シーンへの窓口とカメラを受け取り、バリアの球の描画物を作る</summary>
+	/// <param name="host">シーンへの窓口</param>
+	/// <param name="camera">カメラ</param>
 	void Initialize(IFlightUnitHost* host, Camera* camera) override;
+	/// <summary>耐久力付きのバリアを張る（耐久力＝HP の上限 × 割合。戻る途中なら今の開き具合から出ていく）</summary>
+	/// <returns>張れたら true</returns>
 	bool Activate() override;
+	/// <summary>バリアを消し、ユニットを閉じながら背中へ戻し始める</summary>
+	/// <param name="restoreTime">使わない（防御系は時間の倍率に触らない）</param>
 	void Cancel(bool restoreTime) override;
+	/// <summary>バリアを張っている途中かを返す</summary>
+	/// <returns>途中なら true</returns>
 	bool IsActive() const override { return active_; }
+	/// <summary>技の残りを返す（時間と耐久力の少ない方）</summary>
+	/// <returns>1→0</returns>
 	float GetActiveRatio() const override;
+	/// <summary>今の段階のクールタイムを返す</summary>
+	/// <returns>クールタイム [秒]</returns>
 	float GetCooldown() const override { return cooldown_[LevelIndex()]; }
+	/// <summary>今の段階の HP の上限の補正を返す</summary>
+	/// <returns>HP の上限に掛ける倍率</returns>
 	float GetMaxHpScale() const override { return maxHpScale_[LevelIndex()]; }
+	/// <summary>タイマーを進め、バリアの間は入った敵弾を消して耐久力を減らし、バリアの球の見た目を更新する</summary>
+	/// <param name="dt">実時間の経過 [秒]</param>
+	/// <param name="canAct">使わない</param>
 	void Update(float dt, bool canAct) override;
+	/// <summary>バリアの間か軽減の光りの間だけ、バリアの球を描く</summary>
 	void Draw() override;
 
+	/// <summary>バックパックを背負うかを返す（位置の基準にだけ使う）</summary>
+	/// <returns>常に true</returns>
 	bool UsesBackpack() const override { return true; }
+	/// <summary>バックパック本体を描くかを返す</summary>
+	/// <returns>常に false（本体は描かない）</returns>
 	bool DrawsBackpack() const override { return false; }
+	/// <summary>2 基のユニットのパーツのモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
 	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
+	/// <summary>ユニットの行列を作る（背中で閉じた形と、開いて回る形の間を離れ具合で補間する）</summary>
+	/// <param name="backpackWorld">バックパックのワールド行列</param>
 	void UpdateModels(const Matrix4x4& backpackWorld) override;
+	/// <summary>ユニットを描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="idPass">true なら ID マスクへ描く</param>
 	void DrawModels(DirectXCore* dxCore, bool idPass) override;
 
+	/// <summary>クールタイムが明けていれば被ダメージを軽減する（弾は消さない＝ジャスト回避は普段どおり起きる）</summary>
+	/// <param name="damage">難易度の倍率の後のダメージ</param>
+	/// <returns>軽減後のダメージ</returns>
 	int ModifyIncomingDamage(int damage) override;
+	/// <summary>バリアの間は被弾を吸い、耐久力を減らす（弾でない攻撃は当たり続けるので、間隔を空けて 1 回分だけ減らす）</summary>
+	/// <param name="damage">被弾のダメージ</param>
+	/// <returns>バリアの間なら true</returns>
 	bool AbsorbHit(int damage) override;
 
+	/// <summary>クールタイムのバーの色を返す</summary>
+	/// <returns>色（RGBA 0〜1）</returns>
 	Vector4 GetColor() const override { return color_; }
+	/// <summary>調整値を JSON から読む</summary>
+	/// <param name="node">この系統の欄</param>
 	void LoadTuning(const JsonValue& node) override;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先（この系統の欄）</param>
 	void SaveTuning(JsonValue& node) const override;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui() override;
 
 private:
-	// 耐久力を減らす（尽きたら消す）
+	/// <summary>耐久力を減らす（尽きたらバリアを消す）</summary>
+	/// <param name="damage">減らす量</param>
 	void Drain(int damage);
-	// 0＝背中で閉じている、1＝開いて回っている
+	/// <summary>ユニットの開き具合を返す</summary>
+	/// <returns>0＝背中で閉じている、1＝開いて回っている</returns>
 	float ReleaseRatio() const;
-	// ユニット unit（0/1）の回る位置
+	/// <summary>ユニットの回る位置（自機のまわりの、奥が上がるように傾けた輪）を求める</summary>
+	/// <param name="unit">ユニットの番号 0/1</param>
+	/// <returns>ワールド座標</returns>
 	Vector3 OrbitPosition(int unit) const;
 
 	// ----- モデル -----

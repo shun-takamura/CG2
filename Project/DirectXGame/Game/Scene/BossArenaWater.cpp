@@ -18,6 +18,40 @@ namespace {
 	constexpr float kSeaSize = 6000.0f; // 海はカメラ追従。地平線まで張る
 	// 海の水底は深さで見えなくなる（吸収で水の色になりきる）ので、床のテクスチャは何でもよい
 	constexpr float kSeaDepth = 40.0f;
+	// 足場の水：待機中のさざ波の高さ [m]（タイトルより控えめ）
+	constexpr float kArenaRingAmplitude = 0.01f;
+	// 足場の水：待機中のさざ波が出る間隔 [秒]
+	constexpr float kArenaRingInterval = 6.0f;
+	// 足場の水：さざ波の間隔のばらつき（0..1）
+	constexpr float kArenaRingJitter = 0.7f;
+	// 海の水の色 R
+	constexpr float kSeaWaterColorR = 0.02f;
+	// 海の水の色 G
+	constexpr float kSeaWaterColorG = 0.09f;
+	// 海の水の色 B
+	constexpr float kSeaWaterColorB = 0.13f;
+	// 海の吸収係数 R
+	constexpr float kSeaAbsorptionR = 0.45f;
+	// 海の吸収係数 G
+	constexpr float kSeaAbsorptionG = 0.18f;
+	// 海の吸収係数 B
+	constexpr float kSeaAbsorptionB = 0.12f;
+	// 海の広いうねりの高さ [m]
+	constexpr float kSeaNoiseAmplitude = 0.08f;
+	// 海のうねりのノイズの細かさ
+	constexpr float kSeaNoiseScale = 0.12f;
+	// 海のうねりの流れる速さ
+	constexpr float kSeaNoiseSpeed = 0.6f;
+	// 足場の水の板を円の直径より広げる量 [m]
+	constexpr float kArenaWaterSizeMargin = 2.0f;
+	// 着水の波紋の高さ [m]
+	constexpr float kSplashRingAmplitude = 0.05f;
+	// 着水の波紋の波長 [m]
+	constexpr float kSplashRingWavelength = 1.2f;
+	// 着水の波紋の束の長さ（波長の数）
+	constexpr float kSplashRingPacketLength = 3.0f;
+	// 着水の波紋が届く距離 [m]
+	constexpr float kSplashRingMaxRadius = 25.0f;
 }
 
 BossArenaWater::BossArenaWater() = default;
@@ -27,27 +61,36 @@ void BossArenaWater::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Obj
 	water_ = std::make_unique<WaterSurface>();
 	water_->Initialize(dxCore, srvManager, object3DManager, kFloorTexturePath);
 	water_->SetFollowCamera(false);
-	water_->GetParams().floorTiling = 1.0f / kFloorTileMeters;
+	{
+		WaterSurface::Params p = water_->GetParams();
+		p.floorTiling = 1.0f / kFloorTileMeters;
+		water_->SetParams(p);
+	}
 	water_->SetFloorMaps(kFloorNormalMapPath, kFloorHeightMapPath, kFloorParallaxDepth);
-	// 待機中のさざ波はタイトルより控えめ（戦闘中に水面がうるさくならないように）
-	water_->GetParams().ringAmplitude = 0.01f;
-	water_->GetParams().ringInterval = 6.0f;
-	water_->GetParams().ringJitter = 0.7f;
+	{
+		// 待機中のさざ波はタイトルより控えめ（戦闘中に水面がうるさくならないように）
+		WaterSurface::Params p = water_->GetParams();
+		p.ringAmplitude = kArenaRingAmplitude;
+		p.ringInterval = kArenaRingInterval;
+		p.ringJitter = kArenaRingJitter;
+		water_->SetParams(p);
+	}
 	ApplyHeight();
 
 	sea_ = std::make_unique<WaterSurface>();
 	sea_->Initialize(dxCore, srvManager, object3DManager, kFloorTexturePath);
 	sea_->SetSize(kSeaSize);
 	sea_->SetFollowCamera(true);
-	WaterSurface::Params& sp = sea_->GetParams();
+	WaterSurface::Params sp = sea_->GetParams();
 	sp.depth = kSeaDepth;
-	sp.waterColor = { 0.02f, 0.09f, 0.13f, 1.0f };
-	sp.absorption = { 0.45f, 0.18f, 0.12f };
+	sp.waterColor = { kSeaWaterColorR, kSeaWaterColorG, kSeaWaterColorB, 1.0f };
+	sp.absorption = { kSeaAbsorptionR, kSeaAbsorptionG, kSeaAbsorptionB };
 	sp.ambient = 0.0f;
 	sp.ringAmplitude = 0.0f;      // 海に同心円の波は出さない
-	sp.noiseAmplitude = 0.08f;    // 広いうねり
-	sp.noiseScale = 0.12f;
-	sp.noiseSpeed = 0.6f;
+	sp.noiseAmplitude = kSeaNoiseAmplitude;    // 広いうねり
+	sp.noiseScale = kSeaNoiseScale;
+	sp.noiseSpeed = kSeaNoiseSpeed;
+	sea_->SetParams(sp);
 	sea_->SetClipMinZ(seaClipMinZ_);
 }
 
@@ -56,7 +99,7 @@ void BossArenaWater::SetArena(const Vector3& center, float groundY, float waterR
 	ApplyHeight();
 	if (water_) {
 		water_->SetCenter({ center.x, 0.0f, center.z });
-		water_->SetSize(waterRadius * 2.0f + 2.0f);
+		water_->SetSize(waterRadius * 2.0f + kArenaWaterSizeMargin);
 		water_->SetKeepCircle(center, waterRadius);
 		water_->SetRippleCenter(center);
 	}
@@ -67,12 +110,14 @@ void BossArenaWater::SetArena(const Vector3& center, float groundY, float waterR
 }
 
 void BossArenaWater::EmitSplash(const Vector3& position) {
-	if (water_) water_->EmitRing(position, 0.05f, 1.2f, 3.0f, 25.0f);
+	if (water_) water_->EmitRing(position, kSplashRingAmplitude, kSplashRingWavelength, kSplashRingPacketLength, kSplashRingMaxRadius);
 }
 
 void BossArenaWater::ApplyHeight() {
 	if (!water_) return;
-	water_->GetParams().depth = depth_;
+	WaterSurface::Params p = water_->GetParams();
+	p.depth = depth_;
+	water_->SetParams(p);
 	water_->SetWaterHeight(groundY_ + depth_);
 }
 

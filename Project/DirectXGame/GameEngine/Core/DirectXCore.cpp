@@ -71,8 +71,6 @@ void DirectXCore::Initialize(WindowsApplication* winApp) {
 
 void DirectXCore::BeginDraw() {
     // 描画準備（クリアなどはここで）
-    //HRESULT hr;
-
     // バックバッファのインデックス取得
     frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
 
@@ -99,11 +97,6 @@ void DirectXCore::BeginDraw() {
     const float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     commandList_->ClearRenderTargetView(rtvHandle, black, 0, nullptr);
     SetOutputViewport(commandList_.Get());
-
-    // クリア処理
-    //float clearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
-    //commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    //commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 }
 
 void DirectXCore::ClearDepthBuffer()
@@ -182,6 +175,8 @@ void DirectXCore::EndDraw() {
 }
 
 void DirectXCore::Finalize() {
+    // GPU 計測のクエリヒープ等を、デバイスより先に解放する（Initialize の PEPPER_GPU_INIT と対）
+    PEPPER_GPU_FINALIZE();
     if (fenceEvent_) {
         CloseHandle(fenceEvent_);
         fenceEvent_ = nullptr;
@@ -469,12 +464,29 @@ void DirectXCore::TickPendingCallbacks()
 }
 
 namespace {
+    // スワップチェーンのバックバッファの枚数（RTV もこの数だけ作る）
+    constexpr UINT kBackBufferCount = 2;
+    // DSV ヒープに確保する記述子の数（0 = 通常 / 1 = 深度を書かない読み取り専用。空を描くときに使う）
+    constexpr UINT kDsvHeapDescriptorCount = 2;
+    // 描画解像度の幅の下限 / 上限 [px]
+    constexpr int32_t kMinRenderWidth = 320;
+    constexpr int32_t kMaxRenderWidth = 7680;
+    // 1 秒のマイクロ秒数
+    constexpr float kMicrosecondsPerSecond = 1000000.0f;
+    // フレーム待ちで sleep に任せる割合（残りはビジーループで正確に待つ）
+    constexpr double kSleepRatio = 0.9;
+    // 固定フレームレートのときの FPS
+    constexpr float kFixedFps = 60.0f;
+
     /// <summary>
     /// シェーダ関連の復帰不能な失敗。原因が追える形で記録してから終了する。
     ///
     /// 一番ありがちなのが「カレントディレクトリが Project/ になっていない」ケースで、
     /// その場合は相対パスの Resources/ が丸ごと見つからない。判断材料として cwd も残す。
     /// </summary>
+    /// <param name="what">何が失敗したか</param>
+    /// <param name="path">対象のパス</param>
+    /// <param name="hr">失敗の HRESULT</param>
     [[noreturn]] void FatalShaderError(const wchar_t* what, const std::wstring& path, HRESULT hr) {
         std::error_code ec;
         const std::wstring cwd = std::filesystem::current_path(ec).wstring();
@@ -490,9 +502,9 @@ namespace {
 
         // error.log と session.log の両方に Error で残す（Release でも出る）
         const std::string utf8 = ConvertString(detail);
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Error, SessionLogger::Level::Error, utf8);
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Session, SessionLogger::Level::Error, utf8);
         // Write は毎回 flush するので、この時点でディスクに載っている
 
@@ -503,8 +515,9 @@ namespace {
         std::exit(1);
     }
 
-    /// Resources/Shaders/**/X.hlsl → Resources/CompiledShaders/**/X.cso
-    /// 対応付けが取れない（Shaders 配下でない）場合は空文字を返す。
+    /// <summary>Resources/Shaders/ 以下の .hlsl のパスを、同じ階層の Resources/CompiledShaders/ 以下の .cso に置き換える</summary>
+    /// <param name="hlslPath">.hlsl のパス</param>
+    /// <returns>.cso のパス（Shaders 配下でなければ空文字）</returns>
     std::wstring ToCompiledShaderPath(const std::wstring& hlslPath) {
         static const std::wstring kSrcDir = L"Resources/Shaders/";
         static const std::wstring kDstDir = L"Resources/CompiledShaders/";
@@ -610,7 +623,7 @@ IDxcBlob* DirectXCore::LoadShaderBlobUncached(const std::wstring& hlslPath, cons
         const std::string msg = ConvertString(std::format(
             L"[Shader] .cso が見つからないため実行時コンパイルにフォールバックします: hlsl={}",
             hlslPath));
-        SessionLogger::Instance().Write(
+        SessionLogger::GetInstance()->Write(
             SessionLogger::Category::Error, SessionLogger::Level::Error, msg);
         return CompileShader(hlslPath, profile);
     }
@@ -767,9 +780,6 @@ void DirectXCore::CreateDevice() {
         // ソフトウェアアダプタ出なければ採用!
         if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
 
-            // 採用したアダプタの情報をログに出力<-wstring
-            //Log(convertStringClass->ConvertString(std::format(L"Use Adapter:{}\n", adapterDesc.Description)));
-
             break;
         }
 
@@ -843,7 +853,7 @@ void DirectXCore::CreateRenderTargets() {
 
     // RTVヒープ作成
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
-    rtvHeapDesc.NumDescriptors = 2;
+    rtvHeapDesc.NumDescriptors = kBackBufferCount;
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     hr = device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap_));
     assert(SUCCEEDED(hr));
@@ -854,7 +864,7 @@ void DirectXCore::CreateRenderTargets() {
 
     D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
 
-    for (UINT i = 0; i < 2; ++i) {
+    for (UINT i = 0; i < kBackBufferCount; ++i) {
         hr = swapChain_->GetBuffer(i, IID_PPV_ARGS(&backBuffers_[i]));
         assert(SUCCEEDED(hr));
 
@@ -868,7 +878,7 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
     HRESULT hr = S_OK;
     if (!dsvHeap_) {
         D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
-        dsvHeapDesc.NumDescriptors = 2;
+        dsvHeapDesc.NumDescriptors = kDsvHeapDescriptorCount;
         dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
         hr = device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_));
         assert(SUCCEEDED(hr));
@@ -917,9 +927,6 @@ void DirectXCore::CreateDepthStencilView(int32_t width, int32_t height) {
     dsvHandle.ptr += dsvDescriptorSize;
     device_->CreateDepthStencilView(depthStencilBuffer_.Get(), &dsvDesc, dsvHandle);
 
-   /* device_->CreateDepthStencilView(depthStencilBuffer_.Get(), nullptr,
-        dsvHeap_->GetCPUDescriptorHandleForHeapStart());*/
-
     // 初期状態
     depthState_ = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 }
@@ -951,7 +958,7 @@ void DirectXCore::RequestRenderResolution(int32_t width, int32_t height)
 {
     // 16:9 に丸める（UI の仮想解像度と縦横比をそろえないと UI が伸びる）。高さは幅から決め直し、幅は 2 の倍数に
     (void)height;
-    width = (std::clamp)(width, 320, 7680) & ~1;
+    width = (std::clamp)(width, kMinRenderWidth, kMaxRenderWidth) & ~1;
     pendingRenderWidth_ = width;
     pendingRenderHeight_ = width * WindowsApplication::kUIHeight / WindowsApplication::kUIWidth;
     pendingRenderResolution_ = true;
@@ -1009,13 +1016,13 @@ void DirectXCore::UpdateFixFPS(){
     // （これをしないとフレーム制限が外れて早送りになる）。
     if (replayMode_) {
         const std::chrono::microseconds target(
-            static_cast<long long>(deltaTime_ * 1000000.0f));
+            static_cast<long long>(deltaTime_ * kMicrosecondsPerSecond));
         std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
         std::chrono::microseconds elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
         if (elapsed < target) {
             std::this_thread::sleep_for(std::chrono::microseconds(
-                static_cast<long long>((target - elapsed).count() * 0.9)));
+                static_cast<long long>((target - elapsed).count() * kSleepRatio)));
             do {
                 now = std::chrono::steady_clock::now();
                 elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - reference_);
@@ -1034,8 +1041,8 @@ void DirectXCore::UpdateFixFPS(){
 
     if (useFixedFrameRate_) {
         // 固定フレームレート（60FPS）
-        const std::chrono::microseconds kMinCheckTime(uint64_t(1000000.0f / 60.0f));
-        const std::chrono::microseconds kMinTime(uint64_t(1000000.0f / 60.0f));
+        const std::chrono::microseconds kMinCheckTime(uint64_t(kMicrosecondsPerSecond / kFixedFps));
+        const std::chrono::microseconds kMinTime(uint64_t(kMicrosecondsPerSecond / kFixedFps));
 
         // 1/60秒経っていない場合は待機
         std::chrono::microseconds check =
@@ -1044,7 +1051,7 @@ void DirectXCore::UpdateFixFPS(){
         if (check < kMinCheckTime) {
             std::chrono::microseconds waitTime = kMinCheckTime - check;
             std::this_thread::sleep_for(std::chrono::microseconds(
-                static_cast<long long>(waitTime.count() * 0.9)));
+                static_cast<long long>(waitTime.count() * kSleepRatio)));
         }
 
         // 時間が経つまでループ
@@ -1054,10 +1061,10 @@ void DirectXCore::UpdateFixFPS(){
         } while (elapsed < kMinTime);
 
         reference_ = now;
-        deltaTime_ = 1.0f / 60.0f; // 固定
+        deltaTime_ = 1.0f / kFixedFps; // 固定
     } else {
         // 可変フレームレート
-        deltaTime_ = elapsed.count() / 1000000.0f;
+        deltaTime_ = elapsed.count() / kMicrosecondsPerSecond;
 
         // デルタタイムの上限を設定（処理落ち時の暴走防止）
         const float kMaxDeltaTime = 0.1f; // 最大0.1秒（10FPS相当）

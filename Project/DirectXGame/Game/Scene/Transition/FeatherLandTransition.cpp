@@ -16,6 +16,77 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 波を解く範囲の一辺（着地点のまわりのワールドの長さ）[m]
+	constexpr float kRippleSimSize = 14.0f;
+	// 画面いっぱいに広がるよう速めにした波の速さ
+	constexpr float kRippleWaveSpeed = 2.5f;
+	// 弱めにした 1 刻みごとの波の減衰
+	constexpr float kRippleDamping = 0.996f;
+	// 浮かび上がるゲームオーバー画面の歪み（波の傾き → 画面 UV のずれ）
+	constexpr float kRippleRefraction = 0.05f;
+	// 定数バッファの大きさを 256 バイト単位にそろえるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 羽根の焼け落ちの縁のオレンジ（PlayerFeatherBurn.json の dissolveEdgeColor とそろえる）
+	constexpr Vector3 kBurnEdgeColor = { 1.0f, 0.45f, 0.08f };
+	// 羽根の焼け落ちの縁の幅
+	constexpr float kBurnEdgeWidth = 0.12f;
+	// 各段の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinPhaseSeconds = 0.01f;
+	// これより w が小さければ画面に投影せず画面の中心を返す
+	constexpr float kMinClipW = 1e-5f;
+	// 雨の羽根の揺れの速さのばらつき（倍率）の最小
+	constexpr float kSwaySpeedJitterMin = 0.75f;
+	// 雨の羽根の揺れの速さのばらつき（倍率）の最大
+	constexpr float kSwaySpeedJitterMax = 1.25f;
+	// 雨の羽根の揺れ幅のばらつき（倍率）の最小
+	constexpr float kSwayAmplitudeJitterMin = 0.6f;
+	// 雨の羽根の揺れ幅のばらつき（倍率）の最大
+	constexpr float kSwayAmplitudeJitterMax = 1.2f;
+	// 雨の羽根の X 軸まわりの傾きのばらつき（±）[rad]
+	constexpr float kRainTiltXRange = 0.6f;
+	// 雨の羽根の Z 軸まわりの傾きのばらつき（±）[rad]
+	constexpr float kRainTiltZRange = 0.8f;
+	// 雨の羽根の横の丸みの最小
+	constexpr float kRainCupMin = 0.05f;
+	// 雨の羽根の横の丸みの最大
+	constexpr float kRainCupMax = 0.15f;
+	// 一番奥の羽根を暗くする割合
+	constexpr float kFarDarkening = 0.25f;
+	// 手前と奥の奥行きの差の下限 [m]（0 で割らないように）
+	constexpr float kMinDepthRange = 0.01f;
+	// 羽根の反りが揺れる速さ [rad/秒]
+	constexpr float kFlutterSpeed = 5.0f;
+	// 大きい一枚を画面の上端から自分の長さの何倍上に出すか
+	constexpr float kHeroSpawnAboveRatio = 0.6f;
+	// 大きい一枚の横の丸み
+	constexpr float kHeroCup = 0.12f;
+	// 大きい一枚のディゾルブの欠け方を決めるノイズのずらし（FeatherRise とそろえる）
+	constexpr float kHeroNoiseOffset = 0.37f;
+	// 振れの端での落ちる速さ（振れの中央の速さに対する割合）
+	constexpr float kHeroFallSpeedMinRatio = 0.3f;
+	// 振れの中央へ向かって足す落ちる速さの割合
+	constexpr float kHeroFallSpeedSwingRatio = 0.7f;
+	// 水平に寝始める高さの下限 [m]（0 で割らないように）
+	constexpr float kMinSettleHeight = 0.01f;
+	// 着地した大きい一枚が浮く水面からの高さ [m]
+	constexpr float kFloatHeight = 0.02f;
+	// 水面に浮いた大きい一枚が上下する幅 [m]
+	constexpr float kBobAmplitude = 0.01f;
+	// 水面に浮いた大きい一枚が上下する速さ [rad/秒]
+	constexpr float kBobFrequency = 3.0f;
+	// 浮いた羽根の上下で出す小さな波の半径（着地のへこみの半径に対する割合）
+	constexpr float kBobPulseRadiusRatio = 0.6f;
+	// カメラが大きい一枚を追い始めてから追い切るまで [秒]
+	constexpr float kFollowBlendSeconds = 0.5f;
+	// 瞼の縁のぼかしの下限
+	constexpr float kMinEyelidSoftness = 0.001f;
+	// 画面全体を覆う三角形の頂点の数
+	constexpr int kFullscreenTriangleVertexCount = 3;
+
 	constexpr const wchar_t* kWaterPixelShaderPath = L"Resources/Shaders/Transition/FeatherWater.PS.hlsl";
 	// 浮かび上がりの縁をちぎるノイズ（InkShape.hlsli）。ScreenWaterSurface の t0 / t1 の後ろの t2
 	constexpr const char* kNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
@@ -23,40 +94,46 @@ namespace {
 	// kPi と Vector3 の Lerp はエンジンの MathUtility.h のものを使う
 	constexpr float kHalfPi = kPi * 0.5f;
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float t) {
 		t = std::clamp(t, 0.0f, 1.0f);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
+	/// <summary>a から b へ t で線形補間する</summary>
+	/// <param name="a">t = 0 の値</param>
+	/// <param name="b">t = 1 の値</param>
+	/// <param name="t">補間の割合</param>
+	/// <returns>補間した値</returns>
 	float Lerp(float a, float b, float t) { return a + (b - a) * t; }
 }
 
-void FeatherLandTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-	float screenWidth, float screenHeight) {
-	spriteManager_ = spriteManager;
-	dxCore_ = dxCore;
-	screenWidth_ = screenWidth;
-	screenHeight_ = screenHeight;
+void FeatherLandTransition::OnInitialize() {
 
 	SRVManager* srvManager = SceneManager::GetInstance()->GetSRVManager();
-	water_.Initialize(dxCore_, srvManager, screenWidth_, screenHeight_);
+	water_.Initialize(GetDxCore(), srvManager, GetScreenWidth(), GetScreenHeight());
 	// 水面のワールドの長さで解く：着地点のまわり 14 四方。画面いっぱいに広がるよう波は速め・減衰は弱め
-	ScreenWaterSurface::Settings& ripple = water_.GetSettings();
-	ripple.simSize = 14.0f;
-	ripple.waveSpeed = 2.5f;
-	ripple.damping = 0.996f;
-	ripple.refraction = 0.05f;   // 浮かび上がるゲームオーバー画面の歪み（波の傾き → 画面 UV のずれ）
+	ScreenWaterSurface::Settings ripple = water_.GetSettings();
+	ripple.simSize = kRippleSimSize;
+	ripple.waveSpeed = kRippleWaveSpeed;
+	ripple.damping = kRippleDamping;
+	ripple.refraction = kRippleRefraction;   // 浮かび上がるゲームオーバー画面の歪み（波の傾き → 画面 UV のずれ）
+	water_.SetSettings(ripple);
 	waterRootSignature_ = water_.CreateRootSignature(1);
 	waterPipelineState_ = water_.CreatePipelineState(waterRootSignature_.Get(), kWaterPixelShaderPath, false);
 	TextureManager::GetInstance()->LoadTexture(kNoisePath);
-	waterParamsResource_ = dxCore_->CreateBufferResource((sizeof(WaterParamsForGPU) + 255) & ~255);
+	waterParamsResource_ = GetDxCore()->CreateBufferResource((sizeof(WaterParamsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	waterParamsResource_->Map(0, nullptr, reinterpret_cast<void**>(&waterParamsData_));
 	*waterParamsData_ = WaterParamsForGPU{};
 
-	renderer_.Initialize(dxCore_, srvManager);
+	renderer_.Initialize(GetDxCore(), srvManager);
 	// 縁は死亡演出の羽根の焼け落ちと同じオレンジ（19 番 §1.3。PlayerFeatherBurn.json の dissolveEdgeColor とそろえる）。
 	// よみがえり（FeatherRise）は別の renderer_ なので青白のまま
-	renderer_.GetSettings().edgeColor = { 1.0f, 0.45f, 0.08f };
-	renderer_.GetSettings().edgeWidth = 0.12f;
+	FeatherRenderer::Settings feather = renderer_.GetSettings();
+	feather.edgeColor = kBurnEdgeColor;
+	feather.edgeWidth = kBurnEdgeWidth;
+	renderer_.SetSettings(feather);
 	falling_.reserve(FeatherRenderer::kMaxFeathers);
 	drawList_.reserve(FeatherRenderer::kMaxFeathers);
 }
@@ -85,13 +162,13 @@ void FeatherLandTransition::OnStartCover() {
 	water_.Reset();
 }
 
-bool FeatherLandTransition::UpdateCover(float /*dt*/) {
+bool FeatherLandTransition::UpdateCover([[maybe_unused]] float dt) {
 	// 振れの端（一瞬止まりかける）で覆い終わり、そこでロードする（大きい一枚がまだなら時間だけで）
-	if (currentTime_ < settings_.minCoverTime) return false;
+	if (GetPhaseTime() < settings_.minCoverTime) return false;
 	return !hero_.active || atSwingExtreme_;
 }
 
-bool FeatherLandTransition::UpdateReveal(float /*dt*/) {
+bool FeatherLandTransition::UpdateReveal([[maybe_unused]] float dt) {
 	return EmergeProgress() >= 1.0f && DissolveProgress() >= 1.0f;
 }
 
@@ -102,33 +179,33 @@ void FeatherLandTransition::SetFullyCovered() {
 // ===== 進み =====
 
 float FeatherLandTransition::RevealSeconds() const {
-	return (state_ == TransitionState::FadeOut) ? currentTime_ : 0.0f;
+	return (GetState() == TransitionState::FadeOut) ? GetPhaseTime() : 0.0f;
 }
 
 float FeatherLandTransition::EyelidClosure() const {
-	if (state_ != TransitionState::FadeIn) return 1.0f;
-	return SmoothStep01((currentTime_ - settings_.eyelidStart) / (std::max)(settings_.eyelidDuration, 0.01f));
+	if (GetState() != TransitionState::FadeIn) return 1.0f;
+	return SmoothStep01((GetPhaseTime() - settings_.eyelidStart) / (std::max)(settings_.eyelidDuration, kMinPhaseSeconds));
 }
 
 float FeatherLandTransition::RainAlpha() const {
-	if (state_ != TransitionState::FadeIn) return 0.0f;
-	return 1.0f - SmoothStep01((currentTime_ - settings_.rainFadeStart) / (std::max)(settings_.rainFadeTime, 0.01f));
+	if (GetState() != TransitionState::FadeIn) return 0.0f;
+	return 1.0f - SmoothStep01((GetPhaseTime() - settings_.rainFadeStart) / (std::max)(settings_.rainFadeTime, kMinPhaseSeconds));
 }
 
 float FeatherLandTransition::WaterVisibility() const {
-	return SmoothStep01(RevealSeconds() / (std::max)(settings_.tiltTime, 0.01f));
+	return SmoothStep01(RevealSeconds() / (std::max)(settings_.tiltTime, kMinPhaseSeconds));
 }
 
 float FeatherLandTransition::EmergeProgress() const {
 	if (!hero_.landed) return 0.0f;
 	const float t = RevealSeconds() - hero_.landedTime - settings_.emergeDelay;
-	return SmoothStep01(t / (std::max)(settings_.emergeTime, 0.01f));
+	return SmoothStep01(t / (std::max)(settings_.emergeTime, kMinPhaseSeconds));
 }
 
 float FeatherLandTransition::DissolveProgress() const {
 	if (!hero_.landed) return 0.0f;
 	const float t = RevealSeconds() - hero_.landedTime - settings_.dissolveDelay;
-	return std::clamp(t / (std::max)(settings_.dissolveTime, 0.01f), 0.0f, 1.0f);
+	return std::clamp(t / (std::max)(settings_.dissolveTime, kMinPhaseSeconds), 0.0f, 1.0f);
 }
 
 float FeatherLandTransition::VisibleHalfHeight(float depth) const {
@@ -140,7 +217,7 @@ Vector2 FeatherLandTransition::ProjectToScreen(const Vector3& world) const {
 	const float x = world.x * vp.m[0][0] + world.y * vp.m[1][0] + world.z * vp.m[2][0] + vp.m[3][0];
 	const float y = world.x * vp.m[0][1] + world.y * vp.m[1][1] + world.z * vp.m[2][1] + vp.m[3][1];
 	const float w = world.x * vp.m[0][3] + world.y * vp.m[1][3] + world.z * vp.m[2][3] + vp.m[3][3];
-	if (std::abs(w) < 1e-5f) return { 0.5f, 0.5f };
+	if (std::abs(w) < kMinClipW) return { 0.5f, 0.5f };
 	return { x / w * 0.5f + 0.5f, 0.5f - y / w * 0.5f };
 }
 
@@ -151,7 +228,7 @@ void FeatherLandTransition::SpawnFeather() {
 	std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 	const auto range = [&](float a, float b) { return a + (b - a) * unit(random_); };
 	const Settings& s = settings_;
-	const float aspect = screenWidth_ / (std::max)(screenHeight_, 1.0f);
+	const float aspect = GetScreenWidth() / (std::max)(GetScreenHeight(), 1.0f);
 
 	FallingFeather f{};
 	const float depth = range(s.nearDepth, s.farDepth);
@@ -162,19 +239,19 @@ void FeatherLandTransition::SpawnFeather() {
 	f.origin = { range(-1.0f, 1.0f) * halfWidth * s.spawnSpread, halfHeight + f.look.size, depth };
 	f.fallSpeed = range(s.fallSpeedMin, s.fallSpeedMax);
 	f.swayPhase = range(0.0f, 2.0f * kPi);
-	f.swaySpeed = s.swayFrequency * range(0.75f, 1.25f);
-	f.swayAmplitude = s.swayAmplitude * range(0.6f, 1.2f);
-	f.baseRotation = { range(-0.6f, 0.6f), range(0.0f, 2.0f * kPi), range(-0.8f, 0.8f) };
+	f.swaySpeed = s.swayFrequency * range(kSwaySpeedJitterMin, kSwaySpeedJitterMax);
+	f.swayAmplitude = s.swayAmplitude * range(kSwayAmplitudeJitterMin, kSwayAmplitudeJitterMax);
+	f.baseRotation = { range(-kRainTiltXRange, kRainTiltXRange), range(0.0f, 2.0f * kPi), range(-kRainTiltZRange, kRainTiltZRange) };
 	f.spinSpeed = range(-s.spinSpeed, s.spinSpeed);
 	f.flutterPhase = range(0.0f, 2.0f * kPi);
 	f.baseBend = range(s.bendMin, s.bendMax);
 	f.look.bend = f.baseBend;
-	f.look.cup = range(0.05f, 0.15f);
+	f.look.cup = range(kRainCupMin, kRainCupMax);
 	f.look.texture = static_cast<uint32_t>(unit(random_) * FeatherRenderer::kTextureCount) % FeatherRenderer::kTextureCount;
 	f.look.noiseOffset = unit(random_);
 	f.burnDelay = unit(random_) * (std::max)(s.rainBurnStagger, 0.0f);
 	// 奥の羽根は少し暗く（奥行きが読めるように）
-	f.look.brightness = 1.0f - 0.25f * (depth - s.nearDepth) / (std::max)(s.farDepth - s.nearDepth, 0.01f);
+	f.look.brightness = 1.0f - kFarDarkening * (depth - s.nearDepth) / (std::max)(s.farDepth - s.nearDepth, kMinDepthRange);
 	falling_.push_back(f);
 }
 
@@ -186,7 +263,7 @@ void FeatherLandTransition::UpdateFeathers(float dt) {
 		f.origin.y -= f.fallSpeed * dt;
 		f.swayPhase += f.swaySpeed * dt;
 		f.baseRotation.y += f.spinSpeed * dt;
-		f.flutterPhase += 5.0f * dt;
+		f.flutterPhase += kFlutterSpeed * dt;
 		f.look.position = { f.origin.x + f.swayAmplitude * std::sin(f.swayPhase), f.origin.y, f.origin.z };
 		f.look.rotation = { f.baseRotation.x, f.baseRotation.y, f.baseRotation.z + s.swayTilt * std::cos(f.swayPhase) };
 		f.look.bend = f.baseBend + s.flutter * std::sin(f.flutterPhase);
@@ -210,7 +287,7 @@ void FeatherLandTransition::UpdateFeathers(float dt) {
 	}), falling_.end());
 
 	// 降らせ終わった後、画面に映っている雨が無くなるか、薄れて消え切ったら（大きい一枚だけになったら）残りも捨てる
-	const bool rainDone = currentTime_ >= s.rainTime || state_ != TransitionState::FadeIn;
+	const bool rainDone = GetPhaseTime() >= s.rainTime || GetState() != TransitionState::FadeIn;
 	if ((rainDone && !anyOnScreen) || rainAlpha <= 0.0f) {
 		falling_.clear();
 	}
@@ -237,12 +314,12 @@ void FeatherLandTransition::SpawnHero() {
 	hero_.active = true;
 	// 画面上部の中央、上端の少し上から
 	hero_.baseX = 0.0f;
-	hero_.position = { 0.0f, VisibleHalfHeight(s.heroDepth) + s.heroSize * 0.6f, s.heroDepth };
+	hero_.position = { 0.0f, VisibleHalfHeight(s.heroDepth) + s.heroSize * kHeroSpawnAboveRatio, s.heroDepth };
 	hero_.look.size = s.heroSize;
 	hero_.look.bend = s.heroBend;
-	hero_.look.cup = 0.12f;
+	hero_.look.cup = kHeroCup;
 	hero_.look.texture = 0;
-	hero_.look.noiseOffset = 0.37f;
+	hero_.look.noiseOffset = kHeroNoiseOffset;
 	hero_.look.brightness = 1.0f;
 	previousSwingCos_ = 1.0f;
 }
@@ -254,9 +331,9 @@ void FeatherLandTransition::UpdateHero(float dt) {
 	if (!hero_.landed) {
 		// 落ち葉の落ち方：左右へ振れ、振れの中央で速く・端でふわっと遅くなる。振れの向きへ傾く
 		hero_.swingPhase += s.heroSwingFrequency * dt;
-		hero_.flutterPhase += 5.0f * dt;
+		hero_.flutterPhase += kFlutterSpeed * dt;
 		const float swingCos = std::cos(hero_.swingPhase);
-		const float fall = s.heroFallSpeed * (0.3f + 0.7f * swingCos * swingCos);
+		const float fall = s.heroFallSpeed * (kHeroFallSpeedMinRatio + kHeroFallSpeedSwingRatio * swingCos * swingCos);
 		hero_.position.y -= fall * dt;
 		hero_.position.x = hero_.baseX + s.heroSwingAmplitude * std::sin(hero_.swingPhase);
 
@@ -266,8 +343,8 @@ void FeatherLandTransition::UpdateHero(float dt) {
 
 		// 水面が近づいたら水平に寝ていく（開く側だけ）
 		float settle = 0.0f;
-		if (state_ == TransitionState::FadeOut) {
-			settle = SmoothStep01(1.0f - (hero_.position.y - waterY_) / (std::max)(s.settleHeight, 0.01f));
+		if (GetState() == TransitionState::FadeOut) {
+			settle = SmoothStep01(1.0f - (hero_.position.y - waterY_) / (std::max)(s.settleHeight, kMinSettleHeight));
 		}
 		hero_.look.rotation = {
 			Lerp(s.heroFacePitch, kHalfPi, settle),
@@ -277,10 +354,10 @@ void FeatherLandTransition::UpdateHero(float dt) {
 		hero_.look.bend = s.heroBend + s.flutter * std::sin(hero_.flutterPhase) * (1.0f - settle);
 
 		// 着地：波紋を入れ、波の範囲の中心をここに置く
-		if (state_ == TransitionState::FadeOut && hero_.position.y <= waterY_ + 0.02f) {
+		if (GetState() == TransitionState::FadeOut && hero_.position.y <= waterY_ + kFloatHeight) {
 			hero_.landed = true;
 			hero_.landedTime = RevealSeconds();
-			hero_.position.y = waterY_ + 0.02f;
+			hero_.position.y = waterY_ + kFloatHeight;
 			landingPoint_ = { hero_.position.x, waterY_, hero_.position.z };
 			water_.SetRippleWorldCenter({ landingPoint_.x, landingPoint_.z });
 			water_.AddImpulseWorld({ landingPoint_.x, landingPoint_.z }, s.impulseRadius, s.impulseStrength);
@@ -290,7 +367,7 @@ void FeatherLandTransition::UpdateHero(float dt) {
 	} else {
 		// 水面に浮いて、波に合わせてわずかに上下する
 		const float since = RevealSeconds() - hero_.landedTime;
-		hero_.position.y = waterY_ + 0.02f + 0.01f * std::sin(since * 3.0f);
+		hero_.position.y = waterY_ + kFloatHeight + kBobAmplitude * std::sin(since * kBobFrequency);
 		hero_.look.rotation = { kHalfPi, 0.0f, 0.0f };
 		hero_.look.bend = s.heroBend * 0.5f;
 	}
@@ -307,7 +384,7 @@ void FeatherLandTransition::UpdateWaterDisturbance(float dt) {
 
 	// 浮いた羽根が上下するたびに、着地点から小さな輪が出る
 	if (bobPulsesLeft_ > 0 && now >= nextBobPulseTime_) {
-		water_.AddImpulseWorld({ landingPoint_.x, landingPoint_.z }, s.impulseRadius * 0.6f, s.bobPulseStrength);
+		water_.AddImpulseWorld({ landingPoint_.x, landingPoint_.z }, s.impulseRadius * kBobPulseRadiusRatio, s.bobPulseStrength);
 		--bobPulsesLeft_;
 		nextBobPulseTime_ += s.bobPulseInterval;
 	}
@@ -334,8 +411,8 @@ void FeatherLandTransition::UpdateCamera(float dt) {
 
 	// 追う位置：大きい一枚の高さ（と左右の振れの一部）へなめらかに追いつく。奥行きは原点のまま
 	if (hero_.active && !hero_.landed) {
-		const float follow = (state_ == TransitionState::FadeIn)
-			? SmoothStep01((currentTime_ - s.followStartTime) / 0.5f) : 1.0f;
+		const float follow = (GetState() == TransitionState::FadeIn)
+			? SmoothStep01((GetPhaseTime() - s.followStartTime) / kFollowBlendSeconds) : 1.0f;
 		const Vector3 target = { hero_.position.x * s.followSide * follow, hero_.position.y * follow, 0.0f };
 		const float k = 1.0f - std::exp(-s.followStiffness * dt);
 		followEye_ = Lerp(followEye_, target, k);
@@ -343,7 +420,7 @@ void FeatherLandTransition::UpdateCamera(float dt) {
 
 	Vector3 eye = followEye_;
 	float pitch = 0.0f;
-	if (state_ == TransitionState::FadeOut) {
+	if (GetState() == TransitionState::FadeOut) {
 		// 開く側：着地点（まだ落ちている間は、大きい一枚の真下の水面）を斜めに見下ろす位置へ寄せる
 		const Vector3 lookAt = hero_.landed ? landingPoint_ : Vector3{ hero_.position.x, waterY_, hero_.position.z };
 		const Vector3 viewEye = {
@@ -362,24 +439,24 @@ void FeatherLandTransition::UpdateCamera(float dt) {
 }
 
 void FeatherLandTransition::UpdateVisual() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 	const float dt = GetStepDeltaTime();
 	time_ += dt;
 
-	if (state_ == TransitionState::FadeIn) {
-		if (currentTime_ < settings_.rainTime) {
+	if (GetState() == TransitionState::FadeIn) {
+		if (GetPhaseTime() < settings_.rainTime) {
 			spawnAccumulator_ += settings_.spawnRate * dt;
 			while (spawnAccumulator_ >= 1.0f) {
 				SpawnFeather();
 				spawnAccumulator_ -= 1.0f;
 			}
 		}
-		if (!hero_.active && currentTime_ >= settings_.heroSpawnTime) {
+		if (!hero_.active && GetPhaseTime() >= settings_.heroSpawnTime) {
 			SpawnHero();
 		}
 	}
 	// 開く側の始まりで水面の高さを決める（大きい一枚の waterDrop 下）
-	if (state_ == TransitionState::FadeOut && !waterPlaced_) {
+	if (GetState() == TransitionState::FadeOut && !waterPlaced_) {
 		waterY_ = hero_.position.y - settings_.waterDrop;
 		waterPlaced_ = true;
 	}
@@ -404,7 +481,7 @@ FeatherLandTransition::WaterParamsForGPU FeatherLandTransition::WriteWaterParams
 	p.waterY = waterY_;
 	p.eyelidClosure = EyelidClosure();
 	p.eyelidCurvature = s.eyelidCurvature;
-	p.eyelidSoftness = (std::max)(s.eyelidSoftness, 0.001f);
+	p.eyelidSoftness = (std::max)(s.eyelidSoftness, kMinEyelidSoftness);
 	p.eyelidCloseY = s.eyelidCloseY;
 	p.waterVisibility = WaterVisibility();
 	p.emerge = EmergeProgress();
@@ -424,12 +501,12 @@ FeatherLandTransition::WaterParamsForGPU FeatherLandTransition::WriteWaterParams
 }
 
 void FeatherLandTransition::Draw() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 	RenderTexture* sceneTarget = Game::GetPostEffect()->GetSceneRenderTarget();
 	if (!sceneTarget) return;
 
 	const WaterParamsForGPU params = WriteWaterParams();
-	auto* cmd = dxCore_->GetCommandList();
+	auto* cmd = GetDxCore()->GetCommandList();
 
 	// 1. 瞼で閉じたシーン・水面・浮かび上がり。シーンを読むのは、瞼が開いている間と浮かび上がる間だけ
 	const bool readsScene = params.eyelidClosure < 1.0f || params.emerge > 0.0f;
@@ -440,7 +517,7 @@ void FeatherLandTransition::Draw() {
 	cmd->SetGraphicsRootConstantBufferView(ScreenWaterSurface::kRootParams, waterParamsResource_->GetGPUVirtualAddress());
 	water_.BindTextures(cmd);
 	cmd->SetGraphicsRootDescriptorTable(kRootNoise, TextureManager::GetInstance()->GetSrvHandleGPU(kNoisePath));
-	cmd->DrawInstanced(3, 1, 0, 0);
+	cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 
 	// 2. その上に羽根（雨＋大きい一枚）
 	drawList_.clear();
@@ -455,7 +532,7 @@ void FeatherLandTransition::OnImGui() {
 #ifdef _DEBUG
 	Settings& s = settings_;
 	ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)  rain %zu  landed %d  emerge %.2f",
-		static_cast<int>(state_), falling_.size(), hero_.landed ? 1 : 0, EmergeProgress());
+		static_cast<int>(GetState()), falling_.size(), hero_.landed ? 1 : 0, EmergeProgress());
 	ImGui::SeparatorText("Cover");
 	ImGui::DragFloat("Rain Time [s]", &s.rainTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Rain Fade Start [s]", &s.rainFadeStart, 0.01f, 0.0f, 10.0f);
@@ -464,7 +541,7 @@ void FeatherLandTransition::OnImGui() {
 	ImGui::DragFloat("Hero Spawn Time [s]", &s.heroSpawnTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Follow Start Time [s]", &s.followStartTime, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Min Cover Time [s]", &s.minCoverTime, 0.01f, 0.1f, 10.0f);
-	ImGui::DragFloat("Hold Duration [s]", &holdDuration_, 0.01f, 0.0f, 3.0f);
+	{ float hold = GetHoldDuration(); if (ImGui::DragFloat("Hold Duration [s]", &hold, 0.01f, 0.0f, 3.0f)) SetHoldDuration(hold); }
 	ImGui::SeparatorText("Eyelid");
 	ImGui::DragFloat("Eyelid Start [s]", &s.eyelidStart, 0.01f, 0.0f, 10.0f);
 	ImGui::DragFloat("Eyelid Duration [s]", &s.eyelidDuration, 0.01f, 0.05f, 10.0f);
@@ -540,14 +617,18 @@ void FeatherLandTransition::OnImGui() {
 
 void FeatherLandTransition::LoadTuning(const JsonValue& json) {
 	TransitionTuning::Load(json, settings_);
-	TransitionTuning::Load(json["water"], water_.GetSettings());
-	TransitionTuning::Load(json["feather"], renderer_.GetSettings());
-	holdDuration_ = static_cast<float>(json["holdDuration"].AsDouble(holdDuration_));
+	ScreenWaterSurface::Settings water = water_.GetSettings();
+	TransitionTuning::Load(json["water"], water);
+	water_.SetSettings(water);
+	FeatherRenderer::Settings feather = renderer_.GetSettings();
+	TransitionTuning::Load(json["feather"], feather);
+	renderer_.SetSettings(feather);
+	SetHoldDuration(static_cast<float>(json["holdDuration"].AsDouble(GetHoldDuration())));
 }
 
 void FeatherLandTransition::SaveTuning(JsonValue& json) const {
 	json = TransitionTuning::Save(settings_);
 	json["water"] = TransitionTuning::Save(water_.GetSettings());
 	json["feather"] = TransitionTuning::Save(renderer_.GetSettings());
-	json["holdDuration"] = JsonValue(static_cast<double>(holdDuration_));
+	json["holdDuration"] = JsonValue(static_cast<double>(GetHoldDuration()));
 }

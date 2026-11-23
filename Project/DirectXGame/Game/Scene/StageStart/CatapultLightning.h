@@ -37,18 +37,31 @@ public:
 	CatapultLightning();
 	~CatapultLightning();
 
+	/// <summary>寸法を受け取り、全部の雷の帯を入れる動的メッシュを作る</summary>
+	/// <param name="geometry">寸法（StageStartGeometry.json）</param>
 	void Initialize(const StageStartGeometry& geometry);
+	/// <summary>カタパルトの原点を置くワールドの位置を設定する</summary>
+	/// <param name="origin">ワールド位置</param>
 	void SetOrigin(const Vector3& origin) { origin_ = origin; }
 	/// <summary>出ている雷を全部消す（演出の始め・機体確認のやり直し）</summary>
 	void Reset();
+	/// <summary>雷を年取らせ、drive に合わせて伸びる雷・放電・固定台の雷・溝を走る雷を出す</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="drive">このフレームの雷の出し方</param>
 	void Update(float deltaTime, const Drive& drive);
-	/// <summary>不透明物の後（PrimitivePipeline に切り替える）。帯はカメラへ向けて作る</summary>
+	/// <summary>カメラへ向けた帯を作って描く。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void Draw(Camera* camera);
-	/// <summary>発光パス（Draw の後に呼ぶ。同じフレームの形を使う）</summary>
+	/// <summary>発光パスで描く（Draw の後に呼ぶ。同じフレームの形を使う）</summary>
 	void DrawBloom();
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "lightning"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 	static constexpr int kMaxBolts = 600;
@@ -68,19 +81,58 @@ private:
 		float offsets[kSegments + 1][2] = {};   // 折れ線の横ずれ（2 方向）
 	};
 
+	/// <summary>一様乱数を返す</summary>
+	/// <param name="lo">下限</param>
+	/// <param name="hi">上限</param>
+	/// <returns>lo〜hi の値</returns>
 	float Rand(float lo, float hi);
+	/// <summary>空いている枠に雷を 1 本出す（空きが無ければ出さない）</summary>
+	/// <param name="a">始点（カタパルトの原点から）</param>
+	/// <param name="b">終点（カタパルトの原点から）</param>
+	/// <param name="life">寿命 [秒]</param>
+	/// <param name="width">太さ</param>
+	/// <param name="brightness">明るさ</param>
+	/// <param name="followClamp">true なら固定台について前へ進む</param>
+	/// <param name="travel">出したときの固定台の前進量 [m]</param>
 	void Spawn(const Vector3& a, const Vector3& b, float life, float width, float brightness, bool followClamp, float travel);
+	/// <summary>雷の折れ線の点を少しずらしてチラつかせる（両端は動かさず、真ん中ほど大きく）</summary>
+	/// <param name="bolt">ずらす雷</param>
 	void Jitter(Bolt& bolt);
+	/// <summary>点け直しの先頭のすぐ後ろで、溝の底から前へ這うように伸びる雷を出す</summary>
+	/// <param name="frontZ">先頭の z [m]</param>
+	/// <param name="count">出す本数（端数は繰り越す）</param>
 	void SpawnSweep(float frontZ, float count);
+	/// <summary>溝のあちこちで細かく放電させ、溝から跳ね上がる弧を出す（機体の近くほど多い）</summary>
+	/// <param name="thrust">スラスターの出力 0〜1</param>
+	/// <param name="count">出す本数</param>
 	void SpawnIdle(float thrust, float count);
+	/// <summary>固定台（溝にはまる台車）の底とレールのあいだに雷を出す</summary>
+	/// <param name="clampTravel">固定台の前進量 [m]</param>
+	/// <param name="count">出す本数</param>
+	/// <param name="width">太さ</param>
+	/// <param name="brightness">明るさ</param>
 	void SpawnClamp(float clampTravel, float count, float width, float brightness);
+	/// <summary>射出中、走り抜けた固定台の後ろの溝に残る放電を出す</summary>
+	/// <param name="clampTravel">固定台の前進量 [m]</param>
+	/// <param name="count">出す本数</param>
 	void SpawnTrail(float clampTravel, float count);
-	// 溝の底を縦に走る長い雷（zMin〜zMax のあいだ）
+	/// <summary>溝の底のレールに沿って縦に走る長い雷を出す（レール全体に電気が走っている感じ）</summary>
+	/// <param name="zMin">範囲の手前の z [m]</param>
+	/// <param name="zMax">範囲の奥の z [m]</param>
+	/// <param name="count">出す本数</param>
+	/// <param name="brightness">明るさ</param>
 	void SpawnRailRun(float zMin, float zMax, float count, float brightness);
-	// 射出中、z の所の雷の強さ 0..1（固定台がまだ通っていなければ 1、通ってからは時間で弱まる）
+	/// <summary>射出中、z の所の雷の強さを求める</summary>
+	/// <param name="z">カタパルトの原点からの z [m]</param>
+	/// <returns>0〜1（固定台がまだ通っていなければ 1、通ってからは時間で弱まる）</returns>
 	float LaunchLevelAt(float z) const;
-	// 射出中は LaunchLevelAt の割合で間引く（true＝出さない）。brightness に強さを掛ける
+	/// <summary>射出中は LaunchLevelAt の割合で間引き、明るさに強さを掛ける</summary>
+	/// <param name="z">カタパルトの原点からの z [m]</param>
+	/// <param name="brightness">明るさ（強さを掛ける）</param>
+	/// <returns>出さないなら true</returns>
 	bool CullByLaunch(float z, float& brightness);
+	/// <summary>出ている雷から、カメラへ向けた帯の頂点を作る</summary>
+	/// <param name="cameraPos">カメラの位置（ワールド）</param>
 	void BuildVertices(const Vector3& cameraPos);
 
 	StageStartGeometry geometry_;

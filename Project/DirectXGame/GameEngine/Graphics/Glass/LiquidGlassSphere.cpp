@@ -29,7 +29,56 @@ namespace {
 		kRootCount
 	};
 
+	/// <summary>0〜1 に切り詰める</summary>
+	/// <param name="v">値</param>
+	/// <returns>切り詰めた値</returns>
 	float Clamp01(float v) { return (std::min)((std::max)(v, 0.0f), 1.0f); }
+	// 球の中の波のシミュレーションの設定（速さ [m/s]・1 刻みの減衰・1 秒あたりの刻み・縁で吸収する幅の割合）
+	constexpr float kRippleWaveSpeed = 0.4f;
+	constexpr float kRippleDamping = 0.995f;
+	constexpr float kRippleStepsPerSecond = 240.0f;
+	constexpr float kRippleEdgeFade = 0.1f;
+	// 静的サンプラーの数（s0 ラップ / s1 波紋の高さマップ）
+	constexpr UINT kStaticSamplerCount = 2;
+	// 球のメッシュの分割数の下限
+	constexpr uint32_t kMinSphereDivisions = 8u;
+	// 面が真球の外に来るまで広げたうえで足す余裕の倍率
+	constexpr float kMeshScaleMargin = 1.01f;
+	// 半径 1 の球の直径（液面の高さの上限）
+	constexpr float kUnitSphereDiameter = 2.0f;
+	// 液量から高さを二分法で求める回数
+	constexpr int kFillBisectionSteps = 24;
+	// 球の底から高さ h までの体積の割合 h²(3 − h) / 4 の 3 と 1/4
+	constexpr float kCapVolumeHeightCoef = 3.0f;
+	constexpr float kCapVolumeScale = 0.25f;
+
+	// 乱数（線形合同法）の掛ける数と足す数
+	constexpr uint32_t kLcgMultiplier = 1664525u;
+	constexpr uint32_t kLcgIncrement = 1013904223u;
+	// 乱数の状態から 0〜1 を作る時に捨てる下位ビットの数と、使うビットの数
+	constexpr int kRandomDiscardBits = 8;
+	constexpr int kRandomUsedBits = 24;
+	// 液面の傾きのばねを積む 1 秒あたりの刻みの数
+	constexpr float kSloshStepsPerSecond = 240.0f;
+	// 角速度の変化がこれを超えたら揺れの波源を入れる [rad/s]
+	constexpr float kSloshRippleChangeThreshold = 0.05f;
+	// 揺れの波源を置く位置（液面の円の半径に対する割合）
+	constexpr float kSloshRippleRadiusRatio = 0.8f;
+	// 波源の深さに掛ける角速度の変化の上限 [rad/s]
+	constexpr float kMaxSloshRippleChange = 5.0f;
+	// 揺れの波源を入れた後に次を入れない時間 [秒]
+	constexpr float kSloshRippleCooldown = 0.05f;
+	// 静かな揺れの間隔の揺らぎの下限（平均間隔に対する倍率。0.5〜1.5 倍）
+	constexpr float kAmbientIntervalJitterMin = 0.5f;
+	// 静かな揺れの波源を置く範囲（液面の円の半径に対する割合）
+	constexpr float kAmbientRippleRadiusRatio = 0.85f;
+	// 静かな揺れの深さの揺らぎ（0.6〜1.0 倍）
+	constexpr float kAmbientStrengthJitterMin = 0.6f;
+	constexpr float kAmbientStrengthJitterRange = 0.4f;
+	// 波のシミュレーションの範囲に対する球の直径の割合の下限
+	constexpr float kMinRippleCoverage = 0.05f;
+	// 波のシミュレーションの範囲の下限 [m]（0 割りを防ぐ）
+	constexpr float kMinRippleSimSize = 1e-3f;
 }
 
 LiquidGlassSphere::LiquidGlassSphere() = default;
@@ -41,11 +90,12 @@ void LiquidGlassSphere::Initialize(DirectXCore* dxCore, SRVManager* srvManager, 
 	rippleSimulation_ = std::make_unique<RippleSimulation>();
 	rippleSimulation_->Initialize(dxCore, srvManager);
 	// 球の直径は数十 cm。512 テクセルで波が渡り切る刻みの数は範囲によらないので、刻みを細かくして速さを出す
-	RippleSimulation::Settings& sim = rippleSimulation_->GetSettings();
-	sim.waveSpeed = 0.4f;
-	sim.damping = 0.995f;
-	sim.stepsPerSecond = 240.0f;
-	sim.edgeFade = 0.1f;
+	RippleSimulation::Settings sim = rippleSimulation_->GetSettings();
+	sim.waveSpeed = kRippleWaveSpeed;
+	sim.damping = kRippleDamping;
+	sim.stepsPerSecond = kRippleStepsPerSecond;
+	sim.edgeFade = kRippleEdgeFade;
+	rippleSimulation_->SetSettings(sim);
 
 	CreateRootSignature();
 	pipelineState_ = CreatePipelineState(false);
@@ -95,8 +145,8 @@ void LiquidGlassSphere::CreateRootSignature()
 	rootParameters[kRootRippleHeight].DescriptorTable.NumDescriptorRanges = 1;
 
 	// s0 = 通常（ラップ）, s1 = 波紋の高さマップ（クランプ）
-	D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
-	for (UINT i = 0; i < 2; ++i) {
+	D3D12_STATIC_SAMPLER_DESC samplers[kStaticSamplerCount] = {};
+	for (UINT i = 0; i < kStaticSamplerCount; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -192,7 +242,7 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> LiquidGlassSphere::CreatePipelineSta
 
 void LiquidGlassSphere::CreateMesh(uint32_t divisions)
 {
-	divisions = (std::max)(divisions, 8u);
+	divisions = (std::max)(divisions, kMinSphereDivisions);
 	const MeshData mesh = PrimitiveGenerator::CreateSphere(1.0f, divisions);
 	std::vector<Vector3> positions;
 	positions.reserve(mesh.vertices.size());
@@ -200,7 +250,7 @@ void LiquidGlassSphere::CreateMesh(uint32_t divisions)
 
 	// 頂点は真球の上なので面は内側にへこむ。輪郭の端が欠けないよう、面が真球の外に来るまで広げる
 	// （真球の外のピクセルは PS が捨てる）
-	meshScale_ = 1.0f / std::cos(3.14159265f / static_cast<float>(divisions)) * 1.01f;
+	meshScale_ = 1.0f / std::cos(kPi / static_cast<float>(divisions)) * kMeshScaleMargin;
 
 	const UINT vbSize = static_cast<UINT>(sizeof(Vector3) * positions.size());
 	vertexBuffer_ = dxCore_->CreateBufferResource(vbSize);
@@ -229,10 +279,10 @@ float LiquidGlassSphere::FillToHeight(float amount)
 	// 半径 1 の球で、底から高さ h までの体積の割合 = h²(3 - h) / 4。単調増加なので二分法で解く
 	const float target = Clamp01(amount);
 	float lo = 0.0f;
-	float hi = 2.0f;
-	for (int i = 0; i < 24; ++i) {
+	float hi = kUnitSphereDiameter;
+	for (int i = 0; i < kFillBisectionSteps; ++i) {
 		const float mid = 0.5f * (lo + hi);
-		const float fraction = mid * mid * (3.0f - mid) * 0.25f;
+		const float fraction = mid * mid * (kCapVolumeHeightCoef - mid) * kCapVolumeScale;
 		if (fraction < target) lo = mid; else hi = mid;
 	}
 	return 0.5f * (lo + hi);
@@ -272,8 +322,8 @@ void LiquidGlassSphere::AddRipple(const Vector3& position, float radius, float s
 
 float LiquidGlassSphere::NextRandom01()
 {
-	randomState_ = randomState_ * 1664525u + 1013904223u;
-	return static_cast<float>(randomState_ >> 8) / static_cast<float>(1u << 24);
+	randomState_ = randomState_ * kLcgMultiplier + kLcgIncrement;
+	return static_cast<float>(randomState_ >> kRandomDiscardBits) / static_cast<float>(1u << kRandomUsedBits);
 }
 
 void LiquidGlassSphere::UpdateSlosh(float deltaTime)
@@ -295,7 +345,7 @@ void LiquidGlassSphere::UpdateSlosh(float deltaTime)
 	const float k = motion_.sloshStiffness;
 	const float c = motion_.sloshDamping;
 	// 1 フレームが長いと発散するので刻む
-	const int steps = (std::max)(1, static_cast<int>(std::ceil(deltaTime / (1.0f / 240.0f))));
+	const int steps = (std::max)(1, static_cast<int>(std::ceil(deltaTime / (1.0f / kSloshStepsPerSecond))));
 	const float h = deltaTime / static_cast<float>(steps);
 	for (int i = 0; i < steps; ++i) {
 		tiltVelocity_.x += (k * (target.x - tilt_.x) - c * tiltVelocity_.x) * h;
@@ -309,16 +359,16 @@ void LiquidGlassSphere::UpdateSlosh(float deltaTime)
 	const Vector2 change{ angularVelocity.x - prevAngularVelocity_.x, angularVelocity.y - prevAngularVelocity_.y };
 	prevAngularVelocity_ = angularVelocity;
 	const float changeLength = std::sqrt(change.x * change.x + change.y * change.y);
-	if (changeLength > 0.05f && sloshRippleCooldown_ <= 0.0f && motion_.sloshRippleStrength > 0.0f) {
+	if (changeLength > kSloshRippleChangeThreshold && sloshRippleCooldown_ <= 0.0f && motion_.sloshRippleStrength > 0.0f) {
 		const float offset = GetSurfaceOffset();
 		const float diskRadius = std::sqrt((std::max)(radius_ * radius_ - offset * offset, 0.0f));
 		// 壁に引きずられて持ち上がる側：Z 軸まわりに + 回ると +X 側（+X の壁が上がる）、X 軸まわりに + 回ると -Z 側
 		Vector2 dir{ change.y, -change.x };
 		const float dirLength = std::sqrt(dir.x * dir.x + dir.y * dir.y);
 		dir = { dir.x / dirLength, dir.y / dirLength };
-		const Vector3 position{ center_.x + dir.x * diskRadius * 0.8f, center_.y + offset, center_.z + dir.y * diskRadius * 0.8f };
-		AddRipple(position, motion_.sloshRippleRadius, motion_.sloshRippleStrength * (std::min)(changeLength, 5.0f));
-		sloshRippleCooldown_ = 0.05f;
+		const Vector3 position{ center_.x + dir.x * diskRadius * kSloshRippleRadiusRatio, center_.y + offset, center_.z + dir.y * diskRadius * kSloshRippleRadiusRatio };
+		AddRipple(position, motion_.sloshRippleRadius, motion_.sloshRippleStrength * (std::min)(changeLength, kMaxSloshRippleChange));
+		sloshRippleCooldown_ = kSloshRippleCooldown;
 	}
 }
 
@@ -327,15 +377,15 @@ void LiquidGlassSphere::UpdateAmbientRipples(float deltaTime)
 	if (motion_.ambientRippleInterval <= 0.0f || motion_.ambientRippleStrength <= 0.0f) return;
 	ambientRippleTimer_ -= deltaTime;
 	if (ambientRippleTimer_ > 0.0f) return;
-	ambientRippleTimer_ = motion_.ambientRippleInterval * (0.5f + NextRandom01());
+	ambientRippleTimer_ = motion_.ambientRippleInterval * (kAmbientIntervalJitterMin + NextRandom01());
 
 	// 液面の円の中のランダムな点（spread 0 なら中央に同心円が広がる）
 	const float offset = GetSurfaceOffset();
 	const float diskRadius = std::sqrt((std::max)(radius_ * radius_ - offset * offset, 0.0f));
-	const float r = diskRadius * 0.85f * std::clamp(motion_.ambientRippleSpread, 0.0f, 1.0f) * std::sqrt(NextRandom01());
-	const float a = NextRandom01() * 6.2831853f;
+	const float r = diskRadius * kAmbientRippleRadiusRatio * std::clamp(motion_.ambientRippleSpread, 0.0f, 1.0f) * std::sqrt(NextRandom01());
+	const float a = NextRandom01() * kTwoPi;
 	AddRipple({ center_.x + r * std::cos(a), center_.y + offset, center_.z + r * std::sin(a) },
-		motion_.ambientRippleRadius, motion_.ambientRippleStrength * (0.6f + 0.4f * NextRandom01()));
+		motion_.ambientRippleRadius, motion_.ambientRippleStrength * (kAmbientStrengthJitterMin + kAmbientStrengthJitterRange * NextRandom01()));
 }
 
 void LiquidGlassSphere::Update(float deltaTime)
@@ -348,8 +398,9 @@ void LiquidGlassSphere::Update(float deltaTime)
 	UpdateAmbientRipples(deltaTime);
 
 	// 波のシミュレーションの範囲は球の中心まわり。球の直径が範囲の rippleCoverage になるように
-	RippleSimulation::Settings& sim = rippleSimulation_->GetSettings();
-	sim.simSize = 2.0f * radius_ / std::clamp(motion_.rippleCoverage, 0.05f, 1.0f);
+	RippleSimulation::Settings sim = rippleSimulation_->GetSettings();
+	sim.simSize = 2.0f * radius_ / std::clamp(motion_.rippleCoverage, kMinRippleCoverage, 1.0f);
+	rippleSimulation_->SetSettings(sim);
 	rippleSimulation_->SetCenter({ center_.x, center_.z });
 	rippleSimulation_->Update(deltaTime);
 }
@@ -392,7 +443,7 @@ void LiquidGlassSphere::WriteParams(ParamsForGPU& dst, const Camera& camera, boo
 	dst.meniscusIntensity = a.meniscusIntensity;
 	dst.bloomScale = a.bloomScale;
 	dst.rippleNormalScale = a.rippleNormalScale;
-	dst.rippleUvScale = 1.0f / (std::max)(rippleSimulation_->GetSettings().simSize, 1e-3f);
+	dst.rippleUvScale = 1.0f / (std::max)(rippleSimulation_->GetSettings().simSize, kMinRippleSimSize);
 	dst.rippleTexel = 1.0f / static_cast<float>(RippleSimulation::kResolution);
 	dst.rippleEnabled = 1;
 }
@@ -493,10 +544,11 @@ void LiquidGlassSphere::OnImGui()
 		ImGui::DragFloat("Ambient Ripple Strength [m]", &m.ambientRippleStrength, 0.0001f, 0.0f, 0.1f, "%.4f");
 		ImGui::DragFloat("Ambient Ripple Radius [m]", &m.ambientRippleRadius, 0.001f, 0.001f, 0.5f, "%.3f");
 		ImGui::SliderFloat("Ambient Ripple Spread", &m.ambientRippleSpread, 0.0f, 1.0f);
-		RippleSimulation::Settings& sim = rippleSimulation_->GetSettings();
+		RippleSimulation::Settings sim = rippleSimulation_->GetSettings();
 		ImGui::DragFloat("Wave Speed [m/s]", &sim.waveSpeed, 0.01f, 0.01f, 5.0f);
 		ImGui::SliderFloat("Wave Damping", &sim.damping, 0.9f, 1.0f, "%.4f");
 		ImGui::DragFloat("Steps / s", &sim.stepsPerSecond, 1.0f, 10.0f, 240.0f);
+		rippleSimulation_->SetSettings(sim);
 		ImGui::DragFloat("Test Ripple Strength [m]", &debugRippleStrength_, 0.0005f, 0.0f, 0.1f, "%.4f");
 		if (ImGui::Button("Drop at Center")) {
 			AddRipple({ center_.x, center_.y + GetSurfaceOffset(), center_.z }, m.sloshRippleRadius, debugRippleStrength_);

@@ -1,5 +1,14 @@
 ﻿#include "SkinningComputeManager.h"
 
+namespace {
+    // スキニング CS のレジスタ（t0 パレット / t1 入力頂点 / t2 影響度 / u0 出力頂点 / b0 SkinningInformation）
+    constexpr UINT kRegPaletteSrv = 0;
+    constexpr UINT kRegInputVertexSrv = 1;
+    constexpr UINT kRegInfluenceSrv = 2;
+    constexpr UINT kRegOutputVertexUav = 0;
+    constexpr UINT kRegSkinningInfoCb = 0;
+}
+
 void SkinningComputeManager::Initialize(DirectXCore* dxCore)
 {
     dxCore_ = dxCore;
@@ -25,63 +34,63 @@ void SkinningComputeManager::CreateRootSignature()
 
     // CS: SRV(t0) MatrixPalette
     D3D12_DESCRIPTOR_RANGE descriptorRangePalette[1] = {};
-    descriptorRangePalette[0].BaseShaderRegister = 0;
+    descriptorRangePalette[0].BaseShaderRegister = kRegPaletteSrv;
     descriptorRangePalette[0].NumDescriptors = 1;
     descriptorRangePalette[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangePalette[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // CS: SRV(t1) InputVertices
     D3D12_DESCRIPTOR_RANGE descriptorRangeInputVertex[1] = {};
-    descriptorRangeInputVertex[0].BaseShaderRegister = 1;
+    descriptorRangeInputVertex[0].BaseShaderRegister = kRegInputVertexSrv;
     descriptorRangeInputVertex[0].NumDescriptors = 1;
     descriptorRangeInputVertex[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeInputVertex[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // CS: SRV(t2) Influence
     D3D12_DESCRIPTOR_RANGE descriptorRangeInfluence[1] = {};
-    descriptorRangeInfluence[0].BaseShaderRegister = 2;
+    descriptorRangeInfluence[0].BaseShaderRegister = kRegInfluenceSrv;
     descriptorRangeInfluence[0].NumDescriptors = 1;
     descriptorRangeInfluence[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeInfluence[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // CS: UAV(u0) OutputVertices
     D3D12_DESCRIPTOR_RANGE descriptorRangeOutput[1] = {};
-    descriptorRangeOutput[0].BaseShaderRegister = 0;
+    descriptorRangeOutput[0].BaseShaderRegister = kRegOutputVertexUav;
     descriptorRangeOutput[0].NumDescriptors = 1;
     descriptorRangeOutput[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     descriptorRangeOutput[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // RootParameter（CSなのでShaderVisibilityはALL）
-    D3D12_ROOT_PARAMETER rootParameters[5] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootCount] = {};
 
     // [0] Palette
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRangePalette;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangePalette);
+    rootParameters[kRootPalette].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootPalette].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kRootPalette].DescriptorTable.pDescriptorRanges = descriptorRangePalette;
+    rootParameters[kRootPalette].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangePalette);
 
     // [1] InputVertex
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeInputVertex;
-    rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeInputVertex);
+    rootParameters[kRootInputVertex].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootInputVertex].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kRootInputVertex].DescriptorTable.pDescriptorRanges = descriptorRangeInputVertex;
+    rootParameters[kRootInputVertex].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeInputVertex);
 
     // [2] Influence
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeInfluence;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeInfluence);
+    rootParameters[kRootInfluence].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootInfluence].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kRootInfluence].DescriptorTable.pDescriptorRanges = descriptorRangeInfluence;
+    rootParameters[kRootInfluence].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeInfluence);
 
     // [3] OutputVertex (UAV)
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRangeOutput;
-    rootParameters[3].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeOutput);
+    rootParameters[kRootOutputVertex].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootOutputVertex].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kRootOutputVertex].DescriptorTable.pDescriptorRanges = descriptorRangeOutput;
+    rootParameters[kRootOutputVertex].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeOutput);
 
     // [4] SkinningInformation (CBV b0)
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[4].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootSkinningInfo].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootSkinningInfo].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[kRootSkinningInfo].Descriptor.ShaderRegister = kRegSkinningInfoCb;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
     // ComputeなのでInputLayoutフラグは不要

@@ -2,24 +2,14 @@
 
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonWriter.h"
 
 namespace {
-	Vector3 JsonToVec3(const JsonValue& v) {
-		if (!v.IsArray() || v.Size() < 3) return {};
-		return {
-			static_cast<float>(v[0].AsDouble()),
-			static_cast<float>(v[1].AsDouble()),
-			static_cast<float>(v[2].AsDouble()),
-		};
-	}
-	JsonValue Vec3ToJson(const Vector3& v) {
-		JsonValue arr = JsonValue::MakeArray();
-		arr.Push(JsonValue(static_cast<double>(v.x)));
-		arr.Push(JsonValue(static_cast<double>(v.y)));
-		arr.Push(JsonValue(static_cast<double>(v.z)));
-		return arr;
-	}
+	// Vector3 の要素数（JSON 配列の長さの確認用）
+	constexpr int kVector3ElementCount = 3;
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
 }
 
 namespace WaveDefIO {
@@ -59,20 +49,20 @@ namespace WaveDefIO {
 			entry.childSplineId  = e["child_spline_id"].AsString();
 
 				const JsonValue& off = e["camera_offset"];
-				if (off.IsArray() && off.Size() >= 3) {
+				if (off.IsArray() && off.Size() >= kVector3ElementCount) {
 					entry.useCameraOffset = true;
-					entry.cameraOffset    = JsonToVec3(off);
+					entry.cameraOffset    = ReadVector3(off);
 				}
 
 				const JsonValue& pos = e["positions"];
 				if (pos.IsArray()) {
 					entry.positions.reserve(pos.Size());
 					for (size_t j = 0; j < pos.Size(); ++j) {
-						entry.positions.push_back(JsonToVec3(pos[j]));
+						entry.positions.push_back(ReadVector3(pos[j]));
 					}
 				}
 				const JsonValue& rot = e["rotate_deg"];
-				if (rot.IsArray() && rot.Size() >= 3) entry.rotateDeg = JsonToVec3(rot);
+				if (rot.IsArray() && rot.Size() >= kVector3ElementCount) entry.rotateDeg = ReadVector3(rot);
 				out.entries.push_back(std::move(entry));
 			}
 		}
@@ -100,24 +90,24 @@ namespace WaveDefIO {
 			o["child_spline_id"]   = e.childSplineId;
 
 			if (e.useCameraOffset) {
-				o["camera_offset"] = Vec3ToJson(e.cameraOffset);
+				o["camera_offset"] = MakeVector3(e.cameraOffset);
 			}
 
 			if (!e.positions.empty()) {
 				JsonValue posArr = JsonValue::MakeArray();
 				for (const auto& p : e.positions) {
-					posArr.Push(Vec3ToJson(p));
+					posArr.Push(MakeVector3(p));
 				}
 				o["positions"] = std::move(posArr);
 			}
 			if (e.rotateDeg.x != 0.0f || e.rotateDeg.y != 0.0f || e.rotateDeg.z != 0.0f) {
-				o["rotate_deg"] = Vec3ToJson(e.rotateDeg);
+				o["rotate_deg"] = MakeVector3(e.rotateDeg);
 			}
 			arr.Push(std::move(o));
 		}
 		root["spawn_entries"] = std::move(arr);
 
-		return JsonWriter::WriteFile(filePath, root, { true, 2 });
+		return JsonWriter::WriteFile(filePath, root, { true, kJsonIndentWidth });
 	}
 
 }

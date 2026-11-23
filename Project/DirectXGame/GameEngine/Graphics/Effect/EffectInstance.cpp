@@ -14,18 +14,45 @@
 #include<cmath>
 
 namespace {
-    // 0-1 にクランプ
+    // GPU の移動カーブ LUT のサンプル数
+    constexpr int kMotionLutSize = 32;
+    // 移動カーブ LUT の最後のサンプルの番号（0〜1 に割り当てるための割る数）
+    constexpr float kMotionLutLastIndex = 31.0f;
+    // 回転軸の長さがこれ未満なら回さない
+    constexpr float kMinAxisLength = 1e-5f;
+    // 寿命の下限 [秒]（0 割りを防ぐ）
+    constexpr float kMinLifetime = 0.0001f;
+    // 角速度の大きさがこれ以下なら回転を積まない [rad/s]
+    constexpr float kMinAngularSpeed = 1e-6f;
+    // ディゾルブの長さの下限 [秒]（0 割りを防ぐ）
+    constexpr float kMinDissolveDuration = 0.0001f;
+    // 発生半径がこれ以下なら周回半径の比を 1 にする [m]
+    constexpr float kMinEmitRadius = 1e-4f;
+    // 初速の向きの長さがこれ以下なら真上へ飛ばす
+    constexpr float kMinVelocityDirLength = 1e-5f;
+    // 色のグラデーションの両端のキー（Start / End）の数
+    constexpr size_t kEndpointColorKeyCount = 2;
+    /// <summary>0〜1 に切り詰める</summary>
+    /// <param name="v">値</param>
+    /// <returns>切り詰めた値</returns>
     float Saturate(float v) {
         if (v < 0.0f) return 0.0f;
         if (v > 1.0f) return 1.0f;
         return v;
     }
-    // カーブ(0..1)を GPU の移動カーブ LUT 用に 32 サンプルへ焼く
-    void BakeCurveLUT(const EffectCurve& curve, float out[32]) {
-        for (int s = 0; s < 32; ++s) {
-            out[s] = Saturate(curve.Evaluate(static_cast<float>(s) / 31.0f));
+    /// <summary>カーブ(0..1)を GPU の移動カーブ LUT 用に 32 サンプルへ焼く（各値は 0〜1 に切り詰める）</summary>
+    /// <param name="curve">焼くカーブ</param>
+    /// <param name="out">書き込み先（32 要素）</param>
+    void BakeCurveLUT(const EffectCurve& curve, float out[kMotionLutSize]) {
+        for (int s = 0; s < kMotionLutSize; ++s) {
+            out[s] = Saturate(curve.Evaluate(static_cast<float>(s) / kMotionLutLastIndex));
         }
     }
+    /// <summary>Vector3 の線形補間</summary>
+    /// <param name="a">t=0 の値</param>
+    /// <param name="b">t=1 の値</param>
+    /// <param name="t">補間係数</param>
+    /// <returns>補間した値</returns>
     Vector3 LerpV3(const Vector3& a, const Vector3& b, float t) {
         return {
             a.x + (b.x - a.x) * t,
@@ -33,6 +60,11 @@ namespace {
             a.z + (b.z - a.z) * t,
         };
     }
+    /// <summary>Vector4 の線形補間</summary>
+    /// <param name="a">t=0 の値</param>
+    /// <param name="b">t=1 の値</param>
+    /// <param name="t">補間係数</param>
+    /// <returns>補間した値</returns>
     Vector4 LerpV4(const Vector4& a, const Vector4& b, float t) {
         return {
             a.x + (b.x - a.x) * t,
@@ -41,10 +73,20 @@ namespace {
             a.w + (b.w - a.w) * t,
         };
     }
+    /// <summary>float の線形補間</summary>
+    /// <param name="a">t=0 の値</param>
+    /// <param name="b">t=1 の値</param>
+    /// <param name="t">補間係数</param>
+    /// <returns>補間した値</returns>
     float LerpF(float a, float b, float t) { return a + (b - a) * t; }
 
-    // 色相回転：輝度軸(1,1,1)まわりに RGB を ang ラジアン回す（彩度/明度を保ったまま色相だけ変える）。
-    // GPU 版 UpdateParticle.CS.hlsl の HueRotate と同じ式。
+    /// <summary>
+    /// 色相回転：輝度軸(1,1,1)まわりに RGB を回す（彩度/明度を保ったまま色相だけ変える）。
+    /// GPU 版 UpdateParticle.CS.hlsl の HueRotate と同じ式。
+    /// </summary>
+    /// <param name="c">元の色（α はそのまま）</param>
+    /// <param name="ang">回す角度 [ラジアン]</param>
+    /// <returns>色相を回した色</returns>
     Vector4 HueRotate(const Vector4& c, float ang) {
         const float k = 0.57735026f; // 1/sqrt(3)
         const float cosA = std::cos(ang);
@@ -62,7 +104,9 @@ namespace {
         };
     }
 
-    // [-r, r] の一様乱数
+    /// <summary>[-r, r] の一様乱数</summary>
+    /// <param name="r">範囲の半分</param>
+    /// <returns>乱数。r が 0 以下なら 0</returns>
     float RandSym(float r) {
         if (r <= 0.0f) return 0.0f;
         static std::mt19937 rng{ std::random_device{}() };
@@ -72,10 +116,14 @@ namespace {
 
     // オイラー角→クオータニオンは engine math の QuaternionFromEuler を使う（重複解消）。
 
-    // axis まわりに v を ang 回転（ロドリゲスの回転公式）
+    /// <summary>axis まわりに v を回す（ロドリゲスの回転公式）</summary>
+    /// <param name="v">回すベクトル</param>
+    /// <param name="axis">回転軸（正規化しなくてよい）</param>
+    /// <param name="ang">回す角度 [ラジアン]</param>
+    /// <returns>回したベクトル。軸の長さがほぼ 0 なら v のまま</returns>
     Vector3 RotateAroundAxis(const Vector3& v, const Vector3& axis, float ang) {
         float len = std::sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
-        if (len < 1e-5f) return v;
+        if (len < kMinAxisLength) return v;
         Vector3 k = { axis.x / len, axis.y / len, axis.z / len };
         float c = std::cos(ang), s = std::sin(ang);
         float kv = k.x * v.x + k.y * v.y + k.z * v.z;
@@ -88,9 +136,21 @@ namespace {
     }
 
     // ===== SyncFromDef 用：プリミティブの「メッシュ再生成が要る変更か」を判定するための比較 =====
+    /// <summary>Vector3 が成分ごとに完全一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool V3Eq(const Vector3& a, const Vector3& b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
+    /// <summary>Vector4 が成分ごとに完全一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool V4Eq(const Vector4& a, const Vector4& b) { return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w; }
 
+    /// <summary>リングの形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool RingEq(const PrimitiveGenerator::RingParams& a, const PrimitiveGenerator::RingParams& b) {
         return a.outerRadius == b.outerRadius && a.innerRadius == b.innerRadius && a.divisions == b.divisions
             && V4Eq(a.innerColor, b.innerColor) && V4Eq(a.outerColor, b.outerColor)
@@ -98,11 +158,19 @@ namespace {
             && a.uvHorizon == b.uvHorizon && a.fadeStart == b.fadeStart && a.fadeEnd == b.fadeEnd
             && a.outerRadiusPerDivision == b.outerRadiusPerDivision;
     }
+    /// <summary>円柱の形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool CylEq(const PrimitiveGenerator::CylinderParams& a, const PrimitiveGenerator::CylinderParams& b) {
         return a.topRadius == b.topRadius && a.bottomRadius == b.bottomRadius && a.height == b.height
             && a.divisions == b.divisions && V4Eq(a.topColor, b.topColor) && V4Eq(a.bottomColor, b.bottomColor)
             && a.startAngle == b.startAngle && a.endAngle == b.endAngle;
     }
+    /// <summary>らせんの形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool HelixEq(const PrimitiveGenerator::HelixParams& a, const PrimitiveGenerator::HelixParams& b) {
         return a.startHelixRadius == b.startHelixRadius && a.endHelixRadius == b.endHelixRadius
             && a.startTubeRadius == b.startTubeRadius && a.endTubeRadius == b.endTubeRadius
@@ -110,16 +178,28 @@ namespace {
             && a.circleSegments == b.circleSegments && a.lengthSegments == b.lengthSegments
             && V4Eq(a.startColor, b.startColor) && V4Eq(a.endColor, b.endColor);
     }
+    /// <summary>ビーム／雷の見た目がすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool AppEq(const PrimitiveGenerator::BeamAppearance& a, const PrimitiveGenerator::BeamAppearance& b) {
         return a.startWidth == b.startWidth && a.endWidth == b.endWidth && a.planeCount == b.planeCount
             && a.fadeStartLength == b.fadeStartLength && a.fadeEndLength == b.fadeEndLength
             && V4Eq(a.startColor, b.startColor) && V4Eq(a.endColor, b.endColor)
             && a.uvWrapByLength == b.uvWrapByLength && a.uvTilesPerUnit == b.uvTilesPerUnit;
     }
+    /// <summary>ビームの形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool BeamEq(const PrimitiveGenerator::BeamParams& a, const PrimitiveGenerator::BeamParams& b) {
         return V3Eq(a.startPos, b.startPos) && V3Eq(a.endPos, b.endPos)
             && AppEq(a.appearance, b.appearance) && a.lengthSegments == b.lengthSegments;
     }
+    /// <summary>雷の形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool LightningEq(const PrimitiveGenerator::LightningBoltParams& a, const PrimitiveGenerator::LightningBoltParams& b) {
         return V3Eq(a.startPos, b.startPos) && V3Eq(a.endPos, b.endPos) && AppEq(a.appearance, b.appearance)
             && a.generations == b.generations && a.maxOffsetRatio == b.maxOffsetRatio && a.randomSeed == b.randomSeed
@@ -128,30 +208,43 @@ namespace {
             && a.branchColorScale == b.branchColorScale;
     }
 
+    /// <summary>枠の形状パラメータがすべて一致するか</summary>
+    /// <param name="a">比べる値</param>
+    /// <param name="b">比べる値</param>
+    /// <returns>一致すれば true</returns>
     bool FrameEq(const PrimitiveGenerator::FrameParams& a, const PrimitiveGenerator::FrameParams& b) {
         return a.outerWidth == b.outerWidth && a.outerHeight == b.outerHeight
             && a.innerWidth == b.innerWidth && a.innerHeight == b.innerHeight
             && V4Eq(a.color, b.color);
     }
 
-    // メッシュそのものを作り直す必要がある変更か（meshType / テクスチャ / 該当ジオメトリparams）。
-    // blend / billboard / material / UV / distortion はレンダラの setter でライブ適用できるので含めない。
+    /// <summary>
+    /// メッシュそのものを作り直す必要がある変更か（meshType / テクスチャ / 該当ジオメトリparams）。
+    /// blend / billboard / material / UV / distortion はレンダラの setter でライブ適用できるので含めない。
+    /// </summary>
+    /// <param name="a">変更前のコンポーネント</param>
+    /// <param name="b">変更後のコンポーネント</param>
+    /// <returns>作り直しが要れば true</returns>
     bool PrimitiveMeshNeedsRebuild(const EffectPrimitiveComponent& a, const EffectPrimitiveComponent& b) {
         if (a.meshType != b.meshType) return true;
         if (a.texturePath != b.texturePath) return true;
         switch (a.meshType) {
-        case 3: return !RingEq(a.ringParams, b.ringParams);       // Ring
-        case 4: return !CylEq(a.cylinderParams, b.cylinderParams);// Cylinder
-        case 5: return !HelixEq(a.helixParams, b.helixParams);    // Helix
-        case 6: return !BeamEq(a.beamParams, b.beamParams);       // Beam
-        case 7: return !LightningEq(a.lightningParams, b.lightningParams); // Lightning
-        case 9: return !FrameEq(a.frameParams, b.frameParams);    // Frame
+        case EffectMeshType::Ring: return !RingEq(a.ringParams, b.ringParams);
+        case EffectMeshType::Cylinder: return !CylEq(a.cylinderParams, b.cylinderParams);
+        case EffectMeshType::Helix: return !HelixEq(a.helixParams, b.helixParams);
+        case EffectMeshType::Beam: return !BeamEq(a.beamParams, b.beamParams);
+        case EffectMeshType::Lightning: return !LightningEq(a.lightningParams, b.lightningParams);
+        case EffectMeshType::Frame: return !FrameEq(a.frameParams, b.frameParams);
         default: return false; // Plane/Box/Sphere/Hemisphere は meshType + texture のみ
         }
     }
 
-    // メッシュ再生成不要な静的パラメータ（blend / billboard / material / UV / distortion）を
-    // 既存レンダラへ適用する。spawn 時と SyncFromDef のライブ反映で共用する。
+    /// <summary>
+    /// メッシュ再生成不要な静的パラメータ（blend / billboard / material / UV / distortion / dissolve のマスクと縁）を
+    /// 既存レンダラへ適用する。spawn 時と SyncFromDef のライブ反映で共用する。
+    /// </summary>
+    /// <param name="r">適用先のレンダラ</param>
+    /// <param name="pc">値の取り出し元のコンポーネント</param>
     void ApplyPrimitiveStaticParams(EffectPrimitiveRenderer& r, const EffectPrimitiveComponent& pc) {
         r.SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(pc.blendMode));
         r.SetBillboardMode(pc.billboardMode);
@@ -268,8 +361,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         }
 
         // 寿命は Effect の totalDuration でクランプ（Effect 終了後は残らない）
-        float maxLife = max(0.0001f, def_.totalDuration - pc.startTime);
-        float life = pc.lifetime > 0.0001f ? pc.lifetime : 0.0001f;
+        float maxLife = max(kMinLifetime, def_.totalDuration - pc.startTime);
+        float life = pc.lifetime > kMinLifetime ? pc.lifetime : kMinLifetime;
         if (life > maxLife) life = maxLife;
 
         float t = Saturate(local / life);
@@ -278,14 +371,14 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         Vector4 color = LerpV4(pc.startColor, pc.endColor, t);
         // Hue 回転（生存中のシームレス色変化）。経過秒に沿って色相を回す（彩度/明度/α保持）。
         if (pc.hueShiftEnable) {
-            color = HueRotate(color, pc.hueShiftSpeed * 6.28318530718f * local);
+            color = HueRotate(color, pc.hueShiftSpeed * kTwoPi * local);
         }
 
         // 持続回転：角速度ベクトル rotateSpeed を毎フレーム積分（クオータニオン合成。ジンバルロックなし）。
         {
             const Vector3& w = pc.rotateSpeed;
             float wlen = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
-            if (wlen > 1e-6f) {
+            if (wlen > kMinAngularSpeed) {
                 float ang = wlen * compDt;
                 Quaternion dq = MakeRotateAxisAngleQuaternion({ w.x / wlen, w.y / wlen, w.z / wlen }, ang);
                 rt.orientation = Normalize(Multiply(dq, rt.orientation));
@@ -323,7 +416,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             float th = 0.0f;
             if (pc.dissolveInEnable) {
                 float t = local - pc.dissolveInStartTime;
-                float d = pc.dissolveInDuration > 0.0001f ? pc.dissolveInDuration : 0.0001f;
+                float d = pc.dissolveInDuration > kMinDissolveDuration ? pc.dissolveInDuration : kMinDissolveDuration;
                 // 進行度 progress(0→1) をカーブで再マップ。In は threshold = 1 - progress。
                 float p = Saturate(t / d);
                 float inTh = (t <= 0.0f) ? 1.0f : 1.0f - pc.dissolveCurve.Evaluate(p);
@@ -331,7 +424,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             }
             if (pc.dissolveOutEnable) {
                 float t = local - pc.dissolveOutStartTime;
-                float d = pc.dissolveOutDuration > 0.0001f ? pc.dissolveOutDuration : 0.0001f;
+                float d = pc.dissolveOutDuration > kMinDissolveDuration ? pc.dissolveOutDuration : kMinDissolveDuration;
                 // 進行度 progress(0→1) をカーブで再マップ。Out は threshold = progress。
                 float p = Saturate(t / d);
                 float outTh = (t <= 0.0f) ? 0.0f : pc.dissolveCurve.Evaluate(p);
@@ -376,7 +469,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (gpu_->HasGroup(groupName)) {
             const Vector3 center = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
             // 半径変化は「生成時の円＝emitRadius」に対する比で渡す（シェーダは前フレームとの比をかける）。
-            const float radiusEndRatio = (pc.emitRadius > 1e-4f) ? pc.orbitRadiusEnd / pc.emitRadius : 1.0f;
+            const float radiusEndRatio = (pc.emitRadius > kMinEmitRadius) ? pc.orbitRadiusEnd / pc.emitRadius : 1.0f;
             gpu_->SetGroupOrbit(groupName, pc.orbitEnabled, center,
                                 effRingNormal, pc.orbitSpinSpeed,         // spin：帯上を流れる（現在のリング法線まわり）
                                 pc.orbitTumbleAxis, pc.orbitTumbleSpeed,  // tumble：帯自体の回転
@@ -403,7 +496,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             // 収束（移動をカーブで制御）。orbit と排他（シェーダは converge を優先）。中心はエフェクト位置＋offset。
             gpu_->SetGroupConverge(groupName, pc.convergeEnable, center);
             // 移動カーブ LUT は converge と orbit 半径で共用（排他）。時間非依存＝毎フレーム設定でライブ反映。
-            float motionLut[32];
+            float motionLut[kMotionLutSize];
             BakeCurveLUT(pc.convergeEnable ? pc.convergeCurve : pc.orbitRadiusCurve, motionLut);
             gpu_->SetGroupMotionLUT(groupName, motionLut);
         }
@@ -422,33 +515,33 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             gpu_->SetGroupBillboardMode(groupName, pc.billboardMode);
             Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
 
-            // 収束モードは初速を持たず、velocityMode=4 で emit 時に spawn 位置を velocity フィールドへ保持させる。
+            // 収束モードは初速を持たず、kVelocityConverge で emit 時に spawn 位置を velocity フィールドへ保持させる。
             // この発射フレームでも converge CB を確実に設定しておく（次の Emit+Update CS が同フレームで走るため）。
             if (pc.convergeEnable) {
-                gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 4);
-                float convLut[32];
+                gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, GPUParticleManager::kVelocityConverge);
+                float convLut[kMotionLutSize];
                 BakeCurveLUT(pc.convergeCurve, convLut);
                 gpu_->SetGroupConverge(groupName, true, pos);
                 gpu_->SetGroupMotionLUT(groupName, convLut);
             }
-            // 初速モード（0=ランダム / 1=方向固定 / 2=放射）。mode に応じた baseVelocity を渡す。
-            else if (pc.velocityMode == 1) {
+            // 初速モード（VelocityMode）。mode に応じた baseVelocity を渡す。
+            else if (pc.velocityMode == GPUParticleManager::kVelocityDirectional) {
                 float len = std::sqrt(pc.velocityDir.x * pc.velocityDir.x +
                                       pc.velocityDir.y * pc.velocityDir.y +
                                       pc.velocityDir.z * pc.velocityDir.z);
-                Vector3 v = (len > 1e-5f)
+                Vector3 v = (len > kMinVelocityDirLength)
                     ? Vector3{ pc.velocityDir.x / len * pc.velocitySpeed,
                                pc.velocityDir.y / len * pc.velocitySpeed,
                                pc.velocityDir.z / len * pc.velocitySpeed }
                     : Vector3{ 0.0f, pc.velocitySpeed, 0.0f };
-                gpu_->SetEmitterVelocity(groupName, v, pc.velocityJitter, 1);
-            } else if (pc.velocityMode == 2) {
-                gpu_->SetEmitterVelocity(groupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, 2);
-            } else if (pc.velocityMode == 3) {
+                gpu_->SetEmitterVelocity(groupName, v, pc.velocityJitter, GPUParticleManager::kVelocityDirectional);
+            } else if (pc.velocityMode == GPUParticleManager::kVelocityRadial) {
+                gpu_->SetEmitterVelocity(groupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, GPUParticleManager::kVelocityRadial);
+            } else if (pc.velocityMode == GPUParticleManager::kVelocityTangent) {
                 // 接線（公転）：speed を baseVelocity.x に。方向はシェーダが ringNormal から接線を計算
-                gpu_->SetEmitterVelocity(groupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, 3);
+                gpu_->SetEmitterVelocity(groupName, { pc.velocitySpeed, 0.0f, 0.0f }, pc.velocityJitter, GPUParticleManager::kVelocityTangent);
             } else {
-                gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, 0);
+                gpu_->SetEmitterVelocity(groupName, { 0.0f, 0.0f, 0.0f }, 0.0f, GPUParticleManager::kVelocityRandom);
             }
 
             // 発生形状（Sphere / Ring）。orbit 時は回転済みの法線で発生させ、粒子と同期させる。
@@ -457,9 +550,9 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             // 多色グラデーション（Fixed カラーモード）。
             // Start(loc=0)/End(loc=1) を常に両端キーとして使い、colorKeys はその間に挿入する中間キー。
             // → 中間キー0個=Start→End の2色、1個=3色…（Random モードでは無効）。
-            if (pc.colorMode == 1) {
+            if (pc.colorMode == GPUParticleManager::kColorModeFixed) {
                 std::vector<std::pair<float, Vector4>> keys;
-                keys.reserve(pc.colorKeys.size() + 2);
+                keys.reserve(pc.colorKeys.size() + kEndpointColorKeyCount);
                 keys.emplace_back(0.0f, pc.startColor);
                 for (const auto& k : pc.colorKeys) keys.emplace_back(k.location, k.color);
                 keys.emplace_back(1.0f, pc.endColor);
@@ -476,7 +569,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             // 非ループ時のみ totalDuration を超えないようにクランプ。
             float particleLife = pc.particleLifeTime;
             if (!def_.loop) {
-                float remaining = max(0.0001f, def_.totalDuration - pc.startTime);
+                float remaining = max(kMinLifetime, def_.totalDuration - pc.startTime);
                 particleLife = min(particleLife, remaining);
             }
             Vector3 rotRange = pc.randomRotateOnSpawn ? pc.randomRotateRange : Vector3{ 0.0f, 0.0f, 0.0f };
@@ -519,8 +612,8 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         if (rt.slot == kInvalidLightSlot) continue;
 
         // 寿命を totalDuration でクランプ
-        float maxLife = max(0.0001f, def_.totalDuration - lc.startTime);
-        float life = lc.lifetime > 0.0001f ? lc.lifetime : 0.0001f;
+        float maxLife = max(kMinLifetime, def_.totalDuration - lc.startTime);
+        float life = lc.lifetime > kMinLifetime ? lc.lifetime : kMinLifetime;
         if (life > maxLife) life = maxLife;
 
         float t = Saturate(local / life);

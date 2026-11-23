@@ -12,9 +12,9 @@
 #include "imgui.h"
 #endif
 
-LoadoutState* LoadoutState::GetInstance() {
-	static LoadoutState instance;
-	return &instance;
+namespace {
+	// 割合を百分率にする倍率（デバッグ表示用）
+	constexpr float kPercentScale = 100.0f;
 }
 
 const char* LoadoutState::GetFlightUnitName(FlightUnitKind kind) {
@@ -161,7 +161,7 @@ bool LoadoutState::OnImGuiShield() {
 		changed = true;
 	}
 	if (ShieldDef* d = catalog->GetDefMutable(catalog->IndexOf(GetShieldId()))) {
-		ImGui::Text("MaxHP +%d  DamageCut %.0f%%  Move x%.2f", d->maxHpAdd, d->damageCut * 100.0f, d->moveSpeedScale);
+		ImGui::Text("MaxHP +%d  DamageCut %.0f%%  Move x%.2f", d->maxHpAdd, d->damageCut * kPercentScale, d->moveSpeedScale);
 		// 左手の握り（仮モデルの置き方を合わせる用。Save で Shield.json へ）
 		ImGui::DragFloat3("Grip Translate##Shield", &d->gripTranslate.x, 0.01f);
 		ImGui::DragFloat3("Grip Rotate##Shield", &d->gripRotate.x, 0.01f);

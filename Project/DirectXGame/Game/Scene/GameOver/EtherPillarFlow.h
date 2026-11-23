@@ -24,34 +24,58 @@ public:
 	EtherPillarFlow();
 	~EtherPillarFlow();
 
+	/// <summary>道の輪郭（無ければ既定）から長さを測り、全部の線の帯を入れる動的メッシュを作る</summary>
 	void Initialize();
-	/// <summary>器の原点（土台の脚の下）のワールド位置</summary>
+	/// <summary>器の原点（土台の脚の下）を設定する</summary>
+	/// <param name="origin">ワールド位置</param>
 	void SetOrigin(const Vector3& origin) { origin_ = origin; }
-	/// <summary>光を上から次々に下ろす（止めるまで）</summary>
+	/// <summary>明るい光を上から次々に下ろし始める（止めるまで）</summary>
 	void BeginDescend();
+	/// <summary>光を下ろすのをやめる（出ている光は流れ切る）</summary>
 	void StopDescend() { descending_ = false; }
-	/// <summary>光を下から次々に昇らせる（止めるまで）</summary>
+	/// <summary>明るい光を下から次々に昇らせ始める（止めるまで）</summary>
 	void BeginAscend();
+	/// <summary>光を昇らせるのをやめる（出ている光は流れ切る）</summary>
 	void StopAscend() { ascending_ = false; }
+	/// <summary>光を昇らせている途中かを返す</summary>
+	/// <returns>途中なら true</returns>
 	bool IsAscending() const { return ascending_; }
+	/// <summary>光を下ろしている途中かを返す</summary>
+	/// <returns>途中なら true</returns>
 	bool IsDescending() const { return descending_; }
-	/// <summary>この Update の間に道の上の端（球）へ着いた明るい光の数（液面に波紋を立てるのに使う）</summary>
+	/// <summary>この Update の間に道の上の端（球）へ着いた明るい光の数を返す（液面に波紋を立てるのに使う）</summary>
+	/// <returns>光の数</returns>
 	int GetTopArrivals() const { return topArrivals_; }
-	/// <summary>いつもの淡い光の倍率（0 で消える）</summary>
+	/// <summary>いつもの淡い光の倍率を設定する</summary>
+	/// <param name="scale">倍率（0 で消える）</param>
 	void SetIdleScale(float scale) { idleScale_ = scale; }
-	/// <summary>この Update の間に道の下の端へ着いた光の数（泉に波紋を立てるのに使う）</summary>
+	/// <summary>この Update の間に道の下の端へ着いた光の数を返す（泉に波紋を立てるのに使う）</summary>
+	/// <returns>光の数</returns>
 	int GetArrivals() const { return arrivals_; }
-	/// <summary>道の下の端（ワールド）</summary>
+	/// <summary>道の下の端を返す</summary>
+	/// <returns>ワールド位置（輪郭が無ければ器の原点）</returns>
 	Vector3 GetBottom() const;
 
+	/// <summary>光を出して道に沿って進め、端に着いた光を数える</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
-	/// <summary>不透明物の後（PrimitivePipeline に切り替える）</summary>
+	/// <summary>カメラへ向けた帯を作り直して描く。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="etherColor">エーテルの色（RGB 0〜1）</param>
 	void Draw(Camera* camera, const Vector3& etherColor);
+	/// <summary>発光パスで帯を描く（Draw で作った後だけ）</summary>
 	void DrawBloom();
+	/// <summary>帯を作り終えているかを返す</summary>
+	/// <returns>Draw で作った後なら true</returns>
 	bool IsBuilt() const { return built_; }
 
+	/// <summary>調整値（GameOver.json の "pillarFlow"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 	static constexpr int kMaxLines = 16;
@@ -67,10 +91,21 @@ private:
 		float length = 0.1f;     // 光の長さ [m]
 	};
 
+	/// <summary>一様乱数を返す</summary>
+	/// <param name="lo">下限</param>
+	/// <param name="hi">上限</param>
+	/// <returns>lo〜hi の値</returns>
 	float Rand(float lo, float hi);
+	/// <summary>道の輪郭の折れ線の、各点までの長さと全長を測り直す</summary>
 	void RebuildProfile();
-	// 道の上の端からの距離 s の点（器の原点から、角度 angle の向き）
+	/// <summary>道の上の端から距離 s の点を求める</summary>
+	/// <param name="s">上の端からの道に沿った距離</param>
+	/// <param name="angle">中心の軸まわりの向き [ラジアン]</param>
+	/// <returns>ワールド位置（器の原点から）</returns>
 	Vector3 PointAt(float s, float angle) const;
+	/// <summary>今の光の位置から、カメラへ向けた帯の頂点を作る</summary>
+	/// <param name="cameraPos">カメラの位置（ワールド）</param>
+	/// <param name="etherColor">エーテルの色（RGB 0〜1）</param>
 	void BuildVertices(const Vector3& cameraPos, const Vector3& etherColor);
 
 	Vector3 origin_{};

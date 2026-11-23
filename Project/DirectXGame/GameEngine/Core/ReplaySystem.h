@@ -14,6 +14,7 @@ class InputManager;
 /// 生デバイス状態（キー/スティック/トリガー/ボタン/マウス）を丸ごと記録するため、
 /// 移動が生キー直読みでも忠実に再現できる。
 /// 再生は input.log を読み、ハードを読まずに各デバイスへ状態を注入する。
+/// シングルトンにする理由：入力の記録と再生を 1 か所で行い、乱数の種と組で同じプレイを再現するため。
 /// </summary>
 class ReplaySystem {
 public:
@@ -22,11 +23,12 @@ public:
         Replay,  // 再生：記録から dt と入力を供給
     };
 
-    static ReplaySystem& Instance();
+    /// <summary>唯一のインスタンス</summary>
+    /// <returns>インスタンス</returns>
+    static ReplaySystem* GetInstance();
 
-    /// <summary>
-    /// Record モードで初期化する。seed はステップ3で確定した使用シード。
-    /// </summary>
+    /// <summary>Record モードで初期化する（フレーム番号を 0 に戻す）</summary>
+    /// <param name="seed">このセッションで使う乱数のシード</param>
     void InitializeRecord(uint32_t seed);
 
     /// <summary>
@@ -34,27 +36,37 @@ public:
     /// （例: "Logs/2026-06-11_212430"）。input.log を読み込み、
     /// session.log から記録時シードも取り出す。
     /// </summary>
+    /// <param name="dir">記録時のセッションフォルダ</param>
     void InitializeReplay(const std::string& dir);
 
+    /// <summary>今のモード</summary>
+    /// <returns>Record か Replay</returns>
     Mode GetMode() const { return mode_; }
 
     /// <summary>
     /// 記録時シードが session.log から取得できたか。
     /// </summary>
+    /// <returns>取得できたら true</returns>
     bool HasLoadedSeed() const { return hasLoadedSeed_; }
+    /// <summary>session.log から取り出した記録時シード</summary>
+    /// <returns>シード（HasLoadedSeed が false なら 0）</returns>
     uint32_t GetLoadedSeed() const { return loadedSeed_; }
 
     /// <summary>
     /// 1フレーム分の dt と現在の入力状態を input.log に記録する（Record モード）。
     /// Framework::Update の末尾で呼ぶ。
     /// </summary>
+    /// <param name="dt">このフレームが使った経過時間 [秒]</param>
+    /// <param name="input">入力（nullptr なら何もしない）</param>
     void RecordFrame(float dt, InputManager* input);
 
     /// <summary>
     /// 次フレームの記録を取り出し、入力を各デバイスへ注入する（Replay モード）。
-    /// outDt に記録した dt を返す。記録を再生し終えたら false（=リプレイ終了）。
-    /// Framework::Update の先頭、シーン更新より前に呼ぶ。
+    /// Framework::Update の先頭、シーン更新より前に呼ぶ
     /// </summary>
+    /// <param name="input">注入先の入力</param>
+    /// <param name="outDt">記録した経過時間 [秒] を書く先</param>
+    /// <returns>注入したら true。記録を再生し終えた・Replay モードでない・input が nullptr なら false（=リプレイ終了）</returns>
     bool AdvanceReplay(InputManager* input, float& outDt);
 
 private:

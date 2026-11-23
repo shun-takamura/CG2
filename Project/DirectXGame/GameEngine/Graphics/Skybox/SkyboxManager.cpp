@@ -1,4 +1,20 @@
 ﻿#include "SkyboxManager.h"
+namespace {
+    // シェーダーのレジスタ番号
+    constexpr UINT kCubemapRegister = 0;          // t0：今のスロットの Cubemap
+    constexpr UINT kNextCubemapRegister = 1;      // t1：次のスロットの Cubemap
+    constexpr UINT kCloudNoiseRegister = 5;       // t5：遠景の雲のノイズ
+    constexpr UINT kCloudMokoRegister = 9;        // t9：遠景の雲のもこもこの高さ
+    constexpr UINT kTransformRegister = 0;        // VS b0：座標変換行列
+    constexpr UINT kMaterialRegister = 0;         // PS b0：マテリアル
+    constexpr UINT kCloudParamsRegister = 7;      // PS b7：遠景の雲のパラメータ（水面と共有）
+    constexpr UINT kCubemapSamplerRegister = 0;   // s0：Cubemap 用の linear clamp
+    constexpr UINT kCloudSamplerRegister = 4;     // s4：雲のノイズ用の異方性 wrap
+    // 静的サンプラーの数（s0 と s4）
+    constexpr int kStaticSamplerCount = 2;
+    // 雲のノイズのサンプラーの異方性の最大値
+    constexpr UINT kCloudSamplerMaxAnisotropy = 8;
+}
 
 void SkyboxManager::Initialize(DirectXCore* dxCore)
 {
@@ -27,95 +43,95 @@ void SkyboxManager::CreateRootSignature()
     // DescriptorRange
     // PS: SRV(t0) - 現在スロットのTextureCube用
     D3D12_DESCRIPTOR_RANGE descriptorRange0[1] = {};
-    descriptorRange0[0].BaseShaderRegister = 0;                      // t0
+    descriptorRange0[0].BaseShaderRegister = kCubemapRegister;                      // t0
     descriptorRange0[0].NumDescriptors = 1;
     descriptorRange0[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRange0[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t1) - 次スロットのTextureCube用（クロスフェード用）
     D3D12_DESCRIPTOR_RANGE descriptorRange1[1] = {};
-    descriptorRange1[0].BaseShaderRegister = 1;                      // t1
+    descriptorRange1[0].BaseShaderRegister = kNextCubemapRegister;                      // t1
     descriptorRange1[0].NumDescriptors = 1;
     descriptorRange1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRange1[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t5) - 遠景の雲のノイズ（CloudLayer。雲を使わないシーンはダミー）
     D3D12_DESCRIPTOR_RANGE descriptorRangeCloud[1] = {};
-    descriptorRangeCloud[0].BaseShaderRegister = 5;                  // t5
+    descriptorRangeCloud[0].BaseShaderRegister = kCloudNoiseRegister;                  // t5
     descriptorRangeCloud[0].NumDescriptors = 1;
     descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t9) - 遠景の雲のもこもこの高さ（CloudLayer。雲を使わないシーンはダミー）
     D3D12_DESCRIPTOR_RANGE descriptorRangeCloudMoko[1] = {};
-    descriptorRangeCloudMoko[0].BaseShaderRegister = 9;              // t9
+    descriptorRangeCloudMoko[0].BaseShaderRegister = kCloudMokoRegister;              // t9
     descriptorRangeCloudMoko[0].NumDescriptors = 1;
     descriptorRangeCloudMoko[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeCloudMoko[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[7] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootParamCount] = {};
 
     // VS: CBV(b0) - TransformationMatrix用
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[0].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootParamTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootParamTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kRootParamTransform].Descriptor.ShaderRegister = kTransformRegister;
 
     // PS: CBV(b0) - Material用
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootParamMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootParamMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamMaterial].Descriptor.ShaderRegister = kMaterialRegister;
 
     // PS: DescriptorTable(t0) - 現在スロットのTextureCube用
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange0;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange0);
+    rootParameters[kRootParamCubemap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootParamCubemap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamCubemap].DescriptorTable.pDescriptorRanges = descriptorRange0;
+    rootParameters[kRootParamCubemap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange0);
 
     // PS: DescriptorTable(t1) - 次スロットのTextureCube用
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[3].DescriptorTable.pDescriptorRanges = descriptorRange1;
-    rootParameters[3].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange1);
+    rootParameters[kRootParamNextCubemap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootParamNextCubemap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamNextCubemap].DescriptorTable.pDescriptorRanges = descriptorRange1;
+    rootParameters[kRootParamNextCubemap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange1);
 
     // PS: CBV(b7) - 遠景の雲のパラメータ（CloudSky.hlsli。水面と同じ CB を共有する）
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[4].Descriptor.ShaderRegister = 7;
+    rootParameters[kRootParamCloud].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootParamCloud].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamCloud].Descriptor.ShaderRegister = kCloudParamsRegister;
 
     // PS: DescriptorTable(t5) - 遠景の雲のノイズ
-    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[5].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
-    rootParameters[5].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
+    rootParameters[kRootParamCloudNoise].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootParamCloudNoise].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamCloudNoise].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
+    rootParameters[kRootParamCloudNoise].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloud);
 
     // PS: DescriptorTable(t9) - 遠景の雲のもこもこ
-    rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[6].DescriptorTable.pDescriptorRanges = descriptorRangeCloudMoko;
-    rootParameters[6].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloudMoko);
+    rootParameters[kRootParamCloudMoko].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootParamCloudMoko].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootParamCloudMoko].DescriptorTable.pDescriptorRanges = descriptorRangeCloudMoko;
+    rootParameters[kRootParamCloudMoko].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeCloudMoko);
 
     // ============================================
     // Sampler (PS の s0)
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[kStaticSamplerCount] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;      // Cubemap用にCLAMP推奨
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[0].ShaderRegister = 0;
+    staticSamplers[0].ShaderRegister = kCubemapSamplerRegister;
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // s4: 雲のノイズ。タイルするので WRAP、水平線で UV が引き伸ばされるので異方性
     staticSamplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
-    staticSamplers[1].MaxAnisotropy = 8;
+    staticSamplers[1].MaxAnisotropy = kCloudSamplerMaxAnisotropy;
     staticSamplers[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[1].ShaderRegister = 4;
+    staticSamplers[1].ShaderRegister = kCloudSamplerRegister;
     staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};

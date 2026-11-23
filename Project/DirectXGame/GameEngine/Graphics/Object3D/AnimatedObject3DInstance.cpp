@@ -14,6 +14,20 @@
 #include "TextureManager.h"
 #include "EditorDropPayload.h"  // MATERIAL_DROP / ANIM_DROP / SPRITE_DROP 等の D&D ペイロード
 
+namespace {
+    // ジョイント表示の球の分割数
+    constexpr uint32_t kJointSphereDivisions = 8;
+    // 先頭の頂点のウェイトの合計がこれ未満ならスキニングなし（剛体アニメーション）とみなす
+    constexpr float kRigidWeightThreshold = 0.001f;
+    // スキニング CS の 1 スレッドグループの頂点数と、切り上げのために足す数（グループの頂点数 − 1）
+    constexpr uint32_t kSkinningThreadGroupSize = 1024;
+    constexpr uint32_t kSkinningThreadGroupRoundUp = 1023;
+    // 定数バッファを 256 バイト境界へ切り上げるためのマスク
+    constexpr int kConstantBufferAlignMask = 255;
+    // カメラ CB の最初の位置の手前への距離 [m]（Z = −この値）
+    constexpr float kDefaultCameraDistance = 10.0f;
+}
+
 AnimatedObject3DInstance::~AnimatedObject3DInstance()
 {
     FreeSkinClusterDescriptors();
@@ -86,7 +100,7 @@ void AnimatedObject3DInstance::EnsureDebugSpheres()
     debugSpheres_.resize(skeleton_.joints.size());
     for (size_t i = 0; i < skeleton_.joints.size(); ++i) {
         debugSpheres_[i] = std::make_unique<PrimitiveMesh>();
-        MeshData sphereMesh = PrimitiveGenerator::CreateSphere(jointSphereRadius_, 8);
+        MeshData sphereMesh = PrimitiveGenerator::CreateSphere(jointSphereRadius_, kJointSphereDivisions);
         debugSpheres_[i]->Initialize(sphereMesh);
         debugSpheres_[i]->SetBlendMode(PrimitivePipeline::kBlendModeNone);
         debugSpheres_[i]->SetDepthWrite(true);
@@ -189,7 +203,7 @@ void AnimatedObject3DInstance::Update(float deltaTime)
         if (hasSkinCluster_ && !skinCluster_.mappedInfluence.empty()) {
             const auto& inf = skinCluster_.mappedInfluence[0];
             float totalWeight = inf.weights[0] + inf.weights[1] + inf.weights[2] + inf.weights[3];
-            isRigidAnimation = (totalWeight < 0.001f);
+            isRigidAnimation = (totalWeight < kRigidWeightThreshold);
         } else if (animatedModelInstance_ && animatedModelInstance_->UseDirectStorage()) {
             // DStorage 経路では mappedInfluence が CPU 不可視。.mesh ヘッダのフラグで判定。
             isRigidAnimation = !animatedModelInstance_->HasSkinning();
@@ -250,18 +264,18 @@ void AnimatedObject3DInstance::DispatchSkinning(DirectXCore* dxCore)
 
     // RootParam設定
     commandList->SetComputeRootDescriptorTable(
-        0, srvManager_->GetGPUDescriptorHandle(skinCluster_.paletteSrvIndex));
+        SkinningComputeManager::kRootPalette, srvManager_->GetGPUDescriptorHandle(skinCluster_.paletteSrvIndex));
     commandList->SetComputeRootDescriptorTable(
-        1, srvManager_->GetGPUDescriptorHandle(skinCluster_.inputVertexSrvIndex));
+        SkinningComputeManager::kRootInputVertex, srvManager_->GetGPUDescriptorHandle(skinCluster_.inputVertexSrvIndex));
     commandList->SetComputeRootDescriptorTable(
-        2, srvManager_->GetGPUDescriptorHandle(skinCluster_.influenceSrvIndex));
+        SkinningComputeManager::kRootInfluence, srvManager_->GetGPUDescriptorHandle(skinCluster_.influenceSrvIndex));
     commandList->SetComputeRootDescriptorTable(
-        3, srvManager_->GetGPUDescriptorHandle(skinCluster_.skinnedVertexUavIndex));
+        SkinningComputeManager::kRootOutputVertex, srvManager_->GetGPUDescriptorHandle(skinCluster_.skinnedVertexUavIndex));
     commandList->SetComputeRootConstantBufferView(
-        4, skinCluster_.skinningInformationResource->GetGPUVirtualAddress());
+        SkinningComputeManager::kRootSkinningInfo, skinCluster_.skinningInformationResource->GetGPUVirtualAddress());
 
     // Dispatch（1024頂点ずつ処理。切り上げ）
-    const uint32_t threadGroupCount = (skinCluster_.numVertices + 1023) / 1024;
+    const uint32_t threadGroupCount = (skinCluster_.numVertices + kSkinningThreadGroupRoundUp) / kSkinningThreadGroupSize;
     commandList->Dispatch(threadGroupCount, 1, 1);
 
     // 描画でVBVとして読めるStateへ遷移
@@ -295,15 +309,9 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
             object3DManager_->GetRootSignature()
         );
 
-        Material* mat = animatedModelInstance_->GetMaterialPointer();
-        Object3DManager::ShaderType shaderType;
-        if (mat && mat->shadingModel == 1) {
-            shaderType = Object3DManager::kShaderPBR;
-        } else if (mat && mat->useEnvironmentMap) {
-            shaderType = Object3DManager::kShaderEnvironmentMap;
-        } else {
-            shaderType = Object3DManager::kShaderNoEnvironmentMap;
-        }
+        // スキニングのモデルは地形の層を持たないので、地形のシェーダーは使わない
+        const Object3DManager::ShaderType shaderType =
+            Object3DManager::SelectShaderType(animatedModelInstance_->GetMaterialPointer(), false);
         dxCore->GetCommandList()->SetPipelineState(
             object3DManager_->GetPipelineState(shaderType)
         );
@@ -311,12 +319,12 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
 
     // RootParam[1] TransformationMatrix
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        1, transformationMatrixResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootTransform, transformationMatrixResource_->GetGPUVirtualAddress()
     );
 
     // RootParam[4] Camera
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        4, cameraResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootCamera, cameraResource_->GetGPUVirtualAddress()
     );
 
     LightManager::GetInstance()->BindLights(dxCore->GetCommandList());
@@ -326,7 +334,7 @@ void AnimatedObject3DInstance::Draw(DirectXCore* dxCore)
         const std::string& envPath = object3DManager_->GetEnvironmentTexturePath();
         if (!envPath.empty()) {
             dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-                7, TextureManager::GetInstance()->GetSrvHandleGPU(envPath)
+                Object3DManager::kRootEnvironmentMap, TextureManager::GetInstance()->GetSrvHandleGPU(envPath)
             );
         }
         // 上でルートシグネチャを貼り直している＝Object3DManager::DrawSetting のバインドは
@@ -355,17 +363,12 @@ void AnimatedObject3DInstance::DrawReflection(DirectXCore* dxCore,
     DispatchSkinning(dxCore);
 
     auto* cmd = dxCore->GetCommandList();
-    Material* mat = animatedModelInstance_->GetMaterialPointer();
-    Object3DManager::ShaderType shaderType = Object3DManager::kShaderNoEnvironmentMap;
-    if (mat && mat->shadingModel == 1) {
-        shaderType = Object3DManager::kShaderPBR;
-    } else if (mat && mat->useEnvironmentMap) {
-        shaderType = Object3DManager::kShaderEnvironmentMap;
-    }
+    const Object3DManager::ShaderType shaderType =
+        Object3DManager::SelectShaderType(animatedModelInstance_->GetMaterialPointer(), false);
     cmd->SetPipelineState(object3DManager_->GetReflectionPipelineState(shaderType));
 
-    cmd->SetGraphicsRootConstantBufferView(1, transformationMatrixResource_->GetGPUVirtualAddress());
-    cmd->SetGraphicsRootConstantBufferView(4, reflectionCameraAddress);
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootCamera, reflectionCameraAddress);
     cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootReflectionCamera, reflectionViewProjAddress);
 
     animatedModelInstance_->DrawSkinning(dxCore, skinCluster_);
@@ -402,8 +405,8 @@ void AnimatedObject3DInstance::DrawIdPass(DirectXCore* dxCore)
     cmd->SetGraphicsRootSignature(object3DManager_->GetIdRootSignature());
     cmd->SetPipelineState(object3DManager_->GetIdPipelineState());
 
-    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
-    cmd->SetGraphicsRoot32BitConstant(1, static_cast<UINT>(objectId_), 0);
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kIdRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRoot32BitConstant(Object3DManager::kIdRootConstants, static_cast<UINT>(objectId_), 0);
 
     animatedModelInstance_->DrawIdPass(dxCore, skinCluster_);
 }
@@ -476,9 +479,9 @@ void AnimatedObject3DInstance::DrawBloomPass(DirectXCore* dxCore, float bloomSca
     cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmd->SetGraphicsRootSignature(object3DManager_->GetBloomRootSignature());
     cmd->SetPipelineState(object3DManager_->GetBloomPipelineState());
-    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kBloomRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
     const float constants[Object3DManager::kBloomPassConstantCount] = { bloomScale, 0.0f, 0.0f, 0.0f };
-    cmd->SetGraphicsRoot32BitConstants(2, Object3DManager::kBloomPassConstantCount, constants, 0);
+    cmd->SetGraphicsRoot32BitConstants(Object3DManager::kBloomRootConstants, Object3DManager::kBloomPassConstantCount, constants, 0);
 
     animatedModelInstance_->DrawBloomPassSkinning(dxCore, skinCluster_, dissolveSubmeshes_);
 }
@@ -524,7 +527,7 @@ void AnimatedObject3DInstance::ClearDissolve()
 
 void AnimatedObject3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
-    UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
+    UINT transformationMatrixSize = (sizeof(TransformationMatrix) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
     transformationMatrixResource_ = dxCore->CreateBufferResource(transformationMatrixSize);
     transformationMatrixResource_->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData_));
 
@@ -538,7 +541,7 @@ void AnimatedObject3DInstance::CreateCameraResource(DirectXCore* dxCore)
     cameraResource_ = dxCore->CreateBufferResource(sizeof(CameraForGPU));
     cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
 
-    cameraData_->worldPosition = { 0.0f, 0.0f, -10.0f };
+    cameraData_->worldPosition = { 0.0f, 0.0f, -kDefaultCameraDistance };
     cameraData_->padding = 0.0f;
 }
 
@@ -752,9 +755,9 @@ void AnimatedObject3DInstance::OnImGuiInspector()
                 ImGui::Separator();
 
                 // PBR シェーディング切り替え（静的 Object3D と同じ）
-                bool usePBR = (mat->shadingModel == 1);
+                bool usePBR = (mat->shadingModel == ShadingModel::kPBR);
                 if (ImGui::Checkbox("Use PBR (Cook-Torrance)", &usePBR)) {
-                    mat->shadingModel = usePBR ? 1 : 0;
+                    mat->shadingModel = usePBR ? ShadingModel::kPBR : ShadingModel::kBlinnPhong;
                 }
                 if (usePBR) {
                     ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);

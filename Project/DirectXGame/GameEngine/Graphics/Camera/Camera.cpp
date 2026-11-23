@@ -2,13 +2,24 @@
 #include "imgui.h"
 #include "Easing.h"
 #include <random>
+namespace {
+	// 初期位置で原点から手前（-Z）へ下がる距離 [m]
+	constexpr float kDefaultBackDistance = 10.0f;
+	// 初期の縦の画角 [rad]（約 25.8°）
+	constexpr float kDefaultFovY = 0.45f;
+	// 初期のニアクリップ・ファークリップ [m]
+	constexpr float kDefaultNearClip = 0.1f;
+	constexpr float kDefaultFarClip = 100.0f;
+	// シェイクの乱数の種（毎回同じ揺れ方にする）
+	constexpr unsigned int kShakeRandomSeed = 12345;
+}
 
 Camera::Camera()
-	: transform_({ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} })
-	, horizontalFovY_(0.45f)
+	: transform_({ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -kDefaultBackDistance} })
+	, horizontalFovY_(kDefaultFovY)
 	, aspectRatio_(float(WindowsApplication::kUIWidth) / float(WindowsApplication::kUIHeight))
-	, nearClip_(0.1f)
-	, farClip_(100.0f)
+	, nearClip_(kDefaultNearClip)
+	, farClip_(kDefaultFarClip)
 	, worldMatrix_(MakeAffineMatrix(transform_))
 	, viewMatrix_(Inverse(worldMatrix_))
 	, projectionMatrix_(MakePerspectiveFovMatrix(horizontalFovY_, aspectRatio_, nearClip_, farClip_))
@@ -48,7 +59,7 @@ void Camera::UpdateShake(float deltaTime)
 		float t = shakeElapsed_ / shakeDuration_;
 		float damping = 1.0f - Easing::EaseOutCubic(t);
 
-		static std::mt19937 gen(12345);
+		static std::mt19937 gen(kShakeRandomSeed);
 		std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 		shakeOffset_ = {
 			dist(gen) * shakeIntensity_ * damping,

@@ -31,8 +31,14 @@ struct SphereCollider {
 // Verlet 積分ベースの汎用ソルバ。Skeleton にも ImGui にも依存しない純数学レイヤー。
 class VerletSolver {
 public:
-    // 1 ステップ進める：積分 → stiffness → コリジョン → 角度制限 → 長さ復元。
-    // 中身は Phase 2 で実装する。
+    /// <summary>
+    /// 質点を 1 ステップ進める（積分 → stiffness → コリジョン → 角度制限 → 長さ復元）。
+    /// 今は未実装で何もしない
+    /// </summary>
+    /// <param name="particles">質点の列（結果で書き換える）</param>
+    /// <param name="params">シミュレーションのパラメータ</param>
+    /// <param name="colliders">押し出す球コライダー</param>
+    /// <param name="dt">経過時間 [秒]</param>
     void Step(std::vector<VerletParticle>& particles,
               const VerletParams& params,
               const std::vector<SphereCollider>& colliders,

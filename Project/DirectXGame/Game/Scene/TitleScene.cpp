@@ -42,6 +42,40 @@
 #endif
 
 namespace {
+	// なめらかな補間 3t²−2t³ の t² の係数
+	constexpr float kSmoothStepCubicCoeff = 3.0f;
+	// 水面：待機中のごく小さな波の高さ [m]
+	constexpr float kIdleRingAmplitude = 0.013f;
+	// 水面：待機中の波が出る間隔 [秒]
+	constexpr float kIdleRingInterval = 6.0f;
+	// 水面：待機中の波の間隔のばらつき（0..1）
+	constexpr float kIdleRingJitter = 0.7f;
+	// 大きな波を出すときに待機中の小さな波を引っ込める秒数 [秒]
+	constexpr float kAmbientRingFadeOutSeconds = 0.5f;
+	// 待機中の小さな波を元の強さに戻す秒数 [秒]
+	constexpr float kAmbientRingRestoreSeconds = 1.5f;
+	// レイの Y 成分がこれより小さければ水面と交わらないとみなす
+	constexpr float kRayParallelEpsilon = 1e-6f;
+	// マウスを動かした距離がこれより小さければ波を立てない [m]
+	constexpr float kNearZero = 1e-3f;
+	// マウスの波源を置く間隔の下限 [m]（0 割りを避ける）
+	constexpr float kMinMouseRippleSpacing = 0.01f;
+	// マウスの波源を 1 フレームに置く数の上限
+	constexpr int kMaxMouseRipplesPerFrame = 8;
+	// 「ゲーム終了」を選んでいるときの金色 G
+	constexpr float kQuitFocusedColorG = 0.85f;
+	// 「ゲーム終了」を選んでいるときの金色 B
+	constexpr float kQuitFocusedColorB = 0.2f;
+	// タイトルの文字のアウトラインの太さ [px]
+	constexpr float kTextOutlineThickness = 2.0f;
+	// 「PRESS ANY BUTTON」の明滅の一番薄い不透明度
+	constexpr float kPressBlinkMinAlpha = 0.35f;
+	// 「PRESS ANY BUTTON」の明滅の不透明度の振れ幅
+	constexpr float kPressBlinkAlphaRange = 0.65f;
+	// 「PRESS ANY BUTTON」の明滅の速さ [rad/秒]
+	constexpr float kPressBlinkSpeed = 3.0f;
+	// 「PRESS ANY BUTTON」の縦の位置（画面の高さに対する割合）
+	constexpr float kPressLabelHeightRatio = 0.72f;
 	// 雲なしの昼の青空（tools/BlenderPipeline/gen_title_sky.py で生成。太陽の円盤は描いていない）
 	constexpr const char* kTitleSkyboxPath = "Resources/Cubemaps/title_clear_sky.dds";
 	// 映り込み（PBR の IBL）専用。地平線より下を石っぽい暖色にしてあり、カメラより低い所の金が
@@ -90,7 +124,9 @@ namespace {
 	// TextRenderer のフォントの高さ（Framework::Initialize の MPLUS1p 32px）
 	constexpr float kFontPixelHeight = 32.0f;
 
-	// 終端で少しだけ行き過ぎて戻る ease-out-back（ロゴの「ポン」と出る感じ）
+	/// <summary>終端で少しだけ行き過ぎて戻る ease-out-back（ロゴの「ポン」と出る感じ）</summary>
+	/// <param name="t">進み具合（0〜1）</param>
+	/// <returns>補間した値（途中で 1 を少し超える）</returns>
 	float EaseOutBack(float t) {
 		const float c1 = 1.70158f;
 		const float c3 = c1 + 1.0f;
@@ -98,24 +134,37 @@ namespace {
 		return 1.0f + c3 * u * u * u + c1 * u * u;
 	}
 
+	/// <summary>3 次のイーズアウト</summary>
+	/// <param name="t">進み具合（0〜1）</param>
+	/// <returns>補間した値</returns>
 	float EaseOutCubic(float t) {
 		const float u = 1.0f - t;
 		return 1.0f - u * u * u;
 	}
 
+	/// <summary>経過時間を長さで割った進み具合</summary>
+	/// <param name="time">経過時間 [秒]</param>
+	/// <param name="duration">長さ [秒]</param>
+	/// <returns>0〜1 に収めた進み具合（長さが 0 以下なら 1）</returns>
 	float Progress(float time, float duration) {
 		return (duration > 0.0f) ? std::clamp(time / duration, 0.0f, 1.0f) : 1.0f;
 	}
 
-	// Y 軸まわりに yaw だけ回す（Yaw=θ の前方 (sinθ, 0, cosθ) と同じ向きの取り方）
+	/// <summary>Y 軸まわりに yaw だけ回す（Yaw=θ の前方 (sinθ, 0, cosθ) と同じ向きの取り方）</summary>
+	/// <param name="v">回すベクトル</param>
+	/// <param name="yaw">回す角度 [rad]</param>
+	/// <returns>回したベクトル</returns>
 	Vector3 RotateYaw(const Vector3& v, float yaw) {
 		const float c = std::cos(yaw);
 		const float s = std::sin(yaw);
 		return { v.x * c + v.z * s, v.y, -v.x * s + v.z * c };
 	}
 
+	/// <summary>0〜1 のなめらかな補間（3t²−2t³）</summary>
+	/// <param name="t">進み具合（0〜1）</param>
+	/// <returns>補間した値</returns>
 	float SmoothStep01(float t) {
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepCubicCoeff - 2.0f * t);
 	}
 }
 
@@ -132,64 +181,70 @@ void TitleScene::Initialize() {
 	// 既定の 100m だと水面が途中で切れて地平線の手前に空が覗くので、水面の端より遠くまで取る
 	camera_->SetFarClip(kCameraFarClip);
 	orbitAngle_ = 0.0f;
-	object3DManager_->SetDefaultCamera(camera_.get());
-	skyboxManager_->SetDefaultCamera(camera_.get());
+	GetObject3DManager()->SetDefaultCamera(camera_.get());
+	GetSkyboxManager()->SetDefaultCamera(camera_.get());
 
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, kTitleSkyboxPath);
+	skybox_->Initialize(GetSkyboxManager(), GetDxCore(), kTitleSkyboxPath);
 	// PBR の IBL（t1）。無いと金属は真っ黒、大理石も環境光が無く暗くなる
 	TextureManager::GetInstance()->LoadTexture(kTitleIblPath);
-	object3DManager_->SetEnvironmentTexture(kTitleIblPath);
+	GetObject3DManager()->SetEnvironmentTexture(kTitleIblPath);
 
 	TextureManager::GetInstance()->LoadTexture(kLogoTexturePath);
 	logo_ = std::make_unique<Object3DInstance>();
-	logo_->Initialize(object3DManager_, dxCore_, kLogoModelDir, "logo_plane.mesh", "TitleLogo");
+	logo_->Initialize(GetObject3DManager(), GetDxCore(), kLogoModelDir, "logo_plane.mesh", "TitleLogo");
 
 	waterReflection_ = std::make_unique<WaterReflection>();
-	waterReflection_->Initialize(dxCore_, srvManager_, object3DManager_, 1.0f);
+	waterReflection_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), 1.0f);
 	waterReflection_->SetWaterHeight(kWaterHeight);
 
 	doorFrame_ = std::make_unique<Object3DInstance>();
-	doorFrame_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_frame.mesh", "TitleDoorFrame");
+	doorFrame_->Initialize(GetObject3DManager(), GetDxCore(), kDoorModelDir, "door_frame.mesh", "TitleDoorFrame");
 	doorLeafL_ = std::make_unique<Object3DInstance>();
-	doorLeafL_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_leaf_L.mesh", "TitleDoorLeafL");
+	doorLeafL_->Initialize(GetObject3DManager(), GetDxCore(), kDoorModelDir, "door_leaf_L.mesh", "TitleDoorLeafL");
 	doorLeafR_ = std::make_unique<Object3DInstance>();
-	doorLeafR_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_leaf_R.mesh", "TitleDoorLeafR");
+	doorLeafR_->Initialize(GetObject3DManager(), GetDxCore(), kDoorModelDir, "door_leaf_R.mesh", "TitleDoorLeafR");
 	for (Object3DInstance* part : { doorFrame_.get(), doorLeafL_.get(), doorLeafR_.get() }) {
 		part->SetObjectId(kDoorOutlineId);
 	}
 	doorLight_ = std::make_unique<Object3DInstance>();
-	doorLight_->Initialize(object3DManager_, dxCore_, kDoorModelDir, "door_light.mesh", "TitleDoorLight");
+	doorLight_->Initialize(GetObject3DManager(), GetDxCore(), kDoorModelDir, "door_light.mesh", "TitleDoorLight");
 	doorLight_->SetObjectId(kDoorLightId);
 	for (size_t i = 0; i < doorLines_.size(); ++i) {
 		doorLines_[i] = std::make_unique<Object3DInstance>();
-		doorLines_[i]->Initialize(object3DManager_, dxCore_, kDoorModelDir, kDoorLineMeshes[i],
+		doorLines_[i]->Initialize(GetObject3DManager(), GetDxCore(), kDoorModelDir, kDoorLineMeshes[i],
 			"TitleDoorLine" + std::to_string(i));
 	}
 
 	water_ = std::make_unique<WaterSurface>();
-	water_->Initialize(dxCore_, srvManager_, object3DManager_, kWaterFloorTexturePath);
+	water_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), kWaterFloorTexturePath);
 	water_->SetWaterHeight(kWaterHeight);
-	water_->GetParams().depth = kWaterDepth;
 	water_->SetSize(kWaterSize);
-	water_->GetParams().floorTiling = 1.0f / kWaterFloorTileMeters;
+	{
+		WaterSurface::Params p = water_->GetParams();
+		p.depth = kWaterDepth;
+		p.floorTiling = 1.0f / kWaterFloorTileMeters;
+		// 待機中は「ごく小さな波がたまに出る」程度に抑える（大きな波は演出側で EmitRing / StartRingBurst）
+		p.ringAmplitude = kIdleRingAmplitude;
+		p.ringInterval = kIdleRingInterval;
+		p.ringJitter = kIdleRingJitter;
+		water_->SetParams(p);
+	}
 	water_->SetFloorMaps(kWaterFloorNormalMapPath, kWaterFloorHeightMapPath, kWaterFloorParallaxDepth);
-	// 待機中は「ごく小さな波がたまに出る」程度に抑える（大きな波は演出側で EmitRing / StartRingBurst）
-	water_->GetParams().ringAmplitude = 0.013f;
-	water_->GetParams().ringInterval = 6.0f;
-	water_->GetParams().ringJitter = 0.7f;
 
 	cloudLayer_ = std::make_unique<CloudLayer>();
-	cloudLayer_->Initialize(dxCore_, kCloudNoisePath);
+	cloudLayer_->Initialize(GetDxCore(), kCloudNoisePath);
 	cloudLayer_->SetSunDirection({ -kSunLightDirection.x, -kSunLightDirection.y, -kSunLightDirection.z });
 	// --no-clouds：雲なしで起動（tools/Python/run_cloud_bench.py で雲あり/なしの GPU 時間を比べる用）。
 	// enabled=0 ならシェーダは先頭で抜けるので、差がそのまま雲のコストになる
 	if (std::wstring(::GetCommandLineW()).find(L"--no-clouds") != std::wstring::npos) {
-		cloudLayer_->GetParams().enabled = false;
+		CloudLayer::Params params = cloudLayer_->GetParams();
+		params.enabled = false;
+		cloudLayer_->SetParams(params);
 	}
 	skybox_->SetCloudLayer(cloudLayer_.get());
 	// PBR の鏡面反射（金の装飾）にも同じ雲を映す。シーンをまたいで残るので Finalize で外す
-	object3DManager_->SetCloudLayer(cloudLayer_.get());
+	GetObject3DManager()->SetCloudLayer(cloudLayer_.get());
 	water_->SetCloudLayer(cloudLayer_.get());
 
 	// 平行光源の既定 intensity は 0 なので、ロゴを照らす光をここで必ず設定する
@@ -203,7 +258,7 @@ void TitleScene::Initialize() {
 	SoundManager::GetInstance()->Play2DSoundLooped(kTitleBgm, bgmVolume_);
 
 	demoMovie_ = std::make_unique<TitleDemoMovie>();
-	demoMovie_->Initialize(spriteManager_, input_);
+	demoMovie_->Initialize(GetSpriteManager(), GetInput());
 
 	// まだどちらも反射に登録していない状態から、ロゴだけを出す（扉は ③ で出す）
 	logoVisible_ = false;
@@ -219,7 +274,7 @@ void TitleScene::Finalize() {
 	if (demoMovie_) demoMovie_->Finalize();
 	ReleaseDoorPointLight();
 	// cloudLayer_ はこのシーンと一緒に消えるので、共有の Object3DManager から外しておく
-	object3DManager_->SetCloudLayer(nullptr);
+	GetObject3DManager()->SetCloudLayer(nullptr);
 	EffectManager::GetInstance()->StopAll();
 }
 
@@ -264,7 +319,7 @@ void TitleScene::ChangePhase(Phase next) {
 		if (water_) {
 			water_->StartRingBurst(orbitCenter_, burstInterval_, burstAmplitude_, burstWavelength_);
 			// 待機中の小さな波を引っ込めて、大きな波だけにする
-			water_->SetAmbientRingScale(0.0f, 0.5f);
+			water_->SetAmbientRingScale(0.0f, kAmbientRingFadeOutSeconds);
 		}
 		break;
 	}
@@ -298,7 +353,7 @@ void TitleScene::ChangePhase(Phase next) {
 		framingBlend_ = 1.0f;
 		if (water_) {
 			water_->StopRingBurst();
-			water_->SetAmbientRingScale(1.0f, 1.5f);
+			water_->SetAmbientRingScale(1.0f, kAmbientRingRestoreSeconds);
 		}
 		quitFocused_ = false;
 		break;
@@ -431,9 +486,9 @@ void TitleScene::Update() {
 }
 
 void TitleScene::UpdateInput() {
-	auto* actionMap = input_->GetActionMap();
+	auto* actionMap = GetInput()->GetActionMap();
 	if (!actionMap) return;
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 
 	auto* attract = AttractMode::GetInstance();
 	// マウスはゲーム画面の上での左クリックだけ数える（Debug の ImGui パネルの操作で進まないように）
@@ -444,7 +499,7 @@ void TitleScene::UpdateInput() {
 		// ロゴ登場中の入力は受け付けない（演出を飛ばして即次へ進まないように）
 		if (elapsed_ < introDuration_) return;
 		// デモモードは一定時間で押したことにする
-		const bool autoPress = attract->IsEnabled() && elapsed_ >= introDuration_ + attract->titleIdleWait;
+		const bool autoPress = attract->IsEnabled() && elapsed_ >= introDuration_ + attract->GetSettings().titleIdleWait;
 		if (pressed || autoPress) ChangePhase(Phase::LogoVanish);
 		return;
 	}
@@ -459,7 +514,7 @@ void TitleScene::UpdateInput() {
 	case Phase::Ready: {
 		// デモモードは一定時間で扉に入る
 		if (attract->IsEnabled()) {
-			if (phaseTime_ >= attract->titleReadyWait) {
+			if (phaseTime_ >= attract->GetSettings().titleReadyWait) {
 				SoundManager::GetInstance()->Play2DSound("se_ui_decide");
 				ChangePhase(Phase::Enter);
 			}
@@ -528,19 +583,19 @@ bool TitleScene::IsOverQuit(const Vector2& position) const {
 
 bool TitleScene::IsPressExcludedInput() const {
 	// マウスは水面に波を立てる操作、F8 はデモモードの切り替えなので「PRESS ANY BUTTON」には数えない
-	if (auto* mouse = input_->GetMouse()) {
+	if (auto* mouse = GetInput()->GetMouse()) {
 		using B = MouseInput::Button;
 		for (B b : { B::Left, B::Right, B::Middle, B::Button4 }) {
 			if (mouse->IsButtonTriggered(b)) return true;
 		}
 	}
-	if (auto* keyboard = input_->GetKeyboard(); keyboard && keyboard->TriggerKey(DIK_F8)) return true;
+	if (auto* keyboard = GetInput()->GetKeyboard(); keyboard && keyboard->TriggerKey(DIK_F8)) return true;
 	return false;
 }
 
 bool TitleScene::PickWaterPoint(Vector3& out) const {
 	// マウスのゲーム画面上の位置（Debug のビューポート窓の換算は UIPointer が行う）
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 	if (!pointer.valid) return false;
 	const float clientX = pointer.position.x;
 	const float clientY = pointer.position.y;
@@ -552,7 +607,7 @@ bool TitleScene::PickWaterPoint(Vector3& out) const {
 	const Vector3 nearPoint = TransformCoordinate({ ndcX, ndcY, 0.0f }, inverseViewProjection);
 	const Vector3 farPoint = TransformCoordinate({ ndcX, ndcY, 1.0f }, inverseViewProjection);
 	const Vector3 dir{ farPoint.x - nearPoint.x, farPoint.y - nearPoint.y, farPoint.z - nearPoint.z };
-	if (std::abs(dir.y) < 1e-6f) return false;
+	if (std::abs(dir.y) < kRayParallelEpsilon) return false;
 
 	const float waterHeight = water_ ? water_->GetParams().waterHeight : kWaterHeight;
 	const float t = (waterHeight - nearPoint.y) / dir.y;
@@ -578,9 +633,9 @@ void TitleScene::UpdateMouseRipples() {
 	// 動かした距離に比例して、軌跡に沿って等間隔に波源を置く（速く動かしても途切れないように）
 	const Vector3 delta{ point.x - prevMousePoint_.x, 0.0f, point.z - prevMousePoint_.z };
 	const float distance = std::sqrt(delta.x * delta.x + delta.z * delta.z);
-	if (distance < 1e-3f) return;
-	const float spacing = (std::max)(mouseRippleSpacing_, 0.01f);
-	const int count = (std::min)(static_cast<int>(std::ceil(distance / spacing)), 8);
+	if (distance < kNearZero) return;
+	const float spacing = (std::max)(mouseRippleSpacing_, kMinMouseRippleSpacing);
+	const int count = (std::min)(static_cast<int>(std::ceil(distance / spacing)), kMaxMouseRipplesPerFrame);
 	const float strength = (std::min)(mouseRippleStrength_ * distance / static_cast<float>(count), mouseRippleMaxStrength_);
 	for (int i = 1; i <= count; ++i) {
 		const float t = static_cast<float>(i) / static_cast<float>(count);
@@ -762,11 +817,11 @@ bool TitleScene::HasExtraIdPassObjects() const {
 void TitleScene::DrawExtraIdPassObjects() {
 	if (doorVisible_ && doorOutlineIntensity_ > 0.0f) {
 		for (Object3DInstance* part : { doorFrame_.get(), doorLeafL_.get(), doorLeafR_.get() }) {
-			if (part) part->DrawIdPass(dxCore_);
+			if (part) part->DrawIdPass(GetDxCore());
 		}
 	}
 	// 光の部屋は見えている部分だけに ID が入る（ID パスは深度テストあり＝扉板や枠に隠れた所は書かれない）
-	if (doorLightVisible_ && doorLight_) doorLight_->DrawIdPass(dxCore_);
+	if (doorLightVisible_ && doorLight_) doorLight_->DrawIdPass(GetDxCore());
 }
 
 void TitleScene::UpdateEnter() {
@@ -920,7 +975,7 @@ void TitleScene::UpdatePostEffect() {
 }
 
 void TitleScene::Draw() {
-	auto* commandList = dxCore_->GetCommandList();
+	auto* commandList = GetDxCore()->GetCommandList();
 
 	// 水面に映す物を反射 RT へ（RT を切り替えるので、シーン RT のバインドより前に行う）
 	// 通常はゲームカメラ基準。デバッグカメラ中もゲーム画面での映り込みが水面に焼き付くので、
@@ -945,34 +1000,34 @@ void TitleScene::Draw() {
 
 	// Skybox を最初に描画（深度書き込みなしの ReadOnly DSV）
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
-	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	auto readOnlyDsv = GetDxCore()->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
 
-	skyboxManager_->DrawSetting();
-	if (skybox_) skybox_->Draw(dxCore_);
+	GetSkyboxManager()->DrawSetting();
+	if (skybox_) skybox_->Draw(GetDxCore());
 
-	auto normalDsv = dxCore_->GetDsvHandle();
+	auto normalDsv = GetDxCore()->GetDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 
-	object3DManager_->DrawSetting();
+	GetObject3DManager()->DrawSetting();
 	LightManager::GetInstance()->BindLights(commandList);
 	if (doorVisible_) {
-		if (doorFrame_) doorFrame_->Draw(dxCore_);
-		if (doorLeafL_) doorLeafL_->Draw(dxCore_);
-		if (doorLeafR_) doorLeafR_->Draw(dxCore_);
+		if (doorFrame_) doorFrame_->Draw(GetDxCore());
+		if (doorLeafL_) doorLeafL_->Draw(GetDxCore());
+		if (doorLeafR_) doorLeafR_->Draw(GetDxCore());
 	}
-	if (doorLightVisible_ && doorLight_) doorLight_->Draw(dxCore_);
+	if (doorLightVisible_ && doorLight_) doorLight_->Draw(GetDxCore());
 
 	// 水面は不透明物の後（扉が水中からせり上がる間は、水面より下が隠れる）
 	if (water_) water_->Draw(*camera_, kTitleSkyboxPath, waterReflection_.get());
 
 	// ロゴは縁が、線画は消えるときに半透明になるので水面の後に重ねる。水面がルートシグネチャを替えるので貼り直す
 	if ((logo_ && logoVisible_) || doorLinesVisible_) {
-		object3DManager_->DrawSetting();
+		GetObject3DManager()->DrawSetting();
 		LightManager::GetInstance()->BindLights(commandList);
-		if (logo_ && logoVisible_) logo_->Draw(dxCore_);
+		if (logo_ && logoVisible_) logo_->Draw(GetDxCore());
 		if (doorLinesVisible_) {
-			for (auto& line : doorLines_) line->Draw(dxCore_);
+			for (auto& line : doorLines_) line->Draw(GetDxCore());
 		}
 	}
 
@@ -993,21 +1048,21 @@ void TitleScene::Draw() {
 
 void TitleScene::DrawTexts() {
 	TextRenderer* tr = TextRenderer::GetInstance();
-	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
-	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
+	const float screenW = static_cast<float>(GetDxCore()->GetUIWidth());
+	const float screenH = static_cast<float>(GetDxCore()->GetUIHeight());
 
 	if (phase_ == Phase::Ready) {
 		// 「ゲーム終了」を左上に。選んでいる（カーソルが乗っている）ときは金
-		const Vector4 color = quitFocused_ ? Vector4{ 1.0f, 0.85f, 0.2f, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
-		tr->DrawText(kQuitLabel, { quitMargin_.x, quitMargin_.y }, quitScale_, color, 2.0f, { 0.0f, 0.0f, 0.0f, 1.0f });
+		const Vector4 color = quitFocused_ ? Vector4{ 1.0f, kQuitFocusedColorG, kQuitFocusedColorB, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
+		tr->DrawText(kQuitLabel, { quitMargin_.x, quitMargin_.y }, quitScale_, color, kTextOutlineThickness, { 0.0f, 0.0f, 0.0f, 1.0f });
 	} else if (phase_ == Phase::Idle && elapsed_ >= introDuration_) {
 		// ゆっくり明滅させて「押せる」ことを伝える
-		const float blink = 0.35f + 0.65f * (0.5f + 0.5f * std::sin((elapsed_ - introDuration_) * 3.0f));
+		const float blink = kPressBlinkMinAlpha + kPressBlinkAlphaRange * (0.5f + 0.5f * std::sin((elapsed_ - introDuration_) * kPressBlinkSpeed));
 		const char* label = "PRESS ANY BUTTON";
 		const float scale = 1.2f;
 		const float w = tr->MeasureWidth(label, scale);
-		tr->DrawText(label, { (screenW - w) * 0.5f, screenH * 0.72f }, scale,
-			{ 1.0f, 1.0f, 1.0f, blink }, 2.0f, { 0.0f, 0.0f, 0.0f, blink });
+		tr->DrawText(label, { (screenW - w) * 0.5f, screenH * kPressLabelHeightRatio }, scale,
+			{ 1.0f, 1.0f, 1.0f, blink }, kTextOutlineThickness, { 0.0f, 0.0f, 0.0f, blink });
 	}
 
 	// デモモード中の「デモプレイ中」の表示は Game::Draw がどのシーンでも出す（AttractMode::DrawLabel）
@@ -1080,13 +1135,17 @@ void TitleScene::OnImGuiTuning() {
 			auto* attract = AttractMode::GetInstance();
 			bool attractOn = attract->IsEnabled();
 			if (ImGui::Checkbox("Attract Mode (F8)", &attractOn)) attract->SetEnabled(attractOn);
-			ImGui::DragFloat("Title Idle Wait (s)", &attract->titleIdleWait, 0.1f, 0.0f, 30.0f);
-			ImGui::DragFloat("Title Ready Wait (s)", &attract->titleReadyWait, 0.1f, 0.0f, 30.0f);
-			ImGui::DragFloat("HUB Wait (s)", &attract->hubWait, 0.1f, 0.0f, 30.0f);
-			ImGui::DragFloat("Menu Wait (s)", &attract->menuWait, 0.05f, 0.0f, 10.0f);
-			ImGui::DragFloat("Menu Confirm Delay (s)", &attract->menuConfirmDelay, 0.05f, 0.0f, 10.0f);
-			ImGui::DragFloat("Stage Action Time (s)", &attract->stageActionTime, 0.1f, 0.0f, 60.0f);
-			ImGui::Checkbox("Third Person Lap", &attract->thirdPersonLap);
+			// 設定はコピーに書いて最後に戻す
+			AttractMode::Settings settings = attract->GetSettings();
+			ImGui::DragFloat("Title Idle Wait (s)", &settings.titleIdleWait, 0.1f, 0.0f, 30.0f);
+			ImGui::DragFloat("Title Ready Wait (s)", &settings.titleReadyWait, 0.1f, 0.0f, 30.0f);
+			ImGui::DragFloat("HUB Wait (s)", &settings.hubWait, 0.1f, 0.0f, 30.0f);
+			ImGui::DragFloat("Menu Wait (s)", &settings.menuWait, 0.05f, 0.0f, 10.0f);
+			ImGui::DragFloat("Menu Confirm Delay (s)", &settings.menuConfirmDelay, 0.05f, 0.0f, 10.0f);
+			ImGui::DragFloat("Stage Action Time (s)", &settings.stageActionTime, 0.1f, 0.0f, 60.0f);
+			attract->SetSettings(settings);
+			bool thirdPersonLap = attract->IsThirdPersonLap();
+			if (ImGui::Checkbox("Third Person Lap", &thirdPersonLap)) attract->SetThirdPersonLap(thirdPersonLap);
 		}
 		if (ImGui::CollapsingHeader("Enter (6)")) {
 			ImGui::DragFloat("Open (s)", &enterOpenSeconds_, 0.05f, 0.0f, 10.0f);
@@ -1193,8 +1252,8 @@ void TitleScene::DrawShadowCasters() {
 	// ロゴは板ポリで、シャドウパスは透明部分を捨てられない（四角い影になる）ので影を落とさない。
 	// 扉も同じ理由でディゾルブ中は影を出さず、実体化しきってから落とす
 	if (doorVisible_ && doorDissolve_ >= 1.0f) {
-		if (doorFrame_) doorFrame_->DrawShadowPass(dxCore_);
-		if (doorLeafL_) doorLeafL_->DrawShadowPass(dxCore_);
-		if (doorLeafR_) doorLeafR_->DrawShadowPass(dxCore_);
+		if (doorFrame_) doorFrame_->DrawShadowPass(GetDxCore());
+		if (doorLeafL_) doorLeafL_->DrawShadowPass(GetDxCore());
+		if (doorLeafR_) doorLeafR_->DrawShadowPass(GetDxCore());
 	}
 }

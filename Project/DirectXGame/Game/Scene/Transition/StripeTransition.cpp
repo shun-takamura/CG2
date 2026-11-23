@@ -3,20 +3,31 @@
 #include "SpriteInstance.h"
 #include "DirectXCore.h"
 #include "TextureManager.h"
+#include "MathUtility.h"
+#include <algorithm>
 #include <cmath>
 #include <imgui.h>
 
-void StripeTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-	float screenWidth, float screenHeight) {
-	spriteManager_ = spriteManager;
-	dxCore_ = dxCore;
-	screenWidth_ = screenWidth;
-	screenHeight_ = screenHeight;
+namespace {
+	// 1600x900 で目視調整した帯の幅 [px]
+	constexpr float kDesignStripeWidth = 890.0f;
+	// 帯の大きさを目視調整したときの画面の幅 [px]
+	constexpr float kDesignScreenWidth = 1600.0f;
+	// 1600x900 で目視調整した帯の高さ [px]
+	constexpr float kDesignStripeHeight = 1000.0f;
+	// 帯の大きさを目視調整したときの画面の高さ [px]
+	constexpr float kDesignScreenHeight = 900.0f;
+
+	// transitionDuration_ を 0 にされても割り算が壊れない下限 [秒]
+	constexpr float kMinTransitionDuration = 0.001f;
+}
+
+void StripeTransition::OnInitialize() {
 
 	// 帯のサイズも 1600x900 で目視調整した値だったので、比率で画面に追従させる。
 	// ImGui から手動調整もできるので、ここは初期値の算出だけ。
-	debugStripeWidth_  = screenWidth_  * (890.0f / 1600.0f);
-	debugStripeHeight_ = screenHeight_ * (1000.0f / 900.0f);
+	debugStripeWidth_  = GetScreenWidth()  * (kDesignStripeWidth / kDesignScreenWidth);
+	debugStripeHeight_ = GetScreenHeight() * (kDesignStripeHeight / kDesignScreenHeight);
 
 	CreateStripes();
 }
@@ -39,7 +50,7 @@ void StripeTransition::CreateStripes() {
 		auto stripe = std::make_unique<SpriteInstance>();
 
 		std::string spriteName = "StripeTransition_" + std::to_string(i);
-		stripe->Initialize(spriteManager_, "Resources/Textures/stripe.dds", spriteName);
+		stripe->Initialize(GetSpriteManager(), "Resources/Textures/stripe.dds", spriteName);
 
 		// サイズを先に設定（重要！）
 		stripe->SetSize({ debugStripeWidth_, debugStripeHeight_ });
@@ -68,29 +79,17 @@ void StripeTransition::OnStartCover() {
 	}
 }
 
-bool StripeTransition::UpdateCover(float /*dt*/) {
+float StripeTransition::CalcStripeProgress(size_t index) const {
+	// i 本目は stripeDelay_ × i 秒遅れて動き始め、transitionDuration_ 秒で 1 になる
+	const float startTime = stripeDelay_ * static_cast<float>(index);
+	const float duration = (std::max)(transitionDuration_, kMinTransitionDuration);
+	return std::clamp((GetPhaseTime() - startTime) / duration, 0.0f, 1.0f);
+}
+
+bool StripeTransition::UpdateCover([[maybe_unused]] float dt) {
 	bool allComplete = true;
-	float triggerY = debugStripeHeight_ / 2.0f;
-
 	for (size_t i = 0; i < stripes_.size(); ++i) {
-		bool shouldStart = false;
-
-		if (i == 0) {
-			shouldStart = true;
-		} else {
-			float prevTriggerPoint = stripePositions_[i - 1].y + (debugStripeHeight_ * 2.0f / 3.0f);
-			if (prevTriggerPoint >= triggerY) {
-				shouldStart = true;
-			}
-		}
-
-		if (shouldStart && stripeProgress_[i] < 1.0f) {
-			stripeProgress_[i] += moveSpeed_;
-			if (stripeProgress_[i] > 1.0f) {
-				stripeProgress_[i] = 1.0f;
-			}
-		}
-
+		stripeProgress_[i] = CalcStripeProgress(i);
 		if (stripeProgress_[i] < 1.0f) {
 			allComplete = false;
 		}
@@ -98,27 +97,11 @@ bool StripeTransition::UpdateCover(float /*dt*/) {
 	return allComplete;
 }
 
-bool StripeTransition::UpdateReveal(float /*dt*/) {
+bool StripeTransition::UpdateReveal([[maybe_unused]] float dt) {
+	// 覆っている状態（1）から、ずらしながら 0 へ戻す
 	bool allGone = true;
-
 	for (size_t i = 0; i < stripes_.size(); ++i) {
-		bool shouldStart = false;
-
-		if (i == 0) {
-			shouldStart = true;
-		} else {
-			if (stripeProgress_[i - 1] <= 0.7f) {
-				shouldStart = true;
-			}
-		}
-
-		if (shouldStart && stripeProgress_[i] > 0.0f) {
-			stripeProgress_[i] -= moveSpeed_;
-			if (stripeProgress_[i] < 0.0f) {
-				stripeProgress_[i] = 0.0f;
-			}
-		}
-
+		stripeProgress_[i] = 1.0f - CalcStripeProgress(i);
 		if (stripeProgress_[i] > 0.0f) {
 			allGone = false;
 		}
@@ -137,7 +120,7 @@ void StripeTransition::SetFullyCovered() {
 
 void StripeTransition::UpdateVisual() {
 	// デバッグ強制表示中は常に更新
-	if (!isTransitioning_ && !debugForceShow_) return;
+	if (!IsTransitioning() && !debugForceShow_) return;
 
 	// 帯の位置を更新
 	UpdateStripePositions();
@@ -151,50 +134,48 @@ void StripeTransition::UpdateVisual() {
 void StripeTransition::UpdateStripePositions() {
 	if (stripes_.empty()) return;
 
-	float spacing = screenWidth_ / static_cast<float>(stripes_.size());
+	float spacing = GetScreenWidth() / static_cast<float>(stripes_.size());
 
 	// 斜めに掃く量。もとは 1600x900 で目視調整した固定値だったので、
-	// その比率のまま画面サイズに追従させる（1600x900 では従来と同じ見た目になる）。
-	const float kSweepXRatio  = 600.0f / 1600.0f;  // 開始 X のオフセット
-	const float kTravelXRatio = 500.0f / 1600.0f;  // はけるときの X 移動量
-	const float kTravelYRatio = 870.0f / 900.0f;   // はけるときの Y 移動量
-	const float kEnterXRatio  =  50.0f / 1600.0f;  // 入りの X 立ち上がり
-	const float kEnterYRatio  = 200.0f / 900.0f;   // 入りの Y 助走
-	const float kBaseY        = -50.0f / 900.0f;   // 覆っている状態の Y
+	// その比率のまま画面サイズに追従させる。
+	const float kSweepXRatio  = 600.0f / kDesignScreenWidth;  // 開始 X のオフセット
+	const float kTravelYRatio = 870.0f / kDesignScreenHeight;   // はけるときの Y 移動量
+	const float kEnterYRatio  = 200.0f / kDesignScreenHeight;   // 入りの Y 助走
+	const float kBaseY        = -50.0f / kDesignScreenHeight;   // 覆っている状態の Y
 
-	const float sweepX  = screenWidth_  * kSweepXRatio;
-	const float travelX = screenWidth_  * kTravelXRatio;
-	const float travelY = screenHeight_ * kTravelYRatio;
-	const float enterX  = screenWidth_  * kEnterXRatio;
-	const float enterY  = screenHeight_ * kEnterYRatio;
-	const float baseY   = screenHeight_ * kBaseY;
+	const float sweepX  = GetScreenWidth()  * kSweepXRatio;
+	const float travelY = GetScreenHeight() * kTravelYRatio;
+	const float enterY  = GetScreenHeight() * kEnterYRatio;
+	const float baseY   = GetScreenHeight() * kBaseY;
+	// 下へ 1 動くごとに横へ動く量（stripeAngle_ が負なら左へ）
+	const float slopeX = std::tan(DegToRad(stripeAngle_));
 
 	for (size_t i = 0; i < stripes_.size(); ++i) {
 		float progress = stripeProgress_[i];
 
-		if (debugForceShow_ && !isTransitioning_) {
+		if (debugForceShow_ && !IsTransitioning()) {
 			progress = 1.0f;
 		}
 
 		float x, y;
 
-		if (state_ == TransitionState::FadeOut ||
-			(state_ == TransitionState::None && !isTransitioning_)) {
+		if (GetState() == TransitionState::FadeOut ||
+			(GetState() == TransitionState::None && !IsTransitioning())) {
 			// はけ：覆っている状態から左下へ
 			float startX = (spacing + spacingOffset_) * i - sweepX;
 			float startY = baseY;
-			float endX = startX - travelX;
 			float endY = startY + travelY;
+			float endX = startX + (endY - startY) * slopeX;
 
 			float outProgress = 1.0f - progress;
 			x = startX + (endX - startX) * outProgress;
 			y = startY + (endY - startY) * outProgress;
 		} else {
-			// 入り：右上から左下へ
-			float startX = (spacing + spacingOffset_) * i + enterX;
-			float startY = -screenHeight_ - enterY;
+			// 入り：右上から左下へ（はけと同じ向きに動く）
 			float endX = (spacing + spacingOffset_) * i - sweepX;
 			float endY = baseY;
+			float startY = -GetScreenHeight() - enterY;
+			float startX = endX - (endY - startY) * slopeX;
 
 			x = startX + (endX - startX) * progress;
 			y = startY + (endY - startY) * progress;
@@ -207,13 +188,10 @@ void StripeTransition::UpdateStripePositions() {
 }
 
 void StripeTransition::Draw() {
-	// デバッグ：常に描画する
-	OutputDebugStringA("StripeTransition::Draw() - FORCE DRAWING\n");
-
 	// スプライト描画設定
-	spriteManager_->DrawSetting();
+	GetSpriteManager()->DrawSetting();
 
-	// 強制的に全て描画
+	// 全部の帯を描く（画面の外にいる帯は何も映らない）
 	for (size_t i = 0; i < stripes_.size(); ++i) {
 		stripes_[i]->Draw();
 	}
@@ -224,9 +202,9 @@ void StripeTransition::OnImGui() {
 
 	{
 		ImGui::Text("=== Status ===");
-		ImGui::Text("IsTransitioning: %s", isTransitioning_ ? "true" : "false");
-		ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)", static_cast<int>(state_));
-		ImGui::Text("CurrentTime: %.2f", currentTime_);
+		ImGui::Text("IsTransitioning: %s", IsTransitioning() ? "true" : "false");
+		ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)", static_cast<int>(GetState()));
+		ImGui::Text("CurrentTime: %.2f", GetPhaseTime());
 		ImGui::Text("Stripe Count: %zu", stripes_.size());
 
 		ImGui::Separator();
@@ -248,15 +226,9 @@ void StripeTransition::OnImGui() {
 		}
 
 		ImGui::Separator();
-		ImGui::Text("=== Position Settings ===");
+		ImGui::Text("=== Size Settings ===");
 
 		bool changed = false;
-		changed |= ImGui::SliderFloat("Start Y", &debugStartY_, -2000.0f, 0.0f);
-		changed |= ImGui::SliderFloat("End Y", &debugEndY_, -500.0f, 500.0f);
-		changed |= ImGui::SliderFloat("Offset X", &debugOffsetX_, -200.0f, 200.0f);
-
-		ImGui::Separator();
-		ImGui::Text("=== Size Settings ===");
 
 		changed |= ImGui::SliderFloat("Stripe Width", &debugStripeWidth_, 50.0f, 1500.0f);
 		changed |= ImGui::SliderFloat("Stripe Height", &debugStripeHeight_, 100.0f, 2000.0f);
@@ -271,9 +243,10 @@ void StripeTransition::OnImGui() {
 		ImGui::Separator();
 		ImGui::Text("=== Timing Settings ===");
 
-		ImGui::SliderFloat("Duration", &transitionDuration_, 0.1f, 2.0f);
-		ImGui::SliderFloat("Delay", &stripeDelay_, 0.01f, 0.2f);
-		ImGui::SliderFloat("Hold Duration", &holdDuration_, 0.0f, 1.0f);
+		ImGui::SliderFloat("Duration", &transitionDuration_, 0.05f, 2.0f);
+		ImGui::SliderFloat("Delay", &stripeDelay_, 0.0f, 0.3f);
+		ImGui::SliderFloat("Angle (deg)", &stripeAngle_, -60.0f, 60.0f);
+		{ float hold = GetHoldDuration(); if (ImGui::SliderFloat("Hold Duration", &hold, 0.0f, 1.0f)) SetHoldDuration(hold); }
 
 		ImGui::Separator();
 		ImGui::Text("=== Stripe Count ===");
@@ -310,10 +283,8 @@ void StripeTransition::OnImGui() {
 			for (size_t i = 0; i < stripeProgress_.size(); ++i) {
 				stripeProgress_[i] = 0.0f;
 			}
-			currentTime_ = 0.0f;
-			state_ = TransitionState::FadeIn;
-			isTransitioning_ = true;
-			sceneChangeTriggered_ = true; // シーン切り替えはスキップ
+			ResetToIdle();
+			Start(nullptr); // シーン切り替えなし（差し替えるシーンを渡さない）
 			debugForceShow_ = false;
 		}
 
@@ -323,9 +294,7 @@ void StripeTransition::OnImGui() {
 			for (size_t i = 0; i < stripeProgress_.size(); ++i) {
 				stripeProgress_[i] = 0.0f;
 			}
-			currentTime_ = 0.0f;
-			state_ = TransitionState::None;
-			isTransitioning_ = false;
+			ResetToIdle();
 			debugForceShow_ = false;
 		}
 	}

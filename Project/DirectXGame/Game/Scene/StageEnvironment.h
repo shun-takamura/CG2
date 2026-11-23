@@ -70,6 +70,7 @@ struct StageEnvValues {
 /// </summary>
 class StageEnvironment {
 public:
+	/// <summary>差し替え先と通知先を受け取り、適用済みの状態を消す</summary>
 	/// <param name="skybox">着色/Cubemap 差し替え先。</param>
 	/// <param name="object3DManager">距離フォグ（b6）の供給先。null 可。</param>
 	/// <param name="onCubemapChanged">
@@ -83,38 +84,52 @@ public:
 	/// 遠景の雲（タイトルと同じ CloudLayer）を作り、Skybox と Object3DManager に挿す。
 	/// Initialize の後・Reset の前に呼ぶ（Reset でセクションの光の向き＝太陽の向きが入る）。
 	/// </summary>
+	/// <param name="dxCore">DirectX の基盤</param>
 	void InitializeClouds(DirectXCore* dxCore);
 
 	/// <summary>
-	/// 雲海のレイマーチ（9_CloudRendering フェーズ3）を作る。shaftPath は降下の線（縦穴の中心。レールから拾う）。
+	/// 雲海のレイマーチ（9_CloudRendering フェーズ3）を作る。
 	/// パラメータは LoadFromJson（root["raymarchClouds"]）で先に読んだ値を使う
 	/// </summary>
+	/// <param name="dxCore">DirectX の基盤</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="screenWidth">描画解像度の幅 [px]</param>
+	/// <param name="screenHeight">描画解像度の高さ [px]</param>
+	/// <param name="shaftPath">降下の線（縦穴の中心。レールから拾う）</param>
 	void InitializeRaymarchClouds(DirectXCore* dxCore, SRVManager* srvManager,
 		uint32_t screenWidth, uint32_t screenHeight, const std::vector<Vector3>& shaftPath);
 
-	/// <summary>雲のスクロールを進める。フェーズに関係なく毎フレーム、Skybox の Update の前に呼ぶ</summary>
+	/// <summary>雲のスクロールを進める（雲海は自機の進む向きと逆へ流し、降下の前に止める）。フェーズに関係なく毎フレーム、Skybox の Update の前に呼ぶ</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
+	/// <param name="eyePosition">視点のワールド位置</param>
 	void UpdateClouds(float deltaTime, const Vector3& eyePosition);
 
 	/// <summary>
 	/// 雲海を描いてシーンに重ねる。不透明物・水面の後、Primitive の前。
 	/// 雲を抜けきった後（raymarchOff_.sec）は fadeSec で薄くしてからパスごと止める（11 番 §1 空・雲）
 	/// </summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="sceneTarget">重ねる先のシーンの RT</param>
 	void DrawRaymarchClouds(const Camera& camera, RenderTexture* sceneTarget);
 
 	/// <summary>雲海（InitializeRaymarchClouds 前でも JSON の値は持つ）。L5 は GetParams().opacity / enabled で消す</summary>
+	/// <returns>雲海（まだ作っていなければ nullptr）</returns>
 	CloudRaymarcher* GetCloudRaymarcher() { return raymarcher_.get(); }
 
 	/// <summary>
 	/// 画面の水滴の濡れ具合の目標（雲の縦穴。13_RiverWater.md §9.9）。視点が雲の層（下面〜最高点）の中にいる間 1、
-	/// 層の上下の端の kCloudDropletEdge [m] で 0→1。雲が無効・薄い時は 0
+	/// 層の上下の端の kCloudDropletEdge [m] で 0→1
 	/// </summary>
+	/// <param name="eyePosition">視点のワールド位置</param>
+	/// <returns>濡れ具合の目標（0〜1。雲が無効・薄い時は 0）</returns>
 	float GetCloudDropletTarget(const Vector3& eyePosition) const;
 
 	/// <summary>Object3DManager はシーンをまたいで生きるので、雲を外して返す</summary>
 	void Finalize();
 
-	// unique_ptr<CloudLayer> を前方宣言のまま持つので、生成・破棄は .cpp 側で定義する
+	/// <summary>unique_ptr<CloudLayer> を前方宣言のまま持つので、生成は .cpp 側で定義する</summary>
 	StageEnvironment();
+	/// <summary>unique_ptr<CloudLayer> を前方宣言のまま持つので、破棄は .cpp 側で定義する</summary>
 	~StageEnvironment();
 
 	/// <summary>
@@ -132,17 +147,27 @@ public:
 	/// 補間状態を捨てて stageSec の値を即時適用する（Seek / シーン開始時）。
 	/// クロスフェードを挟むと巻き戻しでの色確認にならないので Cubemap も即差し替える。
 	/// </summary>
+	/// <param name="stageSec">ステージ経過秒</param>
 	void Reset(float stageSec);
-	/// <summary>今のセクションの IBL（空なら空と同じ。セクションが無ければ空文字）</summary>
+	/// <summary>今のセクションの IBL</summary>
+	/// <returns>IBL のパス（空なら空と同じ。セクションが無ければ空文字）</returns>
 	const std::string& GetCurrentIblPath() const { return iblPath_; }
 
+	/// <summary>セクションが 1 件でもあるか</summary>
+	/// <returns>あれば true（無ければ何も適用しない）</returns>
 	bool HasSections() const { return !sections_.empty(); }
-	/// <summary>遠景の雲（InitializeClouds 前は null）。大河の水面に映る空へ重ねるのに使う</summary>
+	/// <summary>遠景の雲。大河の水面に映る空へ重ねるのに使う</summary>
+	/// <returns>遠景の雲（InitializeClouds 前は null）</returns>
 	const CloudLayer* GetCloudLayer() const { return cloudLayer_.get(); }
+	/// <summary>今フレームの補間済みの環境値</summary>
+	/// <returns>今の環境値</returns>
 	const StageEnvValues& GetCurrent() const { return current_; }
 	/// <summary>必殺技の暗転から復帰する時の目標色（＝今のセクションの着色）。</summary>
+	/// <returns>空の着色</returns>
 	const Vector4& GetCurrentTint() const { return current_.skyTint; }
 
+	/// <summary>セクションの一覧と、雲の流れ・雲海を消す時刻の調整 UI</summary>
+	/// <param name="changed">値を書き換えたら true にする（呼ぶ側が保存する）</param>
 	/// <param name="seekTo">"Jump" ボタンでその秒へシークするためのコールバック。</param>
 	void OnImGuiTuning(bool& changed, const std::function<void(float)>& seekTo);
 	/// <summary>雲のパラメータ（保存はしない。値が決まったら既定値かチューニング JSON へ移す）</summary>
@@ -154,24 +179,44 @@ public:
 	/// 雲海を流す向き（XZ。自機の進む向き＝レール t=0 の進行方向）。雲はこの逆へ cloudFlow の速さで流れる。
 	/// レールは雲の上ではほとんど進まないので、流さないと止まって見える（2026-10-19 ユーザー）
 	/// </summary>
+	/// <param name="forwardXZ">自機の進む向き（XZ。正規化する。長さがほぼ 0 なら今の向きのまま）</param>
 	void SetCloudFlowDirection(const Vector2& forwardXZ);
 
-	void LoadFromJson(const JsonValue& root);   // root["sections"]
+	/// <summary>セクション（root["sections"]）・雲の流れ・雲海とそれを消す時刻を読む</summary>
+	/// <param name="root">ステージのチューニング JSON のルート</param>
+	void LoadFromJson(const JsonValue& root);
+	/// <summary>セクション・雲の流れ・雲海とそれを消す時刻を書く</summary>
+	/// <param name="root">書き込み先のルート</param>
 	void SaveToJson(JsonValue& root) const;
 
 private:
-	// stageSec が属するセクション番号（startSec <= stageSec の最後のもの）。空なら -1。
+	/// <summary>stageSec が属するセクション番号（startSec <= stageSec の最後のもの）</summary>
+	/// <param name="stageSec">ステージ経過秒</param>
+	/// <returns>セクション番号。空なら -1</returns>
 	int  FindSectionIndex(float stageSec) const;
-	// 「Cubemap としてどのセクションを採用すべきか」= 遷移窓の先頭を跨いだ時点で次へ進む。
+	/// <summary>「Cubemap としてどのセクションを採用すべきか」= 遷移窓の先頭を跨いだ時点で次へ進む</summary>
+	/// <param name="stageSec">ステージ経過秒</param>
+	/// <returns>セクション番号。空なら -1</returns>
 	int  FindSkyIndex(float stageSec) const;
-	// 遷移窓を考慮した補間値を求める。
+	/// <summary>遷移窓を考慮した補間値を求める</summary>
+	/// <param name="stageSec">ステージ経過秒</param>
+	/// <param name="out">補間値の書き込み先（セクションが無ければ変えない）</param>
 	void Evaluate(float stageSec, StageEnvValues& out) const;
-	// index から遡って最初に見つかる非空の skyboxPath（空セクションは前を引き継ぐ）。
+	/// <summary>index から遡って最初に見つかる非空の skyboxPath（空セクションは前を引き継ぐ）</summary>
+	/// <param name="index">セクション番号</param>
+	/// <returns>Cubemap のパス。見つからなければ nullptr</returns>
 	const std::string* ResolveCubemapPath(int index) const;
-	// index から遡って最初に見つかる iblPath。先に空を替えたセクションに当たったらその空
+	/// <summary>index から遡って最初に見つかる iblPath。先に空を替えたセクションに当たったらその空</summary>
+	/// <param name="index">セクション番号</param>
+	/// <returns>IBL のパス（見つからなければ今の Skybox の Cubemap）</returns>
 	std::string ResolveIblPath(int index) const;
-	// IBL を index のセクションのものにする（force なら同じでも貼り直す）
+	/// <summary>IBL を index のセクションのものにする（変わったら onCubemapChanged を呼ぶ）</summary>
+	/// <param name="index">セクション番号</param>
+	/// <param name="force">true なら同じでも貼り直す</param>
 	void ApplyIbl(int index, bool force);
+	/// <summary>環境値を空の着色・平行光源・距離フォグ・雲の太陽の向きへ書き込む</summary>
+	/// <param name="v">書き込む環境値</param>
+	/// <param name="applyTint">false なら Skybox の着色だけ書かない</param>
 	void ApplyValues(const StageEnvValues& v, bool applyTint);
 
 	Skybox* skybox_ = nullptr;
@@ -194,7 +239,8 @@ private:
 		float sec = 70.0f;
 		float fadeSec = 0.5f;
 	} raymarchOff_;
-	/// <summary>stageSec_ での雲海の濃さの倍率（1 = そのまま、0 = 描かない）</summary>
+	/// <summary>stageSec_ での雲海の濃さの倍率</summary>
+	/// <returns>1 = そのまま、0 = 描かない</returns>
 	float RaymarchVisibility() const;
 	float stageSec_ = 0.0f;   // Update / Reset で受け取った今のステージ秒（雲の流れの強さ）
 

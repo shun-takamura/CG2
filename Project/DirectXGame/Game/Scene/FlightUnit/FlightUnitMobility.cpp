@@ -11,6 +11,27 @@
 #endif
 
 namespace {
+	// 閉じた形で 3 枚の板を前後に重ねる間隔の初期値 [m]
+	constexpr float kPlateStackGap = 0.07f;
+	// 開いた形の真ん中の板の Z の回転の初期値 [rad]
+	constexpr float kOpenMiddlePlateRoll = 0.8f;
+	// 開いた形の手前の板の Z の回転の初期値 [rad]
+	constexpr float kOpenFrontPlateRoll = 1.6f;
+	// 束を背中に付けたときの大きさの初期値
+	constexpr Vector3 kGroupScale = { 1.6f, 1.6f, 1.6f };
+	// 束を背中に付けたときの傾き（外へ倒す）の初期値 [rad]
+	constexpr Vector3 kGroupRotate = { 0.0f, 0.0f, 0.6f };
+	// 束を背中に付けたときの位置（バックパックから）の初期値 [m]
+	constexpr Vector3 kGroupOffset = { 0.3f, 0.6f, 0.15f };
+	// smoothstep（3k² − 2k³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3k² − 2k³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// World の時間の倍率がこれ未満ならほかの演出が握っているとみなす
+	constexpr float kNormalTimeScale = 0.999f;
+	// 時間の長さの下限 [秒]（これ以下ならすぐ終わったものとして扱う）
+	constexpr float kMinSeconds = 1e-4f;
+
 	constexpr const char* kWingDir = "Resources/Models/Weapons/FlightUnit/Mobility/Export";
 	// [束][板]（板の順は FlightUnitMobility::kPlateCount の説明と同じ。右は左の左右反転）
 	constexpr const char* kPlateNames[2][3] = {
@@ -23,15 +44,15 @@ FlightUnitMobility::FlightUnitMobility() {
 	// 初期値（ImGui で合わせて FlightUnit.json に保存する）。
 	// 閉じた形：3 枚を前後に重ねて、支点から下へ垂らす（束の傾きで外へ倒す）
 	const Vector3 one{ 1.0f, 1.0f, 1.0f };
-	closedPlates_[0] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -0.07f } };
+	closedPlates_[0] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -kPlateStackGap } };
 	closedPlates_[1] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } };
-	closedPlates_[2] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.07f } };
+	closedPlates_[2] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, kPlateStackGap } };
 	// 開いた形：奥はそのまま、中と手前を支点のまわりに外・上へ回す（Z の回転が大きいほど上がる）
 	openPlates_[0] = closedPlates_[0];
-	openPlates_[1] = { one, { 0.0f, 0.0f, 0.8f }, { 0.0f, 0.0f, 0.0f } };
-	openPlates_[2] = { one, { 0.0f, 0.0f, 1.6f }, { 0.0f, 0.0f, 0.07f } };
+	openPlates_[1] = { one, { 0.0f, 0.0f, kOpenMiddlePlateRoll }, { 0.0f, 0.0f, 0.0f } };
+	openPlates_[2] = { one, { 0.0f, 0.0f, kOpenFrontPlateRoll }, { 0.0f, 0.0f, kPlateStackGap } };
 	// 束：自機の左の肩の後ろ。下へ垂れる板を外へ倒す（右は鏡写し）
-	groupMounts_[0] = { { 1.6f, 1.6f, 1.6f }, { 0.0f, 0.0f, 0.6f }, { 0.3f, 0.6f, 0.15f } };
+	groupMounts_[0] = { kGroupScale, kGroupRotate, kGroupOffset };
 	groupMounts_[1] = MirroredX(groupMounts_[0]);
 }
 
@@ -50,7 +71,7 @@ void FlightUnitMobility::InitializeModels(Object3DManager* object3DManager, Dire
 
 void FlightUnitMobility::UpdateModels(const Matrix4x4& backpackWorld) {
 	float k = preview_ ? std::clamp(previewRatio_, 0.0f, 1.0f) : openness_;
-	k = k * k * (3.0f - 2.0f * k);
+	k = k * k * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * k);
 	for (int g = 0; g < kGroupCount; ++g) {
 		Group& group = groups_[g];
 		const Matrix4x4 groupWorld = Multiply(MakeAffineMatrix(groupMounts_[g]), backpackWorld);
@@ -81,7 +102,7 @@ void FlightUnitMobility::DrawModels(DirectXCore* dxCore, bool idPass) {
 bool FlightUnitMobility::Activate() {
 	if (!host_) return false;
 	// ほかの演出が World を握っている間は出さない（ジャスト回避・必殺技・Aim オーサリング）
-	if (host_->GetTimeScale(TimeGroup::World) < 0.999f) return false;
+	if (host_->GetTimeScale(TimeGroup::World) < kNormalTimeScale) return false;
 	active_ = true;
 	timer_ = 0.0f;
 	return true;
@@ -96,14 +117,14 @@ void FlightUnitMobility::Cancel(bool restoreTime) {
 
 float FlightUnitMobility::GetActiveRatio() const {
 	const float d = slowDuration_[LevelIndex()];
-	return d > 1e-4f ? std::clamp(1.0f - timer_ / d, 0.0f, 1.0f) : 0.0f;
+	return d > kMinSeconds ? std::clamp(1.0f - timer_ / d, 0.0f, 1.0f) : 0.0f;
 }
 
 void FlightUnitMobility::Update(float dt, bool canAct) {
 	(void)canAct;
 	// ウィングはスローの間だけ開く（実時間で動かす）
-	if (active_) openness_ = openTime_ > 1e-4f ? (std::min)(1.0f, openness_ + dt / openTime_) : 1.0f;
-	else openness_ = closeTime_ > 1e-4f ? (std::max)(0.0f, openness_ - dt / closeTime_) : 0.0f;
+	if (active_) openness_ = openTime_ > kMinSeconds ? (std::min)(1.0f, openness_ + dt / openTime_) : 1.0f;
+	else openness_ = closeTime_ > kMinSeconds ? (std::max)(0.0f, openness_ - dt / closeTime_) : 0.0f;
 	if (!active_ || !host_) return;
 	timer_ += dt;
 	const float d = slowDuration_[LevelIndex()];
@@ -113,8 +134,8 @@ void FlightUnitMobility::Update(float dt, bool canAct) {
 	}
 	// 入り・抜けを短く補間する（1.0 ⇄ slowWorld_）
 	float k = 1.0f;
-	if (easeIn_ > 1e-4f && timer_ < easeIn_) k = timer_ / easeIn_;
-	if (easeOut_ > 1e-4f && d - timer_ < easeOut_) k = (std::min)(k, (d - timer_) / easeOut_);
+	if (easeIn_ > kMinSeconds && timer_ < easeIn_) k = timer_ / easeIn_;
+	if (easeOut_ > kMinSeconds && d - timer_ < easeOut_) k = (std::min)(k, (d - timer_) / easeOut_);
 	host_->SetTimeScale(TimeGroup::World, 1.0f + (slowWorld_ - 1.0f) * k);
 }
 

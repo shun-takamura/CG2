@@ -5,16 +5,32 @@
 #include "AssetLocator.h"
 #include "DStorageManager.h"
 #include "AnimatedMeshCache.h"
+#include "Object3DManager.h"
 #include "PepperMacros.h"
 
-// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
-// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+namespace {
+    // 白のフォールバックテクスチャの各チャンネルの値（0〜255）
+    constexpr uint8_t kWhiteChannel = 255;
+    // マテリアルの既定値（光沢度・粗さ・視差のレイヤー数の下限と上限）
+    constexpr float kDefaultShininess = 50.0f;
+    constexpr float kDefaultRoughness = 0.5f;
+    constexpr float kDefaultParallaxMinLayers = 8.0f;
+    constexpr float kDefaultParallaxMaxLayers = 32.0f;
+    // 三角形の頂点の数
+    constexpr uint32_t kTriangleVertexCount = 3;
+}
+
+/// <summary>
+/// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
+/// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+/// </summary>
+/// <returns>白テクスチャのパス</returns>
 static const std::string& EnsureFallbackWhiteTexture()
 {
     static const std::string kWhite = "Resources/Textures/white1x1.dds";
     auto* tm = TextureManager::GetInstance();
     if (!tm->HasTexture(kWhite)) {
-        tm->CreateSolidColorTexture(kWhite, 255, 255, 255, 255);
+        tm->CreateSolidColorTexture(kWhite, kWhiteChannel, kWhiteChannel, kWhiteChannel, kWhiteChannel);
     }
     return kWhite;
 }
@@ -115,17 +131,17 @@ void AnimatedModelInstance::Draw(DirectXCore* dxCore)
         if (sm.indexCount == 0) continue;
 
         cmd->SetGraphicsRootConstantBufferView(
-            0, sm.materialResource->GetGPUVirtualAddress()
+            Object3DManager::kRootMaterial, sm.materialResource->GetGPUVirtualAddress()
         );
 
         const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
         cmd->SetGraphicsRootDescriptorTable(
-            2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+            Object3DManager::kRootTexture, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
         );
 
         const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
         cmd->SetGraphicsRootDescriptorTable(
-            10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+            Object3DManager::kRootNormalMap, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
         );
 
         PEPPER_COUNT("DrawCall");
@@ -147,19 +163,19 @@ void AnimatedModelInstance::DrawSkinning(DirectXCore* dxCore, const SkinCluster&
 
         // RootParam[0] Material
         cmd->SetGraphicsRootConstantBufferView(
-            0, sm.materialResource->GetGPUVirtualAddress()
+            Object3DManager::kRootMaterial, sm.materialResource->GetGPUVirtualAddress()
         );
 
         // RootParam[2] Texture
         const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
         cmd->SetGraphicsRootDescriptorTable(
-            2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+            Object3DManager::kRootTexture, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
         );
 
         // RootParam[10] 法線マップ（無ければベースで埋める。PS は useNormalMap で判定）
         const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
         cmd->SetGraphicsRootDescriptorTable(
-            10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+            Object3DManager::kRootNormalMap, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
         );
 
         PEPPER_COUNT("DrawCall");
@@ -186,9 +202,9 @@ void AnimatedModelInstance::DrawBloomPassSkinning(DirectXCore* dxCore, const Ski
         if (sm.indexCount == 0) continue;
         const bool dissolve = i < drawSubmesh.size() && drawSubmesh[i] != 0;
         if (!dissolve && !sm.hasEmissive) continue;
-        cmd->SetGraphicsRootConstantBufferView(1, sm.materialResource->GetGPUVirtualAddress());
+        cmd->SetGraphicsRootConstantBufferView(Object3DManager::kBloomRootMaterial, sm.materialResource->GetGPUVirtualAddress());
         const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
-        cmd->SetGraphicsRootDescriptorTable(3, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
+        cmd->SetGraphicsRootDescriptorTable(Object3DManager::kBloomRootBaseColor, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
         PEPPER_COUNT("DrawCall");
         cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
     }
@@ -255,20 +271,20 @@ void AnimatedModelInstance::CreateMaterialData(DirectXCore* dxCore)
         m->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
         m->enableLighting = true;
         m->uvTransform = MakeIdentity4x4();
-        m->shininess = 50.0f;
+        m->shininess = kDefaultShininess;
         m->environmentCoefficient = 1.0f;
         m->useEnvironmentMap = false;
         m->metallic = 0.0f;
-        m->roughness = 0.5f;
-        m->shadingModel = 0;
+        m->roughness = kDefaultRoughness;
+        m->shadingModel = ShadingModel::kBlinnPhong;
         m->useNormalMap = 0;
         m->cloudReflection = 0.0f;
         m->dissolveEnable = 0;
         m->dissolveProgress = 1.0f;
         m->useParallax = 0;
         m->parallaxDepth = 0.0f;
-        m->parallaxMinLayers = 8.0f;
-        m->parallaxMaxLayers = 32.0f;
+        m->parallaxMinLayers = kDefaultParallaxMinLayers;
+        m->parallaxMaxLayers = kDefaultParallaxMaxLayers;
         m->emissive = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
@@ -388,7 +404,7 @@ void AnimatedModelInstance::LoadModel(const std::string& directoryPath, const st
         // Index解析
         for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
             aiFace& face = mesh->mFaces[faceIndex];
-            assert(face.mNumIndices == 3);
+            assert(face.mNumIndices == kTriangleVertexCount);
 
             for (uint32_t element = 0; element < face.mNumIndices; ++element) {
                 uint32_t vertexIndex = face.mIndices[element];

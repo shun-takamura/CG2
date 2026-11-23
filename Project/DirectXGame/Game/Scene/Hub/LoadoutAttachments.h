@@ -12,6 +12,7 @@ class Object3DManager;
 class PlayerWingUnit;
 class SkinningComputeManager;
 class SRVManager;
+class GameSession;
 struct MainWeaponDef;
 struct ShieldDef;
 
@@ -25,6 +26,10 @@ struct ShieldDef;
 /// </summary>
 class LoadoutAttachments {
 public:
+	/// <summary>シーンをまたいで残るプレイの状態を設定する（作った直後、Initialize より前に HubScene が呼ぶ）</summary>
+	/// <param name="gameSession">Game が持つプレイの状態（参照のみ）</param>
+	void SetGameSession(GameSession* gameSession) { gameSession_ = gameSession; }
+
 	/// <summary>ID マスクに描く部分（付け替えのノイズは替えた部分だけにかける）</summary>
 	enum class Part {
 		All,          // 武器・盾・背中のユニット・羽根
@@ -36,23 +41,41 @@ public:
 	LoadoutAttachments();
 	~LoadoutAttachments();
 
+	/// <summary>ビームシールド・飛行ユニット（モデルだけ）・羽根を用意し、今の装備を付ける</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="skinningComputeManager">スキニングの計算の管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="camera">描画に使うカメラ</param>
 	void Initialize(Object3DManager* object3DManager, SkinningComputeManager* skinningComputeManager,
 		DirectXCore* dxCore, SRVManager* srvManager, Camera* camera);
 	/// <summary>LoadoutState に合わせて付け直す（付け替えた直後に呼ぶ）</summary>
 	void Rebuild();
-	/// <summary>body のスケルトンを更新した後に呼ぶ。dt は羽根・ビームの時間</summary>
+	/// <summary>手・背中のボーンに装備を付けて行列を作る。body のスケルトンを更新した後に呼ぶ</summary>
+	/// <param name="body">機体の本体</param>
+	/// <param name="deltaTime">羽根・ビームの時間の経過 [秒]</param>
 	void Update(AnimatedObject3DInstance* body, float deltaTime);
 
-	/// <summary>不透明（武器・盾・背中のユニット・羽根）</summary>
+	/// <summary>不透明の物（武器・盾・背中のユニット・羽根）を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	/// <summary>半透明（ビームシールド）。不透明物の後。ルートシグネチャを替える</summary>
+	/// <summary>半透明の物（ビームシールド）を描く。不透明物の後。ルートシグネチャを替える</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void DrawTransparent(const Camera& camera);
+	/// <summary>発光パスに描く物があるかを返す</summary>
+	/// <returns>ビームシールドか羽根が光っていれば true</returns>
 	bool HasBloom() const;
+	/// <summary>発光パスでビームシールドと羽根を描く（本体が見えている間だけ）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="camera">描画に使うカメラ</param>
 	void DrawBloom(DirectXCore* dxCore, const Camera& camera);
-	/// <summary>ID マスクへ（ノイズを機体だけ・機体以外・替えた部分だけにかけるため）</summary>
+	/// <summary>ID マスクへ描く（ノイズを機体だけ・機体以外・替えた部分だけにかけるため）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="part">描く部分</param>
 	void DrawIdPass(DirectXCore* dxCore, Part part);
 
-	/// <summary>飛行ユニット（装備画面が付けていない系統の値も読む）</summary>
+	/// <summary>飛行ユニットを返す（装備画面が付けていない系統の値も読む）</summary>
+	/// <returns>飛行ユニット。Initialize 前は nullptr</returns>
 	const FlightUnitPart* GetFlightUnit() const { return flightUnit_.get(); }
 	/// <summary>
 	/// 飛行ユニットの調整（付ける所の位置・向き。FlightUnit.json に Save）。ステージと同じ ImGui で、
@@ -61,7 +84,11 @@ public:
 	void OnImGuiFlightUnit();
 
 private:
+	// シーンをまたいで残るプレイの状態（Game が持つ。参照のみ）
+	GameSession* gameSession_ = nullptr;
 	class PreviewHost;
+	/// <summary>ビームシールドを出しているかを返す</summary>
+	/// <returns>ビームの盾を付けていて本体が見えていれば true</returns>
 	bool IsShieldBeamShown() const;
 
 	DirectXCore* dxCore_ = nullptr;

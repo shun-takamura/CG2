@@ -7,15 +7,17 @@
 /// </summary>
 class LogWindow : public IImGuiWindow {
 public:
+    /// <summary>"Log" ウィンドウとして作る（オートスクロールは ON）</summary>
     LogWindow() : IImGuiWindow("Log"), autoScroll_(true) {}
 
 protected:
+    /// <summary>LogBuffer のログをレベルごとの色で並べる。Clear ボタンで消し、オートスクロールを切り替えられる</summary>
     void OnDraw() override {
 #ifdef _DEBUG
 
         // クリアボタンとオートスクロール設定
         if (ImGui::Button("Clear")) {
-            LogBuffer::Instance().Clear();
+            LogBuffer::GetInstance()->Clear();
         }
         ImGui::SameLine();
         ImGui::Checkbox("Auto Scroll", &autoScroll_);
@@ -25,7 +27,7 @@ protected:
         ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, 
                           ImGuiWindowFlags_HorizontalScrollbar);
 
-        const auto& logs = LogBuffer::Instance().GetLogs();
+        const auto& logs = LogBuffer::GetInstance()->GetLogs();
         for (const auto& log : logs) {
             // レベルに応じた色設定
             ImVec4 color;
@@ -40,7 +42,7 @@ protected:
                     prefix = "[Warn]";
                     break;
                 case LogBuffer::Level::Error:
-                    color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);  // 赤
+                    color = kErrorColor;  // 赤
                     prefix = "[Error]";
                     break;
                 default:
@@ -64,5 +66,8 @@ protected:
     }
 
 private:
+    // Error のログの色（赤）
+    static constexpr ImVec4 kErrorColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+
     bool autoScroll_;
 };

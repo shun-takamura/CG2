@@ -12,30 +12,71 @@
 /// </summary>
 class FlightUnitMobility : public FlightUnitSkill {
 public:
+	/// <summary>板の閉じた形・開いた形と、左右の束の付ける所の初期値を決める</summary>
 	FlightUnitMobility();
 	~FlightUnitMobility() override;
 
+	/// <summary>World をスローにし始める（ほかの演出が World を握っている間は出さない）</summary>
+	/// <returns>出せたら true</returns>
 	bool Activate() override;
+	/// <summary>スローを終える</summary>
+	/// <param name="restoreTime">true なら World の倍率を 1 に戻す（false はジャスト回避・必殺技が握っているとき）</param>
 	void Cancel(bool restoreTime) override;
+	/// <summary>スローの途中かを返す</summary>
+	/// <returns>途中なら true</returns>
 	bool IsActive() const override { return active_; }
+	/// <summary>時間の倍率を使うかを返す</summary>
+	/// <returns>常に true</returns>
 	bool UsesTimeScale() const override { return true; }
+	/// <summary>技の残りを返す</summary>
+	/// <returns>1→0</returns>
 	float GetActiveRatio() const override;
+	/// <summary>今の段階のクールタイムを返す</summary>
+	/// <returns>クールタイム [秒]</returns>
 	float GetCooldown() const override { return cooldown_[LevelIndex()]; }
+	/// <summary>ウィングを開閉し、スローの間は入り・抜けを補間しながら World の倍率を書き、時間が来たら終える</summary>
+	/// <param name="dt">実時間の経過 [秒]</param>
+	/// <param name="canAct">使わない</param>
 	void Update(float dt, bool canAct) override;
 
+	/// <summary>バックパックを背負うかを返す（位置の基準にだけ使う）</summary>
+	/// <returns>常に true</returns>
 	bool UsesBackpack() const override { return true; }
+	/// <summary>バックパック本体を描くかを返す</summary>
+	/// <returns>常に false（本体は描かない）</returns>
 	bool DrawsBackpack() const override { return false; }
+	/// <summary>左右の束の板のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
 	void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) override;
+	/// <summary>板の行列を作る（閉じた形と扇に開いた形の間を開き具合で補間する。右の束は左の鏡写し）</summary>
+	/// <param name="backpackWorld">バックパックのワールド行列</param>
 	void UpdateModels(const Matrix4x4& backpackWorld) override;
+	/// <summary>板を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="idPass">true なら ID マスクへ描く</param>
 	void DrawModels(DirectXCore* dxCore, bool idPass) override;
 
+	/// <summary>今の段階の移動速度の補正を返す</summary>
+	/// <returns>移動速度に掛ける倍率</returns>
 	float GetMoveSpeedScale() const override { return moveSpeedScale_[LevelIndex()]; }
+	/// <summary>今の段階のジャスト回避で足す必殺技ゲージを返す</summary>
+	/// <returns>足す量</returns>
 	float GetJustDodgeGaugeBonus() const override { return justDodgeGaugeBonus_[LevelIndex()]; }
+	/// <summary>今の段階のジャスト回避の受付の延長を返す</summary>
+	/// <returns>延ばす秒 [秒]</returns>
 	float GetJustDodgeWindowBonus() const override { return justDodgeWindowBonus_[LevelIndex()]; }
 
+	/// <summary>クールタイムのバーの色を返す</summary>
+	/// <returns>色（RGBA 0〜1）</returns>
 	Vector4 GetColor() const override { return color_; }
+	/// <summary>調整値を JSON から読む</summary>
+	/// <param name="node">この系統の欄</param>
 	void LoadTuning(const JsonValue& node) override;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先（この系統の欄）</param>
 	void SaveTuning(JsonValue& node) const override;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui() override;
 
 private:
