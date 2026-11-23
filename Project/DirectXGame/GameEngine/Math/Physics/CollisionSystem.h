@@ -40,26 +40,39 @@ struct CollisionHostHooks {
 ///
 /// 判定アルゴリズム自体は CollisionGeometry に分離してあるので、
 /// 独自のブロードフェーズを組みたい場合はそちらを直接使ってもよい。
+/// シングルトンにする理由：ゲーム無しでエンジン単体を使うときのコライダーの置き場を 1 つだけ持つため。
 /// </summary>
 class CollisionSystem {
 public:
+	/// <summary>唯一のインスタンス</summary>
+	/// <returns>インスタンス</returns>
 	static CollisionSystem* GetInstance();
 
 	/// <summary>ゲーム側の衝突ルールを配線する。</summary>
+	/// <param name="hooks">ゲーム側の衝突ルール（関数ポインタは nullptr 可）</param>
 	static void SetHostHooks(const CollisionHostHooks& hooks);
 
+	/// <summary>判定対象に登録する（nullptr・登録済みは無視）。形状は ColliderOf で設定する</summary>
+	/// <param name="e">登録するエンティティ</param>
 	void Register(IImGuiEditable* e);
+	/// <summary>登録を外し、コライダーも消す（エンティティの破棄前に必ず呼ぶ）</summary>
+	/// <param name="e">外すエンティティ</param>
 	void Unregister(IImGuiEditable* e);
 
 	/// <summary>エンティティのコライダーを取得する（無ければ既定値で生成）。</summary>
+	/// <param name="e">エンティティ</param>
+	/// <returns>コライダー（書き換え可能）</returns>
 	Collider& ColliderOf(IImGuiEditable* e);
 
 	/// <summary>登録済みかどうか（コライダーを生成せずに調べる）。</summary>
+	/// <param name="e">エンティティ</param>
+	/// <returns>コライダーがあれば true</returns>
 	bool Has(IImGuiEditable* e) const;
 
 	/// <summary>
-	/// 全ペアの衝突判定を実施する。毎フレーム呼ぶこと。
-	/// Debug ビルドでは末尾で DrawDebug() も呼ぶ。
+	/// 登録したエンティティの全ペア（有効なコライダーどうし、ホストのルールで判定する組だけ）の衝突判定をする。
+	/// 当たった組は isCollidingThisFrame を立て、onHit と双方の onCollision を呼ぶ。毎フレーム呼ぶこと。
+	/// Debug ビルドでは末尾で DrawDebug() も呼ぶ
 	/// </summary>
 	void Update();
 
@@ -80,7 +93,10 @@ public:
 	/// すべてのコライダーのデバッグ描画を一括 ON/OFF。デフォルト ON。
 	/// 個別の collider.showDebug が true でもこの全体スイッチが OFF ならどこも描画しない。
 	/// </summary>
+	/// <returns>描画するなら true</returns>
 	bool IsDrawDebugEnabled() const { return drawDebugEnabled_; }
+	/// <summary>すべてのコライダーのデバッグ描画を一括で ON/OFF する</summary>
+	/// <param name="v">描画するなら true</param>
 	void SetDrawDebugEnabled(bool v) { drawDebugEnabled_ = v; }
 
 private:

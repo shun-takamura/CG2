@@ -20,46 +20,81 @@ public:
 		Launching,   // 射出中（前へ加速）
 	};
 
+	/// <summary>Idle に戻し、出力を 0 にする</summary>
 	void Reset();
-	/// <summary>ネオンが点き切った：充電を始める</summary>
+	/// <summary>ネオンが点き切ったので充電を始める</summary>
 	void BeginCharge();
 	/// <summary>射出を始める（出力が 100% になったとき。デバッグの「Next State」からも）</summary>
 	void BeginLaunch();
-	/// <summary>thrustHeld＝SPACE を押している（Charged の間だけ効く）</summary>
+	/// <summary>段階の時間を進め、充電を済ませ、出力を上げ下げする</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="thrustHeld">SPACE を押しているか（Charged の間だけ効く）</param>
 	void Update(float deltaTime, bool thrustHeld);
 
+	/// <summary>今の段階を返す</summary>
+	/// <returns>段階</returns>
 	Phase GetPhase() const { return phase_; }
+	/// <summary>今の段階に入ってからの秒を返す</summary>
+	/// <returns>経過 [秒]</returns>
 	float GetPhaseTime() const { return phaseTime_; }
+	/// <summary>充電が済んでいるかを返す</summary>
+	/// <returns>Charged か Launching なら true</returns>
 	bool IsCharged() const { return phase_ == Phase::Charged || phase_ == Phase::Launching; }
-	/// <summary>スラスターの出力 0..1（射出中は 1）</summary>
+	/// <summary>スラスターの出力を返す</summary>
+	/// <returns>0〜1（射出中は 1）</returns>
 	float GetThrust() const { return thrust_; }
-	/// <summary>出力が 100% になった（このフレームに射出を始めてよい）</summary>
+	/// <summary>出力が 100% になったかを返す（このフレームに射出を始めてよい）</summary>
+	/// <returns>なったら true</returns>
 	bool IsThrustFull() const { return phase_ == Phase::Charged && thrust_ >= 1.0f; }
-	/// <summary>一度でも出力を上げ始めた（機体を前傾にする）</summary>
+	/// <summary>一度でも出力を上げ始めたかを返す（機体を前傾にする）</summary>
+	/// <returns>上げ始めたら true</returns>
 	bool HasThrustStarted() const { return thrustStarted_; }
-	/// <summary>タコメーターの回転数（表示用。出力に少しの揺れを足す）</summary>
+	/// <summary>タコメーターの回転数を返す（表示用。上の方で伸びが鈍り、回っている間は少し揺らす）</summary>
+	/// <returns>回転数</returns>
 	float GetRpm() const;
+	/// <summary>タコメーターの最大の回転数を返す</summary>
+	/// <returns>回転数</returns>
 	float GetMaxRpm() const { return maxRpm_; }
+	/// <summary>タコメーターのレッドゾーンの始まりを返す</summary>
+	/// <returns>回転数</returns>
 	float GetRedZone() const { return redZone_; }
 
-	/// <summary>射出口までの前進量 [m]（StageStartGeometry の tunnelEndZ。射出口の床の中心に機体の原点が来る所）</summary>
+	/// <summary>射出口までの前進量を設定する（StageStartGeometry の tunnelEndZ。射出口の床の中心に機体の原点が来る所）</summary>
+	/// <param name="travel">前進量 [m]</param>
 	void SetExitTravel(float travel) { exitTravel_ = travel; }
-	/// <summary>機体の前進量 [m]（射出を始めてから。射出口を過ぎても最後の速さで進む）</summary>
+	/// <summary>機体の前進量を返す（射出を始めてから。射出口を過ぎても最後の速さで進む）</summary>
+	/// <returns>前進量 [m]</returns>
 	float GetTravel() const;
-	/// <summary>前進の速さ [m/s]</summary>
+	/// <summary>前進の速さを返す</summary>
+	/// <returns>速さ [m/s]</returns>
 	float GetSpeed() const;
-	/// <summary>射出口での速さ [m/s]（いちばん速い。画角・ラジアルブラーの基準）</summary>
+	/// <summary>射出口での速さ（いちばん速い。画角・ラジアルブラーの基準）を返す</summary>
+	/// <returns>速さ [m/s]</returns>
 	float GetMaxSpeed() const;
+	/// <summary>給電ケーブルをパージする所（射出口までの cablePurgeRatio）まで進んだかを返す</summary>
+	/// <returns>進んだら true</returns>
 	bool ShouldPurgeCable() const { return phase_ == Phase::Launching && GetTravel() >= exitTravel_ * cablePurgeRatio_; }
+	/// <summary>射出口に着いたかを返す</summary>
+	/// <returns>着いたら true</returns>
 	bool HasReachedExit() const { return phase_ == Phase::Launching && phaseTime_ >= launchSeconds_; }
-	/// <summary>射出口を過ぎてからの秒（過ぎていなければ負）</summary>
+	/// <summary>射出口を過ぎてからの秒を返す</summary>
+	/// <returns>経過 [秒]（過ぎていなければ負）</returns>
 	float GetTimeSinceExit() const { return phase_ == Phase::Launching ? phaseTime_ - launchSeconds_ : -1.0f; }
 
+	/// <summary>射出の揺れの強さを返す</summary>
+	/// <returns>揺れの強さ</returns>
 	float GetLaunchShakeIntensity() const { return launchShakeIntensity_; }
+	/// <summary>射出の揺れの長さを返す</summary>
+	/// <returns>長さ [秒]</returns>
 	float GetLaunchShakeSeconds() const { return launchShakeSeconds_; }
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "launch"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:

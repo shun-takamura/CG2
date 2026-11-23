@@ -8,6 +8,15 @@
 #include <string>
 #include <vector>
 
+namespace {
+    // プレビューのシークで早送りする 1 刻みのフレームレート [fps]
+    constexpr float kSeekStepFps = 60.0f;
+    // シークの残り時間がこれ以下なら終わりとみなす [秒]
+    constexpr float kSeekRemainEpsilon = 1e-5f;
+    // シークで回す刻みの上限（長いシークでフレームが止まらないように）
+    constexpr int kMaxSeekSteps = 4000;
+}
+
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
@@ -311,14 +320,14 @@ void EffectManager::RewindPreview() {
 
 void EffectManager::SeekPreview(float targetTime) {
     if (targetTime < 0.0f) targetTime = 0.0f;
-    const float step = 1.0f / 60.0f;
+    const float step = 1.0f / kSeekStepFps;
     Camera* cam = previewCamera_ ? previewCamera_ : camera_;
     for (auto& inst : previewInstances_) {
         if (!inst) continue;
         inst->Rewind();
         float remaining = targetTime;
         // ステップ数の暴走ガード（長尺シークでもフレームを潰しすぎない）。
-        for (int guard = 0; remaining > 1e-5f && guard < 4000; ++guard) {
+        for (int guard = 0; remaining > kSeekRemainEpsilon && guard < kMaxSeekSteps; ++guard) {
             const float dt = (remaining > step) ? step : remaining;
             inst->Update(cam, dt);
             if (inst->IsFinished()) break; // 寿命を終えたらそこで停止

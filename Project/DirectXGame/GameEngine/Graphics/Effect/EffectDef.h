@@ -34,7 +34,9 @@ struct EffectCurve {
     bool                 enabled = false;
     std::vector<Vector2> points  = { { 0.0f, 0.0f }, { 1.0f, 1.0f } };
 
-    // t(0..1) を区分線形で評価して返す。enabled=false や点が不足なら t をそのまま返す。
+    /// <summary>t を区分線形で評価する。t が端点より外なら端点の y</summary>
+    /// <param name="t">正規化時間（0〜1）</param>
+    /// <returns>カーブの出力。enabled=false や点が 2 個未満なら t そのまま</returns>
     float Evaluate(float t) const;
 };
 
@@ -46,7 +48,7 @@ struct EffectPrimitiveComponent {
     // Inspector / Hierarchy で表示する名前（空ならデフォルト "Primitive"）
     std::string displayName;
 
-    // 形状（PrimitiveInstance::PrimitiveType の値と互換。Plane=0, Box=1, Sphere=2, Ring=3, Cylinder=4, Helix=5, Beam=6, Lightning=7, Hemisphere=8, Frame=9）
+    // 形状（EffectMeshType の値。EffectPrimitiveRenderer.h）
     int meshType = 0;
 
     // ----- 形状ごとのジオメトリパラメータ（meshType が該当する場合のみ使用。PrimitiveInstance と同等） -----
@@ -243,7 +245,7 @@ struct EffectParticleComponent {
     float   ringThickness = 0.05f;      // Ring の太さ（円周まわりの散らばり）
 
     // ----- 初速制御 -----
-    int     velocityMode = 0;           // 0=全方向ランダム / 1=方向固定 / 2=放射(中心から外) / 3=接線(公転の初速)
+    int     velocityMode = 0;           // GPUParticleManager::VelocityMode の値（全方向ランダム / 方向固定 / 放射 / 接線）
     Vector3 velocityDir = { 0.0f, 1.0f, 0.0f }; // mode=1 の向き
     float   velocitySpeed = 3.0f;       // mode=1/2/3 の初速の大きさ
     float   velocityJitter = 0.0f;      // 速度ゆらぎ量
@@ -370,13 +372,19 @@ struct EffectDef {
 
 namespace EffectDefIO {
     /// <summary>
-    /// 1ファイルからEffectDefを読み込む。失敗時はfalse。
+    /// 1ファイルからEffectDefを読み込む。
     /// 未指定フィールドは EffectDef のデフォルト値を維持。
     /// </summary>
+    /// <param name="filePath">読む JSON ファイルのパス</param>
+    /// <param name="out">書き込み先（配列キーがあればその配列は置き換える）</param>
+    /// <returns>読めたら true。パース失敗・ルートがオブジェクトでない時は false</returns>
     bool LoadFromFile(const std::string& filePath, EffectDef& out);
 
     /// <summary>
-    /// EffectDef を JSON ファイルに保存する。失敗時はfalse。
+    /// EffectDef を JSON ファイルに保存する。
     /// </summary>
+    /// <param name="filePath">書き出す JSON ファイルのパス</param>
+    /// <param name="def">保存するエフェクト定義</param>
+    /// <returns>書き込めたら true、失敗時は false</returns>
     bool SaveToFile(const std::string& filePath, const EffectDef& def);
 }

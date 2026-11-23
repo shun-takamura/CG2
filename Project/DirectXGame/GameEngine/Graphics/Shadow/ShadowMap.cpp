@@ -13,6 +13,18 @@
 #include "imgui.h"
 #endif
 
+namespace {
+    // シャドウの深度バイアス（深度の整数単位）と、斜面に応じたバイアス
+    constexpr INT kDepthBias = 5000;
+    constexpr float kSlopeScaledDepthBias = 2.0f;
+    // 近平面・遠平面の 1 面あたりの隅の数と、スライスの隅の数（平均を取るための float も）
+    constexpr int kFrustumPlaneCornerCount = 4;
+    constexpr int kSliceCornerCount = 8;
+    constexpr float kSliceCornerCountF = 8.0f;
+    // ライトの向きと上方向の内積の絶対値がこれを超えたら、上方向を Z 軸に替える
+    constexpr float kParallelUpThreshold = 0.99f;
+}
+
 void ShadowMap::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
 {
     assert(dxCore && srvManager);
@@ -110,16 +122,16 @@ void ShadowMap::CreatePipeline()
     // ---- RootSignature ----
     // [0] VS CBV(b0) = TransformationMatrix（各オブジェクトの World を使う）
     // [1] VS 32bit定数(b1) = カスケードの ViewProj（float4x4 = 16 個）
-    D3D12_ROOT_PARAMETER rootParams[2] = {};
-    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParams[0].Descriptor.ShaderRegister = 0;
+    D3D12_ROOT_PARAMETER rootParams[kRootCount] = {};
+    rootParams[kRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[kRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[kRootTransform].Descriptor.ShaderRegister = 0;
 
-    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParams[1].Constants.ShaderRegister = 1;
-    rootParams[1].Constants.RegisterSpace = 0;
-    rootParams[1].Constants.Num32BitValues = 16; // float4x4
+    rootParams[kRootCascadeViewProj].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[kRootCascadeViewProj].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[kRootCascadeViewProj].Constants.ShaderRegister = 1;
+    rootParams[kRootCascadeViewProj].Constants.RegisterSpace = 0;
+    rootParams[kRootCascadeViewProj].Constants.Num32BitValues = kCascadeViewProjConstantCount; // float4x4
 
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};
     rsDesc.NumParameters = _countof(rootParams);
@@ -163,9 +175,9 @@ void ShadowMap::CreatePipeline()
     D3D12_RASTERIZER_DESC rasterizer{};
     rasterizer.CullMode = D3D12_CULL_MODE_BACK;
     rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
-    rasterizer.DepthBias = 5000;
+    rasterizer.DepthBias = kDepthBias;
     rasterizer.DepthBiasClamp = 0.0f;
-    rasterizer.SlopeScaledDepthBias = 2.0f;
+    rasterizer.SlopeScaledDepthBias = kSlopeScaledDepthBias;
 
     D3D12_BLEND_DESC blend{};
     blend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
@@ -237,7 +249,7 @@ void ShadowMap::BindCascade(ID3D12GraphicsCommandList* commandList, uint32_t cas
     commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
     // このカスケードのライト ViewProj をルート定数(b1)へ
-    commandList->SetGraphicsRoot32BitConstants(1, 16, &cascadeViewProj_[cascadeIndex], 0);
+    commandList->SetGraphicsRoot32BitConstants(kRootCascadeViewProj, kCascadeViewProjConstantCount, &cascadeViewProj_[cascadeIndex], 0);
 }
 
 void ShadowMap::EndPass(ID3D12GraphicsCommandList* commandList)
@@ -276,18 +288,18 @@ void ShadowMap::UpdateCascades(const Camera& camera, const Vector3& lightDirecti
     };
 
     // 近平面(z=0)・遠平面(z=1)の各 4 隅（LH の深度 [0,1]）
-    Vector3 nearCorners[4] = {
+    Vector3 nearCorners[kFrustumPlaneCornerCount] = {
         ndcToWorld(-1.0f,  1.0f, 0.0f), ndcToWorld(1.0f,  1.0f, 0.0f),
         ndcToWorld(-1.0f, -1.0f, 0.0f), ndcToWorld(1.0f, -1.0f, 0.0f),
     };
-    Vector3 farCorners[4] = {
+    Vector3 farCorners[kFrustumPlaneCornerCount] = {
         ndcToWorld(-1.0f,  1.0f, 1.0f), ndcToWorld(1.0f,  1.0f, 1.0f),
         ndcToWorld(-1.0f, -1.0f, 1.0f), ndcToWorld(1.0f, -1.0f, 1.0f),
     };
 
     Vector3 lightDirN = Normalize(lightDirection);
     Vector3 up = { 0.0f, 1.0f, 0.0f };
-    if (std::fabs(Dot(lightDirN, up)) > 0.99f) up = { 0.0f, 0.0f, 1.0f };
+    if (std::fabs(Dot(lightDirN, up)) > kParallelUpThreshold) up = { 0.0f, 0.0f, 1.0f };
 
     float prevSplit = nearClip;
     for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
@@ -298,10 +310,10 @@ void ShadowMap::UpdateCascades(const Camera& camera, const Vector3& lightDirecti
         const float tNear = (splitNear - nearClip) / (farClip - nearClip);
         const float tFar = (splitFar - nearClip) / (farClip - nearClip);
 
-        Vector3 sliceCorners[8];
-        for (int i = 0; i < 4; ++i) {
+        Vector3 sliceCorners[kSliceCornerCount];
+        for (int i = 0; i < kFrustumPlaneCornerCount; ++i) {
             sliceCorners[i] = Lerp(nearCorners[i], farCorners[i], tNear);
-            sliceCorners[i + 4] = Lerp(nearCorners[i], farCorners[i], tFar);
+            sliceCorners[i + kFrustumPlaneCornerCount] = Lerp(nearCorners[i], farCorners[i], tFar);
         }
 
         // スライスのバウンディング球（中心＝重心、半径＝最遠隅まで）でサイズを固定し
@@ -310,7 +322,7 @@ void ShadowMap::UpdateCascades(const Camera& camera, const Vector3& lightDirecti
         for (const Vector3& v : sliceCorners) {
             center.x += v.x; center.y += v.y; center.z += v.z;
         }
-        center.x /= 8.0f; center.y /= 8.0f; center.z /= 8.0f;
+        center.x /= kSliceCornerCountF; center.y /= kSliceCornerCountF; center.z /= kSliceCornerCountF;
 
         float radius = 0.0f;
         for (const Vector3& v : sliceCorners) {

@@ -15,9 +15,9 @@ public:
 	virtual ~AbstractSceneFactory() = default;
 
 	/// <summary>
-	/// シーン生成
+	/// シーン名から対応するシーンを作る（マネージャの注入と Initialize は呼び出し側が行う）
 	/// </summary>
 	/// <param name="sceneName">シーン名</param>
-	/// <returns>生成したシーン</returns>
+	/// <returns>生成したシーン（知らない名前なら nullptr）</returns>
 	virtual std::unique_ptr<Scene> CreateScene(const std::string& sceneName) = 0;
 };

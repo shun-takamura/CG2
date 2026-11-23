@@ -10,13 +10,21 @@
 ///   1 周ごとに一人称と三人称を交互にする（三人称の周はカタパルトに着いてから視点を切り替える。StageStartPart）
 /// 人がボタンを押せば普通に進む。シーンをまたいで状態を保つのでシングルトン。
 /// 待ち時間は実時間（スロー・一時停止の影響を受けない）で、トランジションの最中は数えない。
+/// シングルトンにする理由：デモモードの状態（周回・死んだ回数）がシーンをまたいで続くため。
 /// </summary>
 class AttractMode {
 public:
+	/// <summary>シングルトンのインスタンスを取得</summary>
+	/// <returns>唯一のインスタンス</returns>
 	static AttractMode* GetInstance();
 
+	/// <summary>デモモードが有効か</summary>
+	/// <returns>有効なら true</returns>
 	bool IsEnabled() const { return enabled_; }
+	/// <summary>デモモードの有効・無効を切り替える（無効から有効にした時は一人称の周・死亡回数 0 から始める）</summary>
+	/// <param name="enabled">有効にするなら true</param>
 	void SetEnabled(bool enabled);
+	/// <summary>デモモードの有効・無効を反転する（F8）</summary>
 	void Toggle() { SetEnabled(!enabled_); }
 
 	/// <summary>
@@ -25,30 +33,59 @@ public:
 	/// </summary>
 	void DrawLabel() const;
 
-	// ----- 自動で押すまでの待ち時間 [s]（Debug では Title Tuning → Attract で調整） -----
-	float titleIdleWait = 4.0f;       // タイトル①：ロゴの登場が終わってから Press するまで
-	float titleReadyWait = 2.0f;      // タイトル⑤：メニューが出てから「スタート」を決定するまで
-	float hubWait = 2.5f;             // HUB の待機：「搭乗」を選ぶまで（神殿を見せる）
-	float menuWait = 1.0f;            // ステージ選択・ポーズ：選べるようになってからカーソルを動かすまで
-	float menuConfirmDelay = 0.7f;    // カーソルを動かしてから決定するまで（全部のメニュー共通）
-	float stageActionTime = 2.0f;     // ステージ1：操作を受け付けてから死ぬ（またはポーズを開く）まで
-	float betRaiseDelay = 1.0f;       // 器の間：入ってから針を上げ始めるまで
-	float betStepInterval = 0.05f;    // 器の間：純度を 0.1 上げる間隔
-	float betConfirmWait = 1.5f;      // 器の間：9.0 に着いてから決定するまで
-	float betTargetPurity = 9.0f;     // 器の間：デモで選ぶ純度
-	bool skipDescent = true;          // HUB のリフトの降下を LSHIFT の長押しのスキップで飛ばす（雲の上から。2026-10-27 ユーザー）
-	bool dieInStage = true;           // ステージで 2 秒後に死ぬ（false ならポーズでステージ選択へ戻る＝前の流れ）
-	int retriesPerLap = 1;            // ゲームオーバーで「もう一度」を選ぶ回数（超えたら「引き上げる」）
+	/// <summary>自動で進める時の待ち時間など（Debug では Title Tuning → Attract で調整）</summary>
+	struct Settings {
+		float titleIdleWait = 4.0f;       // タイトル①：ロゴの登場が終わってから Press するまで [s]
+		float titleReadyWait = 2.0f;      // タイトル⑤：メニューが出てから「スタート」を決定するまで [s]
+		float hubWait = 2.5f;             // HUB の待機：「搭乗」を選ぶまで（神殿を見せる）[s]
+		float menuWait = 1.0f;            // ステージ選択・ポーズ：選べるようになってからカーソルを動かすまで [s]
+		float menuConfirmDelay = 0.7f;    // カーソルを動かしてから決定するまで（全部のメニュー共通）[s]
+		float stageActionTime = 2.0f;     // ステージ1：操作を受け付けてから死ぬ（またはポーズを開く）まで [s]
+		float betRaiseDelay = 1.0f;       // 器の間：入ってから針を上げ始めるまで [s]
+		float betStepInterval = 0.05f;    // 器の間：純度を 0.1 上げる間隔 [s]
+		float betConfirmWait = 1.5f;      // 器の間：9.0 に着いてから決定するまで [s]
+		float betTargetPurity = 9.0f;     // 器の間：デモで選ぶ純度
+		bool skipDescent = true;          // HUB のリフトの降下を LSHIFT の長押しのスキップで飛ばす（雲の上から。2026-10-27 ユーザー）
+		bool dieInStage = true;           // ステージで 2 秒後に死ぬ（false ならポーズでステージ選択へ戻る＝前の流れ）
+		int retriesPerLap = 1;            // ゲームオーバーで「もう一度」を選ぶ回数（超えたら「引き上げる」）
+	};
 
-	/// <summary>この周で死んだ回数（ゲームオーバー画面の入口で増やし、「引き上げる」で 0 に戻す）</summary>
-	int lapDeaths = 0;
+	/// <summary>待ち時間などの設定（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の設定</returns>
+	const Settings& GetSettings() const { return settings_; }
+	/// <summary>待ち時間などの設定をまとめて差し替える</summary>
+	/// <param name="settings">新しい設定</param>
+	void SetSettings(const Settings& settings) { settings_ = settings; }
 
-	/// <summary>今の周のスタート演出を三人称で見せるか（ポーズでステージ選択へ戻るたびに入れ替える。最初の周は一人称）</summary>
-	bool thirdPersonLap = false;
+	//====================
+	// 周回（ステージ選択 → 死亡 → ゲームオーバー → … → ステージ選択 を 1 周と数える）
+	//====================
+	/// <summary>この周で 1 回死んだことを数える（ゲームオーバー画面の入口で呼ぶ）</summary>
+	void RecordLapDeath() { ++lapDeaths_; }
+	/// <summary>この周の死んだ回数が「もう一度」を選べる回数を超えたか</summary>
+	/// <returns>超えていれば true（ゲームオーバーで「引き上げる」を選ぶ）</returns>
+	bool ShouldWithdraw() const { return lapDeaths_ > settings_.retriesPerLap; }
+	/// <summary>周を終える（死んだ回数を数え直し、次の周は視点を入れ替える）</summary>
+	void FinishLap() { lapDeaths_ = 0; ToggleThirdPersonLap(); }
+	/// <summary>次の周の視点を入れ替える（一人称 ↔ 三人称）</summary>
+	void ToggleThirdPersonLap() { thirdPersonLap_ = !thirdPersonLap_; }
+	/// <summary>今の周のスタート演出を三人称で見せるか</summary>
+	/// <returns>三人称なら true（最初の周は一人称）</returns>
+	bool IsThirdPersonLap() const { return thirdPersonLap_; }
+	/// <summary>今の周の視点を決める（Debug の調整画面から）</summary>
+	/// <param name="thirdPerson">三人称にするなら true</param>
+	void SetThirdPersonLap(bool thirdPerson) { thirdPersonLap_ = thirdPerson; }
 
 private:
 	AttractMode();
+	AttractMode(const AttractMode&) = delete;
+	AttractMode& operator=(const AttractMode&) = delete;
 	bool enabled_ = false;
+	Settings settings_;
+	// この周で死んだ回数
+	int lapDeaths_ = 0;
+	// 今の周のスタート演出を三人称で見せるか
+	bool thirdPersonLap_ = false;
 };
 
 /// <summary>
@@ -63,7 +100,13 @@ public:
 		Confirm,     // 決定する（Reset するまで毎フレーム返す）
 	};
 
+	/// <summary>経過時間とカーソル移動済みの印を消して最初から数え直す</summary>
 	void Reset() { time_ = 0.0f; moved_ = false; }
+	/// <summary>時間を進めて、このフレームにやること（待つ・カーソルを動かす・決定）を返す</summary>
+	/// <param name="deltaTime">経過時間 [秒]（実時間）</param>
+	/// <param name="wait">カーソルを動かすまでの待ち時間 [秒]</param>
+	/// <param name="confirmDelay">カーソルを動かしてから決定するまでの時間 [秒]</param>
+	/// <returns>このフレームの段階（MoveCursor は 1 回だけ、Confirm は Reset まで毎フレーム）</returns>
 	Step Advance(float deltaTime, float wait, float confirmDelay);
 
 private:

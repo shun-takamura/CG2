@@ -5,6 +5,7 @@
 
 /// <summary>
 /// ログメッセージを保持するバッファクラス（シングルトン）
+/// シングルトンにする理由：ログを 1 つのバッファに集め、ImGui の Console ウィンドウで見られるようにするため。
 /// </summary>
 class LogBuffer {
 public:
@@ -29,7 +30,7 @@ public:
     /// <summary>
     /// シングルトンインスタンスの取得
     /// </summary>
-    static LogBuffer& Instance();
+    static LogBuffer* GetInstance();
 
     /// <summary>
     /// ログを追加

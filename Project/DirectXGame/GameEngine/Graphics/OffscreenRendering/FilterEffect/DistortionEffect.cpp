@@ -7,6 +7,10 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+    // ResetParams で戻すゆがみの強さの既定値
+    constexpr float kDefaultStrength = 0.1f;
+}
 
 void DistortionEffect::InitializeMasked(
     DirectXCore* dxCore,
@@ -49,7 +53,7 @@ void DistortionEffect::ShowImGui() {
 }
 
 void DistortionEffect::ResetParams() {
-    strength_ = 0.1f;
+    strength_ = kDefaultStrength;
 }
 
 uint32_t DistortionEffect::GetMaskTextureSRVIndex() const {

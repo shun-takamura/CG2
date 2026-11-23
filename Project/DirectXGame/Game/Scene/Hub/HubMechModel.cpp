@@ -8,6 +8,7 @@
 #include "Primitive/PrimitiveMesh.h"   // AnimatedObject3DInstance の暗黙のデストラクタが PrimitiveMesh の完全型を要る
 #include "Material.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 
 #ifdef _DEBUG
@@ -15,6 +16,7 @@
 #endif
 
 namespace {
+
 	// 自機の新モデル（rig_player_mech.py --body-clips で書き出して cook。StageStartPart と同じもの）
 	constexpr const char* kBodyDir = "Resources/Models/Player/PlayerModel";
 	constexpr const char* kBodyFile = "PlayerModel.mesh";
@@ -22,20 +24,6 @@ namespace {
 	constexpr const char* kRetractClip = "Resources/Models/Player/PlayerModel/PlayerModel_Retract.anim";
 	// 胸の装甲の部位（ベースカラーのテクスチャ Chest_BaseColor）。差し出した手は穴の範囲に入っても消さない
 	constexpr const char* kChestTextureKeyword = "Chest_";
-
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
 }
 
 HubMechModel::HubMechModel() = default;
@@ -131,11 +119,11 @@ void HubMechModel::LoadTuning(const JsonValue& node) {
 	};
 	cockpit_->SetHatchOpenDegrees(static_cast<float>(node["hatchOpenDegrees"].AsDouble(cockpit_->GetHatchOpenDegrees())));
 	readFloat("bodyScale", bodyScale_);
-	ReadVector3(node["chestCenter"], chestCenter_);
+	chestCenter_ = ReadVector3(node["chestCenter"], chestCenter_);
 	readFloat("chestRadius", chestRadius_);
 	readFloat("chestStretchY", chestStretchY_);
 	readFloat("chestEdgeWidth", chestEdgeWidth_);
-	ReadVector3(node["chestEdgeColor"], chestEdgeColor_);
+	chestEdgeColor_ = ReadVector3(node["chestEdgeColor"], chestEdgeColor_);
 	readFloat("chestCellSize", chestCellSize_);
 	readFloat("chestCellJitter", chestCellJitter_);
 	readFloat("chestBloomScale", chestBloomScale_);

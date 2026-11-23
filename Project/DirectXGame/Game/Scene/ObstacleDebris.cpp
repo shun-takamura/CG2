@@ -9,30 +9,56 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include "Json/JsonVector.h"
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/ObstacleDebris.json";
+	// 倒す向きを調べるために試しに傾ける角度 [rad]
+	constexpr float kTipProbeAngleRad = 0.1f;
+	// 試しに傾けた 2 つの先端の高さの差がこれ以下なら同じとみなす [m]
+	constexpr float kTipHeightDiffEpsilon = 0.01f;
+	// 破片をはじく向きの Y の下限の大きさ（上寄りにする。−0.2〜1）
+	constexpr float kChunkDirMinY = 0.2f;
+	// 長さがこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kTinyEpsilon = 1e-4f;
+	// 破片の初めの回転の上限 [rad]（ほぼ 1 周）
+	constexpr float kChunkMaxInitialRotateRad = 6.28f;
+	// 破片の回転の速さの上限 [rad/秒]（−6〜6）
+	constexpr float kChunkMaxSpinRadPerSec = 6.0f;
 
+	/// <summary>JSON のオブジェクトから数値を 1 つ読む</summary>
+	/// <param name="j">読むオブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="fallback">無い・数値でない時の値</param>
+	/// <returns>読んだ値</returns>
 	float ReadFloat(const JsonValue& j, const char* key, float fallback) {
 		const JsonValue& v = j[key];
 		return v.IsNumber() ? static_cast<float>(v.AsDouble(fallback)) : fallback;
 	}
 
-	Vector3 ReadVec3(const JsonValue& j, const Vector3& fallback) {
-		if (!j.IsArray() || j.Size() < 3) return fallback;
-		return { static_cast<float>(j[0].AsDouble(fallback.x)),
-		         static_cast<float>(j[1].AsDouble(fallback.y)),
-		         static_cast<float>(j[2].AsDouble(fallback.z)) };
-	}
-
 	/// <summary>部品のローカルの点をワールドへ（回転は描画と同じ MakeAffineMatrix の Rx·Ry·Rz）</summary>
+	/// <param name="local">ローカルの点</param>
+	/// <param name="rotate">部品の回転 [rad]</param>
+	/// <returns>回転した点（平行移動は含まない）</returns>
 	Vector3 Rotate(const Vector3& local, const Vector3& rotate) {
 		const Matrix4x4 m = MakeAffineMatrix(Transform{ { 1.0f, 1.0f, 1.0f }, rotate, { 0.0f, 0.0f, 0.0f } });
 		return TransformMatrix(local, m);
 	}
 
+	/// <summary>ベクトルの和</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルの差</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a − b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルのスカラー倍</summary>
+	/// <param name="a">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>a × s</returns>
 	Vector3 Scale(const Vector3& a, float s) { return { a.x * s, a.y * s, a.z * s }; }
 }
 
@@ -45,7 +71,7 @@ void ObstacleDebris::LoadTuning() {
 	if (!std::filesystem::exists(kTuningPath)) return;
 	auto result = JsonParser::ParseFile(kTuningPath);
 	if (!result.success) {
-		LogBuffer::Instance().Add(std::string("ObstacleDebris: JSON を読めない: ") + kTuningPath, LogBuffer::Level::Warning);
+		LogBuffer::GetInstance()->Add(std::string("ObstacleDebris: JSON を読めない: ") + kTuningPath, LogBuffer::Level::Warning);
 		return;
 	}
 	const JsonValue& root = result.value;
@@ -68,8 +94,8 @@ void ObstacleDebris::LoadTuning() {
 				const JsonValue& f = falls[i];
 				FallDef fd;
 				fd.prefab = f["prefab"].AsString();
-				fd.pivot = ReadVec3(f["pivot"], fd.pivot);
-				fd.tip = ReadVec3(f["tip"], fd.tip);
+				fd.pivot = ReadVector3(f["pivot"], fd.pivot);
+				fd.tip = ReadVector3(f["tip"], fd.tip);
 				fd.hingeAccel = ReadFloat(f, "hingeAccel", fd.hingeAccel);
 				fd.releaseDeg = ReadFloat(f, "releaseDeg", fd.releaseDeg);
 				def.falls.push_back(fd);
@@ -80,12 +106,12 @@ void ObstacleDebris::LoadTuning() {
 			ChunkDef& cd = def.chunks;
 			cd.prefab = c["prefab"].AsString();
 			cd.count = static_cast<int>(c["count"].AsInt(0));
-			cd.origin = ReadVec3(c["origin"], cd.origin);
+			cd.origin = ReadVector3(c["origin"], cd.origin);
 			cd.spread = ReadFloat(c, "spread", cd.spread);
-			const Vector3 speed = ReadVec3(c["speed"], { cd.speedMin, cd.speedMax, 0.0f });
+			const Vector3 speed = ReadVector3(c["speed"], { cd.speedMin, cd.speedMax, 0.0f });
 			cd.speedMin = speed.x;
 			cd.speedMax = speed.y;
-			const Vector3 scale = ReadVec3(c["scale"], { cd.scaleMin, cd.scaleMax, 0.0f });
+			const Vector3 scale = ReadVector3(c["scale"], { cd.scaleMin, cd.scaleMax, 0.0f });
 			cd.scaleMin = scale.x;
 			cd.scaleMax = scale.y;
 		}
@@ -131,12 +157,12 @@ void ObstacleDebris::SpawnFall(const FallDef& def, const Vector3& pos, const Vec
 	const Vector3 arm = Sub(def.tip, def.pivot);
 	auto tipAt = [&](float sign) {
 		Vector3 r = rotate;
-		r.z += sign * 0.1f;
+		r.z += sign * kTipProbeAngleRad;
 		return Add(m.pivotWorld, Rotate(arm, r));
 	};
 	const Vector3 plus = tipAt(1.0f);
 	const Vector3 minus = tipAt(-1.0f);
-	if (std::fabs(plus.y - minus.y) > 0.01f) {
+	if (std::fabs(plus.y - minus.y) > kTipHeightDiffEpsilon) {
 		m.direction = plus.y < minus.y ? 1.0f : -1.0f;
 	} else {
 		auto dist2 = [&](const Vector3& p) {
@@ -164,16 +190,16 @@ void ObstacleDebris::SpawnChunks(const ChunkDef& def, const Vector3& pos, const 
 		e->SetScale({ s, s, s });
 
 		// 上寄りの向きへはじく
-		Vector3 dir{ RandRange(-1.0f, 1.0f), RandRange(-0.2f, 1.0f), RandRange(-1.0f, 1.0f) };
+		Vector3 dir{ RandRange(-1.0f, 1.0f), RandRange(-kChunkDirMinY, 1.0f), RandRange(-1.0f, 1.0f) };
 		const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-		dir = len > 1e-4f ? Scale(dir, 1.0f / len) : Vector3{ 0.0f, 1.0f, 0.0f };
+		dir = len > kTinyEpsilon ? Scale(dir, 1.0f / len) : Vector3{ 0.0f, 1.0f, 0.0f };
 
 		Moving m;
 		m.entity = e;
 		m.position = at;
-		m.rotate = { RandRange(0.0f, 6.28f), RandRange(0.0f, 6.28f), RandRange(0.0f, 6.28f) };
+		m.rotate = { RandRange(0.0f, kChunkMaxInitialRotateRad), RandRange(0.0f, kChunkMaxInitialRotateRad), RandRange(0.0f, kChunkMaxInitialRotateRad) };
 		m.velocity = Scale(dir, RandRange(def.speedMin, def.speedMax));
-		m.spin = { RandRange(-6.0f, 6.0f), RandRange(-6.0f, 6.0f), RandRange(-6.0f, 6.0f) };
+		m.spin = { RandRange(-kChunkMaxSpinRadPerSec, kChunkMaxSpinRadPerSec), RandRange(-kChunkMaxSpinRadPerSec, kChunkMaxSpinRadPerSec), RandRange(-kChunkMaxSpinRadPerSec, kChunkMaxSpinRadPerSec) };
 		m.hinged = false;
 		Apply(m);
 		moving_.push_back(m);

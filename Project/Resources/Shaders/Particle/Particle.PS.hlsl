@@ -1,23 +1,9 @@
 #include "Particle.hlsli"
 
-struct DirectionalLight
-{
-    float4 color;
-    float3 direction;
-    float intensity;
-    int lightingType;
-};
-
-cbuffer gTransformationMatrix : register(b0)
-{
-    float4x4 WVP;
-    float4x4 World;
-};
-
 struct Material
 {
     float4 color;
-    int enableLighting;
+    int enableLighting; // C++ の Material と並びを合わせるための欄（粒子ではライティングしない）
     float4x4 uvTransform;
 };
 
@@ -29,11 +15,6 @@ struct PixelShaderOutput
 cbuffer MaterialBuffer : register(b0)
 {
     Material gMaterial;
-}
-
-cbuffer DirectionalLightBuffer : register(b1)
-{
-    DirectionalLight gDirectionalLight;
 }
 
 Texture2D<float4> gTexture : register(t0); // SRVはt

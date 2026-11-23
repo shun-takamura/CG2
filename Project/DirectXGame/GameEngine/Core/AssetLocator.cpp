@@ -6,12 +6,23 @@
 #include <filesystem>
 
 namespace {
-// FNV-1a 64bit (pack_assets.py と完全に同じアルゴリズム)
+	// FNV-1a 64bit の初期値（offset basis）
+	constexpr uint64_t kFnv1a64OffsetBasis = 0xcbf29ce484222325ULL;
+	// FNV-1a 64bit の素数（FNV prime）
+	constexpr uint64_t kFnv1a64Prime = 0x100000001b3ULL;
+	// pack のファイルに書かれた 64bit / 32bit / 16bit の値の大きさ [byte]
+	constexpr int kPackU64Bytes = 8;
+	constexpr int kPackU32Bytes = 4;
+	constexpr int kPackU16Bytes = 2;
+
+/// <summary>FNV-1a 64bit のハッシュ（pack_assets.py と完全に同じアルゴリズム）</summary>
+/// <param name="s">ハッシュする文字列</param>
+/// <returns>ハッシュ値</returns>
 uint64_t Fnv1a64(const std::string& s) {
-	uint64_t h = 0xcbf29ce484222325ULL;
+	uint64_t h = kFnv1a64OffsetBasis;
 	for (unsigned char c : s) {
 		h ^= c;
-		h *= 0x100000001b3ULL;
+		h *= kFnv1a64Prime;
 	}
 	return h;
 }
@@ -82,10 +93,10 @@ bool AssetLocator::InitializeFromPack(const std::string& packPath)
 
 	// ---- ヘッダー ----
 	uint32_t magic = 0, version = 0, assetCount = 0, indexOffset = 0;
-	f.read(reinterpret_cast<char*>(&magic), 4);
-	f.read(reinterpret_cast<char*>(&version), 4);
-	f.read(reinterpret_cast<char*>(&assetCount), 4);
-	f.read(reinterpret_cast<char*>(&indexOffset), 4);
+	f.read(reinterpret_cast<char*>(&magic), kPackU32Bytes);
+	f.read(reinterpret_cast<char*>(&version), kPackU32Bytes);
+	f.read(reinterpret_cast<char*>(&assetCount), kPackU32Bytes);
+	f.read(reinterpret_cast<char*>(&indexOffset), kPackU32Bytes);
 	if (magic != kPackMagic || version != kPackVersion) return false;
 
 	// ---- インデックスを 40 バイト/エントリで直読み ----
@@ -104,14 +115,14 @@ bool AssetLocator::InitializeFromPack(const std::string& packPath)
 	for (uint32_t i = 0; i < assetCount; ++i) {
 		uint8_t asset_type_skip;
 		ParsedIndex& p = parsed[i];
-		f.read(reinterpret_cast<char*>(&p.name_hash), 8);
-		f.read(reinterpret_cast<char*>(&p.path_offset), 4);
-		f.read(reinterpret_cast<char*>(&p.path_length), 2);
+		f.read(reinterpret_cast<char*>(&p.name_hash), kPackU64Bytes);
+		f.read(reinterpret_cast<char*>(&p.path_offset), kPackU32Bytes);
+		f.read(reinterpret_cast<char*>(&p.path_length), kPackU16Bytes);
 		f.read(reinterpret_cast<char*>(&p.compression), 1);    // 0=NONE, 1=GDEFLATE
 		f.read(reinterpret_cast<char*>(&asset_type_skip), 1);  // asset_type (現状未使用)
-		f.read(reinterpret_cast<char*>(&p.compressed_size), 8);
-		f.read(reinterpret_cast<char*>(&p.uncompressed_size), 8);
-		f.read(reinterpret_cast<char*>(&p.payload_offset), 8);
+		f.read(reinterpret_cast<char*>(&p.compressed_size), kPackU64Bytes);
+		f.read(reinterpret_cast<char*>(&p.uncompressed_size), kPackU64Bytes);
+		f.read(reinterpret_cast<char*>(&p.payload_offset), kPackU64Bytes);
 	}
 
 	// ---- 文字列テーブル ----

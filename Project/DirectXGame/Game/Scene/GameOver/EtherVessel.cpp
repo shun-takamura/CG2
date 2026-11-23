@@ -11,6 +11,7 @@
 #include "MathUtility.h"   // kPi
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -20,6 +21,15 @@
 #endif
 
 namespace {
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// I の傾きがこれ以下なら針の位置を傾きから逆算しない [度]
+	constexpr float kMinTiltDegrees = 1e-4f;
+	// これより短い時間はすぐ終わったものとして扱う [秒]
+	constexpr float kMinFadeSeconds = 1e-3f;
+
 	// G4 の gen_ether_vessel.py が書く寸法（部品の位置・球・文字盤）
 	constexpr const char* kGeometryPath = "Resources/Json/Tuning/EtherVesselGeometry.json";
 	constexpr const char* kPartNames[] = { "Table", "Pillar", "RingStand", "Dial", "Swing" };
@@ -28,28 +38,21 @@ namespace {
 	constexpr const char* kEtherPrefix = "Ether";
 	constexpr float kDegToRad = kPi / 180.0f;
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="u">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 	}
 
+	/// <summary>色の RGB に tint を掛ける（α はそのまま）</summary>
+	/// <param name="color">掛ける色（書き換える）</param>
+	/// <param name="tint">RGB ごとの倍率</param>
 	void Tint(Vector4& color, const Vector3& tint) {
 		color.x *= tint.x;
 		color.y *= tint.y;
 		color.z *= tint.z;
-	}
-
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
 	}
 }
 
@@ -91,7 +94,7 @@ void EtherVessel::LoadGeometry(Object3DManager* object3DManager) {
 		const size_t slash = model.find_last_of('/');
 		if (slash == std::string::npos || !AssetLocator::GetInstance()->Exists(model)) continue;
 		Part p;
-		ReadVector3(part["position"], p.position);
+		p.position = ReadVector3(part["position"], p.position);
 		p.object = std::make_unique<Object3DInstance>();
 		p.object->Initialize(object3DManager, dxCore_, model.substr(0, slash), model.substr(slash + 1),
 			std::string("EtherVessel") + name);
@@ -122,7 +125,7 @@ Vector3 EtherVessel::GetPointerTipWorld() const {
 
 float EtherVessel::GetNeedle01() const {
 	// SetDifficulty01 の逆：傾き = iDegrees·(1 − 2u)
-	if (!glass_ || iDegrees_ <= 1e-4f) return difficulty01_;
+	if (!glass_ || iDegrees_ <= kMinTiltDegrees) return difficulty01_;
 	const float deg = glass_->GetTilt() / kDegToRad;
 	return 0.5f * (1.0f - deg / iDegrees_);
 }
@@ -232,7 +235,7 @@ void EtherVessel::Update(float deltaTime) {
 	// 止まった所から液面が遅れて揺れる（G5 の揺れ）
 	if (tickTimer_ >= 0.0f) {
 		tickTimer_ += deltaTime;
-		const float t = tickSeconds_ > 1e-3f ? std::clamp(tickTimer_ / tickSeconds_, 0.0f, 1.0f) : 1.0f;
+		const float t = tickSeconds_ > kMinFadeSeconds ? std::clamp(tickTimer_ / tickSeconds_, 0.0f, 1.0f) : 1.0f;
 		const float s = t - 1.0f;
 		const float eased = 1.0f + (tickBack_ + 1.0f) * s * s * s + tickBack_ * s * s;
 		glass_->SetTilt((tiltFromDeg_ + (tiltToDeg_ - tiltFromDeg_) * eased) * kDegToRad);
@@ -241,7 +244,7 @@ void EtherVessel::Update(float deltaTime) {
 	// 光：新しい難易度の強さへゆっくり寄る
 	if (glowTimer_ >= 0.0f) {
 		glowTimer_ += deltaTime;
-		const float t = glowFadeSeconds_ > 1e-3f ? std::clamp(glowTimer_ / glowFadeSeconds_, 0.0f, 1.0f) : 1.0f;
+		const float t = glowFadeSeconds_ > kMinFadeSeconds ? std::clamp(glowTimer_ / glowFadeSeconds_, 0.0f, 1.0f) : 1.0f;
 		glass_->SetDifficulty(glowFrom01_ + (glowTo01_ - glowFrom01_) * SmoothStep01(t));
 		if (t >= 1.0f) glowTimer_ = -1.0f;
 	}
@@ -292,7 +295,7 @@ void EtherVessel::LoadTuning(const JsonValue& node) {
 	auto read = [&node](const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	};
-	ReadVector3(node["etherColor"], etherColor_);
+	etherColor_ = ReadVector3(node["etherColor"], etherColor_);
 	read("tickSeconds", tickSeconds_);
 	read("tickBack", tickBack_);
 	read("glowFadeSeconds", glowFadeSeconds_);

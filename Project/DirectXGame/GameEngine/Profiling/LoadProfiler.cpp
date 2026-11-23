@@ -12,10 +12,21 @@
 
 namespace {
 	constexpr double kBytesPerMB = 1024.0 * 1024.0;
+
+	// 経過時間がこれ以下なら転送速度を 0 とする [ms]（0 で割らない）
+	constexpr double kMinWallMs = 1e-6;
+	// 1 秒のミリ秒数
+	constexpr double kMsPerSecond = 1000.0;
+	// 1 ms あたりの 100ns 単位の数（GetProcessTimes の単位 → ms）
+	constexpr double kHundredNanosecondsPerMs = 10000.0;
+	// CSV に書く日時の文字列のバッファの大きさ [byte]
+	constexpr int kTimeStampBufferSize = 32;
+	// サイクル数を M（百万）単位にする割る数
+	constexpr double kCyclesPerMegaCycle = 1.0e6;
 }
 
 double LoadProfiler::BenchResult::ThroughputMBps() const {
-	return (wallMs > 1e-6) ? (static_cast<double>(rawBytes) / kBytesPerMB) / (wallMs / 1000.0) : 0.0;
+	return (wallMs > kMinWallMs) ? (static_cast<double>(rawBytes) / kBytesPerMB) / (wallMs / kMsPerSecond) : 0.0;
 }
 
 LoadProfiler* LoadProfiler::GetInstance() {
@@ -34,7 +45,7 @@ double LoadProfiler::ProcessCpuMs() {
 	ULARGE_INTEGER k{}, u{};
 	k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
 	u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
-	return static_cast<double>(k.QuadPart + u.QuadPart) / 10000.0; // 100ns → ms
+	return static_cast<double>(k.QuadPart + u.QuadPart) / kHundredNanosecondsPerMs; // 100ns → ms
 }
 
 uint64_t LoadProfiler::ProcessCpuCycles() {
@@ -109,7 +120,7 @@ void LoadProfiler::AppendBenchCsv(const std::string& path) const {
 	const std::time_t now = std::time(nullptr);
 	std::tm lt{};
 	localtime_s(&lt, &now);
-	char stamp[32];
+	char stamp[kTimeStampBufferSize];
 	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &lt);
 
 	for (const BenchResult& r : benchResults_) {
@@ -117,29 +128,29 @@ void LoadProfiler::AppendBenchCsv(const std::string& path) const {
 			stamp, BuildConfigName(), r.mode, r.textureCount,
 			static_cast<double>(r.diskBytes) / kBytesPerMB,
 			static_cast<double>(r.rawBytes) / kBytesPerMB,
-			r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / 1.0e6, r.ThroughputMBps());
+			r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / kCyclesPerMegaCycle, r.ThroughputMBps());
 	}
 }
 
 void LoadProfiler::LogSummary() const {
 	// profile.log（P.E.P.P.E.R.）にも key=value 形式で残す。フレーム区間の PROFILE 行とは別の LOAD 行
-	auto& logger = SessionLogger::Instance();
+	auto& logger = *SessionLogger::GetInstance();
 	for (const PhaseRecord& p : phases_) {
 		logger.Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=phase name={} wall_ms={:.2f} cpu_ms={:.2f} cpu_mcycles={:.1f}",
-				p.name, p.wallMs, p.cpuMs, static_cast<double>(p.cpuCycles) / 1.0e6));
+				p.name, p.wallMs, p.cpuMs, static_cast<double>(p.cpuCycles) / kCyclesPerMegaCycle));
 	}
 	for (const BenchResult& r : benchResults_) {
 		logger.Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=bench config={} mode={} textures={} disk_mb={:.2f} raw_mb={:.2f} wall_ms={:.2f} cpu_ms={:.2f} cpu_mcycles={:.1f} throughput_mbps={:.1f}",
 				BuildConfigName(), r.mode, r.textureCount,
 				static_cast<double>(r.diskBytes) / kBytesPerMB, static_cast<double>(r.rawBytes) / kBytesPerMB,
-				r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / 1.0e6, r.ThroughputMBps()));
+				r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / kCyclesPerMegaCycle, r.ThroughputMBps()));
 	}
 
 	for (const PhaseRecord& p : phases_) {
 		Log(std::format("[LOAD] phase={} wall={:.1f}ms cpu={:.1f}ms cycles={:.1f}M\n",
-			p.name, p.wallMs, p.cpuMs, static_cast<double>(p.cpuCycles) / 1.0e6));
+			p.name, p.wallMs, p.cpuMs, static_cast<double>(p.cpuCycles) / kCyclesPerMegaCycle));
 	}
 	for (const BenchResult& r : benchResults_) {
 		Log(std::format(
@@ -147,6 +158,6 @@ void LoadProfiler::LogSummary() const {
 			BuildConfigName(), r.mode, r.textureCount,
 			static_cast<double>(r.diskBytes) / kBytesPerMB,
 			static_cast<double>(r.rawBytes) / kBytesPerMB,
-			r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / 1.0e6, r.ThroughputMBps()));
+			r.wallMs, r.cpuMs, static_cast<double>(r.cpuCycles) / kCyclesPerMegaCycle, r.ThroughputMBps()));
 	}
 }

@@ -62,7 +62,10 @@ namespace SceneRoutes {
 		{ "STAGEPLAY",   "HUB",         { TransitionType::Ink,    kHubReveal } },
 	};
 
-	/// <summary>from → to の組み合わせを引く（表に無ければ kDefault）</summary>
+	/// <summary>from → to の組み合わせを表から引く</summary>
+	/// <param name="from">遷移元のシーン名</param>
+	/// <param name="to">遷移先のシーン名</param>
+	/// <returns>覆う側・開く側のトランジション（表に無ければ kDefault）</returns>
 	constexpr Transitions Find(std::string_view from, std::string_view to) {
 		for (const Route& route : kRoutes) {
 			if (route.from == from && route.to == to) return route.transitions;

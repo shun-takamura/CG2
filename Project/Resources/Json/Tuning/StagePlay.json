@@ -203,6 +203,18 @@
     ],
     "mokoScale": 500,
     "mokoWeight": 0.55000001192092896,
+    "mokoLodBias": 0,
+    "grazingMin": 0.05000000074505806,
+    "grazingPower": 1,
+    "detailFadeStart": 600,
+    "detailFadeEnd": 2500,
+    "detailFadeLod": 2,
+    "anisoEnabled": true,
+    "occlusionSoft": 25,
+    "slopeClampNoise": 0.5,
+    "shapeGradLodBias": 0,
+    "shapeLodBias": 3,
+    "mokoInHeight": 0,
     "maskScale": 9000,
     "maskWind": [
       1,
@@ -282,35 +294,87 @@
     "volumeSea": {
       "enabled": true,
       "temporal": true,
-      "temporalBlend": 0.06,
+      "temporalBlend": 0.059999998658895493,
       "shapeScale": 700,
       "detailScale": 140,
       "fluff": 160,
-      "erosion": 0.6,
-      "extinction": 0.14,
+      "erosion": 0.60000002384185791,
+      "extinction": 0.14000000059604645,
       "steps": 40,
       "stepMin": 4,
-      "stepGrowth": 0.006,
+      "stepGrowth": 0.0060000000521540642,
       "lightSigma": 2.5,
-      "sunScale": 1.0,
-      "ambientScale": 1.0,
-      "phaseG": 0.6,
-      "powder": 0.8,
+      "sunScale": 1,
+      "ambientScale": 1,
+      "phaseG": 0.60000002384185791,
+      "powder": 0.80000001192092896,
       "macroShadow": 2.5,
-      "skyAmbient": [
-        0.14,
-        0.19,
-        0.3
-      ],
       "densityGain": 2.5,
-      "verticalStretch": 1.0,
-      "multiScatter": 0.3
+      "multiScatter": 0.30000001192092896,
+      "verticalStretch": 1,
+      "skyAmbient": [
+        0.14000000059604645,
+        0.18999999761581421,
+        0.30000001192092896
+      ]
+    },
+    "heightVolume": {
+      "enabled": false,
+      "shapeScale": 1500,
+      "detailScale": 400,
+      "detailWeight": 0.34999999403953552,
+      "relief": 60,
+      "floorSpread": 1,
+      "bumpPower": 1,
+      "fluff": 12,
+      "marchDepth": 2,
+      "maxMarch": 400,
+      "steps": 24,
+      "segments": 2,
+      "extinction": 0.10000000149011612,
+      "erosion": 0.5,
+      "erosionScale": 100,
+      "warp": 20,
+      "warpScale": 50,
+      "warpRamp": 20,
+      "lightSteps": [
+        6,
+        18,
+        40,
+        90
+      ],
+      "lightSigma": 0.40000000596046448,
+      "powderMix": 0.60000002384185791,
+      "aoBias": 3,
+      "aoRange": 60,
+      "aoDepth": 120,
+      "litColor": [
+        1,
+        0.97000002861022949,
+        0.92000001668930054
+      ],
+      "shadowColor": [
+        0.2800000011920929,
+        0.40000000596046448,
+        0.69999998807907104
+      ],
+      "skyAmbient": [
+        0.5,
+        0.6600000262260437,
+        0.94999998807907104
+      ],
+      "sunScale": 0.69999998807907104,
+      "ambientScale": 0.55000001192092896
     }
   },
   "cloudFlow": {
     "speed": 60,
     "fadeStartSec": 40,
     "fadeEndSec": 48
+  },
+  "raymarchCloudsOff": {
+    "sec": 70,
+    "fadeSec": 0.5
   },
   "skybox": {
     "tint": [
@@ -435,41 +499,71 @@
     "maxBoss": 5
   },
   "special": {
-    "gaugeMaxGouman": 100,
-    "gaugeMaxDisruptor": 120,
+    "gaugeMaxStormLock": 100,
+    "gaugeMaxShatterline": 120,
     "cooldown": 30,
     "equipped": 0,
-    "disruptorCharge": 2.5,
-    "disruptorSlash": 1.5,
-    "disruptorCollapse": 4,
-    "disruptorRecover": 2,
-    "disruptorChargeTimeScale": 0,
-    "disruptorLineWidth": 10,
-    "disruptorBossDamage": 1000,
-    "disruptorPivotRadius": 14,
-    "disruptorCamPullback": 8,
-    "disruptorCamUpAdd": 1.5,
-    "disruptorCamFovAdd": 0.059999998658895493,
-    "disruptorCamEaseTime": 0.25,
-    "disruptorCamFireSide": 6,
-    "disruptorCamFireFront": 5,
-    "disruptorCamFireDown": 3,
-    "disruptorCamFireLookUp": 0.5,
-    "disruptorCamFireFovAdd": 0,
-    "disruptorCamCollapsePullback": 8,
-    "disruptorCamCollapseUpAdd": 1.5,
-    "disruptorCutDepth": 40,
+    "shatterlineCharge": 2.5,
+    "shatterlineSlash": 1.5,
+    "shatterlineCollapse": 4,
+    "shatterlineRecover": 2,
+    "shatterlineChargeTimeScale": 0,
+    "shatterlineLineWidth": 10,
+    "shatterlineBossDamage": 1000,
+    "shatterlinePivotRadius": 14,
+    "shatterlineCamPullback": 8,
+    "shatterlineCamUpAdd": 1.5,
+    "shatterlineCamFovAdd": 0.059999998658895493,
+    "shatterlineCamEaseTime": 0.25,
+    "shatterlineCamFireSide": 6,
+    "shatterlineCamFireFront": 5,
+    "shatterlineCamFireDown": 3,
+    "shatterlineCamFireLookUp": 0.5,
+    "shatterlineCamFireFovAdd": 0,
+    "shatterlineCamCollapsePullback": 8,
+    "shatterlineCamCollapseUpAdd": 1.5,
+    "shatterlineCutDepth": 40,
+    "shatterlineBeamEffect": "ShatterlineBeam",
+    "shatterlineChargeEffect": "ShatterlineCharge",
+    "shatterlineRiftWidthScale": 1,
+    "shatterlineRiftRevealTime": 0.44999998807907104,
+    "shatterlineRevealIntensity": 1,
+    "shatterlineRevealStartDelay": 0.44999998807907104,
+    "shatterlineCollapseEndAt": 0.89999997615814209,
+    "shatterlineInvertDelay": 0.10000000149011612,
+    "shatterlineFragAlpha": 1,
+    "shatterlineFragSatBoost": 1.6000000238418579,
+    "shatterlineFragSpin": 6,
+    "shatterlineFragMinScale": 0.75,
+    "shatterlineFractureSeed": 3282247032,
+    "shatterlineFractureSeedLock": false,
+    "shatterlineCellCount": 512,
+    "shatterlineBreakFreeze": 0,
+    "shatterlineBreakPopSpeed": 0,
+    "shatterlineBreakSpread": 4,
+    "shatterlineBreakGravity": 6,
+    "shatterlineBreakLifeMin": 1,
+    "shatterlineBreakLifeMax": 2,
+    "shatterlineBeamDir": [
+      0,
+      0.15000000596046448,
+      1
+    ],
+    "shatterlineRiftColor": [
+      0.60000002384185791,
+      0.40000000596046448,
+      1,
+      1
+    ],
     "dodgeGain": 8,
     "meleeWeakGain": 3,
     "meleeStrongGain": 2,
     "meleeLateRate": 0.5,
-    "duration": 5,
-    "barrierRadius": 2,
-    "barrierDuration": 3,
-    "barrierFill": false,
-    "barrierEffect": "Barrier",
-    "centerOffset": 0,
-    "barrierWire": {
+    "stormLockBarrierRadius": 2,
+    "stormLockBarrierDuration": 3,
+    "stormLockBarrierFill": false,
+    "stormLockBarrierEffect": "Barrier",
+    "stormLockBarrierWire": {
       "on": true,
       "spinSpeed": [
         0.5,
@@ -492,7 +586,7 @@
         0.89999997615814209
       ]
     },
-    "barrierParticle": {
+    "stormLockBarrierParticle": {
       "on": false,
       "interval": 0.019999999552965164,
       "count": 10,
@@ -519,7 +613,7 @@
         0
       ]
     },
-    "wing": {
+    "stormLockWing": {
       "on": true,
       "armCount": 4,
       "angleOffset": 0.78539818525314331,
@@ -549,71 +643,40 @@
         0
       ]
     },
-    "barrierColor": [
+    "stormLockBarrierColor": [
       1,
       0.80000001192092896,
       0.30000001192092896,
       0.10000000149011612
     ],
-    "camPullback": 8,
-    "camFovAdd": 0.059999998658895493,
-    "camUpAdd": 1.5,
-    "chargeBoltCount": 6,
-    "chargeRegenInterval": 0.15000000596046448,
-    "chargeStartRadiusH": 0,
-    "chargeStartRadiusV": 0,
-    "chargeMinLength": 1,
-    "fireSimultaneous": 3,
-    "fireMinHold": 0.5,
-    "fireMaxHold": 3,
-    "fireTickInterval": 0.10000000149011612,
-    "fireTickDamage": 10,
-    "fireLaunchInterval": 0.10000000149011612,
-    "fireGrowTime": 0.079999998211860657,
-    "fireMaxOffsetRatio": 0.10000000149011612,
-    "fireBranchProb": 0.0099999997764825821,
-    "fireStartWidth": 0.10000000149011612,
-    "fireEndWidth": 0.05000000074505806,
-    "fireBoltLifetime": 0.079999998211860657,
-    "endDuration": 1,
-    "fireColor": [
+    "stormLockCamPullback": 8,
+    "stormLockCamFovAdd": 0.059999998658895493,
+    "stormLockCamUpAdd": 1.5,
+    "stormLockChargeBoltCount": 6,
+    "stormLockChargeRegenInterval": 0.15000000596046448,
+    "stormLockChargeMinLength": 1,
+    "stormLockFireSimultaneous": 3,
+    "stormLockFireMinHold": 0.5,
+    "stormLockFireMaxHold": 3,
+    "stormLockFireTickInterval": 0.10000000149011612,
+    "stormLockFireTickDamage": 10,
+    "stormLockFireLaunchInterval": 0.10000000149011612,
+    "stormLockFireGrowTime": 0.079999998211860657,
+    "stormLockFireMaxOffsetRatio": 0.10000000149011612,
+    "stormLockFireBranchProb": 0.0099999997764825821,
+    "stormLockFireStartWidth": 0.10000000149011612,
+    "stormLockFireEndWidth": 0.05000000074505806,
+    "stormLockFireBoltLifetime": 0.079999998211860657,
+    "stormLockEndDuration": 1,
+    "stormLockFireColor": [
       0.5,
       0.80000001192092896,
       1,
       1
     ],
-    "disruptorBeamEffect": "DisruptorBeam",
-    "disruptorChargeEffect": "DisruptorCharge",
-    "disruptorRiftWidthScale": 1,
-    "disruptorRiftRevealTime": 0.44999998807907104,
-    "disruptorRevealIntensity": 1,
-    "disruptorRevealStartDelay": 0.44999998807907104,
-    "disruptorCollapseEndAt": 0.89999997615814209,
-    "disruptorInvertDelay": 0.10000000149011612,
-    "disruptorFragAlpha": 1,
-    "disruptorFragSatBoost": 1.6000000238418579,
-    "disruptorFragSpin": 6,
-    "disruptorFragMinScale": 0.75,
-    "disruptorFractureSeed": 3282247032,
-    "disruptorFractureSeedLock": false,
-    "disruptorCellCount": 512,
-    "disruptorBreakFreeze": 0,
-    "disruptorBreakPopSpeed": 0,
-    "disruptorBreakSpread": 4,
-    "disruptorBreakGravity": 6,
-    "disruptorBreakLifeMin": 1,
-    "disruptorBreakLifeMax": 2,
-    "disruptorBeamDir": [
-      0,
-      0.15000000596046448,
-      1
-    ],
-    "disruptorRiftColor": [
-      0.60000002384185791,
-      0.40000000596046448,
-      1,
-      1
-    ],
+    "centerOffset": 0,
+    "bodyEllipseH": 0,
+    "bodyEllipseV": 0,
     "bar": {
       "maxWidth": 300,
       "height": 12,
@@ -709,6 +772,53 @@
     "seekMaxSec": 180,
     "landingDurationSec": 5
   },
+  "streaming": {
+    "groups": [
+      {
+        "name": "LowAltitude",
+        "preloadSec": 51,
+        "showSec": 59,
+        "unloadSec": 126,
+        "prefabs": []
+      },
+      {
+        "name": "Plateau",
+        "preloadSec": 51,
+        "showSec": 59,
+        "unloadSec": 0,
+        "prefabs": []
+      },
+      {
+        "name": "Canyon",
+        "preloadSec": 95,
+        "showSec": 106,
+        "unloadSec": 0,
+        "prefabs": [
+          "canyon_spire_l",
+          "canyon_spire_s",
+          "canyon_beam",
+          "canyon_spire_l_stump",
+          "canyon_spire_l_top",
+          "canyon_spire_s_stump",
+          "canyon_spire_s_top",
+          "canyon_beam_stub_a",
+          "canyon_beam_half_a",
+          "canyon_beam_half_b",
+          "canyon_beam_stub_b",
+          "canyon_chunk",
+          "turret",
+          "HoverEnemy"
+        ]
+      },
+      {
+        "name": "BossArena",
+        "preloadSec": 140,
+        "showSec": 160,
+        "unloadSec": 0,
+        "prefabs": []
+      }
+    ]
+  },
   "stageStart": {
     "origin": [
       0,
@@ -727,6 +837,7 @@
     "catapultReadyIblPath": "Resources/Cubemaps/catapult_ibl_ready.dds",
     "boardAppearDelay": 0.30000001192092896,
     "attractLaunchWait": 1.5,
+    "attractViewSwitchDelay": 0.80000001192092896,
     "launchPanelHideDelay": 0.15000000596046448,
     "kickLeadSeconds": 0.44999998807907104,
     "clampStopBeforeExit": 2,
@@ -1076,6 +1187,8 @@
       "smallBelow": 0.34000000357627869,
       "mediumBelow": 0.67000001668930054,
       "neutralLevel": 1,
+      "moveThreshold": 0.30000001192092896,
+      "followBody": false,
       "backLeft": {
         "bone": "mixamorig:Spine2",
         "offset": [
@@ -1203,6 +1316,141 @@
     "metallic": 0,
     "roughness": 0.60000002384185791,
     "baseGlow": 0.079999998211860657,
-    "albedoGain": 3.2000000476837158
+    "albedoGain": 3.2000000476837158,
+    "burnEdgeColor": [
+      1,
+      0.44999998807907104,
+      0.079999998211860657
+    ],
+    "burnEdgeIntensity": 3,
+    "burnEdgeWidth": 0.15000000596046448,
+    "burnNoiseScale": 3,
+    "burnGlow": 0.25
+  },
+  "playerThrusters": {
+    "smallEffect": "PlayerThruster_S",
+    "mediumEffect": "PlayerThruster_M",
+    "largeEffect": "PlayerThruster_L",
+    "smallBelow": 0.34000000357627869,
+    "mediumBelow": 0.67000001668930054,
+    "neutralLevel": 1,
+    "moveThreshold": 0.30000001192092896,
+    "followBody": true,
+    "backLeft": {
+      "bone": "mixamorig:Spine2",
+      "offset": [
+        -0.12235293537378311,
+        0.056470591574907303,
+        -0.20705883204936981
+      ],
+      "rotationDegrees": [
+        70,
+        0,
+        0
+      ]
+    },
+    "backRight": {
+      "bone": "mixamorig:Spine2",
+      "offset": [
+        0.12235293537378311,
+        0.056470591574907303,
+        -0.20705883204936981
+      ],
+      "rotationDegrees": [
+        70,
+        0,
+        0
+      ]
+    },
+    "calfLeft": {
+      "bone": "mixamorig:LeftFoot",
+      "offset": [
+        0,
+        0.14117647707462311,
+        -0.15058824419975281
+      ],
+      "rotationDegrees": [
+        60,
+        0,
+        0
+      ]
+    },
+    "calfRight": {
+      "bone": "mixamorig:RightFoot",
+      "offset": [
+        0,
+        0.14117647707462311,
+        -0.15058824419975281
+      ],
+      "rotationDegrees": [
+        60,
+        0,
+        0
+      ]
+    }
+  },
+  "playerDeath": {
+    "etherColor": [
+      0,
+      0.64099997282028198,
+      1
+    ],
+    "preludeRailSeconds": 0,
+    "preludeBossSeconds": 2.4000000953674316,
+    "glowSeconds": 0.60000002384185791,
+    "unravelSeconds": 2,
+    "lingerSeconds": 1.2000000476837158,
+    "glowIntensity": 1.2000000476837158,
+    "bottomMargin": 0.15000000596046448,
+    "topMargin": 0.25,
+    "edgeWidth": 0.079999998211860657,
+    "edgeIntensity": 3,
+    "noiseScale": 6,
+    "noiseAmplitude": 0.059999998658895493,
+    "bloomScale": 1,
+    "strandRate": 160,
+    "strandBand": 0.079999998211860657,
+    "strandRadius": 0.11999999731779099,
+    "wingBurnSeconds": 1.6000000238418579,
+    "featherBitRate": 30,
+    "cameraBlendSeconds": 1.2000000476837158,
+    "cameraApproach": 0.30000001192092896,
+    "cameraLookFrom": 1.2000000476837158,
+    "cameraLookTo": 3,
+    "cameraLookUpSeconds": 2.5999999046325684,
+    "kneelFadeSeconds": 0.15000000596046448,
+    "coughStart": 0.30000001192092896,
+    "coughEnd": 1.5499999523162842,
+    "coughPuffLong": 0.18000000715255737,
+    "coughPuffShort": 0.05000000074505806,
+    "coughGapShort": 0.039999999105930328,
+    "coughGapLong": 0.30000001192092896,
+    "coughLargeChance": 0.30000001192092896,
+    "bossCamYawDeg": 0,
+    "bossCamDistance": 3.5,
+    "bossCamHeight": 0.5,
+    "bossCamOrbitSeconds": 1.6000000238418579,
+    "bossCamLookFrom": 0.89999997615814209,
+    "strands": {
+      "lifeMin": 1.6000000238418579,
+      "lifeMax": 2.5999999046325684,
+      "speedMin": 0.60000002384185791,
+      "speedMax": 1.6000000238418579,
+      "acceleration": 2.5,
+      "lengthMin": 0.80000001192092896,
+      "lengthMax": 2.2000000476837158,
+      "widthMin": 0.0080000003799796104,
+      "widthMax": 0.02199999988079071,
+      "amplitude": 0.059999998658895493,
+      "amplitudeGrow": 0.11999999731779099,
+      "frequencyMin": 2,
+      "frequencyMax": 6,
+      "swaySpeed": 2.5,
+      "flare": 0.18000000715255737,
+      "coreWhite": 0.55000001192092896,
+      "brightness": 1.6000000238418579,
+      "fadeInSeconds": 0.15000000596046448,
+      "bloomIntensity": 2
+    }
   }
 }

@@ -1,4 +1,4 @@
-// DisruptorShard.PS.hlsl
+// ScreenShard.PS.hlsl
 // シーンキャプチャ（PostEffect 前の通常色シーン）を baked UV でサンプル → 色反転 → α でブレンド。
 // 破片は PostEffect の後に描く（二重反転しない）。baked UV ＝破片が剥がれた画面位置なので、
 // 破片は「自分の場所の反転絵」を持ったまま飛ぶ（割れたガラスが画面のかけらを運ぶイメージ）。

@@ -9,14 +9,46 @@
 #include "Log.h"
 #include "Object3DManager.h"
 
-// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
-// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+namespace {
+	// 白のフォールバックテクスチャの各チャンネルの値（0〜255）
+	constexpr uint8_t kWhiteChannel = 255;
+	// マテリアルの既定値（光沢度・粗さ・視差のレイヤー数の下限と上限）
+	constexpr float kDefaultShininess = 50.0f;
+	constexpr float kDefaultRoughness = 0.5f;
+	constexpr float kDefaultParallaxMinLayers = 8.0f;
+	constexpr float kDefaultParallaxMaxLayers = 32.0f;
+	// 三角形の頂点の数
+	constexpr uint32_t kTriangleVertexCount = 3;
+	// .mat に height_map_path が入ったバージョンと、その位置 [バイト]
+	constexpr uint32_t kMatHeightMapMinVersion = 4;
+	constexpr size_t kMatHeightMapPathOffset = 564;
+	// .mat / .mesh / .skel / .anim の先頭の識別子（"MATL" など）の長さ [バイト]
+	constexpr size_t kMagicSize = 4;
+	// ヘッダの uint32 / float 1 個の大きさ [バイト]
+	constexpr size_t kFieldSize = 4;
+	// ファイルに書かれたパスの固定長 [バイト]
+	constexpr size_t kAssetPathLength = 256;
+	// .mat の対応する最大のバージョン
+	constexpr uint32_t kMatMaxVersion = 5;
+	// .mat に normal_map_path が入ったバージョンと、その位置 [バイト]
+	constexpr uint32_t kMatNormalMapMinVersion = 3;
+	constexpr size_t kMatNormalMapPathOffset = 308;
+	// .mesh の v3（tangent 付き）と v4（ヘッダ末尾に包む球）
+	constexpr uint32_t kMeshVersionTangent = 3;
+	constexpr uint32_t kMeshVersionBounds = 4;
+}
+
+/// <summary>
+/// テクスチャ無しマテリアル（色のみ PBR 等）用のフォールバック白テクスチャ。
+/// 無ければ手続き生成して確保し、パスを返す（pack/FS どちらでも確実に存在させる）。
+/// </summary>
+/// <returns>白テクスチャのパス</returns>
 static const std::string& EnsureFallbackWhiteTexture()
 {
 	static const std::string kWhite = "Resources/Textures/white1x1.dds";
 	auto* tm = TextureManager::GetInstance();
 	if (!tm->HasTexture(kWhite)) {
-		tm->CreateSolidColorTexture(kWhite, 255, 255, 255, 255);
+		tm->CreateSolidColorTexture(kWhite, kWhiteChannel, kWhiteChannel, kWhiteChannel, kWhiteChannel);
 	}
 	return kWhite;
 }
@@ -191,7 +223,7 @@ void ModelInstance::FinishGPU(DirectXCore* dxCore)
 			if (!tm->HasTexture(sm.terrainColorArrayPath) || !tm->HasTexture(sm.terrainNormalArrayPath)) {
 				sm.terrainColorArrayPath.clear();
 				sm.terrainNormalArrayPath.clear();
-				if (sm.material && sm.material->shadingModel == 2) sm.material->shadingModel = 1;
+				if (sm.material && sm.material->shadingModel == ShadingModel::kTerrain) sm.material->shadingModel = ShadingModel::kPBR;
 			}
 		}
 	}
@@ -222,19 +254,19 @@ void ModelInstance::Draw(DirectXCore* dxCore)
 
 		// マテリアルCBuffer(root0)
 		cmd->SetGraphicsRootConstantBufferView(
-			0, sm.materialResource->GetGPUVirtualAddress()
+			Object3DManager::kRootMaterial, sm.materialResource->GetGPUVirtualAddress()
 		);
 
 		// ベースカラーSRV(root2)。空なら submesh[0] のテクスチャで埋める
 		const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
 		cmd->SetGraphicsRootDescriptorTable(
-			2, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
+			Object3DManager::kRootTexture, TextureManager::GetInstance()->GetSrvHandleGPU(texPath)
 		);
 
 		// 法線マップ(root10)。無い場合はベースで埋める（未バインド回避。PS は useNormalMap で判定）
 		const std::string& normalSrvPath = !sm.normalMapFilePath.empty() ? sm.normalMapFilePath : texPath;
 		cmd->SetGraphicsRootDescriptorTable(
-			10, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
+			Object3DManager::kRootNormalMap, TextureManager::GetInstance()->GetSrvHandleGPU(normalSrvPath)
 		);
 
 		// 視差のハイトマップ(t4)。無い場合はベースで埋める（PS は useParallax で判定）
@@ -284,9 +316,9 @@ void ModelInstance::DrawBloomPass(DirectXCore* dxCore, bool includeAll)
 	for (const auto& sm : submeshes_) {
 		if (sm.indexCount == 0) continue;
 		if (!includeAll && !sm.hasEmissive) continue;
-		cmd->SetGraphicsRootConstantBufferView(1, sm.materialResource->GetGPUVirtualAddress());
+		cmd->SetGraphicsRootConstantBufferView(Object3DManager::kBloomRootMaterial, sm.materialResource->GetGPUVirtualAddress());
 		const std::string& texPath = !sm.textureFilePath.empty() ? sm.textureFilePath : textureFilePath_;
-		cmd->SetGraphicsRootDescriptorTable(3, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
+		cmd->SetGraphicsRootDescriptorTable(Object3DManager::kBloomRootBaseColor, TextureManager::GetInstance()->GetSrvHandleGPU(texPath));
 		PEPPER_COUNT("DrawCall");
 		cmd->DrawIndexedInstanced(sm.indexCount, 1, sm.indexStart, 0, 0);
 	}
@@ -398,23 +430,23 @@ void ModelInstance::CreateMaterialData(DirectXCore* dxCore)
 		// UVTransformに単位行列を書き込む
 		m->uvTransform = MakeIdentity4x4();
 		// 光沢度の初期値。小さいほどぼんやり広く、大きいほどくっきり狭く
-		m->shininess = 50.0f;
+		m->shininess = kDefaultShininess;
 		// 環境マップの反映度合い。1.0だと映り込みすぎになる
 		m->environmentCoefficient = 1.0f;
 		// デフォルトで環境マップを使用しない
 		m->useEnvironmentMap = false;
 		// PBR パラメータの初期値（shadingModel=0=BlinnPhong。未初期化のゴミ値で誤って PBR に飛ばないよう明示）
 		m->metallic = 0.0f;
-		m->roughness = 0.5f;
-		m->shadingModel = 0;
+		m->roughness = kDefaultRoughness;
+		m->shadingModel = ShadingModel::kBlinnPhong;
 		m->useNormalMap = 0;
 		m->cloudReflection = 0.0f;
 		m->dissolveEnable = 0;
 		m->dissolveProgress = 1.0f;
 		m->useParallax = 0;
 		m->parallaxDepth = 0.0f;
-		m->parallaxMinLayers = 8.0f;
-		m->parallaxMaxLayers = 32.0f;
+		m->parallaxMinLayers = kDefaultParallaxMinLayers;
+		m->parallaxMaxLayers = kDefaultParallaxMaxLayers;
 		m->emissive = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 	}
 
@@ -520,63 +552,71 @@ Node ModelInstance::ReadNode(aiNode* node)
 	return result;
 }
 
-// .mat (MATL) から base_color_path を抽出するヘルパー。
-// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v5 を許容する。
+/// <summary>
+/// .mat (MATL) から base_color_path を抽出するヘルパー。
+/// base_color_path は version 直後で全バージョン共通オフセットなので v1〜v5 を許容する。
+/// </summary>
+/// <param name="matPath">.mat のパス</param>
+/// <returns>テクスチャのパス。開けない・形式が違えば空文字</returns>
 static std::string ReadMatBaseColorPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
 	if (!h.IsValid()) return {};
 
-	char magic[4]{};
-	h.Read(magic, 4);
-	if (std::memcmp(magic, "MATL", 4) != 0) return {};
+	char magic[kMagicSize]{};
+	h.Read(magic, kMagicSize);
+	if (std::memcmp(magic, "MATL", kMagicSize) != 0) return {};
 
 	uint32_t version = 0;
-	h.Read(&version, 4);
-	if (version < 1 || version > 5) return {};
+	h.Read(&version, kFieldSize);
+	if (version < 1 || version > kMatMaxVersion) return {};
 
-	char baseColorPath[256]{};
-	h.Read(baseColorPath, 256);
+	char baseColorPath[kAssetPathLength]{};
+	h.Read(baseColorPath, kAssetPathLength);
 	return std::string(baseColorPath);
 }
 
-// .mat (MATL) v3 から normal_map_path を抽出するヘルパー（固定オフセット 308）
+/// <summary>.mat (MATL) v3 から normal_map_path を抽出するヘルパー（固定オフセット 308）</summary>
+/// <param name="matPath">.mat のパス</param>
+/// <returns>法線マップのパス。開けない・v3 未満なら空文字</returns>
 static std::string ReadMatNormalMapPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
 	if (!h.IsValid()) return {};
 
-	char magic[4]{};
-	h.Read(magic, 4);
-	if (std::memcmp(magic, "MATL", 4) != 0) return {};
+	char magic[kMagicSize]{};
+	h.Read(magic, kMagicSize);
+	if (std::memcmp(magic, "MATL", kMagicSize) != 0) return {};
 
 	uint32_t version = 0;
-	h.Read(&version, 4);
-	if (version < 3) return {};  // v3 から normal_map_path
+	h.Read(&version, kFieldSize);
+	if (version < kMatNormalMapMinVersion) return {};  // v3 から normal_map_path
 
-	h.Seek(308);  // magic+ver+base(256)+color(16)+enable+shininess+env+useenv+metallic+roughness+shading
-	char normalPath[256]{};
-	h.Read(normalPath, 256);
+	h.Seek(kMatNormalMapPathOffset);  // magic+ver+base(256)+color(16)+enable+shininess+env+useenv+metallic+roughness+shading
+	char normalPath[kAssetPathLength]{};
+	h.Read(normalPath, kAssetPathLength);
 	return std::string(normalPath);
 }
 
-// .mat (MATL) v4 から height_map_path を抽出するヘルパー（固定オフセット 564 = v3 の末尾）
+/// <summary>.mat (MATL) v4 から height_map_path を抽出するヘルパー（固定オフセット 564 = v3 の末尾）</summary>
+/// <param name="matPath">.mat のパス</param>
+/// <returns>ハイトマップのパス。開けない・v4 未満なら空文字</returns>
 static std::string ReadMatHeightMapPath(const std::string& matPath)
 {
 	auto h = AssetLocator::GetInstance()->Open(matPath);
 	if (!h.IsValid()) return {};
 
-	char magic[4]{};
-	h.Read(magic, 4);
-	if (std::memcmp(magic, "MATL", 4) != 0) return {};
+	char magic[kMagicSize]{};
+	h.Read(magic, kMagicSize);
+	if (std::memcmp(magic, "MATL", kMagicSize) != 0) return {};
 
 	uint32_t version = 0;
-	h.Read(&version, 4);
-	if (version < 4) return {};  // v4 から height_map_path
+	h.Read(&version, kFieldSize);
+	if (version < kMatHeightMapMinVersion) return {};  // v4 から height_map_path
 
-	h.Seek(564);
-	char heightPath[256]{};
-	h.Read(heightPath, 256);
+	h.Seek(kMatHeightMapPathOffset);
+	char heightPath[kAssetPathLength]{};
+	h.Read(heightPath, kAssetPathLength);
 	return std::string(heightPath);
 }
 
@@ -597,28 +637,28 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 	auto h = AssetLocator::GetInstance()->Open(filePath);
 	if (!h.IsValid()) return;
 
-	char magic[4]{};
-	h.Read(magic, 4);
-	if (std::memcmp(magic, "MESH", 4) != 0) return;
+	char magic[kMagicSize]{};
+	h.Read(magic, kMagicSize);
+	if (std::memcmp(magic, "MESH", kMagicSize) != 0) return;
 
 	uint32_t version = 0, flags = 0, vertexCount = 0, indexCount = 0, submeshCount = 0;
 	uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
-	h.Read(&version, 4);
-	h.Read(&flags, 4);
-	h.Read(&vertexCount, 4);
-	h.Read(&indexCount, 4);
-	h.Read(&submeshCount, 4);
-	h.Read(&vertexOffset, 4);
-	h.Read(&indexOffset, 4);
-	h.Read(&skinOffset, 4);
-	h.Read(&submeshOffset, 4);
+	h.Read(&version, kFieldSize);
+	h.Read(&flags, kFieldSize);
+	h.Read(&vertexCount, kFieldSize);
+	h.Read(&indexCount, kFieldSize);
+	h.Read(&submeshCount, kFieldSize);
+	h.Read(&vertexOffset, kFieldSize);
+	h.Read(&indexOffset, kFieldSize);
+	h.Read(&skinOffset, kFieldSize);
+	h.Read(&submeshOffset, kFieldSize);
 
-	if (version != 3 && version != 4) return;  // v3 = tangent 付き、v4 = v3 ＋ヘッダ末尾に包む球
+	if (version != kMeshVersionTangent && version != kMeshVersionBounds) return;  // v3 = tangent 付き、v4 = v3 ＋ヘッダ末尾に包む球
 
 	// skeleton_path は今は使わない（スキニングモデルは別経路）
-	h.Seek(h.GetPosition() + 256);
+	h.Seek(h.GetPosition() + kAssetPathLength);
 
-	if (version >= 4) {
+	if (version >= kMeshVersionBounds) {
 		float sphere[4]{};
 		h.Read(sphere, sizeof(sphere));
 		bounds_.center = { sphere[0], sphere[1], sphere[2] };
@@ -659,10 +699,10 @@ void ModelInstance::LoadMeshBinary(const std::string& directoryPath, const std::
 		submeshes_.reserve(submeshCount);
 		for (uint32_t i = 0; i < submeshCount; ++i) {
 			uint32_t idxStart = 0, idxCount = 0;
-			h.Read(&idxStart, 4);
-			h.Read(&idxCount, 4);
-			char matPath[256]{};
-			h.Read(matPath, 256);
+			h.Read(&idxStart, kFieldSize);
+			h.Read(&idxCount, kFieldSize);
+			char matPath[kAssetPathLength]{};
+			h.Read(matPath, kAssetPathLength);
 
 			RenderSubmesh sm;
 			sm.indexStart = idxStart;
@@ -721,7 +761,7 @@ void ModelInstance::LoadModel(const std::string& directoryPath, const std::strin
 		// Index解析
 		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
 			aiFace& face = mesh->mFaces[faceIndex];
-			assert(face.mNumIndices == 3);
+			assert(face.mNumIndices == kTriangleVertexCount);
 
 			for (uint32_t element = 0; element < face.mNumIndices; ++element) {
 				uint32_t vertexIndex = face.mIndices[element];

@@ -52,13 +52,22 @@ public:
 		float aspect;           // 画面の 幅 / 高さ
 	};
 
+	/// <summary>シーン RT の写し（描画解像度）と波紋のシミュレーションを作る</summary>
+	/// <param name="dxCore">GPU リソースの作成に使う</param>
+	/// <param name="srvManager">写しと波の高さの SRV を取る</param>
+	/// <param name="screenWidth">画面幅（縦横比に使う）</param>
+	/// <param name="screenHeight">画面高さ</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, float screenWidth, float screenHeight);
+	/// <summary>写しのテクスチャと SRV を解放する</summary>
 	void Finalize();
 
-	/// <summary>水面を平らに戻す（遷移の始まりに呼ぶ）</summary>
+	/// <summary>水面を平らに戻し、波の範囲の中心を画面の中心へ戻す（遷移の始まりに呼ぶ）</summary>
 	void Reset();
 
-	/// <summary>画面 UV の点に波源を入れる（半径・深さは画面の幅 = 1）</summary>
+	/// <summary>画面 UV の点に波源を入れる</summary>
+	/// <param name="uv">波源の位置（画面 UV）</param>
+	/// <param name="radius">半径（画面の幅 = 1）</param>
+	/// <param name="strength">深さ（画面の幅 = 1）</param>
 	void AddImpulse(const Vector2& uv, float radius, float strength);
 
 	// ===== 3D の水面として使う（羽根の着水：斜めに見下ろす水面）=====
@@ -66,21 +75,32 @@ public:
 	// rippleCenter / rippleSize もワールドの値になる（シェーダは自前で XZ → 高さマップ UV を求める）
 
 	/// <summary>波の範囲の中心をワールド XZ で決める（呼ぶまでは画面の中心）</summary>
+	/// <param name="centerXZ">中心のワールド XZ</param>
 	void SetRippleWorldCenter(const Vector2& centerXZ);
 
-	/// <summary>ワールド XZ の点に波源を入れる（半径・深さもワールドの長さ）</summary>
+	/// <summary>ワールド XZ の点に波源を入れる</summary>
+	/// <param name="positionXZ">波源のワールド XZ</param>
+	/// <param name="radius">半径（ワールドの長さ）</param>
+	/// <param name="strength">深さ（ワールドの長さ）</param>
 	void AddImpulseWorld(const Vector2& positionXZ, float radius, float strength);
 
-	/// <summary>波の時間を進める（実際の計算は Dispatch）</summary>
+	/// <summary>調整値を波紋へ反映して波の時間を進める（実際の計算は Dispatch）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
 
 	/// <summary>
 	/// 描画の前準備：シーン RT をコピーし（captureScene のとき）、波を進めてから、
-	/// シーン RT を DSV なしで描き先にしてビューポートを合わせる。SRV ヒープもここで貼る
+	/// シーン RT を DSV なしで描き先にしてビューポートを合わせる。SRV ヒープもここで貼る。
+	/// 描画解像度が変わっていたら写しを作り直す
 	/// </summary>
+	/// <param name="cmd">描画のコマンドリスト</param>
+	/// <param name="sceneTarget">シーン RT</param>
+	/// <param name="captureScene">true ならこのフレームのシーンを写す（全面を覆っている間は false でよい）</param>
 	void BeginDraw(ID3D12GraphicsCommandList* cmd, RenderTexture* sceneTarget, bool captureScene);
 
 	/// <summary>後に続く描画のために、シーン RT と DSV を貼り直す</summary>
+	/// <param name="cmd">描画のコマンドリスト</param>
+	/// <param name="sceneTarget">シーン RT</param>
 	void EndDraw(ID3D12GraphicsCommandList* cmd, RenderTexture* sceneTarget);
 
 	// ===== 全画面パスの作成（このクラスを使うシェーダは同じ形のルートシグネチャになる） =====
@@ -91,38 +111,60 @@ public:
 	static constexpr UINT kRootRipple = 2;
 	static constexpr UINT kRootExtraTextures = 3;
 
-	/// <summary>全画面パスのルートシグネチャ（extraTextureCount = t2 以降に呼んだ側が使う枚数）</summary>
+	/// <summary>全画面パスのルートシグネチャを作る</summary>
+	/// <param name="extraTextureCount">t2 以降に呼んだ側が使うテクスチャの枚数</param>
+	/// <returns>ルートシグネチャ</returns>
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> CreateRootSignature(UINT extraTextureCount) const;
 
-	/// <summary>全画面パスの PSO（頂点は PostProcess.VS の全画面三角形。alphaBlend なら通常の α ブレンド）</summary>
+	/// <summary>全画面パスの PSO を作る（頂点は PostProcess.VS の全画面三角形）</summary>
+	/// <param name="rootSignature">CreateRootSignature で作ったルートシグネチャ</param>
+	/// <param name="pixelShaderPath">ピクセルシェーダのパス</param>
+	/// <param name="alphaBlend">true なら通常の α ブレンド、false なら上書き</param>
+	/// <returns>PSO</returns>
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(
 		ID3D12RootSignature* rootSignature, const wchar_t* pixelShaderPath, bool alphaBlend) const;
 
 	/// <summary>t0（シーンのコピー）と t1（波の高さ）を貼る</summary>
+	/// <param name="cmd">描画のコマンドリスト</param>
 	void BindTextures(ID3D12GraphicsCommandList* cmd) const;
 
+	/// <summary>シーンの写しの SRV の番号を返す</summary>
+	/// <returns>SRV の番号。未作成なら UINT32_MAX</returns>
 	uint32_t GetSceneCopySrvIndex() const { return sceneCopySrvIndex_; }
+	/// <summary>波の高さの SRV を返す</summary>
+	/// <returns>GPU ディスクリプタハンドル</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetRippleSrvHandle() const { return ripple_.GetHeightSrvHandle(); }
+	/// <summary>シェーダの定数バッファの先頭に置く水面の値を作る</summary>
+	/// <returns>ScreenWater.hlsli と同じ並びの値</returns>
 	ConstantsForGPU GetConstants() const;
 
-	/// <summary>画面 UV → 画面の幅 = 1 の座標</summary>
+	/// <summary>画面 UV を画面の幅 = 1 の座標へ直す</summary>
+	/// <param name="uv">画面 UV</param>
+	/// <returns>画面の幅 = 1 の座標（y は縦横比で割る）</returns>
 	Vector2 ToWidthSpace(const Vector2& uv) const;
+	/// <summary>画面の縦横比を返す</summary>
+	/// <returns>幅 / 高さ</returns>
 	float GetAspect() const;
 
-	Settings& GetSettings() { return settings_; }
+	/// <summary>水面の調整値を返す（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
 	const Settings& GetSettings() const { return settings_; }
+	/// <summary>水面の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
-	/// <summary>
-	/// ImGui で調整（呼んだ側の窓の中に並べる）
-	/// </summary>
+	/// <summary>水面の調整値を ImGui で調整する（呼んだ側の窓の中に並べる）</summary>
 	void OnImGui();
 
 	// シーン RT と同じ形式（PSO の RTV 形式にも使う）
 	static constexpr DXGI_FORMAT kSceneFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
 private:
-	// シーン RT（描画解像度）をそのまま CopyResource するので、同じ大きさで作る。大きさが変われば作り直す
+	/// <summary>シーン RT と同じ大きさ・形式の写しのテクスチャと SRV を作る（シーン RT をそのまま CopyResource するため。大きさが変われば作り直す）</summary>
+	/// <param name="width">幅 [px]</param>
+	/// <param name="height">高さ [px]</param>
 	void CreateCopyTexture(uint32_t width, uint32_t height);
+	/// <summary>調整値と波の範囲の中心（画面の中心か SetRippleWorldCenter の XZ）を波紋のシミュレーションへ渡す</summary>
 	void ApplyRippleSettings();
 
 	DirectXCore* dxCore_ = nullptr;

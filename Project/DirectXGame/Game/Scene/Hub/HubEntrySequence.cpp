@@ -6,6 +6,39 @@
 #include "imgui.h"
 #endif
 
+namespace {
+	// 機体の方（−Z）を向く yaw [度]
+	constexpr float kFaceMechYawDegrees = 180.0f;
+	// 閉じたタイトルの扉のすぐ手前の目の位置（機体の原点から）[m]
+	constexpr Vector3 kDoorEye = { 0.0f, 12.2f, 17.8f };
+	// 扉の手前で見上げる角度 [度]（− で上を向く）
+	constexpr float kDoorPitchDegrees = 6.0f;
+	// 踊り場を歩き出すキーの時刻 [秒]
+	constexpr float kWalkStartTime = 1.6f;
+	// 踊り場を歩き出す所の目の位置 [m]
+	constexpr Vector3 kWalkStartEye = { 0.0f, 12.2f, 15.2f };
+	// 踊り場を歩き出す所で見上げる角度 [度]（− で上を向く）
+	constexpr float kWalkStartPitchDegrees = 3.0f;
+	// 足場の上を進むキーの時刻 [秒]
+	constexpr float kBridgeTime = 4.0f;
+	// 足場の上を進む所の目の位置 [m]
+	constexpr Vector3 kBridgeEye = { 0.0f, 12.2f, 9.6f };
+	// 足場と鏡の床を見せるために見下ろす角度 [度]
+	constexpr float kBridgePitchDegrees = 4.0f;
+	// 待機の位置で止まるキーの時刻 [秒]
+	constexpr float kHomeTime = 5.4f;
+	// 待機の位置の目の位置（Start で待機の視点に合わせる）[m]
+	constexpr Vector3 kHomeEye = { 0.0f, 12.2f, 6.6f };
+	// 待機の位置の見上げる角度 [度]（− で上を向く）
+	constexpr float kHomePitchDegrees = 2.0f;
+	// 歩くときの頭の上下の幅 [m]
+	constexpr float kBobAmplitude = 0.04f;
+	// 歩くときの 1 秒あたりの歩数
+	constexpr float kBobStepsPerSecond = 1.8f;
+	// 待機へ切り替わる時刻の初期値 [秒]
+	constexpr float kDefaultEndTime = 5.6f;
+}
+
 HubEntrySequence::HubEntrySequence() {
 	ResetToDefaults();
 }
@@ -16,16 +49,16 @@ void HubEntrySequence::ResetToDefaults() {
 	// 踊り場と足場は高さ 10.6m で、目はその 1.6m 上。時計の門の針は z 18.55 の面を回るので、その少し手前から
 	track_.SetKeys({
 		// 閉じたタイトルの扉のすぐ手前（時計の門の通り道）。少し見上げる。白フェードが晴れていく
-		{ 0.0f, { 0.0f, 12.2f, 17.8f }, 180.0f, -6.0f, Ease::Linear, false },
+		{ 0.0f, kDoorEye, kFaceMechYawDegrees, -kDoorPitchDegrees, Ease::Linear, false },
 		// 踊り場を歩き出す
-		{ 1.6f, { 0.0f, 12.2f, 15.2f }, 180.0f, -3.0f, Ease::In, true },
+		{ kWalkStartTime, kWalkStartEye, kFaceMechYawDegrees, -kWalkStartPitchDegrees, Ease::In, true },
 		// 足場の上を進む。少し見下ろして足場と鏡の床を見せる
-		{ 4.0f, { 0.0f, 12.2f, 9.6f }, 180.0f, 4.0f, Ease::Linear, true },
+		{ kBridgeTime, kBridgeEye, kFaceMechYawDegrees, kBridgePitchDegrees, Ease::Linear, true },
 		// 待機の位置で止まる（位置と向きは Start で待機の視点に合わせる）
-		{ 5.4f, { 0.0f, 12.2f, 6.6f }, 180.0f, -2.0f, Ease::Out, true },
+		{ kHomeTime, kHomeEye, kFaceMechYawDegrees, -kHomePitchDegrees, Ease::Out, true },
 	});
-	track_.SetBob(0.04f, 1.8f);
-	endTime_ = 5.6f;
+	track_.SetBob(kBobAmplitude, kBobStepsPerSecond);
+	endTime_ = kDefaultEndTime;
 }
 
 void HubEntrySequence::MatchHome(const HubCameraTrack::Key& home) {

@@ -4,12 +4,37 @@
 
 #include "Profiler.h"
 
-GpuProfiler& GpuProfiler::Instance() {
+namespace {
+    // 1 秒のミリ秒数
+    constexpr double kMsPerSecond = 1000.0;
+    // 区間のスタック・結果の配列に最初に確保する数
+    constexpr size_t kScopeReserveCount = 64;
+    // 1 区間で使うタイムスタンプの枠の数（開始と終了）
+    constexpr uint32_t kSlotsPerScope = 2;
+}
+
+GpuProfiler* GpuProfiler::GetInstance() {
     static GpuProfiler instance;
-    return instance;
+    return &instance;
 }
 
 GpuProfiler::~GpuProfiler() = default;
+
+void GpuProfiler::Finalize() {
+    queryHeap_.Reset();
+    readback_.Reset();
+    statsHeap_.Reset();
+    statsReadback_.Reset();
+    stack_.clear();
+    done_.clear();
+    statsDone_.clear();
+    slotCount_ = 0;
+    statsSlotCount_ = 0;
+    statsActive_ = false;
+    statsSkipped_ = false;
+    initialized_ = false;
+    statsInitialized_ = false;
+}
 
 void GpuProfiler::Initialize(ID3D12Device* device, ID3D12CommandQueue* commandQueue) {
     if (initialized_ || !device || !commandQueue) {
@@ -21,7 +46,7 @@ void GpuProfiler::Initialize(ID3D12Device* device, ID3D12CommandQueue* commandQu
     if (FAILED(commandQueue->GetTimestampFrequency(&freq)) || freq == 0) {
         return;  // タイムスタンプ非対応キューなら計測しない
     }
-    gpuTickToMs_ = 1000.0 / static_cast<double>(freq);
+    gpuTickToMs_ = kMsPerSecond / static_cast<double>(freq);
 
     // タイムスタンプ用クエリヒープ
     D3D12_QUERY_HEAP_DESC heapDesc{};
@@ -50,8 +75,8 @@ void GpuProfiler::Initialize(ID3D12Device* device, ID3D12CommandQueue* commandQu
         return;
     }
 
-    stack_.reserve(64);
-    done_.reserve(64);
+    stack_.reserve(kScopeReserveCount);
+    done_.reserve(kScopeReserveCount);
     initialized_ = true;
 
     // パイプライン統計（直接キューなら使える。失敗しても時間の計測は続ける）
@@ -74,7 +99,7 @@ void GpuProfiler::BeginScope(ID3D12GraphicsCommandList* commandList, const char*
         return;
     }
     // 残り枠が2未満なら計測せず、スタックの釣り合いだけ取る（EndScope で pop される）
-    if (slotCount_ + 2 > kMaxSlots) {
+    if (slotCount_ + kSlotsPerScope > kMaxSlots) {
         stack_.push_back({ name, kInvalidSlot });
         return;
     }
@@ -152,7 +177,7 @@ void GpuProfiler::ReadbackAndReport() {
                 const UINT64 end = ticks[d.endSlot];
                 const double ms =
                     (end > begin) ? static_cast<double>(end - begin) * gpuTickToMs_ : 0.0;
-                Profiler::Instance().AddGpuMs(d.name.c_str(), ms);
+                Profiler::GetInstance()->AddGpuMs(d.name.c_str(), ms);
             }
             const D3D12_RANGE writeRange{ 0, 0 };  // CPU は書いていない
             readback_->Unmap(0, &writeRange);
@@ -167,8 +192,8 @@ void GpuProfiler::ReadbackAndReport() {
             for (const auto& d : statsDone_) {
                 const D3D12_QUERY_DATA_PIPELINE_STATISTICS& q = stats[d.slot];
                 // 同名区間が1フレームに複数あってもカウンタなので合算される
-                Profiler::Instance().Count((d.name + ".PSInv").c_str(), static_cast<int64_t>(q.PSInvocations));
-                Profiler::Instance().Count((d.name + ".Prims").c_str(), static_cast<int64_t>(q.CPrimitives));
+                Profiler::GetInstance()->Count((d.name + ".PSInv").c_str(), static_cast<int64_t>(q.PSInvocations));
+                Profiler::GetInstance()->Count((d.name + ".Prims").c_str(), static_cast<int64_t>(q.CPrimitives));
             }
             const D3D12_RANGE writeRange{ 0, 0 };
             statsReadback_->Unmap(0, &writeRange);

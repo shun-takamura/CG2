@@ -24,45 +24,72 @@ public:
 	LaunchCable();
 	~LaunchCable();
 
+	/// <summary>ケーブルの筒のメッシュ（点の数 × 断面の辺の数）を作る</summary>
 	void Initialize();
 
-	/// <summary>
-	/// 付け根と機体側の端をつなぎ直し、2 点のあいだに垂れた形で置く（演出の始め）。
-	/// restAttach＝機体が前へ出ていないとき（前進 0）の端。長さはこちらの距離で決める
-	/// </summary>
+	/// <summary>付け根と機体側の端をつなぎ直し、2 点のあいだに垂れた形で置く（演出の始め）</summary>
+	/// <param name="anchor">付け根（ワールド）</param>
+	/// <param name="attach">機体側の端（ワールド）</param>
+	/// <param name="restAttach">機体が前へ出ていないとき（前進 0）の端。長さはこちらの距離で決める</param>
 	void Reset(const Vector3& anchor, const Vector3& attach, const Vector3& restAttach);
 	/// <summary>つなぎ直す。形は次の Update で、そのときの付け根と端から作る（機体のボーンがまだ動いていないときに使う）</summary>
 	void Reconnect() { attached_ = true; valid_ = false; }
-	/// <summary>
-	/// anchor＝付け根（ワールド）、attach＝機体側の端（つないでいる間だけ使う）、restAttach＝前進 0 のときの端（つなぎ直すときの長さ）、
-	/// floorY＝カタパルトの床の高さ（ワールド）
-	/// </summary>
+	/// <summary>ひもを動かす（つないでいる間は端を機体に付け、外れた後は付け根へ縮める）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="anchor">付け根（ワールド）</param>
+	/// <param name="attach">機体側の端（つないでいる間だけ使う）</param>
+	/// <param name="restAttach">前進 0 のときの端（つなぎ直すときの長さ）</param>
+	/// <param name="floorY">カタパルトの床の高さ（ワールド）</param>
 	void Update(float deltaTime, const Vector3& anchor, const Vector3& attach, const Vector3& restAttach, float floorY);
 	/// <summary>機体側の端を離す（パージ）。この後は付け根へ縮んでいく</summary>
 	void Purge();
+	/// <summary>機体につながっているかを返す</summary>
+	/// <returns>つながっていれば true</returns>
 	bool IsAttached() const { return attached_; }
-	/// <summary>外れた後にケーブルを横切らせたい点（三人称のカメラの目。ワールド）</summary>
+	/// <summary>外れた後にケーブルを横切らせたい点を設定する</summary>
+	/// <param name="target">三人称のカメラの目（ワールド）</param>
 	void SetSweepTarget(const Vector3& target) { sweepTarget_ = target; }
 
-	/// <summary>不透明物の後（PrimitivePipeline に切り替える）。陰影はカメラの位置で焼く</summary>
+	/// <summary>筒の頂点を作って描く。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）。陰影はカメラの位置で焼く</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void Draw(Camera* camera);
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "cable"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
-	// 機体側の端（StageStartPart が機体のボーンから出す）
+	/// <summary>機体側の端を付けるボーンの名前を返す（StageStartPart が機体のボーンから端を出す）</summary>
+	/// <returns>ボーンの名前</returns>
 	const std::string& GetAttachBone() const { return attachBone_; }
+	/// <summary>機体側の端のボーンからのずらしを返す</summary>
+	/// <returns>ずらし</returns>
 	const Vector3& GetAttachOffset() const { return attachOffset_; }
+	/// <summary>付け根に使う StageStartGeometry の cableAnchors の番号を返す</summary>
+	/// <returns>番号 0/1</returns>
 	int GetAnchorIndex() const { return anchorIndex_; }
 
 	static constexpr int kPointCount = 32;   // ひもの点の数
 	static constexpr int kSides = 12;        // 筒の断面の角の数
 
 private:
+	/// <summary>点を並べたひもを Verlet で細かい刻みに分けて動かす（長さ・曲げの硬さ・床を守る）</summary>
+	/// <param name="dt">経過 [秒]</param>
+	/// <param name="anchor">付け根（ワールド）</param>
+	/// <param name="attach">機体側の端（ワールド。つないでいる間だけ使う）</param>
+	/// <param name="floorY">床の高さ（ワールド）</param>
 	void Simulate(float dt, const Vector3& anchor, const Vector3& attach, float floorY);
+	/// <summary>点をつないだ筒の頂点を作り、陰影を頂点色に焼く</summary>
+	/// <param name="cameraPos">カメラの位置（ワールド）</param>
 	void BuildVertices(const Vector3& cameraPos);
-	// 点 i でケーブルの向きに直交する面の中の、角度 angle の向き（螺旋のうねり）
+	/// <summary>点 i でケーブルの向きに直交する面の中の、角度 angle の向きを求める（螺旋のうねり）</summary>
+	/// <param name="i">点の番号</param>
+	/// <param name="angle">角度 [ラジアン]</param>
+	/// <returns>向き（長さ 1）</returns>
 	Vector3 SwirlDirection(int i, float angle) const;
 
 	std::unique_ptr<PrimitiveMesh> mesh_;

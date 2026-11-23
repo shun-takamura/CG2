@@ -14,18 +14,83 @@
 #endif
 
 namespace {
+	// 長さがこれ以下のベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-6f;
+	// 光の筋の 1 点あたりの頂点の数（左の縁・芯・右の縁）
+	constexpr int kVertsPerPoint = 3;
+	// 道（高さと半径の並び）に要る点の数
+	constexpr int kMinProfilePoints = 2;
+	// 道の 1 区間の長さの下限 [m]（0 で割らないように）
+	constexpr float kMinSegmentLength = 1e-5f;
+	// 光を出す間隔のばらつき（倍率）の最小
+	constexpr float kIntervalJitterMin = 0.5f;
+	// 光を出す間隔のばらつき（倍率）の最大
+	constexpr float kIntervalJitterMax = 1.5f;
+	// 筋の番号を本数未満に収めるための余裕
+	constexpr float kLineIndexEpsilon = 0.001f;
+	// 泉の気配の光の速さのばらつき（倍率）の最小
+	constexpr float kIdleSpeedJitterMin = 0.8f;
+	// 泉の気配の光の速さのばらつき（倍率）の最大
+	constexpr float kIdleSpeedJitterMax = 1.2f;
+	// 泉の気配の光の明るさのばらつき（倍率）の最小
+	constexpr float kIdleIntensityJitterMin = 0.6f;
+	// 光を出す間隔の下限 [秒]
+	constexpr float kMinInterval = 0.005f;
+	// 明るい光の速さのばらつき（倍率）の最小
+	constexpr float kSpeedJitterMin = 0.85f;
+	// 明るい光の速さのばらつき（倍率）の最大
+	constexpr float kSpeedJitterMax = 1.15f;
+	// 明るい光の明るさのばらつき（倍率）の最小
+	constexpr float kIntensityJitterMin = 0.7f;
+	// 明るい光の長さのばらつき（倍率）の最小
+	constexpr float kLengthJitterMin = 0.8f;
+	// 明るい光の長さのばらつき（倍率）の最大
+	constexpr float kLengthJitterMax = 1.6f;
+	// 泉の気配の光より明るいかを見分ける余裕（倍率）
+	constexpr float kIdleIntensityMargin = 1.01f;
+	// 泉の気配の明るさの息づきの真ん中
+	constexpr float kBreathMid = 0.75f;
+	// 泉の気配の明るさの息づきの振れ幅
+	constexpr float kBreathAmplitude = 0.25f;
+	// 半回りの角度 [度]（度 → rad）
+	constexpr float kDegreesPerHalfTurn = 180.0f;
+	// 光の長さの下限 [m]（0 で割らないように）
+	constexpr float kMinPulseLength = 1e-3f;
+	// 道の点（高さ・半径）の JSON 配列に要る要素の数
+	constexpr int kVector2ComponentCount = 2;
+
 	constexpr const char* kWhiteTexture = "Resources/Textures/white1x1.dds";
 	constexpr int kVertsPerLine = EtherPillarFlow::kSamples * 3;   // 帯の左の縁・芯・右の縁
 
+	/// <summary>2 つのベクトルを足す</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルを引く</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a − b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Mul(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 Cross(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 SafeNormalize(const Vector3& v, const Vector3& fallback) {
 		const float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-		return l > 1e-6f ? Mul(v, 1.0f / l) : fallback;
+		return l > kMinNormalizeLength ? Mul(v, 1.0f / l) : fallback;
 	}
 
 	// G4 の器（EtherVesselGeometry.json）に合わせた既定の道：球の下 → 台座の中央の柱 → 支柱の柱（半径約 0.033）→ 歯車の中へ。
@@ -48,8 +113,8 @@ void EtherPillarFlow::Initialize() {
 	for (uint32_t l = 0; l < static_cast<uint32_t>(kMaxLines); ++l) {
 		const uint32_t base = l * kVertsPerLine;
 		for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(kSamples); ++i) {
-			const uint32_t p = base + i * 3;
-			const uint32_t q = p + 3;
+			const uint32_t p = base + i * kVertsPerPoint;
+			const uint32_t q = p + kVertsPerPoint;
 			data.indices.insert(data.indices.end(), { p, q, p + 1, p + 1, q, q + 1 });
 			data.indices.insert(data.indices.end(), { p + 1, q + 1, p + 2, p + 2, q + 1, q + 2 });
 		}
@@ -84,11 +149,11 @@ Vector3 EtherPillarFlow::PointAt(float s, float angle) const {
 	if (profile_.empty()) return origin_;
 	float height = profile_.front().x;
 	float radius = profile_.front().y;
-	if (profile_.size() >= 2) {
+	if (profile_.size() >= kMinProfilePoints) {
 		s = std::clamp(s, 0.0f, totalLength_);
 		size_t i = 1;
 		while (i + 1 < profile_.size() && cumulative_[i] < s) ++i;
-		const float segment = (std::max)(cumulative_[i] - cumulative_[i - 1], 1e-5f);
+		const float segment = (std::max)(cumulative_[i] - cumulative_[i - 1], kMinSegmentLength);
 		const float t = std::clamp((s - cumulative_[i - 1]) / segment, 0.0f, 1.0f);
 		height = profile_[i - 1].x + (profile_[i].x - profile_[i - 1].x) * t;
 		radius = profile_[i - 1].y + (profile_[i].y - profile_[i - 1].y) * t;
@@ -121,26 +186,26 @@ void EtherPillarFlow::Update(float deltaTime) {
 	// 下から弱い光が昇る（泉の気配）
 	idleTimer_ -= deltaTime;
 	if (idleTimer_ <= 0.0f && idleScale_ > 0.0f) {
-		idleTimer_ = idlePulseInterval_ * Rand(0.5f, 1.5f);
-		pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - 0.001f)), totalLength_,
-			-idlePulseSpeed_ * Rand(0.8f, 1.2f), idlePulseIntensity_ * idleScale_ * Rand(0.6f, 1.0f), pulseLength_ });
+		idleTimer_ = idlePulseInterval_ * Rand(kIntervalJitterMin, kIntervalJitterMax);
+		pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - kLineIndexEpsilon)), totalLength_,
+			-idlePulseSpeed_ * Rand(kIdleSpeedJitterMin, kIdleSpeedJitterMax), idlePulseIntensity_ * idleScale_ * Rand(kIdleIntensityJitterMin, 1.0f), pulseLength_ });
 	}
 	// 上から明るい光が次々に下りる
 	if (descending_) {
 		descendTimer_ -= deltaTime;
 		while (descendTimer_ <= 0.0f) {
-			descendTimer_ += (std::max)(descendInterval_, 0.005f) * Rand(0.5f, 1.5f);
-			pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - 0.001f)), 0.0f,
-				descendSpeed_ * Rand(0.85f, 1.15f), descendIntensity_ * Rand(0.7f, 1.0f), pulseLength_ * Rand(0.8f, 1.6f) });
+			descendTimer_ += (std::max)(descendInterval_, kMinInterval) * Rand(kIntervalJitterMin, kIntervalJitterMax);
+			pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - kLineIndexEpsilon)), 0.0f,
+				descendSpeed_ * Rand(kSpeedJitterMin, kSpeedJitterMax), descendIntensity_ * Rand(kIntensityJitterMin, 1.0f), pulseLength_ * Rand(kLengthJitterMin, kLengthJitterMax) });
 		}
 	}
 	// 下から明るい光が次々に昇る（賭ける。速さ・間隔・明るさは下りると同じ値）
 	if (ascending_) {
 		ascendTimer_ -= deltaTime;
 		while (ascendTimer_ <= 0.0f) {
-			ascendTimer_ += (std::max)(descendInterval_, 0.005f) * Rand(0.5f, 1.5f);
-			pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - 0.001f)), totalLength_,
-				-descendSpeed_ * Rand(0.85f, 1.15f), descendIntensity_ * Rand(0.7f, 1.0f), pulseLength_ * Rand(0.8f, 1.6f) });
+			ascendTimer_ += (std::max)(descendInterval_, kMinInterval) * Rand(kIntervalJitterMin, kIntervalJitterMax);
+			pulses_.push_back({ static_cast<int>(Rand(0.0f, static_cast<float>(lines) - kLineIndexEpsilon)), totalLength_,
+				-descendSpeed_ * Rand(kSpeedJitterMin, kSpeedJitterMax), descendIntensity_ * Rand(kIntensityJitterMin, 1.0f), pulseLength_ * Rand(kLengthJitterMin, kLengthJitterMax) });
 		}
 	}
 	for (Pulse& p : pulses_) p.position += p.speed * deltaTime;
@@ -152,7 +217,7 @@ void EtherPillarFlow::Update(float deltaTime) {
 		}
 		if (p.speed < 0.0f && p.position + p.length < 0.0f) {
 			// 泉の気配の弱い光は数えない
-			if (p.intensity > idlePulseIntensity_ * 1.01f) ++topArrivals_;
+			if (p.intensity > idlePulseIntensity_ * kIdleIntensityMargin) ++topArrivals_;
 			return true;
 		}
 		return false;
@@ -166,7 +231,7 @@ void EtherPillarFlow::BuildVertices(const Vector3& cameraPos, const Vector3& eth
 		etherColor.z + (1.0f - etherColor.z) * coreWhite_,
 	};
 	const int lines = std::clamp(lineCount_, 1, kMaxLines);
-	const float breath = 0.75f + 0.25f * std::sin(time_ * idleBreathSpeed_);
+	const float breath = kBreathMid + kBreathAmplitude * std::sin(time_ * idleBreathSpeed_);
 	for (int l = 0; l < kMaxLines; ++l) {
 		MeshVertex* v = &vertices_[static_cast<size_t>(l) * kVertsPerLine];
 		if (l >= lines) {
@@ -176,7 +241,7 @@ void EtherPillarFlow::BuildVertices(const Vector3& cameraPos, const Vector3& eth
 			}
 			continue;
 		}
-		const float angle = (angleOffsetDeg_ * kPi / 180.0f) + 2.0f * kPi * static_cast<float>(l) / static_cast<float>(lines);
+		const float angle = (angleOffsetDeg_ * kPi / kDegreesPerHalfTurn) + 2.0f * kPi * static_cast<float>(l) / static_cast<float>(lines);
 		Vector3 points[kSamples];
 		for (int i = 0; i < kSamples; ++i) {
 			points[i] = PointAt(totalLength_ * static_cast<float>(i) / static_cast<float>(kSamples - 1), angle);
@@ -189,7 +254,7 @@ void EtherPillarFlow::BuildVertices(const Vector3& cameraPos, const Vector3& eth
 			float k = idleIntensity_ * idleScale_ * breath;
 			for (const Pulse& p : pulses_) {
 				if (p.line != l) continue;
-				const float d = (s - p.position) / (std::max)(p.length, 1e-3f);
+				const float d = (s - p.position) / (std::max)(p.length, kMinPulseLength);
 				k += p.intensity * std::exp(-d * d);
 			}
 			k *= envelope;
@@ -197,9 +262,9 @@ void EtherPillarFlow::BuildVertices(const Vector3& cameraPos, const Vector3& eth
 				{ 0.0f, -1.0f, 0.0f });
 			const Vector3 view = SafeNormalize(Sub(cameraPos, points[i]), { 0.0f, 0.0f, -1.0f });
 			const Vector3 side = Mul(SafeNormalize(Cross(tangent, view), { 1.0f, 0.0f, 0.0f }), width_ * 0.5f);
-			MeshVertex& left = v[i * 3];
-			MeshVertex& mid = v[i * 3 + 1];
-			MeshVertex& right = v[i * 3 + 2];
+			MeshVertex& left = v[i * kVertsPerPoint];
+			MeshVertex& mid = v[i * kVertsPerPoint + 1];
+			MeshVertex& right = v[i * kVertsPerPoint + 2];
 			left.position = Sub(points[i], side);
 			mid.position = points[i];
 			right.position = Add(points[i], side);
@@ -216,7 +281,7 @@ void EtherPillarFlow::BuildVertices(const Vector3& cameraPos, const Vector3& eth
 
 void EtherPillarFlow::Draw(Camera* camera, const Vector3& etherColor) {
 	built_ = false;
-	if (!mesh_ || !camera || profile_.size() < 2) return;
+	if (!mesh_ || !camera || profile_.size() < kMinProfilePoints) return;
 	BuildVertices(camera->GetTranslate(), etherColor);
 	mesh_->UpdateVertices(vertices_.data(), static_cast<uint32_t>(vertices_.size()));
 	mesh_->Update(camera, 0.0f);
@@ -249,11 +314,11 @@ void EtherPillarFlow::LoadTuning(const JsonValue& node) {
 	read("coreWhite", coreWhite_);
 	read("bloomIntensity", bloomIntensity_);
 	const JsonValue& profile = node["profile"];
-	if (profile.IsArray() && profile.Size() >= 2) {
+	if (profile.IsArray() && profile.Size() >= kMinProfilePoints) {
 		profile_.clear();
 		for (size_t i = 0; i < profile.Size() && i < static_cast<size_t>(kMaxProfilePoints); ++i) {
 			const JsonValue& p = profile[i];
-			if (!p.IsArray() || p.Size() < 2) continue;
+			if (!p.IsArray() || p.Size() < kVector2ComponentCount) continue;
 			profile_.push_back({ static_cast<float>(p[0].AsDouble()), static_cast<float>(p[1].AsDouble()) });
 		}
 	}

@@ -20,13 +20,15 @@ class EtherStrands;
 class IPlayerDeathHost {
 public:
 	virtual ~IPlayerDeathHost() = default;
-	// 羽根（PlayerWingUnit）を開いた形のまま seconds 秒で焼け落とす（シューティング）
+	/// <summary>羽根（PlayerWingUnit）を開いた形のまま焼け落とす（シューティング）</summary>
+	/// <param name="seconds">焼け落ちるまでの秒数 [秒]</param>
 	virtual void BurnPlayerWings(float seconds) = 0;
-	// 羽根の関節のワールド位置（焼け落ちの粒子を出す所）。羽根が見えていなければ空
+	/// <summary>羽根の関節のワールド位置（焼け落ちの粒子を出す所）を集める。羽根が見えていなければ空</summary>
+	/// <param name="out">位置を追加する先</param>
 	virtual void CollectWingBurnPoints(std::vector<Vector3>& out) = 0;
-	// 死亡演出を終えた：ゲームオーバー画面へ
+	/// <summary>死亡演出を終えたのでゲームオーバー画面へ移る</summary>
 	virtual void FinishPlayerDeath() = 0;
-	// 自機をいまのフェーズの姿勢（クリップ）へ戻す（プレビューの終わり・途中で打ち切ったとき。ボス戦の膝つきの後始末）
+	/// <summary>自機をいまのフェーズの姿勢（クリップ）へ戻す（プレビューの終わり・途中で打ち切ったとき。ボス戦の膝つきの後始末）</summary>
 	virtual void RestorePlayerPose() = 0;
 };
 
@@ -56,65 +58,116 @@ public:
 		Finished,  // ホストへ GAMEOVER を頼んだ（シーンが替わるまでこのまま）
 	};
 
+	/// <summary>光の糸（EtherStrands）を作る</summary>
 	PlayerDeathPart();
 	~PlayerDeathPart();
 
-	/// <summary>糸のメッシュを作る（StagePlay の後回しの初期化の段で呼ぶ）</summary>
+	/// <summary>シーンへの窓口を受け取り、糸のメッシュを作る（StagePlay の後回しの初期化の段で呼ぶ）</summary>
+	/// <param name="host">シーンへの窓口</param>
 	void Initialize(IPlayerDeathHost* host);
+	/// <summary>エフェクトを止めて Idle に戻す</summary>
 	void Finalize();
 
-	/// <summary>
-	/// 演出を始める。preview＝調整用（終わってもゲームオーバーへ行かず、自機を元に戻す）
-	/// </summary>
+	/// <summary>演出を始める</summary>
+	/// <param name="kind">Rail（シューティング）か Boss（ボス戦）</param>
+	/// <param name="player">自機</param>
+	/// <param name="preview">調整用（終わってもゲームオーバーへ行かず、自機を元に戻す）</param>
 	void Begin(Kind kind, AnimatedObject3DInstance* player, bool preview = false);
 	/// <summary>途中で打ち切って自機を元に戻す（シーク・調整のやり直し）</summary>
 	void Cancel();
-	/// <summary>自機のスケルトンの Update の後に呼ぶ（関節の位置からほどける高さと糸の根元を決める）</summary>
+	/// <summary>段階を進め、関節の位置からほどける高さと糸の根元を決める。自機のスケルトンの Update の後に呼ぶ</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
-	/// <summary>糸（加算・半透明）。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）</summary>
+	/// <summary>糸（加算・半透明）を描く。不透明物の後に呼ぶ（PrimitivePipeline に切り替える）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void Draw(Camera* camera);
-	/// <summary>ディゾルブの縁と糸を光らせている間</summary>
+	/// <summary>ディゾルブの縁と糸を光らせている間かを返す</summary>
+	/// <returns>光らせていれば true</returns>
 	bool HasBloom() const;
+	/// <summary>発光パスでディゾルブの縁（自機が見えている間）と糸を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawBloom(DirectXCore* dxCore);
 
+	/// <summary>演出の途中かを返す（StagePlay は操作を受け付けず・被弾させない）</summary>
+	/// <returns>Idle 以外なら true</returns>
 	bool IsActive() const { return state_ != State::Idle; }
+	/// <summary>今の段階を返す</summary>
+	/// <returns>段階</returns>
 	State GetState() const { return state_; }
+	/// <summary>演出の種類を返す</summary>
+	/// <returns>Rail か Boss</returns>
 	Kind GetKind() const { return kind_; }
 	/// <summary>
 	/// 死亡中のカメラ。Rail（G2）：レールのカメラの姿勢（camera に置いた後）から、自機へ寄り、昇る糸を追って見上げる。
 	/// Boss（G3）：ボスのカメラの位置から、自機のまわりを回って斜め前・低めへ回り込み、ほどけ始めから見上げる。
 	/// 毎フレーム、元のカメラの姿勢に掛け直す（積み重ならない）。重みは 0 から上がるので始まりは元のカメラのまま
 	/// </summary>
+	/// <param name="camera">元の姿勢を置いたカメラ（書き換える）</param>
 	void ApplyCamera(Camera& camera) const;
-	/// <summary>死亡中のスラスターの大きさ（ボス戦だけ。咳き込み→止まる）。false なら StagePlay はいつもどおり動かす</summary>
+	/// <summary>死亡中のスラスターの大きさを返す（ボス戦だけ。咳き込み→止まる）</summary>
+	/// <param name="out">4 基の大きさの受け取り先</param>
+	/// <returns>false なら StagePlay はいつもどおり動かす</returns>
 	bool GetThrusterSizes(MechThrusters::Sizes& out) const;
-	/// <summary>自機の下地の発光に足す量（StagePlay の ApplyPlayerLook が足す）</summary>
+	/// <summary>自機の下地の発光に足す量を返す（StagePlay の ApplyPlayerLook が足す）</summary>
+	/// <returns>エーテルの色 × 光る強さ（Glow で上がり、Unravel で最大、ほかは 0）</returns>
 	Vector3 GetBodyGlow() const;
-	/// <summary>エーテルの色（仮。19 番 §6）</summary>
+	/// <summary>エーテルの色（仮。19 番 §6）を返す</summary>
+	/// <returns>RGB 0〜1</returns>
 	const Vector3& GetEtherColor() const { return etherColor_; }
 
+	/// <summary>調整値（StagePlay.json の "playerDeath"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値とプレビューの ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>段階を移し、その段階の始まりの処理（エフェクト・羽根の焼け落ち・体を隠す・終わり）をする</summary>
+	/// <param name="state">次の段階</param>
 	void Enter(State state);
+	/// <summary>前置きの長さを返す（種類ごと）</summary>
+	/// <returns>長さ [秒]</returns>
 	float PreludeSeconds() const;
-	// 自機の関節のワールド位置を取り直し、体の高さの範囲（余白込み）を返す。関節が無ければ false
+	/// <summary>自機の関節のワールド位置を取り直し、体の高さの範囲（余白込み）を返す</summary>
+	/// <param name="minY">下端の高さの受け取り先</param>
+	/// <param name="maxY">上端の高さの受け取り先</param>
+	/// <returns>関節が無ければ false</returns>
 	bool RefreshBody(float& minY, float& maxY);
+	/// <summary>自機に高さの面のディゾルブ（下から上へほどける）をかける</summary>
+	/// <param name="planeHeight">ほどける面の高さ（ワールド）</param>
 	void ApplyDissolve(float planeHeight);
+	/// <summary>ほどける面の高さの近くの骨の上から、出す割合に合わせて糸を出す</summary>
+	/// <param name="planeHeight">ほどける面の高さ（ワールド）</param>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void EmitStrands(float planeHeight, float deltaTime);
-	// エフェクトを再生する。displayName が "Ether" で始まる部品の色にエーテルの色を掛ける
+	/// <summary>エフェクトを再生する。displayName が "Ether" で始まる部品の色にエーテルの色を掛ける</summary>
+	/// <param name="effectName">エフェクトの名前</param>
+	/// <param name="position">再生する位置（ワールド）</param>
+	/// <returns>エフェクトのハンドル</returns>
 	uint64_t PlayEther(const char* effectName, const Vector3& position) const;
+	/// <summary>光と昇る粒のエフェクトを止める</summary>
 	void StopEffects();
-	// 羽根が燃えている間、羽根の関節から焼ける羽根の粒子を出す
+	/// <summary>羽根が燃えている間、羽根の関節から焼ける羽根の粒子を出す</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void EmitFeatherBits(float deltaTime);
+	/// <summary>自機のディゾルブを外して見えるように戻し、姿勢をいまのフェーズへ戻させる</summary>
 	void RestorePlayer();
-	// ボス戦：4 基のスラスターの咳き込みの予定表を作る（基ごとにずれた、間隔の空いていく短い噴射）
+	/// <summary>ボス戦：4 基のスラスターの咳き込みの予定表を作る（基ごとにずれた、間隔の空いていく短い噴射）</summary>
 	void BuildCoughSchedule();
+	/// <summary>シューティングの死亡中のカメラを掛ける（自機へ寄り、昇る糸を追って見上げる）</summary>
+	/// <param name="camera">元の姿勢を置いたカメラ（書き換える）</param>
+	/// <param name="w">元のカメラからの重み 0〜1</param>
 	void ApplyRailCamera(Camera& camera, float w) const;
+	/// <summary>ボス戦の死亡中のカメラを掛ける（自機のまわりを回って正面・低めへ回り込む）</summary>
+	/// <param name="camera">元の姿勢を置いたカメラ（書き換える）</param>
+	/// <param name="w">元のカメラからの重み 0〜1</param>
 	void ApplyBossCamera(Camera& camera, float w) const;
-	// 見上げ：ほどけ始め（Prelude＋Glow の後）から注視点を from から lookTo へ上げる高さ [m]（拡大率を掛ける前）
+	/// <summary>見上げ：ほどけ始め（Prelude＋Glow の後）から注視点の高さを from から lookTo へ上げる</summary>
+	/// <param name="from">始めの高さ [m]（拡大率を掛ける前）</param>
+	/// <returns>今の高さ [m]（拡大率を掛ける前）</returns>
 	float LookHeight(float from) const;
 
 	// 咳き込みの 1 回の噴射（Prelude の始めからの秒）
@@ -125,7 +178,7 @@ private:
 	};
 
 	IPlayerDeathHost* host_ = nullptr;
-	AnimatedObject3DInstance* player_ = nullptr;   // 参照のみ（シーンの dynamicAnimated_ が持つ）
+	AnimatedObject3DInstance* player_ = nullptr;   // 参照のみ（シーンの動的な一覧 GetDynamicAnimated が持つ）
 	std::unique_ptr<EtherStrands> strands_;
 
 	Kind kind_ = Kind::Rail;

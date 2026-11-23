@@ -17,6 +17,17 @@
 #endif
 
 namespace {
+	// 定数バッファの大きさを 256 バイト単位にそろえるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 羽根を描く仮想カメラの近クリップ [m]
+	constexpr float kCameraNearClip = 0.05f;
+	// 羽根を描く仮想カメラの遠クリップ [m]
+	constexpr float kCameraFarClip = 100.0f;
+	// 静的サンプラーの数（s0 = クランプ・線形、s1 = ラップ・線形）
+	constexpr int kStaticSamplerCount = 2;
+	// ディゾルブの縁の幅の下限（0 で割らないように）
+	constexpr float kMinEdgeWidth = 0.001f;
+
 	constexpr const wchar_t* kVertexShaderPath = L"Resources/Shaders/Transition/Feather.VS.hlsl";
 	constexpr const wchar_t* kPixelShaderPath = L"Resources/Shaders/Transition/Feather.PS.hlsl";
 	constexpr const char* kNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
@@ -25,6 +36,9 @@ namespace {
 	constexpr uint32_t kSegmentsAcross = 6;
 	constexpr uint32_t kSegmentsAlong = 16;
 
+	/// <summary>羽根のテクスチャのパスを作る</summary>
+	/// <param name="index">テクスチャの番号（0〜kTextureCount-1）</param>
+	/// <returns>Resources/Textures/Effect/Feathers_0N.dds のパス</returns>
 	std::string FeatherTexturePath(uint32_t index) {
 		return "Resources/Textures/Effect/Feathers_0" + std::to_string(index) + ".dds";
 	}
@@ -58,15 +72,15 @@ void FeatherRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager) {
 	instanceSrvIndex_ = srvManager_->Allocate();
 	srvManager_->CreateSRVForStructuredBuffer(instanceSrvIndex_, instanceBuffer_.Get(), kMaxFeathers, sizeof(InstanceForGPU));
 
-	cameraResource_ = dxCore_->CreateBufferResource((sizeof(CameraForGPU) + 255) & ~255);
+	cameraResource_ = dxCore_->CreateBufferResource((sizeof(CameraForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
 	*cameraData_ = CameraForGPU{};
 
 	// 既定のカメラ：原点から +Z を見る（羽根は z = 数 m 先に置く）
 	camera_.SetTranslate({ 0.0f, 0.0f, 0.0f });
 	camera_.SetRotate({ 0.0f, 0.0f, 0.0f });
-	camera_.SetNearClip(0.05f);
-	camera_.SetFarClip(100.0f);
+	camera_.SetNearClip(kCameraNearClip);
+	camera_.SetFarClip(kCameraFarClip);
 	camera_.Update();
 
 	order_.reserve(kMaxFeathers);
@@ -151,8 +165,8 @@ void FeatherRenderer::CreateRootSignature() {
 	}
 
 	// s0 = クランプ・線形（羽根）, s1 = ラップ・線形（ノイズ）
-	D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
-	for (UINT i = 0; i < 2; ++i) {
+	D3D12_STATIC_SAMPLER_DESC samplers[kStaticSamplerCount] = {};
+	for (UINT i = 0; i < kStaticSamplerCount; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -278,7 +292,7 @@ void FeatherRenderer::Draw(ID3D12GraphicsCommandList* cmd, const std::vector<Fea
 	c.lightDirection = Normalize(settings_.lightDirection);
 	c.ambient = std::clamp(settings_.ambient, 0.0f, 1.0f);
 	c.edgeColor = settings_.edgeColor;
-	c.edgeWidth = (std::max)(settings_.edgeWidth, 0.001f);
+	c.edgeWidth = (std::max)(settings_.edgeWidth, kMinEdgeWidth);
 	c.translucency = settings_.translucency;
 	c.noiseScale = settings_.noiseScale;
 	*cameraData_ = c;

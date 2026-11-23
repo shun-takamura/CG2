@@ -4,6 +4,11 @@
 #include <cassert>
 #include <filesystem>
 
+namespace {
+	// DirectStorage のステージングバッファの大きさ [byte]（256MB。8K cubemap を 1 回で通すため）
+	constexpr int kStagingBufferSizeBytes = 256 * 1024 * 1024;
+}
+
 DStorageManager* DStorageManager::GetInstance()
 {
 	static DStorageManager instance;
@@ -30,7 +35,7 @@ bool DStorageManager::Initialize(ID3D12Device* device)
 	// ステージングバッファサイズを拡大（デフォルト 32MB → 256MB）。
 	// 8K cubemap (BC6H, payload ≈ 35MB) のような大きな単一リクエストを通すため。
 	// Queue 作成より前に呼ぶ必要がある。
-	hr = factory_->SetStagingBufferSize(256 * 1024 * 1024);
+	hr = factory_->SetStagingBufferSize(kStagingBufferSizeBytes);
 	if (FAILED(hr)) {
 		Log("[DStorage] SetStagingBufferSize failed\n");
 		return false;

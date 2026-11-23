@@ -1,22 +1,43 @@
 ﻿#include "Object3DManager.h"
 #include "BloomEffect.h"
 #include "Cloud/CloudLayer.h"
+#include "Material.h"
+
+namespace {
+    // 通常描画の SRV のレジスタ（PS t0〜t7）
+    constexpr UINT kRegTextureSrv = 0;        // t0：ベースカラー
+    constexpr UINT kRegEnvironmentSrv = 1;    // t1：環境マップ
+    constexpr UINT kRegNormalMapSrv = 2;      // t2：法線マップ
+    constexpr UINT kRegShadowMapSrv = 3;      // t3：シャドウマップ
+    constexpr UINT kRegHeightMapSrv = 4;      // t4：視差のハイトマップ
+    constexpr UINT kRegCloudNoiseSrv = 5;     // t5：遠景の雲のノイズ
+    constexpr UINT kRegTerrainColorSrv = 6;   // t6：地形の層の色
+    constexpr UINT kRegTerrainNormalSrv = 7;  // t7：地形の層の法線
+    // 通常描画の CBV のレジスタ（PS b0〜b7 / VS b0・b1）
+    constexpr UINT kRegMaterialCb = 0;            // PS b0
+    constexpr UINT kRegTransformCb = 0;           // VS b0
+    constexpr UINT kRegDirectionalLightCb = 1;    // PS b1
+    constexpr UINT kRegCameraCb = 2;              // PS b2
+    constexpr UINT kRegPointLightCb = 3;          // PS b3
+    constexpr UINT kRegSpotLightCb = 4;           // PS b4
+    constexpr UINT kRegShadowConstantsCb = 5;     // PS b5
+    constexpr UINT kRegFogCb = 6;                 // PS b6
+    constexpr UINT kRegReflectionCameraCb = 1;    // VS b1
+    constexpr UINT kRegCloudParamsCb = 7;         // PS b7
+    // 通常描画の静的サンプラーの数とレジスタ（s0 / s1 / s2 / s4 / s5）
+    constexpr int kStaticSamplerCount = 5;
+    constexpr UINT kRegLinearSampler = 0;         // s0：通常テクスチャ
+    constexpr UINT kRegShadowCompareSampler = 1;  // s1：シャドウ比較
+    constexpr UINT kRegShadowDepthSampler = 2;    // s2：シャドウ生深度読み
+    constexpr UINT kRegCloudNoiseSampler = 4;     // s4：雲のノイズ
+    constexpr UINT kRegTerrainSampler = 5;        // s5：地形の層
+    // 雲のノイズ・地形の層のサンプラーの異方性の最大値
+    constexpr UINT kCloudNoiseMaxAnisotropy = 8;
+    constexpr UINT kTerrainMaxAnisotropy = 16;
+}
 
 void Object3DManager::Initialize(DirectXCore* dxCore)
 {
-    //dxCore_ = dxCore;
-    //CreateRootSignature();
-
-    //// 全ブレンドモードのPSOを作成
-    //for (int i = 0; i < kCountOfBlendMode; ++i) {
-    //    CreateGraphicsPipelineState(static_cast<BlendMode>(i));
-    //}
-
-    //// デフォルトはNormalブレンド
-    //blendMode_ = kBlendModeNormal;
-    //currentBlendMode_ = static_cast<int>(blendMode_);
-    //pipelineState_ = pipelineStates_[currentBlendMode_];
-
     dxCore_ = dxCore;
     CreateRootSignature();
 
@@ -50,17 +71,6 @@ void Object3DManager::Initialize(DirectXCore* dxCore)
 
 void Object3DManager::DrawSetting()
 {  
-    //dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    //dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
-    //dxCore_->GetCommandList()->SetPipelineState(pipelineState_.Get());
-
-    //// 環境マップをバインド（t1 = rootParameter[7])
-    //if (!environmentTexturePath_.empty()) {
-    //    dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
-    //        7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
-    //    );
-    //}
-
     dxCore_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     dxCore_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
 
@@ -72,12 +82,12 @@ void Object3DManager::DrawSetting()
     // 環境マップをバインド
     if (!environmentTexturePath_.empty()) {
         dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
-            7, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
+            kRootEnvironmentMap, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
         );
         // 法線マップ(t2)のフォールバックも貼っておく（個別オブジェクトで上書きされる。
         // PBR を使わないオブジェクトでも未バインドにならないようにするため）
         dxCore_->GetCommandList()->SetGraphicsRootDescriptorTable(
-            10, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
+            kRootNormalMap, TextureManager::GetInstance()->GetSrvHandleGPU(environmentTexturePath_)
         );
     }
 
@@ -128,11 +138,28 @@ void Object3DManager::SetBlendMode(BlendMode blendMode)
 
 }
 
+Object3DManager::ShaderType Object3DManager::SelectShaderType(const Material* material, bool allowTerrain)
+{
+    if (!material) {
+        return kShaderNoEnvironmentMap;
+    }
+    // 地形を使えないモデルで地形が指定されていたら、PBR にはせず環境マップの有無で選ぶ（今までと同じ）
+    if (allowTerrain && material->shadingModel == ShadingModel::kTerrain) {
+        return kShaderTerrain;
+    }
+    if (material->shadingModel == ShadingModel::kPBR) {
+        return kShaderPBR;
+    }
+    if (material->useEnvironmentMap) {
+        return kShaderEnvironmentMap;
+    }
+    return kShaderNoEnvironmentMap;
+}
+
 Object3DManager::~Object3DManager()
 {
     // RootSignature / PSO の解放(ComPtr なので自動)
     rootSignature_.Reset();
-    //pipelineState_.Reset();
     for (auto& pipelineStateArray : pipelineStates2D_) {
         for (auto& pipelineState : pipelineStateArray) {
             pipelineState.Reset();
@@ -147,142 +174,142 @@ void Object3DManager::CreateRootSignature()
     // DescriptorRange 
     // PS: SRV(t0)
     D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-    descriptorRange[0].BaseShaderRegister = 0;                      // 0から始まる
+    descriptorRange[0].BaseShaderRegister = kRegTextureSrv;                      // 0から始まる
     descriptorRange[0].NumDescriptors = 1;                          // 数は1つ
     descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
     descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
 
     // PS: SRV(t1)
     D3D12_DESCRIPTOR_RANGE descriptorRangeEnvironment[1] = {};
-    descriptorRangeEnvironment[0].BaseShaderRegister = 1;                      // 1を使用
+    descriptorRangeEnvironment[0].BaseShaderRegister = kRegEnvironmentSrv;                      // 1を使用
     descriptorRangeEnvironment[0].NumDescriptors = 1;                          // 数は1つ
     descriptorRangeEnvironment[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使用
     descriptorRangeEnvironment[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動設定
 
     // PS: SRV(t3) - シャドウマップ（CSM, Texture2DArray）
     D3D12_DESCRIPTOR_RANGE descriptorRangeShadow[1] = {};
-    descriptorRangeShadow[0].BaseShaderRegister = 3;                      // t3
+    descriptorRangeShadow[0].BaseShaderRegister = kRegShadowMapSrv;                      // t3
     descriptorRangeShadow[0].NumDescriptors = 1;
     descriptorRangeShadow[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeShadow[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t2) - 法線マップ
     D3D12_DESCRIPTOR_RANGE descriptorRangeNormalMap[1] = {};
-    descriptorRangeNormalMap[0].BaseShaderRegister = 2;                      // t2
+    descriptorRangeNormalMap[0].BaseShaderRegister = kRegNormalMapSrv;                      // t2
     descriptorRangeNormalMap[0].NumDescriptors = 1;
     descriptorRangeNormalMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeNormalMap[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t5) - 遠景の雲のノイズ（CloudSky.hlsli）
     D3D12_DESCRIPTOR_RANGE descriptorRangeCloud[1] = {};
-    descriptorRangeCloud[0].BaseShaderRegister = 5;                      // t5
+    descriptorRangeCloud[0].BaseShaderRegister = kRegCloudNoiseSrv;                      // t5
     descriptorRangeCloud[0].NumDescriptors = 1;
     descriptorRangeCloud[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeCloud[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t4) - 視差オクルージョンのハイトマップ
     D3D12_DESCRIPTOR_RANGE descriptorRangeHeight[1] = {};
-    descriptorRangeHeight[0].BaseShaderRegister = 4;                      // t4
+    descriptorRangeHeight[0].BaseShaderRegister = kRegHeightMapSrv;                      // t4
     descriptorRangeHeight[0].NumDescriptors = 1;
     descriptorRangeHeight[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeHeight[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     // PS: SRV(t6 / t7) - 地形の層の色・法線の配列
     D3D12_DESCRIPTOR_RANGE descriptorRangeTerrainColor[1] = {};
-    descriptorRangeTerrainColor[0].BaseShaderRegister = 6;                // t6
+    descriptorRangeTerrainColor[0].BaseShaderRegister = kRegTerrainColorSrv;                // t6
     descriptorRangeTerrainColor[0].NumDescriptors = 1;
     descriptorRangeTerrainColor[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeTerrainColor[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
     D3D12_DESCRIPTOR_RANGE descriptorRangeTerrainNormal[1] = {};
-    descriptorRangeTerrainNormal[0].BaseShaderRegister = 7;               // t7
+    descriptorRangeTerrainNormal[0].BaseShaderRegister = kRegTerrainNormalSrv;               // t7
     descriptorRangeTerrainNormal[0].NumDescriptors = 1;
     descriptorRangeTerrainNormal[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeTerrainNormal[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[18] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootParamCount] = {};
 
     // PS: CBV(b0) - マテリアル用
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
-    rootParameters[0].Descriptor.ShaderRegister = 0;                     // レジスタ番号0
+    rootParameters[kRootMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
+    rootParameters[kRootMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
+    rootParameters[kRootMaterial].Descriptor.ShaderRegister = kRegMaterialCb;                     // レジスタ番号0
 
     // VS: CBV(b0) - トランスフォーム用
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使う
-    rootParameters[1].Descriptor.ShaderRegister = 0;                     // レジスタ番号0
+    rootParameters[kRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
+    rootParameters[kRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // VertexShaderで使う
+    rootParameters[kRootTransform].Descriptor.ShaderRegister = kRegTransformCb;                     // レジスタ番号0
 
     // PS: DescriptorTable(t0) - テクスチャ用
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // DescriptorTableを使用
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // Tableの中身の配列を指定
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // Tableで利用する数
+    rootParameters[kRootTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // DescriptorTableを使用
+    rootParameters[kRootTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
+    rootParameters[kRootTexture].DescriptorTable.pDescriptorRanges = descriptorRange; // Tableの中身の配列を指定
+    rootParameters[kRootTexture].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // Tableで利用する数
 
     // PS: CBV(b1) DirectionalLight用
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
-    rootParameters[3].Descriptor.ShaderRegister = 1;                     // レジスタ番号1を使う
+    rootParameters[kRootDirectionalLight].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;     // CBVを使う
+    rootParameters[kRootDirectionalLight].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;  // PixelShaderで使う
+    rootParameters[kRootDirectionalLight].Descriptor.ShaderRegister = kRegDirectionalLightCb;                     // レジスタ番号1を使う
 
     // rootParameters[4] にカメラ用のCBVを追加
-    rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[4].Descriptor.ShaderRegister = 2;  // b2
+    rootParameters[kRootCamera].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootCamera].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootCamera].Descriptor.ShaderRegister = kRegCameraCb;  // b2
 
     // PS: CBV(b3) PointLight用
-    rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[5].Descriptor.ShaderRegister = 3;  // b3
+    rootParameters[kRootPointLight].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootPointLight].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootPointLight].Descriptor.ShaderRegister = kRegPointLightCb;  // b3
 
     // PS: CBV(b4) SpotLight用
-    rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[6].Descriptor.ShaderRegister = 4;  // b4
+    rootParameters[kRootSpotLight].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootSpotLight].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootSpotLight].Descriptor.ShaderRegister = kRegSpotLightCb;  // b4
 
     // ============================================
     // PS: DescriptorTable(t1) - Environment Map用
     // ============================================
-    rootParameters[7].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[7].DescriptorTable.pDescriptorRanges = descriptorRangeEnvironment;
-    rootParameters[7].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeEnvironment);
+    rootParameters[kRootEnvironmentMap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootEnvironmentMap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootEnvironmentMap].DescriptorTable.pDescriptorRanges = descriptorRangeEnvironment;
+    rootParameters[kRootEnvironmentMap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeEnvironment);
 
     // ============================================
     // PS: CBV(b5) - シャドウ情報（ShadowConstants）
     // ============================================
-    rootParameters[8].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[8].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[8].Descriptor.ShaderRegister = 5;  // b5
+    rootParameters[kRootShadowConstants].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootShadowConstants].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootShadowConstants].Descriptor.ShaderRegister = kRegShadowConstantsCb;  // b5
 
     // ============================================
     // PS: DescriptorTable(t3) - シャドウマップ（CSM）
     // ============================================
-    rootParameters[9].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[9].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[9].DescriptorTable.pDescriptorRanges = descriptorRangeShadow;
-    rootParameters[9].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeShadow);
+    rootParameters[kRootShadowMap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootShadowMap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootShadowMap].DescriptorTable.pDescriptorRanges = descriptorRangeShadow;
+    rootParameters[kRootShadowMap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeShadow);
 
     // ============================================
     // PS: DescriptorTable(t2) - 法線マップ
     // ============================================
-    rootParameters[10].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[10].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[10].DescriptorTable.pDescriptorRanges = descriptorRangeNormalMap;
-    rootParameters[10].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeNormalMap);
+    rootParameters[kRootNormalMap].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootNormalMap].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootNormalMap].DescriptorTable.pDescriptorRanges = descriptorRangeNormalMap;
+    rootParameters[kRootNormalMap].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeNormalMap);
 
     // rootParameters[11] = 距離フォグ（b6）。既存インデックスを動かさないよう末尾に足す。
-    rootParameters[11].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[11].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[11].Descriptor.ShaderRegister = 6;  // b6
+    rootParameters[kRootFog].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootFog].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootFog].Descriptor.ShaderRegister = kRegFogCb;  // b6
 
     // rootParameters[12] = 平面リフレクションの鏡側 CB（VS b1 = 鏡像 ViewProj ＋ クリップ平面）。
     // 反射用 VS だけが参照する。映る物側に CB を増やさず、鏡1枚につき CB 1個で済ませるため。
     rootParameters[kRootReflectionCamera].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[kRootReflectionCamera].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[kRootReflectionCamera].Descriptor.ShaderRegister = 1;  // b1
+    rootParameters[kRootReflectionCamera].Descriptor.ShaderRegister = kRegReflectionCameraCb;  // b1
 
     // rootParameters[13] / [14] = 遠景の雲（CloudSky.hlsli の b7 / t5）。PBR の鏡面反射に雲を映す
     rootParameters[kRootCloudParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[kRootCloudParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[kRootCloudParams].Descriptor.ShaderRegister = 7;  // b7
+    rootParameters[kRootCloudParams].Descriptor.ShaderRegister = kRegCloudParamsCb;  // b7
     rootParameters[kRootCloudNoise].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[kRootCloudNoise].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParameters[kRootCloudNoise].DescriptorTable.pDescriptorRanges = descriptorRangeCloud;
@@ -307,14 +334,14 @@ void Object3DManager::CreateRootSignature()
     // ============================================
     // Sampler (PS の s0 = 通常テクスチャ, s1 = シャドウ比較, s2 = シャドウ生深度読み, s4 = 雲のノイズ, s5 = 地形の層)
     // ============================================
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[5] = {};
+    D3D12_STATIC_SAMPLER_DESC staticSamplers[kStaticSamplerCount] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;         // バイリニアフィルタ
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;       // 0~1の範囲をリピート
     staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;     // 比較しない
     staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;                       // Mipmapをあるだけ使用
-    staticSamplers[0].ShaderRegister = 0;                               // レジスタ番号0を使用
+    staticSamplers[0].ShaderRegister = kRegLinearSampler;                               // レジスタ番号0を使用
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使用
 
     // シャドウ比較サンプラー（PCF）。深度比較で「手前にあるか」を返す
@@ -324,7 +351,7 @@ void Object3DManager::CreateRootSignature()
     staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL; // current<=stored で「照らされている」
     staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[1].ShaderRegister = 1;                               // s1
+    staticSamplers[1].ShaderRegister = kRegShadowCompareSampler;                               // s1
     staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // シャドウ生深度読みサンプラー（ブロッカー探索用）。ポイント＋クランプ
@@ -334,29 +361,29 @@ void Object3DManager::CreateRootSignature()
     staticSamplers[2].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     staticSamplers[2].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSamplers[2].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[2].ShaderRegister = 2;                               // s2
+    staticSamplers[2].ShaderRegister = kRegShadowDepthSampler;                               // s2
     staticSamplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // 雲のノイズ。Skybox / WaterSurface の s4 と同じ設定（CloudSky.hlsli を共用するため）
     staticSamplers[3].Filter = D3D12_FILTER_ANISOTROPIC;
-    staticSamplers[3].MaxAnisotropy = 8;
+    staticSamplers[3].MaxAnisotropy = kCloudNoiseMaxAnisotropy;
     staticSamplers[3].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[3].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[3].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[3].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSamplers[3].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[3].ShaderRegister = 4;                               // s4
+    staticSamplers[3].ShaderRegister = kRegCloudNoiseSampler;                               // s4
     staticSamplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // 地形の層（Terrain.PS）。低空から地面を浅い角度で見るので異方性にする（線形だと遠くの地面がボケる）
     staticSamplers[4].Filter = D3D12_FILTER_ANISOTROPIC;
-    staticSamplers[4].MaxAnisotropy = 16;
+    staticSamplers[4].MaxAnisotropy = kTerrainMaxAnisotropy;
     staticSamplers[4].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[4].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[4].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSamplers[4].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSamplers[4].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[4].ShaderRegister = 5;                               // s5
+    staticSamplers[4].ShaderRegister = kRegTerrainSampler;                               // s5
     staticSamplers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignaturDesc{};
@@ -544,16 +571,16 @@ void Object3DManager::CreateIdPassObjects()
     // ----- Root Signature -----
     // [0] VS CBV(b0) = TransformationMatrix
     // [1] PS RootConstant(b0) = uint id（＋ディゾルブ版は続けて 7 個。WriteIDDissolve.PS / Object3DInstance::DrawIdPass）
-    D3D12_ROOT_PARAMETER rootParams[2] = {};
-    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParams[0].Descriptor.ShaderRegister = 0;
+    D3D12_ROOT_PARAMETER rootParams[kIdRootParamCount] = {};
+    rootParams[kIdRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[kIdRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[kIdRootTransform].Descriptor.ShaderRegister = 0;
 
-    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[1].Constants.ShaderRegister = 0;
-    rootParams[1].Constants.RegisterSpace = 0;
-    rootParams[1].Constants.Num32BitValues = kIdPassConstantCount;
+    rootParams[kIdRootConstants].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[kIdRootConstants].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[kIdRootConstants].Constants.ShaderRegister = 0;
+    rootParams[kIdRootConstants].Constants.RegisterSpace = 0;
+    rootParams[kIdRootConstants].Constants.Num32BitValues = kIdPassConstantCount;
 
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};
     rsDesc.NumParameters = _countof(rootParams);
@@ -652,25 +679,25 @@ void Object3DManager::CreateBloomPassObjects()
     textureRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     textureRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParams[4] = {};
-    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParams[0].Descriptor.ShaderRegister = 0;
+    D3D12_ROOT_PARAMETER rootParams[kBloomRootParamCount] = {};
+    rootParams[kBloomRootTransform].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[kBloomRootTransform].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParams[kBloomRootTransform].Descriptor.ShaderRegister = 0;
 
-    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[1].Descriptor.ShaderRegister = 0;
+    rootParams[kBloomRootMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParams[kBloomRootMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[kBloomRootMaterial].Descriptor.ShaderRegister = 0;
 
-    rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[2].Constants.ShaderRegister = 1;
-    rootParams[2].Constants.RegisterSpace = 0;
-    rootParams[2].Constants.Num32BitValues = kBloomPassConstantCount;
+    rootParams[kBloomRootConstants].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[kBloomRootConstants].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[kBloomRootConstants].Constants.ShaderRegister = 1;
+    rootParams[kBloomRootConstants].Constants.RegisterSpace = 0;
+    rootParams[kBloomRootConstants].Constants.Num32BitValues = kBloomPassConstantCount;
 
-    rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[3].DescriptorTable.pDescriptorRanges = textureRange;
-    rootParams[3].DescriptorTable.NumDescriptorRanges = _countof(textureRange);
+    rootParams[kBloomRootBaseColor].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParams[kBloomRootBaseColor].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[kBloomRootBaseColor].DescriptorTable.pDescriptorRanges = textureRange;
+    rootParams[kBloomRootBaseColor].DescriptorTable.NumDescriptorRanges = _countof(textureRange);
 
     D3D12_STATIC_SAMPLER_DESC sampler{};
     sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;

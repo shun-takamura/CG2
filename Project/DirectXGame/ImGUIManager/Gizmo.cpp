@@ -5,8 +5,24 @@
 #include <cmath>
 
 namespace {
-    // 4x4行列とVector4(行ベクトル)の積（クリップ空間用）
+    // クリップ空間の w がこれ以下ならカメラの後ろとみなす
+    constexpr float kMinClipW = 0.0001f;
+    // スクリーン上の長さの 2 乗がこれ以下なら長さ 0 とみなす [px^2]
+    constexpr float kMinLengthSq = 0.0001f;
+    // 中央ハンドル（自由移動）を表す軸の番号（0=X, 1=Y, 2=Z の次）
+    constexpr int kCenterAxis = 3;
+    // 軸の先端の丸の半径 [px]
+    constexpr float kAxisTipRadius = 5.0f;
+    // 中央ハンドルの色（白）
+    constexpr ImU32 kCenterColor = IM_COL32(255, 255, 255, 255);
+
+    /// <summary>同次座標の 4 成分（クリップ空間用）</summary>
     struct Vec4 { float x, y, z, w; };
+    /// <summary>行ベクトル (v, w) と 4x4 行列の積</summary>
+    /// <param name="v">xyz</param>
+    /// <param name="w">w</param>
+    /// <param name="m">行列</param>
+    /// <returns>クリップ空間の座標</returns>
     Vec4 MulRowVec4Mat4(const Vector3& v, float w, const Matrix4x4& m) {
         Vec4 r;
         r.x = v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0] + w * m.m[3][0];
@@ -16,7 +32,10 @@ namespace {
         return r;
     }
 
-    // 外積（プロジェクトに Cross 関数が無いためここで実装）
+    /// <summary>外積（プロジェクトに Cross 関数が無いためここで実装）</summary>
+    /// <param name="a">左辺</param>
+    /// <param name="b">右辺</param>
+    /// <returns>a × b</returns>
     Vector3 Cross(const Vector3& a, const Vector3& b) {
         return {
             a.y * b.z - a.z * b.y,
@@ -29,7 +48,7 @@ namespace {
 bool Gizmo::WorldToScreen(const Vector3& worldPos, const Matrix4x4& viewProj,
                           ImVec2 imagePos, ImVec2 imageSize, ImVec2& outScreen) {
     Vec4 clip = MulRowVec4Mat4(worldPos, 1.0f, viewProj);
-    if (clip.w <= 0.0001f) return false;  // カメラ後方
+    if (clip.w <= kMinClipW) return false;  // カメラ後方
 
     float ndcX = clip.x / clip.w;
     float ndcY = clip.y / clip.w;
@@ -43,7 +62,7 @@ float Gizmo::DistancePointToLineSegment(ImVec2 p, ImVec2 a, ImVec2 b) {
     float dx = b.x - a.x;
     float dy = b.y - a.y;
     float lenSq = dx * dx + dy * dy;
-    if (lenSq < 0.0001f) {
+    if (lenSq < kMinLengthSq) {
         float ddx = p.x - a.x, ddy = p.y - a.y;
         return std::sqrt(ddx * ddx + ddy * ddy);
     }
@@ -106,7 +125,7 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
         float dyc = mousePos.y - originScreen.y;
         float distCenter = std::sqrt(dxc * dxc + dyc * dyc);
         if (distCenter < kCenterRadius + kHandleHitThreshold * 0.5f) {
-            hoverAxis = 3;  // 中央 = 自由移動
+            hoverAxis = kCenterAxis;  // 中央 = 自由移動
         } else {
             float minDist = kHandleHitThreshold;
             for (int i = 0; i < 3; ++i) {
@@ -126,12 +145,12 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
         ImU32 col = colors[i];
         if (i == hoverAxis || i == activeAxis_) col = hoverColor;
         drawList->AddLine(originScreen, axisEndScreen[i], col, kHandleThickness);
-        drawList->AddCircleFilled(axisEndScreen[i], 5.0f, col);
+        drawList->AddCircleFilled(axisEndScreen[i], kAxisTipRadius, col);
     }
     // 中央の白円（hover/drag 中は黄色）
     {
-        ImU32 centerCol = IM_COL32(255, 255, 255, 255);
-        if (hoverAxis == 3 || activeAxis_ == 3) centerCol = hoverColor;
+        ImU32 centerCol = kCenterColor;
+        if (hoverAxis == kCenterAxis || activeAxis_ == kCenterAxis) centerCol = hoverColor;
         drawList->AddCircleFilled(originScreen, kCenterRadius, centerCol);
     }
 
@@ -142,7 +161,7 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
         dragStartTranslate_ = origin;
 
         // 自由移動の場合のみカメラ基底をキャッシュ（ドラッグ中固定）
-        if (activeAxis_ == 3) {
+        if (activeAxis_ == kCenterAxis) {
             Vector3 camForward = camera->GetForward();
             Vector3 camUp = camera->GetUp();
             Vector3 right = Normalize(Cross(camUp, camForward));
@@ -160,7 +179,7 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
                 mousePos.y - dragStartMousePos_.y
             );
 
-            if (activeAxis_ == 3) {
+            if (activeAxis_ == kCenterAxis) {
                 // ============================================
                 // 自由移動：カメラ右・上ベクトルでスクリーンプレーン投影
                 // ============================================
@@ -189,10 +208,10 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
                     float rightLenSq = rightDir2D.x * rightDir2D.x + rightDir2D.y * rightDir2D.y;
                     float upLenSq = upDir2D.x * upDir2D.x + upDir2D.y * upDir2D.y;
 
-                    float worldDxRight = (rightLenSq > 0.0001f)
+                    float worldDxRight = (rightLenSq > kMinLengthSq)
                         ? (mouseDelta.x * rightDir2D.x + mouseDelta.y * rightDir2D.y) / rightLenSq
                         : 0.0f;
-                    float worldDyUp = (upLenSq > 0.0001f)
+                    float worldDyUp = (upLenSq > kMinLengthSq)
                         ? (mouseDelta.x * upDir2D.x + mouseDelta.y * upDir2D.y) / upLenSq
                         : 0.0f;
 
@@ -227,7 +246,7 @@ void Gizmo::Draw(IImGuiEditable* selected, const Camera* camera,
                     );
                     float axisLen2DSq = axisDir2D.x * axisDir2D.x + axisDir2D.y * axisDir2D.y;
 
-                    if (axisLen2DSq > 0.0001f) {
+                    if (axisLen2DSq > kMinLengthSq) {
                         float worldDelta = (mouseDelta.x * axisDir2D.x + mouseDelta.y * axisDir2D.y) / axisLen2DSq;
 
                         Vector3 newPos = {

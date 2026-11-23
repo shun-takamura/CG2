@@ -10,9 +10,11 @@
 /// </summary>
 class EffectPaletteWindow : public IImGuiWindow {
 public:
+    /// <summary>"Effect Components" ウィンドウとして作る（初めの大きさ 180×320）</summary>
     EffectPaletteWindow();
     ~EffectPaletteWindow() override = default;
 
 protected:
+    /// <summary>Primitive の 8 形状と Particle / Light / Sound をドラッグ元として並べる</summary>
     void OnDraw() override;
 };

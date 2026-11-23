@@ -29,23 +29,39 @@ struct Skeleton {
     std::vector<Joint> joints;              // 全Joint
 };
 
-// Nodeの階層からSkeletonを構築する
+/// <summary>Nodeの階層からSkeletonを構築し、名前→Index の辞書を作って一度 UpdateSkeleton する</summary>
+/// <param name="rootNode">ルートの Node</param>
+/// <returns>構築した Skeleton</returns>
 Skeleton CreateSkeleton(const Node& rootNode);
 
-// 再帰でJointを作りjointsに登録する。自身のIndexを返す
+/// <summary>再帰でJointを作りjointsに登録する</summary>
+/// <param name="node">Joint にする Node（子も再帰で登録）</param>
+/// <param name="parent">親の Index（ルートは nullopt）</param>
+/// <param name="joints">登録先</param>
+/// <returns>自身のIndex</returns>
 int32_t CreateJoint(const Node& node, const std::optional<int32_t>& parent,
     std::vector<Joint>& joints);
 
-// Skeleton全体のlocalMatrix・skeletonSpaceMatrixを更新する
+/// <summary>Skeleton全体のlocalMatrix・skeletonSpaceMatrixを更新する（親が先に並んでいる前提）</summary>
+/// <param name="skeleton">更新する Skeleton</param>
 void UpdateSkeleton(Skeleton& skeleton);
 
-// SkeletonにAnimationを適用する（Joint.transformに値を流し込む）
+/// <summary>SkeletonにAnimationを適用する（名前の合う Joint.transform に値を流し込む）</summary>
+/// <param name="skeleton">適用先</param>
+/// <param name="animation">アニメーション</param>
+/// <param name="animationTime">時刻 [秒]</param>
 void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animationTime);
 
 /// <summary>
 /// 2つのアニメーションをブレンドして適用する（クロスフェード用）。
 /// weight: 0.0 で a そのまま、1.0 で b そのまま。translate/scale は Lerp、rotate は Slerp。
 /// </summary>
+/// <param name="skeleton">適用先</param>
+/// <param name="a">フェード元のアニメーション</param>
+/// <param name="timeA">a の時刻 [秒]</param>
+/// <param name="b">フェード先のアニメーション</param>
+/// <param name="timeB">b の時刻 [秒]</param>
+/// <param name="weight">b の重み（0〜1）</param>
 void ApplyAnimationBlended(Skeleton& skeleton,
     const Animation& a, float timeA,
     const Animation& b, float timeB,

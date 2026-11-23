@@ -37,22 +37,40 @@ public:
 		float pitch = 0.0f;   // ラジアン
 	};
 
+	/// <summary>キー列を差し替えて時刻順に並べる</summary>
+	/// <param name="keys">キー列</param>
 	void SetKeys(std::vector<Key> keys);
+	/// <summary>キー列を返す（書き換え用）</summary>
+	/// <returns>キー列</returns>
 	std::vector<Key>& GetKeys() { return keys_; }
+	/// <summary>キー列を返す</summary>
+	/// <returns>キー列</returns>
 	const std::vector<Key>& GetKeys() const { return keys_; }
 
+	/// <summary>ある時刻のカメラを求める（キーを Catmull-Rom でつなぎ、区間の Ease と歩く上下を掛ける）</summary>
+	/// <param name="time">時刻 [秒]</param>
+	/// <returns>カメラ。キーが無ければ既定値</returns>
 	Sample Evaluate(float time) const;
 
+	/// <summary>歩くときの頭の上下を設定する</summary>
+	/// <param name="amplitude">上下の幅 [m]</param>
+	/// <param name="stepsPerSecond">1 秒あたりの歩数</param>
 	void SetBob(float amplitude, float stepsPerSecond) { bobAmplitude_ = amplitude; stepsPerSecond_ = stepsPerSecond; }
 
-	/// <summary>node（オブジェクト）の "keys" / "bobAmplitude" / "stepsPerSecond" を読む・書く（持ち主の調整値の中に置く）</summary>
+	/// <summary>node（オブジェクト）の "keys" / "bobAmplitude" / "stepsPerSecond" を読む（持ち主の調整値の中に置く）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>node（オブジェクト）へ "keys" / "bobAmplitude" / "stepsPerSecond" を書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
 	void SaveTuning(JsonValue& node) const;
 
-	/// <summary>キーの編集。「Preview Here」が押されたら previewTime にその時刻を入れて true を返す</summary>
+	/// <summary>キーを ImGui で編集する</summary>
+	/// <param name="previewTime">「Preview Here」が押されたらその時刻を入れる</param>
+	/// <returns>「Preview Here」が押されたら true</returns>
 	bool OnImGui(float& previewTime);
 
 private:
+	/// <summary>キーを時刻順に並べる（同じ時刻は順を保つ）</summary>
 	void SortKeys();
 
 	std::vector<Key> keys_;

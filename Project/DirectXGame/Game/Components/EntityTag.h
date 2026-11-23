@@ -32,6 +32,9 @@ enum class EntityTag : int {
 	Count
 };
 
+/// <summary>タグを保存・表示用の名前にする</summary>
+/// <param name="t">タグ</param>
+/// <returns>タグ名。範囲外なら空文字列</returns>
 inline std::string_view GetTagName(EntityTag t) {
 	switch (t) {
 	case EntityTag::None:             return "None";
@@ -56,6 +59,9 @@ inline std::string_view GetTagName(EntityTag t) {
 	}
 }
 
+/// <summary>名前からタグを引く（GetTagName の逆）</summary>
+/// <param name="name">タグ名</param>
+/// <returns>タグ。当たらなければ EntityTag::None</returns>
 inline EntityTag TagFromName(std::string_view name) {
 	for (int i = 0; i < static_cast<int>(EntityTag::Count); ++i) {
 		auto t = static_cast<EntityTag>(i);
@@ -65,8 +71,13 @@ inline EntityTag TagFromName(std::string_view name) {
 }
 
 /// <summary>
-/// Hierarchy のグループ見出しなどに使う色 (RGBA 0-1)
+/// Hierarchy のグループ見出しなどに使うタグの色を求める (RGBA 0-1)
 /// </summary>
+/// <param name="t">タグ</param>
+/// <param name="r">赤（出力）</param>
+/// <param name="g">緑（出力）</param>
+/// <param name="b">青（出力）</param>
+/// <param name="a">不透明度（出力。常に 1）</param>
 inline void GetTagColor(EntityTag t, float& r, float& g, float& b, float& a) {
 	a = 1.0f;
 	switch (t) {

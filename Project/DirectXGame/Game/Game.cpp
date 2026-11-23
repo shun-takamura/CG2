@@ -43,6 +43,7 @@
 #include "Effect/EffectManager.h"
 #include "Effect/EffectEditorWindow.h"
 #include "Components/PrefabManager.h"
+#include "Score/GameSession.h"
 #include "Scene/Scene.h"
 #include "LightManager.h"
 #include "PepperMacros.h"
@@ -50,11 +51,17 @@
 
 std::unique_ptr<PostEffect> Game::postEffect_ = nullptr;
 std::unique_ptr<GPUParticleManager> Game::gpuParticleManager_ = nullptr;
-Game* Game::instance_ = nullptr;
 
 namespace {
-	// SoundManager::LoadFile はファイルが無いと assert で落ちるので、存在するものだけ読む
-	// （BGM を配置する前でも起動できる。鳴らす側は未ロード名なら何もしない）。
+	// --render-res の幅・高さを読むときの基数（10 進数）
+	constexpr int kDecimalRadix = 10;
+	// ブルームのフェードで 1 フレームに進める時間の上限を決めるフレームレート [fps]（重いフレームで一気に消えないように）
+	constexpr float kBloomFadeMinFps = 30.0f;
+
+	/// <summary>
+	/// ゲームで使う SE・BGM を SoundManager に読み込む。SoundManager::LoadFile はファイルが無いと assert で落ちるので、
+	/// 存在するものだけ読む（BGM を配置する前でも起動できる。鳴らす側は未ロード名なら何もしない）
+	/// </summary>
 	void LoadGameSounds() {
 		auto* sm = SoundManager::GetInstance();
 		static const char* const kSE[] = {
@@ -90,9 +97,11 @@ namespace {
 	}
 
 #ifdef _DEBUG
-	// TimeControler の「Scene Switch」欄（EditorHostHooks::drawSceneSwitcher）。
-	// 行き先を選んで、ゲームと同じ組み合わせ（SceneRoutes）か、手で選んだトランジションで切り替える。
-	// STAGEPLAY からはクリア / 失敗を選ぶと、ゲームが実際に使う行き先（RESULT / GAMEOVER）になる。
+	/// <summary>
+	/// TimeControler の「Scene Switch」欄（EditorHostHooks::drawSceneSwitcher）を描く。
+	/// 行き先を選んで、ゲームと同じ組み合わせ（SceneRoutes）か、手で選んだトランジションで切り替える。
+	/// STAGEPLAY からはクリア / 失敗を選ぶと、ゲームが実際に使う行き先（RESULT / GAMEOVER）になる
+	/// </summary>
 	void DrawSceneSwitcher() {
 		static const char* const kScenes[] = { "TITLE", "HUB", "STAGESELECT", "STAGEPLAY", "RESULT", "GAMEOVER", "DEMO" };
 		struct TransitionChoice { const char* name; TransitionType type; };
@@ -164,13 +173,9 @@ namespace {
 #endif // _DEBUG
 }
 
-Game::Game() {
-	instance_ = this;
-}
+Game::Game() = default;
 
-Game::~Game() {
-	instance_ = nullptr;
-}
+Game::~Game() = default;
 
 ISceneRunner* Game::GetSceneRunner() {
 	// シーン駆動の実体はゲームの SceneManager。Framework はこの IF 経由で回す。
@@ -179,7 +184,7 @@ ISceneRunner* Game::GetSceneRunner() {
 
 #ifdef _DEBUG
 void Game::RegisterGameEditorWindows() {
-	auto& imgui = ImGuiManager::Instance();
+	auto& imgui = *ImGuiManager::GetInstance();
 
 	// Hierarchy / Inspector / SceneEditor はフック経由でエンジン側に移設済み。
 	// ゲーム固有の欄だけをセクションとして差し込む。
@@ -230,12 +235,12 @@ void Game::Initialize() {
 	IImGuiEditable::SetHooks(
 		[](IImGuiEditable* e) {
 			Gameplay::Of(e); // ゲームプレイコンポーネントのエントリを確保
-			ImGuiManager::Instance().Register(e);
+			ImGuiManager::GetInstance()->Register(e);
 			CollisionManager::GetInstance()->Register(e);
 		},
 		[](IImGuiEditable* e) {
 			CollisionManager::GetInstance()->Unregister(e);
-			ImGuiManager::Instance().Unregister(e);
+			ImGuiManager::GetInstance()->Unregister(e);
 			Gameplay::Remove(e);
 		});
 
@@ -252,7 +257,7 @@ void Game::Initialize() {
 			return sm ? sm->GetCurrentSceneName().c_str() : nullptr;
 		};
 		hooks.getPostEffect = []() -> PostEffect* { return Game::GetPostEffect(); };
-		hooks.getFramework = []() -> Framework* { return Game::GetInstance(); };
+		hooks.getFramework = [this]() -> Framework* { return this; };
 
 		// Hierarchy のグルーピング / Inspector のグループ切替に EntityTag を使う。
 		// エンジンはこれを「ただの整数」としてしか見ない。
@@ -299,9 +304,9 @@ void Game::Initialize() {
 				if (std::wcscmp(argv[i], L"--render-res") != 0) continue;
 				// "<幅>x<高さ>" を読む
 				wchar_t* end = nullptr;
-				const long w = std::wcstol(argv[i + 1], &end, 10);
+				const long w = std::wcstol(argv[i + 1], &end, kDecimalRadix);
 				if (end && (*end == L'x' || *end == L'X')) {
-					const long h = std::wcstol(end + 1, nullptr, 10);
+					const long h = std::wcstol(end + 1, nullptr, kDecimalRadix);
 					if (w > 0 && h > 0) {
 						renderWidth = static_cast<int32_t>(w);
 						renderHeight = static_cast<int32_t>(h);
@@ -310,8 +315,8 @@ void Game::Initialize() {
 			}
 			::LocalFree(argv);
 		}
-		dxCore_->RequestRenderResolution(renderWidth, renderHeight);
-		dxCore_->ApplyPendingRenderResolution();
+		GetDxCore()->RequestRenderResolution(renderWidth, renderHeight);
+		GetDxCore()->ApplyPendingRenderResolution();
 	}
 
 #ifdef _DEBUG
@@ -328,7 +333,7 @@ void Game::Initialize() {
 	// キーコンフィグの適用（InputActionMap への流し込み）
 	// シーン作成前に確定させておく。user → default → 組み込みデフォルトの優先順位。
 	//===================================
-	if (auto* actionMap = input_->GetActionMap()) {
+	if (auto* actionMap = GetInput()->GetActionMap()) {
 		KeyConfig::LoadAndApply(*actionMap, keyConfigOptions_);
 	}
 
@@ -340,14 +345,14 @@ void Game::Initialize() {
 	// シーン側はカメラセット + Update/Draw を呼ぶだけで済む。
 	//===================================
 	gpuParticleManager_ = std::make_unique<GPUParticleManager>();
-	gpuParticleManager_->Initialize(dxCore_.get(), srvManager_.get());
+	gpuParticleManager_->Initialize(GetDxCore(), GetSRVManager());
 	gpuParticleManager_->CreateGroup("spark", "Resources/Textures/circle.dds");
 
 	EffectManager::GetInstance()->Initialize(gpuParticleManager_.get());
 	EffectManager::GetInstance()->LoadAllDefsInDirectory("Resources/Json/Effects");
 
 #ifdef _DEBUG
-	ImGuiManager::Instance().SetGPUParticleManager(gpuParticleManager_.get());
+	ImGuiManager::GetInstance()->SetGPUParticleManager(gpuParticleManager_.get());
 #endif
 
 	// プリファブ一覧を先に取り込む（シーン Initialize で InstantiatePrefab を使えるように）
@@ -356,8 +361,12 @@ void Game::Initialize() {
 	//===================================
 	// シーンファクトリを生成し、マネージャにセット
 	//===================================
-	sceneFactory_ = std::make_unique<SceneFactory>();
-	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
+	SetSceneFactory(std::make_unique<SceneFactory>());
+	SceneManager::GetInstance()->SetSceneFactory(GetSceneFactory());
+
+	// プレイの状態を作り、最初のシーンを作る前に SceneManager へ渡す
+	gameSession_ = std::make_unique<GameSession>();
+	SceneManager::GetInstance()->SetGameSession(gameSession_.get());
 
 	// シーンマネージャに最初のシーンをセット
 	{
@@ -380,7 +389,7 @@ void Game::Initialize() {
 			}
 			// --fullscreen：枠なしフルスクリーンで起動（展示用）。起動後も Alt+Enter / F11 で切り替えられる
 			for (int i = 1; i < argc; ++i) {
-				if (std::wcscmp(argv[i], L"--fullscreen") == 0) winApp_->SetFullscreen(true);
+				if (std::wcscmp(argv[i], L"--fullscreen") == 0) GetWinApp()->SetFullscreen(true);
 			}
 			::LocalFree(argv);
 		}
@@ -389,9 +398,9 @@ void Game::Initialize() {
 
 	// PostEffect初期化（RenderTextureも内部で作成される）
 	postEffect_ = std::make_unique<PostEffect>();
-	postEffect_->Initialize(dxCore_.get(), srvManager_.get(),
-		dxCore_->GetRenderWidth(),
-		dxCore_->GetRenderHeight());
+	postEffect_->Initialize(GetDxCore(), GetSRVManager(),
+		GetDxCore()->GetRenderWidth(),
+		GetDxCore()->GetRenderHeight());
 
 	// バッチ終了 - DStorage の全リクエストをここで 1 回だけ Submit + Wait
 	DStorageManager::GetInstance()->EndBatchAndWait();
@@ -402,14 +411,14 @@ void Game::Initialize() {
 	viewportRenderTexture_ = std::make_unique<RenderTexture>();
 	// シーンの空きをわかりやすくする水色背景（透明だとPostEffect結果と区別しづらいため）
 	const float viewportClearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
-	viewportRenderTexture_->Initialize(dxCore_.get(), srvManager_.get(),
-		dxCore_->GetRenderWidth(),
-		dxCore_->GetRenderHeight(),
+	viewportRenderTexture_->Initialize(GetDxCore(), GetSRVManager(),
+		GetDxCore()->GetRenderWidth(),
+		GetDxCore()->GetRenderHeight(),
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
 		viewportClearColor);
 
 	// ViewportWindow にはエフェクト適用後の最終出力 RenderTexture を渡す
-	ImGuiManager::Instance().SetViewportRenderTexture(viewportRenderTexture_.get());
+	ImGuiManager::GetInstance()->SetViewportRenderTexture(viewportRenderTexture_.get());
 #endif
 }
 
@@ -417,9 +426,9 @@ void Game::Update() {
 	// 描画解像度の変更（オプション画面などの RequestRenderResolution）をフレームの頭で反映する。
 	// 深度は DirectXCore が作り直すので、シーン RT など Game が持つ物をここで合わせる。
 	// 水面の反射・トランジションの水面など、シーンが持つ RT は描くときに自分で合わせる
-	if (dxCore_->ApplyPendingRenderResolution()) {
-		const uint32_t width = static_cast<uint32_t>(dxCore_->GetRenderWidth());
-		const uint32_t height = static_cast<uint32_t>(dxCore_->GetRenderHeight());
+	if (GetDxCore()->ApplyPendingRenderResolution()) {
+		const uint32_t width = static_cast<uint32_t>(GetDxCore()->GetRenderWidth());
+		const uint32_t height = static_cast<uint32_t>(GetDxCore()->GetRenderHeight());
 		if (postEffect_) postEffect_->Resize(width, height);
 #ifdef _DEBUG
 		if (viewportRenderTexture_) viewportRenderTexture_->Resize(width, height);
@@ -430,12 +439,12 @@ void Game::Update() {
 	Framework::Update();
 
 	// 終了リクエストが来ていたら処理しない
-	if (endRequest_) {
+	if (IsEndRequest()) {
 		return;
 	}
 
 	// F8：デモモード（展示用の自動進行）の開始・終了。どのシーンからでも切り替えられる
-	if (input_ && input_->GetKeyboard() && input_->GetKeyboard()->TriggerKey(DIK_F8)) {
+	if (GetInput() && GetInput()->GetKeyboard() && GetInput()->GetKeyboard()->TriggerKey(DIK_F8)) {
 		AttractMode::GetInstance()->Toggle();
 	}
 }
@@ -446,147 +455,144 @@ void Game::Draw() {
 	// 文字のインスタンスバッファの書き込み位置を先頭へ（同じフレームの Flush は続きへ書く）
 	TextRenderer::GetInstance()->BeginFrame();
 
-	// 0. シャドウパス（CSM）：シーンRT描画の前に、平行光源視点で深度を書く。
-	//    受光リソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
-	if (shadowMap_) {
-		PEPPER_SCOPE("Game::ShadowPass");
-		if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
-			if (Camera* cam = scene->GetCamera()) {
-				auto* dl = LightManager::GetInstance()->GetDirectionalLightData();
-				// 無効時もカスケード更新（enabled フラグを CB に反映）するが、深度描画は省略
-				shadowMap_->UpdateCascades(*cam, dl->direction);
+	// 1 フレームの描画パス。並び順に意味がある（理由は各関数の先頭のコメント）
+	//   影の深度 → シーン → 強調表示のマスク → 歪み → 発光 → ポストエフェクトで合成し、合成後に重ねる物 → ImGui
+	RenderShadowPass();
+	RenderScenePass();
+	RenderIdMaskPass();
+	RenderDistortionPass();
+	RenderBloomPass();
+	RenderPostEffectAndOverlay();
 
-				if (shadowMap_->IsEnabled()) {
-					auto* cmd = dxCore_->GetCommandList();
-					// スキニングモデルをキャストさせるため、シャドウパス前にスキニングを確定する。
-					// Compute は SRV ヒープを使うので先に PreDraw でヒープを束ねる。
-					srvManager_->PreDraw();
-					scene->DispatchDynamicAnimatedSkinning();
+#ifdef _DEBUG
+	// ImGui は Swapchain に直接描く
+	ImGuiManager::GetInstance()->EndFrame();
+#endif // _DEBUG
 
-					// 深度を書く所だけ GPU で測る（スキニングの Compute は含めない）
-					PEPPER_GPU_SCOPE(cmd, "Game::ShadowPass");
-					shadowMap_->BeginPass(cmd);
-					for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
-						shadowMap_->BindCascade(cmd, c);
-						scene->DrawShadowCasters();
-					}
-					shadowMap_->EndPass(cmd);
+	GetDxCore()->EndDraw();
+	// シーン切り替え後の最初のフレームが画面に出た時点（Present＋GPU完了）でロード計測を出力
+	SceneManager::GetInstance()->OnFramePresented();
+	GetDxCore()->TickIntermediateResources();
+	GetDxCore()->TickPendingCallbacks();
+}
+
+void Game::BindRenderSizeTarget(D3D12_CPU_DESCRIPTOR_HANDLE rtv, const D3D12_CPU_DESCRIPTOR_HANDLE* dsv) {
+	auto* cmd = GetDxCore()->GetCommandList();
+	cmd->OMSetRenderTargets(1, &rtv, false, dsv);
+
+	const float width = static_cast<float>(GetDxCore()->GetRenderWidth());
+	const float height = static_cast<float>(GetDxCore()->GetRenderHeight());
+	D3D12_VIEWPORT viewport{ 0.0f, 0.0f, width, height, 0.0f, 1.0f };
+	D3D12_RECT scissor{ 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
+	cmd->RSSetViewports(1, &viewport);
+	cmd->RSSetScissorRects(1, &scissor);
+}
+
+// 影の深度（CSM）。シーンを描く前に、平行光源から見た深度を書いておく。
+// 受光側のリソース(b5/t3)は Object3DManager に渡し、各シーンの DrawSetting でバインドされる。
+void Game::RenderShadowPass() {
+	if (!GetShadowMap()) return;
+	PEPPER_SCOPE("Game::ShadowPass");
+
+	if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
+		if (Camera* cam = scene->GetCamera()) {
+			auto* dl = LightManager::GetInstance()->GetDirectionalLightData();
+			// 無効時もカスケード更新（enabled フラグを CB に反映）するが、深度描画は省略
+			GetShadowMap()->UpdateCascades(*cam, dl->direction);
+
+			if (GetShadowMap()->IsEnabled()) {
+				auto* cmd = GetDxCore()->GetCommandList();
+				// スキニングモデルにも影を落とさせるため、影の前にスキニングを確定する。
+				// Compute は SRV ヒープを使うので先に PreDraw でヒープを束ねる。
+				GetSRVManager()->PreDraw();
+				scene->DispatchDynamicAnimatedSkinning();
+
+				// 深度を書く所だけ GPU で測る（スキニングの Compute は含めない）
+				PEPPER_GPU_SCOPE(cmd, "Game::ShadowPass");
+				GetShadowMap()->BeginPass(cmd);
+				for (uint32_t c = 0; c < kShadowCascadeCount; ++c) {
+					GetShadowMap()->BindCascade(cmd, c);
+					scene->DrawShadowCasters();
 				}
+				GetShadowMap()->EndPass(cmd);
 			}
 		}
-		object3DManager_->SetShadowBindings(
-			shadowMap_->GetConstantsGpuAddress(), shadowMap_->GetSrvGpuHandle());
 	}
+	GetObject3DManager()->SetShadowBindings(
+		GetShadowMap()->GetConstantsGpuAddress(), GetShadowMap()->GetSrvGpuHandle());
+}
 
-	// 1. PostEffectのRenderTextureにシーンを描画
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
-		dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
+// シーン本体を PostEffect の RenderTexture に描く。
+// 水面反射の RT はシーンの Draw の中で、水面を描く前に作られる（WaterReflection::Render）。
+void Game::RenderScenePass() {
+	auto* cmd = GetDxCore()->GetCommandList();
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = GetDxCore()->GetDsvHandle();
 
-	postEffect_->BeginSceneRender(dxCore_->GetCommandList(), &dsvHandle);
+	postEffect_->BeginSceneRender(cmd, &dsvHandle);
+	GetSRVManager()->PreDraw();
+	cmd->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	srvManager_->PreDraw();
-
-	// 深度クリア
-	dxCore_->GetCommandList()->ClearDepthStencilView(
-		dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-	// シーン描画
 	SceneManager::GetInstance()->Draw();
 
 	// デモモードの表示：どのシーンでも、トランジションの上に出す。
 	// トランジションが RT を切り替えていることがあるので、シーンの RT とビューポートを付け直してから描く
 	if (AttractMode::GetInstance()->IsEnabled()) {
-		auto* cmd = dxCore_->GetCommandList();
-		auto rtv = postEffect_->GetSceneRenderTarget()->GetRTVHandle();
-		cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
-		const float width = static_cast<float>(dxCore_->GetRenderWidth());
-		const float height = static_cast<float>(dxCore_->GetRenderHeight());
-		D3D12_VIEWPORT viewport{ 0.0f, 0.0f, width, height, 0.0f, 1.0f };
-		D3D12_RECT scissor{ 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
-		cmd->RSSetViewports(1, &viewport);
-		cmd->RSSetScissorRects(1, &scissor);
+		BindRenderSizeTarget(postEffect_->GetSceneRenderTarget()->GetRTVHandle(), nullptr);
 		AttractMode::GetInstance()->DrawLabel();
 	}
 
-	postEffect_->EndSceneRender(dxCore_->GetCommandList());
+	postEffect_->EndSceneRender(cmd);
+}
 
-	// ----- ID Pass：ハイライト対象を idMaskRT に書き込む -----
-	if (Scene* scene = SceneManager::GetInstance()->GetCurrentScene()) {
-		PEPPER_SCOPE("Game::IdPass");
-		if (!scene->GetHighlights().empty() || scene->HasExtraIdPassObjects()) {
-			auto* cmd = dxCore_->GetCommandList();
-			postEffect_->BeginIdPass(cmd);
+// 強調表示（アウトライン）の対象を idMaskRT に書く。シーンの深度を使って隠れた所は書かない。
+void Game::RenderIdMaskPass() {
+	Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
+	if (!scene) return;
+	PEPPER_SCOPE("Game::IdPass");
 
-			// RTV + DSV をバインド
-			auto rtv = postEffect_->GetIdMaskRT()->GetRTVHandle();
-			auto dsv = dxCore_->GetDsvHandle();
-			cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
-
-			D3D12_VIEWPORT vp{};
-			vp.Width = static_cast<float>(dxCore_->GetRenderWidth());
-			vp.Height = static_cast<float>(dxCore_->GetRenderHeight());
-			vp.MaxDepth = 1.0f;
-			cmd->RSSetViewports(1, &vp);
-			D3D12_RECT sc{ 0, 0,
-				static_cast<LONG>(dxCore_->GetRenderWidth()),
-				static_cast<LONG>(dxCore_->GetRenderHeight()) };
-			cmd->RSSetScissorRects(1, &sc);
-
-			srvManager_->PreDraw();
-			scene->RunIdPass(cmd);
-
-			postEffect_->EndIdPass(cmd);
-		} else {
-			// ハイライト無し時も idMaskRT を SRV 可能状態に維持（0でクリアして遷移）
-			auto* cmd = dxCore_->GetCommandList();
-			postEffect_->BeginIdPass(cmd);
-			postEffect_->EndIdPass(cmd);
-		}
+	auto* cmd = GetDxCore()->GetCommandList();
+	postEffect_->BeginIdPass(cmd);
+	// 対象が無いフレームも、0 でクリアして SRV 状態に遷移だけはしておく（PostEffect が毎フレーム読むため）
+	if (!scene->GetHighlights().empty() || scene->HasExtraIdPassObjects()) {
+		const auto dsv = GetDxCore()->GetDsvHandle();
+		BindRenderSizeTarget(postEffect_->GetIdMaskRT()->GetRTVHandle(), &dsv);
+		GetSRVManager()->PreDraw();
+		scene->RunIdPass(cmd);
 	}
+	postEffect_->EndIdPass(cmd);
+}
 
-	// ----- Distortion Pass：エフェクト中の useDistortion なプリミティブを distortionRT に書き込む -----
-	// 歪み源が無いフレームはパス全体（RT 遷移・クリア・描画・PostEffect 合成）をスキップして GPU を節約する。
-	// 合成側 (PostEffect の Distortion フィルタ) も同じフラグで毎フレーム自動 ON/OFF する。
+// エフェクトの useDistortion なプリミティブを distortionRT に書く（深度テストのみ・書き込みなし）。
+// 歪み源が無いフレームはパス全体と PostEffect の Distortion 合成を丸ごと飛ばして GPU を節約する。
+void Game::RenderDistortionPass() {
 	const bool distortionActive = EffectManager::GetInstance()->HasActiveDistortionSource();
 	if (postEffect_ && postEffect_->distortion) {
 		postEffect_->distortion->SetEnabled(distortionActive);
 	}
-	if (distortionActive) {
-		PEPPER_SCOPE("Game::DistortionPass");
-		auto* cmd = dxCore_->GetCommandList();
-		postEffect_->BeginDistortionPass(cmd);
+	if (!distortionActive) return;
+	PEPPER_SCOPE("Game::DistortionPass");
 
-		// RTV + DSV をバインド（IdPass と同じ要領、深度テストのみ・書き込みなし）
-		auto rtv = postEffect_->GetDistortionRT()->GetRTVHandle();
-		auto dsv = dxCore_->GetDsvHandle();
-		cmd->OMSetRenderTargets(1, &rtv, false, &dsv);
+	auto* cmd = GetDxCore()->GetCommandList();
+	postEffect_->BeginDistortionPass(cmd);
+	const auto dsv = GetDxCore()->GetDsvHandle();
+	BindRenderSizeTarget(postEffect_->GetDistortionRT()->GetRTVHandle(), &dsv);
+	GetSRVManager()->PreDraw();
+	EffectManager::GetInstance()->DrawDistortionPass();
+	postEffect_->EndDistortionPass(cmd);
+}
 
-		D3D12_VIEWPORT vp{};
-		vp.Width = static_cast<float>(dxCore_->GetRenderWidth());
-		vp.Height = static_cast<float>(dxCore_->GetRenderHeight());
-		vp.MaxDepth = 1.0f;
-		cmd->RSSetViewports(1, &vp);
-		D3D12_RECT sc{ 0, 0,
-			static_cast<LONG>(dxCore_->GetRenderWidth()),
-			static_cast<LONG>(dxCore_->GetRenderHeight()) };
-		cmd->RSSetScissorRects(1, &sc);
-
-		srvManager_->PreDraw();
-		EffectManager::GetInstance()->DrawDistortionPass();
-
-		postEffect_->EndDistortionPass(cmd);
-	}
-
-	// ----- Bloom Pass：useBloom なエフェクトだけを発光 RT（bloomRT）に書き込む -----
-	// Distortion と同じく、発光源が無いフレームはパスも PostEffect の Bloom 合成も丸ごとスキップする。
-	// シーンが自分で光らせる物（コクピットの発光など）と文字の発光の層（TextRenderer）も同じ発光 RT に描く
-	Scene* bloomScene = SceneManager::GetInstance()->GetCurrentScene();
+// 光らせる物だけを発光 RT（bloomRT）に書く。対象はエフェクトの useBloom、シーン自身の発光（コクピットなど）、
+// 文字の発光の層（TextRenderer）。発光源が無いフレームはパスも PostEffect の Bloom 合成も飛ばす。
+void Game::RenderBloomPass() {
+	Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
 	const bool effectBloom = EffectManager::GetInstance()->HasActiveBloomSource();
-	const bool sceneBloom = bloomScene && bloomScene->HasBloomSources();
+	const bool sceneBloom = scene && scene->HasBloomSources();
 	const bool textBloom = TextRenderer::GetInstance()->HasPendingGlow();
+
+	// トランジションが画面を覆う間はブルームを消す（覆いはシーンの絵の中にあり、光が覆いの上に残るため）
 	{
 		const float target = SceneManager::GetInstance()->IsTransitionCovering() ? 0.0f : 1.0f;
-		const float step = (std::min)(dxCore_->GetDeltaTime(), 1.0f / 30.0f) / kBloomFadeSeconds;
+		const float step = (std::min)(GetDxCore()->GetDeltaTime(), 1.0f / kBloomFadeMinFps) / kBloomFadeSeconds;
 		bloomFade_ = (bloomFade_ < target) ? (std::min)(bloomFade_ + step, target) : (std::max)(bloomFade_ - step, target);
 	}
 	const bool bloomActive = (effectBloom || sceneBloom || textBloom) && bloomFade_ > 0.0f;
@@ -594,100 +600,93 @@ void Game::Draw() {
 		postEffect_->bloom->SetEnabled(bloomActive);
 		postEffect_->bloom->SetFade(bloomFade_);
 	}
-	if (bloomActive) {
-		PEPPER_SCOPE("Game::BloomPass");
-		auto* cmd = dxCore_->GetCommandList();
-		// RTV＋ビューポートは BeginBloomPass が設定する。深度テスト用に DSV を渡す
-		auto dsv = dxCore_->GetDsvHandle();
-		postEffect_->BeginBloomPass(cmd, &dsv);
+	if (!bloomActive) return;
+	PEPPER_SCOPE("Game::BloomPass");
 
-		srvManager_->PreDraw();
-		if (effectBloom) EffectManager::GetInstance()->DrawBloomPass();
-		if (sceneBloom) bloomScene->DrawBloomSources();
-		if (textBloom) TextRenderer::GetInstance()->FlushGlow();
+	auto* cmd = GetDxCore()->GetCommandList();
+	// RTV＋ビューポートは BeginBloomPass が設定する。深度テスト用に DSV を渡す
+	auto dsv = GetDxCore()->GetDsvHandle();
+	postEffect_->BeginBloomPass(cmd, &dsv);
+	GetSRVManager()->PreDraw();
+	if (effectBloom) EffectManager::GetInstance()->DrawBloomPass();
+	if (sceneBloom) scene->DrawBloomSources();
+	if (textBloom) TextRenderer::GetInstance()->FlushGlow();
+	postEffect_->EndBloomPass(cmd);
+}
 
-		postEffect_->EndBloomPass(cmd);
-	}
-
-	// 2. Swapchainに切り替え
-	dxCore_->BeginDraw();
-
-	srvManager_->PreDraw();  // ディスクリプタヒープを再設定
+// ここまでの RT をポストエフェクトで合成し、その上に「合成後に重ねる物」を描く。
+// 重ねる物（必殺技の崩壊の破片など）は、合成より前に描くと色反転が二重にかかって元の色に戻るため、必ず合成の後。
+// Release：Swapchain へ直接出力 / Debug：ImGui のビューポートに出す RenderTexture へ出力
+void Game::RenderPostEffectAndOverlay() {
+	GetDxCore()->BeginDraw();
+	GetSRVManager()->PreDraw();
 
 	// Outline系エフェクトに最新の射影行列を渡す
-	if (Camera* cam = object3DManager_->GetDefaultCamera()) {
+	if (Camera* cam = GetObject3DManager()->GetDefaultCamera()) {
 		postEffect_->SetProjectionMatrix(cam->GetProjectionMatrix());
 	}
 
-	// 3. マルチパスでエフェクト適用
-	// Releaseビルド: Swapchainへ直接出力
-	// Debugビルド  : Viewport表示用 RenderTexture へ出力 → ImGui::Image で表示
-	auto* cmd = dxCore_->GetCommandList();
-	Scene* afterScene = SceneManager::GetInstance()->GetCurrentScene();
+	auto* cmd = GetDxCore()->GetCommandList();
+	Scene* scene = SceneManager::GetInstance()->GetCurrentScene();
 #ifdef _DEBUG
 	{ PEPPER_SCOPE("Game::PostEffectDraw"); postEffect_->Draw(cmd, viewportRenderTexture_.get()); }
-	// PostEffect 後のオーバーレイ（崩壊破片など）を viewportRT に重ねる。
-	// viewportRT は Draw 後 SRV 状態なので、合成画像を消さないよう手動バリアで RT 化（クリアしない・DSVなし）。
-	if (afterScene) {
-		RenderTexture* vrt = viewportRenderTexture_.get();
-		D3D12_RESOURCE_BARRIER barrier{};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = vrt->GetResource();
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		cmd->ResourceBarrier(1, &barrier);
-
-		auto rtv = vrt->GetRTVHandle();
-		cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
-		D3D12_VIEWPORT vp{ 0.0f, 0.0f,
-			static_cast<float>(vrt->GetWidth()), static_cast<float>(vrt->GetHeight()), 0.0f, 1.0f };
-		D3D12_RECT sc{ 0, 0,
-			static_cast<LONG>(vrt->GetWidth()), static_cast<LONG>(vrt->GetHeight()) };
-		cmd->RSSetViewports(1, &vp);
-		cmd->RSSetScissorRects(1, &sc);
-		srvManager_->PreDraw();
-		afterScene->DrawAfterPostEffect(cmd);
-
-		// RT → SRV に戻す（ImGui::Image で読めるように）
-		std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
-		cmd->ResourceBarrier(1, &barrier);
+	if (scene) {
+		DrawOverlayOnViewportTexture(scene);
 	}
 	// Effect Editor のプレビュー RT への描画。どのシーンでも動くよう、シーンに任せずここで描く。
 	// 共有の深度バッファをクリアして使うので、シーンの深度を読む処理（ID パス・ポストエフェクト）が
 	// すべて終わったこの位置で行う。エディタを開いていなければ中で何もしない
-	if (auto* effectEditor = ImGuiManager::Instance().GetEffectEditorWindow()) {
-		srvManager_->PreDraw();
+	if (auto* effectEditor = ImGuiManager::GetInstance()->GetEffectEditorWindow()) {
+		GetSRVManager()->PreDraw();
 		effectEditor->Render();
 	}
 	// ImGui を Swapchain に描画するために RTV を戻す
-	dxCore_->RestoreSwapchainRenderTarget(cmd);
-	srvManager_->PreDraw();
+	GetDxCore()->RestoreSwapchainRenderTarget(cmd);
+	GetSRVManager()->PreDraw();
 #else
 	{ PEPPER_SCOPE("Game::PostEffectDraw"); postEffect_->Draw(cmd); }
-	// PostEffect 後のオーバーレイ（崩壊破片など）。Swapchain RTV は DSVなしでバインド済み。
-	if (afterScene) {
-		srvManager_->PreDraw();
-		afterScene->DrawAfterPostEffect(cmd);
+	// Swapchain の RTV は DSV なしでバインド済み
+	if (scene) {
+		GetSRVManager()->PreDraw();
+		scene->DrawAfterPostEffect(cmd);
 	}
 #endif
-
-	// 4. ImGui描画（Swapchainに直接）
-#ifdef _DEBUG
-	ImGuiManager::Instance().EndFrame();
-#endif // _DEBUG
-
-	// 5. 終了
-	dxCore_->EndDraw();
-	// シーン切り替え後の最初のフレームが画面に出た時点（Present＋GPU完了）でロード計測を出力
-	SceneManager::GetInstance()->OnFramePresented();
-	dxCore_->TickIntermediateResources();
-	dxCore_->TickPendingCallbacks();
 }
+
+#ifdef _DEBUG
+// 合成後に重ねる物を viewportRT に描く。viewportRT は合成の後 SRV 状態なので、
+// 合成した絵を消さないよう手動バリアで RT にして（クリアしない・DSV なし）描き、SRV に戻す（ImGui::Image で読むため）
+void Game::DrawOverlayOnViewportTexture(Scene* scene) {
+	auto* cmd = GetDxCore()->GetCommandList();
+	RenderTexture* vrt = viewportRenderTexture_.get();
+
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = vrt->GetResource();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	cmd->ResourceBarrier(1, &barrier);
+
+	auto rtv = vrt->GetRTVHandle();
+	cmd->OMSetRenderTargets(1, &rtv, false, nullptr);
+	D3D12_VIEWPORT vp{ 0.0f, 0.0f,
+		static_cast<float>(vrt->GetWidth()), static_cast<float>(vrt->GetHeight()), 0.0f, 1.0f };
+	D3D12_RECT sc{ 0, 0,
+		static_cast<LONG>(vrt->GetWidth()), static_cast<LONG>(vrt->GetHeight()) };
+	cmd->RSSetViewports(1, &vp);
+	cmd->RSSetScissorRects(1, &sc);
+	GetSRVManager()->PreDraw();
+	scene->DrawAfterPostEffect(cmd);
+
+	std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+	cmd->ResourceBarrier(1, &barrier);
+}
+#endif
 
 void Game::Finalize() {
 #ifdef _DEBUG
-	ImGuiManager::Instance().SetGPUParticleManager(nullptr);
+	ImGuiManager::GetInstance()->SetGPUParticleManager(nullptr);
 #endif
 
 	//===================================

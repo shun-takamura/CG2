@@ -1,6 +1,11 @@
 #include "Quaternion.h"
 #include <cmath>
 
+namespace {
+    // cos(yaw) がこれ以下ならジンバル特異点（yaw=±90°）とみなす
+    constexpr float kGimbalLockCosEpsilon = 1e-6f;
+}
+
 Quaternion IdentityQuaternion()
 {
     return { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -100,7 +105,7 @@ Vector3 EulerFromQuaternion(const Quaternion& q)
     const float yaw = std::atan2(m.m[2][0], cosYaw);
 
     float pitch, roll;
-    if (cosYaw > 1e-6f) {
+    if (cosYaw > kGimbalLockCosEpsilon) {
         pitch = std::atan2(-m.m[2][1], m.m[2][2]);
         roll  = std::atan2(-m.m[1][0], m.m[0][0]);
     } else {

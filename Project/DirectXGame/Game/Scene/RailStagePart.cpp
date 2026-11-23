@@ -1,4 +1,5 @@
 #include "RailStagePart.h"
+#include "Score/GameSession.h"
 #include "PepperMacros.h"
 
 #include "Camera.h"
@@ -33,7 +34,60 @@
 #endif
 
 namespace {
+	// World のフレーム時間がこれ以下ならゲームが止まっているとみなす [秒]
+	constexpr float kFrozenDeltaTime = 0.0001f;
+	// レールの進む速さがこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kRailSpeedEpsilon = 1e-8f;
+	// 踏破秒がこれ以下なら 0 とみなす
+	constexpr float kTinyEpsilon = 1e-4f;
+	// JSON の配列を Vector3 として読むのに要る要素数
+	constexpr size_t kVec3ComponentCount = 3;
+	// 緩急カーブに要る点の数の下限
+	constexpr size_t kMinEasePointCount = 2;
+	// 緩急カーブの点 1 つの要素数（x, y）
+	constexpr size_t kEasePointComponentCount = 2;
+	// 画面の点から伸ばすレイの長さがこれより短ければ失敗とみなす
+	constexpr float kRayDirEpsilon = 1e-5f;
+	// レールの速さが 0 のときに ImGui で使う全体の長さ [秒]
+	constexpr float kFallbackRailTotalSec = 120.0f;
+	// 「退避する」を ON にしたときの、出現から退避までの初めの秒数 [秒]
+	constexpr float kDefaultRetreatDelaySec = 3.0f;
+	// スプラインの踏破時間の下限 [秒]
+	constexpr float kMinTraverseSec = 0.1f;
+	/// <summary>Wave のエントリから敵 1 体ぶんの EnemyController を作る（出現時と Seek で復元した時の両方で使う）</summary>
+	/// <param name="spawned">出した敵</param>
+	/// <param name="entryIndex">Wave のエントリ番号</param>
+	/// <param name="we">Wave のエントリ</param>
+	/// <param name="pdef">敵のプレハブ定義（nullptr 可）</param>
+	/// <param name="shootIntervalScale">純度による射撃の間隔の倍率（DifficultyProfile）</param>
+	/// <returns>作ったコントローラ</returns>
+	std::unique_ptr<EnemyController> CreateWaveEnemyController(IImGuiEditable* spawned, int entryIndex,
+		const WaveEntry& we, const PrefabDef* pdef, float shootIntervalScale) {
+		EnemyWaveParams params;
+		params.triggerSec       = we.triggerSec;
+		// 純度の倍率（19 番 §5）。子の敵はこの値を受け継ぐので二重には掛からない
+		params.shootIntervalSec = we.shootIntervalSec * shootIntervalScale;
+		params.spawnIntervalSec = we.spawnIntervalSec;
+		params.spawnLimit       = we.spawnLimit;
+		// 子敵は明示指定があればそれを、なければ自身のプレハブ／スプラインにフォールバック
+		params.childPrefab      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
+		params.childSplineId    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
+		// ScreenHover 用パラメータ（移動はプレハブ駆動）
+		params.hoverOffset      = we.cameraOffset;
+		if (pdef && pdef->hasMovement) {
+			params.hoverApproachSpeed = pdef->hoverApproachSpeed;
+			params.hoverHoldDuration  = pdef->hoverHoldDuration;
+		}
+		// 運び屋・障害物は自機の方を向かない
+		const bool billboard = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
+		auto ctrl = std::make_unique<EnemyController>();
+		ctrl->Init(spawned, entryIndex, billboard, params, EnemyCommandFactory::Create(we, pdef));
+		return ctrl;
+	}
+
 	/// <summary>positions[] に置いた物へ Wave の rotate_deg（度）を反映する（谷の障害物の向き）</summary>
+	/// <param name="entity">置いた物</param>
+	/// <param name="we">Wave のエントリ（角度が全部 0 なら何もしない）</param>
 	void ApplyWaveRotation(IImGuiEditable* entity, const WaveEntry& we) {
 		const Vector3& d = we.rotateDeg;
 		if (d.x == 0.0f && d.y == 0.0f && d.z == 0.0f) return;
@@ -144,7 +198,7 @@ void RailStagePart::ReloadWaveNow() {
 	// 現在時刻で組み直す（既存の敵を掃除し、今いるべき敵を新しい定義で復元）
 	Seek(GetStageSeconds());
 	MarkWaveFileSynced();  // 読み直した内容が最新＝直後に再検出しない
-	LogBuffer::Instance().Add("Wave reloaded: " + wavePath_, LogBuffer::Level::Info);
+	LogBuffer::GetInstance()->Add("Wave reloaded: " + wavePath_, LogBuffer::Level::Info);
 }
 
 bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, float seekMaxSec) {
@@ -198,7 +252,7 @@ bool RailStagePart::UpdateCamera(class InputActionMap* actions, float scaledDt, 
 		if (aimAuthoring_ && cameraPath_ && railAim_ && camera_) {
 			const Vector3 eye = cameraPath_->Sample(railCamera_->GetProgress());
 #ifdef _DEBUG
-			auto* vp = ImGuiManager::Instance().GetViewportWindow();
+			auto* vp = ImGuiManager::GetInstance()->GetViewportWindow();
 			if (vp && vp->IsHovered()) {
 				ImGuiIO& io = ImGui::GetIO();
 				if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
@@ -224,7 +278,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 	// Blender から敵配置を Export したらその場で反映する（変化時だけ走るので軽い）
 	RefreshWaveIfChanged();
 
-	const bool gameFrozen = worldDt <= 0.0001f;
+	const bool gameFrozen = worldDt <= kFrozenDeltaTime;
 
 	if (!gameFrozen) {
 		// SweepDeadEntities の前に、HP がゼロになった敵のスポーンエントリに kill t を記録
@@ -236,8 +290,8 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 			if (Gameplay::Of(entity).GetHP().IsDead()) {
 				killAtT_[waveEntryIndex] = currentT;
 				// 撃破で加点（プレハブ側で設定された scoreValue を使う）
-				ScoreManager::GetInstance()->AddScore(Gameplay::Of(entity).GetScoreValue());
-				ScoreManager::GetInstance()->AddKill();
+				host_->GetGameSession()->GetScoreManager()->AddScore(Gameplay::Of(entity).GetScoreValue());
+				host_->GetGameSession()->GetScoreManager()->AddKill();
 				// 谷の障害物は、同じ原点・向きで切り分けた部品に差し替えて崩す（本体は直後の Sweep で消える）
 				const WaveEntry& we = currentWave_.entries[waveEntryIndex];
 				// アイテムとエーテルを落とす（表に無い敵・障害物は落とさない）
@@ -267,7 +321,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 	if (!gameFrozen) {
 		const float currentT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
 		// ステージ開始からの経過秒（進行度 t を全体尺で割る）。スポーン/退避判定の基準。
-		const float nowSec = (railCameraSpeed_ > 1e-8f) ? currentT / railCameraSpeed_ : 0.0f;
+		const float nowSec = (railCameraSpeed_ > kRailSpeedEpsilon) ? currentT / railCameraSpeed_ : 0.0f;
 		for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
 			const WaveEntry& we = currentWave_.entries[i];
 
@@ -308,14 +362,14 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 						// Rusher は終端で止まる（removeAtEnd=false）
 						const bool removeAtEnd = (we.enemyType != "Rusher");
 						// traverse_sec [秒] → スプライン速度 [spline_t/sec]。速度 = 1 / 踏破秒。
-						const float enemySpeed = (we.traverseSec > 1e-4f)
+						const float enemySpeed = (we.traverseSec > kTinyEpsilon)
 							? (1.0f / we.traverseSec) : 0.0f;
 						if (IImGuiEditable* s = host_->SpawnEnemyOnSpline(we.prefab, sp, enemySpeed,
 							removeAtEnd, 0.0f, static_cast<int>(i))) {
 							spawnedList.push_back(s);
 						}
 					} else {
-						LogBuffer::Instance().Add(
+						LogBuffer::GetInstance()->Add(
 							std::string("Wave: spline not found: ") + we.splineId,
 							LogBuffer::Level::Warning);
 					}
@@ -323,25 +377,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 
 				// 湧いた敵ごとに EnemyController を生成してコマンドを設定
 				for (IImGuiEditable* spawned : spawnedList) {
-					auto ctrl = std::make_unique<EnemyController>();
-					ctrl->entity_           = spawned;
-					ctrl->waveEntryIndex_   = static_cast<int>(i);
-					ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
-					ctrl->triggerSec_       = we.triggerSec;
-					// 純度の倍率（19 番 §5）。子の敵はこの値を受け継ぐので二重には掛からない
-					ctrl->shootIntervalSec_ = we.shootIntervalSec * DifficultyProfile::GetInstance()->GetShootIntervalScale();
-					ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
-					ctrl->spawnLimit_       = we.spawnLimit;
-					// 子敵は明示指定があればそれを、なければ自身のプレハブ／スプラインにフォールバック
-					ctrl->childPrefab_      = we.childPrefab.empty()    ? we.prefab   : we.childPrefab;
-					ctrl->childSplineId_    = we.childSplineId.empty()  ? we.splineId : we.childSplineId;
-					// ScreenHover 用パラメータ（移動はプレハブ駆動）
-					ctrl->hoverOffset_      = we.cameraOffset;
-					if (pdef && pdef->hasMovement) {
-						ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
-						ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
-					}
-					ctrl->Init(EnemyCommandFactory::Create(we, pdef));
+					auto ctrl = CreateWaveEnemyController(spawned, static_cast<int>(i), we, pdef, host_->GetGameSession()->GetDifficultyProfile()->GetShootIntervalScale());
 
 					// movingEnemies_ にコントローラを紐付け
 					host_->LinkEnemyController(spawned, ctrl.get());
@@ -376,7 +412,7 @@ void RailStagePart::UpdateWaveAndEnemies(float worldDt) {
 	// 敵コントローラ更新（自由移動・ビルボード・退避完了処理）
 	if (!gameFrozen) {
 		const float cameraT = railCamera_ ? railCamera_->GetProgress() : 0.0f;
-		const float stageSec = (railCameraSpeed_ > 1e-8f) ? cameraT / railCameraSpeed_ : 0.0f;
+		const float stageSec = (railCameraSpeed_ > kRailSpeedEpsilon) ? cameraT / railCameraSpeed_ : 0.0f;
 		host_->UpdateEnemyControllers(worldDt, host_->GetPlayer(), stageSec);
 	}
 
@@ -426,10 +462,10 @@ void RailStagePart::Seek(float seconds) {
 
 	// スコアは Seek では再構築しない（開発時のみ Seek を使う想定。
 	// 厳密にやるなら killAtT_ ごとに wave→prefab→scoreValue を引く必要があり実装コスト高）
-	ScoreManager::GetInstance()->Reset();
+	host_->GetGameSession()->GetScoreManager()->Reset();
 
 	// seek 先の経過秒（進行度 t を全体尺で割る）
-	const float seekSec = (railCameraSpeed_ > 1e-8f) ? seekT / railCameraSpeed_ : 0.0f;
+	const float seekSec = (railCameraSpeed_ > kRailSpeedEpsilon) ? seekT / railCameraSpeed_ : 0.0f;
 
 	// フラグを seekSec から再構築
 	for (size_t i = 0; i < currentWave_.entries.size(); ++i) {
@@ -471,7 +507,7 @@ void RailStagePart::Seek(float seconds) {
 		} else {
 			if (we.splineId.empty()) continue;
 			// 経過秒 / 踏破秒 = スプライン上の進捗 t
-			if (we.traverseSec < 1e-4f) continue;
+			if (we.traverseSec < kTinyEpsilon) continue;
 			const float tOnSpline = std::clamp((seekSec - we.triggerSec) / we.traverseSec, 0.0f, 1.0f);
 			if (tOnSpline >= 1.0f) continue;
 
@@ -487,22 +523,7 @@ void RailStagePart::Seek(float seconds) {
 
 		// Seek 復元された敵にも EnemyController を作って AI を再開させる
 		for (IImGuiEditable* spawned : spawnedList) {
-			auto ctrl = std::make_unique<EnemyController>();
-			ctrl->entity_           = spawned;
-			ctrl->waveEntryIndex_   = static_cast<int>(i);
-			ctrl->billboardToPlayer_ = (we.enemyType != "Carrier" && we.enemyType != "Obstacle");
-			ctrl->triggerSec_       = we.triggerSec;
-			ctrl->shootIntervalSec_ = we.shootIntervalSec * DifficultyProfile::GetInstance()->GetShootIntervalScale();
-			ctrl->spawnIntervalSec_ = we.spawnIntervalSec;
-			ctrl->spawnLimit_       = we.spawnLimit;
-			ctrl->childPrefab_      = we.childPrefab.empty()   ? we.prefab   : we.childPrefab;
-			ctrl->childSplineId_    = we.childSplineId.empty() ? we.splineId : we.childSplineId;
-			ctrl->hoverOffset_      = we.cameraOffset;
-			if (pdef && pdef->hasMovement) {
-				ctrl->hoverApproachSpeed_ = pdef->hoverApproachSpeed;
-				ctrl->hoverHoldDuration_  = pdef->hoverHoldDuration;
-			}
-			ctrl->Init(EnemyCommandFactory::Create(we, pdef));
+			auto ctrl = CreateWaveEnemyController(spawned, static_cast<int>(i), we, pdef, host_->GetGameSession()->GetDifficultyProfile()->GetShootIntervalScale());
 
 			host_->LinkEnemyController(spawned, ctrl.get());
 			host_->RegisterEnemyController(std::move(ctrl));
@@ -534,7 +555,7 @@ Vector3 RailStagePart::SampleCameraPathAtSec(float sec) const {
 float RailStagePart::GetStageSeconds() const {
 	const float t = GetCameraProgressT();
 	if (t < 0.0f) return 0.0f;
-	return (railCameraSpeed_ > 1e-8f) ? (t / railCameraSpeed_) : 0.0f;
+	return (railCameraSpeed_ > kRailSpeedEpsilon) ? (t / railCameraSpeed_) : 0.0f;
 }
 
 void RailStagePart::ApplyWaterClampToCamera() {
@@ -544,7 +565,7 @@ void RailStagePart::ApplyWaterClampToCamera() {
 		w.startSec * railCameraSpeed_, w.endSec * railCameraSpeed_, w.cameraSoftness);
 
 	const LowPitch& lp = lowPitch_;
-	railCamera_->SetPitchBiasWindow(lp.enabled ? lp.deg * (3.14159265f / 180.0f) : 0.0f,
+	railCamera_->SetPitchBiasWindow(lp.enabled ? DegToRad(lp.deg) : 0.0f,
 		lp.startSec * railCameraSpeed_, lp.endSec * railCameraSpeed_, lp.fadeSec * railCameraSpeed_);
 }
 
@@ -593,7 +614,7 @@ void RailStagePart::LoadFromJson(const JsonValue& root) {
 				key->t = static_cast<float>(ko["t"].AsDouble(0.0));
 
 				const JsonValue& rot = ko["rotate"];
-				if (rot.IsArray() && rot.Size() >= 3) {
+				if (rot.IsArray() && rot.Size() >= kVec3ComponentCount) {
 					key->rotate = {
 						static_cast<float>(rot[0].AsDouble(0.0)),
 						static_cast<float>(rot[1].AsDouble(0.0)),
@@ -605,11 +626,11 @@ void RailStagePart::LoadFromJson(const JsonValue& root) {
 				if (ease.IsObject()) {
 					key->easeToNext.enabled = ease["enabled"].AsBool(false);
 					const JsonValue& pts = ease["points"];
-					if (pts.IsArray() && pts.Size() >= 2) {
+					if (pts.IsArray() && pts.Size() >= kMinEasePointCount) {
 						key->easeToNext.points.clear();
 						for (size_t j = 0; j < pts.Size(); ++j) {
 							const JsonValue& pr = pts[j];
-							if (pr.IsArray() && pr.Size() >= 2) {
+							if (pr.IsArray() && pr.Size() >= kEasePointComponentCount) {
 								key->easeToNext.points.push_back({
 									static_cast<float>(pr[0].AsDouble(0.0)),
 									static_cast<float>(pr[1].AsDouble(0.0)) });
@@ -692,7 +713,7 @@ bool RailStagePart::OnViewportPrefabDrop(const std::string& prefabName, float re
 	const Vector3 farP  = TransformCoordinate({ ndcX, ndcY, 1.0f }, invVP);
 	Vector3 dir{ farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
 	const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-	if (len < 1e-5f) return false;
+	if (len < kRayDirEpsilon) return false;
 	dir = { dir.x / len, dir.y / len, dir.z / len };
 	const Vector3 camPos = camera_->GetTranslate();
 	const Vector3 worldPos{
@@ -702,7 +723,7 @@ bool RailStagePart::OnViewportPrefabDrop(const std::string& prefabName, float re
 	};
 
 	// 新規ウェーブエントリを現在の経過秒で作成（カメラ相対配置）
-	const float nowSec = (railCameraSpeed_ > 1e-8f && railCamera_)
+	const float nowSec = (railCameraSpeed_ > kRailSpeedEpsilon && railCamera_)
 		? railCamera_->GetProgress() / railCameraSpeed_ : 0.0f;
 	WaveEntry e{};
 	e.prefab          = prefabName;
@@ -714,7 +735,7 @@ bool RailStagePart::OnViewportPrefabDrop(const std::string& prefabName, float re
 	currentWave_.entries.push_back(e);
 	waveSelectedEntry_ = static_cast<int>(currentWave_.entries.size()) - 1;
 	RebuildWaveRuntimeState();
-	LogBuffer::Instance().Add(
+	LogBuffer::GetInstance()->Add(
 		"Wave: added entry '" + prefabName + "' at " + std::to_string(e.triggerSec) + "s",
 		LogBuffer::Level::Info);
 	return true;
@@ -810,7 +831,7 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 				cameraRotKeys_.push_back(std::move(key));
 				std::sort(cameraRotKeys_.begin(), cameraRotKeys_.end(),
 					[](const std::unique_ptr<CameraRotKey>& a, const std::unique_ptr<CameraRotKey>& b) { return a->t < b->t; });
-				ImGuiManager::Instance().SetSelected(raw);
+				ImGuiManager::GetInstance()->SetSelected(raw);
 				changed = true;
 			}
 
@@ -822,9 +843,9 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 				Vector3 d = RadToDeg(k->rotate);
 				char label[96];
 				std::snprintf(label, sizeof(label), "t=%.2f  (p%.0f y%.0f r%.0f)", k->t, d.x, d.y, d.z);
-				const bool isSel = (ImGuiManager::Instance().GetSelected() == k);
+				const bool isSel = (ImGuiManager::GetInstance()->GetSelected() == k);
 				if (ImGui::Selectable(label, isSel)) {
-					ImGuiManager::Instance().SetSelected(k);
+					ImGuiManager::GetInstance()->SetSelected(k);
 					railCamera_->SetProgress(k->t);
 				}
 				ImGui::SameLine();
@@ -833,8 +854,8 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 			}
 			if (deleteIdx >= 0) {
 				CameraRotKey* del = cameraRotKeys_[deleteIdx].get();
-				if (ImGuiManager::Instance().GetSelected() == del) {
-					ImGuiManager::Instance().SetSelected(nullptr);
+				if (ImGuiManager::GetInstance()->GetSelected() == del) {
+					ImGuiManager::GetInstance()->SetSelected(nullptr);
 				}
 				cameraRotKeys_.erase(cameraRotKeys_.begin() + deleteIdx);
 				changed = true;
@@ -852,9 +873,9 @@ void RailStagePart::OnImGuiTuning(bool& changed) {
 void RailStagePart::SaveWaveToDisk() {
 	if (WaveDefIO::SaveToFile(wavePath_, currentWave_)) {
 		MarkWaveFileSynced();  // 自分の保存で再読込を誘発しない（反響防止）
-		LogBuffer::Instance().Add("Wave saved: " + wavePath_, LogBuffer::Level::Info);
+		LogBuffer::GetInstance()->Add("Wave saved: " + wavePath_, LogBuffer::Level::Info);
 	} else {
-		LogBuffer::Instance().Add("Wave save FAILED: " + wavePath_, LogBuffer::Level::Warning);
+		LogBuffer::GetInstance()->Add("Wave save FAILED: " + wavePath_, LogBuffer::Level::Warning);
 	}
 }
 
@@ -864,7 +885,7 @@ void RailStagePart::RebuildWaveRuntimeState() {
 	spawnFired_.assign(currentWave_.entries.size(), false);
 	retreatFired_.assign(currentWave_.entries.size(), false);
 	killAtT_.assign(currentWave_.entries.size(), -1.0f);
-	const float seconds = (railCameraSpeed_ > 1e-8f && railCamera_)
+	const float seconds = (railCameraSpeed_ > kRailSpeedEpsilon && railCamera_)
 		? railCamera_->GetProgress() / railCameraSpeed_ : 0.0f;
 	Seek(seconds);
 }
@@ -889,7 +910,7 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 
 	// エントリの時間系は全て秒(s)。レールカメラは進行度 t なので、UI 上のレール時刻だけ
 	// 進行度⇔秒を換算する（t = 秒 × railCameraSpeed_、全体尺 = 1/railCameraSpeed_ 秒）。
-	const float tps = (railCameraSpeed_ > 1e-8f) ? railCameraSpeed_ : (1.0f / 120.0f);
+	const float tps = (railCameraSpeed_ > kRailSpeedEpsilon) ? railCameraSpeed_ : (1.0f / kFallbackRailTotalSec);
 	const float totalSec = 1.0f / tps;
 	const float nowSec = railCamera_ ? railCamera_->GetProgress() / tps : 0.0f;
 
@@ -964,7 +985,7 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 		// 退避（秒）。チェックOFFで「退避なし」(-1)
 		bool hasRetreat = (we.retreatSec >= 0.0f);
 		if (ImGui::Checkbox("退避する", &hasRetreat)) {
-			we.retreatSec = hasRetreat ? (we.triggerSec + 3.0f) : -1.0f;
+			we.retreatSec = hasRetreat ? (we.triggerSec + kDefaultRetreatDelaySec) : -1.0f;
 			changed = true;
 		}
 		if (hasRetreat) {
@@ -995,7 +1016,7 @@ void RailStagePart::DrawWaveEditorUI(bool& changed) {
 			}
 			// スプライン踏破にかける時間（秒）
 			if (ImGui::DragFloat("踏破時間 (s)", &we.traverseSec, 0.1f, 0.1f, totalSec, "%.2f s")) {
-				if (we.traverseSec < 0.1f) we.traverseSec = 0.1f;
+				if (we.traverseSec < kMinTraverseSec) we.traverseSec = kMinTraverseSec;
 			}
 		}
 		// ワールド座標に置く物（谷の障害物など）の向き
@@ -1068,4 +1089,8 @@ bool RailStagePart::GetLootCollectPoint(Vector3& out) const {
 	if (!t) return false;
 	out = *t;
 	return true;
+}
+
+GameSession* RailStagePart::GetGameSession() const {
+	return host_->GetGameSession();
 }

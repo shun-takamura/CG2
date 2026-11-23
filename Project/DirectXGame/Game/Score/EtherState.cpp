@@ -14,18 +14,43 @@
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/EtherState.json";
+	// 純度の刻み（0.1 単位）
+	constexpr float kDifficultyStep = 0.1f;
+	// 純度の 1 あたりの刻みの数（0.1 単位で切り捨てる）
+	constexpr float kDifficultyStepsPerUnit = 10.0f;
+	// 純度を刻みで探すときの上限の誤差
+	constexpr float kDifficultySearchTolerance = 1e-4f;
+	// 消費が手元を越えたか比べるときの誤差
+	constexpr float kCostTolerance = 1e-3f;
+	// 死んだときの純度を切り捨てる前に足す誤差（÷ の誤差で 1 つ下へ落ちないように）
+	constexpr float kFloorTolerance = 1e-3f;
+	// これより少ない賭け分は賭けていないとみなす
+	constexpr float kMinBet = 1e-4f;
+	// 液面の計算に使う IX の消費の下限（0 割りを防ぐ）
+	constexpr float kMinCapacity = 1e-3f;
+	// 液面の指数の下限
+	constexpr float kMinFillExponent = 0.05f;
+	// 純度の幅の下限（0 割りを防ぐ）
+	constexpr float kMinDifficultyRange = 1e-3f;
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+	// 文字盤の V の純度（デバッグ表示・賭ける純度の初期値）
+	constexpr float kMidPurity = 5.0f;
 
+	/// <summary>キーの数値を float として読む</summary>
+	/// <param name="node">読む JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">書き込み先（数値でなければ元の値のまま）</param>
 	void ReadFloat(const JsonValue& node, const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	}
+	/// <summary>キーに float を数値として書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">書く値</param>
 	void WriteFloat(JsonValue& node, const char* key, float value) {
 		node[key] = JsonValue(static_cast<double>(value));
 	}
-}
-
-EtherState* EtherState::GetInstance() {
-	static EtherState instance;
-	return &instance;
 }
 
 EtherState::EtherState() {
@@ -57,8 +82,11 @@ float EtherState::GetMaxAffordableDifficulty() const {
 	// 今の賭け分は手元へ戻してから引くので、使えるのは手元＋賭け分。消費は単調に増えるので 0.1 刻みで下から探す
 	const float budget = hand_ + bet_;
 	float best = difficultyMin_;
-	for (float d = difficultyMin_; d <= difficultyMax_ + 1e-4f; d += 0.1f) {
-		if (CostOf(d) > budget + 1e-3f) break;
+	// float に 0.1 を足し続けると誤差がたまるので、何歩目かを整数で数えて毎回かけ算で出す
+	for (int step = 0;; ++step) {
+		const float d = difficultyMin_ + static_cast<float>(step) * kDifficultyStep;
+		if (d > difficultyMax_ + kDifficultySearchTolerance) break;
+		if (CostOf(d) > budget + kCostTolerance) break;
 		best = d;
 	}
 	return best;
@@ -84,8 +112,8 @@ EtherState::DeathResult EtherState::ApplyDeath() {
 	bet_ = (std::max)(bet_ * (1.0f - std::clamp(betLossRatio_, 0.0f, 1.0f)), 0.0f);
 	// 元の純度 ÷ 1.17 を小数第 2 位以下で切り捨て（例 5.0 → 4.2 → 3.5 → 2.9）。÷ の誤差で 1 つ下へ落ちないよう少し足してから切る
 	const float divided = difficulty_ / (std::max)(difficultyDivisor_, 1.0f);
-	difficulty_ = (std::max)(std::floor(divided * 10.0f + 1e-3f) / 10.0f, difficultyMin_);
-	betPlaced_ = bet_ > 1e-4f;
+	difficulty_ = (std::max)(std::floor(divided * kDifficultyStepsPerUnit + kFloorTolerance) / kDifficultyStepsPerUnit, difficultyMin_);
+	betPlaced_ = bet_ > kMinBet;
 	result.betAfter = bet_;
 	result.difficultyAfter = difficulty_;
 	return result;
@@ -98,12 +126,12 @@ void EtherState::Withdraw() {
 }
 
 float EtherState::BetToFill(float bet) const {
-	const float capacity = (std::max)(CostOf(difficultyMax_), 1e-3f);
-	return std::pow(std::clamp(bet / capacity, 0.0f, 1.0f), (std::max)(fillExponent_, 0.05f));
+	const float capacity = (std::max)(CostOf(difficultyMax_), kMinCapacity);
+	return std::pow(std::clamp(bet / capacity, 0.0f, 1.0f), (std::max)(fillExponent_, kMinFillExponent));
 }
 
 float EtherState::DifficultyTo01(float difficulty) const {
-	const float range = (std::max)(difficultyMax_ - difficultyMin_, 1e-3f);
+	const float range = (std::max)(difficultyMax_ - difficultyMin_, kMinDifficultyRange);
 	return std::clamp((difficulty - difficultyMin_) / range, 0.0f, 1.0f);
 }
 
@@ -136,14 +164,14 @@ void EtherState::SaveTuning() const {
 	WriteFloat(root, "difficultyDivisor", difficultyDivisor_);
 	WriteFloat(root, "difficultyMin", difficultyMin_);
 	WriteFloat(root, "difficultyMax", difficultyMax_);
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }
 
 void EtherState::OnImGui() {
 #ifdef _DEBUG
 	// 本番は HUB の賭ける画面（§4.7）。ここはデバッグで直接決める
 	ImGui::Text("Hand %.1f  Bet %.1f  Difficulty %.2f  Placed %d", hand_, bet_, difficulty_, betPlaced_ ? 1 : 0);
-	static float betDifficulty = 5.0f;
+	static float betDifficulty = kMidPurity;
 	ImGui::SliderFloat("Purity##EtherStateBet", &betDifficulty, difficultyMin_, difficultyMax_, "%.1f");
 	ImGui::SameLine();
 	if (ImGui::Button("Place Bet##EtherState")) PlaceBet(betDifficulty);
@@ -160,7 +188,7 @@ void EtherState::OnImGui() {
 	ImGui::Checkbox("Infinite Hand", &infiniteHand_);
 	ImGui::DragFloat("Cost Scale (x(n-1)(n+2))", &costScale_, 1.0f, 0.0f, 10000.0f);
 	ImGui::DragFloat("Fill Exponent", &fillExponent_, 0.01f, 0.05f, 3.0f);
-	ImGui::Text("Cost: I %.0f  V %.0f  IX %.0f", CostOf(difficultyMin_), CostOf(5.0f), CostOf(difficultyMax_));
+	ImGui::Text("Cost: I %.0f  V %.0f  IX %.0f", CostOf(difficultyMin_), CostOf(kMidPurity), CostOf(difficultyMax_));
 	ImGui::SliderFloat("Bet Loss Ratio (death)", &betLossRatio_, 0.0f, 1.0f);
 	ImGui::DragFloat("Difficulty Divisor (death)", &difficultyDivisor_, 0.01f, 1.0f, 3.0f);
 	ImGui::DragFloat("Difficulty Min (I)", &difficultyMin_, 0.1f, 0.0f, 9.0f);

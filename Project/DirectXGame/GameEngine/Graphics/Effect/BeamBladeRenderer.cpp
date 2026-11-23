@@ -26,6 +26,18 @@ namespace {
 
 	// 菱形の断面（幅の縁 → 上の稜線 → 反対の縁 → 下の稜線）
 	constexpr float kSection[4][2] = { { 1.0f, 0.0f }, { 0.0f, 1.0f }, { -1.0f, 0.0f }, { 0.0f, -1.0f } };
+	// 断面の頂点番号を 0〜3 に巡回させるマスク（kSection の 4 頂点）
+	constexpr int kSectionIndexMask = 3;
+	// 断面の頂点の数（菱形）
+	constexpr int kSectionVertexCount = 4;
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothstepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothstepCubeCoef = 2.0f;
+	// 「Single Edge (down)」ボタンで入れる稜線のずれ（片刃の形）
+	constexpr float kSingleEdgeRidgeOffset = 0.75f;
+	// 側面の区間の数（根元→肩、肩→先）
+	constexpr int kBladeSegmentCount = 2;
 }
 
 void BeamBladeRenderer::Initialize(DirectXCore* dxCore)
@@ -135,13 +147,13 @@ void BeamBladeRenderer::CreateMesh()
 {
 	std::vector<BladeVertex> v;
 	auto push = [&v](int k, float station) {
-		v.push_back({ kSection[k & 3][0], kSection[k & 3][1], station });
+		v.push_back({ kSection[k & kSectionIndexMask][0], kSection[k & kSectionIndexMask][1], station });
 	};
 	// 根元→肩、肩→先 の側面（面は頂点を分けて持つ。法線は PS が ddx/ddy で出す）
-	for (int seg = 0; seg < 2; ++seg) {
+	for (int seg = 0; seg < kBladeSegmentCount; ++seg) {
 		const float sa = static_cast<float>(seg);
 		const float sb = static_cast<float>(seg + 1);
-		for (int k = 0; k < 4; ++k) {
+		for (int k = 0; k < kSectionVertexCount; ++k) {
 			push(k, sa); push(k, sb); push(k + 1, sb);
 			push(k, sa); push(k + 1, sb); push(k + 1, sa);
 		}
@@ -178,7 +190,7 @@ void BeamBladeRenderer::DrawImpl(const Camera& camera, bool bloomPass)
 {
 	if (extend_ <= 0.0f) return;
 	const BeamBladeAppearance& a = appearance_;
-	const float eased = extend_ * extend_ * (3.0f - 2.0f * extend_);
+	const float eased = extend_ * extend_ * (kSmoothstepSquareCoef - kSmoothstepCubeCoef * extend_);
 
 	TransformForGPU& t = bloomPass ? *bloomTransformData_ : *transformData_;
 	t.WVP = Multiply(world_, camera.GetViewProjectionMatrix());
@@ -243,7 +255,7 @@ bool BeamBladeRenderer::EditAppearance(BeamBladeAppearance& a)
 	changed |= ImGui::SliderFloat("Ridge Offset##Blade", &a.ridgeOffset, -1.0f, 1.0f);
 	changed |= ImGui::SliderFloat("Back Anchor##Blade", &a.backAnchor, 0.0f, 1.0f);
 	if (ImGui::Button("Single Edge (down)##Blade")) {
-		a.ridgeOffset = 0.75f;
+		a.ridgeOffset = kSingleEdgeRidgeOffset;
 		a.backAnchor = 1.0f;
 		a.tipOffset = 1.0f;
 		changed = true;

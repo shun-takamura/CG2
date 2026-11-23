@@ -7,6 +7,62 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// copyRootSignature のルートパラメータの番号（テクスチャだけ）
+	enum CopyRootParam : UINT {
+		kCopyRootParamTexture,           // PS t0：入力（テーブル）
+		kCopyRootParamCount,
+	};
+	// effectRootSignature のルートパラメータの番号（テクスチャ ＋ cbuffer）
+	enum EffectRootParam : UINT {
+		kEffectRootParamTexture,         // PS t0：入力（テーブル）
+		kEffectRootParamParams,          // PS b0：エフェクトのパラメータ
+		kEffectRootParamCount,
+	};
+	// outlineRootSignature のルートパラメータの番号
+	enum OutlineRootParam : UINT {
+		kOutlineRootParamColor,          // PS t0：入力の色（テーブル）
+		kOutlineRootParamAux,            // PS t1：深度またはマスク（テーブル）
+		kOutlineRootParamParams,         // PS b0：エフェクトのパラメータ
+		kOutlineRootParamCount,
+	};
+	// distortionRootSignature のルートパラメータの番号
+	enum DistortionRootParam : UINT {
+		kDistortionRootParamColor,       // PS t0：入力の色（テーブル）
+		kDistortionRootParamDistortion,  // PS t1：ゆがみ RT（テーブル）
+		kDistortionRootParamDepth,       // PS t2：シーンの深度（テーブル）
+		kDistortionRootParamParams,      // PS b0：エフェクトのパラメータ
+		kDistortionRootParamCount,
+	};
+	// maskedOutlineRootSignature のルートパラメータの番号
+	enum MaskedOutlineRootParam : UINT {
+		kMaskedOutlineRootParamColor,    // PS t0：入力の色（テーブル）
+		kMaskedOutlineRootParamDepth,    // PS t1：シーンの深度（テーブル）
+		kMaskedOutlineRootParamMask,     // PS t2：ID マスク（テーブル）
+		kMaskedOutlineRootParamParams,   // PS b0：エフェクトのパラメータ
+		kMaskedOutlineRootParamCount,
+	};
+	// シェーダーのレジスタ番号
+	constexpr UINT kColorTextureRegister = 0;          // t0：入力の色
+	constexpr UINT kOutlineAuxTextureRegister = 1;     // t1：輪郭系の深度・マスク
+	constexpr UINT kDistortionTextureRegister = 1;     // t1：ゆがみ RT
+	constexpr UINT kDistortionDepthRegister = 2;       // t2：ゆがみのシーンの深度
+	constexpr UINT kMaskedOutlineDepthRegister = 1;    // t1：マスク付き輪郭のシーンの深度
+	constexpr UINT kMaskedOutlineMaskRegister = 2;     // t2：マスク付き輪郭の ID マスク
+	constexpr UINT kParamsRegister = 0;                // b0：エフェクトのパラメータ
+	constexpr UINT kLinearSamplerRegister = 0;         // s0：linear clamp
+	constexpr UINT kPointSamplerRegister = 1;          // s1：point clamp（深度を補間しない）
+	// linear と point の静的サンプラーの数
+	constexpr int kLinearPointSamplerCount = 2;
+	// クリア色の要素数（RGBA）
+	constexpr int kClearColorComponentCount = 4;
+	// ゆがみ RT のクリア値（RG = 0.5 がオフセット 0）
+	constexpr float kDistortionNeutralOffset = 0.5f;
+	// 全画面の三角形 1 枚の頂点数
+	constexpr UINT kFullscreenTriangleVertexCount = 3;
+	// ダメージの割合がこれ以上でグレースケールにする
+	constexpr float kDamageGrayscaleThreshold = 0.9f;
+}
 
 // ===================================================================
 // 初期化
@@ -23,7 +79,7 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 	// ピンポンRenderTexture作成。
 	// シーン RT（A/B）と captureRT_ は、指定があればアプリの背景色でクリアする
 	// （未指定なら従来どおり透明黒）。intermediate の B も同じ値にしておく。
-	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float clearColor[kClearColorComponentCount] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	if (sceneClearColor) {
 		clearColor[0] = sceneClearColor[0];
 		clearColor[1] = sceneClearColor[1];
@@ -40,19 +96,19 @@ void PostEffect::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, clearColor);
 
 	// IDマスク用 RT（uint8、0 で初期化）。MaskedGrayscale 等が参照する
-	float idClear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float idClear[kClearColorComponentCount] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	idMaskRT_ = std::make_unique<RenderTexture>();
 	idMaskRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8_UINT, idClear);
 
 	// Distortion 用 RT。RG=0.5（オフセット0）, A=0（強度0）で初期化
-	float distortionClear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+	float distortionClear[kClearColorComponentCount] = { kDistortionNeutralOffset, kDistortionNeutralOffset, kDistortionNeutralOffset, 0.0f };
 	distortionRT_ = std::make_unique<RenderTexture>();
 	distortionRT_->Initialize(dxCore_, srvManager_, width, height,
 		DXGI_FORMAT_R8G8B8A8_UNORM, distortionClear);
 
 	// Bloom 用の発光 RT。1.0 を超える強度を保つため float、0 でクリア
-	float bloomClear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float bloomClear[kClearColorComponentCount] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	bloomRT_ = std::make_unique<RenderTexture>();
 	bloomRT_->Initialize(dxCore_, srvManager_, width, height,
 		BloomEffect::kFormat, bloomClear);
@@ -95,16 +151,16 @@ void PostEffect::CreateRootSignatures()
 	// ----- copyRootSignature（テクスチャのみ） -----
 	{
 		D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-		descriptorRange[0].BaseShaderRegister = 0;
+		descriptorRange[0].BaseShaderRegister = kColorTextureRegister;
 		descriptorRange[0].NumDescriptors = 1;
 		descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		D3D12_ROOT_PARAMETER rootParameters[1] = {};
-		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRange;
-		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		D3D12_ROOT_PARAMETER rootParameters[kCopyRootParamCount] = {};
+		rootParameters[kCopyRootParamTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kCopyRootParamTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kCopyRootParamTexture].DescriptorTable.pDescriptorRanges = descriptorRange;
+		rootParameters[kCopyRootParamTexture].DescriptorTable.NumDescriptorRanges = 1;
 
 		D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -113,7 +169,7 @@ void PostEffect::CreateRootSignatures()
 		staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 		staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-		staticSamplers[0].ShaderRegister = 0;
+		staticSamplers[0].ShaderRegister = kLinearSamplerRegister;
 		staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -137,21 +193,21 @@ void PostEffect::CreateRootSignatures()
 	// ----- effectRootSignature（テクスチャ + cbuffer） -----
 	{
 		D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-		descriptorRange[0].BaseShaderRegister = 0;
+		descriptorRange[0].BaseShaderRegister = kColorTextureRegister;
 		descriptorRange[0].NumDescriptors = 1;
 		descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		D3D12_ROOT_PARAMETER rootParameters[2] = {};
-		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRange;
-		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		D3D12_ROOT_PARAMETER rootParameters[kEffectRootParamCount] = {};
+		rootParameters[kEffectRootParamTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kEffectRootParamTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kEffectRootParamTexture].DescriptorTable.pDescriptorRanges = descriptorRange;
+		rootParameters[kEffectRootParamTexture].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[1].Descriptor.ShaderRegister = 0;
-		rootParameters[1].Descriptor.RegisterSpace = 0;
+		rootParameters[kEffectRootParamParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[kEffectRootParamParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kEffectRootParamParams].Descriptor.ShaderRegister = kParamsRegister;
+		rootParameters[kEffectRootParamParams].Descriptor.RegisterSpace = 0;
 
 		D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -160,7 +216,7 @@ void PostEffect::CreateRootSignatures()
 		staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 		staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-		staticSamplers[0].ShaderRegister = 0;
+		staticSamplers[0].ShaderRegister = kLinearSamplerRegister;
 		staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -185,43 +241,43 @@ void PostEffect::CreateRootSignatures()
 	{
 		// color t0
 		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
-		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].BaseShaderRegister = kColorTextureRegister;
 		colorRange[0].NumDescriptors = 1;
 		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		// depth t1
 		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
-		depthRange[0].BaseShaderRegister = 1;
+		depthRange[0].BaseShaderRegister = kOutlineAuxTextureRegister;
 		depthRange[0].NumDescriptors = 1;
 		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		D3D12_ROOT_PARAMETER rootParameters[3] = {};
-		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
-		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		D3D12_ROOT_PARAMETER rootParameters[kOutlineRootParamCount] = {};
+		rootParameters[kOutlineRootParamColor].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kOutlineRootParamColor].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kOutlineRootParamColor].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[kOutlineRootParamColor].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[1].DescriptorTable.pDescriptorRanges = depthRange;
-		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kOutlineRootParamAux].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kOutlineRootParamAux].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kOutlineRootParamAux].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[kOutlineRootParamAux].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[2].Descriptor.ShaderRegister = 0;
-		rootParameters[2].Descriptor.RegisterSpace = 0;
+		rootParameters[kOutlineRootParamParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[kOutlineRootParamParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kOutlineRootParamParams].Descriptor.ShaderRegister = kParamsRegister;
+		rootParameters[kOutlineRootParamParams].Descriptor.RegisterSpace = 0;
 
 		// linear(s0) と point(s1) を用意（Depthの補間防止用）
-		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[kLinearPointSamplerCount] = {};
 		staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 		staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-		staticSamplers[0].ShaderRegister = 0;
+		staticSamplers[0].ShaderRegister = kLinearSamplerRegister;
 		staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		staticSamplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
@@ -230,7 +286,7 @@ void PostEffect::CreateRootSignatures()
 		staticSamplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		staticSamplers[1].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 		staticSamplers[1].MaxLOD = D3D12_FLOAT32_MAX;
-		staticSamplers[1].ShaderRegister = 1;
+		staticSamplers[1].ShaderRegister = kPointSamplerRegister;
 		staticSamplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -254,48 +310,48 @@ void PostEffect::CreateRootSignatures()
 	// ----- distortionRootSignature（color t0 + distortion t1 + depth t2 + cbuffer b0 + linear/point sampler） -----
 	{
 		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
-		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].BaseShaderRegister = kColorTextureRegister;
 		colorRange[0].NumDescriptors = 1;
 		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		D3D12_DESCRIPTOR_RANGE distortionRange[1] = {};
-		distortionRange[0].BaseShaderRegister = 1;
+		distortionRange[0].BaseShaderRegister = kDistortionTextureRegister;
 		distortionRange[0].NumDescriptors = 1;
 		distortionRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		distortionRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
-		depthRange[0].BaseShaderRegister = 2;
+		depthRange[0].BaseShaderRegister = kDistortionDepthRegister;
 		depthRange[0].NumDescriptors = 1;
 		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		D3D12_ROOT_PARAMETER rootParameters[4] = {};
+		D3D12_ROOT_PARAMETER rootParameters[kDistortionRootParamCount] = {};
 		// [0] color (t0)
-		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
-		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kDistortionRootParamColor].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kDistortionRootParamColor].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kDistortionRootParamColor].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[kDistortionRootParamColor].DescriptorTable.NumDescriptorRanges = 1;
 		// [1] distortion (t1)
-		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[1].DescriptorTable.pDescriptorRanges = distortionRange;
-		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kDistortionRootParamDistortion].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kDistortionRootParamDistortion].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kDistortionRootParamDistortion].DescriptorTable.pDescriptorRanges = distortionRange;
+		rootParameters[kDistortionRootParamDistortion].DescriptorTable.NumDescriptorRanges = 1;
 		// [2] depth (t2)
-		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[2].DescriptorTable.pDescriptorRanges = depthRange;
-		rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kDistortionRootParamDepth].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kDistortionRootParamDepth].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kDistortionRootParamDepth].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[kDistortionRootParamDepth].DescriptorTable.NumDescriptorRanges = 1;
 		// [3] cbuffer (b0)
-		rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[3].Descriptor.ShaderRegister = 0;
-		rootParameters[3].Descriptor.RegisterSpace = 0;
+		rootParameters[kDistortionRootParamParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[kDistortionRootParamParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kDistortionRootParamParams].Descriptor.ShaderRegister = kParamsRegister;
+		rootParameters[kDistortionRootParamParams].Descriptor.RegisterSpace = 0;
 
 		// linear(s0) + point(s1)
-		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
-		for (int i = 0; i < 2; ++i) {
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[kLinearPointSamplerCount] = {};
+		for (int i = 0; i < kLinearPointSamplerCount; ++i) {
 			staticSamplers[i].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 			staticSamplers[i].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 			staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -328,46 +384,46 @@ void PostEffect::CreateRootSignatures()
 	// ----- maskedOutlineRootSignature（color t0 + depth t1 + idMask t2 + cbuffer b0 + linear/point sampler） -----
 	{
 		D3D12_DESCRIPTOR_RANGE colorRange[1] = {};
-		colorRange[0].BaseShaderRegister = 0;
+		colorRange[0].BaseShaderRegister = kColorTextureRegister;
 		colorRange[0].NumDescriptors = 1;
 		colorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		colorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		D3D12_DESCRIPTOR_RANGE depthRange[1] = {};
-		depthRange[0].BaseShaderRegister = 1;
+		depthRange[0].BaseShaderRegister = kMaskedOutlineDepthRegister;
 		depthRange[0].NumDescriptors = 1;
 		depthRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		depthRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		D3D12_DESCRIPTOR_RANGE maskRange[1] = {};
-		maskRange[0].BaseShaderRegister = 2;
+		maskRange[0].BaseShaderRegister = kMaskedOutlineMaskRegister;
 		maskRange[0].NumDescriptors = 1;
 		maskRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		maskRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		D3D12_ROOT_PARAMETER rootParameters[4] = {};
-		rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[0].DescriptorTable.pDescriptorRanges = colorRange;
-		rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		D3D12_ROOT_PARAMETER rootParameters[kMaskedOutlineRootParamCount] = {};
+		rootParameters[kMaskedOutlineRootParamColor].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kMaskedOutlineRootParamColor].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kMaskedOutlineRootParamColor].DescriptorTable.pDescriptorRanges = colorRange;
+		rootParameters[kMaskedOutlineRootParamColor].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[1].DescriptorTable.pDescriptorRanges = depthRange;
-		rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kMaskedOutlineRootParamDepth].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kMaskedOutlineRootParamDepth].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kMaskedOutlineRootParamDepth].DescriptorTable.pDescriptorRanges = depthRange;
+		rootParameters[kMaskedOutlineRootParamDepth].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[2].DescriptorTable.pDescriptorRanges = maskRange;
-		rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
+		rootParameters[kMaskedOutlineRootParamMask].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParameters[kMaskedOutlineRootParamMask].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kMaskedOutlineRootParamMask].DescriptorTable.pDescriptorRanges = maskRange;
+		rootParameters[kMaskedOutlineRootParamMask].DescriptorTable.NumDescriptorRanges = 1;
 
-		rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		rootParameters[3].Descriptor.ShaderRegister = 0;
-		rootParameters[3].Descriptor.RegisterSpace = 0;
+		rootParameters[kMaskedOutlineRootParamParams].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParameters[kMaskedOutlineRootParamParams].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParameters[kMaskedOutlineRootParamParams].Descriptor.ShaderRegister = kParamsRegister;
+		rootParameters[kMaskedOutlineRootParamParams].Descriptor.RegisterSpace = 0;
 
-		D3D12_STATIC_SAMPLER_DESC staticSamplers[2] = {};
-		for (int i = 0; i < 2; ++i) {
+		D3D12_STATIC_SAMPLER_DESC staticSamplers[kLinearPointSamplerCount] = {};
+		for (int i = 0; i < kLinearPointSamplerCount; ++i) {
 			staticSamplers[i].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 			staticSamplers[i].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 			staticSamplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -588,7 +644,7 @@ void PostEffect::BeginIdPass(ID3D12GraphicsCommandList* commandList)
 {
 	if (!idMaskRT_) return;
 	// 0 でクリアして開始
-	const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clear[kClearColorComponentCount] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	idMaskRT_->BeginRender(commandList);
 	// BeginRender 内で ClearRenderTargetView は init 時の clear color で行われるはず
 	// 念のため明示クリア（カラー指定でゼロにする）
@@ -610,7 +666,7 @@ void PostEffect::BeginDistortionPass(ID3D12GraphicsCommandList* commandList)
 {
 	if (!distortionRT_) return;
 	// (0.5, 0.5, 0.5, 0) でクリア（オフセット0・強度0）
-	const float clear[4] = { 0.5f, 0.5f, 0.5f, 0.0f };
+	const float clear[kClearColorComponentCount] = { kDistortionNeutralOffset, kDistortionNeutralOffset, kDistortionNeutralOffset, 0.0f };
 	distortionRT_->BeginRender(commandList);
 	auto rtv = distortionRT_->GetRTVHandle();
 	commandList->ClearRenderTargetView(rtv, clear, 0, nullptr);
@@ -649,13 +705,13 @@ void PostEffect::RunDistortionForPreview(ID3D12GraphicsCommandList* commandList,
 	// distortion 専用 RS：t0=color / t1=distortion / t2=depth / b0=cbuffer
 	commandList->SetGraphicsRootSignature(distortionRootSignature_.Get());
 	commandList->SetPipelineState(distortion->GetPipelineState());
-	srvManager_->SetGraphicsRootDescriptorTable(0, colorSrvIndex);
-	srvManager_->SetGraphicsRootDescriptorTable(1, distortionSrvIndex);
-	srvManager_->SetGraphicsRootDescriptorTable(2, dxCore_->GetDepthSRVIndex());
-	commandList->SetGraphicsRootConstantBufferView(3, distortion->GetConstantBufferGPUAddress());
+	srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamColor, colorSrvIndex);
+	srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamDistortion, distortionSrvIndex);
+	srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamDepth, dxCore_->GetDepthSRVIndex());
+	commandList->SetGraphicsRootConstantBufferView(kDistortionRootParamParams, distortion->GetConstantBufferGPUAddress());
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->DrawInstanced(3, 1, 0, 0);
+	commandList->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 }
 
 // ===================================================================
@@ -674,7 +730,7 @@ bool PostEffect::ConsumeStillCaptureDone()
 	return true;
 }
 
-void PostEffect::CaptureSceneForDisruptor(ID3D12GraphicsCommandList* commandList)
+void PostEffect::CaptureScene(ID3D12GraphicsCommandList* commandList)
 {
 	if (!captureRT_ || !renderTextureA_) return;
 
@@ -865,19 +921,19 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 		// Distortion: color t0, distortion t1, depth t2, cbuffer b0（専用 RS）
 		commandList->SetGraphicsRootSignature(distortionRootSignature_.Get());
 		commandList->SetPipelineState(effect->GetPipelineState());
-		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(1, effect->GetMaskTextureSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(2, dxCore_->GetDepthSRVIndex());
-		commandList->SetGraphicsRootConstantBufferView(3, effect->GetConstantBufferGPUAddress());
+		srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamColor, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamDistortion, effect->GetMaskTextureSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kDistortionRootParamDepth, dxCore_->GetDepthSRVIndex());
+		commandList->SetGraphicsRootConstantBufferView(kDistortionRootParamParams, effect->GetConstantBufferGPUAddress());
 	}
 	else if (effect == maskedOutline) {
 		// MaskedOutline: color t0, scene depth t1, idMask t2, cbuffer b0（専用 RS）
 		commandList->SetGraphicsRootSignature(maskedOutlineRootSignature_.Get());
 		commandList->SetPipelineState(effect->GetPipelineState());
-		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(1, dxCore_->GetDepthSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(2, effect->GetMaskTextureSRVIndex());
-		commandList->SetGraphicsRootConstantBufferView(3, effect->GetConstantBufferGPUAddress());
+		srvManager_->SetGraphicsRootDescriptorTable(kMaskedOutlineRootParamColor, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kMaskedOutlineRootParamDepth, dxCore_->GetDepthSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kMaskedOutlineRootParamMask, effect->GetMaskTextureSRVIndex());
+		commandList->SetGraphicsRootConstantBufferView(kMaskedOutlineRootParamParams, effect->GetConstantBufferGPUAddress());
 	}
 	else if (effect->NeedsDepth() || effect->NeedsMaskTexture()) {
 		// Outline系/Dissolve系: color t0, aux t1, cbuffer b0
@@ -887,23 +943,23 @@ void PostEffect::DrawEffect(ID3D12GraphicsCommandList* commandList, BaseFilterEf
 
 		commandList->SetGraphicsRootSignature(outlineRootSignature_.Get());
 		commandList->SetPipelineState(effect->GetPipelineState());
-		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
-		srvManager_->SetGraphicsRootDescriptorTable(1, auxSrvIndex);
-		commandList->SetGraphicsRootConstantBufferView(2, effect->GetConstantBufferGPUAddress());
+		srvManager_->SetGraphicsRootDescriptorTable(kOutlineRootParamColor, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kOutlineRootParamAux, auxSrvIndex);
+		commandList->SetGraphicsRootConstantBufferView(kOutlineRootParamParams, effect->GetConstantBufferGPUAddress());
 	}
 	else {
 		ID3D12RootSignature* rootSig = effect->NeedsCBuffer() ? effectRootSignature_.Get() : copyRootSignature_.Get();
 		commandList->SetGraphicsRootSignature(rootSig);
 		commandList->SetPipelineState(effect->GetPipelineState());
-		srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+		srvManager_->SetGraphicsRootDescriptorTable(kEffectRootParamTexture, input->GetSRVIndex());
 
 		if (effect->NeedsCBuffer()) {
-			commandList->SetGraphicsRootConstantBufferView(1, effect->GetConstantBufferGPUAddress());
+			commandList->SetGraphicsRootConstantBufferView(kEffectRootParamParams, effect->GetConstantBufferGPUAddress());
 		}
 	}
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->DrawInstanced(3, 1, 0, 0);
+	commandList->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 }
 
 // ===================================================================
@@ -914,9 +970,9 @@ void PostEffect::DrawCopy(ID3D12GraphicsCommandList* commandList, RenderTexture*
 {
 	commandList->SetGraphicsRootSignature(copyRootSignature_.Get());
 	commandList->SetPipelineState(copyPipelineState_.Get());
-	srvManager_->SetGraphicsRootDescriptorTable(0, input->GetSRVIndex());
+	srvManager_->SetGraphicsRootDescriptorTable(kCopyRootParamTexture, input->GetSRVIndex());
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->DrawInstanced(3, 1, 0, 0);
+	commandList->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 }
 
 // ===================================================================
@@ -986,7 +1042,7 @@ void PostEffect::ApplyDamageEffect(float damageRatio)
 	damageRatio = std::clamp(damageRatio, 0.0f, 1.0f);
 
 	// グレースケール
-	if (damageRatio >= 0.9f) {
+	if (damageRatio >= kDamageGrayscaleThreshold) {
 		grayscale->SetEnabled(true);
 	}
 	else {

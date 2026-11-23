@@ -5,6 +5,7 @@
 #include "Primitive/MeshData.h"
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 
@@ -13,47 +14,89 @@
 #endif
 
 namespace {
+	// 長さがこれ以下のベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-6f;
+	// smoothstep（3u² − 2u³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3u² − 2u³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// Vector3・Vector4 の JSON 配列に要る要素の最小の数
+	constexpr int kVector3ComponentCount = 3;
+	// Vector4 の JSON 配列で w まで読むのに要る要素の数
+	constexpr int kVector4ComponentCount = 4;
+	// 放物線の長さの近似から垂れ下がりを求める式（√(3d(L−d)/8)）の掛ける数
+	constexpr float kSagLengthCoef = 3.0f;
+	// 放物線の長さの近似から垂れ下がりを求める式（√(3d(L−d)/8)）の割る数
+	constexpr float kSagLengthDivisor = 8.0f;
+	// 4u(1−u) で真ん中を 1 にするための倍率
+	constexpr float kParabolaPeakScale = 4.0f;
+	// ケーブルの計算の 1 秒あたりの基準の回数（これを substeps で割る）
+	constexpr float kSimulationBaseRate = 60.0f;
+	// 接線の Y がこれ以上なら上の向きの代わりに X 軸を使う
+	constexpr float kNearVerticalCos = 0.9f;
+	// 時間の長さ・幅の下限（これ以下ならすぐ終わったものとして扱う）
+	constexpr float kMinSeconds = 1e-3f;
+	// ケーブルの長さの下限 [m]（0 で割らないように）
+	constexpr float kMinLength = 1e-3f;
+
 	constexpr const char* kWhiteTexture = "Resources/Textures/white1x1.dds";
 
+	/// <summary>2 つのベクトルを足す</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルを引く</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a − b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Mul(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 Cross(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>ベクトルの長さを求める</summary>
+	/// <param name="v">ベクトル</param>
+	/// <returns>長さ</returns>
 	float Len(const Vector3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 SafeNormalize(const Vector3& v, const Vector3& fallback) {
 		const float l = Len(v);
-		return l > 1e-6f ? Mul(v, 1.0f / l) : fallback;
+		return l > kMinNormalizeLength ? Mul(v, 1.0f / l) : fallback;
 	}
+	/// <summary>a から b へ t で線形補間する</summary>
+	/// <param name="a">t = 0 の値</param>
+	/// <param name="b">t = 1 の値</param>
+	/// <param name="t">補間の割合</param>
+	/// <returns>補間した値</returns>
 	Vector3 LerpV(const Vector3& a, const Vector3& b, float t) { return Add(a, Mul(Sub(b, a), t)); }
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="u">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * u);
 	}
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
+	/// <summary>要素 3〜4 つの JSON 配列を Vector4 として読む（4 つ目が無ければ w は今の値のまま。配列でない・要素が足りないときは全部今の値のまま）</summary>
+	/// <param name="node">読み込み元の配列</param>
+	/// <param name="value">読み込み先</param>
+	void ReadColorRgbOrRgba(const JsonValue& node, Vector4& value) {
+		if (!node.IsArray() || node.Size() < kVector3ComponentCount) return;
 		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-	void ReadVector4(const JsonValue& node, Vector4& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)), node.Size() >= 4 ? static_cast<float>(node[3].AsDouble(value.w)) : value.w };
-	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue node = JsonValue::MakeArray();
-		node.Push(JsonValue(static_cast<double>(v.x)));
-		node.Push(JsonValue(static_cast<double>(v.y)));
-		node.Push(JsonValue(static_cast<double>(v.z)));
-		return node;
-	}
-	JsonValue MakeVector4(const Vector4& v) {
-		JsonValue node = MakeVector3({ v.x, v.y, v.z });
-		node.Push(JsonValue(static_cast<double>(v.w)));
-		return node;
+			static_cast<float>(node[2].AsDouble(value.z)), node.Size() >= kVector4ComponentCount ? static_cast<float>(node[3].AsDouble(value.w)) : value.w };
 	}
 
 	// 頂点の並び：点 i の輪（kSides 個）を順に。最後に両端のふたの中心 2 つ
@@ -104,11 +147,11 @@ void LaunchCable::Reset(const Vector3& anchor, const Vector3& attach, const Vect
 	const float d = Len(Sub(attach, anchor));
 	length_ = (std::max)(baseLength_, d * stretchSlack_);
 	// 長さ L・距離 d の放物線のたるみ s ≈ sqrt(3·d·(L − d) / 8)
-	const float sag = std::sqrt((std::max)(3.0f * d * (length_ - d) / 8.0f, 0.0f));
+	const float sag = std::sqrt((std::max)(kSagLengthCoef * d * (length_ - d) / kSagLengthDivisor, 0.0f));
 	for (int i = 0; i < kPointCount; ++i) {
 		const float u = static_cast<float>(i) / static_cast<float>(kPointCount - 1);
 		Vector3 p = LerpV(anchor, attach, u);
-		p.y -= sag * 4.0f * u * (1.0f - u);
+		p.y -= sag * kParabolaPeakScale * u * (1.0f - u);
 		points_[i] = p;
 		previous_[i] = p;
 	}
@@ -123,7 +166,7 @@ void LaunchCable::Purge() {
 	// 機体の速さは捨てて、跳ね上がって後ろへ残る速さ＋螺旋の速さを与える（端ほど大きい。Verlet なので前の位置で表す）。
 	// 螺旋：各点で「その点のケーブルの向き」に直交する 2 方向の中で向きを回す
 	const int last = kPointCount - 1;
-	const float h = 1.0f / (60.0f * static_cast<float>((std::max)(substeps_, 1)));
+	const float h = 1.0f / (kSimulationBaseRate * static_cast<float>((std::max)(substeps_, 1)));
 	for (int i = 1; i <= last; ++i) {
 		const float u = static_cast<float>(i) / static_cast<float>(last);
 		const float angle = kPi * waveKickHalfWaves_ * u;
@@ -136,7 +179,7 @@ void LaunchCable::Purge() {
 Vector3 LaunchCable::SwirlDirection(int i, float angle) const {
 	const int last = kPointCount - 1;
 	const Vector3 tangent = SafeNormalize(Sub(points_[(std::min)(i + 1, last)], points_[(std::max)(i - 1, 0)]), { 0.0f, 0.0f, 1.0f });
-	const Vector3 ref = std::fabs(tangent.y) < 0.9f ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
+	const Vector3 ref = std::fabs(tangent.y) < kNearVerticalCos ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
 	const Vector3 side = SafeNormalize(Cross(ref, tangent), { 1.0f, 0.0f, 0.0f });
 	const Vector3 up = Cross(tangent, side);
 	// waveUpRatio が 1 で円（螺旋）、小さいほど横につぶれた楕円
@@ -152,7 +195,7 @@ void LaunchCable::Update(float deltaTime, const Vector3& anchor, const Vector3& 
 	} else {
 		purgeTime_ += deltaTime;
 		// 外れてしばらくは長さを保ってうねらせ、それから縮める
-		const float u = retractSeconds_ > 1e-3f ? (purgeTime_ - retractDelay_) / retractSeconds_ : 1.0f;
+		const float u = retractSeconds_ > kMinSeconds ? (purgeTime_ - retractDelay_) / retractSeconds_ : 1.0f;
 		length_ = purgeLength_ + (retractLength_ - purgeLength_) * SmoothStep01(u);
 	}
 	Simulate(deltaTime, anchor, attach, floorY);
@@ -163,17 +206,17 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 	const float h = dt / static_cast<float>(steps);
 	const float maxMove = maxSpeed_ * h;
 	const float segment = length_ / static_cast<float>(kPointCount - 1);
-	const float thin = std::clamp(std::sqrt(baseLength_ / (std::max)(length_, 1e-3f)), thinMin_, 1.0f);
+	const float thin = std::clamp(std::sqrt(baseLength_ / (std::max)(length_, kMinLength)), thinMin_, 1.0f);
 	const float floorLimit = floorY + radius_ * thin;
 	const int last = kPointCount - 1;
 	const float damping = attached_ ? damping_ : purgeDamping_;
 	// 外れた後のうねり：ケーブルの軸の周りを回りながら先端から付け根へ伝わる螺旋の波。時間とともに弱める
 	const float waveFade = attached_ ? 0.0f
-		: 1.0f - SmoothStep01(waveFadeSeconds_ > 1e-3f ? purgeTime_ / waveFadeSeconds_ : 1.0f);
+		: 1.0f - SmoothStep01(waveFadeSeconds_ > kMinSeconds ? purgeTime_ / waveFadeSeconds_ : 1.0f);
 	const float bendRest = 2.0f * segment * bendRest_;
 	// カメラの側へ引き寄せる強さ（時間の山）
 	float sweepEnvelope = 0.0f;
-	if (!attached_ && sweepSeconds_ > 1e-3f) {
+	if (!attached_ && sweepSeconds_ > kMinSeconds) {
 		const float st = (purgeTime_ - sweepDelay_) / sweepSeconds_;
 		if (st > 0.0f && st < 1.0f) sweepEnvelope = std::sin(kPi * st);
 	}
@@ -185,7 +228,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 			if (i == 0 || (attached_ && i == last)) continue;
 			Vector3 v = Mul(Sub(points_[i], previous_[i]), damping);
 			const float speed = Len(v);
-			if (speed > maxMove && speed > 1e-6f) v = Mul(v, maxMove / speed);
+			if (speed > maxMove && speed > kMinNormalizeLength) v = Mul(v, maxMove / speed);
 			Vector3 force = { 0.0f, -gravity_, 0.0f };
 			if (waveFade > 0.0f) {
 				const float u = static_cast<float>(i) / static_cast<float>(last);
@@ -194,7 +237,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 			}
 			if (sweepEnvelope > 0.0f) {
 				const float u = static_cast<float>(i) / static_cast<float>(last);
-				const float w = sweepWidth_ > 1e-3f ? (u - sweepCenter_) / sweepWidth_ : 0.0f;
+				const float w = sweepWidth_ > kMinSeconds ? (u - sweepCenter_) / sweepWidth_ : 0.0f;
 				const float shape = std::exp(-w * w);
 				// カメラへの向きから、ケーブルの向きの成分を除く（ケーブルを横へ振る）
 				const Vector3 toTarget = Sub(sweepTarget_, points_[i]);
@@ -202,7 +245,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 				const Vector3 tangent = SafeNormalize(Sub(points_[(std::min)(i + 1, last)], points_[i - 1]), { 0.0f, 0.0f, 1.0f });
 				const float k = toTarget.x * tangent.x + toTarget.y * tangent.y + toTarget.z * tangent.z;
 				const Vector3 dir = SafeNormalize(Sub(toTarget, Mul(tangent, k)), { 0.0f, 0.0f, 0.0f });
-				const float keepOut = sweepKeepOut_ > 1e-3f ? std::clamp((dist - sweepKeepOut_) / sweepKeepOut_, 0.0f, 1.0f) : 1.0f;
+				const float keepOut = sweepKeepOut_ > kMinSeconds ? std::clamp((dist - sweepKeepOut_) / sweepKeepOut_, 0.0f, 1.0f) : 1.0f;
 				force = Add(force, Mul(dir, sweepForce_ * sweepEnvelope * shape * keepOut));
 			}
 			previous_[i] = points_[i];
@@ -221,7 +264,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 				if (fixedA && fixedB) continue;
 				const Vector3 d = Sub(points_[i + 1], points_[i]);
 				const float l = Len(d);
-				if (l < 1e-6f) continue;
+				if (l < kMinNormalizeLength) continue;
 				const Vector3 corr = Mul(d, (l - segment) / l * stiffness_);
 				if (fixedA) {
 					points_[i + 1] = Sub(points_[i + 1], corr);
@@ -240,7 +283,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 					if (fixedA && fixedB) continue;
 					const Vector3 d = Sub(points_[i + 2], points_[i]);
 					const float l = Len(d);
-					if (l >= bendRest || l < 1e-6f) continue;
+					if (l >= bendRest || l < kMinNormalizeLength) continue;
 					const Vector3 corr = Mul(d, (l - bendRest) / l * bendStiffness_);
 					if (fixedA) {
 						points_[i + 2] = Sub(points_[i + 2], corr);
@@ -266,7 +309,7 @@ void LaunchCable::Simulate(float dt, const Vector3& anchor, const Vector3& attac
 
 void LaunchCable::BuildVertices(const Vector3& cameraPos) {
 	const Vector3 keyDir = SafeNormalize(keyDirection_, { 0.0f, 1.0f, 0.0f });
-	const float thin = std::clamp(std::sqrt(baseLength_ / (std::max)(length_, 1e-3f)), thinMin_, 1.0f);
+	const float thin = std::clamp(std::sqrt(baseLength_ / (std::max)(length_, kMinLength)), thinMin_, 1.0f);
 	auto shade = [&](const Vector3& n, const Vector3& p, const Vector4& albedo) {
 		const float up = n.y * 0.5f + 0.5f;
 		const Vector3 hemi = LerpV(groundLight_, skyLight_, up);
@@ -288,7 +331,7 @@ void LaunchCable::BuildVertices(const Vector3& cameraPos) {
 			i == 0 ? firstTangent : lastTangent);
 		if (i == 0) {
 			firstTangent = tangent;
-			const Vector3 up = std::fabs(tangent.y) < 0.9f ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
+			const Vector3 up = std::fabs(tangent.y) < kNearVerticalCos ? Vector3{ 0.0f, 1.0f, 0.0f } : Vector3{ 1.0f, 0.0f, 0.0f };
 			normal = SafeNormalize(Cross(up, tangent), { 1.0f, 0.0f, 0.0f });
 		} else {
 			// 前の点の法線を今の接線に直交させて運ぶ（ねじれないように）
@@ -339,7 +382,7 @@ void LaunchCable::LoadTuning(const JsonValue& node) {
 	readInt("anchorIndex", anchorIndex_);
 	anchorIndex_ = std::clamp(anchorIndex_, 0, 1);
 	attachBone_ = node["attachBone"].AsString(attachBone_);
-	ReadVector3(node["attachOffset"], attachOffset_);
+	attachOffset_ = ReadVector3(node["attachOffset"], attachOffset_);
 	read("radius", radius_);
 	read("slack", slack_);
 	read("stretchSlack", stretchSlack_);
@@ -369,15 +412,15 @@ void LaunchCable::LoadTuning(const JsonValue& node) {
 	read("sweepCenter", sweepCenter_);
 	read("sweepWidth", sweepWidth_);
 	read("sweepKeepOut", sweepKeepOut_);
-	ReadVector3(node["purgeKick"], purgeKick_);
+	purgeKick_ = ReadVector3(node["purgeKick"], purgeKick_);
 	read("floorFriction", floorFriction_);
 	readInt("plugPoints", plugPoints_);
 	read("plugScale", plugScale_);
-	ReadVector4(node["color"], color_);
-	ReadVector4(node["plugColor"], plugColor_);
-	ReadVector3(node["skyLight"], skyLight_);
-	ReadVector3(node["groundLight"], groundLight_);
-	ReadVector3(node["keyDirection"], keyDirection_);
+	ReadColorRgbOrRgba(node["color"], color_);
+	ReadColorRgbOrRgba(node["plugColor"], plugColor_);
+	skyLight_ = ReadVector3(node["skyLight"], skyLight_);
+	groundLight_ = ReadVector3(node["groundLight"], groundLight_);
+	keyDirection_ = ReadVector3(node["keyDirection"], keyDirection_);
 	read("keyIntensity", keyIntensity_);
 	read("specularIntensity", specularIntensity_);
 	read("specularPower", specularPower_);

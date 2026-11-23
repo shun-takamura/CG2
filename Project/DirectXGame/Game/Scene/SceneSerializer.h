@@ -70,16 +70,25 @@ struct SceneData {
 /// </summary>
 namespace SceneSerializer {
 
-	/// <summary>SceneData を JSON ファイルへ書き出す。失敗時 false。</summary>
+	/// <summary>SceneData を JSON ファイルへ書き出す（親フォルダが無ければ作る）</summary>
+	/// <param name="filePath">書き出す JSON ファイルのパス</param>
+	/// <param name="data">書き出すシーンの記述</param>
+	/// <returns>書けたら true、失敗時 false</returns>
 	bool WriteFile(const std::string& filePath, const SceneData& data);
 
 	/// <summary>SceneData を JSON 文字列にする（ファイルには書かない）。差分検出のハッシュ源に使う。</summary>
+	/// <param name="data">文字列にするシーンの記述</param>
+	/// <returns>WriteFile と同じ形の JSON 文字列</returns>
 	std::string ToString(const SceneData& data);
 
 	/// <summary>
-	/// JSON ファイルを SceneData へ読み込む。失敗時 false（out は変更しない）。
+	/// JSON ファイルを SceneData へ読み込む（未知の種別のエントリは読み飛ばす）。
 	/// **パースに失敗しても呼び出し側のシーンは壊さない**のが約束（先に読み切ってから差し替える）。
 	/// </summary>
+	/// <param name="filePath">読む JSON ファイルのパス</param>
+	/// <param name="out">読んだ結果の書き込み先（失敗時は変更しない）</param>
+	/// <param name="errorMessage">失敗時にパースのエラー文を入れる先（nullptr なら入れない）</param>
+	/// <returns>読めたら true、失敗時 false</returns>
 	bool ReadFile(const std::string& filePath, SceneData& out, std::string* errorMessage = nullptr);
 
 }  // namespace SceneSerializer

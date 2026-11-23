@@ -2,6 +2,28 @@
 #include "DirectXCore.h"
 #include <algorithm>
 
+namespace {
+	// DirectXCore が無いときに 1 フレームの時間を出すのに使うフレームレート [fps]
+	constexpr float kFallbackFrameRate = 60.0f;
+}
+
+void BaseTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
+	float screenWidth, float screenHeight) {
+	spriteManager_ = spriteManager;
+	dxCore_        = dxCore;
+	screenWidth_   = screenWidth;
+	screenHeight_  = screenHeight;
+	OnInitialize();
+}
+
+void BaseTransition::ResetToIdle() {
+	state_ = TransitionState::None;
+	isTransitioning_ = false;
+	skipRequested_ = false;
+	currentTime_ = 0.0f;
+	holdTime_ = 0.0f;
+}
+
 void BaseTransition::Start(std::function<void()> onSceneChange, bool playReveal) {
 	if (isTransitioning_) return;
 	skipRequested_ = false;
@@ -95,7 +117,7 @@ void BaseTransition::Update() {
 }
 
 float BaseTransition::GetStepDeltaTime() const {
-	const float dt = dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / 60.0f);
+	const float dt = dxCore_ ? dxCore_->GetDeltaTime() : (1.0f / kFallbackFrameRate);
 	return (std::min)(dt, kMaxStepDeltaTime);
 }
 

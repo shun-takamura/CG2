@@ -31,8 +31,13 @@ struct CameraForGPU;
 class WaterReflection {
 public:
 	WaterReflection();
+	/// <summary>反射 RT を解放する</summary>
 	~WaterReflection();
 
+	/// <summary>反射 RT（sRGB）・専用の深度・鏡側の CB（VS b1 の鏡像 ViewProj と PS b2 のカメラを 1 本に同居）を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
+	/// <param name="srvManager">反射 RT の SRV を確保する先</param>
+	/// <param name="object3DManager">映す物を描く時の DrawSetting に使う</param>
 	/// <param name="resolutionScale">反射 RT の解像度倍率（本体解像度に対する比。0.25〜1.0）</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager,
 		float resolutionScale = 1.0f);
@@ -40,9 +45,14 @@ public:
 	//==============================
 	// 映す物の登録
 	//==============================
+	/// <summary>静的なモデルを映す物に加える（nullptr・登録済みは無視）</summary>
+	/// <param name="target">映す物</param>
 	void AddTarget(Object3DInstance* target);
+	/// <summary>静的なモデルを映す物から外す</summary>
+	/// <param name="target">外す物</param>
 	void RemoveTarget(Object3DInstance* target);
 	/// <summary>アニメーションするモデル（自機・敵など）。スキニングは反射のパスの中で済ませる</summary>
+	/// <param name="target">映す物（nullptr・登録済みは無視）</param>
 	void AddTarget(AnimatedObject3DInstance* target);
 	/// <summary>静的・アニメーションの両方を外す</summary>
 	void ClearTargets();
@@ -53,46 +63,65 @@ public:
 	/// （ビューポート／シザーは本体解像度に戻して返す）。
 	/// 描画距離内に映す物が無く、前フレームも空だったならパスごと飛ばす。
 	/// </summary>
+	/// <param name="camera">本編のカメラ（エフェクトのビルボードにも使う）</param>
 	void Render(const Camera& camera);
 
 	/// <summary>
 	/// 視点を行列で直接渡す版。水面を描くカメラと別の視点で反射を作るとき
 	/// （デバッグカメラ中にゲームカメラ基準の反射を確認する等）に使う。
 	/// </summary>
+	/// <param name="viewProjection">反射の基準にする ViewProj</param>
+	/// <param name="eyePosition">反射の基準にする視点の位置</param>
 	void Render(const Matrix4x4& viewProjection, const Vector3& eyePosition);
 
 	/// <summary>
 	/// エフェクト（GPU パーティクル・エフェクトの Primitive）も反射 RT に描くか。既定 false（タイトルは描かない）。
 	/// ビルボードに View 行列が要るので、Render(const Camera&) の時だけ描く。
 	/// </summary>
+	/// <param name="draw">描くなら true</param>
 	void SetDrawEffects(bool draw) { drawEffects_ = draw; }
 
 	//==============================
 	// パラメータ
 	//==============================
+	/// <summary>反射面の高さを設定する</summary>
+	/// <param name="height">y [m]</param>
 	void SetWaterHeight(float height) { waterHeight_ = height; }
+	/// <summary>反射面の高さを返す</summary>
+	/// <returns>y [m]</returns>
 	float GetWaterHeight() const { return waterHeight_; }
 	/// <summary>反射側の描画距離（本編カメラから物を包む球の表面まで）。これより遠い物は映さない</summary>
+	/// <param name="distance">距離 [m]</param>
 	void SetFarClip(float distance) { farClip_ = distance; }
+	/// <summary>反射側の描画距離を返す</summary>
+	/// <returns>距離 [m]</returns>
 	float GetFarClip() const { return farClip_; }
 
 	//==============================
 	// 水面シェーダ向け
 	//==============================
 	/// <summary>反射 RT が SRV として読める状態か（最初の Render 以降 true）</summary>
+	/// <returns>読めるなら true</returns>
 	bool IsReady() const { return srvReady_; }
 	/// <summary>このフレームの反射 RT に何か描かれているか（false なら空だけ映せばよい）</summary>
+	/// <returns>描かれていれば true</returns>
 	bool HasContent() const { return hasContent_; }
+	/// <summary>反射 RT の SRV を返す（α=0 の所は空）</summary>
+	/// <returns>SRV のハンドル</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandle() const;
 
 	/// <summary>反射に使った視点の ViewProj（鏡像前）。水面はこれで投影して反射 RT を引く</summary>
+	/// <returns>ViewProj</returns>
 	const Matrix4x4& GetSourceViewProjection() const { return sourceViewProjection_; }
 	/// <summary>反射に使った視点の位置。フレネル・反射方向・屈折の基準になる</summary>
+	/// <returns>ワールド座標</returns>
 	const Vector3& GetSourceEyePosition() const { return sourceEyePosition_; }
 
 	/// <summary>このフレームに反射 RT へ描いた物の数（PEPPER/ImGui の確認用）</summary>
+	/// <returns>描いた物の数</returns>
 	uint32_t GetDrawnCount() const { return drawnCount_; }
 
+	/// <summary>反射の描画距離・クリップ平面のずれの調整と、描いた数の表示（Debug だけ）</summary>
 	void OnImGui();
 
 private:
@@ -105,9 +134,15 @@ private:
 	// VS b1（先頭）と PS b2（256 バイト先）を1本のバッファに同居させる
 	static constexpr uint32_t kCameraCBOffset = 256;
 
+	/// <summary>反射 RT 用の深度（D24S8）と DSV を作る（作り直しは前の物を捨てて）</summary>
+	/// <param name="width">幅 [px]</param>
+	/// <param name="height">高さ [px]</param>
 	void CreateDepthBuffer(uint32_t width, uint32_t height);
-	// 描画解像度 × 倍率の大きさ。描画解像度が変わっていたら RT と深度を作り直す
+	/// <summary>描画解像度 × 倍率の大きさ。描画解像度が変わっていたら RT と深度を作り直す</summary>
 	void FitToRenderResolution();
+	/// <summary>描画距離で映す物を絞り、鏡像 ViewProj とクリップ平面・鏡像カメラを CB に書いて反射 RT へ描く（映す物が無く RT も空なら飛ばす）</summary>
+	/// <param name="viewProjection">反射の基準にする ViewProj</param>
+	/// <param name="eyePosition">反射の基準にする視点の位置</param>
 	/// <param name="view">本編カメラの View。null ならエフェクトは描かない</param>
 	void RenderInternal(const Matrix4x4& viewProjection, const Vector3& eyePosition, const Matrix4x4* view);
 

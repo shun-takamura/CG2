@@ -24,6 +24,9 @@ enum class TimeGroup : int {
     Count
 };
 
+/// <summary>グループの表示名（ImGui・ログ用）</summary>
+/// <param name="g">グループ</param>
+/// <returns>名前（範囲外なら空文字）</returns>
 inline const char* GetTimeGroupName(TimeGroup g) {
     switch (g) {
     case TimeGroup::World:  return "World";

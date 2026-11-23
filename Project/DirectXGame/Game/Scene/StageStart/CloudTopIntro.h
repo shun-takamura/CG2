@@ -14,27 +14,48 @@ class JsonValue;
 /// </summary>
 class CloudTopIntro {
 public:
+	/// <summary>回り込みを始める</summary>
 	void Begin();
+	/// <summary>回り込みをやめる（以後はレールのカメラのまま）</summary>
 	void Cancel() { active_ = false; }
+	/// <summary>回り込みの途中かを返す（この間はシーンが入力を止める）</summary>
+	/// <returns>途中なら true</returns>
 	bool IsActive() const { return active_; }
+	/// <summary>始めてからの秒を返す</summary>
+	/// <returns>経過 [秒]</returns>
 	float GetElapsed() const { return elapsed_; }
+	/// <summary>全体の長さ（止まって見る秒＋回り込む秒）を返す</summary>
+	/// <returns>長さ [秒]</returns>
 	float GetTotalSeconds() const;
 
 	/// <summary>
 	/// 時間を進め、camera（今はレールのカメラ）を回り込みのカメラで上書きして camera->Update() する。
-	/// focus＝自機の位置（ワールド）。終わったフレームは上書きしない（そのままレールのカメラ）
+	/// 終わったフレームは上書きしない（そのままレールのカメラ）
 	/// </summary>
+	/// <param name="camera">レールのカメラ（書き換える）</param>
+	/// <param name="playerWorldPos">自機の位置（ワールド。注視点）</param>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Apply(Camera* camera, const Vector3& playerWorldPos, float deltaTime);
-	/// <summary>Apply の前のレールのカメラの姿勢へ戻す／回り込みのカメラへ戻す（レールのカメラで決める物＝敵の出現位置の間だけ）</summary>
+	/// <summary>Apply の前のレールのカメラの姿勢へ戻す（レールのカメラで決める物＝敵の出現位置の間だけ）</summary>
+	/// <param name="camera">戻すカメラ</param>
 	void UseRailPose(Camera* camera) const;
+	/// <summary>回り込みのカメラの姿勢へ戻す</summary>
+	/// <param name="camera">戻すカメラ</param>
 	void UseIntroPose(Camera* camera) const;
-	/// <summary>レールのカメラの向き（自機をレールの前へ向ける）</summary>
+	/// <summary>レールのカメラの向きを返す（自機をレールの前へ向ける）</summary>
+	/// <returns>回転 [ラジアン]</returns>
 	const Vector3& GetRailRotate() const { return railRotate_; }
-	/// <summary>雲の上に出てから羽根の展開を始めるまで [s]</summary>
+	/// <summary>雲の上に出てから羽根の展開を始めるまでの秒を返す</summary>
+	/// <returns>秒 [秒]</returns>
 	float GetWingDeployDelay() const { return wingDeployDelay_; }
 
+	/// <summary>調整値（StagePlay.json の "cloudTopIntro"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:

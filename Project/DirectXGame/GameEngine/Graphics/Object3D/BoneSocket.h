@@ -20,10 +20,12 @@ struct BoneSocket {
     /// <summary>
     /// 追従先ボーンのスケール除去済みワールド × offset。target が無ければ offset のみ。
     /// </summary>
+    /// <returns>ソケットのワールド行列</returns>
     Matrix4x4 World() const;
 
     /// <summary>
     /// World() の平行移動成分。パーティクル発生点・銃口など位置だけ欲しい時に使う。
     /// </summary>
+    /// <returns>ソケットのワールド座標</returns>
     Vector3 Position() const;
 };

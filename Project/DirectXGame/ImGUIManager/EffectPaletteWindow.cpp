@@ -3,9 +3,18 @@
 #include "EditorDropPayload.h"               // EFFECT_COMP_DROP / EffectComponentDropPayload
 #include "imgui.h"
 
+namespace {
+    // ウィンドウの初めの大きさ [px]
+    constexpr int kInitialWidth = 180;
+    constexpr int kInitialHeight = 320;
+    // ImGui の ID がほかの項目とぶつからないように足す値（Primitive の D&D 元 / 種別の D&D 元）
+    constexpr int kPrimitiveSourceIdOffset = 700000;
+    constexpr int kKindSourceIdOffset = 710000;
+}
+
 EffectPaletteWindow::EffectPaletteWindow()
     : IImGuiWindow("Effect Components") {
-    SetInitialSize(ImVec2(180, 320));
+    SetInitialSize(ImVec2(kInitialWidth, kInitialHeight));
 }
 
 void EffectPaletteWindow::OnDraw() {
@@ -14,7 +23,7 @@ void EffectPaletteWindow::OnDraw() {
 
     // kind==Primitive の D&D ソース。meshType を payload に載せる（置いた瞬間に形状確定）。
     auto primitiveSource = [](const char* label, int meshType) {
-        ImGui::PushID(meshType + 700000);
+        ImGui::PushID(meshType + kPrimitiveSourceIdOffset);
         ImGui::Selectable(label, false);
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
             EffectComponentDropPayload payload{};
@@ -29,7 +38,7 @@ void EffectPaletteWindow::OnDraw() {
 
     // Primitive 以外（種別だけ。meshType は無視される）の D&D ソース。
     auto kindSource = [](const char* label, EffectComponentEditable::Kind kind) {
-        ImGui::PushID(static_cast<int>(kind) + 710000);
+        ImGui::PushID(static_cast<int>(kind) + kKindSourceIdOffset);
         ImGui::Selectable(label, false);
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
             EffectComponentDropPayload payload{};

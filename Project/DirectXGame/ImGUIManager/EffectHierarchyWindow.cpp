@@ -4,9 +4,20 @@
 #include "Effect/EffectComponentEditable.h"
 #include "imgui.h"
 
+namespace {
+    // ウィンドウの初めの大きさ [px]
+    constexpr int kInitialWidth = 260;
+    constexpr int kInitialHeight = 360;
+    // グループの見出しの文字列のバッファの大きさ [byte]
+    constexpr int kGroupHeaderBufferSize = 64;
+    // Selectable の右に並べるボタンの数（複製 + / 削除 x）と、その分に足す余白 [px]
+    constexpr float kTrailingButtonCount = 2.0f;
+    constexpr float kTrailingButtonMargin = 8.0f;
+}
+
 EffectHierarchyWindow::EffectHierarchyWindow(IEditorSelection* selection, EffectEditorWindow* editor)
     : IImGuiWindow("EffectHierarchy"), selection_(selection), editor_(editor) {
-    SetInitialSize(ImVec2(260, 360));
+    SetInitialSize(ImVec2(kInitialWidth, kInitialHeight));
 
 }
 
@@ -28,7 +39,7 @@ void EffectHierarchyWindow::OnDraw() {
         int count = 0;
         for (auto& e : editables) if (e->GetKind() == kind) ++count;
 
-        char header[64];
+        char header[kGroupHeaderBufferSize];
         std::snprintf(header, sizeof(header), "%s (%d)", label, count);
 
         if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -42,7 +53,7 @@ void EffectHierarchyWindow::OnDraw() {
                 // 複製(+)・削除(x) ボタン分の幅を残して Selectable を伸ばす
                 const float availW = ImGui::GetContentRegionAvail().x;
                 const float btnW = ImGui::GetFrameHeight();
-                if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availW - btnW * 2.0f - 8.0f, 0))) {
+                if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availW - btnW * kTrailingButtonCount - kTrailingButtonMargin, 0))) {
                     if (selection_) selection_->SetSelected(e.get());
                 }
                 ImGui::SameLine();

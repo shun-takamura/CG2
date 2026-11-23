@@ -18,15 +18,40 @@
 #include <utility>
 
 namespace {
-    // 文字配列ペイロードへの安全コピー
+    // .mesh のヘッダーの大きさ / magic の文字数 / flags の位置と大きさ [byte]
+    constexpr int kMeshHeaderSize = 12;
+    constexpr int kMeshMagicLength = 4;
+    constexpr int kMeshFlagsOffset = 8;
+    constexpr int kMeshFlagsSize = 4;
+    // .mesh の flags のスキニングありのビット
+    constexpr int kMeshFlagSkinning = 0x1;
+    // シーンの内容が変わってから保存するまでの待ち時間 [秒]
+    constexpr float kSceneSaveDebounceSeconds = 0.3f;
+    // アセットの一覧で ImGui の ID がぶつからないように種類ごとに足す値
+    constexpr int kModelIdOffset = 100000;
+    constexpr int kSpriteIdOffset = 200000;
+    constexpr int kAnimatedIdOffset = 300000;
+    constexpr int kPrimitiveIdOffset = 400000;
+    constexpr int kMaterialIdOffset = 500000;
+    constexpr int kEffectIdOffset = 600000;
+    constexpr int kAnimationIdOffset = 700000;
+
+    /// <summary>文字配列のペイロードへ、はみ出さないよう切り詰めてコピーする（必ず終端する）</summary>
+    /// <param name="dst">コピー先</param>
+    /// <param name="cap">コピー先の大きさ [byte]（1 以上）</param>
+    /// <param name="src">コピー元</param>
     inline void SafeCopy(char* dst, size_t cap, const std::string& src) {
         size_t n = src.size() < cap - 1 ? src.size() : cap - 1;
         std::memcpy(dst, src.data(), n);
         dst[n] = '\0';
     }
 
-    // 大文字小文字を無視した比較（フォルダ/ファイルのアルファベット順用）
+    /// <summary>大文字小文字を無視した比較（フォルダ/ファイルのアルファベット順用）</summary>
     struct CiLess {
+        /// <summary>a が b より前か（大文字小文字を無視した辞書順）</summary>
+        /// <param name="a">左辺</param>
+        /// <param name="b">右辺</param>
+        /// <returns>前なら true</returns>
         bool operator()(const std::string& a, const std::string& b) const {
             return std::lexicographical_compare(
                 a.begin(), a.end(), b.begin(), b.end(),
@@ -37,14 +62,17 @@ namespace {
         }
     };
 
-    // アセット一覧をファイルブラウザ風に見せるためのツリーノード。
-    // folders は CiLess で自動的にアルファベット順。files は葉（表示名＋元コレクションでの index）。
+    /// <summary>
+    /// アセット一覧をファイルブラウザ風に見せるためのツリーノード。
+    /// folders は CiLess で自動的にアルファベット順。files は葉（表示名＋元コレクションでの index）
+    /// </summary>
     struct AssetTreeNode {
         std::map<std::string, AssetTreeNode, CiLess> folders;
         std::vector<std::pair<std::string, int>>     files; // (葉の表示名, 元 index)
     };
 
-    // files を再帰的にアルファベット順（CiLess）へソート。
+    /// <summary>files を再帰的にアルファベット順（CiLess）へソートする</summary>
+    /// <param name="node">ソートするノード</param>
     void SortAssetTree(AssetTreeNode& node) {
         std::sort(node.files.begin(), node.files.end(),
             [](const std::pair<std::string, int>& a, const std::pair<std::string, int>& b) {
@@ -56,8 +84,9 @@ namespace {
         }
     }
 
-    // (displayName, index) の一覧から、'/' 区切りでフォルダ階層ツリーを構築する。
-    // 葉のラベルにはパス末尾（ファイル名）のみを格納する。
+    /// <summary>(displayName, index) の一覧から、'/' 区切りでフォルダ階層ツリーを作る（葉のラベルはパス末尾のファイル名だけ）</summary>
+    /// <param name="items">表示名と元の添字の組</param>
+    /// <returns>ソート済みのツリーの根</returns>
     AssetTreeNode BuildAssetTree(const std::vector<std::pair<std::string, int>>& items) {
         AssetTreeNode root;
         for (const auto& [displayName, index] : items) {
@@ -78,8 +107,12 @@ namespace {
         return root;
     }
 
-    // ツリーを描画。フォルダを TreeNode で再帰描画 → その階層の葉を renderLeaf(葉名, index) で描画。
-    // forceOpen=true（検索中など）のとき全フォルダを開いた状態で見せる。
+    /// <summary>
+    /// ツリーを描く。フォルダを TreeNode で再帰描画 → その階層の葉を renderLeaf(葉名, index) で描く
+    /// </summary>
+    /// <param name="node">描くノード</param>
+    /// <param name="renderLeaf">葉を描く関数</param>
+    /// <param name="forceOpen">true（検索中など）なら全フォルダを開いた状態で見せる</param>
     template<typename LeafFn>
     void RenderAssetTree(const AssetTreeNode& node, const LeafFn& renderLeaf, bool forceOpen) {
         for (const auto& [folderName, child] : node.folders) {
@@ -114,6 +147,8 @@ SceneEditorWindow::~SceneEditorWindow() {
 void SceneEditorWindow::WorkerFunc() {
     // バックグラウンドスレッドでの例外はプロセス全体を落とすため try-catch で保護する
     try {
+        // 1. Resources/Models / Resources/Textures / Resources/Models/Animated をスキャン
+        // 2. モデルは ModelManager::PreloadCPU で先読み（スプライト・アニメーションは表示のみ。実体はドロップ時にロード）
         ScanModelsAndTextures();
         if (stopRequested_) return;
         scanDone_ = true;
@@ -167,12 +202,12 @@ void SceneEditorWindow::ScanModelsAndTextures() {
             bool hasSkinning = false;
             auto h = locator->Open(p);
             if (h.IsValid()) {
-                char hdr[12]{};
-                h.Read(hdr, 12);
-                if (std::memcmp(hdr, "MESH", 4) == 0) {
+                char hdr[kMeshHeaderSize]{};
+                h.Read(hdr, kMeshHeaderSize);
+                if (std::memcmp(hdr, "MESH", kMeshMagicLength) == 0) {
                     uint32_t flags = 0;
-                    std::memcpy(&flags, hdr + 8, 4);
-                    hasSkinning = (flags & 0x1) != 0;
+                    std::memcpy(&flags, hdr + kMeshFlagsOffset, kMeshFlagsSize);
+                    hasSkinning = (flags & kMeshFlagSkinning) != 0;
                 }
             }
 
@@ -395,7 +430,7 @@ void SceneEditorWindow::AutoSaveSceneIfDirty(float dt) {
         // 内容が変わった。ドラッグ中は毎フレhere に来るのでデバウンスを張り直し、
         // 手が止まって 0.3 秒経ってから 1 回だけ保存する。
         sceneContentHash_ = h;
-        sceneDirtyDebounce_ = 0.3f;
+        sceneDirtyDebounce_ = kSceneSaveDebounceSeconds;
         return;
     }
 
@@ -533,7 +568,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(models);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = models[i];
-            ImGui::PushID(i + 100000);
+            ImGui::PushID(i + kModelIdOffset);
 
             const bool gpuReady = ModelManager::GetInstance()->IsGPUReady(entry.filename);
             const bool cpuReady = ModelManager::GetInstance()->IsCPUReady(entry.filename);
@@ -563,7 +598,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(textures);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = textures[i];
-            ImGui::PushID(i + 200000);
+            ImGui::PushID(i + kSpriteIdOffset);
 
             ImGui::Selectable(leafName.c_str(), false);
 
@@ -587,7 +622,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(materials);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = materials[i];
-            ImGui::PushID(i + 500000);
+            ImGui::PushID(i + kMaterialIdOffset);
 
             ImGui::Selectable(leafName.c_str(), false);
 
@@ -614,7 +649,7 @@ void SceneEditorWindow::OnDraw() {
             const auto type = static_cast<PrimitiveInstance::PrimitiveType>(i);
             const char* label = PrimitiveInstance::PrimitiveTypeToString(type);
 
-            ImGui::PushID(i + 400000);
+            ImGui::PushID(i + kPrimitiveIdOffset);
 
             ImGui::Selectable(label, false);
 
@@ -646,7 +681,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(anims);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = anims[i];
-            ImGui::PushID(i + 400000);
+            ImGui::PushID(i + kAnimationIdOffset);
             ImGui::Selectable(leafName.c_str(), false);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 AnimDropPayload payload{};
@@ -667,7 +702,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(animated);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = animated[i];
-            ImGui::PushID(i + 300000);
+            ImGui::PushID(i + kAnimatedIdOffset);
 
             ImGui::Selectable(leafName.c_str(), false);
 
@@ -695,7 +730,7 @@ void SceneEditorWindow::OnDraw() {
         AssetTreeNode tree = buildTreeFrom(discoveredEffects_);
         RenderAssetTree(tree, [&](const std::string& leafName, int i) {
             const auto& entry = discoveredEffects_[i];
-            ImGui::PushID(i + 600000);
+            ImGui::PushID(i + kEffectIdOffset);
 
             ImGui::Selectable(leafName.c_str(), false);
 

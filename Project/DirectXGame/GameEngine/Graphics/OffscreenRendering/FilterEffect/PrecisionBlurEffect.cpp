@@ -7,6 +7,17 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+    // ResetParams で戻す既定値（ぼけない内側の半径・ぼけが強まる幅・最大のぼけ [px]・周辺の暗さ）
+    constexpr float kDefaultInnerRadius = 0.35f;
+    constexpr float kDefaultFalloff = 0.35f;
+    constexpr float kDefaultMaxBlurPx = 8.0f;
+    constexpr float kDefaultVignette = 0.5f;
+    // SetFalloff で受け付ける幅の下限（0 だと割り算できない）
+    constexpr float kMinFalloff = 0.01f;
+    // SetMaxBlurPx で受け付ける最大のぼけの上限 [px]
+    constexpr float kMaxBlurPxLimit = 64.0f;
+}
 
 void PrecisionBlurEffect::Initialize(
     DirectXCore* dxCore,
@@ -57,10 +68,10 @@ void PrecisionBlurEffect::ShowImGui() {
 
 void PrecisionBlurEffect::ResetParams() {
     intensity_ = 1.0f;
-    innerRadius_ = 0.35f;
-    falloff_ = 0.35f;
-    maxBlurPx_ = 8.0f;
-    vignette_ = 0.5f;
+    innerRadius_ = kDefaultInnerRadius;
+    falloff_ = kDefaultFalloff;
+    maxBlurPx_ = kDefaultMaxBlurPx;
+    vignette_ = kDefaultVignette;
 }
 
 void PrecisionBlurEffect::SetIntensity(float intensity) {
@@ -72,11 +83,11 @@ void PrecisionBlurEffect::SetInnerRadius(float r) {
 }
 
 void PrecisionBlurEffect::SetFalloff(float f) {
-    falloff_ = std::clamp(f, 0.01f, 1.0f);
+    falloff_ = std::clamp(f, kMinFalloff, 1.0f);
 }
 
 void PrecisionBlurEffect::SetMaxBlurPx(float px) {
-    maxBlurPx_ = std::clamp(px, 0.0f, 64.0f);
+    maxBlurPx_ = std::clamp(px, 0.0f, kMaxBlurPxLimit);
 }
 
 void PrecisionBlurEffect::SetVignette(float v) {

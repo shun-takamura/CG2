@@ -7,6 +7,10 @@
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Crafting.json";
 
+	/// <summary>作成・強化 1 回に要る物を読む（個数 0 以下・id が空の素材は捨てる）</summary>
+	/// <param name="node">読む JSON オブジェクト</param>
+	/// <param name="initialFallback">"initial" が無い時の初期装備かどうか</param>
+	/// <returns>読んだ要る物。オブジェクトでなければ initial だけ入った空の物</returns>
 	CraftCost ReadCost(const JsonValue& node, bool initialFallback) {
 		CraftCost c;
 		c.initial = initialFallback;

@@ -14,44 +14,68 @@
 // =====================================================================
 
 namespace {
+    // .mat / .mesh / .skel / .anim の先頭の識別子（"MATL" など）の長さ [バイト]
+    constexpr size_t kMagicSize = 4;
+    // ヘッダの uint32 / float 1 個の大きさ [バイト]
+    constexpr size_t kFieldSize = 4;
+    // ファイルに書かれたパスの固定長 [バイト]
+    constexpr size_t kAssetPathLength = 256;
+    // .mat の対応する最大のバージョン
+    constexpr uint32_t kMatMaxVersion = 5;
+    // .mat に normal_map_path が入ったバージョンと、その位置 [バイト]
+    constexpr uint32_t kMatNormalMapMinVersion = 3;
+    constexpr size_t kMatNormalMapPathOffset = 308;
+    // .mesh の v3（tangent 付き）と v4（ヘッダ末尾に包む球）
+    constexpr uint32_t kMeshVersionTangent = 3;
+    constexpr uint32_t kMeshVersionBounds = 4;
+    // .skel / .anim のジョイント名の固定長 [バイト]
+    constexpr size_t kJointNameLength = 64;
+    // .mesh のフラグの「スキニングあり」
+    constexpr uint32_t kMeshFlagHasSkinning = 0x1;
+    // 1 頂点あたりのスキニングの影響の数
+    constexpr int kSkinInfluenceCount = 4;
 
-// .mat から base_color テクスチャパスを取り出すヘルパー
+/// <summary>.mat（v1〜v5）から base_color テクスチャパスを取り出す</summary>
+/// <param name="matPath">.mat のパス</param>
+/// <returns>テクスチャのパス。開けない・形式が違えば空文字</returns>
 std::string ReadMatBaseColorPath_V2(const std::string& matPath)
 {
     auto h = AssetLocator::GetInstance()->Open(matPath);
     if (!h.IsValid()) return {};
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "MATL", 4) != 0) return {};
+    char magic[kMagicSize]{};
+    h.Read(magic, kMagicSize);
+    if (std::memcmp(magic, "MATL", kMagicSize) != 0) return {};
     uint32_t version = 0;
-    h.Read(&version, 4);
+    h.Read(&version, kFieldSize);
     // base_color_path は version 直後で全バージョン共通オフセット。v1〜v5 を許容
-    if (version < 1 || version > 5) return {};
-    char path[256]{};
-    h.Read(path, 256);
+    if (version < 1 || version > kMatMaxVersion) return {};
+    char path[kAssetPathLength]{};
+    h.Read(path, kAssetPathLength);
     return std::string(path);
 }
 
-// .mat v3 から normal_map_path を取り出すヘルパー（固定オフセット 308）
+/// <summary>.mat v3 以降から normal_map_path を取り出す（固定オフセット 308）</summary>
+/// <param name="matPath">.mat のパス</param>
+/// <returns>法線マップのパス。開けない・v3 未満なら空文字</returns>
 std::string ReadMatNormalMapPath_V2(const std::string& matPath)
 {
     auto h = AssetLocator::GetInstance()->Open(matPath);
     if (!h.IsValid()) return {};
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "MATL", 4) != 0) return {};
+    char magic[kMagicSize]{};
+    h.Read(magic, kMagicSize);
+    if (std::memcmp(magic, "MATL", kMagicSize) != 0) return {};
     uint32_t version = 0;
-    h.Read(&version, 4);
-    if (version < 3) return {};  // v3 から normal_map_path
-    h.Seek(308);
-    char path[256]{};
-    h.Read(path, 256);
+    h.Read(&version, kFieldSize);
+    if (version < kMatNormalMapMinVersion) return {};  // v3 から normal_map_path
+    h.Seek(kMatNormalMapPathOffset);
+    char path[kAssetPathLength]{};
+    h.Read(path, kAssetPathLength);
     return std::string(path);
 }
 
 // .skel の Joint 1 個ぶん（172 バイト）
 struct SkelJoint {
-    char       name[64];
+    char       name[kJointNameLength];
     int32_t    parent_index;
     Matrix4x4  inverse_bind_matrix;
     Vector3    bind_translation;
@@ -59,20 +83,22 @@ struct SkelJoint {
     Vector3    bind_scale;
 };
 
-// .skel を読んでフラットなジョイント配列を返す。失敗時は空。
+/// <summary>.skel（v1）を読んでフラットなジョイント配列を返す</summary>
+/// <param name="skelPath">.skel のパス</param>
+/// <returns>ジョイント配列。失敗時は空</returns>
 std::vector<SkelJoint> ReadSkelFile(const std::string& skelPath)
 {
     std::vector<SkelJoint> joints;
     auto h = AssetLocator::GetInstance()->Open(skelPath);
     if (!h.IsValid()) return joints;
 
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "SKEL", 4) != 0) return joints;
+    char magic[kMagicSize]{};
+    h.Read(magic, kMagicSize);
+    if (std::memcmp(magic, "SKEL", kMagicSize) != 0) return joints;
     uint32_t version = 0, jointCount = 0, reserved = 0;
-    h.Read(&version, 4);
-    h.Read(&jointCount, 4);
-    h.Read(&reserved, 4);
+    h.Read(&version, kFieldSize);
+    h.Read(&jointCount, kFieldSize);
+    h.Read(&reserved, kFieldSize);
     if (version != 1) return joints;
 
     joints.resize(jointCount);
@@ -80,8 +106,12 @@ std::vector<SkelJoint> ReadSkelFile(const std::string& skelPath)
     return joints;
 }
 
-// フラットなジョイント配列から Node 階層を組み立てる。
-// .skel はトポロジカル順序（親 index < 自 index）と仮定する。
+/// <summary>
+/// フラットなジョイント配列から Node 階層を組み立てる。
+/// .skel はトポロジカル順序（親 index < 自 index）と仮定する。
+/// </summary>
+/// <param name="joints">ジョイント配列</param>
+/// <returns>ルートの Node（空なら単位行列の空 Node）</returns>
 Node BuildNodeTreeFromSkel(const std::vector<SkelJoint>& joints)
 {
     if (joints.empty()) {
@@ -122,7 +152,9 @@ Node BuildNodeTreeFromSkel(const std::vector<SkelJoint>& joints)
     return std::move(tempNodes[rootIdx]);
 }
 
-// .anim を読んで Animation を構築する
+/// <summary>.anim（v1）を読んで Animation を構築する</summary>
+/// <param name="animPath">.anim のパス</param>
+/// <returns>読んだアニメーション。失敗時は duration 0 の空</returns>
 Animation ReadAnimFile(const std::string& animPath)
 {
     Animation anim{};
@@ -130,23 +162,23 @@ Animation ReadAnimFile(const std::string& animPath)
     auto h = AssetLocator::GetInstance()->Open(animPath);
     if (!h.IsValid()) return anim;
 
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "ANIM", 4) != 0) return anim;
+    char magic[kMagicSize]{};
+    h.Read(magic, kMagicSize);
+    if (std::memcmp(magic, "ANIM", kMagicSize) != 0) return anim;
     uint32_t version = 0, channelCount = 0, channelsOffset = 0, reserved = 0;
     float duration = 0.0f;
-    h.Read(&version, 4);
-    h.Read(&duration, 4);
-    h.Read(&channelCount, 4);
-    h.Read(&channelsOffset, 4);
-    h.Read(&reserved, 4);
+    h.Read(&version, kFieldSize);
+    h.Read(&duration, kFieldSize);
+    h.Read(&channelCount, kFieldSize);
+    h.Read(&channelsOffset, kFieldSize);
+    h.Read(&reserved, kFieldSize);
     if (version != 1) return anim;
 
     anim.duration = duration;
 
     // Channel テーブルを全部読み込む
     struct ChannelHeader {
-        char     joint_name[64];
+        char     joint_name[kJointNameLength];
         uint32_t t_count, r_count, s_count;
         uint32_t t_offset, r_offset, s_offset;
     };
@@ -163,7 +195,7 @@ Animation ReadAnimFile(const std::string& animPath)
         h.Seek(ch.t_offset);
         for (uint32_t i = 0; i < ch.t_count; ++i) {
             float t; Vector3 v;
-            h.Read(&t, 4);
+            h.Read(&t, kFieldSize);
             h.Read(&v, sizeof(Vector3));
             na.translate.keyframes[i] = { t, v };
         }
@@ -171,7 +203,7 @@ Animation ReadAnimFile(const std::string& animPath)
         h.Seek(ch.r_offset);
         for (uint32_t i = 0; i < ch.r_count; ++i) {
             float t; float q[4];
-            h.Read(&t, 4);
+            h.Read(&t, kFieldSize);
             h.Read(q, sizeof(q));
             na.rotate.keyframes[i] = { t, Quaternion(q[0], q[1], q[2], q[3]) };
         }
@@ -179,7 +211,7 @@ Animation ReadAnimFile(const std::string& animPath)
         h.Seek(ch.s_offset);
         for (uint32_t i = 0; i < ch.s_count; ++i) {
             float t; Vector3 v;
-            h.Read(&t, 4);
+            h.Read(&t, kFieldSize);
             h.Read(&v, sizeof(Vector3));
             na.scale.keyframes[i] = { t, v };
         }
@@ -187,7 +219,10 @@ Animation ReadAnimFile(const std::string& animPath)
     return anim;
 }
 
-// DEFAULT heap・COMMON のバッファ（DirectStorage の書き込み先）
+/// <summary>DEFAULT heap・COMMON のバッファ（DirectStorage の書き込み先）を作る</summary>
+/// <param name="dxCore">デバイスの取得元</param>
+/// <param name="sizeInBytes">バイト数</param>
+/// <returns>作ったバッファ</returns>
 Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(DirectXCore* dxCore, size_t sizeInBytes)
 {
     D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -275,40 +310,40 @@ std::shared_ptr<AnimatedMeshData> AnimatedMeshCache::LoadCPU(const std::string& 
     auto h = AssetLocator::GetInstance()->Open(meshPath);
     if (!h.IsValid()) return nullptr;  // 呼び出し側（Acquire の使い手）が assert する。先読みのマニフェストが古いこともある
 
-    char magic[4]{};
-    h.Read(magic, 4);
-    if (std::memcmp(magic, "MESH", 4) != 0) return nullptr;
+    char magic[kMagicSize]{};
+    h.Read(magic, kMagicSize);
+    if (std::memcmp(magic, "MESH", kMagicSize) != 0) return nullptr;
 
     uint32_t version = 0, flags = 0;
     uint32_t vertexCount = 0, indexCount = 0, submeshCount = 0;
     uint32_t vertexOffset = 0, indexOffset = 0, skinOffset = 0, submeshOffset = 0;
-    h.Read(&version, 4);
-    h.Read(&flags, 4);
-    h.Read(&vertexCount, 4);
-    h.Read(&indexCount, 4);
-    h.Read(&submeshCount, 4);
-    h.Read(&vertexOffset, 4);
-    h.Read(&indexOffset, 4);
-    h.Read(&skinOffset, 4);
-    h.Read(&submeshOffset, 4);
-    assert((version == 3 || version == 4) && "expected .mesh v3 / v4");
+    h.Read(&version, kFieldSize);
+    h.Read(&flags, kFieldSize);
+    h.Read(&vertexCount, kFieldSize);
+    h.Read(&indexCount, kFieldSize);
+    h.Read(&submeshCount, kFieldSize);
+    h.Read(&vertexOffset, kFieldSize);
+    h.Read(&indexOffset, kFieldSize);
+    h.Read(&skinOffset, kFieldSize);
+    h.Read(&submeshOffset, kFieldSize);
+    assert((version == kMeshVersionTangent || version == kMeshVersionBounds) && "expected .mesh v3 / v4");
 
     auto data = std::make_shared<AnimatedMeshData>();
     data->key = meshPath;
 
-    char skeletonPathBuf[256]{};
-    h.Read(skeletonPathBuf, 256);
+    char skeletonPathBuf[kAssetPathLength]{};
+    h.Read(skeletonPathBuf, kAssetPathLength);
     std::string skeletonPath(skeletonPathBuf);
 
     // v4 はヘッダ末尾に包む球（バインドポーズ）。データの位置は各 offset で引くので v3 と同じ読み方で済む
-    if (version >= 4) {
+    if (version >= kMeshVersionBounds) {
         float sphere[4]{};
         h.Read(sphere, sizeof(sphere));
         data->bounds.center = { sphere[0], sphere[1], sphere[2] };
         data->bounds.radius = sphere[3];
     }
 
-    const bool hasSkinning = (flags & 0x1) != 0;
+    const bool hasSkinning = (flags & kMeshFlagHasSkinning) != 0;
 
     // GPU フェーズ / SkinCluster で使うメタ情報を保持
     data->meshFilePath     = meshPath;
@@ -362,15 +397,15 @@ std::shared_ptr<AnimatedMeshData> AnimatedMeshCache::LoadCPU(const std::string& 
     if (!data->useDirectStorage && hasSkinning && !skelJoints.empty()) {
         // 一頂点あたり (joint_indices[4], weights[4]) = 32 バイト
         struct SkinVertex {
-            uint32_t joint_indices[4];
-            float    weights[4];
+            uint32_t joint_indices[kSkinInfluenceCount];
+            float    weights[kSkinInfluenceCount];
         };
         std::vector<SkinVertex> skinData(vertexCount);
         h.ReadAt(skinOffset, skinData.data(),
                  static_cast<size_t>(vertexCount) * sizeof(SkinVertex));
 
         for (uint32_t v = 0; v < vertexCount; ++v) {
-            for (int k = 0; k < 4; ++k) {
+            for (int k = 0; k < kSkinInfluenceCount; ++k) {
                 float w = skinData[v].weights[k];
                 if (w <= 0.0f) continue;
                 uint32_t jointIdx = skinData[v].joint_indices[k];
@@ -389,10 +424,10 @@ std::shared_ptr<AnimatedMeshData> AnimatedMeshCache::LoadCPU(const std::string& 
         data->submeshes.reserve(submeshCount);
         for (uint32_t i = 0; i < submeshCount; ++i) {
             uint32_t idxStart = 0, idxCount = 0;
-            h.Read(&idxStart, 4);
-            h.Read(&idxCount, 4);
-            char matPath[256]{};
-            h.Read(matPath, 256);
+            h.Read(&idxStart, kFieldSize);
+            h.Read(&idxCount, kFieldSize);
+            char matPath[kAssetPathLength]{};
+            h.Read(matPath, kAssetPathLength);
 
             RenderSubmesh sm;
             sm.indexStart = idxStart;

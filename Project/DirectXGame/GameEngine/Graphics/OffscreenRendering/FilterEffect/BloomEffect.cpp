@@ -9,6 +9,22 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// 縮小段のクリア色の要素数（RGBA）
+	constexpr int kClearColorComponentCount = 4;
+	// ルート定数 Params のレジスタ番号（b0）
+	constexpr UINT kParamsRegister = 0;
+	// 線形クランプのサンプラーのレジスタ番号（s0）
+	constexpr UINT kLinearSamplerRegister = 0;
+	// 全画面の三角形 1 枚の頂点数
+	constexpr UINT kFullscreenTriangleVertexCount = 3;
+	// ぼかしのパスの数（横 → 縦）
+	constexpr int kBlurPassCount = 2;
+	// ResetParams で戻す 1/4・1/8・1/16 段の重み（1/2 段は 1）
+	constexpr float kDefaultLevelWeightQuarter = 0.8f;
+	constexpr float kDefaultLevelWeightEighth = 0.6f;
+	constexpr float kDefaultLevelWeightSixteenth = 0.4f;
+}
 
 BloomEffect::BloomEffect() = default;
 BloomEffect::~BloomEffect() = default;
@@ -25,7 +41,7 @@ void BloomEffect::InitializeBloom(
 	CreateRootSignature(dxCore);
 	CreatePipelines(dxCore, basePsoDesc);
 
-	const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clear[kClearColorComponentCount] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	uint32_t w = width;
 	uint32_t h = height;
 	for (auto& level : levels_) {
@@ -54,7 +70,7 @@ void BloomEffect::CreateRootSignature(DirectXCore* dxCore)
 {
 	// t0..t4 を1枚ずつのテーブルで持つ（縮小段の SRV は連番とは限らないため）
 	D3D12_DESCRIPTOR_RANGE ranges[kLevelCount + 1] = {};
-	D3D12_ROOT_PARAMETER rootParameters[kLevelCount + 2] = {};
+	D3D12_ROOT_PARAMETER rootParameters[kRootParamCount] = {};
 	for (uint32_t i = 0; i < kLevelCount + 1; ++i) {
 		ranges[i].BaseShaderRegister = i;
 		ranges[i].NumDescriptors = 1;
@@ -67,10 +83,10 @@ void BloomEffect::CreateRootSignature(DirectXCore* dxCore)
 		rootParameters[i].DescriptorTable.NumDescriptorRanges = 1;
 	}
 	// b0：パラメータはパスごとに変わるのでルート定数（パス数分の CB を持たずに済む）
-	D3D12_ROOT_PARAMETER& constants = rootParameters[kLevelCount + 1];
+	D3D12_ROOT_PARAMETER& constants = rootParameters[kRootParamConstants];
 	constants.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 	constants.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	constants.Constants.ShaderRegister = 0;
+	constants.Constants.ShaderRegister = kParamsRegister;
 	constants.Constants.RegisterSpace = 0;
 	constants.Constants.Num32BitValues = kParamCount;
 
@@ -81,7 +97,7 @@ void BloomEffect::CreateRootSignature(DirectXCore* dxCore)
 	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 	sampler.MaxLOD = D3D12_FLOAT32_MAX;
-	sampler.ShaderRegister = 0;
+	sampler.ShaderRegister = kLinearSamplerRegister;
 	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 	D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -128,9 +144,9 @@ void BloomEffect::DrawFullscreen(ID3D12GraphicsCommandList* commandList, ID3D12P
 	for (uint32_t i = 0; i < kLevelCount + 1; ++i) {
 		srvManager_->SetGraphicsRootDescriptorTable(i, srvs[i]);
 	}
-	commandList->SetGraphicsRoot32BitConstants(kLevelCount + 1, kParamCount, &params, 0);
+	commandList->SetGraphicsRoot32BitConstants(kRootParamConstants, kParamCount, &params, 0);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->DrawInstanced(3, 1, 0, 0);
+	commandList->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 }
 
 void BloomEffect::Prepare(ID3D12GraphicsCommandList* commandList, uint32_t sourceSrvIndex,
@@ -161,7 +177,7 @@ void BloomEffect::Prepare(ID3D12GraphicsCommandList* commandList, uint32_t sourc
 		// 横ぼかし ping → pong、縦ぼかし pong → ping
 		p.texelSize[0] = 1.0f / levelW;
 		p.texelSize[1] = 1.0f / levelH;
-		const struct { RenderTexture* src; RenderTexture* dst; float dx; float dy; } passes[2] = {
+		const struct { RenderTexture* src; RenderTexture* dst; float dx; float dy; } passes[kBlurPassCount] = {
 			{ level.ping.get(), level.pong.get(), 1.0f, 0.0f },
 			{ level.pong.get(), level.ping.get(), 0.0f, 1.0f },
 		};
@@ -211,7 +227,7 @@ void BloomEffect::ResetParams()
 {
 	intensity_ = 1.0f;
 	tint_ = { 1.0f, 1.0f, 1.0f };
-	levelWeights_ = { 1.0f, 0.8f, 0.6f, 0.4f };
+	levelWeights_ = { 1.0f, kDefaultLevelWeightQuarter, kDefaultLevelWeightEighth, kDefaultLevelWeightSixteenth };
 }
 
 void BloomEffect::Finalize()

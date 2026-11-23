@@ -1,4 +1,5 @@
 #include "LoadoutScreen.h"
+#include "Score/GameSession.h"
 
 #include "CockpitReveal.h"
 #include "Camera.h"
@@ -18,6 +19,7 @@
 #include "Score/CraftingCatalog.h"
 #include "Score/LootCatalog.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
@@ -28,6 +30,287 @@
 #endif
 
 namespace {
+	// 割合を百分率にする倍率
+	constexpr float kPercentScale = 100.0f;
+	// この w 以下はカメラの後ろとみなす
+	constexpr float kMinClipW = 1e-4f;
+	// UTF-8 の 1 バイト文字の先頭のバイトの上限（これ未満）
+	constexpr int kUtf8SingleByteLimit = 0x80;
+	// UTF-8 の 2 バイト文字の先頭を見分けるために右へずらす量 [ビット]
+	constexpr int kUtf8Lead2Shift = 5;
+	// UTF-8 の 2 バイト文字の先頭のビット（110）
+	constexpr int kUtf8Lead2Pattern = 0x6;
+	// UTF-8 の 3 バイト文字の先頭を見分けるために右へずらす量 [ビット]
+	constexpr int kUtf8Lead3Shift = 4;
+	// UTF-8 の 3 バイト文字の先頭のビット（1110）
+	constexpr int kUtf8Lead3Pattern = 0xE;
+	// UTF-8 の 4 バイト文字の先頭を見分けるために右へずらす量 [ビット]
+	constexpr int kUtf8Lead4Shift = 3;
+	// UTF-8 の 4 バイト文字の先頭のビット（11110）
+	constexpr int kUtf8Lead4Pattern = 0x1E;
+	// 緑ネオンの色の初期値
+	constexpr Vector4 kDefaultColor = { 0.35f, 1.0f, 0.6f, 1.0f };
+	// 暗い緑の色の初期値
+	constexpr Vector4 kDefaultDimColor = { 0.12f, 0.4f, 0.22f, 1.0f };
+	// 値が上がるときの色の初期値
+	constexpr Vector4 kDefaultUpColor = { 0.55f, 1.0f, 0.95f, 1.0f };
+	// 値が下がるときの色の初期値
+	constexpr Vector4 kDefaultDownColor = { 1.0f, 0.45f, 0.4f, 1.0f };
+	// 背景の色の初期値
+	constexpr Vector4 kDefaultBackdropColor = { 0.006f, 0.016f, 0.024f, 1.0f };
+	// 文字の光の強さの初期値
+	constexpr float kDefaultTextGlow = 1.4f;
+	// 左右の余白の初期値 [px]
+	constexpr float kDefaultMarginX = 48.0f;
+	// パネルの上端の初期値 [px]
+	constexpr float kDefaultTopY = 112.0f;
+	// 左のパネルの幅の初期値 [px]
+	constexpr float kDefaultLeftWidth = 430.0f;
+	// 右のパネルの幅の初期値 [px]
+	constexpr float kDefaultRightWidth = 450.0f;
+	// タブの高さの初期値 [px]
+	constexpr float kDefaultTabHeight = 54.0f;
+	// 一覧の 1 行の高さの初期値 [px]
+	constexpr float kDefaultItemHeight = 86.0f;
+	// 一覧の行どうしのすき間の初期値 [px]
+	constexpr float kDefaultItemGap = 8.0f;
+	// パネルが順に出る間隔の初期値 [秒]
+	constexpr float kDefaultPanelStagger = 0.08f;
+	// 見出しの線を右端からどれだけ手前で止めるかの初期値 [px]
+	constexpr float kDefaultHeaderLineRightInset = 400.0f;
+	// 倍率が 1 からこれ以上離れていれば補正として出す
+	constexpr float kScaleEpsilon = 1e-4f;
+	// タブどうしのすき間 [px]
+	constexpr float kTabGap = 4.0f;
+	// 一覧をタブの下からどれだけ下に置くか [px]
+	constexpr float kListOffsetY = 36.0f;
+	// 段階を下げる ◀ を行の右端からどれだけ左に置くか [px]
+	constexpr float kLevelDownArrowOffset = 150.0f;
+	// 段階を上げる ▶ を行の右端からどれだけ左に置くか [px]
+	constexpr float kLevelUpArrowOffset = 34.0f;
+	// 戻るボタンを画面の下端からどれだけ上に置くか [px]
+	constexpr float kBackButtonBottomOffset = 78.0f;
+	// 戻るボタンの幅 [px]
+	constexpr float kBackButtonWidth = 170.0f;
+	// 戻るボタンの高さ [px]
+	constexpr float kBackButtonHeight = 44.0f;
+	// 右のパネルの下の余白 [px]
+	constexpr float kRightPanelBottomMargin = 110.0f;
+	// 三角の根元を中心からずらす量（大きさに対する割合）
+	constexpr float kArrowTipOffsetRatio = 0.25f;
+	// 走査線の不透明度
+	constexpr float kScanlineAlpha = 0.025f;
+	// 走査線の間隔 [px]
+	constexpr float kScanlineSpacing = 6.0f;
+	// 中央の点の輪の中心の高さ（画面の高さに対する割合）
+	constexpr float kRingCenterY = 0.48f;
+	// 中央の点の輪の不透明度
+	constexpr float kRingAlpha = 0.16f;
+	// 中央の点の輪の半径（画面の高さに対する割合）
+	constexpr float kRingRadiusRatio = 0.42f;
+	// 中央の点の輪の 1 区切りの点の数
+	constexpr int kRingDotsPerSegment = 36;
+	// 中央の点の輪の 1 区切りのうち描く点の数（残りが切れ目）
+	constexpr int kRingDotsShownPerSegment = 32;
+	// 中央の点の輪が回る速さ [rad/秒]
+	constexpr float kRingSpinSpeed = 0.05f;
+	// 中央の点の輪で大きい点を置く間隔 [点]
+	constexpr int kRingMajorDotInterval = 12;
+	// 中央の点の輪の大きい点の大きさ [px]
+	constexpr float kRingMajorDotSize = 4.0f;
+	// 中央の点の輪の小さい点の大きさ [px]
+	constexpr float kRingMinorDotSize = 2.0f;
+	// 足元の輪が回る速さ [rad/秒]
+	constexpr float kFloorRingSpinSpeed = 0.1f;
+	// 足元の輪（真ん中）の点の数
+	constexpr int kFloorRingDots = 160;
+	// 足元の輪（真ん中）の不透明度
+	constexpr float kFloorRingAlpha = 0.55f;
+	// 足元の輪（真ん中）の点の大きさ [px]
+	constexpr float kFloorRingDotSize = 3.0f;
+	// 足元の内の輪の半径（真ん中の輪に対する割合）
+	constexpr float kFloorInnerRingRadiusRatio = 0.78f;
+	// 足元の内の輪の点の数
+	constexpr int kFloorInnerRingDots = 120;
+	// 足元の内の輪の不透明度
+	constexpr float kFloorInnerRingAlpha = 0.25f;
+	// 足元の内・外の輪の点の大きさ [px]
+	constexpr float kFloorSubRingDotSize = 2.0f;
+	// 足元の外の輪の半径（真ん中の輪に対する割合）
+	constexpr float kFloorOuterRingRadiusRatio = 1.25f;
+	// 足元の外の輪の点の数
+	constexpr int kFloorOuterRingDots = 200;
+	// 足元の外の輪の不透明度
+	constexpr float kFloorOuterRingAlpha = 0.12f;
+	// 切れる演出の前半（縦に潰れる）が終わる進み（0〜1）
+	constexpr float kCollapseSquashEnd = 0.6f;
+	// 切れる演出の後半（横線が縮む）の長さ（進み 0〜1）
+	constexpr float kCollapseShrinkSpan = 0.4f;
+	// 横線が縮み切ったときの横の倍率の下限
+	constexpr float kMinCollapseScaleX = 0.002f;
+	// 縦に潰れ切ったときの縦の倍率
+	constexpr float kCollapsedScaleY = 0.004f;
+	// パネルがチカチカして出る長さ [秒]
+	constexpr float kPanelFlickerSeconds = 0.2f;
+	// 見出し「機体設定」の上端 [px]
+	constexpr float kTitleY = 38.0f;
+	// 見出し「機体設定」の文字の大きさ
+	constexpr float kTitleScale = 0.9f;
+	// 上の中央の案内の文字を小さい文字より大きくする量
+	constexpr float kMessageScaleBoost = 0.05f;
+	// 上の中央の案内の上端 [px]
+	constexpr float kMessageY = 50.0f;
+	// 上の中央の案内の不透明度
+	constexpr float kMessageAlpha = 0.8f;
+	// 見出しの下の横の線の高さ [px]
+	constexpr float kHeaderLineY = 90.0f;
+	// 見出しの下の横の線の太さ [px]
+	constexpr float kHeaderLineThickness = 2.0f;
+	// 見出しの下の横の線の不透明度
+	constexpr float kHeaderLineAlpha = 0.6f;
+	// パネルの暗い塗りの赤
+	constexpr float kPanelFillRed = 0.01f;
+	// パネルの暗い塗りの緑
+	constexpr float kPanelFillGreen = 0.05f;
+	// パネルの暗い塗りの青
+	constexpr float kPanelFillBlue = 0.03f;
+	// パネルの暗い塗りの不透明度
+	constexpr float kPanelFillAlpha = 0.62f;
+	// 選んだタブの塗りの不透明度
+	constexpr float kSelectedTabAlpha = 0.85f;
+	// 選んだタブの光の強さ
+	constexpr float kSelectedTabGlow = 0.4f;
+	// パネル・タブ・ボタンの枠の太さ [px]
+	constexpr float kFrameThickness = 1.5f;
+	// 明るい塗りの上に置く暗い文字の緑
+	constexpr float kDarkTextGreen = 0.08f;
+	// 明るい塗りの上に置く暗い文字の青
+	constexpr float kDarkTextBlue = 0.04f;
+	// 選んでいないタブの文字の不透明度
+	constexpr float kTabTextAlpha = 0.8f;
+	// TextRenderer のフォントの高さ（文字の大きさ 1 のとき）[px]
+	constexpr float kFontPixelHeight = 32.0f;
+	// 英字の見出しをタブの下からどれだけ下に置くか [px]
+	constexpr float kCaptionOffsetY = 8.0f;
+	// 英字の見出しの左の余白 [px]
+	constexpr float kCaptionInsetX = 4.0f;
+	// 英字の見出しの不透明度
+	constexpr float kCaptionAlpha = 0.6f;
+	// 並びの線を英字の見出しからどれだけ下に置くか [px]
+	constexpr float kCaptionLineOffsetY = 22.0f;
+	// 選んだ行の塗りの不透明度
+	constexpr float kSelectedItemAlpha = 0.16f;
+	// 選んだ行の光の強さ
+	constexpr float kSelectedItemGlow = 0.12f;
+	// 選んだ行の枠の太さ [px]
+	constexpr float kSelectedItemFrameThickness = 2.0f;
+	// 付けている物の E の札の幅 [px]
+	constexpr float kEquippedBadgeWidth = 26.0f;
+	// E の札の不透明度
+	constexpr float kEquippedBadgeAlpha = 0.9f;
+	// E の札の光の強さ
+	constexpr float kEquippedBadgeGlow = 0.4f;
+	// E の文字を札の左からどれだけ右に置くか [px]
+	constexpr float kEquippedLetterOffsetX = 6.0f;
+	// E の文字を札の上からどれだけ下に置くか [px]
+	constexpr float kEquippedLetterOffsetY = 8.0f;
+	// E の文字の大きさ
+	constexpr float kEquippedLetterScale = 0.6f;
+	// 行の文字を行の左からどれだけ右に置くか [px]
+	constexpr float kItemTextOffsetX = 40.0f;
+	// 名前を行の上からどれだけ下に置くか [px]
+	constexpr float kItemNameOffsetY = 12.0f;
+	// 選んでいない行の名前の不透明度
+	constexpr float kUnselectedTextAlpha = 0.8f;
+	// 選んでいない行の名前の光の強さ（選んだ行に対する割合）
+	constexpr float kUnselectedGlowRatio = 0.3f;
+	// 要約を行の上からどれだけ下に置くか [px]
+	constexpr float kItemSummaryOffsetY = 52.0f;
+	// 要約の不透明度
+	constexpr float kItemSummaryAlpha = 0.55f;
+	// 段階の ◀ ▶ の大きさ [px]
+	constexpr float kLevelArrowSize = 18.0f;
+	// 段階の ◀ ▶ を指していないときの不透明度
+	constexpr float kLevelArrowIdleAlpha = 0.7f;
+	// 段階の ◀ ▶ を指しているときの光の強さ
+	constexpr float kLevelArrowHoverGlow = 1.5f;
+	// 右のパネルの左右の余白 [px]
+	constexpr float kPanelPaddingX = 16.0f;
+	// 欄の見出しの帯の不透明度
+	constexpr float kSectionBarAlpha = 0.8f;
+	// 欄の見出しの帯の光の強さ
+	constexpr float kSectionBarGlow = 0.35f;
+	// 欄の見出しの文字を帯の上からどれだけ下に置くか [px]
+	constexpr float kSectionTitleOffsetY = 3.0f;
+	// 欄の見出しの帯の下のすき間 [px]
+	constexpr float kSectionGap = 8.0f;
+	// フレームの欄・素材の行の名前の不透明度
+	constexpr float kFrameLabelAlpha = 0.85f;
+	// 変わらない値の光の強さ（文字の光に対する割合）
+	constexpr float kFrameValueGlowRatio = 0.4f;
+	// 替えた後の値と「→」の間 [px]
+	constexpr float kChangeArrowGap = 8.0f;
+	// 「→」と今の値の不透明度
+	constexpr float kOldValueAlpha = 0.6f;
+	// 「→」と今の値の間 [px]
+	constexpr float kOldValueGap = 16.0f;
+	// フレームの欄・性能の 1 行の高さ [px]
+	constexpr float kStatRowHeight = 34.0f;
+	// 欄と欄の間に足すすき間 [px]
+	constexpr float kSectionExtraGap = 10.0f;
+	// 右のパネルの名前を一覧の名前より大きくする量
+	constexpr float kNameScaleBoost = 0.06f;
+	// 右のパネルの名前の行の高さ [px]
+	constexpr float kNameRowHeight = 46.0f;
+	// 性能・素材の行の左の字下げ [px]
+	constexpr float kStatIndentX = 8.0f;
+	// 性能・素材の行の文字を小さい文字より大きくする量
+	constexpr float kStatScaleBoost = 0.04f;
+	// 性能の名前・初期装備の文字の不透明度
+	constexpr float kStatLabelAlpha = 0.8f;
+	// 性能の値の光の強さ（文字の光に対する割合）
+	constexpr float kStatValueGlowRatio = 0.3f;
+	// 行の下の線を行の上からどれだけ下に置くか [px]
+	constexpr float kRowUnderlineOffsetY = 27.0f;
+	// 行の下の線の不透明度
+	constexpr float kRowUnderlineAlpha = 0.7f;
+	// 説明文を「作成／強化に必要」の欄からどれだけ離すか [px]
+	constexpr float kDescriptionBottomMargin = 28.0f;
+	// 説明文の不透明度
+	constexpr float kDescriptionAlpha = 0.7f;
+	// 説明文の行の高さ [px]
+	constexpr float kDescriptionLineHeight = 25.0f;
+	// 「作成／強化に必要」の欄の下の余白 [px]
+	constexpr float kCostBottomPadding = 8.0f;
+	// 強化と呼ぶ最初の段階
+	constexpr int kFirstUpgradeLevel = 2;
+	// 素材の色の印を行の上からどれだけ下に置くか [px]
+	constexpr float kCostMarkOffsetY = 7.0f;
+	// 素材の色の印の一辺 [px]
+	constexpr float kCostMarkSize = 12.0f;
+	// 素材の色の印の光の強さ
+	constexpr float kCostMarkGlow = 0.4f;
+	// 素材の名前を左からどれだけ右に置くか [px]
+	constexpr float kCostLabelOffsetX = 30.0f;
+	// 戻るボタンを指しているときの塗りの不透明度
+	constexpr float kBackHoverAlpha = 0.25f;
+	// 戻るボタンを指しているときの光の強さ
+	constexpr float kBackHoverGlow = 0.3f;
+	// 戻るボタンの ◀ をボタンの左からどれだけ右に置くか [px]
+	constexpr float kBackArrowOffsetX = 24.0f;
+	// 戻るボタンの ◀ の大きさ [px]
+	constexpr float kBackArrowSize = 16.0f;
+	// 「戻る」をボタンの左からどれだけ右に置くか [px]
+	constexpr float kBackLabelOffsetX = 48.0f;
+	// 戻るボタンを指しているときの文字の光の強さ（文字の光に対する割合）
+	constexpr float kBackLabelGlowRatio = 0.6f;
+	// 右下の操作の案内の文字の大きさ
+	constexpr float kHintScale = 0.45f;
+	// 右下の操作の案内を画面の下端からどれだけ上に置くか [px]
+	constexpr float kHintBottomOffset = 66.0f;
+	// 右下の操作の案内の不透明度
+	constexpr float kHintAlpha = 0.6f;
+
 	// 基準の値が読めないときの値（player.json の既定と同じ）
 	constexpr int kFallbackAttack = 10;
 	constexpr int kFallbackMaxHp = 100;
@@ -40,13 +323,23 @@ namespace {
 	const char* kTabCaptions[] = { "MAIN WEAPON", "SHIELD", "FLIGHT UNIT" };
 	const char* kTabMessages[] = { "メイン武器を選択します。", "盾を選択します。", "飛行ユニットを選択します。" };
 
+	/// <summary>0〜1 に切る</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 の値</returns>
 	float Clamp01(float t) {
 		return std::clamp(t, 0.0f, 1.0f);
 	}
+	/// <summary>色の α に倍率を掛ける</summary>
+	/// <param name="c">元の色</param>
+	/// <param name="alpha">α に掛ける倍率</param>
+	/// <returns>α だけ変えた色</returns>
 	Vector4 WithAlpha(const Vector4& c, float alpha) {
 		return { c.x, c.y, c.z, c.w * alpha };
 	}
 
+	/// <summary>printf 形式で文字列を作る（128 バイトまで）</summary>
+	/// <param name="format">書式</param>
+	/// <returns>作った文字列</returns>
 	std::string Format(const char* format, ...) {
 		char buffer[128];
 		va_list args;
@@ -55,43 +348,39 @@ namespace {
 		va_end(args);
 		return buffer;
 	}
+	/// <summary>割合を符号付きの百分率の文字列にする（0 は ±0%）</summary>
+	/// <param name="ratio">割合（0.1 で +10%）</param>
+	/// <returns>例：+10%</returns>
 	std::string SignedPercent(float ratio) {
-		const int p = static_cast<int>(std::lround(ratio * 100.0f));
+		const int p = static_cast<int>(std::lround(ratio * kPercentScale));
 		if (p == 0) return "±0%";
 		return Format("%+d%%", p);
 	}
 
-	JsonValue MakeVector4(const Vector4& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		a.Push(JsonValue(static_cast<double>(v.w)));
-		return a;
-	}
-	Vector4 ReadVector4(const JsonValue& a, const Vector4& fallback) {
-		if (!a.IsArray() || a.Size() < 4) return fallback;
-		return { static_cast<float>(a[0].AsDouble(fallback.x)), static_cast<float>(a[1].AsDouble(fallback.y)),
-			static_cast<float>(a[2].AsDouble(fallback.z)), static_cast<float>(a[3].AsDouble(fallback.w)) };
-	}
-
-	// ワールドの点を UI の画面の座標へ。カメラの後ろなら false
+	/// <summary>ワールドの点を UI の画面の座標へ投影する</summary>
+	/// <param name="camera">投影に使うカメラ</param>
+	/// <param name="p">ワールドの点</param>
+	/// <param name="screen">UI の画面の大きさ [px]</param>
+	/// <param name="out">画面の座標 [px] の受け取り先</param>
+	/// <returns>カメラの後ろなら false</returns>
 	bool ProjectToScreen(const Camera& camera, const Vector3& p, const Vector2& screen, Vector2& out) {
 		const Matrix4x4& vp = camera.GetViewProjectionMatrix();
 		const float x = p.x * vp.m[0][0] + p.y * vp.m[1][0] + p.z * vp.m[2][0] + vp.m[3][0];
 		const float y = p.x * vp.m[0][1] + p.y * vp.m[1][1] + p.z * vp.m[2][1] + vp.m[3][1];
 		const float w = p.x * vp.m[0][3] + p.y * vp.m[1][3] + p.z * vp.m[2][3] + vp.m[3][3];
-		if (w <= 1e-4f) return false;
+		if (w <= kMinClipW) return false;
 		out = { (x / w * 0.5f + 0.5f) * screen.x, (0.5f - y / w * 0.5f) * screen.y };
 		return true;
 	}
 
-	// UTF-8 の 1 文字のバイト数
+	/// <summary>UTF-8 の 1 文字のバイト数を先頭のバイトから求める</summary>
+	/// <param name="lead">文字の先頭のバイト</param>
+	/// <returns>バイト数 1〜4（不正なバイトは 1）</returns>
 	size_t CharLength(unsigned char lead) {
-		if (lead < 0x80) return 1;
-		if ((lead >> 5) == 0x6) return 2;
-		if ((lead >> 4) == 0xE) return 3;
-		if ((lead >> 3) == 0x1E) return 4;
+		if (lead < kUtf8SingleByteLimit) return 1;
+		if ((lead >> kUtf8Lead2Shift) == kUtf8Lead2Pattern) return 2;
+		if ((lead >> kUtf8Lead3Shift) == kUtf8Lead3Pattern) return 3;
+		if ((lead >> kUtf8Lead4Shift) == kUtf8Lead4Pattern) return 4;
 		return 1;
 	}
 }
@@ -101,22 +390,22 @@ LoadoutScreen::LoadoutScreen() {
 }
 
 void LoadoutScreen::ResetToDefaults() {
-	color_ = { 0.35f, 1.0f, 0.6f, 1.0f };
-	dimColor_ = { 0.12f, 0.4f, 0.22f, 1.0f };
-	upColor_ = { 0.55f, 1.0f, 0.95f, 1.0f };
-	downColor_ = { 1.0f, 0.45f, 0.4f, 1.0f };
-	backdropColor_ = { 0.006f, 0.016f, 0.024f, 1.0f };
-	textGlow_ = 1.4f;
+	color_ = kDefaultColor;
+	dimColor_ = kDefaultDimColor;
+	upColor_ = kDefaultUpColor;
+	downColor_ = kDefaultDownColor;
+	backdropColor_ = kDefaultBackdropColor;
+	textGlow_ = kDefaultTextGlow;
 	lineGlow_ = 1.0f;
-	marginX_ = 48.0f;
-	topY_ = 112.0f;
-	leftWidth_ = 430.0f;
-	rightWidth_ = 450.0f;
-	tabHeight_ = 54.0f;
-	itemHeight_ = 86.0f;
-	itemGap_ = 8.0f;
-	panelStagger_ = 0.08f;
-	headerLineRightInset_ = 400.0f;
+	marginX_ = kDefaultMarginX;
+	topY_ = kDefaultTopY;
+	leftWidth_ = kDefaultLeftWidth;
+	rightWidth_ = kDefaultRightWidth;
+	tabHeight_ = kDefaultTabHeight;
+	itemHeight_ = kDefaultItemHeight;
+	itemGap_ = kDefaultItemGap;
+	panelStagger_ = kDefaultPanelStagger;
+	headerLineRightInset_ = kDefaultHeaderLineRightInset;
 	unitTexts_[static_cast<size_t>(FlightUnitKind::Wings)] = { "初期の羽根", "",
 		"最初から付いている羽根。機動力を上げるだけで、RB の技は無い。" };
 	unitTexts_[static_cast<size_t>(FlightUnitKind::Assault)] = { "攻撃ユニット", "ファンネル展開",
@@ -146,7 +435,7 @@ int LoadoutScreen::ItemCount(int tab) const {
 }
 
 int LoadoutScreen::EquippedIndex(int tab) const {
-	const LoadoutState* loadout = LoadoutState::GetInstance();
+	const LoadoutState* loadout = gameSession_->GetLoadoutState();
 	switch (tab) {
 	case kTabMain:   return MainWeaponCatalog::GetInstance()->IndexOf(loadout->GetMainWeaponId());
 	case kTabShield: return ShieldCatalog::GetInstance()->IndexOf(loadout->GetShieldId());
@@ -182,7 +471,7 @@ std::string LoadoutScreen::ItemSummary(int tab, int index, const FlightUnitPart*
 		break;
 	case kTabShield:
 		if (const ShieldDef* d = ShieldCatalog::GetInstance()->GetDef(index)) {
-			return Format("HP 上限 %+d   軽減 %d%%", d->maxHpAdd, static_cast<int>(std::lround(d->damageCut * 100.0f)));
+			return Format("HP 上限 %+d   軽減 %d%%", d->maxHpAdd, static_cast<int>(std::lround(d->damageCut * kPercentScale)));
 		}
 		break;
 	case kTabUnit:
@@ -199,7 +488,7 @@ std::string LoadoutScreen::ItemSummary(int tab, int index, const FlightUnitPart*
 
 bool LoadoutScreen::Equip(int tab, int index) {
 	if (index == EquippedIndex(tab)) return false;
-	LoadoutState* loadout = LoadoutState::GetInstance();
+	LoadoutState* loadout = gameSession_->GetLoadoutState();
 	switch (tab) {
 	case kTabMain:
 		if (const MainWeaponDef* d = MainWeaponCatalog::GetInstance()->GetDef(index)) {
@@ -228,7 +517,7 @@ bool LoadoutScreen::Equip(int tab, int index) {
 bool LoadoutScreen::ChangeLevel(int index, int delta) {
 	const FlightUnitKind kind = UnitKindAt(index);
 	if (kind == FlightUnitKind::Wings || index < 0 || index >= static_cast<int>(FlightUnitKind::Count)) return false;
-	LoadoutState* loadout = LoadoutState::GetInstance();
+	LoadoutState* loadout = gameSession_->GetLoadoutState();
 	const int before = loadout->GetFlightUnitLevel(kind);
 	loadout->SetFlightUnitLevel(kind, before + delta);
 	return loadout->GetFlightUnitLevel(kind) != before;
@@ -238,7 +527,7 @@ bool LoadoutScreen::ChangeLevel(int index, int delta) {
 
 LoadoutScreen::FrameStats LoadoutScreen::ComputeFrame(int tab, int index, const FlightUnitPart* unit) const {
 	// ゲームと同じ計算（StagePlayScene::ScaledPlayerAttack / UpdateFlightUnit）。index が負なら付けている物のまま
-	const LoadoutState* loadout = LoadoutState::GetInstance();
+	const LoadoutState* loadout = gameSession_->GetLoadoutState();
 	const MainWeaponDef* weapon = loadout->GetMainWeapon();
 	const ShieldDef* shield = loadout->GetShield();
 	FlightUnitKind kind = loadout->GetFlightUnit();
@@ -288,12 +577,12 @@ std::vector<LoadoutScreen::StatLine> LoadoutScreen::ItemStats(int tab, int index
 			lines.push_back({ "RB の技", "なし" });
 			break;
 		}
-		lines.push_back({ "段階", Format("Lv %d / %d", LoadoutState::GetInstance()->GetFlightUnitLevel(kind),
+		lines.push_back({ "段階", Format("Lv %d / %d", gameSession_->GetLoadoutState()->GetFlightUnitLevel(kind),
 			LoadoutState::kMaxFlightUnitLevel) });
 		// 常時の補正（1 倍でない物だけ）
-		if (std::abs(skill->GetAttackScale() - 1.0f) > 1e-4f) lines.push_back({ "攻撃力", SignedPercent(skill->GetAttackScale() - 1.0f) });
-		if (std::abs(skill->GetMaxHpScale() - 1.0f) > 1e-4f) lines.push_back({ "HP 上限", SignedPercent(skill->GetMaxHpScale() - 1.0f) });
-		if (std::abs(skill->GetMoveSpeedScale() - 1.0f) > 1e-4f) lines.push_back({ "移動速度", SignedPercent(skill->GetMoveSpeedScale() - 1.0f) });
+		if (std::abs(skill->GetAttackScale() - 1.0f) > kScaleEpsilon) lines.push_back({ "攻撃力", SignedPercent(skill->GetAttackScale() - 1.0f) });
+		if (std::abs(skill->GetMaxHpScale() - 1.0f) > kScaleEpsilon) lines.push_back({ "HP 上限", SignedPercent(skill->GetMaxHpScale() - 1.0f) });
+		if (std::abs(skill->GetMoveSpeedScale() - 1.0f) > kScaleEpsilon) lines.push_back({ "移動速度", SignedPercent(skill->GetMoveSpeedScale() - 1.0f) });
 		// ジャスト回避の受付は機動系だけ（2026-11-01 ユーザー決定）
 		if (kind == FlightUnitKind::Mobility) {
 			lines.push_back({ "ジャスト回避の受付", Format("%+.3f 秒", skill->GetJustDodgeWindowBonus()) });
@@ -329,11 +618,11 @@ std::string LoadoutScreen::ItemDescription(int tab, int index) const {
 
 LoadoutScreen::Rect LoadoutScreen::TabRect(int tab) const {
 	const float w = leftWidth_ / static_cast<float>(kTabCount);
-	return { marginX_ + w * static_cast<float>(tab), topY_, w - 4.0f, tabHeight_ };
+	return { marginX_ + w * static_cast<float>(tab), topY_, w - kTabGap, tabHeight_ };
 }
 
 LoadoutScreen::Rect LoadoutScreen::ItemRect(int index) const {
-	const float y0 = topY_ + tabHeight_ + 36.0f;
+	const float y0 = topY_ + tabHeight_ + kListOffsetY;
 	return { marginX_, y0 + (itemHeight_ + itemGap_) * static_cast<float>(index), leftWidth_, itemHeight_ };
 }
 
@@ -341,12 +630,12 @@ LoadoutScreen::Rect LoadoutScreen::LevelArrowRect(int index, int direction) cons
 	const Rect item = ItemRect(index);
 	constexpr float kSize = 30.0f;
 	const float cy = item.y + item.height * 0.5f;
-	const float cx = direction < 0 ? item.x + item.width - 150.0f : item.x + item.width - 34.0f;
+	const float cx = direction < 0 ? item.x + item.width - kLevelDownArrowOffset : item.x + item.width - kLevelUpArrowOffset;
 	return { cx - kSize * 0.5f, cy - kSize * 0.5f, kSize, kSize };
 }
 
 LoadoutScreen::Rect LoadoutScreen::BackButtonRect(const Vector2& screen) const {
-	return { marginX_, screen.y - 78.0f, 170.0f, 44.0f };
+	return { marginX_, screen.y - kBackButtonBottomOffset, kBackButtonWidth, kBackButtonHeight };
 }
 
 LoadoutScreen::Rect LoadoutScreen::LeftPanelRect() const {
@@ -356,7 +645,7 @@ LoadoutScreen::Rect LoadoutScreen::LeftPanelRect() const {
 }
 
 LoadoutScreen::Rect LoadoutScreen::RightPanelRect(const Vector2& screen) const {
-	return { screen.x - marginX_ - rightWidth_, topY_, rightWidth_, screen.y - topY_ - 110.0f };
+	return { screen.x - marginX_ - rightWidth_, topY_, rightWidth_, screen.y - topY_ - kRightPanelBottomMargin };
 }
 
 bool LoadoutScreen::IsOverPanel(const Vector2& position, const Vector2& screen) const {
@@ -500,8 +789,8 @@ void LoadoutScreen::Arrow(const Vector2& center, float size, bool right, const V
 	for (int s = 0; s < steps; ++s) {
 		const float k = static_cast<float>(s) / static_cast<float>(steps);
 		const float h = size * (1.0f - k);
-		const float x = right ? center.x - size * 0.25f + kStrip * static_cast<float>(s)
-			: center.x + size * 0.25f - kStrip * static_cast<float>(s + 1);
+		const float x = right ? center.x - size * kArrowTipOffsetRatio + kStrip * static_cast<float>(s)
+			: center.x + size * kArrowTipOffsetRatio - kStrip * static_cast<float>(s + 1);
 		Rect4({ x, center.y - h * 0.5f, kStrip, h }, color, glowStrength);
 	}
 }
@@ -540,34 +829,34 @@ void LoadoutScreen::DrawBackdrop(const Vector2& screen, const Camera& camera, co
 	tr->DrawRect({ 0.0f, 0.0f }, { screen.x, screen.y }, backdropColor_);
 
 	// 走査線のような横の細い線
-	const Vector4 scan = WithAlpha(color_, 0.025f);
-	for (float y = 0.0f; y < screen.y; y += 6.0f) tr->DrawRect({ 0.0f, y }, { screen.x, 1.0f }, scan);
+	const Vector4 scan = WithAlpha(color_, kScanlineAlpha);
+	for (float y = 0.0f; y < screen.y; y += kScanlineSpacing) tr->DrawRect({ 0.0f, y }, { screen.x, 1.0f }, scan);
 
 	// 中央の点の輪（ゆっくり回る。コクピットの計器と同じ形）
-	const Vector2 c = { screen.x * 0.5f, screen.y * 0.48f };
-	const Vector4 faint = WithAlpha(color_, 0.16f);
-	const float ring = screen.y * 0.42f;
+	const Vector2 c = { screen.x * 0.5f, screen.y * kRingCenterY };
+	const Vector4 faint = WithAlpha(color_, kRingAlpha);
+	const float ring = screen.y * kRingRadiusRatio;
 	constexpr int kDots = 144;
 	for (int i = 0; i < kDots; ++i) {
-		if (i % 36 >= 32) continue;
-		const float a = static_cast<float>(i) / kDots * 2.0f * kPi + time * 0.05f;
-		const float size = (i % 12 == 0) ? 4.0f : 2.0f;
+		if (i % kRingDotsPerSegment >= kRingDotsShownPerSegment) continue;
+		const float a = static_cast<float>(i) / kDots * 2.0f * kPi + time * kRingSpinSpeed;
+		const float size = (i % kRingMajorDotInterval == 0) ? kRingMajorDotSize : kRingMinorDotSize;
 		tr->DrawRect({ c.x + std::cos(a) * ring - size * 0.5f, c.y + std::sin(a) * ring - size * 0.5f }, { size, size }, faint);
 	}
 
 	// 足元の輪（ワールドの円を画面へ。機体の後ろに描くので、体で隠れた所は見えない）
 	auto drawFloorRing = [&](float r, int dots, const Vector4& color, float size) {
 		for (int i = 0; i < dots; ++i) {
-			const float a = static_cast<float>(i) / static_cast<float>(dots) * 2.0f * kPi - time * 0.1f;
+			const float a = static_cast<float>(i) / static_cast<float>(dots) * 2.0f * kPi - time * kFloorRingSpinSpeed;
 			const Vector3 p = { floorCenter.x + std::cos(a) * r, floorCenter.y, floorCenter.z + std::sin(a) * r };
 			Vector2 s;
 			if (!ProjectToScreen(camera, p, screen, s)) continue;
 			tr->DrawRect({ s.x - size * 0.5f, s.y - size * 0.5f }, { size, size }, color);
 		}
 	};
-	drawFloorRing(radius, 160, WithAlpha(color_, 0.55f), 3.0f);
-	drawFloorRing(radius * 0.78f, 120, WithAlpha(color_, 0.25f), 2.0f);
-	drawFloorRing(radius * 1.25f, 200, WithAlpha(color_, 0.12f), 2.0f);
+	drawFloorRing(radius, kFloorRingDots, WithAlpha(color_, kFloorRingAlpha), kFloorRingDotSize);
+	drawFloorRing(radius * kFloorInnerRingRadiusRatio, kFloorInnerRingDots, WithAlpha(color_, kFloorInnerRingAlpha), kFloorSubRingDotSize);
+	drawFloorRing(radius * kFloorOuterRingRadiusRatio, kFloorOuterRingDots, WithAlpha(color_, kFloorOuterRingAlpha), kFloorSubRingDotSize);
 }
 
 void LoadoutScreen::Draw(const Vector2& screen, float uiTime, float collapse, const FlightUnitPart* unit, bool glow) {
@@ -578,23 +867,23 @@ void LoadoutScreen::Draw(const Vector2& screen, float uiTime, float collapse, co
 	// 戻るときはコクピットの UI と同じく、ブラウン管が切れるように縦に潰れて点になる
 	const Vector2 center = { screen.x * 0.5f, screen.y * 0.5f };
 	if (collapse > 0.0f) {
-		const float squash = Clamp01(collapse / 0.6f);
-		const float shrink = Clamp01((collapse - 0.6f) / 0.4f);
-		tr->SetTransform(center, { (std::max)(1.0f - shrink * shrink, 0.002f), 1.0f + (0.004f - 1.0f) * squash * squash });
+		const float squash = Clamp01(collapse / kCollapseSquashEnd);
+		const float shrink = Clamp01((collapse - kCollapseSquashEnd) / kCollapseShrinkSpan);
+		tr->SetTransform(center, { (std::max)(1.0f - shrink * shrink, kMinCollapseScaleX), 1.0f + (kCollapsedScaleY - 1.0f) * squash * squash });
 	}
 
-	const float leftAppear = CockpitReveal::Flicker(uiTime, 0.2f);
-	const float rightAppear = CockpitReveal::Flicker(uiTime - panelStagger_, 0.2f);
-	const float footerAppear = CockpitReveal::Flicker(uiTime - panelStagger_ * 2.0f, 0.2f);
+	const float leftAppear = CockpitReveal::Flicker(uiTime, kPanelFlickerSeconds);
+	const float rightAppear = CockpitReveal::Flicker(uiTime - panelStagger_, kPanelFlickerSeconds);
+	const float footerAppear = CockpitReveal::Flicker(uiTime - panelStagger_ * 2.0f, kPanelFlickerSeconds);
 
 	// 見出し：左上に「機体設定」、上の中央に案内、下に横の線
 	if (leftAppear > 0.0f) {
-		Text("機体設定", { marginX_, 38.0f }, 0.9f, WithAlpha(color_, leftAppear), textGlow_);
+		Text("機体設定", { marginX_, kTitleY }, kTitleScale, WithAlpha(color_, leftAppear), textGlow_);
 		const char* message = kTabMessages[tab_];
-		const float mw = tr->MeasureWidth(message, kSmallScale + 0.05f);
-		Text(message, { (screen.x - mw) * 0.5f, 50.0f }, kSmallScale + 0.05f, WithAlpha(color_, 0.8f * leftAppear), 0.0f);
+		const float mw = tr->MeasureWidth(message, kSmallScale + kMessageScaleBoost);
+		Text(message, { (screen.x - mw) * 0.5f, kMessageY }, kSmallScale + kMessageScaleBoost, WithAlpha(color_, kMessageAlpha * leftAppear), 0.0f);
 		// 右上の所持エーテルの枠（HubEtherBet::DrawHandPanel）に掛からないよう、その手前で止める
-		Rect4({ marginX_, 90.0f, screen.x - marginX_ - headerLineRightInset_, 2.0f }, WithAlpha(color_, 0.6f * leftAppear), lineGlow_);
+		Rect4({ marginX_, kHeaderLineY, screen.x - marginX_ - headerLineRightInset_, kHeaderLineThickness }, WithAlpha(color_, kHeaderLineAlpha * leftAppear), lineGlow_);
 	}
 	if (leftAppear > 0.0f) DrawLeft(leftAppear, unit);
 	if (rightAppear > 0.0f) DrawRight(screen, rightAppear, unit);
@@ -605,23 +894,23 @@ void LoadoutScreen::Draw(const Vector2& screen, float uiTime, float collapse, co
 
 void LoadoutScreen::DrawLeft(float appear, const FlightUnitPart* unit) {
 	TextRenderer* tr = TextRenderer::GetInstance();
-	const Vector4 panelFill = { 0.01f, 0.05f, 0.03f, 0.62f * appear };
+	const Vector4 panelFill = { kPanelFillRed, kPanelFillGreen, kPanelFillBlue, kPanelFillAlpha * appear };
 
 	// タブ
 	for (int t = 0; t < kTabCount; ++t) {
 		const Rect r = TabRect(t);
 		const bool selected = (t == tab_);
-		Rect4(r, selected ? WithAlpha(color_, 0.85f * appear) : panelFill, selected ? 0.4f : 0.0f);
-		Frame(r, WithAlpha(selected ? color_ : dimColor_, appear), 1.5f);
+		Rect4(r, selected ? WithAlpha(color_, kSelectedTabAlpha * appear) : panelFill, selected ? kSelectedTabGlow : 0.0f);
+		Frame(r, WithAlpha(selected ? color_ : dimColor_, appear), kFrameThickness);
 		const float lw = tr->MeasureWidth(kTabLabels[t], kLabelScale);
-		const Vector4 textColor = selected ? Vector4{ 0.0f, 0.08f, 0.04f, appear } : WithAlpha(color_, 0.8f * appear);
-		Text(kTabLabels[t], { r.x + (r.width - lw) * 0.5f, r.y + (r.height - 32.0f * kLabelScale) * 0.5f }, kLabelScale,
+		const Vector4 textColor = selected ? Vector4{ 0.0f, kDarkTextGreen, kDarkTextBlue, appear } : WithAlpha(color_, kTabTextAlpha * appear);
+		Text(kTabLabels[t], { r.x + (r.width - lw) * 0.5f, r.y + (r.height - kFontPixelHeight * kLabelScale) * 0.5f }, kLabelScale,
 			textColor, 0.0f);
 	}
 	// 見出し（英字）と並びの線
-	const float captionY = topY_ + tabHeight_ + 8.0f;
-	Text(kTabCaptions[tab_], { marginX_ + 4.0f, captionY }, kSmallScale, WithAlpha(color_, 0.6f * appear), 0.0f);
-	Rect4({ marginX_, captionY + 22.0f, leftWidth_, 1.0f }, WithAlpha(dimColor_, appear), 0.0f);
+	const float captionY = topY_ + tabHeight_ + kCaptionOffsetY;
+	Text(kTabCaptions[tab_], { marginX_ + kCaptionInsetX, captionY }, kSmallScale, WithAlpha(color_, kCaptionAlpha * appear), 0.0f);
+	Rect4({ marginX_, captionY + kCaptionLineOffsetY, leftWidth_, 1.0f }, WithAlpha(dimColor_, appear), 0.0f);
 
 	// 一覧
 	const int count = ItemCount(tab_);
@@ -629,34 +918,34 @@ void LoadoutScreen::DrawLeft(float appear, const FlightUnitPart* unit) {
 	for (int i = 0; i < count; ++i) {
 		const Rect r = ItemRect(i);
 		const bool selected = (i == cursor_[tab_]);
-		Rect4(r, selected ? WithAlpha(color_, 0.16f * appear) : panelFill, selected ? 0.12f : 0.0f);
-		Frame(r, WithAlpha(selected ? color_ : dimColor_, appear), selected ? 2.0f : 1.0f);
+		Rect4(r, selected ? WithAlpha(color_, kSelectedItemAlpha * appear) : panelFill, selected ? kSelectedItemGlow : 0.0f);
+		Frame(r, WithAlpha(selected ? color_ : dimColor_, appear), selected ? kSelectedItemFrameThickness : 1.0f);
 		// 付けている物に E の札
 		if (i == equipped) {
-			Rect4({ r.x, r.y, 26.0f, r.height }, WithAlpha(color_, 0.9f * appear), 0.4f);
-			Text("E", { r.x + 6.0f, r.y + 8.0f }, 0.6f, { 0.0f, 0.08f, 0.04f, appear }, 0.0f);
+			Rect4({ r.x, r.y, kEquippedBadgeWidth, r.height }, WithAlpha(color_, kEquippedBadgeAlpha * appear), kEquippedBadgeGlow);
+			Text("E", { r.x + kEquippedLetterOffsetX, r.y + kEquippedLetterOffsetY }, kEquippedLetterScale, { 0.0f, kDarkTextGreen, kDarkTextBlue, appear }, 0.0f);
 		}
-		const float textX = r.x + 40.0f;
-		Text(ItemName(tab_, i), { textX, r.y + 12.0f }, kNameScale, WithAlpha(color_, (selected ? 1.0f : 0.8f) * appear),
-			selected ? textGlow_ : textGlow_ * 0.3f);
-		Text(ItemSummary(tab_, i, unit), { textX, r.y + 52.0f }, kSmallScale, WithAlpha(color_, 0.55f * appear), 0.0f);
+		const float textX = r.x + kItemTextOffsetX;
+		Text(ItemName(tab_, i), { textX, r.y + kItemNameOffsetY }, kNameScale, WithAlpha(color_, (selected ? 1.0f : kUnselectedTextAlpha) * appear),
+			selected ? textGlow_ : textGlow_ * kUnselectedGlowRatio);
+		Text(ItemSummary(tab_, i, unit), { textX, r.y + kItemSummaryOffsetY }, kSmallScale, WithAlpha(color_, kItemSummaryAlpha * appear), 0.0f);
 		// 飛行ユニットの段階 ◀ Lv n ▶
 		if (tab_ == kTabUnit && UnitKindAt(i) != FlightUnitKind::Wings) {
-			const int level = LoadoutState::GetInstance()->GetFlightUnitLevel(UnitKindAt(i));
+			const int level = gameSession_->GetLoadoutState()->GetFlightUnitLevel(UnitKindAt(i));
 			const Rect left = LevelArrowRect(i, -1);
 			const Rect right = LevelArrowRect(i, +1);
 			const bool hl = selected && hoverArrow_ < 0;
 			const bool hr = selected && hoverArrow_ > 0;
 			const bool canDown = level > 1;
 			const bool canUp = level < LoadoutState::kMaxFlightUnitLevel;
-			Arrow({ left.x + left.width * 0.5f, left.y + left.height * 0.5f }, 18.0f, false,
-				WithAlpha(canDown ? color_ : dimColor_, (hl ? 1.0f : 0.7f) * appear), hl ? 1.5f : 0.0f);
-			Arrow({ right.x + right.width * 0.5f, right.y + right.height * 0.5f }, 18.0f, true,
-				WithAlpha(canUp ? color_ : dimColor_, (hr ? 1.0f : 0.7f) * appear), hr ? 1.5f : 0.0f);
+			Arrow({ left.x + left.width * 0.5f, left.y + left.height * 0.5f }, kLevelArrowSize, false,
+				WithAlpha(canDown ? color_ : dimColor_, (hl ? 1.0f : kLevelArrowIdleAlpha) * appear), hl ? kLevelArrowHoverGlow : 0.0f);
+			Arrow({ right.x + right.width * 0.5f, right.y + right.height * 0.5f }, kLevelArrowSize, true,
+				WithAlpha(canUp ? color_ : dimColor_, (hr ? 1.0f : kLevelArrowIdleAlpha) * appear), hr ? kLevelArrowHoverGlow : 0.0f);
 			const std::string lv = Format("Lv %d", level);
 			const float lvW = tr->MeasureWidth(lv, kLabelScale);
 			const float midX = (left.x + left.width + right.x) * 0.5f;
-			Text(lv, { midX - lvW * 0.5f, left.y + (left.height - 32.0f * kLabelScale) * 0.5f }, kLabelScale,
+			Text(lv, { midX - lvW * 0.5f, left.y + (left.height - kFontPixelHeight * kLabelScale) * 0.5f }, kLabelScale,
 				WithAlpha(color_, appear), selected ? textGlow_ * 0.5f : 0.0f);
 		}
 	}
@@ -665,17 +954,17 @@ void LoadoutScreen::DrawLeft(float appear, const FlightUnitPart* unit) {
 void LoadoutScreen::DrawRight(const Vector2& screen, float appear, const FlightUnitPart* unit) {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	const Rect panel = RightPanelRect(screen);
-	Rect4(panel, { 0.01f, 0.05f, 0.03f, 0.62f * appear }, 0.0f);
-	Frame(panel, WithAlpha(dimColor_, appear), 1.5f);
-	const Vector4 dark = { 0.0f, 0.08f, 0.04f, appear };
-	const float x0 = panel.x + 16.0f;
-	const float x1 = panel.x + panel.width - 16.0f;
+	Rect4(panel, { kPanelFillRed, kPanelFillGreen, kPanelFillBlue, kPanelFillAlpha * appear }, 0.0f);
+	Frame(panel, WithAlpha(dimColor_, appear), kFrameThickness);
+	const Vector4 dark = { 0.0f, kDarkTextGreen, kDarkTextBlue, appear };
+	const float x0 = panel.x + kPanelPaddingX;
+	const float x1 = panel.x + panel.width - kPanelPaddingX;
 	float y = panel.y;
 
 	auto section = [&](const char* title) {
-		Rect4({ panel.x, y, panel.width, kSectionHeight }, WithAlpha(color_, 0.8f * appear), 0.35f);
-		Text(title, { x0, y + 3.0f }, kSmallScale, dark, 0.0f);
-		y += kSectionHeight + 8.0f;
+		Rect4({ panel.x, y, panel.width, kSectionHeight }, WithAlpha(color_, kSectionBarAlpha * appear), kSectionBarGlow);
+		Text(title, { x0, y + kSectionTitleOffsetY }, kSmallScale, dark, 0.0f);
+		y += kSectionHeight + kSectionGap;
 	};
 	auto rightAligned = [&](const std::string& text, float right, float yy, float scale, const Vector4& color, float glow) {
 		const float w = tr->MeasureWidth(text, scale);
@@ -689,42 +978,42 @@ void LoadoutScreen::DrawRight(const Vector2& screen, float appear, const FlightU
 	const FrameStats now = ComputeFrame(tab_, -1, unit);
 	const FrameStats next = ComputeFrame(tab_, cursor, unit);
 	auto frameRow = [&](const char* label, const std::string& nowText, const std::string& nextText, int compare) {
-		Text(label, { x0, y }, kLabelScale, WithAlpha(color_, 0.85f * appear), 0.0f);
+		Text(label, { x0, y }, kLabelScale, WithAlpha(color_, kFrameLabelAlpha * appear), 0.0f);
 		if (compare == 0) {
-			rightAligned(nowText, x1, y, kLabelScale, WithAlpha(color_, appear), textGlow_ * 0.4f);
+			rightAligned(nowText, x1, y, kLabelScale, WithAlpha(color_, appear), textGlow_ * kFrameValueGlowRatio);
 		} else {
 			const Vector4 c = WithAlpha(compare > 0 ? upColor_ : downColor_, appear);
 			const float w = rightAligned(nextText, x1, y, kLabelScale, c, textGlow_ * 0.5f);
-			const float arrowW = rightAligned("→", x1 - w - 8.0f, y, kLabelScale, WithAlpha(color_, 0.6f * appear), 0.0f);
-			rightAligned(nowText, x1 - w - arrowW - 16.0f, y, kLabelScale, WithAlpha(color_, 0.6f * appear), 0.0f);
+			const float arrowW = rightAligned("→", x1 - w - kChangeArrowGap, y, kLabelScale, WithAlpha(color_, kOldValueAlpha * appear), 0.0f);
+			rightAligned(nowText, x1 - w - arrowW - kOldValueGap, y, kLabelScale, WithAlpha(color_, kOldValueAlpha * appear), 0.0f);
 		}
-		y += 34.0f;
+		y += kStatRowHeight;
 	};
 	auto compareInt = [](int a, int b) { return b > a ? 1 : (b < a ? -1 : 0); };
 	frameRow("攻撃力", Format("%d", now.attack), Format("%d", next.attack), compareInt(now.attack, next.attack));
 	frameRow("HP 上限", Format("%d", now.maxHp), Format("%d", next.maxHp), compareInt(now.maxHp, next.maxHp));
-	const int nowMove = static_cast<int>(std::lround(now.moveScale * 100.0f));
-	const int nextMove = static_cast<int>(std::lround(next.moveScale * 100.0f));
+	const int nowMove = static_cast<int>(std::lround(now.moveScale * kPercentScale));
+	const int nextMove = static_cast<int>(std::lround(next.moveScale * kPercentScale));
 	frameRow("移動速度", Format("%d%%", nowMove), Format("%d%%", nextMove), compareInt(nowMove, nextMove));
-	y += 10.0f;
+	y += kSectionExtraGap;
 
 	// カーソルの物：名前・性能・説明文
 	section(kTabLabels[tab_]);
-	Text(ItemName(tab_, cursor), { x0, y }, kNameScale + 0.06f, WithAlpha(color_, appear), textGlow_);
-	y += 46.0f;
+	Text(ItemName(tab_, cursor), { x0, y }, kNameScale + kNameScaleBoost, WithAlpha(color_, appear), textGlow_);
+	y += kNameRowHeight;
 	for (const StatLine& line : ItemStats(tab_, cursor, unit)) {
-		Text(line.label, { x0 + 8.0f, y }, kSmallScale + 0.04f, WithAlpha(color_, 0.8f * appear), 0.0f);
-		rightAligned(line.value, x1, y, kSmallScale + 0.04f, WithAlpha(color_, appear), textGlow_ * 0.3f);
-		Rect4({ x0, y + 27.0f, x1 - x0, 1.0f }, WithAlpha(dimColor_, 0.7f * appear), 0.0f);
-		y += 34.0f;
+		Text(line.label, { x0 + kStatIndentX, y }, kSmallScale + kStatScaleBoost, WithAlpha(color_, kStatLabelAlpha * appear), 0.0f);
+		rightAligned(line.value, x1, y, kSmallScale + kStatScaleBoost, WithAlpha(color_, appear), textGlow_ * kStatValueGlowRatio);
+		Rect4({ x0, y + kRowUnderlineOffsetY, x1 - x0, 1.0f }, WithAlpha(dimColor_, kRowUnderlineAlpha * appear), 0.0f);
+		y += kStatRowHeight;
 	}
-	y += 10.0f;
+	y += kSectionExtraGap;
 	// 説明文は下の端の「作成／強化に必要」の欄にかからない所まで
 	const float costHeight = DrawCost(panel, appear, true);
 	for (const std::string& line : Wrap(ItemDescription(tab_, cursor), kSmallScale, x1 - x0)) {
-		if (y > panel.y + panel.height - 28.0f - costHeight) break;
-		Text(line, { x0, y }, kSmallScale, WithAlpha(color_, 0.7f * appear), 0.0f);
-		y += 25.0f;
+		if (y > panel.y + panel.height - kDescriptionBottomMargin - costHeight) break;
+		Text(line, { x0, y }, kSmallScale, WithAlpha(color_, kDescriptionAlpha * appear), 0.0f);
+		y += kDescriptionLineHeight;
 	}
 	DrawCost(panel, appear, false);
 }
@@ -742,7 +1031,7 @@ const CraftCost* LoadoutScreen::ItemCost(int tab, int index, int& level) const {
 	case kTabUnit:
 		if (index >= 0 && index < static_cast<int>(FlightUnitKind::Count)) {
 			const FlightUnitKind kind = UnitKindAt(index);
-			level = LoadoutState::GetInstance()->GetFlightUnitLevel(kind);
+			level = gameSession_->GetLoadoutState()->GetFlightUnitLevel(kind);
 			const std::string id = LoadoutState::GetFlightUnitName(kind);
 			// 段階の無い物（初期の羽根）は Lv1 の欄を見る
 			const CraftCost* cost = crafting->FindFlightUnit(id, level);
@@ -766,39 +1055,39 @@ float LoadoutScreen::DrawCost(const Rect& panel, float appear, bool measureOnly)
 
 	constexpr float kRow = 30.0f;
 	const int rows = cost->initial ? 1 : static_cast<int>(cost->materials.size()) + 1;
-	const float height = kSectionHeight + 8.0f + kRow * static_cast<float>(rows) + 8.0f;
+	const float height = kSectionHeight + kSectionGap + kRow * static_cast<float>(rows) + kCostBottomPadding;
 	if (measureOnly) return height;
 
 	TextRenderer* tr = TextRenderer::GetInstance();
-	const float x0 = panel.x + 16.0f;
-	const float x1 = panel.x + panel.width - 16.0f;
+	const float x0 = panel.x + kPanelPaddingX;
+	const float x1 = panel.x + panel.width - kPanelPaddingX;
 	float y = panel.y + panel.height - height;
-	const Vector4 dark = { 0.0f, 0.08f, 0.04f, appear };
+	const Vector4 dark = { 0.0f, kDarkTextGreen, kDarkTextBlue, appear };
 	auto rightAligned = [&](const std::string& text, float yy, const Vector4& color) {
-		const float w = tr->MeasureWidth(text, kSmallScale + 0.04f);
-		Text(text, { x1 - w, yy }, kSmallScale + 0.04f, color, textGlow_ * 0.3f);
+		const float w = tr->MeasureWidth(text, kSmallScale + kStatScaleBoost);
+		Text(text, { x1 - w, yy }, kSmallScale + kStatScaleBoost, color, textGlow_ * kStatValueGlowRatio);
 	};
 
 	// 見出し：初期装備／作成に必要／Lv○ への強化に必要
 	std::string title;
 	if (cost->initial) title = "入手";
-	else if (level >= 2) title = Format("Lv%d への強化に必要", level);
+	else if (level >= kFirstUpgradeLevel) title = Format("Lv%d への強化に必要", level);
 	else title = "作成に必要";
-	Rect4({ panel.x, y, panel.width, kSectionHeight }, WithAlpha(color_, 0.8f * appear), 0.35f);
-	Text(title, { x0, y + 3.0f }, kSmallScale, dark, 0.0f);
-	y += kSectionHeight + 8.0f;
+	Rect4({ panel.x, y, panel.width, kSectionHeight }, WithAlpha(color_, kSectionBarAlpha * appear), kSectionBarGlow);
+	Text(title, { x0, y + kSectionTitleOffsetY }, kSmallScale, dark, 0.0f);
+	y += kSectionHeight + kSectionGap;
 
 	if (cost->initial) {
-		Text("初期装備（最初から持っている）", { x0 + 8.0f, y }, kSmallScale + 0.04f, WithAlpha(color_, 0.8f * appear), 0.0f);
+		Text("初期装備（最初から持っている）", { x0 + kStatIndentX, y }, kSmallScale + kStatScaleBoost, WithAlpha(color_, kStatLabelAlpha * appear), 0.0f);
 		return height;
 	}
 	// 素材の行：アイテムの色の印＋名前、右に個数
 	const LootCatalog* loot = LootCatalog::GetInstance();
 	auto row = [&](const std::string& label, const Vector4& mark, const std::string& value) {
-		Rect4({ x0 + 8.0f, y + 7.0f, 12.0f, 12.0f }, WithAlpha(mark, appear), 0.4f);
-		Text(label, { x0 + 30.0f, y }, kSmallScale + 0.04f, WithAlpha(color_, 0.85f * appear), 0.0f);
+		Rect4({ x0 + kStatIndentX, y + kCostMarkOffsetY, kCostMarkSize, kCostMarkSize }, WithAlpha(mark, appear), kCostMarkGlow);
+		Text(label, { x0 + kCostLabelOffsetX, y }, kSmallScale + kStatScaleBoost, WithAlpha(color_, kFrameLabelAlpha * appear), 0.0f);
 		rightAligned(value, y, WithAlpha(color_, appear));
-		Rect4({ x0, y + 27.0f, x1 - x0, 1.0f }, WithAlpha(dimColor_, 0.7f * appear), 0.0f);
+		Rect4({ x0, y + kRowUnderlineOffsetY, x1 - x0, 1.0f }, WithAlpha(dimColor_, kRowUnderlineAlpha * appear), 0.0f);
 		y += kRow;
 	};
 	for (const CraftCost::Material& m : cost->materials) {
@@ -813,18 +1102,18 @@ void LoadoutScreen::DrawFooter(const Vector2& screen, float appear) {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	// 戻るボタン
 	const Rect back = BackButtonRect(screen);
-	Rect4(back, hoverBack_ ? WithAlpha(color_, 0.25f * appear) : Vector4{ 0.01f, 0.05f, 0.03f, 0.62f * appear },
-		hoverBack_ ? 0.3f : 0.0f);
-	Frame(back, WithAlpha(hoverBack_ ? color_ : dimColor_, appear), 1.5f);
-	Arrow({ back.x + 24.0f, back.y + back.height * 0.5f }, 16.0f, false, WithAlpha(color_, appear), 0.0f);
-	Text("戻る", { back.x + 48.0f, back.y + (back.height - 32.0f * kLabelScale) * 0.5f }, kLabelScale,
-		WithAlpha(color_, appear), hoverBack_ ? textGlow_ * 0.6f : 0.0f);
+	Rect4(back, hoverBack_ ? WithAlpha(color_, kBackHoverAlpha * appear) : Vector4{ kPanelFillRed, kPanelFillGreen, kPanelFillBlue, kPanelFillAlpha * appear },
+		hoverBack_ ? kBackHoverGlow : 0.0f);
+	Frame(back, WithAlpha(hoverBack_ ? color_ : dimColor_, appear), kFrameThickness);
+	Arrow({ back.x + kBackArrowOffsetX, back.y + back.height * 0.5f }, kBackArrowSize, false, WithAlpha(color_, appear), 0.0f);
+	Text("戻る", { back.x + kBackLabelOffsetX, back.y + (back.height - kFontPixelHeight * kLabelScale) * 0.5f }, kLabelScale,
+		WithAlpha(color_, appear), hoverBack_ ? textGlow_ * kBackLabelGlowRatio : 0.0f);
 
 	// 操作の案内（右下）
 	const char* hint = "LB/RB：タブ   ↑↓：選択   A：装備   ←→：段階   B：戻る   右スティック/ドラッグ：回転";
-	const float scale = 0.45f;
+	const float scale = kHintScale;
 	const float w = tr->MeasureWidth(hint, scale);
-	Text(hint, { screen.x - marginX_ - w, screen.y - 66.0f }, scale, WithAlpha(color_, 0.6f * appear), 0.0f);
+	Text(hint, { screen.x - marginX_ - w, screen.y - kHintBottomOffset }, scale, WithAlpha(color_, kHintAlpha * appear), 0.0f);
 }
 
 //==================== 調整値 ====================

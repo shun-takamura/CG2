@@ -8,15 +8,27 @@
 /// </summary>
 class StageClearBanner {
 public:
+	/// <summary>表示を最初から始める</summary>
+	/// <param name="clearTimeSec">下に出すクリアタイム [秒]</param>
 	void Start(float clearTimeSec);
+	/// <summary>表示をやめる（非表示に戻す）</summary>
 	void Reset();
+	/// <summary>表示中なら経過時間を進める</summary>
+	/// <param name="dt">経過時間 [秒]</param>
 	void Update(float dt);
+	/// <summary>表示中か</summary>
+	/// <returns>表示中なら true</returns>
 	bool IsActive() const { return active_; }
+	/// <summary>表示を始めてからの経過時間を取得する</summary>
+	/// <returns>経過時間 [秒]</returns>
 	float GetTime() const { return time_; }
 
-	// screenW/H は UI 座標の画面の大きさ
+	/// <summary>帯・金の線・文字・光の筋・クリアタイムを経過時間に合わせて TextRenderer に積む</summary>
+	/// <param name="screenW">UI 座標の画面の幅</param>
+	/// <param name="screenH">UI 座標の画面の高さ</param>
 	void Draw(float screenW, float screenH) const;
 
+	/// <summary>表示の調整値を ImGui に出す（再生のボタン付き）</summary>
 	void OnImGui();
 
 private:

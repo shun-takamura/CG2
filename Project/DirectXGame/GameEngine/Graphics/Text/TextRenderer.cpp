@@ -13,6 +13,31 @@
 #include <cstring>
 #include <d3dcompiler.h>
 
+namespace {
+	// ルートシグネチャのルートパラメータの番号（CreateRootSignature と DrawLayer で同じ番号を使う）
+	enum RootParam : UINT {
+		kRootParamInstances,     // VS t0：グリフのインスタンスの StructuredBuffer（テーブル）
+		kRootParamConstants,     // VS b0：描く先の大きさ・層の区画の先頭インスタンス番号（ルート定数）
+		kRootParamAtlas,         // PS t0：フォントアトラス（テーブル）
+		kRootParamCount,
+	};
+	// VS のインスタンスの StructuredBuffer のレジスタ番号（t0）
+	constexpr UINT kInstanceBufferRegister = 0;
+	// PS のフォントアトラスのレジスタ番号（t0）
+	constexpr UINT kAtlasTextureRegister = 0;
+	// VS のルート定数のレジスタ番号（b0）
+	constexpr UINT kRootConstantsRegister = 0;
+	// アトラスを読むサンプラーのレジスタ番号（s0）
+	constexpr UINT kAtlasSamplerRegister = 0;
+	// ルート定数の 32bit 値の数（幅・高さ・先頭インスタンス番号・予備）
+	constexpr UINT kRootConstantValueCount = 4;
+	// 1 文字の四角を描く三角形ストリップの頂点数
+	constexpr UINT kQuadVertexCount = 4;
+	// 発光の層の最初に確保しておくインスタンス数
+	constexpr size_t kGlowLayerReserve = 1024;
+	// 画面の外の層の最初に確保しておくインスタンス数
+	constexpr size_t kOffscreenLayerReserve = 256;
+}
 TextRenderer* TextRenderer::GetInstance()
 {
 	static TextRenderer instance;
@@ -40,8 +65,8 @@ void TextRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager,
 	atlas_->PreloadDefaultCharset(nullptr);
 
 	layers_[kLayerScreen].reserve(kMaxInstances);
-	layers_[kLayerGlow].reserve(1024);
-	layers_[kLayerOffscreen].reserve(256);
+	layers_[kLayerGlow].reserve(kGlowLayerReserve);
+	layers_[kLayerOffscreen].reserve(kOffscreenLayerReserve);
 	initialized_ = true;
 }
 
@@ -64,35 +89,35 @@ void TextRenderer::CreateRootSignature()
 {
 	// DescriptorRange: SRV(t0) for VS (StructuredBuffer)
 	D3D12_DESCRIPTOR_RANGE rangeInst[1] = {};
-	rangeInst[0].BaseShaderRegister = 0;
+	rangeInst[kInstanceBufferRegister].BaseShaderRegister = kInstanceBufferRegister;
 	rangeInst[0].NumDescriptors = 1;
 	rangeInst[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	rangeInst[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	// DescriptorRange: SRV(t0) for PS (atlas)
 	D3D12_DESCRIPTOR_RANGE rangeAtlas[1] = {};
-	rangeAtlas[0].BaseShaderRegister = 0;
+	rangeAtlas[kAtlasTextureRegister].BaseShaderRegister = kAtlasTextureRegister;
 	rangeAtlas[0].NumDescriptors = 1;
 	rangeAtlas[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	rangeAtlas[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_PARAMETER params[3] = {};
+	D3D12_ROOT_PARAMETER params[kRootParamCount] = {};
 	// [0] VS DescriptorTable - instances (t0)
-	params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	params[0].DescriptorTable.pDescriptorRanges = rangeInst;
-	params[0].DescriptorTable.NumDescriptorRanges = 1;
+	params[kRootParamInstances].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	params[kRootParamInstances].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	params[kRootParamInstances].DescriptorTable.pDescriptorRanges = rangeInst;
+	params[kRootParamInstances].DescriptorTable.NumDescriptorRanges = 1;
 	// [1] VS ルート定数(b0) - 描く先の大きさ（ピクセル）と、層の区画の先頭のインスタンス番号
-	params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-	params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	params[1].Constants.ShaderRegister = 0;
-	params[1].Constants.RegisterSpace = 0;
-	params[1].Constants.Num32BitValues = 4;
+	params[kRootParamConstants].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	params[kRootParamConstants].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	params[kRootParamConstants].Constants.ShaderRegister = kRootConstantsRegister;
+	params[kRootParamConstants].Constants.RegisterSpace = 0;
+	params[kRootParamConstants].Constants.Num32BitValues = kRootConstantValueCount;
 	// [2] PS DescriptorTable - atlas (t0)
-	params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	params[2].DescriptorTable.pDescriptorRanges = rangeAtlas;
-	params[2].DescriptorTable.NumDescriptorRanges = 1;
+	params[kRootParamAtlas].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	params[kRootParamAtlas].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	params[kRootParamAtlas].DescriptorTable.pDescriptorRanges = rangeAtlas;
+	params[kRootParamAtlas].DescriptorTable.NumDescriptorRanges = 1;
 
 	D3D12_STATIC_SAMPLER_DESC sampler{};
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -101,7 +126,7 @@ void TextRenderer::CreateRootSignature()
 	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
 	sampler.MaxLOD = D3D12_FLOAT32_MAX;
-	sampler.ShaderRegister = 0;
+	sampler.ShaderRegister = kAtlasSamplerRegister;
 	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 	D3D12_ROOT_SIGNATURE_DESC desc{};
@@ -338,12 +363,12 @@ void TextRenderer::DrawLayer(Layer layer, ID3D12PipelineState* pso, float target
 	cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	cmd->IASetVertexBuffers(0, 0, nullptr); // SV_VertexID で頂点生成
 
-	srvManager_->SetGraphicsRootDescriptorTable(0, instanceSrvIndex_);
-	cmd->SetGraphicsRoot32BitConstants(1, 4, &constants, 0);
-	srvManager_->SetGraphicsRootDescriptorTable(2, atlas_->GetSrvIndex());
+	srvManager_->SetGraphicsRootDescriptorTable(kRootParamInstances, instanceSrvIndex_);
+	cmd->SetGraphicsRoot32BitConstants(kRootParamConstants, kRootConstantValueCount, &constants, 0);
+	srvManager_->SetGraphicsRootDescriptorTable(kRootParamAtlas, atlas_->GetSrvIndex());
 
 	PEPPER_COUNT("DrawCall");
-	cmd->DrawInstanced(4, n, 0, 0);
+	cmd->DrawInstanced(kQuadVertexCount, n, 0, 0);
 
 	instances.clear();
 }

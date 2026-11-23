@@ -11,8 +11,23 @@
 #endif
 
 namespace {
-	constexpr float kTwoPi = 6.28318531f;
+	// 定数バッファを 256 バイト境界へ切り上げるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 量のゆらぎの周期の下限 [秒]（0 割りを防ぐ）
+	constexpr float kMinSwingPeriod = 0.1f;
+	// 量のゆらぎの 2 つの波の混ぜ方（A と B の重み）
+	constexpr float kSwingWeightA = 0.6f;
+	constexpr float kSwingWeightB = 0.4f;
+	// 太陽の向きの水平成分がこれ以下なら影をずらさない（真上）
+	constexpr float kMinSunHorizontal = 1e-4f;
+	// 太陽側への影の歩数の上限
+	constexpr int kMaxLightSteps = 3;
+	// 縁の光の散乱の偏り g の上限
+	constexpr float kMaxRimG = 0.95f;
 
+	/// <summary>小数部だけを取り 0〜1 に折り返す</summary>
+	/// <param name="v">値</param>
+	/// <returns>0 以上 1 未満の値</returns>
 	float Wrap01(float v) {
 		return v - std::floor(v);
 	}
@@ -28,7 +43,7 @@ void CloudLayer::Initialize(DirectXCore* dxCore, const std::string& noiseTexture
 	TextureManager::GetInstance()->LoadTexture(noiseTexturePath_);
 	TextureManager::GetInstance()->LoadTexture(GetMokoTexturePath());
 
-	constantsResource_ = dxCore_->CreateBufferResource((sizeof(ConstantsForGPU) + 255) & ~255);
+	constantsResource_ = dxCore_->CreateBufferResource((sizeof(ConstantsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	constantsResource_->Map(0, nullptr, reinterpret_cast<void**>(&constantsData_));
 	Update(0.0f, { 0.0f, 0.0f, 0.0f });
 }
@@ -59,9 +74,9 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	const float mokoScale = (std::max)(params_.mokoScale, 1.0f);
 	scroll(mokoOffset_, params_.shapeWind, mokoScale);
 
-	const float swingA = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodA, 0.1f));
-	const float swingB = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodB, 0.1f));
-	const float threshold = params_.coverage + params_.swingAmplitude * (0.6f * swingA + 0.4f * swingB);
+	const float swingA = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodA, kMinSwingPeriod));
+	const float swingB = std::sin(kTwoPi * time_ / (std::max)(params_.swingPeriodB, kMinSwingPeriod));
+	const float threshold = params_.coverage + params_.swingAmplitude * (kSwingWeightA * swingA + kSwingWeightB * swingB);
 
 	// 一様分布2枚を w で混ぜると標準偏差が sqrt((1-w)^2 + w^2) 倍に縮むので、その分広げ直す
 	const float w = std::clamp(params_.detailWeight, 0.0f, 1.0f);
@@ -73,7 +88,7 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	Vector2 mokoLightStep{ 0.0f, 0.0f };
 	Vector2 mokoMicroStep{ 0.0f, 0.0f };
 	const float sunXZ = std::sqrt(sunDirection_.x * sunDirection_.x + sunDirection_.z * sunDirection_.z);
-	if (sunXZ > 1e-4f) {
+	if (sunXZ > kMinSunHorizontal) {
 		const Vector2 towardSun{ sunDirection_.x / sunXZ, sunDirection_.z / sunXZ };
 		const float k = params_.lightStep / shapeScale;
 		lightOffset = { towardSun.x * k, towardSun.y * k };
@@ -123,12 +138,12 @@ void CloudLayer::Update(float deltaTime, const Vector3& eyePosition)
 	c.mokoLightStep = mokoLightStep;
 	c.mokoMicroStep = mokoMicroStep;
 	c.density = params_.density;
-	c.lightSteps = std::clamp(params_.lightSteps, 0, 3);
+	c.lightSteps = std::clamp(params_.lightSteps, 0, kMaxLightSteps);
 	c.microGain = params_.microGain;
 	c.rimIntensity = params_.rimIntensity;
 	c.rimColor = params_.rimColor;
 	c.rimAmbient = params_.rimAmbient;
-	c.rimG = std::clamp(params_.rimG, 0.0f, 0.95f);
+	c.rimG = std::clamp(params_.rimG, 0.0f, kMaxRimG);
 	*constantsData_ = c;
 }
 
@@ -154,7 +169,7 @@ const char* CloudLayer::GetMokoTexturePath()
 
 Microsoft::WRL::ComPtr<ID3D12Resource> CloudLayer::CreateDisabledConstantBuffer(DirectXCore* dxCore)
 {
-	Microsoft::WRL::ComPtr<ID3D12Resource> resource = dxCore->CreateBufferResource((sizeof(ConstantsForGPU) + 255) & ~255);
+	Microsoft::WRL::ComPtr<ID3D12Resource> resource = dxCore->CreateBufferResource((sizeof(ConstantsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	ConstantsForGPU* data = nullptr;
 	resource->Map(0, nullptr, reinterpret_cast<void**>(&data));
 	*data = ConstantsForGPU{};

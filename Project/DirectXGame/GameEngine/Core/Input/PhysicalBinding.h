@@ -25,31 +25,47 @@ struct PhysicalBinding {
 	InputDevice device = InputDevice::None;
 	uint32_t code = 0;
 
+	/// <summary>割り当てが空か</summary>
+	/// <returns>デバイスが None なら true</returns>
 	bool IsEmpty() const { return device == InputDevice::None; }
+	/// <summary>デバイスとコードが同じか</summary>
+	/// <param name="other">比べる相手</param>
+	/// <returns>同じなら true</returns>
 	bool operator==(const PhysicalBinding& other) const {
 		return device == other.device && code == other.code;
 	}
 
 	/// <summary>
-	/// "kb.Space" / "mouse.Left" / "gp.RT" などの文字列に変換（JSON保存用）。
-	/// Empty なら空文字列を返す。
+	/// "kb.Space" / "mouse.Left" / "gp.RT" などの文字列に変換する（JSON保存用）
 	/// </summary>
+	/// <returns>文字列（Empty・名前の表に無いコードなら空文字列）</returns>
 	std::string ToString() const;
 
 	/// <summary>
-	/// 文字列から PhysicalBinding を復元。失敗時は Empty を返す。
+	/// "kb.Space" / "mouse.Left" / "gp.RT" の形の文字列から PhysicalBinding を復元する
 	/// </summary>
+	/// <param name="text">"接頭辞.名前" の文字列</param>
+	/// <returns>復元した割り当て（"." が無い・接頭辞や名前が表に無いと Empty）</returns>
 	static PhysicalBinding FromString(std::string_view text);
 
 	//====================
 	// 構築ヘルパー
 	//====================
+	/// <summary>キーボードの割り当てを作る</summary>
+	/// <param name="dikCode">DIK_* の値</param>
+	/// <returns>割り当て</returns>
 	static PhysicalBinding Keyboard(uint32_t dikCode) {
 		return PhysicalBinding{ InputDevice::Keyboard, dikCode };
 	}
+	/// <summary>マウスの割り当てを作る</summary>
+	/// <param name="buttonIndex">MouseCode の値</param>
+	/// <returns>割り当て</returns>
 	static PhysicalBinding Mouse(uint32_t buttonIndex) {
 		return PhysicalBinding{ InputDevice::Mouse, buttonIndex };
 	}
+	/// <summary>ゲームパッドの割り当てを作る</summary>
+	/// <param name="code">XINPUT_GAMEPAD_* のビット、または GamepadCode::LT / RT</param>
+	/// <returns>割り当て</returns>
 	static PhysicalBinding Gamepad(uint32_t code) {
 		return PhysicalBinding{ InputDevice::Gamepad, code };
 	}

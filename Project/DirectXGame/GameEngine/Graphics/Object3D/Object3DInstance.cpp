@@ -6,6 +6,15 @@
 #include "EditorDropPayload.h"  // MATERIAL_DROP / SPRITE_DROP 等の D&D ペイロード
 #include <algorithm>
 
+namespace {
+    // ルート定数 1 個の大きさ [バイト]
+    constexpr size_t kBytesPer32BitConstant = 4;
+    // 定数バッファを 256 バイト境界へ切り上げるためのマスク
+    constexpr int kConstantBufferAlignMask = 255;
+    // カメラ CB の最初の位置の手前への距離 [m]（Z = −この値）
+    constexpr float kDefaultCameraDistance = 10.0f;
+}
+
 void Object3DInstance::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore,
     const std::string& directorPath, const std::string& filename,
     const std::string& name)
@@ -90,34 +99,19 @@ void Object3DInstance::Draw(DirectXCore* dxCore)
 #endif
   // Materialのフラグに応じてPSOを切り替え
     if (modelInstance_) {
-        Material* mat = modelInstance_->GetMaterialPointer();
-        if (mat && mat->shadingModel == 2) {
-            dxCore->GetCommandList()->SetPipelineState(
-                object3DManager_->GetPipelineState(Object3DManager::kShaderTerrain)
-            );
-        } else if (mat && mat->shadingModel == 1) {
-            dxCore->GetCommandList()->SetPipelineState(
-                object3DManager_->GetPipelineState(Object3DManager::kShaderPBR)
-            );
-        } else if (mat && mat->useEnvironmentMap) {
-            dxCore->GetCommandList()->SetPipelineState(
-                object3DManager_->GetPipelineState(Object3DManager::kShaderEnvironmentMap)
-            );
-        } else {
-            dxCore->GetCommandList()->SetPipelineState(
-                object3DManager_->GetPipelineState(Object3DManager::kShaderNoEnvironmentMap)
-            );
-        }
+        const Object3DManager::ShaderType shaderType =
+            Object3DManager::SelectShaderType(modelInstance_->GetMaterialPointer(), true);
+        dxCore->GetCommandList()->SetPipelineState(object3DManager_->GetPipelineState(shaderType));
     }
 
     // 座標変換行列CBufferの場所を設定
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        1, transformationMatrixResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootTransform, transformationMatrixResource_->GetGPUVirtualAddress()
     );
 
     // カメラCBufferの場所を設定
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        4, cameraResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootCamera, cameraResource_->GetGPUVirtualAddress()
     );
 
     if (modelInstance_) {
@@ -143,7 +137,7 @@ void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
                                      : object3DManager_->GetIdPipelineState());
 
     // VS CBV b0 = TransformationMatrix
-    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kIdRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
 
     // PS Root Constant b0 = objectId（ディゾルブ版は WriteIDDissolve.PS の IdDissolveCB と同じ並びで続ける）
     const UINT idValue = static_cast<UINT>(objectId_);
@@ -159,10 +153,10 @@ void Object3DInstance::DrawIdPass(DirectXCore* dxCore)
             float padding;
         } constants{ idValue, mat->dissolveProgress, mat->dissolveEdgeWidth, mat->dissolveNoiseScale,
                      mat->dissolveHeightMin, mat->dissolveHeightMax, mat->dissolveNoiseWeight, 0.0f };
-        static_assert(sizeof(IdDissolveConstants) == Object3DManager::kIdPassConstantCount * 4);
-        cmd->SetGraphicsRoot32BitConstants(1, Object3DManager::kIdPassConstantCount, &constants, 0);
+        static_assert(sizeof(IdDissolveConstants) == Object3DManager::kIdPassConstantCount * kBytesPer32BitConstant);
+        cmd->SetGraphicsRoot32BitConstants(Object3DManager::kIdRootConstants, Object3DManager::kIdPassConstantCount, &constants, 0);
     } else {
-        cmd->SetGraphicsRoot32BitConstant(1, idValue, 0);
+        cmd->SetGraphicsRoot32BitConstant(Object3DManager::kIdRootConstants, idValue, 0);
     }
 
     modelInstance_->DrawIdPass(dxCore);
@@ -180,9 +174,9 @@ void Object3DInstance::DrawBloomPass(DirectXCore* dxCore, float bloomScale, bool
     cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmd->SetGraphicsRootSignature(object3DManager_->GetBloomRootSignature());
     cmd->SetPipelineState(object3DManager_->GetBloomPipelineState());
-    cmd->SetGraphicsRootConstantBufferView(0, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kBloomRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
     const float constants[Object3DManager::kBloomPassConstantCount] = { bloomScale, 0.0f, 0.0f, 0.0f };
-    cmd->SetGraphicsRoot32BitConstants(2, Object3DManager::kBloomPassConstantCount, constants, 0);
+    cmd->SetGraphicsRoot32BitConstants(Object3DManager::kBloomRootConstants, Object3DManager::kBloomPassConstantCount, constants, 0);
 
     modelInstance_->DrawBloomPass(dxCore, includeAll);
 }
@@ -212,20 +206,12 @@ void Object3DInstance::DrawReflection(DirectXCore* dxCore,
 
     auto* cmd = dxCore->GetCommandList();
 
-    Object3DManager::ShaderType shaderType = Object3DManager::kShaderNoEnvironmentMap;
-    if (Material* mat = modelInstance_->GetMaterialPointer()) {
-        if (mat->shadingModel == 2) {
-            shaderType = Object3DManager::kShaderTerrain;
-        } else if (mat->shadingModel == 1) {
-            shaderType = Object3DManager::kShaderPBR;
-        } else if (mat->useEnvironmentMap) {
-            shaderType = Object3DManager::kShaderEnvironmentMap;
-        }
-    }
+    const Object3DManager::ShaderType shaderType =
+        Object3DManager::SelectShaderType(modelInstance_->GetMaterialPointer(), true);
     cmd->SetPipelineState(object3DManager_->GetReflectionPipelineState(shaderType));
 
-    cmd->SetGraphicsRootConstantBufferView(1, transformationMatrixResource_->GetGPUVirtualAddress());
-    cmd->SetGraphicsRootConstantBufferView(4, reflectionCameraAddress);
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootTransform, transformationMatrixResource_->GetGPUVirtualAddress());
+    cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootCamera, reflectionCameraAddress);
     cmd->SetGraphicsRootConstantBufferView(Object3DManager::kRootReflectionCamera, reflectionViewProjAddress);
 
     modelInstance_->Draw(dxCore);
@@ -234,7 +220,7 @@ void Object3DInstance::DrawReflection(DirectXCore* dxCore,
 void Object3DInstance::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     // サイズを設定
-    UINT transformationMatrixSize = (sizeof(TransformationMatrix) + 255) & ~255;
+    UINT transformationMatrixSize = (sizeof(TransformationMatrix) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
 
     // WVP用のリソースを作る。
     transformationMatrixResource_ = dxCore->CreateBufferResource(transformationMatrixSize);
@@ -257,7 +243,7 @@ void Object3DInstance::CreateCameraResource(DirectXCore* dxCore)
     cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&cameraData_));
 
     // 初期値
-    cameraData_->worldPosition = { 0.0f, 0.0f, -10.0f };
+    cameraData_->worldPosition = { 0.0f, 0.0f, -kDefaultCameraDistance };
     cameraData_->padding = 0.0f;
 }
 
@@ -412,9 +398,9 @@ void Object3DInstance::OnImGuiInspector()
                 ImGui::Separator();
 
                 // PBR シェーディング切り替え
-                bool usePBR = (mat->shadingModel == 1);
+                bool usePBR = (mat->shadingModel == ShadingModel::kPBR);
                 if (ImGui::Checkbox("Use PBR (Cook-Torrance)", &usePBR)) {
-                    mat->shadingModel = usePBR ? 1 : 0;
+                    mat->shadingModel = usePBR ? ShadingModel::kPBR : ShadingModel::kBlinnPhong;
                 }
                 if (usePBR) {
                     ImGui::SliderFloat("Metallic", &mat->metallic, 0.0f, 1.0f);

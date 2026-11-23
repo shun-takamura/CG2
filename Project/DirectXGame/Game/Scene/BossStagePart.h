@@ -6,6 +6,7 @@
 #include "Enemy/Boss/BossRig.h"
 #include "Loot/LootDrops.h"
 
+class GameSession;
 class Camera;
 class IImGuiEditable;
 class EnemyController;
@@ -18,15 +19,31 @@ class BossBrainCommand;
 class IBossStageHost {
 public:
 	virtual ~IBossStageHost() = default;
-	// プレハブをスプラインなしで指定座標にスポーンして返す（ボス本体に流用）。
+	/// <summary>シーンをまたいで残るプレイの状態を取得する（スコア・難易度・手に入れた物など）</summary>
+	/// <returns>プレイの状態</returns>
+	virtual GameSession* GetGameSession() const = 0;
+	/// <summary>プレハブをスプラインなしで指定座標にスポーンする（ボス本体・手足・落とし物に流用）</summary>
+	/// <param name="prefabName">プレハブ名</param>
+	/// <param name="pos">置く位置（ワールド）</param>
+	/// <returns>出した実体。出せなければ nullptr</returns>
 	virtual IImGuiEditable* SpawnPrefabAt(const std::string& prefabName, const Vector3& pos) = 0;
+	/// <summary>敵コントローラ（ボスの AI）を登録する</summary>
+	/// <param name="ctrl">登録するコントローラ（所有権を移す）</param>
 	virtual void RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) = 0;
+	/// <summary>敵コントローラ（ボスの AI）を更新する</summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="player">自機</param>
+	/// <param name="stageTimeSec">ステージの経過時間 [秒]</param>
 	virtual void UpdateEnemyControllers(float dt, IImGuiEditable* player, float stageTimeSec) = 0;
+	/// <summary>HP が尽きた動的エンティティを死亡エフェクト付きで破棄する</summary>
 	virtual void SweepDeadEntities() = 0;
+	/// <summary>自機を取得</summary>
+	/// <returns>自機（いなければ nullptr）</returns>
 	virtual IImGuiEditable* GetPlayer() const = 0;
-	// Enemy/Boss/Terrain タグの動的エンティティ＋敵コントローラを一括破棄（Reset/シーン再入用）。
+	/// <summary>Enemy/Boss/Terrain タグの動的エンティティ＋敵コントローラを一括破棄（Reset/シーン再入用）</summary>
 	virtual void ClearBossRuntimeState() = 0;
-	// 実体を 1 つ消す（ボスの手足・破片・落とし物）
+	/// <summary>実体を 1 つ消す（ボスの手足・破片・落とし物）</summary>
+	/// <param name="entity">消す実体</param>
 	virtual void DestroyEntity(IImGuiEditable* entity) = 0;
 };
 
@@ -40,80 +57,142 @@ public:
 	BossStagePart();
 	~BossStagePart();
 
+	/// <summary>ホストとカメラを受け取り、闘技場の寸法を読み、手足と落とし物を用意する</summary>
+	/// <param name="host">ボス戦が頼む操作の窓口（StagePlayScene）</param>
+	/// <param name="camera">ボス戦で動かすシーンのカメラ</param>
 	void Initialize(IBossStageHost* host, Camera* camera);
 
-	// Phase::Boss 突入時に1回：ボス本体をスポーンし、ボスAIコントローラを登録、プレイヤーを地上開始位置へ。
+	/// <summary>Phase::Boss 突入時に1回：ボス本体をスポーンし、ボスAIコントローラを登録、プレイヤーを地上開始位置へ</summary>
 	void Enter();
-	// Boss フェーズ中に毎フレーム：ボスAI（敵コントローラ）更新＋撃破掃除＋ボス生存監視。
+	/// <summary>Boss フェーズ中に毎フレーム：ボスAI（敵コントローラ）更新＋撃破掃除＋ボス生存監視（倒れたボスが残っている間は回さない）</summary>
+	/// <param name="worldDt">世界の経過時間 [秒]</param>
 	void Update(float worldDt);
-	// Rail の camera-local 配置の代わりに、カメラ相対の地上XZ平面をワールド空間で移動させる。
+	/// <summary>Rail の camera-local 配置の代わりに、カメラ相対の地上XZ平面をワールド空間で移動させる（闘技場の半径の内に収める）</summary>
+	/// <param name="player">動かす自機</param>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="moveDelta">移動入力（x=右, y=奥。-1..1）</param>
 	void UpdatePlayerGroundMovement(IImGuiEditable* player, float dt, const Vector2& moveDelta);
-	// カメラ前方をXZ平面へ射影した地上基底（forward=奥, right=右）。地上移動・プレイヤー向き・
-	// ジャスト回避分身リングの配置など、地面と平行な方向計算をすべてここに一本化する。
+	/// <summary>
+	/// カメラ前方をXZ平面へ射影した地上基底（forward=奥, right=右）。地上移動・プレイヤー向き・
+	/// ジャスト回避分身リングの配置など、地面と平行な方向計算をすべてここに一本化する。
+	/// </summary>
+	/// <param name="outForward">奥の向き（XZ・正規化）</param>
+	/// <param name="outRight">右の向き（XZ・正規化）</param>
 	void ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const;
-	// STG の回避ダッシュ相当：移動入力方向へ地上速度の初速（dodgeDashSpeed_）を上乗せする。
-	// 入力なし（moveDelta≈0）はその場回避。ボス戦の回避は playerVelocity_ ではなくこちらへ入れる。
+	/// <summary>
+	/// STG の回避ダッシュ相当：移動入力方向へ地上速度の初速（dodgeDashSpeed_）を上乗せする。
+	/// 入力なし（moveDelta≈0）はその場回避。ボス戦の回避は playerVelocity_ ではなくこちらへ入れる。
+	/// </summary>
+	/// <param name="moveDelta">移動入力（x=右, y=奥。-1..1）</param>
 	void ApplyDashImpulse(const Vector2& moveDelta);
-	// 地上速度をゼロ化。近接派生でワープ／攻撃中は地上移動を止めるため、開始時に呼んで
-	// 残留速度が派生終了後に持ち越されない（勝手に滑り出さない）ようにする。
+	/// <summary>
+	/// 地上速度をゼロ化。近接派生でワープ／攻撃中は地上移動を止めるため、開始時に呼んで
+	/// 残留速度が派生終了後に持ち越されない（勝手に滑り出さない）ようにする。
+	/// </summary>
 	void StopGroundVelocity() { groundVelocity_ = { 0.0f, 0.0f }; }
-	// 被弾ノックバック。attackerPos から離れる水平方向へ飛ばし、一定時間は移動入力を無視する。
-	// heavy=true は近接系（大きく）、false は弾（小さく）。
+	/// <summary>被弾ノックバック。attackerPos から離れる水平方向へ飛ばし、一定時間は移動入力を無視する</summary>
+	/// <param name="attackerPos">攻撃元の位置</param>
+	/// <param name="heavy">true は近接系（大きく）、false は弾（小さく）</param>
 	void ApplyKnockback(const Vector3& attackerPos, bool heavy);
-	// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力（右スティック -1..1／マウス相対カウント）を受け、
-	// 感度・反転は内部で適用する。reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
+	/// <summary>
+	/// プレイヤー周回・yaw/pitch 駆動の三人称カメラ。生入力を受け、感度・反転は内部で適用する。
+	/// reticle は画面中央固定運用のため、発射方向＝カメラ forward になる。
+	/// </summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="stickX">右スティックの横（-1..1）</param>
+	/// <param name="stickY">右スティックの縦（-1..1）</param>
+	/// <param name="mouseDx">マウスの横の相対カウント</param>
+	/// <param name="mouseDy">マウスの縦の相対カウント</param>
 	void UpdateCamera(float dt, float stickX, float stickY, float mouseDx, float mouseDy);
-	// ターゲットカメラ：一瞬ボス方向へスナップ（短押し）。ボスが無ければ無視。
+	/// <summary>ターゲットカメラ：一瞬ボス方向へスナップ（短押し）。ボスが無ければ無視</summary>
 	void RequestTargetSnap();
-	// カメラモード切替（Free ⇔ LockOn。長押し）。
+	/// <summary>カメラモード切替（Free ⇔ LockOn。長押し）</summary>
 	void ToggleCamMode();
-	// camYaw_/camPitch_ を現在のカメラ実姿勢に合わせて上書きする。近接派生カメラ（乗っ取り）から
-	// 通常カメラへ制御を返す瞬間に呼ぶことで、古い角度への瞬間戻りを防ぐ（距離は camDistance_ に即切替）。
+	/// <summary>
+	/// camYaw_/camPitch_ を現在のカメラ実姿勢に合わせて上書きする。近接派生カメラ（乗っ取り）から
+	/// 通常カメラへ制御を返す瞬間に呼ぶことで、古い角度への瞬間戻りを防ぐ（距離は camDistance_ に即切替）。
+	/// </summary>
 	void SyncYawPitchFromCamera();
 	// ----- 着陸（Phase::Landing）：谷の出口から海の上の闘技場へ飛んで降りる -----
-	// 今のカメラと自機の位置から、ボス戦の最初のカメラ・自機の開始位置までを曲線でつなぐ。
-	// カメラと自機の位置はこのクラスが書く（自機の向きは GetLandingPlayerYaw をホストが適用）。
+	/// <summary>
+	/// 着陸を始める。今のカメラと自機の位置から、ボス戦の最初のカメラ・自機の開始位置までを曲線でつなぐ。
+	/// カメラと自機の位置はこのクラスが書く（自機の向きは GetLandingPlayerYaw をホストが適用）。
+	/// </summary>
 	void BeginLanding();
-	// 進める。終わったら true（ホストは Phase::Boss へ）
+	/// <summary>着陸を進める（カメラと自機を曲線に沿って動かす）</summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <returns>終わったら true（ホストは Phase::Boss へ）</returns>
 	bool UpdateLanding(float dt);
+	/// <summary>着陸の途中か</summary>
+	/// <returns>途中なら true</returns>
 	bool IsLandingActive() const { return landingActive_; }
-	// 自機が足場に着いた後か（ホストは立ち姿勢にする）
+	/// <summary>自機が足場に着いた後か（ホストは立ち姿勢にする）</summary>
+	/// <returns>着いた後なら true</returns>
 	bool HasLandingTouchedDown() const { return landingTouchedDown_; }
-	// 着いたフレームだけ true（羽根をしまう・水しぶき）
+	/// <summary>足場に着いた知らせを受け取る（羽根をしまう・水しぶき）</summary>
+	/// <returns>着いたフレームだけ true</returns>
 	bool ConsumeLandingTouchdown();
+	/// <summary>着陸中の自機の向き</summary>
+	/// <returns>yaw [rad]</returns>
 	float GetLandingPlayerYaw() const { return landingPlayerYaw_; }
-	// 自機の開始位置（足場の上）とボスの出る位置。アリーナの前（arenaYaw_）の向きに並ぶ
+	/// <summary>自機の開始位置（足場の上）。アリーナの前（arenaYaw_）の向きにボスと並ぶ</summary>
+	/// <returns>開始位置（足元）</returns>
 	Vector3 GetPlayerStartPos() const;
+	/// <summary>ボスの出る位置。アリーナの前（arenaYaw_）の向きに自機と並ぶ</summary>
+	/// <returns>ボスの中心の位置</returns>
 	Vector3 GetBossStartPos() const;
 	// ----- 撃破の後（23 番 §4 B。段取りは BossClearSequence、ここはボスの実体だけ）-----
-	// HP が 0 になったボスは、すぐには消さずに AI を止めて残す（寄るカメラで見せるため）。
-	// 倒れたボスが残っている間は敵コントローラも撃破の掃除も回さない
+	/// <summary>
+	/// 倒れたボスが残っているか。HP が 0 になったボスは、すぐには消さずに AI を止めて残す（寄るカメラで見せるため）。
+	/// 倒れたボスが残っている間は敵コントローラも撃破の掃除も回さない
+	/// </summary>
+	/// <returns>残っていれば true</returns>
 	bool HasDefeatedBoss() const { return defeatedBoss_ != nullptr; }
-	// 倒れたボスの体の中心（残っていなければ false）
+	/// <summary>倒れたボスの体の中心</summary>
+	/// <param name="out">中心の書き込み先</param>
+	/// <returns>残っていれば true（残っていなければ false）</returns>
 	bool GetDefeatedBossCenter(Vector3& out) const;
-	// 崩す：手足を外して落とし、本体を破棄する（死亡エフェクト＝大きな爆発はこの破棄で出る）
+	/// <summary>崩す：手足を外して落とし、本体を破棄する（死亡エフェクト＝大きな爆発はこの破棄で出る）</summary>
 	void CollapseDefeatedBoss();
-	// Boss 離脱・シーン再入時のクリア（スポーン物・状態を破棄）。
+	/// <summary>Boss 離脱・シーン再入時のクリア（手足・落とし物・スポーン物・状態を破棄）</summary>
 	void Reset();
-	// true の間、ボスは次の行動を選ばない（今の攻撃は最後までやる）。自機の死亡演出の間（19 番 G3）
+	/// <summary>true の間、ボスは次の行動を選ばない（今の攻撃は最後までやる）。自機の死亡演出の間（19 番 G3）</summary>
+	/// <param name="standDown">止めるなら true</param>
 	void SetBossStandDown(bool standDown);
 
+	/// <summary>ボスが生きているか</summary>
+	/// <returns>撃破前なら true</returns>
 	bool IsBossAlive() const { return boss_ != nullptr; }
-	// ボス本体への参照（撃破で nullptr）。ボスは Enemy タグではないため nearestEnemy_ 等の
-	// 照準トラッカーに乗らない＝ジャスト回避の攻撃元(attacker)はこちらを使う必要がある。
+	/// <summary>
+	/// ボス本体への参照。ボスは Enemy タグではないため nearestEnemy_ 等の
+	/// 照準トラッカーに乗らない＝ジャスト回避の攻撃元(attacker)はこちらを使う必要がある。
+	/// </summary>
+	/// <returns>ボス本体（撃破で nullptr）</returns>
 	IImGuiEditable* GetBossEntity() const { return boss_; }
+	/// <summary>カメラがロックオンのモードか</summary>
+	/// <returns>LockOn なら true</returns>
 	bool IsLockOn() const { return camMode_ == BossCamMode::LockOn; }
-	// 床（BossArenaWater の石畳）を合わせるためのアリーナ情報
+	/// <summary>床（BossArenaWater の石畳）を合わせるための接地高さ</summary>
+	/// <returns>プレイヤー原点（足元）の接地高さ [m]</returns>
 	float GetGroundY() const { return groundY_; }
+	/// <summary>闘技場の中心</summary>
+	/// <returns>足場の中心</returns>
 	const Vector3& GetArenaCenter() const { return arenaCenter_; }
-	// 海の高さと、足場の薄い水を描く円の半径（BossArenaGeometry.json）
+	/// <summary>海の高さ（BossArenaGeometry.json）</summary>
+	/// <returns>海面の高さ [m]</returns>
 	float GetSeaY() const { return seaY_; }
+	/// <summary>足場の薄い水を描く円の半径（BossArenaGeometry.json）</summary>
+	/// <returns>半径 [m]</returns>
 	float GetWaterRadius() const { return waterRadius_; }
+	/// <summary>ボス戦の調整 UI（Debug のみ中身あり）</summary>
+	/// <param name="changed">値を書き換えたら true にする（呼ぶ側が保存する）</param>
 	void OnImGuiTuning(bool& changed);
 
-	// 撃破イベントを一度だけ通知する（検出直後の1回だけ true。呼ぶたびに消費される）。
+	/// <summary>撃破イベントを一度だけ通知する（呼ぶたびに消費される）</summary>
+	/// <returns>撃破の検出直後の1回だけ true</returns>
 	bool ConsumeBossDefeated();
-	// 直近の撃破で得たスコア値（撃破検出時点の Gameplay ScoreValue をキャプチャ）。
+	/// <summary>直近の撃破で得たスコア値（撃破検出時点の Gameplay ScoreValue をキャプチャ）</summary>
+	/// <returns>スコア値</returns>
 	int GetLastBossScoreValue() const { return bossDefeatedScoreValue_; }
 
 private:
@@ -179,23 +258,44 @@ private:
 	float camEffectiveDistance_ = -1.0f; // 実際に使っている距離（<0 は未初期化）
 	float lockSpringGain_ = 2.5f;   // ロックオンのボス方向への引き（小さいほどラグ/低精度）
 
-	// 闘技場の寸法を読む（無ければ既定値のまま）
+	/// <summary>闘技場の寸法を BossArenaGeometry.json から読む（無ければ既定値のまま）</summary>
 	void LoadArenaGeometry();
-	// HP が尽きたら撃破として参照を切る（実体は defeatedBoss_ に残す。手足を外すのは CollapseDefeatedBoss）
+	/// <summary>HP が尽きたら撃破として参照を切る（実体は defeatedBoss_ に残す。手足を外すのは CollapseDefeatedBoss）</summary>
 	void CheckBossDefeated();
 
 	// ----- 手足と部位破壊（22 番 §7.1）-----
 	// IBossRigHost / ILootDropsHost：ホストへ取り次ぐ
+	/// <summary>部位・破片の実体をシーンに出す（ホストの SpawnPrefabAt へ取り次ぐ）</summary>
+	/// <param name="prefab">出すプレハブ名</param>
+	/// <param name="pos">出す位置（ワールド）</param>
+	/// <returns>出した実体。出せなければ nullptr</returns>
 	IImGuiEditable* SpawnRigPiece(const std::string& prefab, const Vector3& pos) override;
+	/// <summary>部位・破片の実体をシーンから消す（ホストの DestroyEntity へ取り次ぐ）</summary>
+	/// <param name="entity">消す実体</param>
 	void DestroyRigPiece(IImGuiEditable* entity) override;
+	/// <summary>落とし物のプレハブを置く（当たり判定のない見た目だけ。ホストの SpawnPrefabAt へ取り次ぐ）</summary>
+	/// <param name="prefab">出すプレハブ名</param>
+	/// <param name="pos">出す位置（ワールド）</param>
+	/// <returns>出した実体。出せなければ nullptr</returns>
 	IImGuiEditable* SpawnLootPiece(const std::string& prefab, const Vector3& pos) override;
+	/// <summary>落とし物の実体を消す（ホストの DestroyEntity へ取り次ぐ）</summary>
+	/// <param name="entity">消す実体</param>
 	void DestroyLootPiece(IImGuiEditable* entity) override;
+	/// <summary>自機の足元（落とし物を吸い寄せる先）</summary>
+	/// <param name="out">足元の位置の書き込み先</param>
+	/// <returns>自機がいなければ false</returns>
 	bool GetLootCollectPoint(Vector3& out) const override;
+	/// <summary>シーンをまたいで残るプレイの状態を取得する（ホストの GetGameSession へ取り次ぐ）</summary>
+	/// <returns>プレイの状態</returns>
+	GameSession* GetGameSession() const override;
 
 	BossRig   rig_;
 	LootDrops lootDrops_;               // 壊れた腕が落とす素材（落ち方・拾い方はシューティングと同じ）
 	float     partStaggerSeconds_ = 2.0f; // 腕が壊れたときのひるみ [s]
-	// ボス戦の最初のカメラ（自機の開始位置からボスの出る位置を向く）。Enter と着陸の終点で同じ姿勢にする
+	/// <summary>ボス戦の最初のカメラ（自機の開始位置からボスの出る位置を向く）。Enter と着陸の終点で同じ姿勢にする</summary>
+	/// <param name="outEye">目の位置</param>
+	/// <param name="outYaw">yaw [rad]</param>
+	/// <param name="outPitch">pitch（下向き＋）[rad]</param>
 	void ComputeStartCamera(Vector3& outEye, float& outYaw, float& outPitch) const;
 
 	// ----- 撃破の後 -----
@@ -220,7 +320,10 @@ private:
 	Vector3 landingLookStart_{};        // 始めに見ている点
 	Vector3 landingFocusEnd_{};         // 終わりに見る点（自機の体の中心）
 
-	// ボス方向の yaw/pitch を算出（プレイヤー focus からボス中心へ）。boss_ が無ければ現状維持。
+	/// <summary>ボス方向の yaw/pitch を算出（プレイヤー focus からボス中心へ）</summary>
+	/// <param name="outYaw">yaw [rad]</param>
+	/// <param name="outPitch">pitch（下向き＋）[rad]</param>
+	/// <returns>求めたら true。boss_ が無ければ false（出力は変えない）</returns>
 	bool ComputeBossYawPitch(float& outYaw, float& outPitch) const;
 
 	std::string bossPrefab_   = "boss";

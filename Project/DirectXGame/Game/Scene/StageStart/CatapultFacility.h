@@ -26,27 +26,44 @@ class JsonValue;
 /// </summary>
 class CatapultFacility {
 public:
+	/// <summary>ポイントライトの枠を空にし、天井の近くに並べる灯りの既定値を決める</summary>
 	CatapultFacility();
 	~CatapultFacility();
 
+	/// <summary>カタパルト・液晶の帯・射出口の光・リフト・固定台・縦穴の単位のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="geometry">寸法（StageStartGeometry.json）</param>
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, const StageStartGeometry& geometry);
 	/// <summary>ポイントライトを借りる（演出を始めるとき。借りている間は何度呼んでもよい）</summary>
 	void AcquireLights();
 	/// <summary>ポイントライトを返し、共有のマテリアル（液晶の UV）を元に戻す（演出を終えたとき・シーンの終わり。何度呼んでもよい）</summary>
 	void Finalize();
 
+	/// <summary>カタパルトの原点を置くワールドの位置を設定する</summary>
+	/// <param name="origin">ワールド位置</param>
 	void SetOrigin(const Vector3& origin) { origin_ = origin; }
+	/// <summary>カタパルトの原点のワールドの位置を返す</summary>
+	/// <returns>ワールド位置</returns>
 	const Vector3& GetOrigin() const { return origin_; }
-	/// <summary>リフトの上面の高さ（カタパルトの原点から。0 で停止位置）</summary>
+	/// <summary>リフトの上面の高さを設定する</summary>
+	/// <param name="liftY">カタパルトの原点からの高さ [m]（0 で停止位置）</param>
 	void SetLiftY(float liftY) { liftY_ = liftY; }
+	/// <summary>リフトの上面の高さを返す</summary>
+	/// <returns>カタパルトの原点からの高さ [m]</returns>
 	float GetLiftY() const { return liftY_; }
-	/// <summary>固定台が溝に沿って前（+Z）へ走った距離 [m]（発進。0 で機体確認の位置）</summary>
+	/// <summary>固定台が溝に沿って前（+Z）へ走った距離を設定する（発進）</summary>
+	/// <param name="travel">距離 [m]（0 で機体確認の位置）</param>
 	void SetClampTravel(float travel) { clampTravel_ = travel; }
-	/// <summary>射出口の光の倍率（exitLightScale に掛ける。機体が近づくと弱め、ブルームのにじみに機体が埋もれないようにする）</summary>
+	/// <summary>射出口の光の倍率を設定する（機体が近づくと弱め、ブルームのにじみに機体が埋もれないようにする）</summary>
+	/// <param name="level">exitLightScale に掛ける倍率</param>
 	void SetExitLightLevel(float level) { exitLightLevel_ = level; }
-	/// <summary>射出口の板を描かず、奥に空を見せているか</summary>
+	/// <summary>射出口の板を描かず、奥に空を見せているかを返す</summary>
+	/// <returns>見せていれば true</returns>
 	bool IsExitOpenToSky() const { return exitOpenToSky_; }
-	/// <summary>カタパルトの原点からの位置をワールドへ</summary>
+	/// <summary>カタパルトの原点からの位置をワールドへ直す</summary>
+	/// <param name="local">カタパルトの原点からの位置</param>
+	/// <returns>ワールド位置</returns>
 	Vector3 ToWorld(const Vector3& local) const;
 
 	/// <summary>発進の可否の見た目を「発進不可」（ネオン赤ピンク・液晶 LAUNCH UNABLE）に戻す（演出の始め）</summary>
@@ -57,28 +74,37 @@ public:
 	/// </summary>
 	void BeginReadySequence();
 	/// <summary>点け直しを進める（Update の前に呼ぶ）</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void AdvanceReadySequence(float deltaTime);
-	/// <summary>射出口まで点き切った（ブーストの許可を出してよい）</summary>
+	/// <summary>射出口まで点き切ったかを返す（ブーストの許可を出してよい）</summary>
+	/// <returns>点き切ったら true</returns>
 	bool IsLaunchReady() const { return readyPhase_ == ReadyPhase::Ready; }
-	/// <summary>
-	/// 点け直しの先頭の z（カタパルトの原点から）。消えている間は始まりの z、点き切ったら射出口。
-	/// 電磁カタパルトの雷をネオンと一緒に伸ばすのに使う（F5）。発進不可の間は負の大きな値
-	/// </summary>
+	/// <summary>点け直しの先頭の z を返す。電磁カタパルトの雷をネオンと一緒に伸ばすのに使う（F5）</summary>
+	/// <returns>カタパルトの原点からの z [m]。消えている間は始まりの z、点き切ったら射出口、発進不可の間は負の大きな値</returns>
 	float GetSweepFrontZ() const;
-	/// <summary>点け直しの最中か済んだ（液晶はもう READY）</summary>
+	/// <summary>点け直しの最中か済んだか（液晶はもう READY）を返す</summary>
+	/// <returns>発進不可でなければ true</returns>
 	bool IsReadySequenceStarted() const { return readyPhase_ != ReadyPhase::Unable; }
 
-	/// <summary>
-	/// 灯りの強さ 0..1（ポイントライト）。lcdScroll は液晶の文字を流した量 [m]（進行方向へ）
-	/// </summary>
+	/// <summary>部品を置き、縦穴の単位を並べ直し、灯りと発光を反映する</summary>
+	/// <param name="lampLevel">灯りの強さ 0〜1（ポイントライト）</param>
+	/// <param name="lcdScroll">液晶の文字を流した量 [m]（進行方向へ）</param>
 	void Update(float lampLevel, float lcdScroll);
-	/// <summary>不透明物（Object3D の DrawSetting・BindLights の後）</summary>
+	/// <summary>施設を描く（不透明物。Object3D の DrawSetting・BindLights の後）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void Draw(DirectXCore* dxCore);
-	/// <summary>発光パス：照明の帯・ネオン・液晶・射出口の光</summary>
+	/// <summary>発光パスで照明の帯・ネオン・液晶・射出口の光を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="bloomScale">発光 RT に書くときの倍率</param>
 	void DrawBloom(DirectXCore* dxCore, float bloomScale);
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "facility"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
@@ -92,12 +118,20 @@ private:
 
 	enum class ReadyPhase { Unable, Sweeping, Ready };
 
+	/// <summary>縦穴の単位を、決まった枠のうちリフトの裏から上の近くだけに置き直す</summary>
 	void PlaceShaftUnits();
+	/// <summary>照明の帯・ネオン・液晶・射出口の発光と液晶のスクロールを書き直す（モデルは共有なので毎フレーム）</summary>
+	/// <param name="lcdScroll">液晶の文字を流した量 [m]</param>
 	void ApplyEmissive(float lcdScroll);
-	// ネオンの列 / 固定台の点き具合 0..1（発進不可の間は使わない）
+	/// <summary>ネオンの列 / 固定台の点き具合を求める（発進不可の間は使わない）</summary>
+	/// <param name="z">カタパルトの原点からの z [m]</param>
+	/// <returns>0〜1</returns>
 	float NeonLevelAt(float z) const;
-	// 点け直しで最後の列が点き切る時刻
+	/// <summary>点け直しで最後の列が点き切る時刻を求める</summary>
+	/// <returns>点け直しを始めてからの秒 [秒]</returns>
 	float ReadySequenceSeconds() const;
+	/// <summary>液晶の帯のテクスチャを差し替える（同じなら何もしない。GPU の準備前なら次のフレームで貼り直す）</summary>
+	/// <param name="path">テクスチャのパス</param>
 	void SetLcdTexture(const std::string& path);
 
 	StageStartGeometry geometry_;

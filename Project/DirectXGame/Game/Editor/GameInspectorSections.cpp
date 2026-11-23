@@ -25,7 +25,23 @@
 
 namespace {
 
-/// Inspector の「ゲーム固有欄」本体。選択中エンティティを受け取って描画する。
+// 名前・パスを編集する入力欄の文字バッファの大きさ [文字]
+constexpr int kNameBufferSize = 128;
+// 新しいエフェクトスロット名の入力欄の文字バッファの大きさ [文字]
+constexpr int kNewSlotBufferSize = 64;
+// 弾・近接の攻撃スロットの数（slotNames の要素数）
+constexpr int kAttackSlotCount = 8;
+// 入力欄の幅 [px]
+constexpr float kInputFieldWidth = 200.0f;
+// 新しいエフェクトスロット名の入力欄の幅 [px]
+constexpr float kNewSlotFieldWidth = 120.0f;
+// 弾スロット名の後ろに入力欄を並べる位置 [px]
+constexpr float kBulletSlotLabelWidth = 90.0f;
+// エフェクトスロット名の後ろに入力欄を並べる位置 [px]
+constexpr float kEffectSlotLabelWidth = 120.0f;
+
+/// <summary>Inspector の「ゲーム固有欄」本体。選択中エンティティを受け取って描画する（Debug ビルドのみ）</summary>
+/// <param name="selected">選択中のエンティティ</param>
 void DrawGameComponents(IImGuiEditable* selected) {
 #ifdef _DEBUG
     if (!selected) return;
@@ -123,7 +139,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
             // BulletParams（PlayerBullet / EnemyAttack）
             if (showBullet) {
                 sep();
-                BulletParams& bp = Gameplay::Of(selected).GetBulletParams();
+                BulletParams bp = Gameplay::Of(selected).GetBulletParams();
                 ImGui::Checkbox("BulletParams Enabled", &bp.enabled);
                 if (bp.enabled) {
                     ImGui::DragFloat("Bullet Speed", &bp.speed, 0.5f, 0.0f, 1000.0f, "%.2f");
@@ -143,9 +159,9 @@ void DrawGameComponents(IImGuiEditable* selected) {
                         if (ImGui::IsItemHovered()) {
                             ImGui::SetTooltip("貫通中、同じ敵に多段ヒットする間隔 (秒)");
                         }
-                        char effBuf[128];
+                        char effBuf[kNameBufferSize];
                         std::snprintf(effBuf, sizeof(effBuf), "%s", bp.penetrateEffect.c_str());
-                        ImGui::SetNextItemWidth(200.0f);
+                        ImGui::SetNextItemWidth(kInputFieldWidth);
                         if (ImGui::InputText("Penetrate Effect", effBuf, sizeof(effBuf))) {
                             bp.penetrateEffect = effBuf;
                         }
@@ -158,12 +174,13 @@ void DrawGameComponents(IImGuiEditable* selected) {
                         }
                     }
                 }
+                Gameplay::Of(selected).SetBulletParams(bp);
             }
 
             // MeleeParams（PlayerMelee：持続・オフセット・コンボ・本/持続あて倍率）
             if (showMelee) {
                 sep();
-                MeleeParams& mp = Gameplay::Of(selected).GetMeleeParams();
+                MeleeParams mp = Gameplay::Of(selected).GetMeleeParams();
                 ImGui::Checkbox("MeleeParams Enabled", &mp.enabled);
                 if (mp.enabled) {
                     ImGui::DragFloat("Startup", &mp.startup, 0.01f, 0.0f, 5.0f, "%.2f sec");
@@ -184,24 +201,26 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     ImGui::DragFloat("Late Multiplier", &mp.lateMultiplier, 0.05f, 0.0f, 100.0f, "%.2f");
                     if (ImGui::IsItemHovered()) ImGui::SetTooltip("持続あて（遅れ当て）倍率");
                 }
+                Gameplay::Of(selected).SetMeleeParams(mp);
             }
 
             // CarrierParams（Enemy / Boss）
             if (showCarrier) {
                 sep();
-                CarrierParams& cp = Gameplay::Of(selected).GetCarrierParams();
+                CarrierParams cp = Gameplay::Of(selected).GetCarrierParams();
                 ImGui::Checkbox("CarrierParams Enabled", &cp.enabled);
                 if (cp.enabled) {
                     ImGui::DragFloat("Child Lifetime", &cp.childLifetimeSec, 0.5f, 0.5f, 120.0f, "%.1f sec");
                     ImGui::DragFloat("Child Wander Radius", &cp.childWanderRadius, 0.5f, 0.5f, 50.0f, "%.1f");
                     ImGui::DragFloat("Child Move Speed", &cp.childMoveSpeed, 0.5f, 0.0f, 50.0f, "%.1f /sec");
                 }
+                Gameplay::Of(selected).SetCarrierParams(cp);
             }
 
             // MovementParams（Enemy：登場/移動の方法と速度）
             if (showMovement) {
                 sep();
-                MovementParams& mv = Gameplay::Of(selected).GetMovementParams();
+                MovementParams mv = Gameplay::Of(selected).GetMovementParams();
                 ImGui::Checkbox("MovementParams Enabled", &mv.enabled);
                 if (mv.enabled) {
                     const char* kMovementNames[] = { "SplineFollow", "ScreenHover", "Drift", "Static" };
@@ -215,12 +234,13 @@ void DrawGameComponents(IImGuiEditable* selected) {
                         ImGui::DragFloat("Hover Hold Duration", &mv.hoverHoldDuration, 0.1f, 0.0f, 60.0f, "%.1f sec");
                     }
                 }
+                Gameplay::Of(selected).SetMovementParams(mv);
             }
 
             // ChargeParams（Player）
             if (showCharge) {
                 sep();
-                ChargeParams& chp = Gameplay::Of(selected).GetChargeParams();
+                ChargeParams chp = Gameplay::Of(selected).GetChargeParams();
                 ImGui::Checkbox("ChargeParams Enabled", &chp.enabled);
                 if (chp.enabled) {
                     ImGui::DragFloat("Charge Stage1 Time", &chp.stage1Time, 0.05f, 0.0f, 30.0f, "%.2f sec");
@@ -231,12 +251,13 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     }
                     ImGui::TextDisabled("(stage2Time は合計時間。stage1Time より大きい値を設定する)");
                 }
+                Gameplay::Of(selected).SetChargeParams(chp);
             }
 
             // PrecisionParams（Player：精密射撃モード中の弾性能加算）
             if (showPrecision) {
                 sep();
-                PrecisionParams& pp = Gameplay::Of(selected).GetPrecisionParams();
+                PrecisionParams pp = Gameplay::Of(selected).GetPrecisionParams();
                 ImGui::Checkbox("Precision Enabled", &pp.enabled);
                 if (pp.enabled) {
                     ImGui::DragFloat("Precision Speed +", &pp.speedAdd, 0.5f, 0.0f, 2000.0f, "%.1f /sec");
@@ -248,12 +269,13 @@ void DrawGameComponents(IImGuiEditable* selected) {
                         ImGui::SetTooltip("精密モード中、強ホーミング（ロック弾）の強さに加算");
                     }
                 }
+                Gameplay::Of(selected).SetPrecisionParams(pp);
             }
 
             // WeaponParams（Player：ボーンソケット追従武器）
             if (showWeapon) {
                 sep();
-                WeaponParams& wp = Gameplay::Of(selected).GetWeaponParams();
+                WeaponParams wp = Gameplay::Of(selected).GetWeaponParams();
                 ImGui::Checkbox("Weapon Enabled", &wp.enabled);
                 // 追従先ボーン：選択中がスケルトン持ち（AnimatedObject3D）ならジョイント名を列挙、なければテキスト入力。
                 auto* anim = dynamic_cast<AnimatedObject3DInstance*>(selected);
@@ -268,7 +290,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
                         ImGui::EndCombo();
                     }
                 } else {
-                    char boneBuf[128];
+                    char boneBuf[kNameBufferSize];
                     std::snprintf(boneBuf, sizeof(boneBuf), "%s", wp.bone.c_str());
                     if (ImGui::InputText("Bone", boneBuf, sizeof(boneBuf))) wp.bone = boneBuf;
                 }
@@ -279,25 +301,26 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     wp.modelDir.empty() ? "(none)" : wp.modelDir.c_str(),
                     wp.modelFile.empty() ? "(none)" : wp.modelFile.c_str());
                 ImGui::TextDisabled("(下の Save as Prefab で player.json に保存)");
+                Gameplay::Of(selected).SetWeaponParams(wp);
             }
 
             // 弾プレハブスロット（Player）：normal / charge1 / charge2
             if (showBulletSlots) {
                 sep();
                 ImGui::TextDisabled("Bullet Prefab Slots");
-                auto& bulletPrefabs = Gameplay::Of(selected).GetBulletPrefabs();
+                auto bulletPrefabs = Gameplay::Of(selected).GetBulletPrefabs();
                 // 弾スロットと近接スロット（攻撃スロットとして同じ map を流用）
-                const char* slotNames[8] = {
+                const char* slotNames[kAttackSlotCount] = {
                     "normal", "charge1", "charge2",
                     "melee_w1", "melee_w2", "melee_w3", "melee_w4", "melee_strong"
                 };
                 for (const char* slot : slotNames) {
                     ImGui::PushID(slot);
                     ImGui::TextUnformatted(slot);
-                    ImGui::SameLine(90.0f);
-                    char buf[128];
+                    ImGui::SameLine(kBulletSlotLabelWidth);
+                    char buf[kNameBufferSize];
                     std::snprintf(buf, sizeof(buf), "%s", bulletPrefabs[slot].c_str());
-                    ImGui::SetNextItemWidth(200.0f);
+                    ImGui::SetNextItemWidth(kInputFieldWidth);
                     if (ImGui::InputText("##bp", buf, sizeof(buf))) {
                         bulletPrefabs[slot] = buf;
                     }
@@ -310,6 +333,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     }
                     ImGui::PopID();
                 }
+                Gameplay::Of(selected).SetBulletPrefabs(bulletPrefabs);
             }
 
             // ScoreValue（Enemy / Boss）
@@ -330,7 +354,8 @@ void DrawGameComponents(IImGuiEditable* selected) {
     // DnD ターゲット（SceneEditor の Effects 一覧から）と手入力の両対応。
     if (showEffects) {
         if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
-            auto& effects = Gameplay::Of(selected).GetEffects();
+            // コピーに書いて、欄の最後でまとめて戻す
+            auto effects = Gameplay::Of(selected).GetEffects();
 
             // タグに応じた推奨スロット名
             std::vector<const char*> suggested;
@@ -359,11 +384,11 @@ void DrawGameComponents(IImGuiEditable* selected) {
                 ImGui::PushID(key.c_str());
 
                 ImGui::TextUnformatted(key.c_str());
-                ImGui::SameLine(120.0f);
+                ImGui::SameLine(kEffectSlotLabelWidth);
 
-                char valBuf[128];
+                char valBuf[kNameBufferSize];
                 std::snprintf(valBuf, sizeof(valBuf), "%s", effects[key].c_str());
-                ImGui::SetNextItemWidth(200.0f);
+                ImGui::SetNextItemWidth(kInputFieldWidth);
                 if (ImGui::InputText("##val", valBuf, sizeof(valBuf))) {
                     effects[key] = valBuf;
                 }
@@ -396,14 +421,15 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     ImGui::SameLine();
                 }
             }
-            static char newSlotBuf[64] = "";
-            ImGui::SetNextItemWidth(120.0f);
+            static char newSlotBuf[kNewSlotBufferSize] = "";
+            ImGui::SetNextItemWidth(kNewSlotFieldWidth);
             ImGui::InputText("##newSlot", newSlotBuf, sizeof(newSlotBuf));
             ImGui::SameLine();
             if (ImGui::SmallButton("Add slot") && newSlotBuf[0] != '\0') {
                 effects[newSlotBuf] = "";
                 newSlotBuf[0] = '\0';
             }
+            Gameplay::Of(selected).SetEffects(effects);
         }
         ImGui::Separator();
     }
@@ -417,7 +443,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
         if (isObj3D || isAnimated || isPrimitive) {
             ImGui::Separator();
             if (ImGui::CollapsingHeader("Prefab", ImGuiTreeNodeFlags_DefaultOpen)) {
-                static char prefabNameBuf[128] = "";
+                static char prefabNameBuf[kNameBufferSize] = "";
                 static IImGuiEditable* lastSelected = nullptr;
                 if (selected != lastSelected) {
                     std::snprintf(prefabNameBuf, sizeof(prefabNameBuf), "%s",
@@ -576,7 +602,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
                     std::string path = std::string(PrefabManager::GetPrefabDir())
                         + "/" + def.name + ".json";
                     bool ok = PrefabManager::Save(def, path);
-                    LogBuffer::Instance().Add(
+                    LogBuffer::GetInstance()->Add(
                         ok ? ("Prefab saved: " + path)
                            : ("Prefab save FAILED: " + path),
                         ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
@@ -598,7 +624,7 @@ void DrawGameComponents(IImGuiEditable* selected) {
 namespace GameInspectorSections {
 
 void Register() {
-    ImGuiManager::Instance().AddInspectorSection("Game Components", &DrawGameComponents);
+    ImGuiManager::GetInstance()->AddInspectorSection("Game Components", &DrawGameComponents);
 }
 
 } // namespace GameInspectorSections

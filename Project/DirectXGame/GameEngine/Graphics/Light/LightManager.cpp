@@ -1,13 +1,34 @@
 #include "LightManager.h"
+#include "Object3DManager.h"
 #include "imgui.h"
-
-//LightManager* LightManager::instance_ = nullptr;
+namespace {
+    // 定数バッファの大きさを 256 バイト境界へ切り上げるためのマスク（256 - 1）
+    constexpr int kConstantBufferAlignMask = 255;
+    // 点光源の初期配置（高さ [m] と、番号ごとに Z 方向へずらす間隔 [m]）と影響半径 [m]
+    constexpr float kDefaultPointLightHeight = 2.0f;
+    constexpr float kDefaultPointLightSpacingZ = 3.0f;
+    constexpr float kDefaultPointLightRadius = 5.0f;
+    // スポットライトの初期配置（X の始まり [m]・番号ごとに X 方向へずらす間隔 [m]・高さ [m]）
+    constexpr float kDefaultSpotLightStartX = 2.0f;
+    constexpr float kDefaultSpotLightSpacingX = 2.0f;
+    constexpr float kDefaultSpotLightHeight = 1.25f;
+    // スポットライトの届く距離 [m] と減衰の指数
+    constexpr float kDefaultSpotLightDistance = 7.0f;
+    constexpr float kDefaultSpotLightDecay = 2.0f;
+    // スポットライトの開き角 = π ÷ この値（60°）、減衰が始まる角 = π ÷ この値（45°）
+    constexpr float kDefaultSpotAngleDivisor = 3.0f;
+    constexpr float kDefaultSpotFalloffStartDivisor = 4.0f;
+    // 平行光源のライティングの種類の数（None / Lambert / Half-Lambert）
+    constexpr int kLightingTypeCount = 3;
+    // ImGui のライトの見出しの文字バッファの大きさ [byte]
+    constexpr int kLightLabelBufferSize = 32;
+    // スポットライトの ImGui の ID を点光源とぶつけないためのずらし
+    constexpr int kSpotLightImGuiIdOffset = 1000;
+    // 半回転の角度 [度]（ラジアン ↔ 度の変換に使う）
+    constexpr float kHalfTurnDegrees = 180.0f;
+}
 
 LightManager* LightManager::GetInstance() {
-    //if (instance_ == nullptr) {
-        //instance_ = new LightManager();
-    //}
-    //return instance_;
     static LightManager instance;
     return &instance;
 }
@@ -16,7 +37,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     dxCore_ = dxCore;
 
     // DirectionalLight用バッファ作成
-    UINT directionalLightSize = (sizeof(DirectionalLight) + 255) & ~255;
+    UINT directionalLightSize = (sizeof(DirectionalLight) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
     directionalLightResource_ = dxCore->CreateBufferResource(directionalLightSize);
     directionalLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData_));
 
@@ -27,7 +48,7 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     directionalLightData_->lightingType = 0;
 
     // PointLightGroup用バッファ作成
-    UINT pointLightSize = (sizeof(PointLightGroup) + 255) & ~255;
+    UINT pointLightSize = (sizeof(PointLightGroup) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
     pointLightResource_ = dxCore->CreateBufferResource(pointLightSize);
     pointLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&pointLightGroupData_));
 
@@ -35,14 +56,14 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     pointLightGroupData_->activeCount = 1;
     for (uint32_t i = 0; i < kMaxPointLights; ++i) {
         pointLightGroupData_->lights[i].color = { 1.0f, 1.0f, 1.0f, 1.0f };
-        pointLightGroupData_->lights[i].position = { 0.0f, 2.0f, static_cast<float>(i) * 3.0f };
+        pointLightGroupData_->lights[i].position = { 0.0f, kDefaultPointLightHeight, static_cast<float>(i) * kDefaultPointLightSpacingZ };
         pointLightGroupData_->lights[i].intensity = 0.0f;
-        pointLightGroupData_->lights[i].radius = 5.0f;
+        pointLightGroupData_->lights[i].radius = kDefaultPointLightRadius;
         pointLightGroupData_->lights[i].decay = 1.0f;
     }
 
     // SpotLightGroup用バッファ作成
-    UINT spotLightSize = (sizeof(SpotLightGroup) + 255) & ~255;
+    UINT spotLightSize = (sizeof(SpotLightGroup) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
     spotLightResource_ = dxCore->CreateBufferResource(spotLightSize);
     spotLightResource_->Map(0, nullptr, reinterpret_cast<void**>(&spotLightGroupData_));
 
@@ -50,13 +71,13 @@ void LightManager::Initialize(DirectXCore* dxCore) {
     spotLightGroupData_->activeCount = 1;
     for (uint32_t i = 0; i < kMaxSpotLights; ++i) {
         spotLightGroupData_->lights[i].color = { 1.0f, 1.0f, 1.0f, 1.0f };
-        spotLightGroupData_->lights[i].position = { 2.0f + static_cast<float>(i) * 2.0f, 1.25f, 0.0f };
-        spotLightGroupData_->lights[i].distance = 7.0f;
+        spotLightGroupData_->lights[i].position = { kDefaultSpotLightStartX + static_cast<float>(i) * kDefaultSpotLightSpacingX, kDefaultSpotLightHeight, 0.0f };
+        spotLightGroupData_->lights[i].distance = kDefaultSpotLightDistance;
         spotLightGroupData_->lights[i].direction = Normalize({ -1.0f, -1.0f, 0.0f });
         spotLightGroupData_->lights[i].intensity = 0.0f;
-        spotLightGroupData_->lights[i].decay = 2.0f;
-        spotLightGroupData_->lights[i].cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
-        spotLightGroupData_->lights[i].cosFalloffStart = std::cos(std::numbers::pi_v<float> / 4.0f);
+        spotLightGroupData_->lights[i].decay = kDefaultSpotLightDecay;
+        spotLightGroupData_->lights[i].cosAngle = std::cos(std::numbers::pi_v<float> / kDefaultSpotAngleDivisor);
+        spotLightGroupData_->lights[i].cosFalloffStart = std::cos(std::numbers::pi_v<float> / kDefaultSpotFalloffStartDivisor);
     }
 }
 
@@ -64,25 +85,22 @@ void LightManager::Finalize() {
     directionalLightResource_.Reset();
     pointLightResource_.Reset();
     spotLightResource_.Reset();
-
-    //delete instance_;
-    //instance_ = nullptr;
 }
 
 void LightManager::BindLights(ID3D12GraphicsCommandList* commandList) {
     // rootParameter[3] = DirectionalLight (b1)
     commandList->SetGraphicsRootConstantBufferView(
-        3, directionalLightResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootDirectionalLight, directionalLightResource_->GetGPUVirtualAddress()
     );
 
     // rootParameter[5] = PointLightGroup (b3)
     commandList->SetGraphicsRootConstantBufferView(
-        5, pointLightResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootPointLight, pointLightResource_->GetGPUVirtualAddress()
     );
 
     // rootParameter[6] = SpotLightGroup (b4)
     commandList->SetGraphicsRootConstantBufferView(
-        6, spotLightResource_->GetGPUVirtualAddress()
+        Object3DManager::kRootSpotLight, spotLightResource_->GetGPUVirtualAddress()
     );
 }
 
@@ -245,7 +263,7 @@ void LightManager::OnImGui() {
             ImGui::DragFloat("DL Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
 
             const char* lightingTypes[] = { "None", "Lambert", "Half-Lambert" };
-            ImGui::Combo("DL Type", &directionalLightData_->lightingType, lightingTypes, 3);
+            ImGui::Combo("DL Type", &directionalLightData_->lightingType, lightingTypes, kLightingTypeCount);
         }
 
         // ===== PointLight (複数対応) =====
@@ -260,7 +278,7 @@ void LightManager::OnImGui() {
             for (uint32_t i = 0; i < pointLightGroupData_->activeCount; ++i) {
                 ImGui::PushID(static_cast<int>(i));
 
-                char label[32];
+                char label[kLightLabelBufferSize];
                 sprintf_s(label, "Point Light [%d]", i);
 
                 if (ImGui::TreeNode(label)) {
@@ -287,9 +305,9 @@ void LightManager::OnImGui() {
 
             // 各ライトの設定
             for (uint32_t i = 0; i < spotLightGroupData_->activeCount; ++i) {
-                ImGui::PushID(1000 + static_cast<int>(i)); // PointLightとIDが被らないようにオフセット
+                ImGui::PushID(kSpotLightImGuiIdOffset + static_cast<int>(i)); // PointLightとIDが被らないようにオフセット
 
-                char label[32];
+                char label[kLightLabelBufferSize];
                 sprintf_s(label, "Spot Light [%d]", i);
 
                 if (ImGui::TreeNode(label)) {
@@ -302,14 +320,14 @@ void LightManager::OnImGui() {
                     ImGui::DragFloat("Decay", &sl.decay, 0.01f, 0.1f, 10.0f);
 
                     // 角度をdegreeで表示・編集
-                    float angleDeg = std::acos(sl.cosAngle) * 180.0f / std::numbers::pi_v<float>;
+                    float angleDeg = std::acos(sl.cosAngle) * kHalfTurnDegrees / std::numbers::pi_v<float>;
                     if (ImGui::DragFloat("Angle", &angleDeg, 0.5f, 1.0f, 90.0f)) {
-                        sl.cosAngle = std::cos(angleDeg * std::numbers::pi_v<float> / 180.0f);
+                        sl.cosAngle = std::cos(angleDeg * std::numbers::pi_v<float> / kHalfTurnDegrees);
                     }
 
-                    float falloffStartDeg = std::acos(sl.cosFalloffStart) * 180.0f / std::numbers::pi_v<float>;
+                    float falloffStartDeg = std::acos(sl.cosFalloffStart) * kHalfTurnDegrees / std::numbers::pi_v<float>;
                     if (ImGui::DragFloat("Falloff Start", &falloffStartDeg, 0.5f, 0.0f, angleDeg)) {
-                        sl.cosFalloffStart = std::cos(falloffStartDeg * std::numbers::pi_v<float> / 180.0f);
+                        sl.cosFalloffStart = std::cos(falloffStartDeg * std::numbers::pi_v<float> / kHalfTurnDegrees);
                     }
 
                     ImGui::TreePop();

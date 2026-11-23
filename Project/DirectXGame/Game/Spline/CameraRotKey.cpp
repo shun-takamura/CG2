@@ -8,9 +8,14 @@
 #include "CurveEditorWidget.h"    // EffectUI::DrawCurveEditor
 #endif
 
+namespace {
+    // 名前の無い回転キーの表示名を作る文字バッファの大きさ [文字]
+    constexpr int kNameBufferSize = 32;
+}
+
 std::string CameraRotKey::GetName() const {
     if (!name_.empty()) return name_;
-    char buf[32];
+    char buf[kNameBufferSize];
     std::snprintf(buf, sizeof(buf), "RotKey t=%.2f", t);
     return buf;
 }

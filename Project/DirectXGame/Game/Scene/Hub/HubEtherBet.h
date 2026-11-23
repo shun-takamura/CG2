@@ -12,6 +12,7 @@ class SpriteManager;
 class InputManager;
 class JsonValue;
 class EtherVesselRoom;
+class GameSession;
 struct UIPointer;
 
 /// <summary>
@@ -27,6 +28,10 @@ struct UIPointer;
 /// </summary>
 class HubEtherBet {
 public:
+	/// <summary>シーンをまたいで残るプレイの状態を設定する（作った直後、Initialize より前に HubScene が呼ぶ）</summary>
+	/// <param name="gameSession">Game が持つプレイの状態（参照のみ）</param>
+	void SetGameSession(GameSession* gameSession) { gameSession_ = gameSession; }
+
 	enum class Result {
 		None,
 		Confirmed,   // 賭けた（EtherState::PlaceBet 済み）。演出が終わってから返す
@@ -36,40 +41,86 @@ public:
 	HubEtherBet();
 	~HubEtherBet();
 
+	/// <summary>器の間（EtherVesselRoom）を用意し、GameOver.json の器・水面の調整値を読む</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="spriteManager">スプライトの管理</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager, Object3DManager* object3DManager, SpriteManager* spriteManager);
+	/// <summary>器の間の終了処理をする</summary>
 	void Finalize();
 
-	/// <summary>器の間に入る（黒フェードで覆われている間に呼ぶ）。値は前回の純度から</summary>
+	/// <summary>器の間に入る（黒フェードで覆われている間に呼ぶ）。値は前回の純度から（払える範囲に収める）</summary>
 	void Begin();
-	/// <summary>inputEnabled=false の間は入力を読まない（フェード中）。attract はデモモード（少し待って今の値で決める）</summary>
+	/// <summary>入力で純度を動かす・決定する・戻るを受け、器と UI を進める</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="input">入力</param>
+	/// <param name="inputEnabled">false の間は入力を読まない（フェード中）</param>
+	/// <param name="attract">デモモード（少し待って今の値で決める）</param>
+	/// <returns>決定（演出が終わってから）・戻る・まだ（None）</returns>
 	Result Update(float deltaTime, InputManager* input, bool inputEnabled, bool attract);
+	/// <summary>器の間と UI を描く</summary>
 	void Draw();
 	/// <summary>
 	/// 右上の所持エーテルの枠（斜めの暗い枠・しずくの印・金の縁の数字）を積む。Flush は呼び出し側。
-	/// 賭ける画面と機体設定（HubScene）で同じ物を出す。alpha は 0..1
+	/// 賭ける画面と機体設定（HubScene）で同じ物を出す
 	/// </summary>
+	/// <param name="alpha">不透明度 0〜1</param>
 	void DrawHandPanel(float alpha) const;
+	/// <summary>発光パスで器の間を描く</summary>
 	void DrawBloom();
+	/// <summary>器の間のカメラを返す</summary>
+	/// <returns>カメラ。Initialize 前は nullptr</returns>
 	Camera* GetCamera() const;
 
+	/// <summary>調整値（Hub.json の "etherBet"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	// シーンをまたいで残るプレイの状態（Game が持つ。参照のみ）
+	GameSession* gameSession_ = nullptr;
+	// 0.1 刻みの数 1 つあたりの純度
+	static constexpr float kValuePerTenth = 0.1f;
+
 	enum class Step {
 		Adjust,
 		Confirming,
 		Finished,
 	};
 
-	/// <summary>値を tenths（0.1 単位）だけ動かす。動いたら true</summary>
+	/// <summary>値を 0.1 単位で動かし（払える範囲に収める）、上げるなら支柱の光を昇らせ・下げるなら下ろす</summary>
+	/// <param name="tenths">動かす量（0.1 単位。負で下げる）</param>
+	/// <returns>動いたら true</returns>
 	bool Step10(int tenths);
+	/// <summary>今の純度で賭けて（EtherState::PlaceBet）、決定の演出を始める</summary>
 	void Confirm();
+	/// <summary>針と光を値へなめらかに寄せ、液面の量を消費に合わせる</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void UpdateVessel(float deltaTime);
+	/// <summary>所持エーテル・純度の札・下の帯（◀ 使用するエーテル ▶）を積む</summary>
 	void DrawUi();
+	/// <summary>しずくの印（下が円、上へすぼまって尖る）を 1px の横線を重ねて積む</summary>
+	/// <param name="center">中心 [px]（UI 座標）</param>
+	/// <param name="height">高さ [px]</param>
+	/// <param name="alpha">不透明度 0〜1</param>
 	void DrawDroplet(const Vector2& center, float height, float alpha) const;
+	/// <summary>◀ ▶ を四角を重ねた三角で積む（フォントに無いかもしれないため）</summary>
+	/// <param name="center">中心 [px]（UI 座標）</param>
+	/// <param name="size">大きさ [px]</param>
+	/// <param name="right">true で ▶、false で ◀</param>
+	/// <param name="alpha">不透明度 0〜1</param>
+	/// <param name="highlighted">マウスが重なっていれば true（明るくする）</param>
 	void DrawArrow(const Vector2& center, float size, bool right, float alpha, bool highlighted) const;
+	/// <summary>見やすいように後ろに暗い帯（左右の端と上下はぼかす）を積む</summary>
+	/// <param name="centerY">帯の中心の高さ [px]（UI 座標）</param>
+	/// <param name="height">帯の高さ [px]</param>
+	/// <param name="alpha">不透明度 0〜1</param>
 	void DrawBand(float centerY, float height, float alpha) const;
 	// 下の帯の ◀ ▶ と中央（使用するエーテル）の当たり。UI 座標
 	struct Rect {
@@ -77,10 +128,19 @@ private:
 		float y = 0.0f;
 		float width = 0.0f;
 		float height = 0.0f;
+		/// <summary>点が四角の中にあるかを返す</summary>
+		/// <param name="p">点（UI 座標）</param>
+		/// <returns>中（縁を含む）なら true</returns>
 		bool Contains(const Vector2& p) const { return p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height; }
 	};
+	/// <summary>下の帯の ◀ ▶ と中央（使用するエーテル）の当たりの四角を求める（UI 座標）</summary>
+	/// <param name="left">◀ の当たりの受け取り先</param>
+	/// <param name="center">中央の当たりの受け取り先</param>
+	/// <param name="right">▶ の当たりの受け取り先</param>
 	void LayoutBand(Rect& left, Rect& center, Rect& right) const;
-	float GetValue() const { return static_cast<float>(valueTenths_) * 0.1f; }
+	/// <summary>今の純度を返す</summary>
+	/// <returns>純度 1.0〜9.0</returns>
+	float GetValue() const { return static_cast<float>(valueTenths_) * kValuePerTenth; }
 
 	DirectXCore* dxCore_ = nullptr;
 	std::unique_ptr<EtherVesselRoom> room_;

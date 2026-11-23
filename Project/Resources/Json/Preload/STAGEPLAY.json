@@ -3,11 +3,11 @@
   "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
   "shaders": [
     {
-      "path": "Resources/Shaders/Disruptor/DisruptorShard.VS.hlsl",
+      "path": "Resources/Shaders/ScreenShard/ScreenShard.VS.hlsl",
       "profile": "vs_6_0"
     },
     {
-      "path": "Resources/Shaders/Disruptor/DisruptorShard.PS.hlsl",
+      "path": "Resources/Shaders/ScreenShard/ScreenShard.PS.hlsl",
       "profile": "ps_6_0"
     },
     {
@@ -415,6 +415,14 @@
     {
       "path": "Resources/Models/Weapons/Shields/Small/Export/ShieldSmall_NormalMap.dds",
       "linear": true
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/HightPower/Export/MainWeapon_HightPower_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Models/Weapons/MainWeapons/HightPower/Export/MainWeapon_HightPower_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [
@@ -557,6 +565,10 @@
     {
       "dir": "Resources/Models/Weapons/Shields/Small/Export",
       "file": "ShieldSmall.mesh"
+    },
+    {
+      "dir": "Resources/Models/Weapons/MainWeapons/HightPower/Export",
+      "file": "MainWeapon_HightPower.mesh"
     }
   ],
   "animatedModels": [

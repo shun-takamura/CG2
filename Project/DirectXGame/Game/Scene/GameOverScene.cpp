@@ -1,4 +1,5 @@
 #include "GameOverScene.h"
+#include "Score/GameSession.h"
 
 #include "Camera.h"
 #include "Object3DManager.h"
@@ -20,6 +21,7 @@
 #include "MathUtility.h"   // kPi
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonWriter.h"
 #include "Vector4.h"
 #include <algorithm>
@@ -36,38 +38,86 @@ namespace {
 	// TextRenderer のフォントの高さ（Framework::Initialize の MPLUS1p 32px）
 	constexpr float kFontPixelHeight = 32.0f;
 	constexpr float kDegToRad = kPi / 180.0f;
+	// なめらかな補間 3u²−2u³ の u² の係数
+	constexpr float kSmoothStepCubicCoeff = 3.0f;
+	// よりなめらかな補間 6u⁵−15u⁴+10u³ の u⁵ の係数
+	constexpr float kSmootherStepQuinticCoeff = 6.0f;
+	// よりなめらかな補間 6u⁵−15u⁴+10u³ の u⁴ の係数
+	constexpr float kSmootherStepQuarticCoeff = 15.0f;
+	// よりなめらかな補間 6u⁵−15u⁴+10u³ の u³ の係数
+	constexpr float kSmootherStepCubicCoeff = 10.0f;
+	// JSON の配列を RGB として読むのに要る要素数
+	constexpr size_t kRgbComponentCount = 3;
+	// RGB の成分の数（読むループの回数）
+	constexpr int kRgbChannelCount = 3;
+	// 秒数・幅がこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kNearZero = 1e-3f;
+	// カメラを引く秒数の下限 [秒]（0 割りを避ける）
+	constexpr float kMinPullSeconds = 0.01f;
+	// 再挑戦を選んだときに器の液面を揺らす強さ
+	constexpr float kRetrySplashStrength = 0.006f;
+	// 選択肢がこの不透明度より濃く出ていたら決定を受け付ける
+	constexpr float kOptionsInputAlphaThreshold = 0.5f;
+	// 暗い帯：外側の段ほど 1 段につき高さをこの割合だけ広げる
+	constexpr float kBandRowHeightGrowth = 0.25f;
+	// 暗い帯：上下の薄い縁の濃さ（真ん中の帯に対する倍率）
+	constexpr float kBandEdgeRowDensity = 0.35f;
+	// 選んだ選択肢の金の縁の太さ [px]
+	constexpr float kSelectedOutlineThickness = 2.0f;
+	// 選んでいない選択肢の文字色 R（落ち着いた灰色）
+	constexpr float kUnselectedTextR = 0.62f;
+	// 選んでいない選択肢の文字色 G（落ち着いた灰色）
+	constexpr float kUnselectedTextG = 0.64f;
+	// 選んでいない選択肢の文字色 B（落ち着いた灰色）
+	constexpr float kUnselectedTextB = 0.68f;
+	// 選んでいない選択肢の暗い縁の太さ [px]
+	constexpr float kUnselectedOutlineThickness = 1.5f;
+	// 選んでいない選択肢の暗い縁の不透明度（文字の不透明度に対する倍率）
+	constexpr float kUnselectedOutlineAlpha = 0.8f;
+	// 純度を 0.1 単位に丸めるための倍率
+	constexpr float kPurityRoundScale = 10.0f;
+	// 調整値の JSON を書き出すときの字下げ [スペースの数]
+	constexpr int kTuningJsonIndentWidth = 2;
 
+	/// <summary>0〜1 のなめらかな補間（3u²−2u³）</summary>
+	/// <param name="u">進み具合（0〜1 に収める）</param>
+	/// <returns>補間した値</returns>
 	float SmoothStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * (3.0f - 2.0f * u);
+		return u * u * (kSmoothStepCubicCoeff - 2.0f * u);
 	}
+	/// <summary>0〜1 のよりなめらかな補間（6u⁵−15u⁴+10u³）</summary>
+	/// <param name="u">進み具合（0〜1 に収める）</param>
+	/// <returns>補間した値</returns>
 	float SmootherStep01(float u) {
 		u = std::clamp(u, 0.0f, 1.0f);
-		return u * u * u * (u * (u * 6.0f - 15.0f) + 10.0f);
+		return u * u * u * (u * (u * kSmootherStepQuinticCoeff - kSmootherStepQuarticCoeff) + kSmootherStepCubicCoeff);
 	}
 
+	/// <summary>JSON のオブジェクトから数値を読む（無ければ今の値のまま）</summary>
+	/// <param name="node">読むオブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">読み書きする値</param>
 	void ReadFloat(const JsonValue& node, const char* key, float& value) {
 		value = static_cast<float>(node[key].AsDouble(value));
 	}
+	/// <summary>JSON のオブジェクトへ数値を書く</summary>
+	/// <param name="node">書くオブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="value">書く値</param>
 	void WriteFloat(JsonValue& node, const char* key, float value) {
 		node[key] = JsonValue(static_cast<double>(value));
 	}
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
+	/// <summary>要素 3 つ以上の JSON 配列を RGB として読む（配列でなければ今の値のまま）</summary>
+	/// <param name="node">読む配列</param>
+	/// <param name="value">読み書きする色</param>
 	void ReadColor3(const JsonValue& node, float (&value)[3]) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		for (int i = 0; i < 3; ++i) value[i] = static_cast<float>(node[static_cast<size_t>(i)].AsDouble(value[i]));
+		if (!node.IsArray() || node.Size() < kRgbComponentCount) return;
+		for (int i = 0; i < kRgbChannelCount; ++i) value[i] = static_cast<float>(node[static_cast<size_t>(i)].AsDouble(value[i]));
 	}
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
+	/// <summary>RGB を要素 3 つの JSON 配列にする</summary>
+	/// <param name="c">色</param>
+	/// <returns>[r, g, b] の配列</returns>
 	JsonValue MakeColor3(const float (&c)[3]) {
 		return MakeVector3({ c[0], c[1], c[2] });
 	}
@@ -80,12 +130,12 @@ void GameOverScene::Initialize() {
 	Game::GetPostEffect()->ResetEffects();
 
 	room_ = std::make_unique<EtherVesselRoom>();
-	room_->Initialize(dxCore_, srvManager_, object3DManager_, spriteManager_);
+	room_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), GetSpriteManager());
 	room_->Activate();
 	vessel_ = room_->GetVessel();
 	LoadTuning();
 
-	hasBossCheckpoint_ = BossRetryState::GetInstance()->HasCheckpoint();
+	hasBossCheckpoint_ = GetGameSession()->GetBossRetryState()->HasCheckpoint();
 	options_.clear();
 	if (hasBossCheckpoint_) options_.push_back(Option::BossRetry);
 	options_.push_back(Option::Restart);
@@ -96,12 +146,12 @@ void GameOverScene::Initialize() {
 	attractMenu_.Reset();
 	attractWithdraw_ = false;
 	if (AttractMode* attract = AttractMode::GetInstance(); attract->IsEnabled()) {
-		++attract->lapDeaths;
-		attractWithdraw_ = attract->lapDeaths > attract->retriesPerLap;
+		attract->RecordLapDeath();
+		attractWithdraw_ = attract->ShouldWithdraw();
 	}
 
 	// 死んだ分は入口で黙って減らす（§3：どれだけ減ったかは画面に出さない）
-	EtherState* ether = EtherState::GetInstance();
+	EtherState* ether = GetGameSession()->GetEtherState();
 	death_ = ether->ApplyDeath();
 	fillBefore_ = ether->BetToFill(death_.betBefore);
 	fillAfter_ = ether->BetToFill(death_.betAfter);
@@ -153,7 +203,7 @@ void GameOverScene::UpdateFlow(float deltaTime) {
 		break;
 	case Step::Drain: {
 		stepTime_ += deltaTime;
-		const float t = drainSeconds_ > 1e-3f ? std::clamp(stepTime_ / drainSeconds_, 0.0f, 1.0f) : 1.0f;
+		const float t = drainSeconds_ > kNearZero ? std::clamp(stepTime_ / drainSeconds_, 0.0f, 1.0f) : 1.0f;
 		// 始めからすっと下がり、最後だけゆるめる（ease-out。smoothstep は出だしが溜まって糸だけ先に見えた）
 		const float u = 1.0f - (1.0f - t) * (1.0f - t);
 		vessel_->SetFill(fillBefore_ + (fillAfter_ - fillBefore_) * u, true);
@@ -178,26 +228,26 @@ void GameOverScene::UpdateFlow(float deltaTime) {
 		break;
 	case Step::Choose:
 		stepTime_ += deltaTime;
-		optionsAlpha_ = optionsFadeSeconds_ > 1e-3f ? (std::min)(optionsAlpha_ + deltaTime / optionsFadeSeconds_, 1.0f) : 1.0f;
+		optionsAlpha_ = optionsFadeSeconds_ > kNearZero ? (std::min)(optionsAlpha_ + deltaTime / optionsFadeSeconds_, 1.0f) : 1.0f;
 		break;
 	case Step::Rise: {
 		stepTime_ += deltaTime;
-		optionsAlpha_ = optionsFadeOutSeconds_ > 1e-3f ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
+		optionsAlpha_ = optionsFadeOutSeconds_ > kNearZero ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
 		// 球の光が強まる（賭けたエーテルで機体を組み直す）
-		const float t = riseSeconds_ > 1e-3f ? std::clamp(stepTime_ / riseSeconds_, 0.0f, 1.0f) : 1.0f;
+		const float t = riseSeconds_ > kNearZero ? std::clamp(stepTime_ / riseSeconds_, 0.0f, 1.0f) : 1.0f;
 		vessel_->SetGlowBoost(1.0f + (riseGlowBoost_ - 1.0f) * SmoothStep01(t));
 		if (t >= 1.0f) {
 			step_ = Step::Leaving;
-			if (chosen_ == Option::BossRetry) BossRetryState::GetInstance()->RequestBossRetry();
+			if (chosen_ == Option::BossRetry) GetGameSession()->GetBossRetryState()->RequestBossRetry();
 			SceneManager::GetInstance()->ChangeScene("STAGEPLAY");
 		}
 		break;
 	}
 	case Step::Return: {
 		stepTime_ += deltaTime;
-		optionsAlpha_ = optionsFadeOutSeconds_ > 1e-3f ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
+		optionsAlpha_ = optionsFadeOutSeconds_ > kNearZero ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
 		// 残ったエーテルが支柱を伝って泉へ下りる（＝手元に戻る）
-		const float t = returnSeconds_ > 1e-3f ? std::clamp(stepTime_ / returnSeconds_, 0.0f, 1.0f) : 1.0f;
+		const float t = returnSeconds_ > kNearZero ? std::clamp(stepTime_ / returnSeconds_, 0.0f, 1.0f) : 1.0f;
 		vessel_->SetFill(returnFillFrom_ * (1.0f - SmoothStep01(t)), true);
 		if (t >= 1.0f) vessel_->GetPillarFlow()->StopDescend();
 		if (stepTime_ >= returnSeconds_ + returnTailSeconds_) {
@@ -208,7 +258,7 @@ void GameOverScene::UpdateFlow(float deltaTime) {
 		break;
 	}
 	case Step::Leaving:
-		optionsAlpha_ = optionsFadeOutSeconds_ > 1e-3f ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
+		optionsAlpha_ = optionsFadeOutSeconds_ > kNearZero ? (std::max)(optionsAlpha_ - deltaTime / optionsFadeOutSeconds_, 0.0f) : 0.0f;
 		break;
 	}
 
@@ -221,7 +271,7 @@ void GameOverScene::UpdateCamera(float deltaTime) {
 	} else {
 		pullTimer_ += deltaTime;
 	}
-	const float t = SmootherStep01((pullTimer_ - pullDelay_) / (std::max)(pullSeconds_, 0.01f));
+	const float t = SmootherStep01((pullTimer_ - pullDelay_) / (std::max)(pullSeconds_, kMinPullSeconds));
 	auto lerp = [t](const Vector3& a, const Vector3& b) {
 		return Vector3{ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
 	};
@@ -236,13 +286,13 @@ void GameOverScene::Confirm(Option option) {
 	chosen_ = option;
 	stepTime_ = 0.0f;
 	if (option == Option::Withdraw) {
-		EtherState::GetInstance()->Withdraw();
+		GetGameSession()->GetEtherState()->Withdraw();
 		returnFillFrom_ = fillAfter_;
 		vessel_->GetPillarFlow()->BeginDescend();
 		step_ = Step::Return;
 	} else {
 		// 再挑戦は糸も粒も出さない（2026-10-24 ユーザー）。光が強まるだけ
-		vessel_->Splash(0.006f);
+		vessel_->Splash(kRetrySplashStrength);
 		step_ = Step::Rise;
 	}
 }
@@ -253,11 +303,11 @@ void GameOverScene::UpdateChoose() {
 	const bool justRevealed = wasTransitioning_ && !transitioning;
 	wasTransitioning_ = transitioning;
 	if (transitioning || justRevealed) return;
-	auto* actions = input_->GetActionMap();
+	auto* actions = GetInput()->GetActionMap();
 	if (!actions || options_.empty()) return;
 	const bool confirmed = actions->IsTriggered(static_cast<int>(Action::MenuConfirm));
 	// マウス（Debug のビューポート窓・Release の黒帯の換算は UIPointer）
-	const UIPointer pointer = UIPointer::FromInput(input_);
+	const UIPointer pointer = UIPointer::FromInput(GetInput());
 	const bool clicked = pointer.valid && pointer.clicked;
 
 	// 減る〜カチッの途中で決定かクリックをしたら、選択肢まで早送り（押した 1 回は選ばない）
@@ -276,7 +326,7 @@ void GameOverScene::UpdateChoose() {
 			selectedIndex_ = hit;
 			EmitCursorRing();
 		}
-		if (hit >= 0 && pointer.clicked && optionsAlpha_ > 0.5f) {
+		if (hit >= 0 && pointer.clicked && optionsAlpha_ > kOptionsInputAlphaThreshold) {
 			Confirm(options_[hit]);
 			return;
 		}
@@ -296,7 +346,7 @@ void GameOverScene::UpdateChoose() {
 		selectedIndex_ = (selectedIndex_ + count - 1) % count;
 		EmitCursorRing();
 	}
-	if (confirmed && optionsAlpha_ > 0.5f) Confirm(options_[selectedIndex_]);
+	if (confirmed && optionsAlpha_ > kOptionsInputAlphaThreshold) Confirm(options_[selectedIndex_]);
 }
 
 void GameOverScene::Update() {
@@ -312,7 +362,7 @@ void GameOverScene::Update() {
 	UpdateGlobalEffects(room_->GetCamera(), dt);
 	// 純度の札はトランジション（着水）が明けたらふわっと出す
 	if (!SceneManager::GetInstance()->IsTransitioning()) {
-		tagAlpha_ = tagFadeSeconds_ > 1e-3f ? (std::min)(tagAlpha_ + dt / tagFadeSeconds_, 1.0f) : 1.0f;
+		tagAlpha_ = tagFadeSeconds_ > kNearZero ? (std::min)(tagAlpha_ + dt / tagFadeSeconds_, 1.0f) : 1.0f;
 	}
 
 #ifdef _DEBUG
@@ -328,7 +378,7 @@ bool GameOverScene::UpdateAttract() {
 	for (size_t i = 0; i < options_.size(); ++i) {
 		if (options_[i] == want) target = static_cast<int>(i);
 	}
-	switch (attractMenu_.Advance(dxCore_->GetDeltaTime(), attract->menuWait, attract->menuConfirmDelay)) {
+	switch (attractMenu_.Advance(GetDxCore()->GetDeltaTime(), attract->GetSettings().menuWait, attract->GetSettings().menuConfirmDelay)) {
 	case AttractMenuTimer::Step::MoveCursor:
 		if (selectedIndex_ != target) {
 			selectedIndex_ = target;
@@ -342,8 +392,7 @@ bool GameOverScene::UpdateAttract() {
 		attractMenu_.Reset();
 		if (want == Option::Withdraw) {
 			// 一周の終わり：数え直し、次の周は視点を入れ替える（一人称 ↔ 三人称）
-			attract->lapDeaths = 0;
-			attract->thirdPersonLap = !attract->thirdPersonLap;
+			attract->FinishLap();
 		}
 		Confirm(want);
 		return true;
@@ -367,7 +416,7 @@ void GameOverScene::DrawOptions() {
 	if (!tr->IsInitialized() || options_.empty() || optionsAlpha_ <= 0.0f) return;
 
 	const float a = SmoothStep01(optionsAlpha_);
-	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
+	const float screenW = static_cast<float>(GetDxCore()->GetUIWidth());
 	std::vector<OptionRect> rects;
 	LayoutOptions(rects);
 	const float y = rects.front().y;
@@ -381,10 +430,10 @@ void GameOverScene::DrawOptions() {
 		const float columnW = screenW / static_cast<float>(kColumns);
 		for (int c = 0; c < kColumns; ++c) {
 			const float u = (static_cast<float>(c) + 0.5f) / static_cast<float>(kColumns);
-			const float edge = SmoothStep01((std::min)(u, 1.0f - u) / (std::max)(bandEdgeFade_, 1e-3f));
+			const float edge = SmoothStep01((std::min)(u, 1.0f - u) / (std::max)(bandEdgeFade_, kNearZero));
 			for (int r = 0; r < kRows; ++r) {
-				const float h = bandHeight_ * (1.0f + static_cast<float>(r) * 0.25f);
-				const float k = r == 0 ? 1.0f : 0.35f;
+				const float h = bandHeight_ * (1.0f + static_cast<float>(r) * kBandRowHeightGrowth);
+				const float k = r == 0 ? 1.0f : kBandEdgeRowDensity;
 				tr->DrawRect({ columnW * static_cast<float>(c), centerY - h * 0.5f }, { columnW + 1.0f, h },
 					{ bandColor_[0], bandColor_[1], bandColor_[2], bandAlpha_ * edge * k * a });
 			}
@@ -398,7 +447,7 @@ void GameOverScene::DrawOptions() {
 		const float width = rects[i].width;
 		if (selected) {
 			// 白に金の縁、下に細い金の線
-			tr->DrawText(label, { x, y }, optionsScale_, { 1.0f, 1.0f, 1.0f, a }, 2.0f,
+			tr->DrawText(label, { x, y }, optionsScale_, { 1.0f, 1.0f, 1.0f, a }, kSelectedOutlineThickness,
 				{ outlineGold_[0], outlineGold_[1], outlineGold_[2], a });
 			tr->DrawRect({ x, y + textHeight + underlineOffset_ }, { width, underlineThickness_ },
 				{ outlineGold_[0], outlineGold_[1], outlineGold_[2], a });
@@ -409,7 +458,7 @@ void GameOverScene::DrawOptions() {
 			}
 		} else {
 			// 選んでいない物は落ち着いた灰色に暗い縁（対等に並べたまま、選んだ物だけが立つ）
-			tr->DrawText(label, { x, y }, optionsScale_, { 0.62f, 0.64f, 0.68f, a }, 1.5f, { 0.0f, 0.0f, 0.0f, a * 0.8f });
+			tr->DrawText(label, { x, y }, optionsScale_, { kUnselectedTextR, kUnselectedTextG, kUnselectedTextB, a }, kUnselectedOutlineThickness, { 0.0f, 0.0f, 0.0f, a * kUnselectedOutlineAlpha });
 		}
 	}
 	tr->Flush();
@@ -421,8 +470,8 @@ void GameOverScene::LayoutOptions(std::vector<OptionRect>& rects) const {
 	TextRenderer* tr = TextRenderer::GetInstance();
 	if (!tr->IsInitialized() || options_.empty()) return;
 	const float a = SmoothStep01(optionsAlpha_);
-	const float screenW = static_cast<float>(dxCore_->GetUIWidth());
-	const float screenH = static_cast<float>(dxCore_->GetUIHeight());
+	const float screenW = static_cast<float>(GetDxCore()->GetUIWidth());
+	const float screenH = static_cast<float>(GetDxCore()->GetUIHeight());
 	const float y = screenH * optionsYRatio_ + (1.0f - a) * optionsRisePixels_;
 	const float height = kFontPixelHeight * optionsScale_;
 	float total = 0.0f;
@@ -463,14 +512,14 @@ void GameOverScene::Draw() {
 void GameOverScene::DrawPurityTag() {
 	if (tagAlpha_ <= 0.0f) return;
 	// 針の傾き → 純度（I が +iDegrees、IX が −iDegrees。EtherVessel::SetDifficulty01 の逆）。0.1 単位に丸める
-	EtherState* ether = EtherState::GetInstance();
+	EtherState* ether = GetGameSession()->GetEtherState();
 	const float u = vessel_->GetNeedle01();
 	const float minD = ether->GetDifficultyMin();
 	const float maxD = ether->GetDifficultyMax();
 	const float lo = (std::min)(death_.difficultyBefore, death_.difficultyAfter);
 	const float hi = (std::max)(death_.difficultyBefore, death_.difficultyAfter);
 	const float purity = std::clamp(minD + (maxD - minD) * u, lo, hi);
-	room_->DrawPurityTag(std::round(purity * 10.0f) / 10.0f, SmoothStep01(tagAlpha_), tagScale_, tagOffset_, outlineGold_);
+	room_->DrawPurityTag(std::round(purity * kPurityRoundScale) / kPurityRoundScale, SmoothStep01(tagAlpha_), tagScale_, tagOffset_, outlineGold_);
 	TextRenderer::GetInstance()->Flush();
 }
 
@@ -494,10 +543,10 @@ bool GameOverScene::LoadTuning() {
 	const JsonValue& root = result.value;
 
 	const JsonValue& cam = root["camera"];
-	ReadVector3(cam["nearPos"], cameraNearPos_);
-	ReadVector3(cam["nearRotDeg"], cameraNearRotDeg_);
-	ReadVector3(cam["farPos"], cameraFarPos_);
-	ReadVector3(cam["farRotDeg"], cameraFarRotDeg_);
+	cameraNearPos_ = ReadVector3(cam["nearPos"], cameraNearPos_);
+	cameraNearRotDeg_ = ReadVector3(cam["nearRotDeg"], cameraNearRotDeg_);
+	cameraFarPos_ = ReadVector3(cam["farPos"], cameraFarPos_);
+	cameraFarRotDeg_ = ReadVector3(cam["farRotDeg"], cameraFarRotDeg_);
 	ReadFloat(cam, "pullDelay", pullDelay_);
 	ReadFloat(cam, "pullSeconds", pullSeconds_);
 
@@ -581,7 +630,7 @@ void GameOverScene::SaveTuning() const {
 	WriteFloat(text, "bandEdgeFade", bandEdgeFade_);
 
 	room_->SaveTuning(root);
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kTuningJsonIndentWidth });
 }
 
 void GameOverScene::OnImGui() {
@@ -599,7 +648,7 @@ void GameOverScene::OnImGui() {
 		ImGui::SameLine();
 		ImGui::TextDisabled("%s", kTuningPath);
 
-		if (ImGui::CollapsingHeader("Ether State")) EtherState::GetInstance()->OnImGui();
+		if (ImGui::CollapsingHeader("Ether State")) GetGameSession()->GetEtherState()->OnImGui();
 		if (ImGui::CollapsingHeader("Flow")) {
 			ImGui::DragFloat("Drain Delay after Pull [s]", &drainDelay_, 0.01f, 0.0f, 10.0f);
 			ImGui::DragFloat("Drain Seconds", &drainSeconds_, 0.01f, 0.0f, 10.0f);

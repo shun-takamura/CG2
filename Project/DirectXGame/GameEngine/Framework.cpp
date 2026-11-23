@@ -48,10 +48,31 @@
 #include "Profiling/LoadProfiler.h"
 #include "Profiling/TextureLoadBenchmark.h"
 
+namespace {
+	// コマンドラインの数字を読むときの基数（10 進数）
+	constexpr int kDecimalBase = 10;
+	// pack のヘッダーの uint32_t の個数（magic / version / asset_count / index_offset）
+	constexpr int kPackHeaderWordCount = 4;
+	// テキストのフォントを bake する高さ [px]
+	constexpr int kFontBakePixelHeight = 32;
+	// テキストのフォントのアトラスの一辺 [px]
+	constexpr int kFontAtlasSize = 1024;
+	// 1 MB のバイト数
+	constexpr double kBytesPerMB = 1024.0 * 1024.0;
+	// 1 ms あたりの 100ns 単位の数（GetProcessTimes の単位 → ms）
+	constexpr double kHundredNanosecondsPerMs = 10000.0;
+	// 割合を百分率 [%] にする倍率
+	constexpr double kPercentScale = 100.0;
+}
+
 // メンバの unique_ptr が指す型（AbstractSceneFactory 等）の完全型がここで揃うので、
 // コンストラクタ / デストラクタの実体はこの翻訳単位に置く。ヘッダ側は宣言のみ。
 Framework::Framework() = default;
 Framework::~Framework() = default;
+
+void Framework::SetSceneFactory(std::unique_ptr<AbstractSceneFactory> factory) {
+	sceneFactory_ = std::move(factory);
+}
 
 void Framework::Run() {
 	// KPI: 計測起点 (Run の入り口 = 実質プロセス開始直後)
@@ -103,7 +124,7 @@ void Framework::Run() {
 
 void Framework::Initialize() {
 	// セッションログ基盤を最初に起こす（以降の Log() がファイルに残る）
-	SessionLogger::Instance().Initialize();
+	SessionLogger::GetInstance()->Initialize();
 
 	// 中央乱数とリプレイの初期化。
 	//   --replay <dir> : そのセッションフォルダの input.log を再生（シードも session.log から復元）
@@ -118,7 +139,7 @@ void Framework::Initialize() {
 		if (argv) {
 			for (int i = 1; i < argc; ++i) {
 				if (std::wcscmp(argv[i], L"--seed") == 0 && i + 1 < argc) {
-					seed = static_cast<uint32_t>(std::wcstoul(argv[i + 1], nullptr, 10));
+					seed = static_cast<uint32_t>(std::wcstoul(argv[i + 1], nullptr, kDecimalBase));
 					seedProvided = true;
 				} else if (std::wcscmp(argv[i], L"--replay") == 0 && i + 1 < argc) {
 					const std::wstring w = argv[i + 1];
@@ -134,9 +155,9 @@ void Framework::Initialize() {
 		const bool replay = !replayDir.empty();
 		if (replay) {
 			// input.log を読み込み、記録時シードも復元する
-			ReplaySystem::Instance().InitializeReplay(replayDir);
-			if (!seedProvided && ReplaySystem::Instance().HasLoadedSeed()) {
-				seed = ReplaySystem::Instance().GetLoadedSeed();
+			ReplaySystem::GetInstance()->InitializeReplay(replayDir);
+			if (!seedProvided && ReplaySystem::GetInstance()->HasLoadedSeed()) {
+				seed = ReplaySystem::GetInstance()->GetLoadedSeed();
 				seedProvided = true;
 			}
 		}
@@ -144,13 +165,13 @@ void Framework::Initialize() {
 			std::random_device rd;
 			seed = rd();
 		}
-		RandomGenerator::Instance().Initialize(seed);
+		RandomGenerator::GetInstance()->Initialize(seed);
 		Log("[Random] seed=" + std::to_string(seed) +
 			(replay ? " (replay)\n" : (seedProvided ? " (injected)\n" : " (generated)\n")));
 
 		// 通常プレイのときだけ記録を開始する（再生中は記録しない）
 		if (!replay) {
-			ReplaySystem::Instance().InitializeRecord(seed);
+			ReplaySystem::GetInstance()->InitializeRecord(seed);
 		}
 	}
 
@@ -231,7 +252,7 @@ void Framework::Initialize() {
 	dxCore_->Initialize(winApp_.get());
 
 	// リプレイ再生中は dt を記録値で供給するため、実時計ベースの FPS 制御を止める
-	if (ReplaySystem::Instance().GetMode() == ReplaySystem::Mode::Replay) {
+	if (ReplaySystem::GetInstance()->GetMode() == ReplaySystem::Mode::Replay) {
 		dxCore_->SetReplayMode(true);
 	}
 
@@ -268,7 +289,7 @@ void Framework::Initialize() {
 		}
 		// D.1 検証: pack ヘッダーを EnqueueMemoryRead で読んでログ出力
 		if (auto* file = DStorageManager::GetInstance()->GetPackFile()) {
-			uint32_t header[4] = {};
+			uint32_t header[kPackHeaderWordCount] = {};
 			DStorageManager::GetInstance()->EnqueueMemoryRead(file, 0, sizeof(header), header);
 			DStorageManager::GetInstance()->SubmitAndWait();
 			Log("[DStorage TEST] magic=0x" + std::format("{:08X}", header[0]) +
@@ -289,7 +310,7 @@ void Framework::Initialize() {
 	// SRV化したdepthをポストエフェクトから読めるように登録
 	dxCore_->RegisterDepthSRV(srvManager_.get());
 
-	ImGuiManager::Instance().Initialize(
+	ImGuiManager::GetInstance()->Initialize(
 		winApp_->GetHwnd(),
 		dxCore_.get(),
 		srvManager_.get()
@@ -402,7 +423,7 @@ void Framework::Initialize() {
 	// テキストレンダラーの初期化（フォントは MPLUS 1p Medium、bake 32px）
 	TextRenderer::GetInstance()->Initialize(
 		dxCore_.get(), srvManager_.get(),
-		"Resources/Fonts/MPLUS1p-Medium.ttf", 32, 1024);
+		"Resources/Fonts/MPLUS1p-Medium.ttf", kFontBakePixelHeight, kFontAtlasSize);
 
 	// プリミティブパイプラインの初期化
 	PrimitivePipeline::GetInstance()->Initialize(dxCore_.get(), srvManager_.get());
@@ -489,15 +510,15 @@ void Framework::Update() {
 				}
 			}
 		}
-		const double vramMB = static_cast<double>(vramBytes) / (1024.0 * 1024.0);
+		const double vramMB = static_cast<double>(vramBytes) / kBytesPerMB;
 
 		// プロセス RAM (Working Set / Private Bytes)
 		double wsMB = 0.0, privMB = 0.0;
 		PROCESS_MEMORY_COUNTERS_EX pmc{};
 		if (GetProcessMemoryInfo(GetCurrentProcess(),
 			reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
-			wsMB   = static_cast<double>(pmc.WorkingSetSize)  / (1024.0 * 1024.0);
-			privMB = static_cast<double>(pmc.PrivateUsage)    / (1024.0 * 1024.0);
+			wsMB   = static_cast<double>(pmc.WorkingSetSize)  / kBytesPerMB;
+			privMB = static_cast<double>(pmc.PrivateUsage)    / kBytesPerMB;
 		}
 
 		// CPU 時間 (Run() 起点から ここまでに使った Kernel+User 時間 100ns 単位 → ms)
@@ -512,8 +533,8 @@ void Framework::Update() {
 				const uint64_t cur100ns = k.QuadPart + u.QuadPart;
 				const uint64_t delta100ns = (cur100ns >= kpiStartCpuTime100ns_)
 					? (cur100ns - kpiStartCpuTime100ns_) : 0;
-				cpuMs = static_cast<double>(delta100ns) / 10000.0;  // 100ns → ms
-				cpuPct = (loadMs > 0.0) ? (cpuMs / loadMs * 100.0) : 0.0;
+				cpuMs = static_cast<double>(delta100ns) / kHundredNanosecondsPerMs;  // 100ns → ms
+				cpuPct = (loadMs > 0.0) ? (cpuMs / loadMs * kPercentScale) : 0.0;
 			}
 		}
 
@@ -526,7 +547,7 @@ void Framework::Update() {
 				if (!ec) { packBytes = sz; break; }
 			}
 		}
-		const double packMB = static_cast<double>(packBytes) / (1024.0 * 1024.0);
+		const double packMB = static_cast<double>(packBytes) / kBytesPerMB;
 
 		Log(std::format(
 			"[KPI] mode={} loadTime={:.1f}ms vram={:.1f}MB "
@@ -567,12 +588,12 @@ void Framework::Update() {
 	}
 
 	// ===== ImGuiフレーム開始 =====
-	ImGuiManager::Instance().BeginFrame();
+	ImGuiManager::GetInstance()->BeginFrame();
 
 	// 入力の更新（再生中はハードを読まず、記録した入力を注入して dt も差し替える）
-	if (ReplaySystem::Instance().GetMode() == ReplaySystem::Mode::Replay) {
+	if (ReplaySystem::GetInstance()->GetMode() == ReplaySystem::Mode::Replay) {
 		float replayDt = 0.0f;
-		if (!ReplaySystem::Instance().AdvanceReplay(input_.get(), replayDt)) {
+		if (!ReplaySystem::GetInstance()->AdvanceReplay(input_.get(), replayDt)) {
 			// 記録を再生し終えた → 終了
 			endRequest_ = true;
 			return;
@@ -595,7 +616,7 @@ void Framework::Update() {
 	// リプレイ記録：このフレームが実際に使った dt と入力を input.log へ。
 	// 入力・シーン更新の後（dt 確定済み、UpdateFixFPS は Draw 後なので今フレームの値）に記録する。
 	// （RecordFrame は Record モードのときだけ書き込む）
-	ReplaySystem::Instance().RecordFrame(dxCore_->GetDeltaTime(), input_.get());
+	ReplaySystem::GetInstance()->RecordFrame(dxCore_->GetDeltaTime(), input_.get());
 }
 
 void Framework::Finalize() {
@@ -604,9 +625,6 @@ void Framework::Finalize() {
 	// すべて null チェックしてから解放する。
 	// 出力ウィンドウへの文字出力
 	Log("DirectX12isNotUseful\n");
-
-	// COMの終了
-	CoUninitialize();
 
 	//=============
 	// 解放処理
@@ -639,6 +657,7 @@ void Framework::Finalize() {
 
 	// DirectXCoreよりも先に解放
 	AnimatedMeshCache::GetInstance()->Finalize();
+	ModelManager::GetInstance()->Finalize();
 	TextureManager::GetInstance()->Finalize();
 	LightManager::GetInstance()->Finalize();
 
@@ -646,7 +665,7 @@ void Framework::Finalize() {
 	DStorageManager::GetInstance()->Finalize();
 
 	// ImGui終了処理
-	ImGuiManager::Instance().Shutdown();
+	ImGuiManager::GetInstance()->Shutdown();
 
 	if (dxCore_) dxCore_->Finalize();
 
@@ -659,5 +678,10 @@ void Framework::Finalize() {
 	PEPPER_FLUSH();
 
 	// セッションログを閉じる（全ファイルを flush）
-	SessionLogger::Instance().Finalize();
+	SessionLogger::GetInstance()->Finalize();
+
+	// COM の終了。Initialize の CoInitializeEx と対になる 1 回だけ。
+	// 音（XAudio2）・カメラと動画（Media Foundation）・テクスチャの読み込み（WIC）・DirectStorage は
+	// COM の上で動くので、それらを全部解放した後の一番最後に呼ぶ
+	CoUninitialize();
 }

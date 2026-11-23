@@ -21,8 +21,12 @@ class MaskedOutlineEffect : public BaseFilterEffect
 {
 public:
 	/// <summary>
-	/// 専用ルートシグネチャ（color t0 + depth t1 + idMask t2 + cbuffer b0）でパイプラインを作成。
+	/// 専用ルートシグネチャ（color t0 + depth t1 + idMask t2 + cbuffer b0）で MaskedOutlineNormal.PS のパイプラインと定数バッファを作成。
 	/// </summary>
+	/// <param name="dxCore">DirectXCoreへのポインタ</param>
+	/// <param name="maskedOutlineRootSignature">MaskedOutline 専用ルートシグネチャ（[0]=t0、[1]=t1、[2]=t2、[3]=b0、s0=linear、s1=point）</param>
+	/// <param name="basePsoDesc">共通のパイプラインステート設定</param>
+	/// <param name="idMaskRT">ID マスク RT（PostEffect 所有。t2 にバインドされる）</param>
 	void InitializeMaskedOutline(
 		DirectXCore* dxCore,
 		ID3D12RootSignature* maskedOutlineRootSignature,
@@ -30,36 +34,75 @@ public:
 		RenderTexture* idMaskRT
 	);
 
-	// 通常の Initialize はダミー（別経路で初期化する）
+	/// <summary>Base 経由でも呼べるようにしたダミー実装（未使用。初期化は InitializeMaskedOutline）</summary>
+	/// <param name="dxCore">未使用</param>
+	/// <param name="copyRootSignature">未使用</param>
+	/// <param name="effectRootSignature">未使用</param>
+	/// <param name="basePsoDesc">未使用</param>
 	void Initialize(
-		DirectXCore* /*dxCore*/,
-		ID3D12RootSignature* /*copyRootSignature*/,
-		ID3D12RootSignature* /*effectRootSignature*/,
-		const D3D12_GRAPHICS_PIPELINE_STATE_DESC& /*basePsoDesc*/
+		[[maybe_unused]] DirectXCore* dxCore,
+		[[maybe_unused]] ID3D12RootSignature* copyRootSignature,
+		[[maybe_unused]] ID3D12RootSignature* effectRootSignature,
+		[[maybe_unused]] const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc
 	) override {}
 
+	/// <summary>射影逆行列・色・重み・閾値・点滅の設定を定数バッファへ書き込む（最低強度は 0〜1 に切り詰める）</summary>
 	void UpdateConstantBuffer() override;
+	/// <summary>色・重み・閾値・点滅の設定を ImGui で編集する</summary>
 	void ShowImGui() override;
+	/// <summary>色・重み・閾値・点滅の設定を既定値に戻す（時間は戻さない）</summary>
 	void ResetParams() override;
 
+	/// <summary>エフェクト名を返す</summary>
+	/// <returns>"MaskedOutline"</returns>
 	std::string GetName() const override { return "MaskedOutline"; }
+	/// <summary>定数バッファを使う</summary>
+	/// <returns>常に true</returns>
 	bool NeedsCBuffer() const override { return true; }
-	bool NeedsDepth() const override { return true; }        // 深度遷移＋射影行列伝播に乗せる
-	bool NeedsMaskTexture() const override { return true; }  // idMaskRT のポインタ保持用
+	/// <summary>深度遷移＋射影行列伝播に乗せる（深度は専用ルートシグネチャの t1）</summary>
+	/// <returns>常に true</returns>
+	bool NeedsDepth() const override { return true; }
+	/// <summary>ID マスクを使う（PostEffect は専用の分岐で t2 にバインドする）</summary>
+	/// <returns>常に true</returns>
+	bool NeedsMaskTexture() const override { return true; }
+	/// <summary>t2 にバインドする ID マスク RT の SRV インデックスを返す</summary>
+	/// <returns>SRV インデックス。idMaskRT が無ければ 0</returns>
 	uint32_t GetMaskTextureSRVIndex() const override;
 
+	/// <summary>射影行列の逆行列を保持する（深度から視空間の位置を戻すのに使う）</summary>
+	/// <param name="projection">カメラの射影行列</param>
 	void SetProjectionMatrix(const Matrix4x4& projection) override;
 
 	// ===== 専用パラメータ設定 =====
+	/// <summary>ID マスク 1（炎状態）のアウトライン色を設定する</summary>
+	/// <param name="c">色（RGBA）</param>
 	void SetFireColor(const Vector4& c) { colorFire_ = c; }
+	/// <summary>ID マスク 2（氷状態）のアウトライン色を設定する</summary>
+	/// <param name="c">色（RGBA）</param>
 	void SetIceColor(const Vector4& c) { colorIce_ = c; }
+	/// <summary>点滅に使う経過時間を設定する（毎フレーム外部から渡す）</summary>
+	/// <param name="t">経過時間 [秒]</param>
 	void SetTime(float t) { time_ = t; }
+	/// <summary>点滅の速さを設定する</summary>
+	/// <param name="v">点滅の周波数 [Hz]</param>
 	void SetBlinkHz(float v) { blinkHz_ = v; }
+	/// <summary>点滅で一番暗くなるときの強さを設定する</summary>
+	/// <param name="v">最低強度（0〜1）</param>
 	void SetMinIntensity(float v) { minIntensity_ = v; }
+	/// <summary>深度差のエッジの重みを設定する</summary>
+	/// <param name="v">重み</param>
 	void SetDepthWeight(float v) { depthWeight_ = v; }
+	/// <summary>法線差のエッジの重みを設定する</summary>
+	/// <param name="v">重み</param>
 	void SetNormalWeight(float v) { normalWeight_ = v; }
+	/// <summary>深度差のエッジとみなす閾値を設定する</summary>
+	/// <param name="v">閾値</param>
 	void SetDepthThreshold(float v) { depthThreshold_ = v; }
+	/// <summary>法線差のエッジとみなす閾値を設定する</summary>
+	/// <param name="v">閾値</param>
 	void SetNormalThreshold(float v) { normalThreshold_ = v; }
+	/// <summary>エッジ全体の強さを設定する</summary>
+	/// <param name="v">強さ</param>
 	void SetEdgeStrength(float v) { edgeStrength_ = v; }
 
 private:

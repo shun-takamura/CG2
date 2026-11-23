@@ -1,4 +1,5 @@
 #include "FlightUnitPart.h"
+#include "Score/GameSession.h"
 
 #include "FlightUnitAssault.h"
 #include "FlightUnitGuard.h"
@@ -11,6 +12,7 @@
 #include "SpriteManager.h"
 #include "SoundManager.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include <algorithm>
@@ -23,20 +25,31 @@
 #endif
 
 namespace {
+	// Y の回転の cos がこれ以下なら ±90° とみなして Z を 0 にする
+	constexpr float kMinCosPitch = 1e-6f;
+	// クールタイムの下限 [秒]（0 で割らないように）
+	constexpr float kMinCooldownSeconds = 1e-3f;
+	// 調整値の JSON を書き出すときの字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
+
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/FlightUnit.json";
 	constexpr const char* kBackpackDir = "Resources/Models/Weapons/FlightUnit/Backpack/Export";
 	constexpr const char* kBackpackFile = "FlightUnitBackpack.mesh";
 
-	// MakeAffineMatrix の回転（Rx·Ry·Rz。エンジンの QuaternionFromEuler / EulerFromQuaternion は逆の Rz·Ry·Rx なので使えない）
-	// の行列からオイラー角を取り出す。Y が ±90° の所では Z を 0 にする
+	/// <summary>MakeAffineMatrix の回転（Rx·Ry·Rz）の行列からオイラー角を取り出す（エンジンの QuaternionFromEuler / EulerFromQuaternion は逆の Rz·Ry·Rx なので使えない）。Y が ±90° の所では Z を 0 にする</summary>
+	/// <param name="m">回転の行列</param>
+	/// <returns>オイラー角 [ラジアン]</returns>
 	Vector3 EulerXYZFromMatrix(const Matrix4x4& m) {
 		const float cosY = std::sqrt(m.m[0][0] * m.m[0][0] + m.m[0][1] * m.m[0][1]);
 		const float y = std::atan2(-m.m[0][2], cosY);
-		if (cosY > 1e-6f) return { std::atan2(m.m[1][2], m.m[2][2]), y, std::atan2(m.m[0][1], m.m[0][0]) };
+		if (cosY > kMinCosPitch) return { std::atan2(m.m[1][2], m.m[2][2]), y, std::atan2(m.m[0][1], m.m[0][0]) };
 		return { std::atan2(-m.m[2][1], m.m[1][1]), y, 0.0f };
 	}
 
-	// 自分のローカルの軸まわりに回す。クォータニオンで掛け合わせてからオイラー角へ戻す（オイラー角を直接いじるとジンバルロックで回せない向きができる）
+	/// <summary>自分のローカルの軸まわりに回す。クォータニオンで掛け合わせてからオイラー角へ戻す（オイラー角を直接いじるとジンバルロックで回せない向きができる）</summary>
+	/// <param name="rotate">回すオイラー角 [ラジアン]（書き換える）</param>
+	/// <param name="axis">ローカルの回転軸</param>
+	/// <param name="radians">回す角度 [ラジアン]</param>
 	void RotateLocal(Vector3& rotate, const Vector3& axis, float radians) {
 		const Quaternion current = Multiply(Multiply(MakeRotateAxisAngleQuaternion({ 1.0f, 0.0f, 0.0f }, rotate.x),
 			MakeRotateAxisAngleQuaternion({ 0.0f, 1.0f, 0.0f }, rotate.y)), MakeRotateAxisAngleQuaternion({ 0.0f, 0.0f, 1.0f }, rotate.z));
@@ -64,7 +77,7 @@ void FlightUnitSkill::GetCameraBasis(Vector3& right, Vector3& up, Vector3& forwa
 void FlightUnitSkill::ReadLevels(const JsonValue& node, const char* key, float (&v)[3]) {
 	const JsonValue& a = node[key];
 	if (!a.IsArray()) return;
-	for (size_t i = 0; i < 3 && i < a.Size(); ++i) {
+	for (size_t i = 0; i < kMaxLevel && i < a.Size(); ++i) {
 		v[i] = static_cast<float>(a[i].AsDouble(v[i]));
 	}
 }
@@ -84,33 +97,19 @@ void FlightUnitSkill::DragLevels(const char* label, float (&v)[3], float speed, 
 }
 
 void FlightUnitSkill::ReadVec4(const JsonValue& node, const char* key, Vector4& v) {
-	const JsonValue& a = node[key];
-	if (!a.IsArray() || a.Size() < 4) return;
-	v = { static_cast<float>(a[0].AsDouble(v.x)), static_cast<float>(a[1].AsDouble(v.y)),
-		static_cast<float>(a[2].AsDouble(v.z)), static_cast<float>(a[3].AsDouble(v.w)) };
+	v = ReadVector4(node[key], v);
 }
 
 void FlightUnitSkill::WriteVec4(JsonValue& node, const char* key, const Vector4& v) {
-	JsonValue a = JsonValue::MakeArray();
-	a.Push(JsonValue(static_cast<double>(v.x)));
-	a.Push(JsonValue(static_cast<double>(v.y)));
-	a.Push(JsonValue(static_cast<double>(v.z)));
-	a.Push(JsonValue(static_cast<double>(v.w)));
-	node[key] = std::move(a);
+	node[key] = MakeVector4(v);
 }
 
 void FlightUnitSkill::ReadVec3(const JsonValue& node, const char* key, Vector3& v) {
-	const JsonValue& a = node[key];
-	if (!a.IsArray() || a.Size() < 3) return;
-	v = { static_cast<float>(a[0].AsDouble(v.x)), static_cast<float>(a[1].AsDouble(v.y)), static_cast<float>(a[2].AsDouble(v.z)) };
+	v = ReadVector3(node[key], v);
 }
 
 void FlightUnitSkill::WriteVec3(JsonValue& node, const char* key, const Vector3& v) {
-	JsonValue a = JsonValue::MakeArray();
-	a.Push(JsonValue(static_cast<double>(v.x)));
-	a.Push(JsonValue(static_cast<double>(v.y)));
-	a.Push(JsonValue(static_cast<double>(v.z)));
-	node[key] = std::move(a);
+	node[key] = MakeVector3(v);
 }
 
 void FlightUnitSkill::ReadTransform(const JsonValue& node, Transform& t) {
@@ -222,7 +221,7 @@ FlightUnitSkill* FlightUnitPart::Current() const {
 
 void FlightUnitPart::SyncLoadout() {
 	if (FlightUnitSkill* s = Current(); s && s->IsActive()) s->Cancel(true);
-	const LoadoutState* loadout = LoadoutState::GetInstance();
+	const LoadoutState* loadout = host_->GetGameSession()->GetLoadoutState();
 	kind_ = loadout->GetFlightUnit();
 	for (size_t i = 0; i < skills_.size(); ++i) {
 		if (skills_[i]) skills_[i]->SetLevel(loadout->GetFlightUnitLevel(static_cast<FlightUnitKind>(i)));
@@ -317,7 +316,7 @@ void FlightUnitPart::DrawUI() {
 	if (s->IsActive()) {
 		ratio = s->GetActiveRatio();
 	} else if (cooldownTimer_ > 0.0f) {
-		const float cd = (std::max)(s->GetCooldown(), 1e-3f);
+		const float cd = (std::max)(s->GetCooldown(), kMinCooldownSeconds);
 		ratio = 1.0f - cooldownTimer_ / cd;
 		fg.w = c.w * barCoolingAlpha_;
 	} else if (readyPulse_ > 0.0f && readyPulseDuration_ > 0.0f) {
@@ -440,12 +439,12 @@ void FlightUnitPart::SaveTuning() const {
 		std::error_code ec;
 		std::filesystem::create_directories(p.parent_path(), ec);
 	}
-	JsonWriter::WriteFile(kTuningPath, root, { true, 2 });
+	JsonWriter::WriteFile(kTuningPath, root, { true, kJsonIndentWidth });
 }
 
 void FlightUnitPart::OnImGui() {
 #ifdef _DEBUG
-	if (LoadoutState::GetInstance()->OnImGui()) SyncLoadout();
+	if (host_->GetGameSession()->GetLoadoutState()->OnImGui()) SyncLoadout();
 	if (const FlightUnitSkill* s = Current()) {
 		ImGui::Text("Equipped: %s  Active: %s  Cooldown: %.1f / %.1f", LoadoutState::GetFlightUnitName(kind_),
 			s->IsActive() ? "yes" : "no", cooldownTimer_, s->GetCooldown());

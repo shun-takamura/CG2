@@ -9,13 +9,98 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 待機中の灯りの明るさの初期値
+	constexpr float kDefaultIdleLightLevel = 0.25f;
+	// 表示板が LOCKED になる時刻の初期値 [秒]
+	constexpr float kDefaultLockTime = 0.15f;
+	// 表示板を消し始める時刻の初期値 [秒]
+	constexpr float kDefaultSignHideTime = 0.75f;
+	// 表示板がチカチカして消える長さの初期値 [秒]
+	constexpr float kDefaultSignHideSeconds = 0.2f;
+	// 灯りが点き始める時刻の初期値 [秒]
+	constexpr float kDefaultLightsOnTime = 0.25f;
+	// 灯りがチカチカして点き切る長さの初期値 [秒]
+	constexpr float kDefaultLightsOnSeconds = 0.6f;
+	// 六角形が広がり切る長さの初期値 [秒]
+	constexpr float kDefaultHexSeconds = 1.4f;
+	// メニューが出始める時刻の初期値 [秒]
+	constexpr float kDefaultMenuTime = 1.1f;
+	// メニューが出てから入力を受け付けるまでの初期値 [秒]
+	constexpr float kDefaultInputDelay = 0.15f;
+	// UI がたたまれる長さの初期値 [秒]
+	constexpr float kDefaultCollapseSeconds = 0.4f;
+	// 六角形が閉じ始める時刻の初期値 [秒]
+	constexpr float kDefaultHexCloseStartTime = 0.3f;
+	// 六角形が閉じ切る長さの初期値 [秒]
+	constexpr float kDefaultHexCloseSeconds = 0.6f;
+	// シャットダウンで表示板を出す時刻の初期値 [秒]
+	constexpr float kDefaultSignShowTime = 0.9f;
+	// 灯りが落ち始める時刻の初期値 [秒]
+	constexpr float kDefaultLightsOffTime = 0.9f;
+	// 灯りが落ち切る長さの初期値 [秒]
+	constexpr float kDefaultLightsOffSeconds = 0.3f;
+	// シャットダウンが終わる時刻の初期値 [秒]
+	constexpr float kDefaultShutdownEndTime = 1.3f;
+	// 到着で灯りが点き始める時刻の初期値 [秒]
+	constexpr float kDefaultArriveLightsOnTime = 0.4f;
+	// 到着で LOCKED を出す時刻の初期値 [秒]
+	constexpr float kDefaultArriveSignTime = 0.7f;
+	// 到着で待機の明るさへ落ち始める時刻の初期値 [秒]
+	constexpr float kDefaultArriveLightsDownTime = 1.5f;
+	// 到着が終わる時刻の初期値 [秒]
+	constexpr float kDefaultArriveEndTime = 1.9f;
+	// チカチカ：最初に点く区間の終わり（進み 0〜1）
+	constexpr float kFlickerFirstOnEnd = 0.10f;
+	// チカチカ：最初に点く明るさ
+	constexpr float kFlickerFirstOnLevel = 0.7f;
+	// チカチカ：消える区間の終わり（進み 0〜1）
+	constexpr float kFlickerOffEnd = 0.22f;
+	// チカチカ：少し点く区間の終わり（進み 0〜1）
+	constexpr float kFlickerSecondOnEnd = 0.30f;
+	// チカチカ：少し点く明るさ
+	constexpr float kFlickerSecondOnLevel = 0.9f;
+	// チカチカ：消えかける区間の終わり＝点き切り始める進み（0〜1）
+	constexpr float kFlickerDimEnd = 0.45f;
+	// チカチカ：消えかける明るさ
+	constexpr float kFlickerDimLevel = 0.15f;
+	// チカチカ：だんだん点き切り始める明るさ
+	constexpr float kFlickerRiseStartLevel = 0.5f;
+	// チカチカ：だんだん点き切る間に上がる明るさの幅
+	constexpr float kFlickerRiseRange = 0.5f;
+	// チカチカ：だんだん点き切る区間の長さ（進み 0〜1）
+	constexpr float kFlickerRiseSpan = 0.55f;
+	// 起動で待機の灯りが落ち切る長さ [秒]
+	constexpr float kIdleLightDropSeconds = 0.15f;
+	// 時間の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinSeconds = 1e-4f;
+	// 背景がチカチカして出る長さ [秒]
+	constexpr float kBackgroundFlickerSeconds = 0.25f;
+	// メニューを出し切った状態にするための十分先の時刻 [秒]
+	constexpr float kMenuFullyShownTime = 1000.0f;
+	// 灯りが落ちる途中で点き直す区間の始まり（進み 0〜1）
+	constexpr float kBlinkStart = 0.35f;
+	// 灯りが落ちる途中で点き直す区間の終わり（進み 0〜1）
+	constexpr float kBlinkEnd = 0.5f;
+	// 点き直す区間で明るさを引く割合
+	constexpr float kBlinkDim = 0.4f;
+
+	/// <summary>0〜1 に切る</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 の値</returns>
 	float Clamp01(float t) {
 		return std::clamp(t, 0.0f, 1.0f);
 	}
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float t) {
 		t = Clamp01(t);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
 
 	// 線形の上げ下げ：rise の間に 0→1、hold の間 1、fall の間に 1→0
@@ -27,28 +112,28 @@ CockpitReveal::CockpitReveal() {
 
 void CockpitReveal::ResetToDefaults() {
 	// フェーズと時刻は触らない（ImGui から再生中に戻しても止まらない）
-	idleLightLevel_ = 0.25f;
-	lockTime_ = 0.15f;
-	signHideTime_ = 0.75f;
-	signHideSeconds_ = 0.2f;
-	lightsOnTime_ = 0.25f;
-	lightsOnSeconds_ = 0.6f;
+	idleLightLevel_ = kDefaultIdleLightLevel;
+	lockTime_ = kDefaultLockTime;
+	signHideTime_ = kDefaultSignHideTime;
+	signHideSeconds_ = kDefaultSignHideSeconds;
+	lightsOnTime_ = kDefaultLightsOnTime;
+	lightsOnSeconds_ = kDefaultLightsOnSeconds;
 	hexStartTime_ = 1.0f;
-	hexSeconds_ = 1.4f;
+	hexSeconds_ = kDefaultHexSeconds;
 	backgroundTime_ = 1.0f;
-	menuTime_ = 1.1f;
-	inputDelay_ = 0.15f;
-	collapseSeconds_ = 0.4f;
-	hexCloseStartTime_ = 0.3f;
-	hexCloseSeconds_ = 0.6f;
-	signShowTime_ = 0.9f;
-	lightsOffTime_ = 0.9f;
-	lightsOffSeconds_ = 0.3f;
-	shutdownEndTime_ = 1.3f;
-	arriveLightsOnTime_ = 0.4f;
-	arriveSignTime_ = 0.7f;
-	arriveLightsDownTime_ = 1.5f;
-	arriveEndTime_ = 1.9f;
+	menuTime_ = kDefaultMenuTime;
+	inputDelay_ = kDefaultInputDelay;
+	collapseSeconds_ = kDefaultCollapseSeconds;
+	hexCloseStartTime_ = kDefaultHexCloseStartTime;
+	hexCloseSeconds_ = kDefaultHexCloseSeconds;
+	signShowTime_ = kDefaultSignShowTime;
+	lightsOffTime_ = kDefaultLightsOffTime;
+	lightsOffSeconds_ = kDefaultLightsOffSeconds;
+	shutdownEndTime_ = kDefaultShutdownEndTime;
+	arriveLightsOnTime_ = kDefaultArriveLightsOnTime;
+	arriveSignTime_ = kDefaultArriveSignTime;
+	arriveLightsDownTime_ = kDefaultArriveLightsDownTime;
+	arriveEndTime_ = kDefaultArriveEndTime;
 }
 
 void CockpitReveal::Reset() {
@@ -85,11 +170,11 @@ float CockpitReveal::Flicker(float t, float seconds) {
 	if (seconds <= 0.0f || t >= seconds) return 1.0f;
 	// 点く → 消える → 少し点く → 消えかける → だんだん点き切る
 	const float u = t / seconds;
-	if (u < 0.10f) return 0.7f;
-	if (u < 0.22f) return 0.0f;
-	if (u < 0.30f) return 0.9f;
-	if (u < 0.45f) return 0.15f;
-	return 0.5f + 0.5f * SmoothStep01((u - 0.45f) / 0.55f);
+	if (u < kFlickerFirstOnEnd) return kFlickerFirstOnLevel;
+	if (u < kFlickerOffEnd) return 0.0f;
+	if (u < kFlickerSecondOnEnd) return kFlickerSecondOnLevel;
+	if (u < kFlickerDimEnd) return kFlickerDimLevel;
+	return kFlickerRiseStartLevel + kFlickerRiseRange * SmoothStep01((u - kFlickerDimEnd) / kFlickerRiseSpan);
 }
 
 CockpitReveal::State CockpitReveal::Evaluate() const {
@@ -105,10 +190,10 @@ CockpitReveal::State CockpitReveal::Evaluate() const {
 		// 六角形が広がる前に消す（点くときのチカチカを裏返して消える）
 		s.signAlpha = 1.0f - Flicker(t - signHideTime_, signHideSeconds_);
 		// 閉じ切りで一度落ちて、チカチカしながら点く
-		const float idle = idleLightLevel_ * (1.0f - SmoothStep01(t / 0.15f));
+		const float idle = idleLightLevel_ * (1.0f - SmoothStep01(t / kIdleLightDropSeconds));
 		s.lightLevel = (std::max)(idle, Flicker(t - lightsOnTime_, lightsOnSeconds_));
-		s.reveal = SmoothStep01((t - hexStartTime_) / (std::max)(hexSeconds_, 1e-4f));
-		s.backgroundAlpha = Flicker(t - backgroundTime_, 0.25f);
+		s.reveal = SmoothStep01((t - hexStartTime_) / (std::max)(hexSeconds_, kMinSeconds));
+		s.backgroundAlpha = Flicker(t - backgroundTime_, kBackgroundFlickerSeconds);
 		s.menuTime = t - menuTime_;
 		s.inputEnabled = t >= menuTime_ + inputDelay_;
 		break;
@@ -117,16 +202,16 @@ CockpitReveal::State CockpitReveal::Evaluate() const {
 	case Phase::ShuttingDown:
 	case Phase::Off: {
 		const float t = (phase_ == Phase::Off) ? shutdownEndTime_ : time_;
-		s.collapse = Clamp01(t / (std::max)(collapseSeconds_, 1e-4f));
+		s.collapse = Clamp01(t / (std::max)(collapseSeconds_, kMinSeconds));
 		s.backgroundAlpha = 1.0f;
-		s.menuTime = 1000.0f;   // メニューは出し切った状態のまま潰す
-		s.reveal = 1.0f - SmoothStep01((t - hexCloseStartTime_) / (std::max)(hexCloseSeconds_, 1e-4f));
+		s.menuTime = kMenuFullyShownTime;   // メニューは出し切った状態のまま潰す
+		s.reveal = 1.0f - SmoothStep01((t - hexCloseStartTime_) / (std::max)(hexCloseSeconds_, kMinSeconds));
 		// ハッチはまだ閉じているので LOCKED のまま。外を映す壁が戻ったら出す（UNLOCK はハッチが開くとき）
 		s.signLocked = true;
 		s.signAlpha = Flicker(t - signShowTime_, signHideSeconds_);
 		// 落ちる途中で一度だけ点き直す
-		const float off = Clamp01((t - lightsOffTime_) / (std::max)(lightsOffSeconds_, 1e-4f));
-		const float blink = (off > 0.35f && off < 0.5f) ? 0.4f : 0.0f;
+		const float off = Clamp01((t - lightsOffTime_) / (std::max)(lightsOffSeconds_, kMinSeconds));
+		const float blink = (off > kBlinkStart && off < kBlinkEnd) ? kBlinkDim : 0.0f;
 		s.lightLevel = (std::max)(idleLightLevel_, 1.0f - off) * (1.0f - blink);
 		break;
 	}
@@ -140,11 +225,11 @@ CockpitReveal::State CockpitReveal::Evaluate() const {
 		s.signLocked = true;
 		s.signAlpha = Flicker(t - arriveSignTime_, signHideSeconds_);
 		const float on = Flicker(t - arriveLightsOnTime_, lightsOnSeconds_);
-		const float off = Clamp01((t - arriveLightsDownTime_) / (std::max)(lightsOffSeconds_, 1e-4f));
-		const float blink = (off > 0.35f && off < 0.5f) ? 0.4f : 0.0f;
+		const float off = Clamp01((t - arriveLightsDownTime_) / (std::max)(lightsOffSeconds_, kMinSeconds));
+		const float blink = (off > kBlinkStart && off < kBlinkEnd) ? kBlinkDim : 0.0f;
 		s.lightLevel = (std::min)(on, (std::max)(idleLightLevel_, 1.0f - off) * (1.0f - blink));
 		// 外の光も真っ暗の間は 0（閉じたコクピットの壁をうっすら照らさない）
-		s.sunScale = SmoothStep01((t - arriveLightsOnTime_) / (std::max)(lightsOnSeconds_, 1e-4f));
+		s.sunScale = SmoothStep01((t - arriveLightsOnTime_) / (std::max)(lightsOnSeconds_, kMinSeconds));
 		break;
 	}
 	}

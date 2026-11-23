@@ -20,6 +20,17 @@ namespace {
 	constexpr UINT kThreadGroupSize = 8; // RippleSimulation.CS.hlsl の numthreads と合わせる
 	constexpr D3D12_RESOURCE_STATES kReadState =
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	// 高さを持つテクスチャの数（前の状態と次の状態を入れ替えて使う）
+	constexpr uint32_t kTextureCount = 2;
+	// シミュレーションする範囲の一辺の下限 [m]（0 割りを防ぐ）
+	constexpr float kMinSimSize = 0.01f;
+	// 1 テクセルの大きさの下限 [m]（0 割りを防ぐ）
+	constexpr float kMinTexelSize = 1e-4f;
+	// 波の係数 (c·Δt/Δx)² の上限（0.5 以上で発散するので手前で止める）
+	constexpr float kMaxWaveFactor = 0.45f;
+	// 縁で波を吸収する幅（範囲に対する割合）の下限と上限
+	constexpr float kMinEdgeFade = 0.001f;
+	constexpr float kMaxEdgeFade = 0.5f;
 }
 
 RippleSimulation::~RippleSimulation()
@@ -30,7 +41,7 @@ RippleSimulation::~RippleSimulation()
 void RippleSimulation::FreeDescriptors()
 {
 	if (!srvManager_) return;
-	for (uint32_t i = 0; i < 2; ++i) {
+	for (uint32_t i = 0; i < kTextureCount; ++i) {
 		if (srvIndices_[i] != UINT32_MAX) {
 			srvManager_->Free(srvIndices_[i]);
 			srvIndices_[i] = UINT32_MAX;
@@ -74,7 +85,7 @@ void RippleSimulation::CreateTextures()
 	D3D12_HEAP_PROPERTIES heap{};
 	heap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
-	for (uint32_t i = 0; i < 2; ++i) {
+	for (uint32_t i = 0; i < kTextureCount; ++i) {
 		states_[i] = kReadState;
 		HRESULT hr = dxCore_->GetDevice()->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
 			states_[i], nullptr, IID_PPV_ARGS(&textures_[i]));
@@ -153,7 +164,7 @@ void RippleSimulation::AddImpulse(const Vector3& position, float radius, float s
 {
 	if (impulseCount_ >= kMaxImpulsesPerFrame) return;
 	// 範囲の外は枠を使わない（スクロール時は Dispatch で範囲が少し動くので、そこでもう一度確かめる）
-	const float size = (std::max)(settings_.simSize, 0.01f);
+	const float size = (std::max)(settings_.simSize, kMinSimSize);
 	const Vector2 uv{ (position.x - center_.x) / size + 0.5f, (position.z - center_.y) / size + 0.5f };
 	if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) return;
 	pendingImpulses_[impulseCount_++] = { { position.x, position.z }, radius, strength };
@@ -161,7 +172,7 @@ void RippleSimulation::AddImpulse(const Vector3& position, float radius, float s
 
 uint32_t RippleSimulation::BuildImpulses(Impulse* out) const
 {
-	const float size = (std::max)(settings_.simSize, 0.01f);
+	const float size = (std::max)(settings_.simSize, kMinSimSize);
 	const Vector2& center = GetCenter();
 	uint32_t count = 0;
 	for (uint32_t i = 0; i < impulseCount_; ++i) {
@@ -218,8 +229,8 @@ void RippleSimulation::Dispatch()
 		if (clearRequested_) {
 			gridCenter_ = center_;
 		} else {
-			const float texelX = std::round((center_.x - gridCenter_.x) / (std::max)(dx, 1e-4f));
-			const float texelZ = std::round((center_.y - gridCenter_.y) / (std::max)(dx, 1e-4f));
+			const float texelX = std::round((center_.x - gridCenter_.x) / (std::max)(dx, kMinTexelSize));
+			const float texelZ = std::round((center_.y - gridCenter_.y) / (std::max)(dx, kMinTexelSize));
 			const float limit = static_cast<float>(kResolution);
 			if (std::abs(texelX) >= limit || std::abs(texelZ) >= limit) {
 				// 範囲より大きく飛んだ（シーク等）。残る波が無いので消してそこから始める
@@ -235,8 +246,8 @@ void RippleSimulation::Dispatch()
 	}
 
 	// k = (c·Δt/Δx)²。0.5 以上だと発散するので手前で止める
-	const float courant = settings_.waveSpeed * step / (std::max)(dx, 1e-4f);
-	const float waveFactor = (std::min)(courant * courant, 0.45f);
+	const float courant = settings_.waveSpeed * step / (std::max)(dx, kMinTexelSize);
+	const float waveFactor = (std::min)(courant * courant, kMaxWaveFactor);
 
 	cmd->SetComputeRootSignature(rootSignature_.Get());
 	cmd->SetPipelineState(pipelineState_.Get());
@@ -246,7 +257,7 @@ void RippleSimulation::Dispatch()
 		SimParamsForGPU& p = *paramsData_[s];
 		p.waveFactor = waveFactor;
 		p.damping = std::clamp(settings_.damping, 0.0f, 1.0f);
-		p.edgeFade = std::clamp(settings_.edgeFade, 0.001f, 0.5f);
+		p.edgeFade = std::clamp(settings_.edgeFade, kMinEdgeFade, kMaxEdgeFade);
 		p.resolution = kResolution;
 		p.clear = (s == 0 && clearRequested_) ? 1u : 0u;
 		// 波源とずらしは最初の刻みにだけ入れる

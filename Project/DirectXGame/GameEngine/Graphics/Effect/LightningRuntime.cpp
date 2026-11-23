@@ -1,6 +1,11 @@
 #include "LightningRuntime.h"
 #include "Primitive/PrimitivePipeline.h"
 
+namespace {
+    // フェードを始める寿命の半分がこれ以下ならフェードしない [秒]
+    constexpr float kMinHalfLife = 0.0001f;
+}
+
 void LightningRuntime::Initialize(const PrimitiveGenerator::LightningBoltParams& templateParams,
                                   const std::string& texturePath,
                                   int blendMode) {
@@ -38,7 +43,7 @@ void LightningRuntime::Regenerate(BoltState& bolt) {
     p.randomSeed = 0;
 
     bolt.renderer = std::make_unique<EffectPrimitiveRenderer>();
-    bolt.renderer->Initialize(7 /*Lightning*/, texturePath_, {}, {}, {}, {}, p);
+    bolt.renderer->Initialize(EffectMeshType::Lightning, texturePath_, {}, {}, {}, {}, p);
     bolt.renderer->SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(blendMode_));
     bolt.renderer->SetViewAngleFadePower(viewAngleFadePower_);
     bolt.initialized = true;
@@ -71,7 +76,7 @@ void LightningRuntime::Draw() {
             // ※ Update で color CB を毎フレ更新しているので、ここでは SetColor で被せても OK
             float halfLife = boltLifetime_ * 0.5f;
             float fade = 1.0f;
-            if (halfLife > 0.0001f && bolt.remaining < halfLife) {
+            if (halfLife > kMinHalfLife && bolt.remaining < halfLife) {
                 fade = bolt.remaining / halfLife;
                 if (fade < 0.0f) fade = 0.0f;
             }

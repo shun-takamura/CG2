@@ -8,7 +8,14 @@
 #include "CrashHandler.h"
 
 namespace {
-    // カテゴリ → ファイル名 / レコード上の表記
+    // 1 秒のミリ秒数
+    constexpr int kMsPerSecond = 1000;
+    // 時刻のミリ秒の桁数
+    constexpr int kMillisecondDigits = 3;
+
+    /// <summary>カテゴリの出力ファイル名</summary>
+    /// <param name="c">カテゴリ</param>
+    /// <returns>ファイル名（"input.log" 等）</returns>
     const char* CategoryFileName(SessionLogger::Category c) {
         switch (c) {
         case SessionLogger::Category::Input:   return "input.log";
@@ -22,6 +29,9 @@ namespace {
         }
     }
 
+    /// <summary>レコードに書くカテゴリの表記</summary>
+    /// <param name="c">カテゴリ</param>
+    /// <returns>表記（"INPUT" 等）</returns>
     const char* CategoryTag(SessionLogger::Category c) {
         switch (c) {
         case SessionLogger::Category::Input:   return "INPUT";
@@ -35,6 +45,9 @@ namespace {
         }
     }
 
+    /// <summary>レコードに書くレベルの表記</summary>
+    /// <param name="l">レベル</param>
+    /// <returns>表記（"INFO" 等）</returns>
     const char* LevelTag(SessionLogger::Level l) {
         switch (l) {
         case SessionLogger::Level::Critical: return "CRITICAL";
@@ -47,23 +60,25 @@ namespace {
         }
     }
 
-    // HH:MM:SS.mmm
+    /// <summary>今の時刻をレコード用の文字列にする</summary>
+    /// <returns>HH:MM:SS.mmm</returns>
     std::string TimeStamp() {
         const auto now = std::chrono::system_clock::now();
         const auto t = std::chrono::system_clock::to_time_t(now);
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now.time_since_epoch()) % 1000;
+            now.time_since_epoch()) % kMsPerSecond;
 
         std::tm lt;
         localtime_s(&lt, &t);
 
         std::ostringstream oss;
         oss << std::put_time(&lt, "%H:%M:%S")
-            << '.' << std::setfill('0') << std::setw(3) << ms.count();
+            << '.' << std::setfill('0') << std::setw(kMillisecondDigits) << ms.count();
         return oss.str();
     }
 
-    // YYYY-MM-DD_HHMMSS
+    /// <summary>今の時刻をセッションフォルダ名用の文字列にする</summary>
+    /// <returns>YYYY-MM-DD_HHMMSS</returns>
     std::string FolderStamp() {
         const auto now = std::chrono::system_clock::now();
         const auto t = std::chrono::system_clock::to_time_t(now);
@@ -75,9 +90,9 @@ namespace {
     }
 }
 
-SessionLogger& SessionLogger::Instance() {
+SessionLogger* SessionLogger::GetInstance() {
     static SessionLogger instance;
-    return instance;
+    return &instance;
 }
 
 SessionLogger::~SessionLogger() {

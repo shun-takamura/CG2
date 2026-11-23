@@ -27,6 +27,10 @@ namespace {
 		{ -1.0f, -1.0f }, { -1.0f, 1.0f }, { 1.0f, 1.0f },
 		{ -1.0f, -1.0f }, { 1.0f, 1.0f }, { 1.0f, -1.0f },
 	};
+	// ノイズの精度を保つために経過時間を巻き戻す周期 [秒]
+	constexpr float kTimeWrapSeconds = 1000.0f;
+	// 板の範囲に足す、縁のにじみの分の余白（ローカル単位）
+	constexpr float kQuadEdgeBleedMargin = 0.05f;
 }
 
 void BeamShieldRenderer::Initialize(DirectXCore* dxCore)
@@ -149,7 +153,7 @@ void BeamShieldRenderer::Update(float deltaTime)
 {
 	time_ += deltaTime;
 	// 長く起動していてもノイズの精度が落ちないよう巻き戻す（1000 秒に 1 度、縁と筋が一瞬入れ替わるだけ）
-	if (time_ > 1000.0f) time_ -= 1000.0f;
+	if (time_ > kTimeWrapSeconds) time_ -= kTimeWrapSeconds;
 	flash_ *= std::exp(-appearance_.flashDecay * deltaTime);
 }
 
@@ -164,7 +168,7 @@ void BeamShieldRenderer::DrawImpl(const Camera& camera, bool bloomPass)
 	TransformForGPU& t = bloomPass ? *bloomTransformData_ : *transformData_;
 	t.WVP = Multiply(world_, camera.GetViewProjectionMatrix());
 	// 形の外側に、縁のゆらぎ（被弾の光りで広がる分も）と縁のにじみの余白を取る
-	const float margin = a.edgeNoiseAmp * (1.0f + a.flashEdgeNoise) + a.edgeWidth + 0.05f;
+	const float margin = a.edgeNoiseAmp * (1.0f + a.flashEdgeNoise) + a.edgeWidth + kQuadEdgeBleedMargin;
 	t.quadRect[0] = -a.halfWidth - margin;
 	t.quadRect[1] = a.bottomY * a.halfHeight - margin;
 	t.quadRect[2] = a.halfWidth + margin;

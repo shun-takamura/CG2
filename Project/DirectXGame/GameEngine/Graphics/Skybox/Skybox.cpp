@@ -2,6 +2,10 @@
 #include "SkyboxManager.h"
 #include "PepperMacros.h"
 #include "Cloud/CloudLayer.h"
+namespace {
+    // 定数バッファの大きさを 256 バイト境界へ切り上げるためのマスク（256 - 1）
+    constexpr int kConstantBufferAlignMask = 255;
+}
 
 void Skybox::Initialize(SkyboxManager* skyboxManager, DirectXCore* dxCore, const std::string& cubemapFilePath)
 {
@@ -161,40 +165,40 @@ void Skybox::Draw(DirectXCore* dxCore)
 
     // 座標変換行列CBufferの場所を設定（b0 VS）
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        0, transformationMatrixResource_->GetGPUVirtualAddress()
+        SkyboxManager::kRootParamTransform, transformationMatrixResource_->GetGPUVirtualAddress()
     );
 
     // マテリアルCBufferの場所を設定（b0 PS）
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        1, materialResource_->GetGPUVirtualAddress()
+        SkyboxManager::kRootParamMaterial, materialResource_->GetGPUVirtualAddress()
     );
 
     // SRV t0：現在スロットのCubemap
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        2, TextureManager::GetInstance()->GetSrvHandleGPU(cubemapFilePath_)
+        SkyboxManager::kRootParamCubemap, TextureManager::GetInstance()->GetSrvHandleGPU(cubemapFilePath_)
     );
 
     // SRV t1：次スロットのCubemap（クロスフェード先。非ブレンド時は現在と同一）
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        3, TextureManager::GetInstance()->GetSrvHandleGPU(nextCubemapFilePath_)
+        SkyboxManager::kRootParamNextCubemap, TextureManager::GetInstance()->GetSrvHandleGPU(nextCubemapFilePath_)
     );
 
     // b7 / t5 / t9：遠景の雲。雲なしでもルートパラメータは埋める（enabled=0 なのでシェーダはテクスチャを読まない）
     dxCore->GetCommandList()->SetGraphicsRootConstantBufferView(
-        4, cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress()
+        SkyboxManager::kRootParamCloud, cloudLayer_ ? cloudLayer_->GetConstantBufferAddress() : disabledCloudResource_->GetGPUVirtualAddress()
     );
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        5, cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle()
+        SkyboxManager::kRootParamCloudNoise, cloudLayer_ ? cloudLayer_->GetNoiseSrvHandle()
                        : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath())
     );
     dxCore->GetCommandList()->SetGraphicsRootDescriptorTable(
-        6, cloudLayer_ ? cloudLayer_->GetMokoSrvHandle()
+        SkyboxManager::kRootParamCloudMoko, cloudLayer_ ? cloudLayer_->GetMokoSrvHandle()
                        : TextureManager::GetInstance()->GetSrvHandleGPU(CloudLayer::GetFallbackTexturePath())
     );
 
     // インデックスを使用して描画
     PEPPER_COUNT("DrawCall");
-    dxCore->GetCommandList()->DrawIndexedInstanced(36, 1, 0, 0, 0);
+    dxCore->GetCommandList()->DrawIndexedInstanced(kIndexCount, 1, 0, 0, 0);
 }
 
 void Skybox::CreateVertexData()
@@ -241,7 +245,7 @@ void Skybox::CreateVertexData()
 void Skybox::CreateVertexBuffer(DirectXCore* dxCore)
 {
     // 頂点バッファリソース作成
-    UINT vertexBufferSize = sizeof(VertexData_Skybox) * 8;
+    UINT vertexBufferSize = sizeof(VertexData_Skybox) * kVertexCount;
     vertexBuffer_ = dxCore->CreateBufferResource(vertexBufferSize);
 
     // 頂点バッファにデータを書き込む
@@ -259,7 +263,7 @@ void Skybox::CreateVertexBuffer(DirectXCore* dxCore)
 void Skybox::CreateIndexBuffer(DirectXCore* dxCore)
 {
     // インデックスバッファリソース作成
-    UINT indexBufferSize = sizeof(uint32_t) * 36;
+    UINT indexBufferSize = sizeof(uint32_t) * kIndexCount;
     indexBuffer_ = dxCore->CreateBufferResource(indexBufferSize);
 
     // インデックスバッファにデータを書き込む
@@ -277,7 +281,7 @@ void Skybox::CreateIndexBuffer(DirectXCore* dxCore)
 void Skybox::CreateTransformationMatrixResource(DirectXCore* dxCore)
 {
     // サイズを256アライメントに調整
-    UINT transformationMatrixSize = (sizeof(SkyboxTransformationMatrix) + 255) & ~255;
+    UINT transformationMatrixSize = (sizeof(SkyboxTransformationMatrix) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
 
     // リソースを作る
     transformationMatrixResource_ = dxCore->CreateBufferResource(transformationMatrixSize);
@@ -292,7 +296,7 @@ void Skybox::CreateTransformationMatrixResource(DirectXCore* dxCore)
 void Skybox::CreateMaterialResource(DirectXCore* dxCore)
 {
     // サイズを256アライメントに調整
-    UINT materialSize = (sizeof(SkyboxMaterial) + 255) & ~255;
+    UINT materialSize = (sizeof(SkyboxMaterial) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
 
     // リソースを作る
     materialResource_ = dxCore->CreateBufferResource(materialSize);

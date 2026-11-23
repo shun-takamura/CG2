@@ -1,8 +1,8 @@
 #include "RandomGenerator.h"
 
-RandomGenerator& RandomGenerator::Instance() {
+RandomGenerator* RandomGenerator::GetInstance() {
     static RandomGenerator instance;
-    return instance;
+    return &instance;
 }
 
 void RandomGenerator::Initialize(uint32_t seed) {

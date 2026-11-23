@@ -11,6 +11,10 @@
 #include"SRVManager.h"
 #include<cassert>
 
+/// <summary>
+/// テクスチャの読み込み・GPU への転送・SRV の割り当てを行い、パスで引けるようにする。
+/// シングルトンにする理由：テクスチャ（と SRV）をパスごとに 1 つだけ持ち、どの描画クラス・シーンからも同じ物を引くため。
+/// </summary>
 class TextureManager
 {
 private:
@@ -46,34 +50,18 @@ private:
 	// SRVインデックスの開始番号(0番はImGui)
 	static uint32_t kSRVIndexTop;
 
-	//// テクスチャ一枚分のデータ
-	//struct TextureData{
-	//	//std::string filePath; // 画像ファイルのパス
-	//	DirectX::TexMetadata metadata; // 画像の幅や高さの情報
-	//	Microsoft::WRL::ComPtr<ID3D12Resource> resource; // テクスチャリソース
-	//	uint32_t srvIndex;
-	//	D3D12_CPU_DESCRIPTOR_HANDLE srvHandleCPU; // SRV作成時に必要なCPUハンドル
-	//	D3D12_GPU_DESCRIPTOR_HANDLE srvHandleGPU; // 描画コマンドに必要なGPUハンドル
-	//};
-
 	// テクスチャデータの配列。読み込み済みのテクスチャ枚数のカウントが可能
-	//std::vector<TextureData> textureDatas;
 	std::unordered_map<std::string, TextureData>textureDatas;
 
 	// textureDatas への並行アクセス保護（バックグラウンドスレッドの CPU フェーズと
 	// メインスレッドのクエリ・GPU フェーズが競合しないようにする）
 	mutable std::mutex textureDatasMutex_;
 
-	// シングルトンでインスタンスを一つだけ所有
-	//static TextureManager* instance;
-
 	TextureManager() = default;
 	~TextureManager() = default;
-	TextureManager(TextureManager&) = default;
-	TextureManager& operator = (TextureManager&) = default;
+	TextureManager(const TextureManager&) = delete;
+	TextureManager& operator=(const TextureManager&) = delete;
 
-	/*SpriteManager* spriteManager_;
-	DirectXCore* dxCore_;*/
 	SpriteManager* spriteManager_ = nullptr;
 	DirectXCore* dxCore_ = nullptr;
 	SRVManager* srvManager_ = nullptr;
@@ -81,32 +69,47 @@ private:
 	// LoadTexture / LoadTextureLinear が呼ばれたら知らせる先（シーンの読み込みの記録用。空なら何もしない）
 	std::function<void(const std::string& filePath, bool linear)> loadObserver_;
 
-	// DirectStorage 経路の GPU フェーズ（リソースの作成・転送の登録・SRV）と、転送が終わった後の仕上げ（バリア）
+	/// <summary>
+	/// DirectStorage 経路の GPU フェーズ。COMMON 状態でリソースを作り、pack から VRAM への転送を登録して SRV を作る（GPUPending にする）
+	/// </summary>
+	/// <param name="data">CPU フェーズで DirectStorage 経路と判定されたテクスチャの情報</param>
+	/// <param name="filePath">テクスチャのパス（ログ用）</param>
 	void CreateDirectStorageTexture(TextureData& data, const std::string& filePath);
+	/// <summary>DirectStorage の転送が終わった後の仕上げ。COMMON → GENERIC_READ のバリアを積んで GPUReady にする</summary>
+	/// <param name="data">転送が終わったテクスチャの情報</param>
 	void FinishDirectStorageTexture(TextureData& data);
 
 public:
 
+	/// <summary>使う各マネージャーを受け取る</summary>
+	/// <param name="spriteManager">テクスチャリソースの作成と転送に使う SpriteManager</param>
+	/// <param name="dxCore">DirectXCoreへのポインタ</param>
+	/// <param name="srvManager">SRV を確保する SRVManager</param>
 	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore, SRVManager* srvManager);
 
-	// 同期ロード（CPU + GPU を一気に行う既存 API）
+	/// <summary>同期ロード（CPU + GPU を一気に行う既存 API。sRGB として読む）。読み込み済みなら何もしない</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
 	void LoadTexture(const std::string& filePath);
 
 	/// <summary>
-	/// SRGB変換せずに線形値として読み込む（マスク・ノーマルマップ用）
+	/// SRGB変換せずに線形値として読み込む（マスク・ノーマルマップ用）。読み込み済みなら何もしない
 	/// </summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
 	void LoadTextureLinear(const std::string& filePath);
 
 	/// <summary>
 	/// CPU フェーズ: ファイルを読んで ScratchImage を作るところまで。
-	/// バックグラウンドスレッドから呼んで OK（GPU API は触らない）。
+	/// バックグラウンドスレッドから呼んで OK（GPU API は触らない）。既に登録があれば何もしない
 	/// </summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <param name="linear">true なら sRGB 変換せず線形値として読む</param>
 	void LoadTextureCPU(const std::string& filePath, bool linear = false);
 
 	/// <summary>
 	/// GPU フェーズ: ID3D12Resource 作成 / アップロード / SRV 作成。
 	/// メインスレッド専用。事前に LoadTextureCPU を呼んでおくこと。
 	/// </summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
 	void LoadTextureGPU(const std::string& filePath);
 
 	/// <summary>
@@ -114,15 +117,24 @@ public:
 	/// DirectStorage 経路なら転送を登録して true を返す：呼び出し側が DStorageManager::SubmitWithFence で送り、
 	/// fence が終わってから FinishTextureGPU を呼ぶ。それ以外の経路はその場で GPUReady まで進めて false
 	/// </summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>DirectStorage の転送を登録したら true。CPUReady でない・その場で仕上げた場合は false</returns>
 	bool BeginTextureGPUAsync(const std::string& filePath);
 	/// <summary>BeginTextureGPUAsync の転送が終わった後の仕上げ（バリアを積んで GPUReady に）。メインスレッド専用</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
 	void FinishTextureGPU(const std::string& filePath);
 
-	// 非同期ロードの状態クエリ
+	/// <summary>CPU フェーズが終わっているかを返す（スレッドセーフ）</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>CPUReady 以降なら true</returns>
 	bool IsCPUReady(const std::string& filePath) const;
+	/// <summary>GPU フェーズまで終わって使えるかを返す（スレッドセーフ）</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>GPUReady なら true</returns>
 	bool IsGPUReady(const std::string& filePath) const;
 
 	/// <summary>LoadTexture / LoadTextureLinear が呼ばれるたびに知らせる（キャッシュに当たっても）。空の関数で外す</summary>
+	/// <param name="observer">パスと線形読み込みかを受け取る関数</param>
 	void SetLoadObserver(std::function<void(const std::string& filePath, bool linear)> observer) { loadObserver_ = std::move(observer); }
 
 	/// <summary>
@@ -131,7 +143,7 @@ public:
 	/// <param name="name">テクスチャの識別名</param>
 	/// <param name="width">幅</param>
 	/// <param name="height">高さ</param>
-	/// <param name="format">フォーマット（デフォルトはRGBA）</param>
+	/// <param name="format">フォーマット（デフォルトはBGRA）</param>
 	void CreateDynamicTexture(const std::string& name, uint32_t width, uint32_t height,
 		DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
 
@@ -144,12 +156,14 @@ public:
 	void UpdateDynamicTexture(const std::string& name, const uint8_t* data, size_t dataSize);
 
 	/// <summary>
-	/// テクスチャが存在するかチェック
+	/// テクスチャが登録されているかチェック（読み込み途中の物も含む）
 	/// </summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>登録があれば true</returns>
 	bool HasTexture(const std::string& filePath) const;
 
 	/// <summary>
-	/// 単色テクスチャを生成（ファイル不要）
+	/// 1x1 の単色テクスチャ（sRGB）を生成（ファイル不要）。同じ名前があれば何もしない
 	/// </summary>
 	/// <param name="name">テクスチャ名（キー）</param>
 	/// <param name="r">赤 (0-255)</param>
@@ -163,35 +177,38 @@ public:
 	/// 同じ名前は上書きする（作り直した RenderTexture を登録し直す）。SRV と resource の寿命は呼び出し側が持つ
 	/// （登録している間 resource の参照は1つ持つ）
 	/// </summary>
+	/// <param name="name">引くときの名前（キー）</param>
+	/// <param name="resource">テクスチャのリソース（メタデータはここから作る）</param>
+	/// <param name="srvIndex">呼び出し側が作った SRV のスロット番号</param>
 	void RegisterExternalTexture(const std::string& name, ID3D12Resource* resource, uint32_t srvIndex);
-	// RegisterExternalTexture の登録を外す（SRV を解放する前に呼ぶ）
+	/// <summary>RegisterExternalTexture の登録を外す（SRV を解放する前に呼ぶ）</summary>
+	/// <param name="name">登録した名前</param>
 	void UnregisterExternalTexture(const std::string& name) { textureDatas.erase(name); }
 
-	// シングルトンインスタンスの取得
+	/// <summary>シングルトンインスタンスを返す</summary>
+	/// <returns>TextureManager のインスタンス</returns>
 	static TextureManager* GetInstance();
 
-	// 読み込み済みテクスチャ数（P.E.P.P.E.R. 計測用）
+	/// <summary>登録済みテクスチャ数を返す（P.E.P.P.E.R. 計測用）</summary>
+	/// <returns>登録数（読み込み途中・外部登録を含む）</returns>
 	size_t GetLoadedTextureCount() const { return textureDatas.size(); }
 
-	// SRVインデックスの開始番号
-	//uint32_t GetTextureIndexByFilePath(const std::string& filePath);
-
-	// テクスチャ番号からGPUハンドルを取得
-	//D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandleGPU(uint32_t textureIndex);
-
-	// メタデータを取得
-	//const DirectX::TexMetadata& GetMetaData(uint32_t textureIndex);
-
-	// メタデータの取得
+	/// <summary>メタデータを返す。未登録なら assert で止まる</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>メタデータ（未登録なら空のダミー）</returns>
 	const DirectX::TexMetadata& GetMetaData(const std::string& filePath);
 
-	// SRVインデックスの取得
+	/// <summary>SRV インデックスを返す。未登録なら assert で止まる</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>SRV インデックス（未登録なら 0）</returns>
 	uint32_t GetSrvIndex(const std::string& filePath);
 
-	// GPUハンドルの取得
+	/// <summary>SRV の GPU ハンドルを返す。未登録なら登録済みのキーをログに出して assert で止まる</summary>
+	/// <param name="filePath">テクスチャのパス（登録キー）</param>
+	/// <returns>GPU ハンドル（未登録なら空のハンドル）</returns>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandleGPU(const std::string& filePath);
 
-	// 終了
+	/// <summary>登録している全テクスチャを破棄する</summary>
 	void Finalize();
 
 };

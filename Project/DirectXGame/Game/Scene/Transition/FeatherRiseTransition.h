@@ -116,28 +116,51 @@ public:
 	FeatherRiseTransition() = default;
 	~FeatherRiseTransition() override;
 
-	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth, float screenHeight) override;
+	/// <summary>羽根の描画・水面・白のスプライト・定数バッファを解放する</summary>
 	void Finalize() override;
+	/// <summary>シーン＋隙間埋め → 羽根 →（白フェード版のみ）白 の順に描く（真っ白の間は白だけ）</summary>
 	void Draw() override;
 
+	/// <summary>トランジションの種類を返す</summary>
+	/// <returns>TransitionType::FeatherRise</returns>
 	TransitionType GetType() const override { return TransitionType::FeatherRise; }
+	/// <summary>トランジション名を返す</summary>
+	/// <returns>"FeatherRise"</returns>
 	std::string GetName() const override { return "FeatherRise"; }
 
-	Settings& GetSettings() { return settings_; }
+	/// <summary>調整値を返す（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
+	const Settings& GetSettings() const { return settings_; }
+	/// <summary>調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
-	/// <summary>ImGui で調整</summary>
+	/// <summary>調整値を ImGui で調整する</summary>
 	void OnImGui();
 
-	// 調整値（Resources/Json/Tuning/Transition.json の GetName() の欄）
+	/// <summary>調整値を JSON から読む（Resources/Json/Tuning/Transition.json の GetName() の欄）</summary>
+	/// <param name="json">このトランジションの欄</param>
 	void LoadTuning(const JsonValue& json) override;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="json">書き込み先（このトランジションの欄）</param>
 	void SaveTuning(JsonValue& json) const override;
 
 protected:
+	/// <summary>羽根と水面を最初に戻し、よみがえる一枚を用意する</summary>
 	void OnStartCover() override;
+	/// <summary>水面・隙間埋めの全画面パス・定数バッファ・羽根の描画（陰を明るく）・白のスプライトを作る</summary>
+	void OnInitialize() override;
+	/// <summary>覆う秒数（coverTime）が過ぎるのを待つ</summary>
+	/// <param name="dt">経過 [秒]（使わない）</param>
+	/// <returns>覆い終えたら true（ここでロードする）</returns>
 	bool UpdateCover(float dt) override;
+	/// <summary>白を薄め、白フェード版は白が消え切るまで、羽根だけの版は残りの羽根が画面から抜け切るまで待つ</summary>
+	/// <param name="dt">経過 [秒]（使わない）</param>
+	/// <returns>晴れ切ったら true</returns>
 	bool UpdateReveal(float dt) override;
+	/// <summary>白の濃さを 1 にする</summary>
 	void SetFullyCovered() override;
+	/// <summary>突風の間は羽根を吹き込ませ、よみがえる一枚・飛ぶ羽根・水面・仮想カメラを進める</summary>
 	void UpdateVisual() override;
 
 private:
@@ -161,20 +184,36 @@ private:
 		float padding0;
 	};
 
+	/// <summary>風上（右下）の画面の外から羽根を 1 枚吹き込ませる（風向きの線を均等に並べて角も中央も同じ濃さで覆う）</summary>
 	void SpawnFromUpwind();
-	// 面をこちらへ向けた向きと回り方（画面を覆えるように）
+	/// <summary>面をこちらへ向けた向きと回り方をランダムに決める（画面を覆えるように）</summary>
+	/// <param name="f">決める羽根</param>
 	void RandomizeFacing(FlyingFeather& f);
+	/// <summary>飛び立つ瞬間に、よみがえった一枚のまわりから羽根を一緒に舞い上がらせる</summary>
 	void SpawnBurst();
+	/// <summary>飛ぶ羽根を風に乗せて揺らしながら進め、風下（左上）の外へ抜けたものを捨てる</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateFlying(float dt);
+	/// <summary>よみがえる一枚をディゾルブの逆再生でよみがえらせ、風に乗って飛び立たせる</summary>
+	/// <param name="dt">経過 [秒]</param>
 	void UpdateHero(float dt);
-	// 白の濃さ 0..1
+	/// <summary>白の濃さを返す（白フェード版のみ）</summary>
+	/// <returns>0〜1。白フェード版でなければ 0</returns>
 	float Whiteness() const;
-	// 隙間埋めの濃さ 0..1
+	/// <summary>隙間埋めの濃さを返す</summary>
+	/// <returns>0〜1。隙間埋めを使わなければ 0</returns>
 	float GapFill() const;
-	// 画面の向きの風（正規化済み、z = 0）
+	/// <summary>画面の向きの風を返す</summary>
+	/// <returns>正規化済みの向き（z = 0）。調整値がほぼ 0 なら左上向きの既定</returns>
 	Vector3 WindDirection() const;
+	/// <summary>カメラからの距離 depth の所で、画面の中心から上端までの高さを求める</summary>
+	/// <param name="depth">カメラからの距離</param>
+	/// <returns>高さ（ワールドの長さ）</returns>
 	float VisibleHalfHeight(float depth) const;
-	// 画面 UV → 奥行き depth の所のワールドの位置（カメラは原点から +Z を見る）
+	/// <summary>画面 UV を奥行き depth の所のワールドの位置へ直す（カメラは原点から +Z を見る）</summary>
+	/// <param name="uv">画面 UV</param>
+	/// <param name="depth">奥行き</param>
+	/// <returns>ワールドの位置</returns>
 	Vector3 ScreenToWorld(const Vector2& uv, float depth) const;
 
 	FeatherRenderer renderer_;

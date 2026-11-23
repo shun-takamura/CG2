@@ -6,6 +6,15 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻す既定値（中心は画面の真ん中の UV）
+	constexpr float kDefaultCenterU = 0.5f;
+	constexpr float kDefaultCenterV = 0.5f;
+	constexpr float kDefaultBlurWidth = 0.01f;
+	constexpr int kDefaultNumSamples = 10;
+	// サンプル数の上限（シェーダのループの上限に合わせる）
+	constexpr int kMaxNumSamples = 32;
+}
 
 void RadialBlurEffect::InitializeDepth(
 	DirectXCore* dxCore,
@@ -56,10 +65,10 @@ void RadialBlurEffect::ShowImGui()
 
 void RadialBlurEffect::ResetParams()
 {
-	centerArray_[0] = 0.5f;
-	centerArray_[1] = 0.5f;
-	blurWidth_ = 0.01f;
-	numSamples_ = 10;
+	centerArray_[0] = kDefaultCenterU;
+	centerArray_[1] = kDefaultCenterV;
+	blurWidth_ = kDefaultBlurWidth;
+	numSamples_ = kDefaultNumSamples;
 	depthThreshold_ = 0.0f;
 }
 
@@ -84,6 +93,6 @@ void RadialBlurEffect::SetBlurWidth(float width)
 void RadialBlurEffect::SetNumSamples(int samples)
 {
 	if (samples < 1) samples = 1;
-	if (samples > 32) samples = 32;
+	if (samples > kMaxNumSamples) samples = kMaxNumSamples;
 	numSamples_ = samples;
 }

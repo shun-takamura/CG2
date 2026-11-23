@@ -1,35 +1,41 @@
 #include "LootCatalog.h"
 
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonParser.h"
 #include <filesystem>
 
 namespace {
 	constexpr const char* kTuningPath = "Resources/Json/Tuning/Loot.json";
+	// レア度の上限
+	constexpr int kMaxRarity = 5;
+	// エーテルの色（淡い水色）の緑の成分
+	constexpr float kEtherColorGreen = 0.641f;
 
-	Vector4 ReadVec4(const JsonValue& a, const Vector4& fallback) {
-		if (!a.IsArray() || a.Size() < 4) return fallback;
-		return { static_cast<float>(a[0].AsDouble(fallback.x)), static_cast<float>(a[1].AsDouble(fallback.y)),
-			static_cast<float>(a[2].AsDouble(fallback.z)), static_cast<float>(a[3].AsDouble(fallback.w)) };
-	}
-
+	/// <summary>アイテム 1 種の定義を読む（レア度は 1〜5 に収める）</summary>
+	/// <param name="node">読む JSON オブジェクト</param>
+	/// <param name="fallback">無いキーに使う値</param>
+	/// <returns>読んだ定義。オブジェクトでなければ fallback</returns>
 	LootItemDef ReadItem(const JsonValue& node, const LootItemDef& fallback) {
 		LootItemDef d = fallback;
 		if (!node.IsObject()) return d;
 		d.id = node["id"].AsString(d.id);
 		d.displayName = node["displayName"].AsString(d.id);
 		d.prefab = node["prefab"].AsString(d.prefab);
-		d.color = ReadVec4(node["color"], d.color);
+		d.color = ReadVector4(node["color"], d.color);
 		d.scale = static_cast<float>(node["scale"].AsDouble(d.scale));
 		d.spinSpeed = static_cast<float>(node["spinSpeed"].AsDouble(d.spinSpeed));
 		d.description = node["description"].AsString(d.description);
 		d.rarity = static_cast<int>(node["rarity"].AsInt(d.rarity));
 		if (d.rarity < 1) d.rarity = 1;
-		if (d.rarity > 5) d.rarity = 5;
+		if (d.rarity > kMaxRarity) d.rarity = kMaxRarity;
 		d.sellPrice = static_cast<int>(node["sellPrice"].AsInt(d.sellPrice));
 		return d;
 	}
 
+	/// <summary>敵 1 種のドロップの表を読む（id が空の行は捨てる）</summary>
+	/// <param name="node">読む JSON オブジェクト</param>
+	/// <returns>読んだ表。オブジェクトでなければ空の表</returns>
 	LootTable ReadTable(const JsonValue& node) {
 		LootTable t;
 		if (!node.IsObject()) return t;
@@ -60,7 +66,7 @@ LootCatalog* LootCatalog::GetInstance() {
 LootCatalog::LootCatalog() {
 	ether_.id = "Ether";
 	ether_.displayName = "エーテル";
-	ether_.color = { 0.0f, 0.641f, 1.0f, 1.0f };
+	ether_.color = { 0.0f, kEtherColorGreen, 1.0f, 1.0f };
 	Load();
 }
 

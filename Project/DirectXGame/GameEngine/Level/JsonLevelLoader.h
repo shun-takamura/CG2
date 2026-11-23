@@ -16,13 +16,16 @@ class JsonLevelLoader {
 public:
 	/// <summary>
 	/// JSONレベルファイルを読み込んで LevelData を構築する。
-	/// 読み込み・フォーマット検証に失敗した場合は nullptr を返す。
 	/// </summary>
+	/// <param name="filePath">レベルファイル（.json）のパス</param>
+	/// <returns>読み込んだデータ（ファイルを開けない・JSON が壊れている・ルートが name="scene" のオブジェクトでない場合は nullptr）</returns>
 	static std::unique_ptr<LevelData> Load(const std::string& filePath);
 
 private:
 	/// <summary>
 	/// JSONのオブジェクトノード1個を ObjectData に変換する（子を再帰的に走査）
 	/// </summary>
+	/// <param name="jsonObject">オブジェクトのノード</param>
+	/// <returns>変換したデータ（無い項目は既定値のまま）</returns>
 	static LevelData::ObjectData ParseObject(const JsonValue& jsonObject);
 };

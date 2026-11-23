@@ -1,4 +1,4 @@
-﻿#include "DisruptorShardRenderer.h"
+﻿#include "ScreenShardRenderer.h"
 #include "DirectXCore.h"
 #include "SRVManager.h"
 #include "MathUtility.h"
@@ -7,7 +7,14 @@
 #include <cstring>
 #include <algorithm>
 
-void DisruptorShardRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t maxCells) {
+namespace {
+	// 定数バッファを 256 バイト境界へ切り上げるためのマスク
+	constexpr uint32_t kConstantBufferAlignMask = 255u;
+	// 頂点バッファに確保する頂点の数の下限（三角形 1 枚）
+	constexpr uint32_t kMinVertexCapacity = 3u;
+}
+
+void ScreenShardRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvManager, uint32_t maxCells) {
 	dxCore_ = dxCore;
 	srvManager_ = srvManager;
 	maxCells_ = (std::max)(maxCells, 1u);
@@ -17,7 +24,7 @@ void DisruptorShardRenderer::Initialize(DirectXCore* dxCore, SRVManager* srvMana
 	CreateConstantBuffer();
 }
 
-void DisruptorShardRenderer::Finalize() {
+void ScreenShardRenderer::Finalize() {
 	if (cbBuffer_ && cbMapped_) {
 		cbBuffer_->Unmap(0, nullptr);
 		cbMapped_ = nullptr;
@@ -32,7 +39,7 @@ void DisruptorShardRenderer::Finalize() {
 	rootSignature_.Reset();
 }
 
-void DisruptorShardRenderer::CreateRootSignature() {
+void ScreenShardRenderer::CreateRootSignature() {
 	// [0] CBV b0（VS:WVP / PS:alpha,satBoost）, [1] SRV t0（capture, PS）, s0 linear clamp
 	D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
 	srvRange[0].BaseShaderRegister = 0;
@@ -78,9 +85,9 @@ void DisruptorShardRenderer::CreateRootSignature() {
 	assert(SUCCEEDED(hr));
 }
 
-void DisruptorShardRenderer::CreatePipelineState() {
-	IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/Disruptor/DisruptorShard.VS.hlsl", L"vs_6_0");
-	IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/Disruptor/DisruptorShard.PS.hlsl", L"ps_6_0");
+void ScreenShardRenderer::CreatePipelineState() {
+	IDxcBlob* vs = dxCore_->LoadShaderBlob(L"Resources/Shaders/ScreenShard/ScreenShard.VS.hlsl", L"vs_6_0");
+	IDxcBlob* ps = dxCore_->LoadShaderBlob(L"Resources/Shaders/ScreenShard/ScreenShard.PS.hlsl", L"ps_6_0");
 	assert(vs && ps);
 
 	D3D12_INPUT_ELEMENT_DESC elems[2] = {};
@@ -138,13 +145,13 @@ void DisruptorShardRenderer::CreatePipelineState() {
 	assert(SUCCEEDED(hr));
 }
 
-void DisruptorShardRenderer::CreateConstantBuffer() {
-	cbStride_ = (static_cast<uint32_t>(sizeof(ShardCB)) + 255u) & ~255u;
+void ScreenShardRenderer::CreateConstantBuffer() {
+	cbStride_ = (static_cast<uint32_t>(sizeof(ShardCB)) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask;
 	cbBuffer_ = dxCore_->CreateBufferResource(static_cast<size_t>(cbStride_) * maxCells_);
 	cbBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&cbMapped_));
 }
 
-void DisruptorShardRenderer::EnsureVertexCapacity(uint32_t vertexCount) {
+void ScreenShardRenderer::EnsureVertexCapacity(uint32_t vertexCount) {
 	if (vertexCount <= vbCapacityVerts_ && vertexBuffer_) return;
 
 	// 既存をアンマップして作り直す（SetCells は崩壊開始に1回＝フレーム途中の描画中ではない）
@@ -154,13 +161,13 @@ void DisruptorShardRenderer::EnsureVertexCapacity(uint32_t vertexCount) {
 	}
 	// 余裕を持って確保（churn 抑制）
 	uint32_t cap = (std::max)(vertexCount, vbCapacityVerts_ + vbCapacityVerts_ / 2u);
-	cap = (std::max)(cap, 3u);
+	cap = (std::max)(cap, kMinVertexCapacity);
 	vertexBuffer_ = dxCore_->CreateBufferResource(static_cast<size_t>(cap) * sizeof(Vertex));
 	vertexBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&vbMapped_));
 	vbCapacityVerts_ = cap;
 }
 
-void DisruptorShardRenderer::SetCells(const std::vector<CellMesh>& cells) {
+void ScreenShardRenderer::SetCells(const std::vector<CellMesh>& cells) {
 	cellRanges_.clear();
 	cellRanges_.reserve(cells.size());
 
@@ -191,7 +198,7 @@ void DisruptorShardRenderer::SetCells(const std::vector<CellMesh>& cells) {
 	vbView_.StrideInBytes = sizeof(Vertex);
 }
 
-void DisruptorShardRenderer::Draw(const Matrix4x4& viewProjection, uint32_t captureSrvIndex,
+void ScreenShardRenderer::Draw(const Matrix4x4& viewProjection, uint32_t captureSrvIndex,
 	const std::vector<DrawItem>& items) {
 	if (items.empty() || !pipelineState_ || !cbMapped_ || cellRanges_.empty() || vbView_.SizeInBytes == 0) return;
 

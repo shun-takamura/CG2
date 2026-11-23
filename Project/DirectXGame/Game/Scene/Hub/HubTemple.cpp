@@ -19,6 +19,13 @@
 #endif
 
 namespace {
+	// 反射の遠クリップ（ドームの頂点まで約 45m、斜めでも足りる長さ）[m]
+	constexpr float kReflectionFarClip = 100.0f;
+	// 一回りの角度 [度]
+	constexpr float kFullTurnDegrees = 360.0f;
+	// Vector3 の JSON 配列に要る要素の数
+	constexpr int kVector3ComponentCount = 3;
+
 	// tools/BlenderPipeline/gen_hub_temple.py --export Assets/Models/HubTemple を cook したもの
 	constexpr const char* kModelDir = "Resources/Models/HubTemple";
 	constexpr const char* kFloorTexturePath = "Resources/Models/HubTemple/HubFloor_BaseColor.dds";
@@ -128,7 +135,7 @@ void HubTemple::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore
 	reflection_->Initialize(dxCore, srvManager, object3DManager, kReflectionScale);
 	reflection_->SetWaterHeight(0.0f);
 	// 神殿の中は全部映す（ドームの頂点まで約 45m、斜めでも 100m あれば足りる）
-	reflection_->SetFarClip(100.0f);
+	reflection_->SetFarClip(kReflectionFarClip);
 	reflection_->AddTarget(shell_.get());
 	reflection_->AddTarget(gate_.get());
 	for (GateMover& mover : gateMovers_) reflection_->AddTarget(mover.object.get());
@@ -142,7 +149,7 @@ void HubTemple::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore
 	floor_->SetWaterHeight(0.0f);
 	floor_->SetSize(kFloorSize);
 	floor_->SetCenter({ 0.0f, 0.0f, 0.0f });
-	WaterSurface::Params& p = floor_->GetParams();
+	WaterSurface::Params p = floor_->GetParams();
 	p.depth = kFloorDepth;
 	p.floorTiling = 1.0f / kFloorTileMeters;
 	// 波は全部止める（同心円・ノイズ・シミュレーション）
@@ -153,6 +160,7 @@ void HubTemple::Initialize(Object3DManager* object3DManager, DirectXCore* dxCore
 	p.distortion = 0.0f;
 	// 屈折で床の模様がずれないように（空気と同じ）
 	p.ior = 1.0f;
+	floor_->SetParams(p);
 	ApplyFloorParams();
 
 	Update(0.0f);
@@ -196,10 +204,11 @@ void HubTemple::ApplyDoor() {
 }
 
 void HubTemple::ApplyFloorParams() {
-	WaterSurface::Params& p = floor_->GetParams();
+	WaterSurface::Params p = floor_->GetParams();
 	p.fresnelF0 = floorF0_;
 	p.reflectionIntensity = floorReflection_;
 	p.ambient = floorAmbient_;
+	floor_->SetParams(p);
 }
 
 void HubTemple::Update(float deltaTime) {
@@ -212,7 +221,7 @@ void HubTemple::Update(float deltaTime) {
 	doorLeafR_->Update();
 	for (GateMover& mover : gateMovers_) {
 		if (ringsSpin_) {
-			mover.angle = std::fmod(mover.angle + mover.spinDegPerSec * gateSpeedScale_ * deltaTime, 360.0f);
+			mover.angle = std::fmod(mover.angle + mover.spinDegPerSec * gateSpeedScale_ * deltaTime, kFullTurnDegrees);
 		}
 		mover.object->SetTranslate({ kGateCenter.x + mover.offset.x, kGateCenter.y + mover.offset.y,
 			kGateCenter.z + mover.offset.z });
@@ -222,7 +231,7 @@ void HubTemple::Update(float deltaTime) {
 	}
 	for (Ring& ring : rings_) {
 		if (ringsSpin_) {
-			ring.angle = std::fmod(ring.angle + ring.spinDegPerSec * deltaTime, 360.0f);
+			ring.angle = std::fmod(ring.angle + ring.spinDegPerSec * deltaTime, kFullTurnDegrees);
 		}
 		// X（輪の面の中の回転）→ Y → Z の順にかかる（MakeAffineMatrix の Rx·Ry·Rz）
 		ring.object->SetTranslate(ring.center);
@@ -282,7 +291,7 @@ void HubTemple::DrawFloor(const Camera& camera) {
 void HubTemple::LoadTuning(const JsonValue& node) {
 	if (!node.IsObject()) return;
 	const JsonValue& door = node["doorPosition"];
-	if (door.IsArray() && door.Size() >= 3) {
+	if (door.IsArray() && door.Size() >= kVector3ComponentCount) {
 		doorPosition_ = { static_cast<float>(door[0].AsDouble(doorPosition_.x)),
 			static_cast<float>(door[1].AsDouble(doorPosition_.y)), static_cast<float>(door[2].AsDouble(doorPosition_.z)) };
 	}

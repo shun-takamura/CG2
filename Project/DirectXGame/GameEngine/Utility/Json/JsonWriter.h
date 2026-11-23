@@ -16,13 +16,16 @@ public:
 		int indentWidth = 2;    // pretty時の1段あたりのスペース数
 	};
 
-	/// <summary>
-	/// 文字列にシリアライズ
-	/// </summary>
+	/// <summary>値を JSON 文字列にする。NaN / 無限大の Double は null として書く</summary>
+	/// <param name="value">書く値</param>
+	/// <param name="options">整形の設定（既定は 2 スペースの pretty）</param>
+	/// <returns>JSON 文字列</returns>
 	static std::string Write(const JsonValue& value, const Options& options = {});
 
-	/// <summary>
-	/// ファイルに書き出し
-	/// </summary>
+	/// <summary>値を JSON 文字列にしてファイルに書き出す（既存のファイルは上書き、改行は LF のまま）</summary>
+	/// <param name="filePath">書き出すファイルのパス</param>
+	/// <param name="value">書く値</param>
+	/// <param name="options">整形の設定（既定は 2 スペースの pretty）</param>
+	/// <returns>開けて書き終えたら true（開けない・書き込みに失敗したら false）</returns>
 	static bool WriteFile(const std::string& filePath, const JsonValue& value, const Options& options = {});
 };

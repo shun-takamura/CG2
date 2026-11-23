@@ -12,7 +12,7 @@
 #include "Object3DInstance.h"
 #include "ModelManager.h"
 #include "AnimatedObject3DInstance.h"
-// 保存/読込で全コンテナを触るため、deferredDeletes_ への退避に完全型が要る
+// 保存/読込で全コンテナを触るため、遅延破棄（DeferDelete）に完全型が要る
 #include "AnimatedModelInstance.h"
 #include "SpriteInstance.h"
 #include "Spline/SplineCurveActor.h"
@@ -24,25 +24,57 @@
 #include "Primitive/DebugDraw.h"
 #include "Physics/CollisionGeometry.h"
 #include "Score/DifficultyProfile.h"
+#include "Score/GameSession.h"
 #include "MathUtility.h"
 #include <algorithm>
 #include <cmath>
 
 namespace {
-	// スポーンした敵・ボスの体力に純度の倍率を掛ける（19_GameOverAndDifficulty.md §5）
-	void ApplyDifficultyHp(IImGuiEditable* e) {
+	// 敵を走らせるスプラインに要る制御点の数の下限
+	constexpr size_t kMinSplinePointCount = 2;
+	// 偏差射撃の速さを測るフレーム時間の下限 [秒]（0 割りを避ける）
+	constexpr float kMinAimSampleDeltaTime = 1e-5f;
+	// これより速いレールの移動はワープとみなして先読みしない [m/s]
+	constexpr float kMaxPlausibleRailSpeed = 150.0f;
+	// これより速い自機自身の移動はワープとみなして先読みしない [m/s]
+	constexpr float kMaxPlausiblePlayerSpeed = 60.0f;
+	// プレハブに bullet 指定が無いときの敵弾の速さ [m/s]
+	constexpr float kDefaultEnemyBulletSpeed = 18.0f;
+	// プレハブに bullet 指定が無いときの敵弾の寿命 [秒]
+	constexpr float kDefaultEnemyBulletLifetime = 4.0f;
+	// 距離・速さがこれ以下なら 0 とみなす（0 割りを避ける）
+	constexpr float kTinyEpsilon = 1e-4f;
+	// 完全に重なったときに自分をずらす量 [m]
+	constexpr float kOverlapNudge = 0.01f;
+	// 死亡エンティティを集める配列に先に取っておく数
+	constexpr int kDeadEntityReserveCount = 8;
+	// 線分の長さの 2 乗・分母がこれ以下なら 0 とみなす
+	constexpr float kSegmentEpsilon = 1e-8f;
+	// 弾の移動線分の長さの 2 乗がこれより小さければ動いていないとみなす
+	constexpr float kSegmentLengthSqEpsilon = 1e-10f;
+	// 2 次方程式の判別式 b²−4ac の係数
+	constexpr float kQuadraticDiscriminantCoeff = 4.0f;
+	// 向きの長さがこれ以下なら正規化しない
+	constexpr float kSquaredEpsilon = 1e-6f;
+	// デバッグ：プレイヤー弾の進む向きに引く線の長さ [m]
+	constexpr float kBulletDebugRayLength = 5.0f;
+	/// <summary>スポーンした敵・ボスの体力に純度の倍率を掛け、満タンにする（19_GameOverAndDifficulty.md §5）</summary>
+	/// <param name="e">スポーンしたエンティティ（敵・ボス以外・HP なしなら何もしない）</param>
+	/// <param name="difficulty">純度から決まる倍率（GameSession が持つ物）</param>
+	void ApplyDifficultyHp(IImGuiEditable* e, const DifficultyProfile& difficulty) {
 		if (!e) return;
 		const EntityTag tag = Gameplay::Of(e).GetTag();
 		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
 		HP& hp = Gameplay::Of(e).GetHP();
 		if (!hp.enabled) return;
-		const DifficultyProfile* dp = DifficultyProfile::GetInstance();
 		hp.maxHP = DifficultyProfile::ScaleInt(hp.maxHP,
-			tag == EntityTag::Boss ? dp->GetBossHpScale() : dp->GetEnemyHpScale());
+			tag == EntityTag::Boss ? difficulty.GetBossHpScale() : difficulty.GetEnemyHpScale());
 		hp.currentHP = hp.maxHP;
 	}
 
-	// 進行方向（正規化済み）→ オイラー角（ラジアン）。LH系・前方+Z 前提。
+	/// <summary>進行方向をオイラー角にする（LH系・前方+Z 前提）</summary>
+	/// <param name="dir">進行方向（正規化済み）</param>
+	/// <returns>(pitch, yaw, 0) [rad]</returns>
 	Vector3 DirectionToEuler(const Vector3& dir) {
 		const float yaw = std::atan2(dir.x, dir.z);
 		const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
@@ -59,8 +91,17 @@ GameScene::~GameScene() = default;
 //====================
 
 void GameScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
+	SplineCurveActor* spline = AddDynamicSplineActor(static_cast<EntityTag>(tagInt));
+	for (auto& p : spline->MutablePoints()) {
+		p.x += worldPos.x;
+		p.y += worldPos.y;
+		p.z += worldPos.z;
+	}
+}
+
+SplineCurveActor* GameScene::AddDynamicSplineActor(EntityTag tag) {
 	auto spline = std::make_unique<SplineCurveActor>();
-	Gameplay::Of(spline).SetTag(static_cast<EntityTag>(tagInt));
+	Gameplay::Of(spline).SetTag(tag);
 
 	std::string base = "Spline";
 	std::string name = base;
@@ -71,20 +112,15 @@ void GameScene::AddDynamicSpline(int tagInt, const Vector3& worldPos) {
 	}
 	spline->SetName(name);
 
-	for (auto& p : spline->MutablePoints()) {
-		p.x += worldPos.x;
-		p.y += worldPos.y;
-		p.z += worldPos.z;
-	}
-
 	dynamicSplines_.push_back(std::move(spline));
+	return dynamicSplines_.back().get();
 }
 
 void GameScene::RemoveDynamicSpline(const std::string& name) {
 	auto it = std::find_if(dynamicSplines_.begin(), dynamicSplines_.end(),
 		[&name](const std::unique_ptr<SplineCurveActor>& s) { return s->GetName() == name; });
 	if (it != dynamicSplines_.end()) {
-		deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(it->release()));
+		DeferDelete(std::move(*it));
 		dynamicSplines_.erase(it);
 	}
 }
@@ -110,7 +146,7 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 	PEPPER_SCOPE("GameScene::InstantiatePrefab");
 	const PrefabDef* def = PrefabManager::GetInstance()->Find(prefabName);
 	if (!def) {
-		LogBuffer::Instance().Add("Prefab not found: " + prefabName, LogBuffer::Level::Warning);
+		LogBuffer::GetInstance()->Add("Prefab not found: " + prefabName, LogBuffer::Level::Warning);
 		return nullptr;
 	}
 
@@ -145,7 +181,7 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		// 敵撃破スコア（タグに関わらずコピー、StagePlay 側で Enemy/Boss だけ参照する）
 		Gameplay::Of(e).SetScoreValue(def->scoreValue);
 		if (def->hasBullet) {
-			BulletParams& bp = Gameplay::Of(e).GetBulletParams();
+			BulletParams bp = Gameplay::Of(e).GetBulletParams();
 			bp.enabled        = true;
 			bp.speed          = def->bulletSpeed;
 			bp.lifetime       = def->bulletLifetime;
@@ -155,9 +191,10 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 			bp.penetrate            = def->bulletPenetrate;
 			bp.penetrateDamageRate  = def->bulletPenetrateDamageRate;
 			bp.penetrateEffect      = def->bulletPenetrateEffect;
+			Gameplay::Of(e).SetBulletParams(bp);
 		}
 		if (def->hasMelee) {
-			MeleeParams& mp = Gameplay::Of(e).GetMeleeParams();
+			MeleeParams mp = Gameplay::Of(e).GetMeleeParams();
 			mp.enabled         = true;
 			mp.startup         = def->meleeStartup;
 			mp.activeDuration  = def->meleeActiveDuration;
@@ -167,37 +204,42 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 			mp.cleanWindow     = def->meleeCleanWindow;
 			mp.cleanMultiplier = def->meleeCleanMultiplier;
 			mp.lateMultiplier  = def->meleeLateMultiplier;
+			Gameplay::Of(e).SetMeleeParams(mp);
 		}
 		if (def->hasCarrier) {
-			CarrierParams& cp = Gameplay::Of(e).GetCarrierParams();
+			CarrierParams cp = Gameplay::Of(e).GetCarrierParams();
 			cp.enabled           = true;
 			cp.childLifetimeSec  = def->carrierChildLifetimeSec;
 			cp.childWanderRadius = def->carrierChildWanderRadius;
 			cp.childMoveSpeed    = def->carrierChildMoveSpeed;
+			Gameplay::Of(e).SetCarrierParams(cp);
 		}
 		if (def->hasMovement) {
-			MovementParams& mv = Gameplay::Of(e).GetMovementParams();
+			MovementParams mv = Gameplay::Of(e).GetMovementParams();
 			mv.enabled            = true;
 			mv.movementType       = def->movementType;
 			mv.moveSpeed          = def->moveSpeed;
 			mv.hoverApproachSpeed = def->hoverApproachSpeed;
 			mv.hoverHoldDuration  = def->hoverHoldDuration;
+			Gameplay::Of(e).SetMovementParams(mv);
 		}
 		if (def->hasCharge) {
-			ChargeParams& chp = Gameplay::Of(e).GetChargeParams();
+			ChargeParams chp = Gameplay::Of(e).GetChargeParams();
 			chp.enabled    = true;
 			chp.stage1Time = def->chargeStage1Time;
 			chp.stage2Time = def->chargeStage2Time;
 			chp.fireRate   = def->chargeFireRate;
+			Gameplay::Of(e).SetChargeParams(chp);
 		}
 		if (def->hasPrecision) {
-			PrecisionParams& pp = Gameplay::Of(e).GetPrecisionParams();
+			PrecisionParams pp = Gameplay::Of(e).GetPrecisionParams();
 			pp.enabled   = true;
 			pp.speedAdd  = def->precisionSpeedAdd;
 			pp.homingAdd = def->precisionHomingAdd;
+			Gameplay::Of(e).SetPrecisionParams(pp);
 		}
 		if (def->hasWeapon) {
-			WeaponParams& wp = Gameplay::Of(e).GetWeaponParams();
+			WeaponParams wp = Gameplay::Of(e).GetWeaponParams();
 			wp.enabled         = def->weaponEnabled;
 			wp.bone            = def->weaponBone;
 			wp.offsetTranslate = def->weaponOffsetTranslate;
@@ -205,26 +247,28 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 			wp.offsetScale     = def->weaponOffsetScale;
 			wp.modelDir        = def->weaponModelDir;
 			wp.modelFile       = def->weaponModelFile;
+			Gameplay::Of(e).SetWeaponParams(wp);
 		}
 		// エフェクトスロットを丸ごとコピー
 		if (!def->effects.empty()) {
-			Gameplay::Of(e).GetEffects() = def->effects;
+			Gameplay::Of(e).SetEffects(def->effects);
 		}
 		// 弾プレハブスロットを丸ごとコピー
 		if (!def->bulletPrefabs.empty()) {
-			Gameplay::Of(e).GetBulletPrefabs() = def->bulletPrefabs;
+			Gameplay::Of(e).SetBulletPrefabs(def->bulletPrefabs);
 		}
 	};
 
 	const std::string base = def->name.empty() ? std::string("PrefabInstance") : def->name;
 
 	if (def->kind == PrefabKind::Primitive) {
-		{ PEPPER_SCOPE("InstantiatePrefab::AddPrimitive"); AddDynamicPrimitive(def->primitiveParams.primitiveType, worldPos); }
-		if (dynamicPrimitives_.empty()) return nullptr;
+		PrimitiveInstance::PrimitiveType primitiveType{};
+		if (!PrimitiveInstance::PrimitiveTypeFromInt(def->primitiveParams.primitiveType, primitiveType)) return nullptr;
+		PrimitiveInstance* back = nullptr;
+		{ PEPPER_SCOPE("InstantiatePrefab::AddPrimitive"); back = AddDynamicPrimitive(primitiveType, worldPos); }
 
-		auto& back = dynamicPrimitives_.back();
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		back->SetName(MakeUniqueDynamicName(base, dynamicPrimitives_, back.get()));
+		back->SetName(MakeUniqueDynamicName(base, GetDynamicPrimitives(), back));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->ApplyPrefabParams(def->primitiveParams);
@@ -232,36 +276,38 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 		back->SetRotate(def->defaultRotate);
 		back->SetTranslate(worldPos);
 		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
-		applyHPAndDamage(back.get());
-		return back.get();
+		applyHPAndDamage(back);
+		// 定数バッファを今の位置で確定させる（次の Update まで原点に描かれないように）
+		back->Update();
+		return back;
 	} else if (def->kind == PrefabKind::Animated || def->isAnimated) {
-		{ PEPPER_SCOPE("InstantiatePrefab::AddAnimated"); AddDynamicAnimated(def->modelDir, def->modelFile, worldPos); }
-		if (dynamicAnimated_.empty()) return nullptr;
+		AnimatedObject3DInstance* back = nullptr;
+		{ PEPPER_SCOPE("InstantiatePrefab::AddAnimated"); back = AddDynamicAnimated(def->modelDir, def->modelFile, worldPos); }
+		if (!back) return nullptr;
 
-		auto& back = dynamicAnimated_.back();
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		back->SetName(MakeUniqueDynamicName(base, dynamicAnimated_, back.get()));
+		back->SetName(MakeUniqueDynamicName(base, GetDynamicAnimated(), back));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
-		applyHPAndDamage(back.get());
-		return back.get();
+		applyHPAndDamage(back);
+		return back;
 	} else {
-		{ PEPPER_SCOPE("InstantiatePrefab::AddObject3D"); AddDynamicObject(def->modelDir, def->modelFile, worldPos); }
-		if (object3DInstances_.empty()) return nullptr;
+		Object3DInstance* back = nullptr;
+		{ PEPPER_SCOPE("InstantiatePrefab::AddObject3D"); back = AddDynamicObject(def->modelDir, def->modelFile, worldPos); }
+		if (!back) return nullptr;
 
-		auto& back = object3DInstances_.back();
 		PEPPER_SCOPE("InstantiatePrefab::UniqueName");
-		back->SetName(MakeUniqueDynamicName(base, object3DInstances_, back.get()));
+		back->SetName(MakeUniqueDynamicName(base, GetDynamicObjects(), back));
 		Gameplay::Of(back).SetTag(def->tag);
 		Gameplay::Of(back).SetPrefabName(prefabName);
 		back->SetScale(def->defaultScale);
 		back->SetRotate(def->defaultRotate);
 		if (def->hasCollider) applyCollider(Gameplay::Of(back).GetCollider());
-		applyHPAndDamage(back.get());
-		return back.get();
+		applyHPAndDamage(back);
+		return back;
 	}
 }
 
@@ -272,40 +318,24 @@ IImGuiEditable* GameScene::InstantiatePrefab(const std::string& prefabName, cons
 IImGuiEditable* GameScene::SpawnEnemyOnSpline(const std::string& prefabName,
 	SplineCurveActor* spline, float speed, bool removeAtEnd,
 	float initialT, int waveEntryIndex) {
-	if (!spline || spline->GetPointCount() < 2) {
-		LogBuffer::Instance().Add(
+	if (!spline || spline->GetPointCount() < kMinSplinePointCount) {
+		LogBuffer::GetInstance()->Add(
 			std::string("SpawnEnemyOnSpline: invalid spline for ") + prefabName,
 			LogBuffer::Level::Warning);
 		return nullptr;
 	}
 
-	// プレハブの種別を問わず、各 dynamic 配列のサイズ差分でスポーン対象を特定する
-	const size_t prevPrim = dynamicPrimitives_.size();
-	const size_t prevAnim = dynamicAnimated_.size();
-	const size_t prevObj  = object3DInstances_.size();
-
 	const float clampedInitialT = (initialT < 0.0f) ? 0.0f : (initialT > 1.0f ? 1.0f : initialT);
 	const Vector3 startPos = spline->Sample(clampedInitialT);
-	InstantiatePrefab(prefabName, startPos);
-
-	IImGuiEditable* spawned = nullptr;
-	if (dynamicPrimitives_.size() != prevPrim) {
-		spawned = dynamicPrimitives_.back().get();
-		// transform CB を即時反映（弾と同じ理由）
-		dynamicPrimitives_.back()->Update();
-	} else if (dynamicAnimated_.size() != prevAnim) {
-		spawned = dynamicAnimated_.back().get();
-	} else if (object3DInstances_.size() != prevObj) {
-		spawned = object3DInstances_.back().get();
-	}
+	IImGuiEditable* spawned = InstantiatePrefab(prefabName, startPos);
 
 	if (!spawned) {
-		LogBuffer::Instance().Add(
+		LogBuffer::GetInstance()->Add(
 			std::string("SpawnEnemyOnSpline: prefab not found or not instantiable: ") + prefabName,
 			LogBuffer::Level::Warning);
 		return nullptr;
 	}
-	ApplyDifficultyHp(spawned);
+	ApplyDifficultyHp(spawned, *GetGameSession()->GetDifficultyProfile());
 
 	MovingEnemy me{};
 	me.entity         = spawned;
@@ -334,10 +364,8 @@ void GameScene::UpdateMovingEnemies(float deltaTime) {
 		// ビルボード：プレイヤー方向を向く（カメラ方向ではない）
 		if (m.billboardToPlayer) {
 			const Vector3* selfPos = m.entity->GetEditableTranslate();
-			// player_ は派生クラスが持つため、コントローラ経由で player を取得できない。
-			// UpdateEnemyControllers で ctx.player を設定済みなのでここでは EnemyController の
-			// billboardToPlayer_ フラグが false に上書きされている場合は処理しない。
-			// ビルボード回転は UpdateEnemyControllers 内で行う。
+			// player_ は派生クラスが持つため、ここでは回さない。
+			// ビルボード回転は UpdateEnemyControllers 内で行う（EnemyController::IsBillboardToPlayer を見る）。
 		}
 	}
 
@@ -345,7 +373,7 @@ void GameScene::UpdateMovingEnemies(float deltaTime) {
 	for (auto it = movingEnemies_.begin(); it != movingEnemies_.end();) {
 		if (it->entity && it->spline && it->t >= 1.0f) {
 			// 紐付くコントローラに終端到達を通知
-			if (it->controller) it->controller->splineArrived_ = true;
+			if (it->controller) it->controller->NotifySplineArrived();
 			if (it->removeAtEnd) {
 				DestroyDynamicEntity(it->entity);
 			}
@@ -376,7 +404,7 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 	{
 		Camera* cam = GetCamera();
 		const Vector3* pp = player ? player->GetEditableTranslate() : nullptr;
-		if (cam && pp && deltaTime > 1e-5f) {
+		if (cam && pp && deltaTime > kMinAimSampleDeltaTime) {
 			const Vector3 cp = cam->GetTranslate();
 			if (hasPrevAimSample_) {
 				const float inv = 1.0f / deltaTime;
@@ -388,7 +416,7 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 				// Seek やシーン切替のワープで異常値になったフレームは先読みしない
 				const float railSq = railVel.x * railVel.x + railVel.y * railVel.y + railVel.z * railVel.z;
 				const float ownSq = ownVel.x * ownVel.x + ownVel.y * ownVel.y + ownVel.z * ownVel.z;
-				if (railSq > 150.0f * 150.0f || ownSq > 60.0f * 60.0f) {
+				if (railSq > kMaxPlausibleRailSpeed * kMaxPlausibleRailSpeed || ownSq > kMaxPlausiblePlayerSpeed * kMaxPlausiblePlayerSpeed) {
 					railVel = { 0.0f, 0.0f, 0.0f };
 					ownVel = { 0.0f, 0.0f, 0.0f };
 				}
@@ -400,25 +428,14 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 	}
 
 	for (auto& ctrl : enemyControllers_) {
-		if (!ctrl || !ctrl->entity_) continue;
+		if (!ctrl || !ctrl->GetEntity()) continue;
+		IImGuiEditable* entity = ctrl->GetEntity();
 
-		// コンテキスト構築（in フィールド）
-		// WaveEntry の情報は EnemyController に直接持たせるか、派生クラスで設定する。
-		// ここでは ctrl 自身が持つ waveEntry 情報を使うため、派生クラスが triggerT 等を設定済みの前提。
+		// コンテキスト構築（in フィールド）。Wave のエントリの値はコントローラ自身が詰める
 		EnemyContext ctx{};
 		ctx.player          = player;
 		ctx.scene           = this;
 		ctx.stageTimeSec    = stageTimeSec;
-		ctx.triggerSec      = ctrl->triggerSec_;
-		ctx.shootIntervalSec = ctrl->shootIntervalSec_;
-		ctx.spawnIntervalSec = ctrl->spawnIntervalSec_;
-		ctx.spawnLimit      = ctrl->spawnLimit_;
-		ctx.childPrefab     = ctrl->childPrefab_;
-		ctx.childSplineId   = ctrl->childSplineId_;
-		ctx.splineArrived   = ctrl->splineArrived_;
-		ctx.hoverOffset         = ctrl->hoverOffset_;
-		ctx.hoverApproachSpeed  = ctrl->hoverApproachSpeed_;
-		ctx.hoverHoldDuration   = ctrl->hoverHoldDuration_;
 		ctx.viewFrustum         = viewFrustum;
 		ctx.hasViewFrustum      = hasFrustum;
 		ctx.playerRailVelocity  = railVel;
@@ -427,9 +444,9 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 
 		ctrl->Update(deltaTime, ctx);
 
-		// ビルボード回転（コントローラが billboardToPlayer_=true を維持している間）
-		if (ctrl->billboardToPlayer_ && player && ctrl->entity_) {
-			Vector3* pos  = ctrl->entity_->GetEditableTranslate();
+		// ビルボード回転（コントローラが自機の方を向かせている間）
+		if (ctrl->IsBillboardToPlayer() && player) {
+			Vector3* pos  = entity->GetEditableTranslate();
 			Vector3* ppos = player->GetEditableTranslate();
 			if (pos && ppos) {
 				const float dx = ppos->x - pos->x;
@@ -438,52 +455,52 @@ void GameScene::UpdateEnemyControllers(float deltaTime, IImGuiEditable* player, 
 				const float horiz = std::sqrt(dx * dx + dz * dz);
 				const float yaw   = std::atan2(dx, dz);
 				const float pitch = -std::atan2(dy, horiz);
-				ctrl->entity_->SetRotate({ pitch, yaw, 0.0f });
+				entity->SetRotate({ pitch, yaw, 0.0f });
 			}
 		}
 
 		// MovingEnemy の billboardToPlayer フラグを ctrl に同期
 		for (auto& m : movingEnemies_) {
-			if (m.entity == ctrl->entity_) {
-				m.billboardToPlayer = ctrl->billboardToPlayer_;
+			if (m.entity == entity) {
+				m.billboardToPlayer = ctrl->IsBillboardToPlayer();
 				break;
 			}
 		}
 
 		// 自由移動（Retreat / Rush）
-		if (ctrl->useFreeVelocity_ && ctrl->entity_) {
-			if (Vector3* pos = ctrl->entity_->GetEditableTranslate()) {
-				pos->x += ctrl->freeVelocity_.x * deltaTime;
-				pos->y += ctrl->freeVelocity_.y * deltaTime;
-				pos->z += ctrl->freeVelocity_.z * deltaTime;
+		if (ctrl->UsesFreeVelocity()) {
+			if (Vector3* pos = entity->GetEditableTranslate()) {
+				const Vector3& v = ctrl->GetFreeVelocity();
+				pos->x += v.x * deltaTime;
+				pos->y += v.y * deltaTime;
+				pos->z += v.z * deltaTime;
 			}
 		}
 
 		// スプライン切り離し
-		if (ctrl->requestDetach_) {
+		if (ctrl->ConsumeDetachRequest()) {
 			for (auto it = movingEnemies_.begin(); it != movingEnemies_.end(); ++it) {
-				if (it->entity == ctrl->entity_) {
+				if (it->entity == entity) {
 					it->removeAtEnd = false;
 					it->speed = 0.0f; // 以降はコントローラが位置を制御
 					break;
 				}
 			}
-			ctrl->requestDetach_ = false;
 		}
 	}
 
 	// 完了したコントローラのエンティティを破棄
 	for (auto& ctrl : enemyControllers_) {
-		if (ctrl && ctrl->IsDone() && ctrl->entity_) {
-			DestroyDynamicEntity(ctrl->entity_);
-			ctrl->entity_ = nullptr;
+		if (ctrl && ctrl->IsDone() && ctrl->GetEntity()) {
+			DestroyDynamicEntity(ctrl->GetEntity());
+			ctrl->ClearEntity();
 		}
 	}
-	// entity_ が null（破棄済み）または全コマンド完了したコントローラを削除
+	// 敵が無い（破棄済み）または全コマンド完了したコントローラを削除
 	enemyControllers_.erase(
 		std::remove_if(enemyControllers_.begin(), enemyControllers_.end(),
 			[](const std::unique_ptr<EnemyController>& c) {
-				return !c || !c->entity_ || c->IsDone();
+				return !c || !c->GetEntity() || c->IsDone();
 			}),
 		enemyControllers_.end());
 
@@ -501,7 +518,7 @@ Vector3 GameScene::GetShotAimPoint(IImGuiEditable* target) {
 	if (!tp) return { 0.0f, 0.0f, 0.0f };
 	if (Gameplay::Of(target).GetTag() != EntityTag::Player) return *tp;
 	// シーンが判定の姿勢を決めていればその中心（当たり判定と同じ点を狙う）
-	if (Gameplay::Of(target).hasColliderPose) return Gameplay::Of(target).colliderPoseCenter;
+	if (Gameplay::Of(target).HasColliderPose()) return Gameplay::Of(target).GetColliderPoseCenter();
 	// オフセットは自機の回転（Object3D と同じ Rx·Ry·Rz）で回す。降下中の前傾でも見た目の体の中心に合う
 	const Vector3& off = Gameplay::Of(target).GetCollider().offset;
 	const Vector3* rot = static_cast<const IImGuiEditable*>(target)->GetEditableRotate();
@@ -525,31 +542,24 @@ void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 		}
 	}
 	// プレハブに bullet 指定がなければデフォルトにフォールバック
-	if (speed          < 0.0f) speed          = 18.0f;
-	if (lifetime       < 0.0f) lifetime       = 4.0f;
+	if (speed          < 0.0f) speed          = kDefaultEnemyBulletSpeed;
+	if (lifetime       < 0.0f) lifetime       = kDefaultEnemyBulletLifetime;
 	if (homingStrength < 0.0f) homingStrength = 0.0f;
 
-	const size_t prevCount = dynamicPrimitives_.size();
-	InstantiatePrefab(prefabName, pos);
-	if (dynamicPrimitives_.size() != prevCount + 1) {
-		LogBuffer::Instance().Add(
+	PrimitiveInstance* spawned = dynamic_cast<PrimitiveInstance*>(InstantiatePrefab(prefabName, pos));
+	if (!spawned) {
+		LogBuffer::GetInstance()->Add(
 			std::string("SpawnEnemyBullet: prefab not spawned as primitive: ") + prefabName,
 			LogBuffer::Level::Warning);
 		return;
 	}
 
 	const Vector3 vel{ direction.x * speed, direction.y * speed, direction.z * speed };
-	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
-	if (spawned) {
-		spawned->Update();
-		Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
-			if (!other) return;
-			if (Gameplay::Of(other).GetTag() != EntityTag::Player) return;
-			for (auto& b : bullets_) {
-				if (b.primitive == spawned) b.remainingLifetime = -1.0f;
-			}
-		};
-	}
+	Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
+		if (!other) return;
+		if (Gameplay::Of(other).GetTag() != EntityTag::Player) return;
+		if (BulletRuntime* b = FindBullet(spawned)) b->remainingLifetime = -1.0f;
+	};
 
 	BulletRuntime br{};
 	br.primitive         = spawned;
@@ -559,26 +569,95 @@ void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 	br.originPos         = pos;
 	br.homingTarget      = homingTarget;
 	br.homingStrength    = homingStrength;
-	if (spawned) br.baseColliderRadius = Gameplay::Of(spawned).GetCollider().radius;
-	bullets_.push_back(br);
+	br.baseColliderRadius = Gameplay::Of(spawned).GetCollider().radius;
+	bullets_.emplace(spawned, std::move(br));
+}
+
+GameScene::BulletRuntime* GameScene::FindBullet(PrimitiveInstance* primitive) {
+	auto it = bullets_.find(primitive);
+	return (it != bullets_.end()) ? &it->second : nullptr;
+}
+
+void GameScene::ForEachEnemyBullet(const std::function<void(PrimitiveInstance* bullet)>& fn) const {
+	for (const auto& [prim, b] : bullets_) {
+		if (!prim || b.remainingLifetime < 0.0f) continue;
+		if (Gameplay::Of(prim).GetTag() != EntityTag::EnemyAttack) continue;
+		fn(prim);
+	}
+}
+
+bool GameScene::IsBullet(const PrimitiveInstance* primitive) const {
+	return bullets_.count(const_cast<PrimitiveInstance*>(primitive)) != 0;
+}
+
+void GameScene::KillBullet(const IImGuiEditable* bullet) {
+	if (!bullet) return;
+	// 上向きのキャスト（PrimitiveInstance* → IImGuiEditable*）で比べるだけなので、消えた弾のポインタでも中身を読まない
+	for (auto& [prim, b] : bullets_) {
+		if (static_cast<const IImGuiEditable*>(prim) == bullet) {
+			b.remainingLifetime = -1.0f;
+			return;
+		}
+	}
+}
+
+void GameScene::KillAllEnemyBullets() {
+	for (auto& [prim, b] : bullets_) {
+		if (prim && Gameplay::Of(prim).GetTag() == EntityTag::EnemyAttack) b.remainingLifetime = -1.0f;
+	}
+}
+
+void GameScene::ClearCombatRuntime() {
+	enemyControllers_.clear();
+	pendingEnemyControllers_.clear();
+	movingEnemies_.clear();
+	bullets_.clear();
+	melees_.clear();
+}
+
+void GameScene::ForEachMovingEnemyEntry(const std::function<void(IImGuiEditable* entity, int waveEntryIndex)>& fn) const {
+	for (const auto& m : movingEnemies_) {
+		if (m.entity) fn(m.entity, m.waveEntryIndex);
+	}
+}
+
+void GameScene::AddStationaryMovingEnemy(IImGuiEditable* entity, int waveEntryIndex) {
+	MovingEnemy me{};
+	me.entity         = entity;
+	me.spline         = nullptr;
+	me.t              = 0.0f;
+	me.speed          = 0.0f;
+	me.removeAtEnd    = false;
+	me.waveEntryIndex = waveEntryIndex;
+	movingEnemies_.push_back(me);
+}
+
+void GameScene::AttachControllerToMovingEnemy(IImGuiEditable* entity, EnemyController* ctrl) {
+	for (auto& m : movingEnemies_) {
+		if (m.entity == entity) {
+			m.controller = ctrl;
+			m.billboardToPlayer = ctrl->IsBillboardToPlayer();
+			break;
+		}
+	}
+}
+
+EnemyController* GameScene::FindEnemyControllerByWave(int waveEntryIndex) const {
+	for (const auto& ctrl : enemyControllers_) {
+		if (ctrl && ctrl->GetWaveEntryIndex() == waveEntryIndex) return ctrl.get();
+	}
+	return nullptr;
+}
+
+void GameScene::ForEachEnemyController(const std::function<void(const EnemyController& ctrl)>& fn) const {
+	for (const auto& ctrl : enemyControllers_) {
+		if (ctrl) fn(*ctrl);
+	}
 }
 
 IImGuiEditable* GameScene::SpawnEnemyAt(const std::string& prefabName, const Vector3& pos) {
-	const size_t prevPrim = dynamicPrimitives_.size();
-	const size_t prevAnim = dynamicAnimated_.size();
-	const size_t prevObj  = object3DInstances_.size();
-	InstantiatePrefab(prefabName, pos);
-	IImGuiEditable* spawned = nullptr;
-	if (dynamicPrimitives_.size() != prevPrim) {
-		// CB を即座にスポーン位置で確定させる（フレーム終わりに走る Update まで原点で描画されないように）
-		dynamicPrimitives_.back()->Update();
-		spawned = dynamicPrimitives_.back().get();
-	} else if (dynamicAnimated_.size() != prevAnim) {
-		spawned = dynamicAnimated_.back().get();
-	} else if (object3DInstances_.size() != prevObj) {
-		spawned = object3DInstances_.back().get();
-	}
-	ApplyDifficultyHp(spawned);
+	IImGuiEditable* spawned = InstantiatePrefab(prefabName, pos);
+	ApplyDifficultyHp(spawned, *GetGameSession()->GetDifficultyProfile());
 	return spawned;
 }
 
@@ -602,10 +681,10 @@ void GameScene::ApplyEnemyRepulsion(IImGuiEditable* self) {
 		float d2 = dx * dx + dy * dy + dz * dz;
 		if (d2 >= minDist * minDist) return;
 		float d = std::sqrt(d2);
-		if (d < 1e-4f) {
+		if (d < kTinyEpsilon) {
 			// 完全重なり: 微小ランダム方向に逃がす
-			selfPos->x += 0.01f;
-			selfPos->z += 0.01f;
+			selfPos->x += kOverlapNudge;
+			selfPos->z += kOverlapNudge;
 			return;
 		}
 		const float push = (minDist - d) * 0.5f; // 半分だけ自分を押す（相手は別フレームで自分を押す）
@@ -614,9 +693,9 @@ void GameScene::ApplyEnemyRepulsion(IImGuiEditable* self) {
 		selfPos->z += dz / d * push;
 	};
 
-	for (auto& p : dynamicPrimitives_)  repelAgainst(p.get());
-	for (auto& a : dynamicAnimated_)    repelAgainst(a.get());
-	for (auto& o : object3DInstances_)  repelAgainst(o.get());
+	for (auto& p : GetDynamicPrimitives())  repelAgainst(p.get());
+	for (auto& a : GetDynamicAnimated())    repelAgainst(a.get());
+	for (auto& o : GetDynamicObjects())  repelAgainst(o.get());
 }
 
 void GameScene::RegisterEnemyController(std::unique_ptr<EnemyController> ctrl) {
@@ -637,11 +716,11 @@ void GameScene::DestroyDynamicEntity(IImGuiEditable* e) {
 		if (m.entity == e) m.entity = nullptr;
 	}
 	for (auto& ctrl : enemyControllers_) {
-		if (ctrl && ctrl->entity_ == e) ctrl->entity_ = nullptr;
+		if (ctrl && ctrl->GetEntity() == e) ctrl->ClearEntity();
 	}
-	for (auto& b : bullets_) {
+	for (auto& [prim, b] : bullets_) {
 		if (b.homingTarget == e) b.homingTarget = nullptr;
-		if (b.penetrate) b.hitCooldowns.erase(e);
+		b.hitCooldowns.erase(e);
 	}
 	for (auto& m : melees_) {
 		if (m.owner == e) m.owner = nullptr;
@@ -649,12 +728,10 @@ void GameScene::DestroyDynamicEntity(IImGuiEditable* e) {
 	}
 
 	// e が動的プリミティブなら、それを primitive として参照する弾・近接も掃除
-	for (const auto& p : dynamicPrimitives_) {
+	for (const auto& p : GetDynamicPrimitives()) {
 		if (static_cast<IImGuiEditable*>(p.get()) == e) {
 			PrimitiveInstance* prim = p.get();
-			for (auto& b : bullets_) {
-				if (b.primitive == prim) b.remainingLifetime = -1.0f;
-			}
+			if (auto it = bullets_.find(prim); it != bullets_.end()) it->second.remainingLifetime = -1.0f;
 			for (auto& m : melees_) {
 				if (m.primitive == prim) { m.remainingLifetime = -1.0f; m.primitive = nullptr; }
 			}
@@ -687,11 +764,10 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	const std::string& prefabName,
 	int attackPower,
 	float sizeScale) {
-	const size_t prevCount = dynamicPrimitives_.size();
-	InstantiatePrefab(prefabName, pos);
-	if (dynamicPrimitives_.size() != prevCount + 1) {
+	PrimitiveInstance* spawned = dynamic_cast<PrimitiveInstance*>(InstantiatePrefab(prefabName, pos));
+	if (!spawned) {
 		// プレハブが Primitive 種別でなかった、または見つからなかった
-		LogBuffer::Instance().Add(
+		LogBuffer::GetInstance()->Add(
 			std::string("SpawnPlayerBullet: prefab not spawned as primitive: ") + prefabName,
 			LogBuffer::Level::Warning);
 		return;
@@ -700,21 +776,17 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	// velocity = direction * speed（direction は呼び出し側が正規化済みの前提）
 	const Vector3 vel{ direction.x * speed, direction.y * speed, direction.z * speed };
 
-	// 弾プレハブの貫通設定を読む
-	bool        penetrate = false;
-	float       penetrateDamageRate = 0.2f;
-	std::string penetrateEffect;
-	if (const PrefabDef* bdef = PrefabManager::GetInstance()->Find(prefabName); bdef && bdef->hasBullet) {
-		penetrate           = bdef->bulletPenetrate;
-		penetrateDamageRate = bdef->bulletPenetrateDamageRate;
-		penetrateEffect     = bdef->bulletPenetrateEffect;
-	}
+	// 弾プレハブの貫通設定を読む（bullet の指定が無ければ PrefabDef の既定値）
+	const PrefabDef* bdef = PrefabManager::GetInstance()->Find(prefabName);
+	const PrefabDef& bullet = (bdef && bdef->hasBullet) ? *bdef : PrefabDef::Defaults();
+	const bool        penetrate           = bullet.bulletPenetrate;
+	const float       penetrateDamageRate = bullet.bulletPenetrateDamageRate;
+	const std::string penetrateEffect     = bullet.bulletPenetrateEffect;
 
 	const Vector3 bulletEuler = DirectionToEuler(direction);
 
-	int penetrateDamage = 0;
-	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
-	if (spawned) {
+	int hitDamage = 0;
+	{
 		// 進行方向に弾の向きを合わせる
 		spawned->SetRotate(bulletEuler);
 		// サイズ倍率を見た目とコライダー両方に適用（baseColliderRadius は下で倍率後の半径を拾う）
@@ -737,45 +809,42 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 		DamageDealer& dd = Gameplay::Of(spawned).GetDamageDealer();
 		if (dd.enabled) {
 			dd.damage = static_cast<int>(static_cast<float>(attackPower) * dd.multiplier);
-			penetrateDamage = dd.damage;
-			// 貫通弾は CollisionManager の毎フレーム自動ダメージを無効化し、onCollision で damageRate 制御する
-			if (penetrate) {
-				dd.enabled = false;
-			}
+			hitDamage = dd.damage;
+			// CollisionManager の自動ダメージは重なっている相手すべてに入る（ボスの腕と本体に同時に重なると二重に入る）。
+			// 自機の弾は onCollision で「1 発が同じ持ち主に当たるのは 1 回」に制御するので切る。
+			// damage の値は残す（必殺技の吸収などが読む）
+			dd.enabled = false;
 		}
 
-		// 敵に当たったときの処理。実ダメージ適用は通常弾=CollisionManager / 貫通弾=ここで手動。
+		// 敵に当たったときの処理。ダメージもここで入れる
 		Gameplay::Of(spawned).GetCollider().onCollision = [this, spawned](IImGuiEditable* other) {
 			if (!other) return;
 			const EntityTag tag = Gameplay::Of(other).GetTag();
 			if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+			BulletRuntime* b = FindBullet(spawned);
+			if (!b) return;
 
 			Vector3 hitPos{ 0.0f, 0.0f, 0.0f };
 			if (const Vector3* t = spawned->GetEditableTranslate()) {
 				hitPos = *t;
 			}
+			HP& hp = Gameplay::Of(other).GetHP();
 
-			for (auto& b : bullets_) {
-				if (b.primitive != spawned) continue;
-				if (b.penetrate) {
-					// 貫通：damageRate クールタイムが切れていればダメージ + ヒットエフェクト
-					auto it = b.hitCooldowns.find(other);
-					const float cd = (it != b.hitCooldowns.end()) ? it->second : 0.0f;
-					if (cd <= 0.0f) {
-						if (Gameplay::Of(other).GetHP().enabled) {
-							Gameplay::Of(other).GetHP().TakeDamage(b.penetrateDamage);
-						}
-						// 攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を再生
-						PlayHitEffects(spawned, other, hitPos);
-						b.hitCooldowns[other] = b.penetrateDamageRate;
-					}
-					// 貫通弾は消えない
-				} else {
-					// 通常弾：攻撃側の "hit" ＋ 被弾側（敵）の "hurt" を再生 + 死亡フラグ（実ダメージは CollisionManager 側）
-					PlayHitEffects(spawned, other, hitPos);
-					b.remainingLifetime = -1.0f;
-				}
-				break;
+			if (b->penetrate) {
+				// 貫通：持ち主ごとのクールタイムが切れていればダメージ + ヒットエフェクト（弾は消えない）
+				IImGuiEditable* root = Gameplay::DamageRootOf(other);
+				auto it = b->hitCooldowns.find(root);
+				if (it != b->hitCooldowns.end() && it->second > 0.0f) return;
+				if (hp.enabled) hp.TakeDamage(b->hitDamage);
+				PlayHitEffects(spawned, other, hitPos);
+				b->hitCooldowns[root] = b->penetrateDamageRate;
+			} else {
+				// 通常弾：最初の 1 体にだけ入れて消える（同じフレームに重なった別の判定は無視）
+				if (b->hasHit) return;
+				b->hasHit = true;
+				if (hp.enabled) hp.TakeDamage(b->hitDamage);
+				PlayHitEffects(spawned, other, hitPos);
+				b->remainingLifetime = -1.0f;
 			}
 			// HPゼロの敵は SweepDeadEntities が後で破棄する
 		};
@@ -787,7 +856,7 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.speed = speed;
 	br.remainingLifetime = lifetime;
 	br.originPos = pos;
-	br.baseColliderRadius = spawned ? Gameplay::Of(spawned).GetCollider().radius : 0.0f;
+	br.baseColliderRadius = Gameplay::Of(spawned).GetCollider().radius;
 	br.colliderGrowthPerMeter = colliderGrowthPerMeter;
 	br.homingTarget = homingTarget;
 	br.homingStrength = homingStrength;
@@ -795,18 +864,15 @@ void GameScene::SpawnPlayerBullet(const Vector3& pos, const Vector3& direction,
 	br.penetrate = penetrate;
 	br.penetrateDamageRate = penetrateDamageRate;
 	br.penetrateEffect = penetrateEffect;
-	br.penetrateDamage = penetrateDamage;
+	br.hitDamage = hitDamage;
 
 	// 弾追従エフェクト（trail スロット、ループ前提）を再生。弾消滅時に Stop する。
-	if (spawned) {
-		const std::string trailEff = Gameplay::Of(spawned).FindEffect("trail");
-		if (!trailEff.empty()) {
-			br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
-			// エフェクトの向きを弾の進行方向に合わせる
-			EffectManager::GetInstance()->SetRotation(br.trailEffectHandle, bulletEuler);
-		}
+	if (const std::string trailEff = Gameplay::Of(spawned).FindEffect("trail"); !trailEff.empty()) {
+		br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
+		// エフェクトの向きを弾の進行方向に合わせる
+		EffectManager::GetInstance()->SetRotation(br.trailEffectHandle, bulletEuler);
 	}
-	bullets_.push_back(br);
+	bullets_.emplace(spawned, std::move(br));
 }
 
 void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
@@ -815,22 +881,16 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	int attackPower,
 	const Vector3& extraWorldOffset,
 	float sizeScale) {
-	// 近接パラメータをプレハブから読む（無ければデフォルトで動かす）
-	float activeDuration = 0.20f;
-	Vector3 offset{ 0.0f, 0.0f, 2.0f };
-	float cleanWindow = 0.08f;
-	float cleanMul = 1.5f;
-	float lateMul = 0.7f;
+	// 近接パラメータをプレハブから読む（melee の指定が無ければ PrefabDef の既定値で動かす）
 	Vector3 baseScale{ 1.0f, 1.0f, 1.0f };
 	const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefabName);
 	if (mdef) baseScale = mdef->defaultScale;
-	if (mdef && mdef->hasMelee) {
-		activeDuration = mdef->meleeActiveDuration;
-		offset         = mdef->meleeOffset;
-		cleanWindow    = mdef->meleeCleanWindow;
-		cleanMul       = mdef->meleeCleanMultiplier;
-		lateMul        = mdef->meleeLateMultiplier;
-	}
+	const PrefabDef& melee = (mdef && mdef->hasMelee) ? *mdef : PrefabDef::Defaults();
+	const float activeDuration = melee.meleeActiveDuration;
+	const Vector3 offset       = melee.meleeOffset;
+	const float cleanWindow    = melee.meleeCleanWindow;
+	const float cleanMul       = melee.meleeCleanMultiplier;
+	const float lateMul        = melee.meleeLateMultiplier;
 
 	// 判定オフセットを基底ベクトルでワールドへ展開（右/上/前）
 	const Vector3 worldOffset{
@@ -855,17 +915,13 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 		}
 	}
 
-	const size_t prevCount = dynamicPrimitives_.size();
-	InstantiatePrefab(prefabName, spawnPos);
-	if (dynamicPrimitives_.size() != prevCount + 1) {
-		LogBuffer::Instance().Add(
+	PrimitiveInstance* spawned = dynamic_cast<PrimitiveInstance*>(InstantiatePrefab(prefabName, spawnPos));
+	if (!spawned) {
+		LogBuffer::GetInstance()->Add(
 			std::string("SpawnPlayerMelee: prefab not spawned as primitive: ") + prefabName,
 			LogBuffer::Level::Warning);
 		return;
 	}
-
-	PrimitiveInstance* spawned = dynamicPrimitives_.back().get();
-	if (!spawned) return;
 
 	// サイズ倍率（STG=1.0 / ボス戦=小さめ 等）を見た目とコライダー両方に適用。
 	if (sizeScale != 1.0f) {
@@ -909,8 +965,8 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 
 		for (auto& m : melees_) {
 			if (m.primitive != spawned) continue;
-			if (m.hitTargets.count(other)) return; // この判定では既に当てた敵
-			m.hitTargets.insert(other);
+			// この判定では既に当てた持ち主（ボスの腕と本体に同時に触れても 1 回）
+			if (!m.hitTargets.insert(Gameplay::DamageRootOf(other)).second) return;
 
 			const bool clean = (m.elapsed <= m.cleanWindow);
 			if (Gameplay::Of(other).GetHP().enabled) {
@@ -964,15 +1020,15 @@ void GameScene::SweepDeadEntities() {
 	PEPPER_SCOPE("GameScene::SweepDeadEntities");
 	// 死亡エンティティを収集（破棄で配列が変わるので二段階）。Player タグは除外。
 	std::vector<IImGuiEditable*> dead;
-	dead.reserve(8);
+	dead.reserve(kDeadEntityReserveCount);
 	auto collect = [&](IImGuiEditable* e) {
 		if (!e) return;
 		if (Gameplay::Of(e).GetTag() == EntityTag::Player) return;
 		if (Gameplay::Of(e).GetHP().IsDead()) dead.push_back(e);
 	};
-	for (auto& p : dynamicPrimitives_) collect(p.get());
-	for (auto& o : object3DInstances_) collect(o.get());
-	for (auto& a : dynamicAnimated_)   collect(a.get());
+	for (auto& p : GetDynamicPrimitives()) collect(p.get());
+	for (auto& o : GetDynamicObjects()) collect(o.get());
+	for (auto& a : GetDynamicAnimated())   collect(a.get());
 
 	// DestroyDynamicEntity が movingEnemies_ / bullets_.homingTarget も
 	// 安全にクリアしてくれるので、こちらを経由して破棄する。
@@ -995,9 +1051,15 @@ void GameScene::SweepDeadEntities() {
 
 namespace {
 	/// <summary>
-	/// 線分 p1q1 と p2q2 の最短距離の二乗と、そのときの p1q1 上の割合 s（0..1）を返す（Christer Ericson）。
+	/// 線分 p1q1 と p2q2 の最短距離を求める（Christer Ericson）。
 	/// 弾の移動線分とカプセルの芯の交差に使う。
 	/// </summary>
+	/// <param name="p1">1 本目の始点</param>
+	/// <param name="q1">1 本目の終点</param>
+	/// <param name="p2">2 本目の始点</param>
+	/// <param name="q2">2 本目の終点</param>
+	/// <param name="s">最も近づく所の p1q1 上の割合（0..1）の書き込み先</param>
+	/// <returns>最短距離の二乗</returns>
 	float ClosestSegmentSegment(const Vector3& p1, const Vector3& q1, const Vector3& p2, const Vector3& q2, float& s) {
 		const Vector3 d1{ q1.x - p1.x, q1.y - p1.y, q1.z - p1.z };
 		const Vector3 d2{ q2.x - p2.x, q2.y - p2.y, q2.z - p2.z };
@@ -1008,18 +1070,18 @@ namespace {
 		const float f = dot(d2, r);
 		float t = 0.0f;
 		s = 0.0f;
-		if (a <= 1e-8f && e <= 1e-8f) {
+		if (a <= kSegmentEpsilon && e <= kSegmentEpsilon) {
 			// 両方とも点
-		} else if (a <= 1e-8f) {
+		} else if (a <= kSegmentEpsilon) {
 			t = (std::clamp)(f / e, 0.0f, 1.0f);
 		} else {
 			const float c = dot(d1, r);
-			if (e <= 1e-8f) {
+			if (e <= kSegmentEpsilon) {
 				s = (std::clamp)(-c / a, 0.0f, 1.0f);
 			} else {
 				const float b = dot(d1, d2);
 				const float denom = a * e - b * b;
-				s = denom > 1e-8f ? (std::clamp)((b * f - c * e) / denom, 0.0f, 1.0f) : 0.0f;
+				s = denom > kSegmentEpsilon ? (std::clamp)((b * f - c * e) / denom, 0.0f, 1.0f) : 0.0f;
 				t = (b * s + f) / e;
 				if (t < 0.0f) {
 					t = 0.0f;
@@ -1040,7 +1102,7 @@ namespace {
 float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const {
 	const Vector3 d{ to.x - from.x, to.y - from.y, to.z - from.z };
 	const float a = d.x * d.x + d.y * d.y + d.z * d.z;
-	if (a < 1e-10f) return -1.0f;
+	if (a < kSegmentLengthSqEpsilon) return -1.0f;
 
 	// 接触判定より少し内側（半径和の 90%）で交差を取る。
 	// 敵の更新は弾の後に走り、同フレームで最大 ~1m 動くので、止める位置は「入った点」ではなく
@@ -1084,7 +1146,7 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 			return;
 		}
 		const float bq = 2.0f * (f.x * d.x + f.y * d.y + f.z * d.z);
-		const float disc = bq * bq - 4.0f * a * cq;
+		const float disc = bq * bq - kQuadraticDiscriminantCoeff * a * cq;
 		if (disc < 0.0f) return;
 		const float entry = (-bq - std::sqrt(disc)) / (2.0f * a);
 		if (entry < 0.0f || entry > 1.0f) return;
@@ -1094,13 +1156,13 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 		bestStop = (std::clamp)(closest, entry, 1.0f);
 	};
 
-	for (const auto& p : dynamicPrimitives_) {
+	for (const auto& p : GetDynamicPrimitives()) {
 		if (p) if (const Vector3* pos = p->GetEditableTranslate()) test(p.get(), *pos);
 	}
-	for (const auto& o : object3DInstances_) {
+	for (const auto& o : GetDynamicObjects()) {
 		if (o) if (const Vector3* pos = o->GetEditableTranslate()) test(o.get(), *pos);
 	}
-	for (const auto& an : dynamicAnimated_) {
+	for (const auto& an : GetDynamicAnimated()) {
 		if (an) test(an.get(), an->GetTranslate());
 	}
 	return bestStop;
@@ -1110,7 +1172,7 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 	PEPPER_SCOPE("GameScene::UpdateBullets");
 	if (bullets_.empty()) return;
 
-	for (auto& b : bullets_) {
+	for (auto& [prim, b] : bullets_) {
 		if (!b.primitive) continue;
 		const float deltaTime = (playerBulletDeltaTime >= 0.0f && Gameplay::Of(b.primitive).GetTag() == EntityTag::PlayerBullet)
 			? playerBulletDeltaTime : worldDeltaTime;
@@ -1138,7 +1200,7 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 				const float dy = tp.y - t->y;
 				const float dz = tp.z - t->z;
 				const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-				if (dist > 1e-4f) {
+				if (dist > kTinyEpsilon) {
 					const float wantedX = dx / dist;
 					const float wantedY = dy / dist;
 					const float wantedZ = dz / dist;
@@ -1150,7 +1212,7 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 					float ny = curY + (wantedY - curY) * alpha;
 					float nz = curZ + (wantedZ - curZ) * alpha;
 					const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
-					if (nlen > 1e-6f) {
+					if (nlen > kSquaredEpsilon) {
 						nx /= nlen; ny /= nlen; nz /= nlen;
 						b.velocity = { nx * b.speed, ny * b.speed, nz * b.speed };
 					}
@@ -1180,7 +1242,7 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 		*t = to;
 
 		// 進行方向に弾とエフェクトの向きを合わせる（ホーミングで方向が変わるため毎フレーム更新）
-		if (b.speed > 1e-4f) {
+		if (b.speed > kTinyEpsilon) {
 			const Vector3 d{ b.velocity.x / b.speed, b.velocity.y / b.speed, b.velocity.z / b.speed };
 			const Vector3 rot = DirectionToEuler(d);
 			b.primitive->SetRotate(rot);
@@ -1190,7 +1252,7 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 #ifdef USE_IMGUI
 			// デバッグ：プレイヤー弾の進行方向に線を表示（黄色）
 			if (Gameplay::Of(b.primitive).GetTag() == EntityTag::PlayerBullet) {
-				DebugDraw::Ray(*t, d, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
+				DebugDraw::Ray(*t, d, kBulletDebugRayLength, { 1.0f, 1.0f, 0.0f, 1.0f });
 			}
 #endif
 		}
@@ -1223,25 +1285,19 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 		}
 	}
 
-	// 寿命切れの弾を削除：bullets_ から外し、対応する dynamicPrimitives_ も deferredDeletes_ へ
+	// 寿命切れの弾を削除：bullets_ から外し、対応するプリミティブもシーンの一覧から外して遅延破棄する
 	for (auto it = bullets_.begin(); it != bullets_.end();) {
-		if (it->remainingLifetime > 0.0f && it->primitive) {
+		BulletRuntime& b = it->second;
+		if (b.remainingLifetime > 0.0f && b.primitive) {
 			++it;
 			continue;
 		}
 		// 弾消滅と同時に trail エフェクトを停止
-		if (it->trailEffectHandle != 0) {
-			EffectManager::GetInstance()->Stop(it->trailEffectHandle);
-			it->trailEffectHandle = 0;
+		if (b.trailEffectHandle != 0) {
+			EffectManager::GetInstance()->Stop(b.trailEffectHandle);
+			b.trailEffectHandle = 0;
 		}
-		// 該当 primitive を dynamicPrimitives_ から取り出す
-		PrimitiveInstance* dead = it->primitive;
-		auto pit = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
-			[dead](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == dead; });
-		if (pit != dynamicPrimitives_.end()) {
-			deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(pit->release()));
-			dynamicPrimitives_.erase(pit);
-		}
+		ReleaseDynamicEntity(it->first);
 		it = bullets_.erase(it);
 	}
 }
@@ -1270,7 +1326,7 @@ void GameScene::UpdateMelees(float deltaTime) {
 		}
 	}
 
-	// 持続切れの判定を削除：melees_ から外し、対応する dynamicPrimitives_ も deferredDeletes_ へ
+	// 持続切れの判定を削除：melees_ から外し、対応するプリミティブもシーンの一覧から外して遅延破棄する
 	for (auto it = melees_.begin(); it != melees_.end();) {
 		if (it->remainingLifetime > 0.0f && it->primitive) {
 			++it;
@@ -1281,15 +1337,7 @@ void GameScene::UpdateMelees(float deltaTime) {
 			EffectManager::GetInstance()->Stop(it->swingEffectHandle);
 			it->swingEffectHandle = 0;
 		}
-		PrimitiveInstance* dead = it->primitive;
-		if (dead) {
-			auto pit = std::find_if(dynamicPrimitives_.begin(), dynamicPrimitives_.end(),
-				[dead](const std::unique_ptr<PrimitiveInstance>& p) { return p.get() == dead; });
-			if (pit != dynamicPrimitives_.end()) {
-				deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(pit->release()));
-				dynamicPrimitives_.erase(pit);
-			}
-		}
+		ReleaseDynamicEntity(it->primitive);
 		it = melees_.erase(it);
 	}
 }
@@ -1303,31 +1351,12 @@ void GameScene::UpdateMelees(float deltaTime) {
 
 void GameScene::ClearDynamicEntities() {
 	// 破棄は次フレームに回す（コマンドリスト記録中のリソースを先に消さないため）
-	for (auto& o : object3DInstances_) {
-		if (o) deferredDeletes_.emplace_back(std::shared_ptr<Object3DInstance>(o.release()));
-	}
-	object3DInstances_.clear();
-	for (auto& a : dynamicAnimated_) {
-		if (a) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedObject3DInstance>(a.release()));
-	}
-	dynamicAnimated_.clear();
-	for (auto& m : dynamicAnimatedModels_) {
-		if (m) deferredDeletes_.emplace_back(std::shared_ptr<AnimatedModelInstance>(m.release()));
-	}
-	dynamicAnimatedModels_.clear();
-	for (auto& s : dynamicSprites_) {
-		if (s) deferredDeletes_.emplace_back(std::shared_ptr<SpriteInstance>(s.release()));
-	}
-	dynamicSprites_.clear();
-	for (auto& p : dynamicPrimitives_) {
-		if (p) deferredDeletes_.emplace_back(std::shared_ptr<PrimitiveInstance>(p.release()));
-	}
-	dynamicPrimitives_.clear();
+	ClearAllDynamicEntities();
 	// 取っておいたストリーミングのエントリも配置の一部なので一緒に捨てる（読み込み済みのグループは覚えたまま）
 	pendingStreamEntities_.clear();
 	streamCreated_.clear();
 	for (auto& sp : dynamicSplines_) {
-		if (sp) deferredDeletes_.emplace_back(std::shared_ptr<SplineCurveActor>(sp.release()));
+		DeferDelete(std::move(sp));
 	}
 	dynamicSplines_.clear();
 }
@@ -1359,7 +1388,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		}
 	};
 
-	for (const auto& o : object3DInstances_) {
+	for (const auto& o : GetDynamicObjects()) {
 		if (!o) continue;
 		const EntityTag tag = Gameplay::Of(o).GetTag();
 		if (ShouldSkipOnSave(o.get(), tag)) continue;
@@ -1374,7 +1403,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		out.entities.push_back(std::move(d));
 	}
 
-	for (const auto& a : dynamicAnimated_) {
+	for (const auto& a : GetDynamicAnimated()) {
 		if (!a) continue;
 		const EntityTag tag = Gameplay::Of(a).GetTag();
 		if (ShouldSkipOnSave(a.get(), tag)) continue;
@@ -1389,7 +1418,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		out.entities.push_back(std::move(d));
 	}
 
-	for (const auto& p : dynamicPrimitives_) {
+	for (const auto& p : GetDynamicPrimitives()) {
 		if (!p) continue;
 		const EntityTag tag = Gameplay::Of(p).GetTag();
 		if (ShouldSkipOnSave(p.get(), tag)) continue;
@@ -1405,7 +1434,7 @@ void GameScene::CollectSceneData(SceneData& out) const {
 		out.entities.push_back(std::move(d));
 	}
 
-	for (const auto& s : dynamicSprites_) {
+	for (const auto& s : GetDynamicSprites()) {
 		if (!s) continue;
 		const EntityTag tag = Gameplay::Of(s).GetTag();
 		if (ShouldSkipOnSave(s.get(), tag)) continue;
@@ -1455,10 +1484,9 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 	IImGuiEditable* created = nullptr;
 	switch (d.kind) {
 	case SceneEntityDesc::Kind::Object3D: {
-		AddDynamicObject(d.dir, d.file, d.translate);
-		if (object3DInstances_.empty()) break;
-		auto& back = object3DInstances_.back();
-		created = back.get();
+		Object3DInstance* back = AddDynamicObject(d.dir, d.file, d.translate);
+		if (!back) break;
+		created = back;
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1466,10 +1494,9 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		break;
 	}
 	case SceneEntityDesc::Kind::AnimatedObject3D: {
-		AddDynamicAnimated(d.dir, d.file, d.translate);
-		if (dynamicAnimated_.empty()) break;
-		auto& back = dynamicAnimated_.back();
-		created = back.get();
+		AnimatedObject3DInstance* back = AddDynamicAnimated(d.dir, d.file, d.translate);
+		if (!back) break;
+		created = back;
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1477,10 +1504,10 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		break;
 	}
 	case SceneEntityDesc::Kind::Primitive: {
-		AddDynamicPrimitive(d.primitiveType, d.translate);
-		if (dynamicPrimitives_.empty()) break;
-		auto& back = dynamicPrimitives_.back();
-		created = back.get();
+		PrimitiveInstance::PrimitiveType primitiveType{};
+		if (!PrimitiveInstance::PrimitiveTypeFromInt(d.primitiveType, primitiveType)) break;
+		PrimitiveInstance* back = AddDynamicPrimitive(primitiveType, d.translate);
+		created = back;
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		back->SetScale(d.scale);
@@ -1489,10 +1516,9 @@ void GameScene::ApplySceneEntity(const SceneEntityDesc& d) {
 		break;
 	}
 	case SceneEntityDesc::Kind::Sprite: {
-		AddDynamicSprite(d.texture, d.spritePos.x, d.spritePos.y);
-		if (dynamicSprites_.empty()) break;
-		auto& back = dynamicSprites_.back();
-		created = back.get();
+		SpriteInstance* back = AddDynamicSprite(d.texture, d.spritePos.x, d.spritePos.y);
+		if (!back) break;
+		created = back;
 		back->SetName(d.name);
 		Gameplay::Of(back).SetTag(d.tag);
 		break;
@@ -1536,7 +1562,7 @@ void GameScene::LogSceneEntityStats() {
 	for (int i = 0; i < kSceneKindCount; ++i) {
 		line += std::format(" {}={}/{:.2f}ms", kKindNames[i], sceneKindCount_[i], sceneKindMs_[i]);
 	}
-	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info, line);
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info, line);
 }
 
 bool GameScene::BeginSceneLoadFromJson(const std::string& filePath) {
@@ -1545,7 +1571,7 @@ bool GameScene::BeginSceneLoadFromJson(const std::string& filePath) {
 	sceneLoadPending_ = false;
 	std::string error;
 	if (!SceneSerializer::ReadFile(filePath, pendingSceneData_, &error)) {
-		LogBuffer::Instance().Add(
+		LogBuffer::GetInstance()->Add(
 			"Scene load FAILED: " + filePath + " (" + error + ")", LogBuffer::Level::Error);
 		return false;
 	}
@@ -1586,7 +1612,7 @@ size_t GameScene::LoadStreamGroup(const std::string& group) {
 	});
 	for (const auto& d : targets) ApplySceneEntity(d);
 
-	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 		std::format("LOAD kind=stream group={} count={} wall_ms={:.2f}", group, targets.size(), LoadProfiler::NowMs() - start));
 	return targets.size();
 }
@@ -1598,8 +1624,8 @@ size_t GameScene::UnloadStreamGroup(const std::string& group) {
 		auto in = [&](const auto& list) {
 			return std::any_of(list.begin(), list.end(), [&](const auto& p) { return p.get() == e; });
 		};
-		return in(object3DInstances_) || in(dynamicAnimated_) || in(dynamicPrimitives_) ||
-		       in(dynamicSprites_) || in(dynamicSplines_);
+		return in(GetDynamicObjects()) || in(GetDynamicAnimated()) || in(GetDynamicPrimitives()) ||
+		       in(GetDynamicSprites()) || in(dynamicSplines_);
 	};
 	size_t count = 0;
 	std::erase_if(streamCreated_, [&](StreamCreated& c) {
@@ -1638,7 +1664,7 @@ bool GameScene::SaveSceneToJson(const std::string& filePath) {
 	SceneData data;
 	CollectSceneData(data);
 	const bool ok = SceneSerializer::WriteFile(filePath, data);
-	LogBuffer::Instance().Add(
+	LogBuffer::GetInstance()->Add(
 		ok ? ("Scene saved: " + filePath) : ("Scene save FAILED: " + filePath),
 		ok ? LogBuffer::Level::Info : LogBuffer::Level::Error);
 	return ok;
@@ -1660,7 +1686,7 @@ bool GameScene::LoadSceneFromJson(const std::string& filePath) {
 	const bool read = SceneSerializer::ReadFile(filePath, data, &error);
 	lp->EndPhase("SceneJson/Read");
 	if (!read) {
-		LogBuffer::Instance().Add(
+		LogBuffer::GetInstance()->Add(
 			"Scene load FAILED: " + filePath + " (" + error + ")", LogBuffer::Level::Error);
 		return false;
 	}
@@ -1676,6 +1702,6 @@ bool GameScene::LoadSceneFromJson(const std::string& filePath) {
 	OnAfterSceneLoad();
 	lp->EndPhase("SceneJson/AfterLoad");
 
-	LogBuffer::Instance().Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
+	LogBuffer::GetInstance()->Add("Scene loaded: " + filePath, LogBuffer::Level::Info);
 	return true;
 }

@@ -12,21 +12,77 @@
 #endif
 
 namespace {
+	// 長さがこれより短いベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-5f;
+	// 上の 2 基のファンネルの大きさの初期値
+	constexpr Vector3 kUpperFunnelScale = { 0.8f, 0.8f, 0.8f };
+	// 上の 2 基のファンネルの左右の位置の初期値（バックパックから）[m]
+	constexpr float kUpperFunnelOffsetX = 0.2f;
+	// 上の 2 基のファンネルの高さの初期値（バックパックから）[m]
+	constexpr float kUpperFunnelOffsetY = 0.6f;
+	// 下の 2 基のファンネルの大きさの初期値
+	constexpr Vector3 kLowerFunnelScale = { 0.6f, 0.6f, 0.6f };
+	// 下の 2 基のファンネルの左右の位置の初期値（バックパックから）[m]
+	constexpr float kLowerFunnelOffsetX = 0.4f;
+	// 下の 2 基のファンネルを下げる量の初期値（バックパックから）[m]
+	constexpr float kLowerFunnelOffsetY = 0.3f;
+	// 時間の長さの下限 [秒]（これ以下なら割合を出さない）
+	constexpr float kMinSeconds = 1e-4f;
+	// 狙う向きと付ける所の前の内積がこれより大きければその向きを使う
+	constexpr float kMountFacingDot = 0.3f;
+	// 周回の輪を縦につぶす割合（自機の上下を隠さない）
+	constexpr float kOrbitVerticalSquash = 0.6f;
+	// 周回の輪を自機の中心から後ろへずらす量 [m]
+	constexpr float kOrbitBackOffset = 0.3f;
+	// 狙う敵を散らす線形合同法の掛ける数
+	constexpr uint32_t kLcgMultiplier = 1664525u;
+	// 狙う敵を散らす線形合同法の足す数
+	constexpr uint32_t kLcgIncrement = 1013904223u;
+	// 線形合同法の値の上の方のビットを使うためにずらす量 [ビット]
+	constexpr int kLcgHighBitsShift = 16;
+	// ファンネルの向きを寄せる速さ [1/秒]
+	constexpr float kAimTurnRate = 12.0f;
+	// smoothstep（3k² − 2k³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3k² − 2k³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+
 	constexpr const char* kFunnelDir = "Resources/Models/Weapons/FlightUnit/Attack/Export";
 	constexpr const char* kFunnelLargeFile = "FunnelLarge.mesh";
 	constexpr const char* kFunnelSmallFile = "FunnelSmall.mesh";
 
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 Normalized(const Vector3& v, const Vector3& fallback) {
 		const float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-		if (len < 1e-5f) return fallback;
+		if (len < kMinNormalizeLength) return fallback;
 		return { v.x / len, v.y / len, v.z / len };
 	}
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 CrossV(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>内積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a・b</returns>
 	float DotV(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+	/// <summary>行列の r 行目の xyz を取り出す（行＝右・上・前・位置）</summary>
+	/// <param name="m">行列</param>
+	/// <param name="r">行の番号 0〜3</param>
+	/// <returns>r 行目の xyz</returns>
 	Vector3 Row(const Matrix4x4& m, int r) { return { m.m[r][0], m.m[r][1], m.m[r][2] }; }
-	// 前（+Z）を forward、上を upHint に寄せた行列（行＝右・上・前・位置）
+	/// <summary>前（+Z）を forward、上を upHint に寄せたワールド行列を作る（行＝右・上・前・位置）</summary>
+	/// <param name="pos">位置</param>
+	/// <param name="forward">前に向ける方向</param>
+	/// <param name="upHint">上に寄せる方向</param>
+	/// <param name="scale">3 軸そろえた拡大率</param>
+	/// <returns>ワールド行列</returns>
 	Matrix4x4 MakeLookWorld(const Vector3& pos, const Vector3& forward, const Vector3& upHint, float scale) {
 		const Vector3 f = Normalized(forward, { 0.0f, 0.0f, 1.0f });
 		const Vector3 r = Normalized(CrossV(upHint, f), { 1.0f, 0.0f, 0.0f });
@@ -44,10 +100,10 @@ FlightUnitAssault::FlightUnitAssault() {
 	// 付ける所の初期値（バックパックのローカル。バックパックは装甲の面＝+Z を後ろへ向けて背負うので、前は -Z。
 	// ファンネルの前（+Z）を自機の前へ向けるため Y を 180°）。ImGui で合わせて FlightUnit.json に保存する
 	const Vector3 front{ 0.0f, kPi, 0.0f };
-	funnels_[0].mount = { { 0.8f, 0.8f, 0.8f }, front, { -0.2f, 0.6f, 0.0f } };
-	funnels_[1].mount = { { 0.8f, 0.8f, 0.8f }, front, { 0.2f, 0.6f, 0.0f } };
-	funnels_[2].mount = { { 0.6f, 0.6f, 0.6f }, front, { -0.4f, -0.3f, 0.0f } };
-	funnels_[3].mount = { { 0.6f, 0.6f, 0.6f }, front, { 0.4f, -0.3f, 0.0f } };
+	funnels_[0].mount = { kUpperFunnelScale, front, { -kUpperFunnelOffsetX, kUpperFunnelOffsetY, 0.0f } };
+	funnels_[1].mount = { kUpperFunnelScale, front, { kUpperFunnelOffsetX, kUpperFunnelOffsetY, 0.0f } };
+	funnels_[2].mount = { kLowerFunnelScale, front, { -kLowerFunnelOffsetX, -kLowerFunnelOffsetY, 0.0f } };
+	funnels_[3].mount = { kLowerFunnelScale, front, { kLowerFunnelOffsetX, -kLowerFunnelOffsetY, 0.0f } };
 }
 
 FlightUnitAssault::~FlightUnitAssault() = default;
@@ -96,12 +152,12 @@ void FlightUnitAssault::Cancel(bool restoreTime) {
 
 float FlightUnitAssault::GetActiveRatio() const {
 	const float d = funnelDuration_[LevelIndex()];
-	return d > 1e-4f ? std::clamp(1.0f - timer_ / d, 0.0f, 1.0f) : 0.0f;
+	return d > kMinSeconds ? std::clamp(1.0f - timer_ / d, 0.0f, 1.0f) : 0.0f;
 }
 
 float FlightUnitAssault::ReleaseRatio() const {
-	if (active_) return funnelDeploy_ > 1e-4f ? (std::min)(timer_ / funnelDeploy_, 1.0f) : 1.0f;
-	if (returning_) return funnelReturn_ > 1e-4f ? std::clamp(1.0f - returnTimer_ / funnelReturn_, 0.0f, 1.0f) : 0.0f;
+	if (active_) return funnelDeploy_ > kMinSeconds ? (std::min)(timer_ / funnelDeploy_, 1.0f) : 1.0f;
+	if (returning_) return funnelReturn_ > kMinSeconds ? std::clamp(1.0f - returnTimer_ / funnelReturn_, 0.0f, 1.0f) : 0.0f;
 	return 0.0f;
 }
 
@@ -130,7 +186,7 @@ void FlightUnitAssault::UpdatePassive(float dt, bool canAct) {
 		if (canAct && f.hasWorld) {
 			const Vector3 p = Row(f.world, 3);
 			const Vector3 d = Normalized({ aim.x - p.x, aim.y - p.y, aim.z - p.z }, f.mountForward);
-			if (DotV(d, f.mountForward) > 0.3f) desired = d;
+			if (DotV(d, f.mountForward) > kMountFacingDot) desired = d;
 		}
 		f.turretDir = Normalized(Lerp(f.turretDir, desired, turn), f.mountForward);
 	}
@@ -153,13 +209,13 @@ Vector3 FlightUnitAssault::FunnelHome(int i) const {
 	Vector3 right, up, forward;
 	GetCameraBasis(right, up, forward);
 	const Vector3 anchor = host_->GetFlightUnitAnchor();
-	const float a = spinAngle_ + 6.2831853f * static_cast<float>(i) / static_cast<float>(kFunnelCount);
+	const float a = spinAngle_ + kTwoPi * static_cast<float>(i) / static_cast<float>(kFunnelCount);
 	const float c = std::cos(a) * funnelRadius_;
-	const float s = std::sin(a) * funnelRadius_ * 0.6f;   // 縦に少しつぶす（自機の上下を隠さない）
+	const float s = std::sin(a) * funnelRadius_ * kOrbitVerticalSquash;   // 縦に少しつぶす（自機の上下を隠さない）
 	return {
-		anchor.x + right.x * c + up.x * s - forward.x * 0.3f,
-		anchor.y + right.y * c + up.y * s - forward.y * 0.3f,
-		anchor.z + right.z * c + up.z * s - forward.z * 0.3f,
+		anchor.x + right.x * c + up.x * s - forward.x * kOrbitBackOffset,
+		anchor.y + right.y * c + up.y * s - forward.y * kOrbitBackOffset,
+		anchor.z + right.z * c + up.z * s - forward.z * kOrbitBackOffset,
 	};
 }
 
@@ -168,8 +224,8 @@ IImGuiEditable* FlightUnitAssault::PickFunnelTarget(int i) {
 	if (IImGuiEditable* t = host_->GetReticleTarget(); t && host_->IsEnemyAlive(t)) return t;
 	if (screenEnemies_.empty()) return nullptr;
 	// 重なっていなければ画面上の敵へ散らす（ファンネルごとに違う敵を狙いやすく）
-	pickSeed_ = pickSeed_ * 1664525u + 1013904223u;
-	const size_t idx = (static_cast<size_t>(i) + (pickSeed_ >> 16)) % screenEnemies_.size();
+	pickSeed_ = pickSeed_ * kLcgMultiplier + kLcgIncrement;
+	const size_t idx = (static_cast<size_t>(i) + (pickSeed_ >> kLcgHighBitsShift)) % screenEnemies_.size();
 	return screenEnemies_[idx];
 }
 
@@ -205,7 +261,7 @@ void FlightUnitAssault::UpdateFunnels(float dt, bool canAct) {
 			}
 		}
 		// 向きはすっと寄せる
-		const float turn = 1.0f - std::exp(-dt * 12.0f);
+		const float turn = 1.0f - std::exp(-dt * kAimTurnRate);
 		f.aimDir = Normalized(Lerp(f.aimDir, desired, turn), forward);
 
 		f.fireTimer -= dt;
@@ -221,7 +277,7 @@ void FlightUnitAssault::UpdateModels(const Matrix4x4& backpackWorld) {
 	Vector3 right, up, forward;
 	GetCameraBasis(right, up, forward);
 	float k = ReleaseRatio();
-	k = k * k * (3.0f - 2.0f * k);
+	k = k * k * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * k);
 
 	for (int i = 0; i < kFunnelCount; ++i) {
 		Funnel& f = funnels_[i];

@@ -19,15 +19,26 @@ namespace {
     // ドロップ配置時のグリッドスナップ刻み（0.5）
     constexpr float kPlacementSnapStep = 0.5f;
 
+    // レイの向きの Y がこれ未満なら Y=0 の平面と交わらないとみなす
+    constexpr float kMinRayDirY = 1e-5f;
+
+    /// <summary>step 刻みに丸める</summary>
+    /// <param name="v">値</param>
+    /// <param name="step">刻み（0 以下なら丸めない）</param>
+    /// <returns>丸めた値</returns>
     inline float SnapTo(float v, float step) {
         if (step <= 0.0f) return v;
         return std::round(v / step) * step;
     }
 
     /// <summary>
-    /// マウス相対座標 (0..1) からカメラを通って Y=0 平面に当たる点を算出。
-    /// 失敗時（カメラがほぼ水平で平面に当たらない等）は false を返す。
+    /// マウス相対座標 (0..1) からカメラを通って Y=0 平面に当たる点を求め、0.5 刻みにスナップする
     /// </summary>
+    /// <param name="camera">シーンのカメラ</param>
+    /// <param name="relX">ビューポート画像内の X（0..1）</param>
+    /// <param name="relY">ビューポート画像内の Y（0..1、上が 0）</param>
+    /// <param name="outHit">当たった点を書く先</param>
+    /// <returns>当たったら true（カメラが無い・ほぼ水平・平面が後ろなら false）</returns>
     bool ScreenToY0Plane(const Camera* camera, float relX, float relY, Vector3& outHit) {
         if (!camera) return false;
 
@@ -49,7 +60,7 @@ namespace {
             farPoint.z - nearPoint.z };
 
         // Y=0 平面と交差。dir.y が極小ならカメラがほぼ水平で交差しない
-        if (std::fabs(dir.y) < 1e-5f) return false;
+        if (std::fabs(dir.y) < kMinRayDirY) return false;
 
         float t = -nearPoint.y / dir.y;
         if (t < 0.0f) return false; // 後方なら無効
@@ -73,7 +84,7 @@ void ViewportWindow::OnDraw() {
 
     // --- 再生/停止コントロール（現在シーンの sceneTimeScale を 0/1 に切り替え） ---
     {
-        Scene* scene = ImGuiManager::Instance().GetActiveScene();
+        Scene* scene = ImGuiManager::GetInstance()->GetActiveScene();
         const bool isPaused = scene && scene->GetSceneTimeScale() == 0.0f;
         if (ImGui::Button(isPaused ? "Play" : "Pause")) {
             if (scene) scene->SetSceneTimeScale(isPaused ? 1.0f : 0.0f);
@@ -117,7 +128,7 @@ void ViewportWindow::OnDraw() {
 
     // ----- SceneEditor からのドロップ受付 -----
     if (ImGui::BeginDragDropTarget()) {
-        Scene* scene = ImGuiManager::Instance().GetActiveScene();
+        Scene* scene = ImGuiManager::GetInstance()->GetActiveScene();
 
         // マウス位置 → ビューポート画像相対座標 (0..1) → ワールド座標 (Y=0平面)
         Vector3 worldPos{ 0.0f, 0.0f, 0.0f };
@@ -162,8 +173,10 @@ void ViewportWindow::OnDraw() {
         else if (const ImGuiPayload* payload =
             ImGui::AcceptDragDropPayload(PRIMITIVE_DROP_PAYLOAD_TYPE)) {
             const PrimitiveDropPayload* p = static_cast<const PrimitiveDropPayload*>(payload->Data);
-            if (scene) scene->AddDynamicPrimitive(p->primitiveType,
-                hasWorldPos ? worldPos : Vector3{});
+            PrimitiveInstance::PrimitiveType primitiveType{};
+            if (scene && PrimitiveInstance::PrimitiveTypeFromInt(p->primitiveType, primitiveType)) {
+                scene->AddDynamicPrimitive(primitiveType, hasWorldPos ? worldPos : Vector3{});
+            }
         }
         // プリファブ → まずシーンのフック（Wave Editor 等）に委譲。
         // 消費されなければ従来通り Y=0 にスナップ配置。

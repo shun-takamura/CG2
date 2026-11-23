@@ -9,13 +9,104 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 座った目と同じ外（+Z）を向く yaw [度]
+	constexpr float kFaceForwardYawDegrees = 360.0f;
+	// 座ったままハッチが開くのを待ち終えるキーの時刻 [秒]
+	constexpr float kWaitHatchEndTime = 2.2f;
+	// 立ち上がるキーの時刻 [秒]
+	constexpr float kStandUpTime = 2.7f;
+	// 立ち上がった目の高さ（機体の原点から）[m]
+	constexpr float kStandUpEyeY = 12.75f;
+	// 立ち上がったときに座った目から前へ出る距離 [m]
+	constexpr float kStandUpForward = 0.27f;
+	// 立ち上がった所で見下ろす角度 [度]
+	constexpr float kStandUpPitchDegrees = 5.0f;
+	// 入口をくぐって胸の装甲の外へ出るキーの時刻 [秒]
+	constexpr float kExitChestTime = 3.5f;
+	// 胸の装甲の外へ出た所の目の位置 [m]
+	constexpr Vector3 kExitChestEye = { 0.0f, 12.7f, 1.7f };
+	// 胸の装甲の外へ出た所で見下ろす角度 [度]
+	constexpr float kExitChestPitchDegrees = 8.0f;
+	// 手のひらの手前側を歩くキーの時刻 [秒]
+	constexpr float kPalmNearTime = 4.3f;
+	// 手のひらの手前側の目の位置 [m]
+	constexpr Vector3 kPalmNearEye = { 0.0f, 12.6f, 2.9f };
+	// 手のひらの上で足元を見る角度 [度]
+	constexpr float kPalmPitchDegrees = 14.0f;
+	// 手のひらの先を歩くキーの時刻 [秒]
+	constexpr float kPalmFarTime = 5.1f;
+	// 手のひらの先の目の位置 [m]
+	constexpr Vector3 kPalmFarEye = { 0.0f, 12.6f, 3.6f };
+	// 手のひらから足場へ降りるキーの時刻 [秒]
+	constexpr float kStepDownTime = 5.7f;
+	// 足場へ降りた所の目の位置 [m]
+	constexpr Vector3 kStepDownEye = { 0.0f, 12.2f, 4.2f };
+	// 足場へ降りた所で見下ろす角度 [度]
+	constexpr float kStepDownPitchDegrees = 12.0f;
+	// 足場の上を歩くキーの時刻 [秒]
+	constexpr float kWalkBridgeTime = 6.4f;
+	// 足場の上を歩く所の目の位置 [m]
+	constexpr Vector3 kWalkBridgeEye = { 0.0f, 12.2f, 5.2f };
+	// 足場の上を歩く所で見下ろす角度 [度]
+	constexpr float kWalkBridgePitchDegrees = 2.0f;
+	// 待機の位置まで歩き終えるキーの時刻 [秒]
+	constexpr float kWalkEndTime = 7.0f;
+	// 待機の目の位置（Start で待機の視点に合わせる）[m]
+	constexpr Vector3 kHomeEye = { 0.0f, 12.2f, 6.6f };
+	// 振り返って機体を見るキーの時刻 [秒]
+	constexpr float kTurnBackTime = 8.2f;
+	// 振り返って機体の方を向いた yaw [度]（360 + 180）
+	constexpr float kTurnBackYawDegrees = 540.0f;
+	// 振り返って機体を見上げる角度 [度]（− で上を向く）
+	constexpr float kHomePitchDegrees = 2.0f;
+	// 歩くときの頭の上下の幅 [m]
+	constexpr float kBobAmplitude = 0.04f;
+	// 歩くときの 1 秒あたりの歩数
+	constexpr float kBobStepsPerSecond = 1.8f;
+	// ハッチが開き始める時刻の初期値 [秒]
+	constexpr float kDefaultHatchStartTime = 0.2f;
+	// 胸の装甲が開き始める時刻の初期値 [秒]
+	constexpr float kDefaultChestOpenStartTime = 1.6f;
+	// 胸の装甲が開き切る時刻の初期値 [秒]
+	constexpr float kDefaultChestOpenEndTime = 2.6f;
+	// 胸の装甲が閉じ始める時刻の初期値 [秒]
+	constexpr float kDefaultChestCloseStartTime = 4.6f;
+	// 胸の装甲が閉じ切る時刻の初期値 [秒]
+	constexpr float kDefaultChestCloseEndTime = 5.4f;
+	// 差し出した手を戻し始める時刻の初期値 [秒]
+	constexpr float kDefaultRetractStartTime = 7.0f;
+	// ハッチが開き切る時刻の初期値 [秒]
+	constexpr float kDefaultHatchOpenTime = 2.0f;
+	// 外の光が戻り切るハッチの開きの割合の初期値
+	constexpr float kDefaultLightDimStartRatio = 0.4f;
+	// HUB へ戻る時刻の初期値（手を戻し終える Retract 7.0〜8.4 秒まで）[秒]
+	constexpr float kDefaultEndTime = 8.5f;
+	// 待機の視点に合わせる最後のキーの数（歩き終わりと振り返り）
+	constexpr int kHomeMatchedKeyCount = 2;
+	// 一回りの角度 [度]
+	constexpr float kFullTurnDegrees = 360.0f;
+	// 区間の長さ・割合の下限（0 で割らないように）
+	constexpr float kMinSpanSeconds = 1e-4f;
+	// Offer の最後のコマに止めるための十分先の時刻 [秒]
+	constexpr float kOfferLastFrameTime = 1e6f;
+
+	/// <summary>0〜1 に切る</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 の値</returns>
 	float Clamp01(float t) {
 		return std::clamp(t, 0.0f, 1.0f);
 	}
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float t) {
 		t = Clamp01(t);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
 }
 
@@ -29,46 +120,46 @@ void HubDisembarkSequence::ResetToDefaults() {
 	// 機体の原点からの相対（正面 +Z）。座った目は外（+Z）を向いているので、そのまま前へ歩けば機体に背を向けて出られる
 	track_.SetKeys({
 		// 座ったまま正面を向いてハッチが開くのを待つ（見上げない）
-		{ 0.0f, seat, 360.0f, 0.0f, Ease::Linear, false },
-		{ 2.2f, seat, 360.0f, 0.0f, Ease::Linear, false },
+		{ 0.0f, seat, kFaceForwardYawDegrees, 0.0f, Ease::Linear, false },
+		{ kWaitHatchEndTime, seat, kFaceForwardYawDegrees, 0.0f, Ease::Linear, false },
 		// 立ち上がる
-		{ 2.7f, { seat.x, 12.75f, seat.z + 0.27f }, 360.0f, 5.0f, Ease::InOut, false },
+		{ kStandUpTime, { seat.x, kStandUpEyeY, seat.z + kStandUpForward }, kFaceForwardYawDegrees, kStandUpPitchDegrees, Ease::InOut, false },
 		// 入口（z 1.565）をくぐり、光って開いた胸の装甲の外へ
-		{ 3.5f, { 0.0f, 12.7f, 1.7f }, 360.0f, 8.0f, Ease::Linear, true },
+		{ kExitChestTime, kExitChestEye, kFaceForwardYawDegrees, kExitChestPitchDegrees, Ease::Linear, true },
 		// 差し出した手のひら（上面 11.0m・z 2.2〜3.8）を歩く（足元を見る）
-		{ 4.3f, { 0.0f, 12.6f, 2.9f }, 360.0f, 14.0f, Ease::Linear, true },
-		{ 5.1f, { 0.0f, 12.6f, 3.6f }, 360.0f, 14.0f, Ease::Linear, true },
+		{ kPalmNearTime, kPalmNearEye, kFaceForwardYawDegrees, kPalmPitchDegrees, Ease::Linear, true },
+		{ kPalmFarTime, kPalmFarEye, kFaceForwardYawDegrees, kPalmPitchDegrees, Ease::Linear, true },
 		// 手のひらから足場（上面 10.6m・先 z 3.85）へ降りる
-		{ 5.7f, { 0.0f, 12.2f, 4.2f }, 360.0f, 12.0f, Ease::Linear, true },
+		{ kStepDownTime, kStepDownEye, kFaceForwardYawDegrees, kStepDownPitchDegrees, Ease::Linear, true },
 		// 足場の上を歩く
-		{ 6.4f, { 0.0f, 12.2f, 5.2f }, 360.0f, 2.0f, Ease::Linear, true },
+		{ kWalkBridgeTime, kWalkBridgeEye, kFaceForwardYawDegrees, kWalkBridgePitchDegrees, Ease::Linear, true },
 		// 足場の上の待機の位置まで（位置は Start で待機の視点に合わせる）
-		{ 7.0f, { 0.0f, 12.2f, 6.6f }, 360.0f, 0.0f, Ease::Out, true },
+		{ kWalkEndTime, kHomeEye, kFaceForwardYawDegrees, 0.0f, Ease::Out, true },
 		// 振り返って機体を見る（位置と向きは Start で待機の視点に合わせる）
-		{ 8.2f, { 0.0f, 12.2f, 6.6f }, 540.0f, -2.0f, Ease::InOut, false },
+		{ kTurnBackTime, kHomeEye, kTurnBackYawDegrees, -kHomePitchDegrees, Ease::InOut, false },
 	});
-	track_.SetBob(0.04f, 1.8f);
-	hatchStartTime_ = 0.2f;
-	chestOpenStartTime_ = 1.6f;
-	chestOpenEndTime_ = 2.6f;
-	chestCloseStartTime_ = 4.6f;
-	chestCloseEndTime_ = 5.4f;
-	retractStartTime_ = 7.0f;
-	hatchOpenTime_ = 2.0f;
-	lightDimStartRatio_ = 0.4f;
-	endTime_ = 8.5f;   // 手を戻し終える（Retract 7.0〜8.4 秒）まで
+	track_.SetBob(kBobAmplitude, kBobStepsPerSecond);
+	hatchStartTime_ = kDefaultHatchStartTime;
+	chestOpenStartTime_ = kDefaultChestOpenStartTime;
+	chestOpenEndTime_ = kDefaultChestOpenEndTime;
+	chestCloseStartTime_ = kDefaultChestCloseStartTime;
+	chestCloseEndTime_ = kDefaultChestCloseEndTime;
+	retractStartTime_ = kDefaultRetractStartTime;
+	hatchOpenTime_ = kDefaultHatchOpenTime;
+	lightDimStartRatio_ = kDefaultLightDimStartRatio;
+	endTime_ = kDefaultEndTime;   // 手を戻し終える（Retract 7.0〜8.4 秒）まで
 }
 
 void HubDisembarkSequence::MatchHome(const HubCameraTrack::Key& home) {
 	auto& keys = track_.GetKeys();
-	if (keys.size() < 2) return;
-	HubCameraTrack::Key& walkEnd = keys[keys.size() - 2];
+	if (keys.size() < kHomeMatchedKeyCount) return;
+	HubCameraTrack::Key& walkEnd = keys[keys.size() - kHomeMatchedKeyCount];
 	HubCameraTrack::Key& turn = keys.back();
 	walkEnd.eye = home.eye;
 	turn.eye = home.eye;
 	// 待機の向きを、歩き終わりの向きより先（巻き戻さずに回す側）の同じ向きにそろえる
 	float target = home.yawDegrees;
-	while (target <= walkEnd.yawDegrees) target += 360.0f;
+	while (target <= walkEnd.yawDegrees) target += kFullTurnDegrees;
 	turn.yawDegrees = target;
 	turn.pitchDegrees = home.pitchDegrees;
 }
@@ -99,23 +190,23 @@ HubDisembarkSequence::Pose HubDisembarkSequence::Evaluate(float time) const {
 	pose.pitch = camera.pitch;
 
 	// ハッチ：ゆっくり動き出して、ゆっくり止まる
-	const float span = (std::max)(hatchOpenTime_ - hatchStartTime_, 1e-4f);
+	const float span = (std::max)(hatchOpenTime_ - hatchStartTime_, kMinSpanSeconds);
 	pose.hatchOpenRatio = SmoothStep01((time - hatchStartTime_) / span);
 
 	// 外の光：隙間が広がると戻る（乗り込みと同じ式）
-	const float dimStart = (std::max)(lightDimStartRatio_, 1e-4f);
+	const float dimStart = (std::max)(lightDimStartRatio_, kMinSpanSeconds);
 	pose.lightScale = minLightScale_ + (1.0f - minLightScale_) * SmoothStep01(pose.hatchOpenRatio / dimStart);
 
 	// 機体：差し出した手のまま（Offer の最後のコマ）→ 振り返る間に戻す。胸の装甲は出る間だけ開く
 	if (time < retractStartTime_) {
 		pose.mech.arm = HubMechModel::ArmClip::Offer;
-		pose.mech.armTime = 1e6f;
+		pose.mech.armTime = kOfferLastFrameTime;
 	} else {
 		pose.mech.arm = HubMechModel::ArmClip::Retract;
 		pose.mech.armTime = time - retractStartTime_;
 	}
-	const float open = SmoothStep01((time - chestOpenStartTime_) / (std::max)(chestOpenEndTime_ - chestOpenStartTime_, 1e-4f));
-	const float close = SmoothStep01((time - chestCloseStartTime_) / (std::max)(chestCloseEndTime_ - chestCloseStartTime_, 1e-4f));
+	const float open = SmoothStep01((time - chestOpenStartTime_) / (std::max)(chestOpenEndTime_ - chestOpenStartTime_, kMinSpanSeconds));
+	const float close = SmoothStep01((time - chestCloseStartTime_) / (std::max)(chestCloseEndTime_ - chestCloseStartTime_, kMinSpanSeconds));
 	pose.mech.chestOpen = open * (1.0f - close);
 	return pose;
 }

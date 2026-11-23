@@ -12,8 +12,10 @@ public:
     virtual ~IEditorSelection() = default;
 
     /// <summary>現在選択中の編集可能オブジェクト（無ければ nullptr）。</summary>
+    /// <returns>選択中のオブジェクト（無ければ nullptr）</returns>
     virtual IImGuiEditable* GetSelected() const = 0;
 
     /// <summary>選択中オブジェクトを設定する（nullptr で選択解除）。</summary>
+    /// <param name="editable">選択するオブジェクト（nullptr で選択解除）</param>
     virtual void SetSelected(IImGuiEditable* editable) = 0;
 };

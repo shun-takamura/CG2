@@ -16,6 +16,23 @@
 #endif
 
 namespace {
+	// 定数バッファの大きさを 256 バイト単位にそろえるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 広がり・薄れの長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinPhaseSeconds = 0.01f;
+	// 墨の縁のぼかし幅の下限
+	constexpr float kMinEdgeSoftness = 0.0001f;
+	// 開く側で全面を墨の芯にするための十分大きな半径（画面の幅を 1 とした長さ）
+	constexpr float kFullCoverInkRadius = 100.0f;
+	// 雫が落ちる長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinDropSeconds = 0.001f;
+	// 芯から縁までの幅の下限（0 で割らないように）
+	constexpr float kMinEdgeWidth = 0.001f;
+	// 全体が黒に寄り始める進みの上限（0.9 で真っ黒になるより前）
+	constexpr float kMaxToneDarkStart = 0.89f;
+	// 画面全体を覆う三角形の頂点の数
+	constexpr int kFullscreenTriangleVertexCount = 3;
+
 	constexpr const wchar_t* kPixelShaderPath = L"Resources/Shaders/Transition/InkTransition.PS.hlsl";
 	// 雲のノイズを流用（R = 形の fBm / G = 低周波の fBm。上下左右がつながる）
 	constexpr const char* kNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
@@ -23,19 +40,14 @@ namespace {
 	constexpr UINT kRootNoise = ScreenWaterSurface::kRootExtraTextures;
 }
 
-void InkTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-	float screenWidth, float screenHeight) {
-	spriteManager_ = spriteManager;
-	dxCore_ = dxCore;
-	screenWidth_ = screenWidth;
-	screenHeight_ = screenHeight;
+void InkTransition::OnInitialize() {
 
-	water_.Initialize(dxCore_, SceneManager::GetInstance()->GetSRVManager(), screenWidth_, screenHeight_);
+	water_.Initialize(GetDxCore(), SceneManager::GetInstance()->GetSRVManager(), GetScreenWidth(), GetScreenHeight());
 	rootSignature_ = water_.CreateRootSignature(1);
 	pipelineState_ = water_.CreatePipelineState(rootSignature_.Get(), kPixelShaderPath, false);
 	TextureManager::GetInstance()->LoadTexture(kNoisePath);
 
-	paramsResource_ = dxCore_->CreateBufferResource((sizeof(ParamsForGPU) + 255) & ~255);
+	paramsResource_ = GetDxCore()->CreateBufferResource((sizeof(ParamsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	paramsResource_->Map(0, nullptr, reinterpret_cast<void**>(&paramsData_));
 	*paramsData_ = ParamsForGPU{};
 }
@@ -54,29 +66,29 @@ void InkTransition::OnStartCover() {
 }
 
 void InkTransition::UpdateVisual() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 
 	// 着水の瞬間に一度だけへこませる
-	if (state_ == TransitionState::FadeIn && !impulseFired_ && currentTime_ >= settings_.dropTime) {
+	if (GetState() == TransitionState::FadeIn && !impulseFired_ && GetPhaseTime() >= settings_.dropTime) {
 		water_.AddImpulse(settings_.dropCenter, settings_.impulseRadius, settings_.impulseStrength);
 		impulseFired_ = true;
 	}
 
 	// 全面黒の間は見えないので止めておく
-	if (state_ != TransitionState::Hold) {
+	if (GetState() != TransitionState::Hold) {
 		water_.Update(GetStepDeltaTime());
 	}
 }
 
-bool InkTransition::UpdateCover(float /*dt*/) {
-	// currentTime_ は基底が進める
-	const float spreadSec = currentTime_ - settings_.dropTime;
-	coverage_ = std::clamp(spreadSec / (std::max)(settings_.spreadTime, 0.01f), 0.0f, 1.0f);
+bool InkTransition::UpdateCover([[maybe_unused]] float dt) {
+	// GetPhaseTime() は基底が進める
+	const float spreadSec = GetPhaseTime() - settings_.dropTime;
+	coverage_ = std::clamp(spreadSec / (std::max)(settings_.spreadTime, kMinPhaseSeconds), 0.0f, 1.0f);
 	return coverage_ >= 1.0f;
 }
 
-bool InkTransition::UpdateReveal(float /*dt*/) {
-	fade_ = std::clamp(1.0f - currentTime_ / (std::max)(settings_.revealTime, 0.01f), 0.0f, 1.0f);
+bool InkTransition::UpdateReveal([[maybe_unused]] float dt) {
+	fade_ = std::clamp(1.0f - GetPhaseTime() / (std::max)(settings_.revealTime, kMinPhaseSeconds), 0.0f, 1.0f);
 	return fade_ <= 0.0f;
 }
 
@@ -86,7 +98,7 @@ void InkTransition::SetFullyCovered() {
 }
 
 float InkTransition::CalcInkRadius() const {
-	if (state_ == TransitionState::FadeIn && currentTime_ < settings_.dropTime) {
+	if (GetState() == TransitionState::FadeIn && GetPhaseTime() < settings_.dropTime) {
 		return -1.0f;  // 着水前
 	}
 	// 雫の点から一番遠い角まで（画面の幅を 1 とした長さ）。縁のぼかしの分だけ先まで広げて端を残さない
@@ -110,20 +122,20 @@ InkTransition::ParamsForGPU InkTransition::WriteParams() {
 	p.water = water_.GetConstants();
 	p.dropCenter = s.dropCenter;
 	p.inkRadius = CalcInkRadius();
-	p.edgeSoftness = (std::max)(s.edgeSoftness, 0.0001f);
+	p.edgeSoftness = (std::max)(s.edgeSoftness, kMinEdgeSoftness);
 	// Hold は全面黒（取り込んだ画面を読まない）。開く側は全面の墨を fade で薄める
-	if (state_ == TransitionState::Hold) {
+	if (GetState() == TransitionState::Hold) {
 		p.coverage = 1.0f;
-	} else if (state_ == TransitionState::FadeOut) {
+	} else if (GetState() == TransitionState::FadeOut) {
 		p.coverage = 0.0f;
-		p.inkRadius = 100.0f;  // 全面が墨の芯（筋の隙間を出さない）。濃さは fade で薄める
+		p.inkRadius = kFullCoverInkRadius;  // 全面が墨の芯（筋の隙間を出さない）。濃さは fade で薄める
 	} else {
 		p.coverage = coverage_;
 	}
 	p.fade = fade_;
-	p.time = (state_ == TransitionState::FadeIn) ? currentTime_ : s.dropTime + s.spreadTime;
-	p.dropPhase = (state_ == TransitionState::FadeIn && currentTime_ < s.dropTime)
-		? currentTime_ / (std::max)(s.dropTime, 0.001f) : -1.0f;
+	p.time = (GetState() == TransitionState::FadeIn) ? GetPhaseTime() : s.dropTime + s.spreadTime;
+	p.dropPhase = (GetState() == TransitionState::FadeIn && GetPhaseTime() < s.dropTime)
+		? GetPhaseTime() / (std::max)(s.dropTime, kMinDropSeconds) : -1.0f;
 	p.dropStartRadius = s.dropStartRadius;
 	p.dropEndRadius = s.dropEndRadius;
 	p.warpAmount = s.warpAmount;
@@ -132,26 +144,26 @@ InkTransition::ParamsForGPU InkTransition::WriteParams() {
 	p.tendrilFreq = s.tendrilFreq;
 	p.detailScale = s.detailScale;
 	p.wispAmount = s.wispAmount;
-	p.edgeWidth = (std::max)(s.edgeWidth, 0.001f);
+	p.edgeWidth = (std::max)(s.edgeWidth, kMinEdgeWidth);
 	p.flowSpeed = s.flowSpeed;
 	p.shadowStrength = s.shadowStrength;
 	p.thinColor = s.thinColor;
 	p.toneScale = s.toneScale;
 	p.toneMin = std::clamp(s.toneMin, 0.0f, 1.0f);
 	p.toneDepth = s.toneDepth;
-	p.toneDarkStart = std::clamp(s.toneDarkStart, 0.0f, 0.89f);
+	p.toneDarkStart = std::clamp(s.toneDarkStart, 0.0f, kMaxToneDarkStart);
 	*paramsData_ = p;
 	return p;
 }
 
 void InkTransition::Draw() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 
 	RenderTexture* sceneTarget = Game::GetPostEffect()->GetSceneRenderTarget();
 	if (!sceneTarget) return;
 
 	const ParamsForGPU params = WriteParams();
-	auto* cmd = dxCore_->GetCommandList();
+	auto* cmd = GetDxCore()->GetCommandList();
 
 	// このフレームのシーンをコピーして読む。全面黒の間はコピーしない
 	water_.BeginDraw(cmd, sceneTarget, params.coverage < 1.0f);
@@ -162,7 +174,7 @@ void InkTransition::Draw() {
 	cmd->SetGraphicsRootConstantBufferView(ScreenWaterSurface::kRootParams, paramsResource_->GetGPUVirtualAddress());
 	water_.BindTextures(cmd);
 	cmd->SetGraphicsRootDescriptorTable(kRootNoise, TextureManager::GetInstance()->GetSrvHandleGPU(kNoisePath));
-	cmd->DrawInstanced(3, 1, 0, 0);
+	cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 
 	water_.EndDraw(cmd, sceneTarget);
 }
@@ -170,14 +182,14 @@ void InkTransition::Draw() {
 void InkTransition::OnImGui() {
 #ifdef _DEBUG
 	Settings& s = settings_;
-	ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)  coverage %.2f", static_cast<int>(state_), coverage_);
+	ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)  coverage %.2f", static_cast<int>(GetState()), coverage_);
 	ImGui::SliderFloat2("Drop Center (UV)", &s.dropCenter.x, 0.0f, 1.0f);
 	ImGui::DragFloat("Drop Time [s]", &s.dropTime, 0.01f, 0.0f, 2.0f);
 	ImGui::DragFloat("Spread Time [s]", &s.spreadTime, 0.01f, 0.05f, 5.0f);
 	ImGui::DragFloat("Spread Ease", &s.spreadEase, 0.05f, 1.0f, 8.0f);
 	ImGui::DragFloat("Edge Softness", &s.edgeSoftness, 0.001f, 0.0f, 0.5f);
 	ImGui::DragFloat("Reveal Time [s]", &s.revealTime, 0.01f, 0.05f, 3.0f);
-	ImGui::DragFloat("Hold Duration [s]", &holdDuration_, 0.01f, 0.0f, 3.0f);
+	{ float hold = GetHoldDuration(); if (ImGui::DragFloat("Hold Duration [s]", &hold, 0.01f, 0.0f, 3.0f)) SetHoldDuration(hold); }
 	ImGui::SeparatorText("Ripple");
 	water_.OnImGui();
 	ImGui::DragFloat("Impulse Radius", &s.impulseRadius, 0.001f, 0.001f, 0.3f);
@@ -210,12 +222,14 @@ void InkTransition::OnImGui() {
 
 void InkTransition::LoadTuning(const JsonValue& json) {
 	TransitionTuning::Load(json, settings_);
-	TransitionTuning::Load(json["water"], water_.GetSettings());
-	holdDuration_ = static_cast<float>(json["holdDuration"].AsDouble(holdDuration_));
+	ScreenWaterSurface::Settings water = water_.GetSettings();
+	TransitionTuning::Load(json["water"], water);
+	water_.SetSettings(water);
+	SetHoldDuration(static_cast<float>(json["holdDuration"].AsDouble(GetHoldDuration())));
 }
 
 void InkTransition::SaveTuning(JsonValue& json) const {
 	json = TransitionTuning::Save(settings_);
 	json["water"] = TransitionTuning::Save(water_.GetSettings());
-	json["holdDuration"] = JsonValue(static_cast<double>(holdDuration_));
+	json["holdDuration"] = JsonValue(static_cast<double>(GetHoldDuration()));
 }

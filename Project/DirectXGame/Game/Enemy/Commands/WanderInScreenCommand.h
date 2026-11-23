@@ -1,8 +1,9 @@
 #pragma once
 #include <cmath>
+#include "MathUtility.h"
 #include "Components/Gameplay.h"
 #include "RandomGenerator.h"
-#include "Enemy/IEnemyCommand.h"
+#include "Enemy/Commands/IEnemyCommand.h"
 #include "Enemy/EnemyContext.h"
 #include "IImGuiEditable.h"
 #include "Scene/GameScene.h"
@@ -17,10 +18,18 @@
 /// </summary>
 class WanderInScreenCommand : public IEnemyCommand {
 public:
+	/// <summary>子ドローンの徘徊コマンドを作る</summary>
+	/// <param name="carrier">徘徊の中心にする運び屋</param>
+	/// <param name="radius">運び屋から離れてよい半径 [m]</param>
+	/// <param name="lifetime">徘徊する時間 [秒]（過ぎたら終わる）</param>
+	/// <param name="speed">移動の速さ [m/秒]</param>
 	WanderInScreenCommand(IImGuiEditable* carrier, float radius, float lifetime, float speed)
 		: carrier_(carrier), radius_(radius), lifetime_(lifetime), moveSpeed_(speed) {}
 
-	void OnEnter(IImGuiEditable*, EnemyContext& ctx) override {
+	/// <summary>スプライン追従を切り離し、最初の徘徊先を抽選する</summary>
+	/// <param name="entity">動かす敵（このコマンドでは使わない）</param>
+	/// <param name="ctx">敵の入力と結果の書き込み先</param>
+	void OnEnter([[maybe_unused]] IImGuiEditable* entity, EnemyContext& ctx) override {
 		elapsed_ = 0.0f;
 		retargetCooldown_ = 0.0f;
 		targetOffset_ = PickRandomOffset();
@@ -29,12 +38,19 @@ public:
 		ctx.billboardToPlayer = true;
 	}
 
+	/// <summary>
+	/// 運び屋のまわりの徘徊先へ進み（半径・運び屋より奥へ行かないようクランプ、兄弟とは押し合う）、
+	/// 射撃間隔ごとに自機を撃つ。徘徊先はときどき抽選し直す
+	/// </summary>
+	/// <param name="dt">経過時間 [秒]</param>
+	/// <param name="entity">子ドローン</param>
+	/// <param name="ctx">敵の入力と結果の書き込み先</param>
 	void Update(float dt, IImGuiEditable* entity, EnemyContext& ctx) override {
 		elapsed_ += dt;
 		retargetCooldown_ -= dt;
 		if (retargetCooldown_ <= 0.0f) {
 			targetOffset_ = PickRandomOffset();
-			retargetCooldown_ = 1.5f + Frand() * 1.5f;
+			retargetCooldown_ = kRetargetMinSec + Frand() * kRetargetRandomSec;
 		}
 		ctx.useFreeVelocity = false;
 		ctx.billboardToPlayer = true;
@@ -61,7 +77,7 @@ public:
 		const float dy = target.y - pos->y;
 		const float dz = target.z - pos->z;
 		const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-		if (dist > 0.01f) {
+		if (dist > kNearZeroLength) {
 			float step = moveSpeed_ * dt;
 			if (step > dist) step = dist;
 			pos->x += dx / dist * step;
@@ -90,7 +106,7 @@ public:
 			const float fy = cpos->y - camPos.y;
 			const float fz = cpos->z - camPos.z;
 			const float flen = std::sqrt(fx * fx + fy * fy + fz * fz);
-			if (flen > 1e-3f) {
+			if (flen > kMinCameraDistance) {
 				const float nx = fx / flen;
 				const float ny = fy / flen;
 				const float nz = fz / flen;
@@ -128,7 +144,7 @@ public:
 					if (ppos) {
 						Vector3 d{ ppos->x - pos->x, ppos->y - pos->y, ppos->z - pos->z };
 						const float dlen = std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
-						if (dlen > 0.01f) {
+						if (dlen > kNearZeroLength) {
 							d = { d.x / dlen, d.y / dlen, d.z / dlen };
 							ctx.scene->SpawnEnemyBullet(*pos, d, -1.0f, -1.0f, "EnemyBullet", ctx.player);
 						}
@@ -138,9 +154,19 @@ public:
 		}
 	}
 
+	/// <summary>徘徊が終わったか</summary>
+	/// <returns>lifetime が過ぎたら true</returns>
 	bool IsFinished() const override { return elapsed_ >= lifetime_; }
 
 private:
+	// 徘徊先を引き直すまでの最短の時間 [秒]
+	static constexpr float kRetargetMinSec = 1.5f;
+	// 徘徊先を引き直すまでの時間のばらつきの幅 [秒]
+	static constexpr float kRetargetRandomSec = 1.5f;
+	// これより短い距離・向きは 0 とみなす [m]
+	static constexpr float kNearZeroLength = 0.01f;
+	// これより短いカメラからの距離では奥行きの制限をしない [m]
+	static constexpr float kMinCameraDistance = 1e-3f;
 	IImGuiEditable* carrier_ = nullptr;
 	float radius_     = 8.0f;
 	float lifetime_   = 10.0f;
@@ -150,12 +176,15 @@ private:
 	int   lastShotIdx_ = -1;
 	Vector3 targetOffset_{ 0.0f, 0.0f, 0.0f };
 
-	// 中央乱数から [0,1) を引く（リプレイ決定性のため std::rand は使わない）。
-	float Frand() { return RandomGenerator::Instance().NextFloat01(); }
+	/// <summary>中央乱数から [0,1) を引く（リプレイ決定性のため std::rand は使わない）</summary>
+	/// <returns>0 以上 1 未満の乱数</returns>
+	float Frand() { return RandomGenerator::GetInstance()->NextFloat01(); }
 
+	/// <summary>運び屋からの徘徊先のオフセットを抽選する（XZ は半径 radius の円盤、Y は ±radius/2）</summary>
+	/// <returns>運び屋からのオフセット [m]</returns>
 	Vector3 PickRandomOffset() {
 		// XZ 円盤 + Y 縦は半分の幅でランダム
-		const float angle = Frand() * 6.2831853f;
+		const float angle = Frand() * kTwoPi;
 		const float r = std::sqrt(Frand()) * radius_;
 		return {
 			std::cos(angle) * r,

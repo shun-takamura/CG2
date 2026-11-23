@@ -16,5 +16,8 @@ struct UIPointer {
 	bool clicked = false;     // ゲーム画面の上で左ボタンを押した（Debug の ImGui パネル上のクリックは数えない）
 	bool pressed = false;     // ゲーム画面の上で左ボタンを押している（長押し。賭ける画面の ◀ ▶ など）
 
+	/// <summary>今のフレームのマウスの状態を作る（Debug はビューポート窓、Release は黒帯を引いて換算）</summary>
+	/// <param name="input">入力の管理（nullptr なら valid = false）</param>
+	/// <returns>マウスの状態。ゲーム画面の外なら valid = false</returns>
 	static UIPointer FromInput(InputManager* input);
 };

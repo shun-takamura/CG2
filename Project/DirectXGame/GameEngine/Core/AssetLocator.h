@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+/// <summary>
+/// アセットのパスを、pack の中かファイルかに振り分けて読み込む。
+/// シングルトンにする理由：アセットの読み込み元（pack かファイルか）をプロセス全体で 1 つに決めるため。
+/// </summary>
 class AssetLocator;
 
 // =====================================================================
@@ -21,17 +25,31 @@ public:
 	AssetHandle(AssetHandle&&) noexcept = default;
 	AssetHandle& operator=(AssetHandle&&) noexcept = default;
 
+	/// <summary>読み出せるハンドルか</summary>
+	/// <returns>開けていれば true</returns>
 	bool IsValid() const { return valid_; }
+	/// <summary>アセットの大きさ（pack の圧縮エントリでは圧縮済みの大きさ）</summary>
+	/// <returns>大きさ [byte]</returns>
 	uint64_t GetSize() const { return size_; }
+	/// <summary>Read の現在位置</summary>
+	/// <returns>位置 [byte]</returns>
 	uint64_t GetPosition() const { return position_; }
 
-	// 指定オフセットから size バイトを dst に読み出す。成功で true。位置は更新しない。
+	/// <summary>指定オフセットから size バイトを読み出す。Read の位置は更新しない</summary>
+	/// <param name="offset">アセット先頭からの位置 [byte]</param>
+	/// <param name="dst">書き込む先</param>
+	/// <param name="size">読む大きさ [byte]</param>
+	/// <returns>読めたら true。無効なハンドル・範囲がアセットの外なら false</returns>
 	bool ReadAt(uint64_t offset, void* dst, size_t size);
 
-	// 現在位置から size バイトを読み、位置を進める。ifstream::read 相当。
+	/// <summary>現在位置から size バイトを読み、位置を進める（ifstream::read 相当）</summary>
+	/// <param name="dst">書き込む先</param>
+	/// <param name="size">読む大きさ [byte]</param>
+	/// <returns>読めたら true（失敗した時は位置を進めない）</returns>
 	bool Read(void* dst, size_t size);
 
-	// 読み出し位置を移動する。ifstream::seekg 相当。
+	/// <summary>読み出し位置を移動する（ifstream::seekg 相当。範囲は確かめない）</summary>
+	/// <param name="offset">アセット先頭からの位置 [byte]</param>
 	void Seek(uint64_t offset) { position_ = offset; }
 
 private:
@@ -56,45 +74,68 @@ private:
 // =====================================================================
 class AssetLocator {
 public:
+	/// <summary>唯一のインスタンス</summary>
+	/// <returns>インスタンス</returns>
 	static AssetLocator* GetInstance();
 
-	// 個別ファイル直読みモードで初期化
+	/// <summary>個別ファイル直読みモードで初期化する（pack の目次は捨てる）</summary>
 	void InitializeFromFilesystem();
 
-	// .pack 経由モードで初期化。失敗で false（pack ファイルなし、フォーマット不正）。
+	/// <summary>.pack 経由モードで初期化する（ヘッダーと目次を読み込む）</summary>
+	/// <param name="packPath">pack ファイルのパス</param>
+	/// <returns>成功なら true。開けない・マジックやバージョンが違う時は false（モードは変えない）</returns>
 	bool InitializeFromPack(const std::string& packPath);
 
-	// 主要 API: 部分読み出し用ハンドルを得る
+	/// <summary>部分読み出し用のハンドルを開く（主要 API）</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <returns>ハンドル（見つからない・空のファイル・未初期化なら IsValid が false）</returns>
 	AssetHandle Open(const std::string& path);
 
-	// 補助 API: ファイル全体を一括読み込み（小サイズ向け）
+	/// <summary>ファイル全体を一括で読み込む（小サイズ向け）。pack の圧縮エントリは圧縮されたまま返す</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <returns>中身（見つからない・空・未初期化なら空）</returns>
 	std::vector<uint8_t> LoadAll(const std::string& path);
 
-	// 存在チェック
+	/// <summary>アセットがあるか</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <returns>あれば true（未初期化なら false）</returns>
 	bool Exists(const std::string& path) const;
 
-	// pack 内のエントリ位置情報を取得（DirectStorage 統合用、Phase D）
-	// pack モード時のみ true を返す。FS モードでは常に false。
-	// outSize は uncompressed_size (= 解凍後サイズ)。
+	/// <summary>pack 内のエントリの位置を取る（DirectStorage 統合用）</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <param name="outPackOffset">pack 上の開始位置 [byte] を書く先</param>
+	/// <param name="outSize">解凍後の大きさ [byte] を書く先</param>
+	/// <returns>見つかったら true。FS モードでは常に false</returns>
 	bool GetPackEntryInfo(const std::string& path,
 	                     uint64_t& outPackOffset, uint64_t& outSize) const;
 
-	// 圧縮情報込みの拡張版（GDeflate 対応、Phase B.3）。
-	// outCompression: 0=NONE, 1=GDEFLATE。outCompressedSize は pack 上の実サイズ。
+	/// <summary>pack 内のエントリの位置と圧縮情報を取る（GDeflate 対応の拡張版）</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <param name="outPackOffset">pack 上の開始位置 [byte] を書く先</param>
+	/// <param name="outUncompressedSize">解凍後の大きさ [byte] を書く先</param>
+	/// <param name="outCompressedSize">pack 上の実際の大きさ [byte] を書く先</param>
+	/// <param name="outCompression">圧縮形式（0=NONE, 1=GDEFLATE）を書く先</param>
+	/// <returns>見つかったら true。FS モードでは常に false</returns>
 	bool GetPackEntryInfoEx(const std::string& path,
 	                       uint64_t& outPackOffset,
 	                       uint64_t& outUncompressedSize,
 	                       uint64_t& outCompressedSize,
 	                       uint8_t&  outCompression) const;
 
-	// 現在のロードモード文字列（"FS" / "Pack" / "Uninitialized"）
+	/// <summary>現在のロードモードの名前</summary>
+	/// <returns>"FS" / "Pack" / "Uninitialized"</returns>
 	const char* GetModeName() const;
+	/// <summary>pack 経由モードか</summary>
+	/// <returns>pack モードなら true</returns>
 	bool IsPackMode() const;
 
-	// 拡張子による列挙（SceneEditor 用、ext は "." 含む形式: ".mesh" 等）
-	// root はスキャン起点（既定は "Resources"）。
-	// FS モード: 指定 root 配下を再帰的にスキャン
-	// pack モード: pack の目次から prefix 一致するものを抽出（B.2 で実装）
+	/// <summary>
+	/// 拡張子でアセットを列挙する（SceneEditor 用。拡張子は大文字小文字を区別しない）。
+	/// FS モードは root 配下を再帰的にスキャン、pack モードは目次から root で始まる物を抜き出す
+	/// </summary>
+	/// <param name="ext">"." を含む拡張子（".mesh" 等）</param>
+	/// <param name="root">スキャン起点（既定は "Resources"）</param>
+	/// <returns>見つかったパスの一覧</returns>
 	std::vector<std::string> ListByExtension(
 		const std::string& ext,
 		const std::string& root = "Resources") const;
@@ -120,6 +161,9 @@ private:
 	std::string packPath_;
 	std::vector<PackEntry> packIndex_;  // name_hash 昇順ソート済み
 
-	// pack エントリのバイナリサーチ。見つかれば true、out にコピー。
+	/// <summary>パスのハッシュで目次を二分探索し、ハッシュが衝突した時はパス文字列で照合する</summary>
+	/// <param name="path">アセットのパス</param>
+	/// <param name="out">見つかったエントリのコピーを書く先</param>
+	/// <returns>見つかったら true</returns>
 	bool FindPackEntry(const std::string& path, PackEntry& out) const;
 };

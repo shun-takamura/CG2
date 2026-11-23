@@ -1,6 +1,7 @@
 #include "SceneManager.h"
 #include "SceneRoutes.h"
 #include "Scene.h"
+#include "GameScene.h"
 #include "EngineTime.h"
 #include "AbstractSceneFactory.h"
 #include "TransitionManager.h"
@@ -190,7 +191,7 @@ void SceneManager::ChangeSceneImmediate(const std::string& sceneName) {
 	assert(sceneFactory_);
 	assert(nextScene_ == nullptr);
 
-	SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 		"SCENE_CHANGE from=" + (currentSceneName_.empty() ? std::string("(none)") : currentSceneName_) + " to=" + sceneName + " immediate=1");
 
 	pendingSceneName_ = sceneName;
@@ -208,7 +209,7 @@ void SceneManager::ExecuteSceneChange() {
 	}
 	MarkSceneChange(SceneChangeTiming::Finalized);
 
-	SessionLogger::Instance().Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Event, SessionLogger::Level::Info,
 		"SCENE_CHANGE from=" + (currentSceneName_.empty() ? std::string("(none)") : currentSceneName_) + " to=" + pendingSceneName_);
 
 	currentScene_ = sceneFactory_->CreateScene(pendingSceneName_);
@@ -265,19 +266,19 @@ void SceneManager::LoadCurrentScene() {
 	// 読み込みの内訳（シーンの Initialize が LOAD_PHASE で区切った区間）を profile.log へ。区間は閉じた順に並ぶ
 	const auto& phases = lp->GetPhases();
 	for (size_t i = phaseBegin; i < phases.size(); ++i) {
-		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+		SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=scene_phase scene={} name={} wall_ms={:.2f} cpu_ms={:.2f}",
 				currentSceneName_, phases[i].name, phases[i].wallMs, phases[i].cpuMs));
 	}
 	if (dxCore_) {
 		const DirectXCore::ShaderLoadStats s = dxCore_->GetShaderLoadStats();
-		SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+		SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 			std::format("LOAD kind=scene_shaders scene={} loaded={} cache_hits={} load_ms={:.2f}",
 				currentSceneName_, s.loadCount - shaderBegin.loadCount, s.cacheHits - shaderBegin.cacheHits,
 				s.loadMs - shaderBegin.loadMs));
 	}
 #ifdef _DEBUG
-	ImGuiManager::Instance().SetCamera(currentScene_->GetCamera());
+	ImGuiManager::GetInstance()->SetCamera(currentScene_->GetCamera());
 #endif
 }
 
@@ -323,7 +324,7 @@ void SceneManager::LogSceneChangeTiming() const {
 		loadMs, cpu(T::ChangeBegin, T::Presented)));
 
 	// profile.log（P.E.P.P.E.R.）にも LOAD 行で残す
-	SessionLogger::Instance().Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
+	SessionLogger::GetInstance()->Write(SessionLogger::Category::Profile, SessionLogger::Level::Info,
 		std::format(
 			"LOAD kind=scene_change from={} to={} total_ms={:.2f} transition_ms={:.2f} finalize_ms={:.2f} create_ms={:.2f} init_ms={:.2f} first_update_ms={:.2f} first_draw_present_ms={:.2f} load_only_ms={:.2f} load_only_cpu_ms={:.2f} init_cpu_ms={:.2f}",
 			t.from, t.to, totalMs,
@@ -361,6 +362,10 @@ void SceneManager::SetupScene(Scene* scene) {
 		scene->SetDirectXCore(dxCore_);
 		scene->SetSRVManager(srvManager_);
 		scene->SetInputManager(input_);
+		// ゲームのシーンにはプレイの状態も渡す（エンジンの Scene は GameSession を知らない）
+		if (auto* gameScene = dynamic_cast<GameScene*>(scene)) {
+			gameScene->SetGameSession(gameSession_);
+		}
 
 		// このシーンをエンジン側の時間スケール供給元として登録（Scene は ITimeScaleProvider）
 		EngineTime::SetProvider(scene);

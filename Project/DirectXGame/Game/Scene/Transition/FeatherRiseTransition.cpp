@@ -18,49 +18,131 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 定数バッファの大きさを 256 バイト単位にそろえるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 画面を羽根で埋めるので明るくした、光の当たらない面の明るさ
+	constexpr float kFeatherAmbient = 0.8f;
+	// 裏から光が透ける強さ
+	constexpr float kFeatherTranslucency = 0.5f;
+	// よみがえる一枚の反り
+	constexpr float kHeroBaseBend = 0.3f;
+	// よみがえる一枚の横の丸み
+	constexpr float kHeroCup = 0.12f;
+	// よみがえる一枚のディゾルブの欠け方を決めるノイズのずらし（着水とそろえる）
+	constexpr float kHeroNoiseOffset = 0.37f;
+	// よみがえる一枚の最初の傾き [rad]
+	constexpr Vector3 kHeroStartRotation = { 0.35f, 0.0f, 0.2f };
+	// 各段の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinPhaseSeconds = 0.01f;
+	// 風の向きの長さがこれ以下なら既定の向きにする
+	constexpr float kMinWindLength = 1e-4f;
+	// 風の向きが 0 のときに使う向き（左上へ）
+	constexpr Vector3 kDefaultWindDirection = Vector3{ -0.8f, 0.6f, 0.0f };
+	// 羽根の長さのばらつき（倍率）の最小
+	constexpr float kSizeJitterMin = 0.8f;
+	// 羽根の長さのばらつき（倍率）の最大
+	constexpr float kSizeJitterMax = 1.2f;
+	// 風の向きの成分がこれより小さければ、その軸では画面に入らない（ずっと中か外）とみなす
+	constexpr float kMinWindAxis = 1e-5f;
+	// 画面に入る t が決まらないときの十分大きな値
+	constexpr float kNeverEnterT = 1e9f;
+	// 羽根の反りの最小
+	constexpr float kBendMin = 0.15f;
+	// 羽根の反りの最大
+	constexpr float kBendMax = 0.35f;
+	// 羽根の横の丸みの最小
+	constexpr float kCupMin = 0.05f;
+	// 羽根の横の丸みの最大
+	constexpr float kCupMax = 0.15f;
+	// 一緒に舞い上がる羽根の長さの倍率
+	constexpr float kBurstSizeScale = 0.8f;
+	// 一緒に舞い上がる羽根を出す所の左右のばらつき（±）[m]
+	constexpr float kBurstSpreadX = 0.3f;
+	// 一緒に舞い上がる羽根を出す所の上下のばらつき（±）[m]
+	constexpr float kBurstSpreadY = 0.2f;
+	// 一緒に舞い上がる羽根を出す所の奥行きのばらつき（±）[m]
+	constexpr float kBurstSpreadZ = 0.8f;
+	// 一緒に舞い上がる羽根の速さのばらつき（倍率）の最小
+	constexpr float kBurstSpeedJitterMin = 0.4f;
+	// 一緒に舞い上がる羽根に足す上向きの速さの最小 [m/秒]
+	constexpr float kBurstUpSpeedMin = 0.5f;
+	// 一緒に舞い上がる羽根に足す上向きの速さの最大 [m/秒]
+	constexpr float kBurstUpSpeedMax = 2.0f;
+	// 羽根の反りが揺れる速さ [rad/秒]
+	constexpr float kFlutterSpeed = 8.0f;
+	// 飛ぶ羽根の反りが揺れる量
+	constexpr float kFlutterBend = 0.1f;
+	// 画面の外へ抜けたとみなす余白（羽根の長さの何倍か）
+	constexpr float kCullMarginSizeRatio = 2.0f;
+	// 飛び立つ一枚の加速に足す上向き
+	constexpr float kHeroLiftUp = 0.3f;
+	// 飛び立つ一枚の回る速さ [rad/秒]
+	constexpr Vector3 kHeroSpinSpeed = { 2.0f, 3.0f, 4.0f };
+	// 飛び立つ一枚の反りが揺れる量
+	constexpr float kHeroFlutterBend = 0.12f;
+	// よみがえった直後の一枚の Z 軸まわりの傾き [rad]
+	constexpr float kHeroRestRoll = 0.2f;
+	// よみがえった直後の一枚が水面で揺れる幅 [rad]
+	constexpr float kHeroRestSwayAmplitude = 0.05f;
+	// よみがえった直後の一枚が水面で揺れる速さ [rad/秒]
+	constexpr float kHeroRestSwaySpeed = 3.0f;
+	// 画面全体を覆う三角形の頂点の数
+	constexpr int kFullscreenTriangleVertexCount = 3;
+
 	constexpr const wchar_t* kRipplePixelShaderPath = L"Resources/Shaders/Transition/ScreenRipple.PS.hlsl";
 	// 隙間埋めの濃淡（InkShape.hlsli の InkNoise）。ScreenWaterSurface の t0 / t1 の後ろの t2
 	constexpr const char* kNoisePath = "Resources/Textures/Cloud/cloud_noise.dds";
 	constexpr UINT kRootNoise = ScreenWaterSurface::kRootExtraTextures;
 	// kPi はエンジンの MathUtility.h のものを使う
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float t) {
 		t = std::clamp(t, 0.0f, 1.0f);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
-	// Vector3 には演算子が無いので、足し算と倍だけ用意する
+	/// <summary>2 つのベクトルを足す（Vector3 には演算子が無いので用意する）</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add3(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Scale3(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
 }
 
 FeatherRiseTransition::~FeatherRiseTransition() = default;
 
-void FeatherRiseTransition::Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-	float screenWidth, float screenHeight) {
-	spriteManager_ = spriteManager;
-	dxCore_ = dxCore;
-	screenWidth_ = screenWidth;
-	screenHeight_ = screenHeight;
+void FeatherRiseTransition::OnInitialize() {
 
 	SRVManager* srvManager = SceneManager::GetInstance()->GetSRVManager();
-	water_.Initialize(dxCore_, srvManager, screenWidth_, screenHeight_);
+	water_.Initialize(GetDxCore(), srvManager, GetScreenWidth(), GetScreenHeight());
 	rippleRootSignature_ = water_.CreateRootSignature(1);
 	TextureManager::GetInstance()->LoadTexture(kNoisePath);
 	ripplePipelineState_ = water_.CreatePipelineState(rippleRootSignature_.Get(), kRipplePixelShaderPath, false);
-	rippleParamsResource_ = dxCore_->CreateBufferResource((sizeof(RippleParamsForGPU) + 255) & ~255);
+	rippleParamsResource_ = GetDxCore()->CreateBufferResource((sizeof(RippleParamsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	rippleParamsResource_->Map(0, nullptr, reinterpret_cast<void**>(&rippleParamsData_));
 	*rippleParamsData_ = RippleParamsForGPU{};
 
-	renderer_.Initialize(dxCore_, srvManager);
+	renderer_.Initialize(GetDxCore(), srvManager);
 	// 画面を羽根で埋め尽くすので、陰を明るくして白く見せる
-	renderer_.GetSettings().ambient = 0.8f;
-	renderer_.GetSettings().translucency = 0.5f;
+	FeatherRenderer::Settings feather = renderer_.GetSettings();
+	feather.ambient = kFeatherAmbient;
+	feather.translucency = kFeatherTranslucency;
+	renderer_.SetSettings(feather);
 
 	// 最後に画面を真っ白にする（羽根の上に重ねる）
 	whiteSprite_ = std::make_unique<SpriteInstance>();
-	whiteSprite_->Initialize(spriteManager_, "Resources/Textures/white1x1.dds", "FeatherRiseWhite");
+	whiteSprite_->Initialize(GetSpriteManager(), "Resources/Textures/white1x1.dds", "FeatherRiseWhite");
 	whiteSprite_->SetPosition({ 0.0f, 0.0f });
-	whiteSprite_->SetSize({ screenWidth_, screenHeight_ });
+	whiteSprite_->SetSize({ GetScreenWidth(), GetScreenHeight() });
 	whiteSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.0f });
 	whiteSprite_->Update();
 
@@ -89,22 +171,22 @@ void FeatherRiseTransition::OnStartCover() {
 	const Settings& s = settings_;
 	hero_ = FlyingFeather{};
 	hero_.position = ScreenToWorld(s.originUV, s.heroDepth);
-	hero_.baseBend = 0.3f;
+	hero_.baseBend = kHeroBaseBend;
 	hero_.look.size = s.heroSize;
 	hero_.look.bend = hero_.baseBend;
-	hero_.look.cup = 0.12f;
+	hero_.look.cup = kHeroCup;
 	hero_.look.texture = 0;
-	hero_.look.noiseOffset = 0.37f;   // 着水のディゾルブと同じ欠け方を逆にたどる
-	hero_.look.rotation = { 0.35f, 0.0f, 0.2f };
+	hero_.look.noiseOffset = kHeroNoiseOffset;   // 着水のディゾルブと同じ欠け方を逆にたどる
+	hero_.look.rotation = kHeroStartRotation;
 	hero_.look.dissolve = 1.0f;
 }
 
-bool FeatherRiseTransition::UpdateCover(float /*dt*/) {
-	return currentTime_ >= settings_.coverTime;
+bool FeatherRiseTransition::UpdateCover([[maybe_unused]] float dt) {
+	return GetPhaseTime() >= settings_.coverTime;
 }
 
-bool FeatherRiseTransition::UpdateReveal(float /*dt*/) {
-	fade_ = std::clamp(1.0f - currentTime_ / (std::max)(settings_.revealTime, 0.01f), 0.0f, 1.0f);
+bool FeatherRiseTransition::UpdateReveal([[maybe_unused]] float dt) {
+	fade_ = std::clamp(1.0f - GetPhaseTime() / (std::max)(settings_.revealTime, kMinPhaseSeconds), 0.0f, 1.0f);
 	// 羽根だけの版は、残りの羽根が画面から抜け切ったら晴れ切り
 	return settings_.whiteFade ? fade_ <= 0.0f : flying_.empty();
 }
@@ -115,9 +197,9 @@ void FeatherRiseTransition::SetFullyCovered() {
 
 float FeatherRiseTransition::Whiteness() const {
 	if (!settings_.whiteFade) return 0.0f;
-	switch (state_) {
+	switch (GetState()) {
 	case TransitionState::FadeIn:
-		return SmoothStep01((currentTime_ - settings_.whiteStart) / (std::max)(settings_.whiteTime, 0.01f));
+		return SmoothStep01((GetPhaseTime() - settings_.whiteStart) / (std::max)(settings_.whiteTime, kMinPhaseSeconds));
 	case TransitionState::Hold:
 		return 1.0f;
 	case TransitionState::FadeOut:
@@ -130,13 +212,13 @@ float FeatherRiseTransition::Whiteness() const {
 float FeatherRiseTransition::GapFill() const {
 	const Settings& s = settings_;
 	if (!s.gapFill) return 0.0f;
-	switch (state_) {
+	switch (GetState()) {
 	case TransitionState::FadeIn:
-		return SmoothStep01((currentTime_ - s.fillStart) / (std::max)(s.coverTime - s.fillStart, 0.01f));
+		return SmoothStep01((GetPhaseTime() - s.fillStart) / (std::max)(s.coverTime - s.fillStart, kMinPhaseSeconds));
 	case TransitionState::Hold:
 		return 1.0f;
 	case TransitionState::FadeOut:
-		return 1.0f - SmoothStep01(currentTime_ / (std::max)(s.fillOutTime, 0.01f));
+		return 1.0f - SmoothStep01(GetPhaseTime() / (std::max)(s.fillOutTime, kMinPhaseSeconds));
 	default:
 		return 0.0f;
 	}
@@ -145,7 +227,7 @@ float FeatherRiseTransition::GapFill() const {
 Vector3 FeatherRiseTransition::WindDirection() const {
 	const Vector2& w = settings_.windDirection;
 	const float len = std::sqrt(w.x * w.x + w.y * w.y);
-	return (len > 1e-4f) ? Vector3{ w.x / len, w.y / len, 0.0f } : Vector3{ -0.8f, 0.6f, 0.0f };
+	return (len > kMinWindLength) ? Vector3{ w.x / len, w.y / len, 0.0f } : kDefaultWindDirection;
 }
 
 float FeatherRiseTransition::VisibleHalfHeight(float depth) const {
@@ -154,7 +236,7 @@ float FeatherRiseTransition::VisibleHalfHeight(float depth) const {
 
 Vector3 FeatherRiseTransition::ScreenToWorld(const Vector2& uv, float depth) const {
 	const float halfHeight = VisibleHalfHeight(depth);
-	const float halfWidth = halfHeight * screenWidth_ / (std::max)(screenHeight_, 1.0f);
+	const float halfWidth = halfHeight * GetScreenWidth() / (std::max)(GetScreenHeight(), 1.0f);
 	return { (uv.x - 0.5f) * 2.0f * halfWidth, (0.5f - uv.y) * 2.0f * halfHeight, depth };
 }
 
@@ -179,9 +261,9 @@ void FeatherRiseTransition::SpawnFromUpwind() {
 	// 手前ほど多く・大きく（画面を覆う面積を稼ぐ）
 	const float farness = std::pow(unit(random_), (std::max)(s.nearBias, 1.0f));
 	const float depth = s.nearDepth + (s.farDepth - s.nearDepth) * farness;
-	f.look.size = (s.sizeMax + (s.sizeMin - s.sizeMax) * farness) * range(0.8f, 1.2f);
+	f.look.size = (s.sizeMax + (s.sizeMin - s.sizeMax) * farness) * range(kSizeJitterMin, kSizeJitterMax);
 	const float halfHeight = VisibleHalfHeight(depth);
-	const float halfWidth = halfHeight * screenWidth_ / (std::max)(screenHeight_, 1.0f);
+	const float halfWidth = halfHeight * GetScreenWidth() / (std::max)(GetScreenHeight(), 1.0f);
 	// 通り道（風向きの直線）を、風と直角の方向に均等に並べ、その線が画面（＋羽根の大きさ）に入る所で出す。
 	// 縁から均等に出すと対角線の両脇に偏って中央が、画面の点を均等に選ぶと線が短い角（右上・左下）が
 	// スカスカになる。線を均等に並べればどの線も画面を端から端まで横切るので、角も中央も同じ濃さで覆える
@@ -194,7 +276,7 @@ void FeatherRiseTransition::SpawnFromUpwind() {
 	const float offset = range(-reach, reach);
 	// 線 p(t) = offset·across + t·wind が画面の長方形に入る t（左右・上下それぞれの入る t の大きい方）
 	const auto entry = [](float origin, float dir, float half) {
-		if (std::abs(dir) < 1e-5f) return (std::abs(origin) <= half) ? -1e9f : 1e9f;
+		if (std::abs(dir) < kMinWindAxis) return (std::abs(origin) <= half) ? -kNeverEnterT : kNeverEnterT;
 		const float t1 = (-half - origin) / dir;
 		const float t2 = (half - origin) / dir;
 		return (std::min)(t1, t2);
@@ -205,9 +287,9 @@ void FeatherRiseTransition::SpawnFromUpwind() {
 	RandomizeFacing(f);
 	f.turbulencePhase = range(0.0f, 2.0f * kPi);
 	f.flutterPhase = range(0.0f, 2.0f * kPi);
-	f.baseBend = range(0.15f, 0.35f);
+	f.baseBend = range(kBendMin, kBendMax);
 	f.look.bend = f.baseBend;
-	f.look.cup = range(0.05f, 0.15f);
+	f.look.cup = range(kCupMin, kCupMax);
 	f.look.texture = static_cast<uint32_t>(unit(random_) * FeatherRenderer::kTextureCount) % FeatherRenderer::kTextureCount;
 	f.look.noiseOffset = unit(random_);
 	f.look.brightness = 1.0f;
@@ -224,17 +306,17 @@ void FeatherRiseTransition::SpawnBurst() {
 	const Vector3 burstCenter = ScreenToWorld({ s.originUV.x + s.burstOffsetX, s.originUV.y }, hero_.position.z);
 	for (int i = 0; i < s.burstCount && flying_.size() + 1 < FeatherRenderer::kMaxFeathers; ++i) {
 		FlyingFeather f{};
-		f.look.size = range(s.sizeMin, s.sizeMax) * 0.8f;
-		f.position = Add3(burstCenter, { range(-0.3f, 0.3f), range(-0.2f, 0.2f), range(-0.8f, 0.8f) });
+		f.look.size = range(s.sizeMin, s.sizeMax) * kBurstSizeScale;
+		f.position = Add3(burstCenter, { range(-kBurstSpreadX, kBurstSpreadX), range(-kBurstSpreadY, kBurstSpreadY), range(-kBurstSpreadZ, kBurstSpreadZ) });
 		// 風の向き＋上向きに、ばらばらの速さで散る
-		const float speed = range(s.windSpeedMin, s.windSpeedMax) * range(0.4f, 1.0f);
-		f.velocity = { wind.x * speed + range(-1.0f, 1.0f), wind.y * speed + range(0.5f, 2.0f), range(-1.0f, 1.0f) };
+		const float speed = range(s.windSpeedMin, s.windSpeedMax) * range(kBurstSpeedJitterMin, 1.0f);
+		f.velocity = { wind.x * speed + range(-1.0f, 1.0f), wind.y * speed + range(kBurstUpSpeedMin, kBurstUpSpeedMax), range(-1.0f, 1.0f) };
 		RandomizeFacing(f);
 		f.turbulencePhase = range(0.0f, 2.0f * kPi);
 		f.flutterPhase = range(0.0f, 2.0f * kPi);
-		f.baseBend = range(0.15f, 0.35f);
+		f.baseBend = range(kBendMin, kBendMax);
 		f.look.bend = f.baseBend;
-		f.look.cup = range(0.05f, 0.15f);
+		f.look.cup = range(kCupMin, kCupMax);
 		f.look.texture = static_cast<uint32_t>(unit(random_) * FeatherRenderer::kTextureCount) % FeatherRenderer::kTextureCount;
 		f.look.noiseOffset = unit(random_);
 		f.look.brightness = 1.0f;
@@ -249,7 +331,7 @@ void FeatherRiseTransition::UpdateFlying(float dt) {
 	const Vector3 across = { -wind.y, wind.x, 0.0f };
 	for (FlyingFeather& f : flying_) {
 		f.turbulencePhase += s.turbulenceFrequency * dt;
-		f.flutterPhase += 8.0f * dt;
+		f.flutterPhase += kFlutterSpeed * dt;
 		const float sway = s.turbulence * std::sin(f.turbulencePhase);
 		f.position = Add3(f.position, Scale3(Add3(f.velocity, Scale3(across, sway)), dt));
 		f.look.rotation = Add3(f.look.rotation, Scale3(f.spin, dt));
@@ -257,26 +339,26 @@ void FeatherRiseTransition::UpdateFlying(float dt) {
 		// （上限の外で毎フレーム反転して震えないよう、外へ向かって動いているときだけ折り返す）
 		if (f.look.rotation.x * f.spin.x > 0.0f && std::abs(f.look.rotation.x) > s.faceTilt) f.spin.x = -f.spin.x;
 		if (f.look.rotation.y * f.spin.y > 0.0f && std::abs(f.look.rotation.y) > s.faceTilt) f.spin.y = -f.spin.y;
-		f.look.bend = f.baseBend + 0.1f * std::sin(f.flutterPhase);
+		f.look.bend = f.baseBend + kFlutterBend * std::sin(f.flutterPhase);
 		f.look.position = f.position;
 		f.look.alpha = 1.0f;
 	}
 	// 風下（画面の左上）の外へ抜けたら捨てる
 	flying_.erase(std::remove_if(flying_.begin(), flying_.end(), [this](const FlyingFeather& f) {
 		const float halfHeight = VisibleHalfHeight(f.position.z);
-		const float halfWidth = halfHeight * screenWidth_ / (std::max)(screenHeight_, 1.0f);
-		const float margin = f.look.size * 2.0f;
+		const float halfWidth = halfHeight * GetScreenWidth() / (std::max)(GetScreenHeight(), 1.0f);
+		const float margin = f.look.size * kCullMarginSizeRatio;
 		return f.position.x < -halfWidth - margin || f.position.y > halfHeight + margin;
 	}), flying_.end());
 }
 
 void FeatherRiseTransition::UpdateHero(float dt) {
 	const Settings& s = settings_;
-	if (state_ == TransitionState::FadeIn) {
+	if (GetState() == TransitionState::FadeIn) {
 		// よみがえる：着水のディゾルブを逆にたどる
-		hero_.look.dissolve = 1.0f - SmoothStep01(currentTime_ / (std::max)(s.reformTime, 0.01f));
+		hero_.look.dissolve = 1.0f - SmoothStep01(GetPhaseTime() / (std::max)(s.reformTime, kMinPhaseSeconds));
 
-		if (!heroLifted_ && currentTime_ >= s.liftStart) {
+		if (!heroLifted_ && GetPhaseTime() >= s.liftStart) {
 			heroLifted_ = true;
 			SpawnBurst();
 		}
@@ -285,31 +367,31 @@ void FeatherRiseTransition::UpdateHero(float dt) {
 	if (heroLifted_) {
 		// 風に乗って加速しながら飛び立つ（少し上向きを足す）
 		const Vector3 wind = WindDirection();
-		hero_.velocity = Add3(hero_.velocity, Scale3({ wind.x, wind.y + 0.3f, 0.0f }, s.heroLiftAcceleration * dt));
+		hero_.velocity = Add3(hero_.velocity, Scale3({ wind.x, wind.y + kHeroLiftUp, 0.0f }, s.heroLiftAcceleration * dt));
 		hero_.position = Add3(hero_.position, Scale3(hero_.velocity, dt));
-		hero_.look.rotation = Add3(hero_.look.rotation, Scale3({ 2.0f, 3.0f, 4.0f }, dt));
-		hero_.flutterPhase += 8.0f * dt;
-		hero_.look.bend = hero_.baseBend + 0.12f * std::sin(hero_.flutterPhase);
+		hero_.look.rotation = Add3(hero_.look.rotation, Scale3(kHeroSpinSpeed, dt));
+		hero_.flutterPhase += kFlutterSpeed * dt;
+		hero_.look.bend = hero_.baseBend + kHeroFlutterBend * std::sin(hero_.flutterPhase);
 	} else {
 		// よみがえった直後は水面でかすかに揺れる
-		hero_.look.rotation.z = 0.2f + 0.05f * std::sin(time_ * 3.0f);
+		hero_.look.rotation.z = kHeroRestRoll + kHeroRestSwayAmplitude * std::sin(time_ * kHeroRestSwaySpeed);
 	}
 	hero_.look.position = hero_.position;
 	hero_.look.alpha = 1.0f;
 }
 
 void FeatherRiseTransition::UpdateVisual() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 	const Settings& s = settings_;
 	const float dt = GetStepDeltaTime();
 	time_ += dt;
 
 	// 突風：吹き始めから覆い終わりまで吹き込む枚数を増やし、ロードの間（Hold）も吹き込み続けて埋めたままにする。
 	// 開く側では止める（残りが抜けると晴れる）
-	const bool blowing = (state_ == TransitionState::FadeIn && currentTime_ >= s.gustStart) || state_ == TransitionState::Hold;
+	const bool blowing = (GetState() == TransitionState::FadeIn && GetPhaseTime() >= s.gustStart) || GetState() == TransitionState::Hold;
 	if (blowing) {
-		const float gust = (state_ == TransitionState::Hold) ? 1.0f
-			: (currentTime_ - s.gustStart) / (std::max)(s.coverTime - s.gustStart, 0.01f);
+		const float gust = (GetState() == TransitionState::Hold) ? 1.0f
+			: (GetPhaseTime() - s.gustStart) / (std::max)(s.coverTime - s.gustStart, kMinPhaseSeconds);
 		const float rate = s.spawnRateStart + (s.spawnRateEnd - s.spawnRateStart) * SmoothStep01(gust);
 		spawnAccumulator_ += rate * dt;
 		while (spawnAccumulator_ >= 1.0f) {
@@ -332,12 +414,12 @@ void FeatherRiseTransition::UpdateVisual() {
 // ===== 描画 =====
 
 void FeatherRiseTransition::Draw() {
-	if (!isTransitioning_) return;
+	if (!IsTransitioning()) return;
 	RenderTexture* sceneTarget = Game::GetPostEffect()->GetSceneRenderTarget();
 	if (!sceneTarget) return;
 
 	const float whiteness = Whiteness();
-	auto* cmd = dxCore_->GetCommandList();
+	auto* cmd = GetDxCore()->GetCommandList();
 
 	// 真っ白の間はシーンも羽根も見えないので白だけ
 	if (whiteness < 1.0f) {
@@ -357,7 +439,7 @@ void FeatherRiseTransition::Draw() {
 		cmd->SetGraphicsRootConstantBufferView(ScreenWaterSurface::kRootParams, rippleParamsResource_->GetGPUVirtualAddress());
 		water_.BindTextures(cmd);
 		cmd->SetGraphicsRootDescriptorTable(kRootNoise, TextureManager::GetInstance()->GetSrvHandleGPU(kNoisePath));
-		cmd->DrawInstanced(3, 1, 0, 0);
+		cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 
 		// 2. 羽根（吹き込む羽根＋よみがえった一枚）
 		drawList_.clear();
@@ -371,7 +453,7 @@ void FeatherRiseTransition::Draw() {
 	if (whiteness > 0.0f) {
 		whiteSprite_->SetColor({ 1.0f, 1.0f, 1.0f, whiteness });
 		whiteSprite_->Update();
-		spriteManager_->DrawSetting();
+		GetSpriteManager()->DrawSetting();
 		whiteSprite_->Draw();
 	}
 }
@@ -380,7 +462,7 @@ void FeatherRiseTransition::OnImGui() {
 #ifdef _DEBUG
 	Settings& s = settings_;
 	ImGui::Text("State: %d (0=None, 1=FadeIn, 2=Hold, 3=FadeOut)  feathers %zu  white %.2f",
-		static_cast<int>(state_), flying_.size(), Whiteness());
+		static_cast<int>(GetState()), flying_.size(), Whiteness());
 	ImGui::SeparatorText("Timing");
 	ImGui::DragFloat("Reform Time [s]", &s.reformTime, 0.01f, 0.01f, 5.0f);
 	ImGui::DragFloat("Gust Start [s]", &s.gustStart, 0.01f, 0.0f, 5.0f);
@@ -392,7 +474,7 @@ void FeatherRiseTransition::OnImGui() {
 	ImGui::DragFloat("White Time [s]", &s.whiteTime, 0.01f, 0.01f, 5.0f);
 	ImGui::DragFloat("Reveal Time [s]", &s.revealTime, 0.01f, 0.01f, 5.0f);
 	ImGui::EndDisabled();
-	ImGui::DragFloat("Hold Duration [s]", &holdDuration_, 0.01f, 0.0f, 3.0f);
+	{ float hold = GetHoldDuration(); if (ImGui::DragFloat("Hold Duration [s]", &hold, 0.01f, 0.0f, 3.0f)) SetHoldDuration(hold); }
 	ImGui::SeparatorText("Wind");
 	ImGui::DragFloat2("Wind Direction (screen)", &s.windDirection.x, 0.01f, -1.0f, 1.0f);
 	ImGui::DragFloat("Wind Speed Min", &s.windSpeedMin, 0.05f, 0.0f, 30.0f);
@@ -433,12 +515,14 @@ void FeatherRiseTransition::OnImGui() {
 
 void FeatherRiseTransition::LoadTuning(const JsonValue& json) {
 	TransitionTuning::Load(json, settings_);
-	TransitionTuning::Load(json["feather"], renderer_.GetSettings());
-	holdDuration_ = static_cast<float>(json["holdDuration"].AsDouble(holdDuration_));
+	FeatherRenderer::Settings feather = renderer_.GetSettings();
+	TransitionTuning::Load(json["feather"], feather);
+	renderer_.SetSettings(feather);
+	SetHoldDuration(static_cast<float>(json["holdDuration"].AsDouble(GetHoldDuration())));
 }
 
 void FeatherRiseTransition::SaveTuning(JsonValue& json) const {
 	json = TransitionTuning::Save(settings_);
 	json["feather"] = TransitionTuning::Save(renderer_.GetSettings());
-	json["holdDuration"] = JsonValue(static_cast<double>(holdDuration_));
+	json["holdDuration"] = JsonValue(static_cast<double>(GetHoldDuration()));
 }

@@ -5,6 +5,17 @@ extern "C" {
 #include "quirc.h"
 }
 
+namespace {
+    // RGBA の 1 画素の大きさ [byte]
+    constexpr uint32_t kBytesPerPixel = 4;
+    // グレースケールに直すときの R の重み（ITU-R BT.601）
+    constexpr float kLumaWeightR = 0.299f;
+    // グレースケールに直すときの G の重み（ITU-R BT.601）
+    constexpr float kLumaWeightG = 0.587f;
+    // グレースケールに直すときの B の重み（ITU-R BT.601）
+    constexpr float kLumaWeightB = 0.114f;
+}
+
 QRCodeReader* QRCodeReader::GetInstance()
 {
     static QRCodeReader instance;
@@ -42,11 +53,11 @@ bool QRCodeReader::Decode(const uint8_t* rgbaData, uint32_t width, uint32_t heig
     uint32_t pixelCount = width * height;
     for (uint32_t i = 0; i < pixelCount; i++)
     {
-        uint8_t r = rgbaData[i * 4 + 0];
-        uint8_t g = rgbaData[i * 4 + 1];
-        uint8_t b = rgbaData[i * 4 + 2];
+        uint8_t r = rgbaData[i * kBytesPerPixel + 0];
+        uint8_t g = rgbaData[i * kBytesPerPixel + 1];
+        uint8_t b = rgbaData[i * kBytesPerPixel + 2];
         // 標準的なグレースケール変換
-        image[i] = static_cast<uint8_t>(0.299f * r + 0.587f * g + 0.114f * b);
+        image[i] = static_cast<uint8_t>(kLumaWeightR * r + kLumaWeightG * g + kLumaWeightB * b);
     }
 
     // QRコードを検出

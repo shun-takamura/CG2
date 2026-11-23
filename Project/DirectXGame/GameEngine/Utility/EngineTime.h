@@ -15,11 +15,15 @@ namespace EngineTime {
     /// 現在の時間スケール供給元を登録する。シーン切替時にゲーム側が呼ぶ。
     /// nullptr を渡すと供給元なし（fallback のみ）になる。
     /// </summary>
+    /// <param name="provider">供給元（所有しない。寿命はゲーム側が管理）</param>
     void SetProvider(ITimeScaleProvider* provider);
 
     /// <summary>
     /// 供給元があればグループ別のスケール済み dt を、無ければ fallback を返す。
     /// </summary>
+    /// <param name="g">グループ</param>
+    /// <param name="fallback">供給元が無い時に返す経過時間 [秒]</param>
+    /// <returns>経過時間 [秒]</returns>
     float ScaledDeltaTime(TimeGroup g, float fallback);
 
 } // namespace EngineTime

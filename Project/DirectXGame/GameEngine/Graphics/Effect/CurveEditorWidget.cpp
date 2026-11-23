@@ -8,6 +8,26 @@
 namespace {
     // グリッド吸着の分割数（1/kCurveGridDiv 刻みに吸着）
     constexpr int kCurveGridDiv = 10;
+    // カーブを描く枠の高さ [px]
+    constexpr float kCanvasHeight = 160.0f;
+    // 枠の背景色
+    constexpr ImU32 kCanvasBgColor = IM_COL32(40, 40, 40, 255);
+    // グリッド線の色
+    constexpr ImU32 kGridLineColor = IM_COL32(70, 70, 70, 255);
+    // 枠線の色
+    constexpr ImU32 kCanvasBorderColor = IM_COL32(120, 120, 120, 255);
+    // カーブの線と制御点の色
+    constexpr ImU32 kCurveColor = IM_COL32(80, 220, 80, 255);
+    // カーブの線の太さ [px]
+    constexpr float kCurveLineThickness = 2.0f;
+    // 制御点を掴める半径 [px]
+    constexpr float kGrabRadius = 8.0f;
+    // 中間の制御点が隣の点に近づける最小の x の間隔
+    constexpr float kMinPointGapX = 0.001f;
+    // マウスが乗っている制御点の半径 [px]
+    constexpr float kPointRadiusHovered = 6.0f;
+    // 制御点の半径 [px]
+    constexpr float kPointRadius = 4.0f;
 }
 
 namespace EffectUI {
@@ -36,33 +56,33 @@ namespace EffectUI {
             dirty = true;
         }
 
-        const ImVec2 size = { ImGui::GetContentRegionAvail().x, 160.0f };
+        const ImVec2 size = { ImGui::GetContentRegionAvail().x, kCanvasHeight };
         const ImVec2 p0 = ImGui::GetCursorScreenPos();
         ImGui::InvisibleButton("canvas", size);
         const ImVec2 p1 = { p0.x + size.x, p0.y + size.y };
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 40, 255));
+        dl->AddRectFilled(p0, p1, kCanvasBgColor);
         for (int i = 0; i <= kCurveGridDiv; ++i) {
             float fx = p0.x + size.x * static_cast<float>(i) / kCurveGridDiv;
             float fy = p0.y + size.y * static_cast<float>(i) / kCurveGridDiv;
-            dl->AddLine({ fx, p0.y }, { fx, p1.y }, IM_COL32(70, 70, 70, 255));
-            dl->AddLine({ p0.x, fy }, { p1.x, fy }, IM_COL32(70, 70, 70, 255));
+            dl->AddLine({ fx, p0.y }, { fx, p1.y }, kGridLineColor);
+            dl->AddLine({ p0.x, fy }, { p1.x, fy }, kGridLineColor);
         }
-        dl->AddRect(p0, p1, IM_COL32(120, 120, 120, 255));
+        dl->AddRect(p0, p1, kCanvasBorderColor);
 
         auto toScreen = [&](const Vector2& pt) -> ImVec2 {
             return { p0.x + pt.x * size.x, p0.y + (1.0f - pt.y) * size.y };
         };
 
         for (size_t i = 1; i < curve.points.size(); ++i) {
-            dl->AddLine(toScreen(curve.points[i - 1]), toScreen(curve.points[i]), IM_COL32(80, 220, 80, 255), 2.0f);
+            dl->AddLine(toScreen(curve.points[i - 1]), toScreen(curve.points[i]), kCurveColor, kCurveLineThickness);
         }
 
         // ドラッグ状態（同時に1点のみ）。dragCurve でどのカーブを掴んでいるか識別。
         static const void* dragCurve = nullptr;
         static int dragIdx = -1;
-        const float grab = 8.0f;
+        const float grab = kGrabRadius;
         const ImVec2 mouse = ImGui::GetIO().MousePos;
 
         if (ImGui::IsItemActive() && ImGui::IsMouseClicked(0)) {
@@ -85,8 +105,8 @@ namespace EffectUI {
                 if (isFirst) nx = 0.0f;
                 else if (isLast) nx = 1.0f;
                 else {
-                    float lo = curve.points[dragIdx - 1].x + 0.001f;
-                    float hi = curve.points[dragIdx + 1].x - 0.001f;
+                    float lo = curve.points[dragIdx - 1].x + kMinPointGapX;
+                    float hi = curve.points[dragIdx + 1].x - kMinPointGapX;
                     nx = std::clamp(nx, lo, hi);
                 }
                 curve.points[dragIdx] = { nx, ny };
@@ -101,7 +121,7 @@ namespace EffectUI {
             ImVec2 sp = toScreen(curve.points[i]);
             float dx = sp.x - mouse.x, dy = sp.y - mouse.y;
             bool hovered = (dx * dx + dy * dy <= grab * grab) && ImGui::IsItemHovered();
-            dl->AddCircleFilled(sp, hovered ? 6.0f : 4.0f, IM_COL32(80, 220, 80, 255));
+            dl->AddCircleFilled(sp, hovered ? kPointRadiusHovered : kPointRadius, kCurveColor);
             if (hovered && ImGui::IsMouseClicked(1) && i != 0 && i != curve.points.size() - 1) {
                 removeIdx = static_cast<int>(i);
             }

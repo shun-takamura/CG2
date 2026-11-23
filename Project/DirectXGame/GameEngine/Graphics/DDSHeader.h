@@ -27,6 +27,10 @@ constexpr uint32_t kMagic = 0x20534444;
 constexpr uint32_t kHeaderSize = 124;
 constexpr uint32_t kPixelFormatSize = 32;
 constexpr uint32_t kDXT10HeaderSize = 20;
+// ファイル先頭のマジック "DDS " の大きさ [byte]
+constexpr uint32_t kMagicSize = 4;
+// キューブマップ 1 個の面の数
+constexpr uint32_t kCubeFaceCount = 6;
 
 // 旧フォーマット FourCC（DDS_PIXELFORMAT.dwFourCC に格納される）
 constexpr uint32_t kFourCC_DXT1 = 0x31545844; // "DXT1"
@@ -102,7 +106,9 @@ struct ParsedDDS {
 	size_t      payloadOffset = 0;       // ピクセルデータ開始バイト位置
 };
 
-// 旧フォーマット FourCC → DXGI_FORMAT 変換（DXT10 拡張がないケースの最小対応）
+/// <summary>旧フォーマット FourCC → DXGI_FORMAT 変換（DXT10 拡張がないケースの最小対応。BC1〜BC5）</summary>
+/// <param name="fourCC">DDS ピクセルフォーマットの FourCC</param>
+/// <returns>対応する DXGI_FORMAT。知らない FourCC なら DXGI_FORMAT_UNKNOWN</returns>
 inline DXGI_FORMAT FourCCToFormat(uint32_t fourCC) {
 	switch (fourCC) {
 	case kFourCC_DXT1: return DXGI_FORMAT_BC1_UNORM;
@@ -118,23 +124,27 @@ inline DXGI_FORMAT FourCCToFormat(uint32_t fourCC) {
 	}
 }
 
-// バイナリ先頭から DDS ヘッダーを解析する。
-// data はファイル先頭、size は読み込めるバイト数。最低 4 + 124 バイト必要、
-// DXT10 拡張があれば 4 + 124 + 20 バイト必要。
-// 成功なら true、不正なフォーマット / バイト数不足なら false。
+/// <summary>
+/// バイナリ先頭から DDS ヘッダーを解析する。キューブマップは arraySize を 6 倍（面の数）にして返す。
+/// 非圧縮の RGB/RGBA は format が UNKNOWN になる
+/// </summary>
+/// <param name="data">ファイル先頭</param>
+/// <param name="size">読み込めるバイト数。最低 4 + 124 バイト、DXT10 拡張があれば 4 + 124 + 20 バイト必要</param>
+/// <param name="out">解析結果（大きさ・ミップ数・配列数・フォーマット・ピクセルデータの開始位置）</param>
+/// <returns>成功なら true、不正なフォーマット / バイト数不足なら false</returns>
 inline bool ParseDDS(const void* data, size_t size, ParsedDDS& out) {
-	if (!data || size < 4 + kHeaderSize) return false;
+	if (!data || size < kMagicSize + kHeaderSize) return false;
 
 	const auto* bytes = static_cast<const uint8_t*>(data);
 
 	// マジック
 	uint32_t magic = 0;
-	std::memcpy(&magic, bytes, 4);
+	std::memcpy(&magic, bytes, kMagicSize);
 	if (magic != kMagic) return false;
 
 	// メインヘッダー
 	Header header{};
-	std::memcpy(&header, bytes + 4, kHeaderSize);
+	std::memcpy(&header, bytes + kMagicSize, kHeaderSize);
 	if (header.size != kHeaderSize) return false;
 	if (header.ddspf.size != kPixelFormatSize) return false;
 
@@ -142,7 +152,7 @@ inline bool ParseDDS(const void* data, size_t size, ParsedDDS& out) {
 	out.height = header.height;
 	out.mipLevels = (header.mipMapCount > 0) ? header.mipMapCount : 1;
 	out.arraySize = 1;
-	out.payloadOffset = 4 + kHeaderSize;
+	out.payloadOffset = kMagicSize + kHeaderSize;
 
 	// 旧形式でのキューブマップ判定（DX10 拡張がない場合）
 	out.isCubemap = (header.caps2 & kDDSCAPS2_CUBEMAP) != 0;
@@ -151,13 +161,13 @@ inline bool ParseDDS(const void* data, size_t size, ParsedDDS& out) {
 	const bool hasDXT10 = hasFourCC && header.ddspf.fourCC == kFourCC_DX10;
 
 	if (hasDXT10) {
-		if (size < 4 + kHeaderSize + kDXT10HeaderSize) return false;
+		if (size < kMagicSize + kHeaderSize + kDXT10HeaderSize) return false;
 		HeaderDXT10 dxt10{};
-		std::memcpy(&dxt10, bytes + 4 + kHeaderSize, kDXT10HeaderSize);
+		std::memcpy(&dxt10, bytes + kMagicSize + kHeaderSize, kDXT10HeaderSize);
 
 		out.format = static_cast<DXGI_FORMAT>(dxt10.dxgiFormat);
 		if (dxt10.arraySize > 0) out.arraySize = dxt10.arraySize;
-		out.payloadOffset = 4 + kHeaderSize + kDXT10HeaderSize;
+		out.payloadOffset = kMagicSize + kHeaderSize + kDXT10HeaderSize;
 
 		// DX10 拡張ではキューブマップは miscFlag で判定（caps2 ではなく）
 		if (dxt10.miscFlag & kDDS_RESOURCE_MISC_TEXTURECUBE) {
@@ -174,7 +184,7 @@ inline bool ParseDDS(const void* data, size_t size, ParsedDDS& out) {
 	// arraySize は「キューブマップの個数」なので、ID3D12Resource 作成時には
 	// 実効的な subresource 数 = arraySize * 6 * mipLevels になる。
 	if (out.isCubemap) {
-		out.arraySize *= 6;
+		out.arraySize *= kCubeFaceCount;
 	}
 
 	return true;

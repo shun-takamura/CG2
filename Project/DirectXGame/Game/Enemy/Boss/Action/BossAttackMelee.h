@@ -1,6 +1,6 @@
 #pragma once
 #include <cmath>
-#include "Enemy/Boss/IBossAction.h"
+#include "Enemy/Boss/IBossState.h"
 #include "Scene/GameScene.h"
 #include "IImGuiEditable.h"
 #include "Enemy/Boss/BossRig.h"
@@ -13,14 +13,20 @@
 /// アニメ導入後は ResolveBossHitAnchor の中身をボーン基準に差し替えるだけでよく、
 /// このクラス自体（タイミング・生成/追従/破棄のロジック）は変更不要。
 /// </summary>
-class BossAttackMelee : public IBossAction {
+class BossAttackMelee : public BossActionState {
 	enum class Phase { Telegraph, Active, Recover, Done };
 
 public:
+	/// <summary>近接攻撃を作る</summary>
+	/// <param name="telegraphTime">予兆の長さ [秒]</param>
+	/// <param name="activeDuration">判定が出ている時間 [秒]（腕で薙ぐ時は薙ぐ時間以上に延ばす）</param>
+	/// <param name="recoverTime">硬直の長さ [秒]</param>
 	explicit BossAttackMelee(float telegraphTime = 0.6f, float activeDuration = 0.25f, float recoverTime = 0.5f)
 		: telegraphTime_(telegraphTime), activeDuration_(activeDuration), recoverTime_(recoverTime) {}
 
-	void OnEnter(BossActionContext& ctx) override {
+	/// <summary>予兆から始め、薙ぐ腕を選ぶ（両方あれば交互）。手足があるのに腕が両方無ければ何もせず終わる</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void OnEnter(BossStateContext& ctx) override {
 		phase_ = Phase::Telegraph;
 		timer_ = 0.0f;
 		ctx.billboardToPlayer = true;
@@ -38,14 +44,17 @@ public:
 		}
 	}
 
-	void Update(float dt, BossActionContext& ctx) override {
+	/// <summary>予兆（振りかぶり）→判定（外から内へ薙ぐ）→硬直を 1 フレーム進める</summary>
+	/// <param name="dt">World の経過時間 [秒]</param>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void Tick(float dt, BossStateContext& ctx) override {
 		ctx.billboardToPlayer = true;
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
 			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			// 予兆（判定なし）：腕を外へ振りかぶる
-			if (useArm_ && ctx.rig) ctx.rig->SetArmTarget(side_, kWindRaise, kWindSwing, 0.12f);
+			if (useArm_ && ctx.rig) ctx.rig->SetArmTarget(side_, kWindRaise, kWindSwing, kWindSmoothTime);
 			if (timer_ >= telegraphTime_) {
 				SpawnHitVolume(ctx);
 				phase_ = Phase::Active;
@@ -54,8 +63,8 @@ public:
 		} else if (phase_ == Phase::Active) {
 			// 外から内へ低く薙ぐ。判定は拳に付いていく
 			if (useArm_ && ctx.rig) {
-				const float t = (activeDuration_ > 1e-4f) ? (std::min)(timer_ / activeDuration_, 1.0f) : 1.0f;
-				ctx.rig->SetArmTarget(side_, kSweepRaise, kWindSwing + (kSweepEndSwing - kWindSwing) * t, 0.03f);
+				const float t = (activeDuration_ > kMinDuration) ? (std::min)(timer_ / activeDuration_, 1.0f) : 1.0f;
+				ctx.rig->SetArmTarget(side_, kSweepRaise, kWindSwing + (kSweepEndSwing - kWindSwing) * t, kSweepSmoothTime);
 			}
 			UpdateHitVolume(ctx);
 			if (timer_ >= activeDuration_) {
@@ -64,19 +73,25 @@ public:
 				timer_ = 0.0f;
 			}
 		} else if (phase_ == Phase::Recover) {
-			if (useArm_ && ctx.rig && timer_ < recoverTime_ * 0.6f) ctx.rig->SetArmTarget(side_, kSweepRaise, kSweepEndSwing, 0.08f);
+			if (useArm_ && ctx.rig && timer_ < recoverTime_ * kRecoverHoldRate) ctx.rig->SetArmTarget(side_, kSweepRaise, kSweepEndSwing, kRecoverSmoothTime);
 			if (timer_ >= recoverTime_) phase_ = Phase::Done;
 		}
 	}
 
-	void OnExit(BossActionContext& ctx) override {
+	/// <summary>途中で打ち切られても判定を残さないよう消す</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void OnExit(BossStateContext& ctx) override {
 		DestroyHitVolume(ctx); // 途中中断でも判定を残さない
 	}
 
+	/// <summary>近接攻撃が終わったか</summary>
+	/// <returns>硬直まで終わったら true</returns>
 	bool IsFinished() const override { return phase_ == Phase::Done; }
 
 private:
-	void SpawnHitVolume(BossActionContext& ctx) {
+	/// <summary>"BossMeleeHit" の判定を拳（無ければ胴の前）に出し、自機の方へ向ける</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void SpawnHitVolume(BossStateContext& ctx) {
 		if (!ctx.scene) return;
 		const Vector3 pos = HitPos(ctx);
 		hitVolume_ = ctx.scene->SpawnEnemyAt("BossMeleeHit", pos);
@@ -85,26 +100,35 @@ private:
 		}
 	}
 
-	void UpdateHitVolume(BossActionContext& ctx) {
+	/// <summary>判定を拳（無ければ胴の前）へ付いていかせる</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void UpdateHitVolume(BossStateContext& ctx) {
 		if (!hitVolume_) return;
 		if (Vector3* p = hitVolume_->GetEditableTranslate()) {
 			*p = HitPos(ctx);
 		}
 	}
 
-	void DestroyHitVolume(BossActionContext& ctx) {
+	/// <summary>判定の実体を消す。無ければ何もしない</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void DestroyHitVolume(BossStateContext& ctx) {
 		if (!hitVolume_) return;
 		if (ctx.scene) ctx.scene->DestroyDynamicEntity(hitVolume_);
 		hitVolume_ = nullptr;
 	}
 
-	// 腕があれば拳、無ければ従来どおり胴の前
-	Vector3 HitPos(const BossActionContext& ctx) const {
+	/// <summary>判定を置く位置を求める</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	/// <returns>腕があれば拳の中心、無ければ従来どおり胴の前（ワールド）</returns>
+	Vector3 HitPos(const BossStateContext& ctx) const {
 		if (useArm_ && ctx.rig && ctx.rig->IsArmAlive(side_)) return ctx.rig->GetFistPos(side_);
 		return ResolveBossHitAnchor(ctx, hitLocalOffset_);
 	}
 
-	Vector3 ComputeFacingRotate(const BossActionContext& ctx) const {
+	/// <summary>ボス→自機の水平方向へ向くオイラー角を求める</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	/// <returns>オイラー角 [ラジアン]（Y だけ。自機が無ければ +Z 向き）</returns>
+	Vector3 ComputeFacingRotate(const BossStateContext& ctx) const {
 		Vector3 fwd{ 0.0f, 0.0f, 1.0f };
 		if (ctx.boss && ctx.player) {
 			const Vector3* bp = ctx.boss->GetEditableTranslate();
@@ -112,7 +136,7 @@ private:
 			if (bp && pp) {
 				Vector3 d{ pp->x - bp->x, 0.0f, pp->z - bp->z };
 				const float len = std::sqrt(d.x * d.x + d.z * d.z);
-				if (len > 1e-4f) fwd = { d.x / len, 0.0f, d.z / len };
+				if (len > kNearZeroLength) fwd = { d.x / len, 0.0f, d.z / len };
 			}
 		}
 		return { 0.0f, std::atan2(fwd.x, fwd.z), 0.0f };
@@ -133,6 +157,18 @@ private:
 	static constexpr float kWindSwing     = -1.0f; // 振りかぶり：外へ
 	static constexpr float kSweepRaise    = 0.8f;  // 薙ぐ高さ：拳が自機の胸のあたり
 	static constexpr float kSweepEndSwing = 1.3f;  // 薙ぎ終わり：体の内側の先まで
+	// 振りかぶりの構えへ寄る時間 [秒]
+	static constexpr float kWindSmoothTime = 0.12f;
+	// 薙ぐ間に構えへ寄る時間 [秒]（素早く追わせる）
+	static constexpr float kSweepSmoothTime = 0.03f;
+	// 硬直のうち薙ぎ終わりの構えを保つ割合（硬直の長さに対して）
+	static constexpr float kRecoverHoldRate = 0.6f;
+	// 硬直中に薙ぎ終わりの構えへ寄る時間 [秒]
+	static constexpr float kRecoverSmoothTime = 0.08f;
+	// これより短い判定の時間は最初から終わりとみなす [秒]
+	static constexpr float kMinDuration = 1e-4f;
+	// これより短い水平距離では向きを決めない（+Z のまま）[m]
+	static constexpr float kNearZeroLength = 1e-4f;
 	BossRig::Side side_ = BossRig::Side::Right;
 	bool useArm_ = false;
 };

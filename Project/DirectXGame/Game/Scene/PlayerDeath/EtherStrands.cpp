@@ -13,20 +13,64 @@
 #endif
 
 namespace {
+	// 長さがこれ以下のベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-6f;
+	// 筋の 1 点あたりの頂点の数（左の縁・芯・右の縁）
+	constexpr int kVertsPerPoint = 3;
+	// 体の大きさの下限
+	constexpr float kMinScale = 1e-3f;
+	// 筋の明るさのばらつきの最小
+	constexpr float kBrightnessJitterMin = 0.6f;
+	// 筋のくねりの振れ幅のばらつき（倍率）の最小
+	constexpr float kAmplitudeJitterMin = 0.5f;
+	// 筋のくねりの振れ幅のばらつき（倍率）の最大
+	constexpr float kAmplitudeJitterMax = 1.5f;
+	// 2 つ目のくねりの速さ（1 つ目に対する倍率）
+	constexpr float kSwaySpeedRatioB = 1.3f;
+	// 時間の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinSeconds = 1e-3f;
+	// 筋の端の太さ（真ん中に対する割合）
+	constexpr float kRootWidthRatio = 0.35f;
+	// 真ん中へ向かって筋の太さに足す割合
+	constexpr float kEnvelopeWidthRatio = 0.65f;
+
 	constexpr const char* kWhiteTexture = "Resources/Textures/white1x1.dds";
 	constexpr int kPointsPerStrand = EtherStrands::kSegments + 1;
 	constexpr int kVertsPerStrand = kPointsPerStrand * 3;   // 帯の左の縁・芯・右の縁
 
+	/// <summary>2 つのベクトルを足す</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルを引く</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a − b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルを s 倍する</summary>
+	/// <param name="v">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>v × s</returns>
 	Vector3 Mul(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 Cross(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>ベクトルの長さを求める</summary>
+	/// <param name="v">ベクトル</param>
+	/// <returns>長さ</returns>
 	float Len(const Vector3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 SafeNormalize(const Vector3& v, const Vector3& fallback) {
 		const float l = Len(v);
-		return l > 1e-6f ? Mul(v, 1.0f / l) : fallback;
+		return l > kMinNormalizeLength ? Mul(v, 1.0f / l) : fallback;
 	}
 }
 
@@ -42,8 +86,8 @@ void EtherStrands::Initialize() {
 	for (uint32_t s = 0; s < static_cast<uint32_t>(kMaxStrands); ++s) {
 		const uint32_t base = s * kVertsPerStrand;
 		for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(kPointsPerStrand); ++i) {
-			const uint32_t p = base + i * 3;
-			const uint32_t q = p + 3;
+			const uint32_t p = base + i * kVertsPerPoint;
+			const uint32_t q = p + kVertsPerPoint;
 			// 左の縁〜芯、芯〜右の縁の 2 枚
 			data.indices.insert(data.indices.end(), { p, q, p + 1, p + 1, q, q + 1 });
 			data.indices.insert(data.indices.end(), { p + 1, q + 1, p + 2, p + 2, q + 1, q + 2 });
@@ -80,14 +124,14 @@ void EtherStrands::Emit(const Vector3& root, float scale) {
 		nextSlot_ = (nextSlot_ + n + 1) % kMaxStrands;
 		s.alive = true;
 		s.root = Sub(root, anchor_);
-		s.scale = (std::max)(scale, 1e-3f);
+		s.scale = (std::max)(scale, kMinScale);
 		s.age = 0.0f;
 		s.life = Rand(lifeMin_, lifeMax_);
 		s.speed = Rand(speedMin_, speedMax_);
 		s.length = Rand(lengthMin_, lengthMax_);
 		s.width = Rand(widthMin_, widthMax_);
-		s.brightness = Rand(0.6f, 1.0f);
-		s.amplitude = amplitude_ * Rand(0.5f, 1.5f);
+		s.brightness = Rand(kBrightnessJitterMin, 1.0f);
+		s.amplitude = amplitude_ * Rand(kAmplitudeJitterMin, kAmplitudeJitterMax);
 		s.freqA = Rand(frequencyMin_, frequencyMax_);
 		s.freqB = Rand(frequencyMin_, frequencyMax_);
 		s.phaseA = Rand(0.0f, 2.0f * kPi);
@@ -119,7 +163,7 @@ Vector3 EtherStrands::SwayAt(const Strand& s, float h) const {
 	const float hu = h / s.scale;
 	const float amp = (s.amplitude + amplitudeGrow_ * hu) * s.scale;
 	const float x = std::sin(s.freqA * hu - time_ * swaySpeed_ + s.phaseA) * amp;
-	const float z = std::sin(s.freqB * hu - time_ * swaySpeed_ * 1.3f + s.phaseB) * amp;
+	const float z = std::sin(s.freqB * hu - time_ * swaySpeed_ * kSwaySpeedRatioB + s.phaseB) * amp;
 	return Add(Mul(s.flareDir, flare_ * h), { x, 0.0f, z });
 }
 
@@ -144,8 +188,8 @@ void EtherStrands::BuildVertices(const Vector3& cameraPos, const Vector3& etherC
 		const float tail = (std::max)(head - s.length * s.scale, 0.0f);
 		const Vector3 base = Add(anchor_, s.root);
 		// 出てすぐ明るく、消える前に暗く
-		const float fadeIn = fadeInSeconds_ > 1e-3f ? (std::min)(s.age / fadeInSeconds_, 1.0f) : 1.0f;
-		const float t = s.age / (std::max)(s.life, 1e-3f);
+		const float fadeIn = fadeInSeconds_ > kMinSeconds ? (std::min)(s.age / fadeInSeconds_, 1.0f) : 1.0f;
+		const float t = s.age / (std::max)(s.life, kMinSeconds);
 		const float fade = fadeIn * (1.0f - t * t);
 
 		Vector3 points[kPointsPerStrand];
@@ -161,12 +205,12 @@ void EtherStrands::BuildVertices(const Vector3& cameraPos, const Vector3& etherC
 			const Vector3 tangent = SafeNormalize(Sub(points[(std::min)(i + 1, kSegments)], points[(std::max)(i - 1, 0)]),
 				{ 0.0f, 1.0f, 0.0f });
 			const Vector3 view = SafeNormalize(Sub(cameraPos, points[i]), { 0.0f, 0.0f, -1.0f });
-			const float halfWidth = s.width * s.scale * (0.35f + 0.65f * envelope) * 0.5f;
+			const float halfWidth = s.width * s.scale * (kRootWidthRatio + kEnvelopeWidthRatio * envelope) * 0.5f;
 			const Vector3 side = Mul(SafeNormalize(Cross(tangent, view), { 1.0f, 0.0f, 0.0f }), halfWidth);
 			const float k = brightness_ * s.brightness * fade * envelope;
-			MeshVertex& left = v[i * 3];
-			MeshVertex& mid = v[i * 3 + 1];
-			MeshVertex& right = v[i * 3 + 2];
+			MeshVertex& left = v[i * kVertsPerPoint];
+			MeshVertex& mid = v[i * kVertsPerPoint + 1];
+			MeshVertex& right = v[i * kVertsPerPoint + 2];
 			left.position = Sub(points[i], side);
 			mid.position = points[i];
 			right.position = Add(points[i], side);

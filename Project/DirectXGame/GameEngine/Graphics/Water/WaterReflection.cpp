@@ -20,6 +20,13 @@
 #include "imgui.h"
 #endif
 
+namespace {
+	// 反射 RT の解像度の倍率の下限
+	constexpr float kMinResolutionScale = 0.25f;
+	// カメラ CB の数（本描画用と鏡像用）
+	constexpr uint32_t kCameraCBSlotCount = 2;
+}
+
 WaterReflection::WaterReflection() = default;
 WaterReflection::~WaterReflection() {
 	// RenderTexture は自分では SRV の番号を返さない
@@ -33,7 +40,7 @@ void WaterReflection::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 	srvManager_ = srvManager;
 	object3DManager_ = object3DManager;
 
-	resolutionScale_ = std::clamp(resolutionScale, 0.25f, 1.0f);
+	resolutionScale_ = std::clamp(resolutionScale, kMinResolutionScale, 1.0f);
 	const uint32_t width = static_cast<uint32_t>(dxCore_->GetRenderWidth() * resolutionScale_);
 	const uint32_t height = static_cast<uint32_t>(dxCore_->GetRenderHeight() * resolutionScale_);
 
@@ -44,7 +51,7 @@ void WaterReflection::Initialize(DirectXCore* dxCore, SRVManager* srvManager, Ob
 
 	CreateDepthBuffer(width, height);
 
-	cameraResource_ = dxCore_->CreateBufferResource(kCameraCBOffset * 2);
+	cameraResource_ = dxCore_->CreateBufferResource(kCameraCBOffset * kCameraCBSlotCount);
 	uint8_t* mapped = nullptr;
 	cameraResource_->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
 	viewProjData_ = reinterpret_cast<ReflectionViewProjForGPU*>(mapped);

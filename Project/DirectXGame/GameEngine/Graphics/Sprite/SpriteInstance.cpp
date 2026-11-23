@@ -5,6 +5,13 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+    // 四角 1 枚の頂点数とインデックス数（三角形 2 枚）
+    constexpr int kQuadVertexCount = 4;
+    constexpr int kQuadIndexCount = 6;
+    // UI の正射影の奥の端（Z）
+    constexpr float kOrthographicFarZ = 100.0f;
+}
 
 void SpriteInstance::Initialize(SpriteManager* spriteManager, const std::string& filePath,
     const std::string& name)
@@ -103,7 +110,7 @@ void SpriteInstance::Update()
         0.0f, 0.0f,
         WindowsApplication::kUIWidth,
         WindowsApplication::kUIHeight,
-        0.0f, 100.0f
+        0.0f, kOrthographicFarZ
     );
     Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
@@ -123,24 +130,24 @@ void SpriteInstance::Draw()
 
     // PS b0: Material
     commandList->SetGraphicsRootConstantBufferView(
-        0,
+        SpriteManager::kRootMaterial,
         materialResource_->GetGPUVirtualAddress()
     );
 
     // VS b0: Transformation
     commandList->SetGraphicsRootConstantBufferView(
-        1,
+        SpriteManager::kRootTransformation,
         transformationMatrixResource_->GetGPUVirtualAddress()
     );
 
     // PS t0: Texture
     commandList->SetGraphicsRootDescriptorTable(
-        2,
+        SpriteManager::kRootTexture,
         TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_)
     );
 
     PEPPER_COUNT("DrawCall");
-    commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+    commandList->DrawIndexedInstanced(kQuadIndexCount, 1, 0, 0, 0);
 }
 
 SpriteInstance::~SpriteInstance()
@@ -179,9 +186,9 @@ void SpriteInstance::AdjustTextureSize()
 void SpriteInstance::CreateVertexBuffer()
 {
     // SpriteVertexData を使用
-    vertexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(SpriteVertexData) * 4);
+    vertexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(SpriteVertexData) * kQuadVertexCount);
 
-    indexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(uint32_t) * 6);
+    indexResource_ = spriteManager_->GetDxCore()->CreateBufferResource(sizeof(uint32_t) * kQuadIndexCount);
 
     vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData_));
     indexResource_->Map(0, nullptr, reinterpret_cast<void**>(&indexData_));
@@ -202,11 +209,11 @@ void SpriteInstance::CreateVertexBuffer()
 
     // バッファビュー設定
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = sizeof(SpriteVertexData) * 4;
+    vertexBufferView_.SizeInBytes = sizeof(SpriteVertexData) * kQuadVertexCount;
     vertexBufferView_.StrideInBytes = sizeof(SpriteVertexData);
 
     indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
-    indexBufferView_.SizeInBytes = sizeof(uint32_t) * 6;
+    indexBufferView_.SizeInBytes = sizeof(uint32_t) * kQuadIndexCount;
     indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
 }
 

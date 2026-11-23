@@ -1,4 +1,5 @@
 #include "FlightUnitGuard.h"
+#include "Score/GameSession.h"
 
 #include "Components/Gameplay.h"
 #include "Effect/EffectPrimitiveRenderer.h"
@@ -15,20 +16,82 @@
 #endif
 
 namespace {
+	// 長さがこれより短いベクトルは向きを決めない
+	constexpr float kMinNormalizeLength = 1e-5f;
+	// 開いた形の上の横のパーツの位置の初期値 [m]
+	constexpr Vector3 kOpenUpperPartOffset = { -0.216f, 0.243f, -0.03f };
+	// 開いた形の下の横のパーツの位置の初期値 [m]
+	constexpr Vector3 kOpenLowerPartOffset = { -0.253f, -0.138f, -0.03f };
+	// 閉じた形の上の横のパーツの回転の初期値 [rad]
+	constexpr Vector3 kClosedUpperPartRotate = { 0.0f, 0.0f, 0.72f };
+	// 閉じた形の上の横のパーツの位置の初期値 [m]
+	constexpr Vector3 kClosedUpperPartOffset = { -0.07f, 0.2f, -0.05f };
+	// 閉じた形の下の横のパーツの回転の初期値 [rad]
+	constexpr Vector3 kClosedLowerPartRotate = { 0.0f, 0.0f, 0.49f };
+	// 閉じた形の下の横のパーツの位置の初期値 [m]
+	constexpr Vector3 kClosedLowerPartOffset = { -0.07f, -0.2f, -0.05f };
+	// 背中に付けたときの大きさの初期値
+	constexpr Vector3 kStowScale = { 1.6f, 1.6f, 1.6f };
+	// 背中に付けたときの傾き（上を外へ倒す）の初期値 [rad]
+	constexpr Vector3 kStowRotate = { 0.0f, 0.0f, 0.35f };
+	// 背中に付けたときの位置（バックパックから）の初期値 [m]
+	constexpr Vector3 kStowOffset = { 0.5f, 0.5f, 0.1f };
+	// 自機が無いときの HP の上限
+	constexpr int kFallbackMaxHp = 100;
+	// 時間・耐久力の下限（これ以下なら割合を出さない）
+	constexpr float kMinSpan = 1e-4f;
+	// smoothstep（3k² − 2k³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3k² − 2k³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 左のパーツから鏡写しの元の右のパーツの添字へ戻す量
+	constexpr int kMirroredPartIndexOffset = 2;
+	// 被弾の光が 1 秒に弱まる量
+	constexpr float kHitFlashDecayPerSecond = 4.0f;
+	// 耐久力が尽きかけたときのバリアの濃さの倍率
+	constexpr float kMinBarrierAlpha = 0.4f;
+	// 耐久力に応じてバリアの濃さに足す倍率
+	constexpr float kBarrierAlphaRange = 0.6f;
+	// この割合を切ったらバリアを点滅させる
+	constexpr float kLowDurabilityRatio = 0.25f;
+	// 点滅の濃さの倍率の真ん中
+	constexpr float kLowBlinkBase = 0.6f;
+	// 点滅の濃さの倍率の振れ幅
+	constexpr float kLowBlinkAmplitude = 0.4f;
+	// 点滅の速さ [rad/秒]
+	constexpr float kLowBlinkSpeed = 30.0f;
+
 	constexpr const char* kDefenseDir = "Resources/Models/Weapons/FlightUnit/Defense/Export";
 	// パーツの順は FlightUnitGuard::kPartCount の説明と同じ
 	constexpr const char* kPartNames[] = { "DefenseMain", "DefenseFrontRight", "DefenseBackRight", "DefenseFrontLeft", "DefenseBackLeft" };
 
+	/// <summary>ベクトルを正規化する</summary>
+	/// <param name="v">正規化するベクトル</param>
+	/// <param name="fallback">長さがほぼ 0 のときに返す値</param>
+	/// <returns>長さ 1 のベクトル。長さがほぼ 0 なら fallback</returns>
 	Vector3 Normalized(const Vector3& v, const Vector3& fallback) {
 		const float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-		if (len < 1e-5f) return fallback;
+		if (len < kMinNormalizeLength) return fallback;
 		return { v.x / len, v.y / len, v.z / len };
 	}
+	/// <summary>外積を求める</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a × b</returns>
 	Vector3 CrossV(const Vector3& a, const Vector3& b) {
 		return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 	}
+	/// <summary>行列の r 行目の xyz を取り出す（行＝右・上・前・位置）</summary>
+	/// <param name="m">行列</param>
+	/// <param name="r">行の番号 0〜3</param>
+	/// <returns>r 行目の xyz</returns>
 	Vector3 Row(const Matrix4x4& m, int r) { return { m.m[r][0], m.m[r][1], m.m[r][2] }; }
-	// 前（+Z）を forward、上を upHint に寄せた行列（行＝右・上・前・位置）
+	/// <summary>前（+Z）を forward、上を upHint に寄せたワールド行列を作る（行＝右・上・前・位置）</summary>
+	/// <param name="pos">位置</param>
+	/// <param name="forward">前に向ける方向</param>
+	/// <param name="upHint">上に寄せる方向</param>
+	/// <param name="scale">3 軸そろえた拡大率</param>
+	/// <returns>ワールド行列</returns>
 	Matrix4x4 MakeLookWorld(const Vector3& pos, const Vector3& forward, const Vector3& upHint, float scale) {
 		const Vector3 f = Normalized(forward, { 0.0f, 0.0f, 1.0f });
 		const Vector3 r = Normalized(CrossV(upHint, f), { 1.0f, 0.0f, 0.0f });
@@ -47,14 +110,14 @@ FlightUnitGuard::FlightUnitGuard() {
 	// パーツはユニットのローカル（+Z が表、上が +Y、自機から見て右が -X）。モデルは展開図の並びで回転なしにそろえてある
 	const Vector3 one{ 1.0f, 1.0f, 1.0f };
 	openParts_[0] = { one, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } };
-	openParts_[1] = { one, { 0.0f, 0.0f, 0.0f }, { -0.216f, 0.243f, -0.03f } };
-	openParts_[2] = { one, { 0.0f, 0.0f, 0.0f }, { -0.253f, -0.138f, -0.03f } };
+	openParts_[1] = { one, { 0.0f, 0.0f, 0.0f }, kOpenUpperPartOffset };
+	openParts_[2] = { one, { 0.0f, 0.0f, 0.0f }, kOpenLowerPartOffset };
 	// 閉じた形：横のパーツを縦に起こして Main の裏へ寄せる
 	closedParts_[0] = openParts_[0];
-	closedParts_[1] = { one, { 0.0f, 0.0f, 0.72f }, { -0.07f, 0.2f, -0.05f } };
-	closedParts_[2] = { one, { 0.0f, 0.0f, 0.49f }, { -0.07f, -0.2f, -0.05f } };
+	closedParts_[1] = { one, kClosedUpperPartRotate, kClosedUpperPartOffset };
+	closedParts_[2] = { one, kClosedLowerPartRotate, kClosedLowerPartOffset };
 	// 背中：自機の左（バックパックのローカルで +X）・右の肩の後ろ。上を外へ倒して V 字に（右の初期値は左の鏡写し）
-	stowMounts_[0] = { { 1.6f, 1.6f, 1.6f }, { 0.0f, 0.0f, 0.35f }, { 0.5f, 0.5f, 0.1f } };
+	stowMounts_[0] = { kStowScale, kStowRotate, kStowOffset };
 	stowMounts_[1] = MirroredX(stowMounts_[0]);
 }
 
@@ -74,7 +137,7 @@ void FlightUnitGuard::InitializeModels(Object3DManager* object3DManager, DirectX
 void FlightUnitGuard::Initialize(IFlightUnitHost* host, Camera* camera) {
 	FlightUnitSkill::Initialize(host, camera);
 	vis_ = std::make_unique<EffectPrimitiveRenderer>();
-	vis_->Initialize(2 /*Sphere*/, "Resources/Textures/white1x1.dds");
+	vis_->Initialize(EffectMeshType::Sphere, "Resources/Textures/white1x1.dds");
 	vis_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
 	vis_->SetDepthWrite(false);
 	vis_->SetCullBackface(false);
@@ -84,7 +147,7 @@ void FlightUnitGuard::Initialize(IFlightUnitHost* host, Camera* camera) {
 bool FlightUnitGuard::Activate() {
 	if (!host_) return false;
 	IImGuiEditable* player = host_->GetPlayer();
-	const int maxHp = player ? Gameplay::Of(player).GetHP().maxHP : 100;
+	const int maxHp = player ? Gameplay::Of(player).GetHP().maxHP : kFallbackMaxHp;
 	durabilityMax_ = (std::max)(1.0f, static_cast<float>(maxHp) * barrierHpRatio_[LevelIndex()]);
 	durability_ = durabilityMax_;
 	// 戻る途中に張り直したら、今の開き具合から出ていく
@@ -111,14 +174,14 @@ void FlightUnitGuard::Cancel(bool restoreTime) {
 float FlightUnitGuard::GetActiveRatio() const {
 	// 時間と耐久力の少ない方
 	const float d = barrierDuration_[LevelIndex()];
-	const float byTime = d > 1e-4f ? 1.0f - timer_ / d : 0.0f;
-	const float byHp = durabilityMax_ > 1e-4f ? durability_ / durabilityMax_ : 0.0f;
+	const float byTime = d > kMinSpan ? 1.0f - timer_ / d : 0.0f;
+	const float byHp = durabilityMax_ > kMinSpan ? durability_ / durabilityMax_ : 0.0f;
 	return std::clamp((std::min)(byTime, byHp), 0.0f, 1.0f);
 }
 
 float FlightUnitGuard::ReleaseRatio() const {
-	if (active_) return deployTime_ > 1e-4f ? (std::min)(deployTimer_ / deployTime_, 1.0f) : 1.0f;
-	if (returning_) return returnTime_ > 1e-4f ? std::clamp(1.0f - returnTimer_ / returnTime_, 0.0f, 1.0f) : 0.0f;
+	if (active_) return deployTime_ > kMinSpan ? (std::min)(deployTimer_ / deployTime_, 1.0f) : 1.0f;
+	if (returning_) return returnTime_ > kMinSpan ? std::clamp(1.0f - returnTimer_ / returnTime_, 0.0f, 1.0f) : 0.0f;
 	return 0.0f;
 }
 
@@ -144,7 +207,7 @@ void FlightUnitGuard::UpdateModels(const Matrix4x4& backpackWorld) {
 	Vector3 right, up, forward;
 	GetCameraBasis(right, up, forward);
 	float k = preview_ ? std::clamp(previewRatio_, 0.0f, 1.0f) : ReleaseRatio();
-	k = k * k * (3.0f - 2.0f * k);
+	k = k * k * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * k);
 	const Vector3 anchor = host_->GetFlightUnitAnchor();
 	const Vector3 center{ anchor.x + up.x * orbitHeight_, anchor.y + up.y * orbitHeight_, anchor.z + up.z * orbitHeight_ };
 
@@ -164,7 +227,7 @@ void FlightUnitGuard::UpdateModels(const Matrix4x4& backpackWorld) {
 			unitWorld = MakeLookWorld(pos, dir, upHint, scale);
 		}
 		for (int p = 0; p < kPartCount; ++p) {
-			const int src = p < kTunedParts ? p : p - 2;   // 左は右（1・2）の鏡写し
+			const int src = p < kTunedParts ? p : p - kMirroredPartIndexOffset;   // 左は右（1・2）の鏡写し
 			Transform local = LerpTransform(closedParts_[src], openParts_[src], k);
 			if (p >= kTunedParts) local = MirroredX(local);
 			const Matrix4x4 w = Multiply(MakeAffineMatrix(local), unitWorld);
@@ -202,7 +265,7 @@ void FlightUnitGuard::Update(float dt, bool canAct) {
 	if (passiveTimer_ > 0.0f) passiveTimer_ -= dt;
 	if (flashTimer_ > 0.0f) flashTimer_ -= dt;
 	if (contactTimer_ > 0.0f) contactTimer_ -= dt;
-	hitFlash_ = (std::max)(0.0f, hitFlash_ - dt * 4.0f);
+	hitFlash_ = (std::max)(0.0f, hitFlash_ - dt * kHitFlashDecayPerSecond);
 	if (active_) deployTimer_ += dt;
 	if (returning_) {
 		returnTimer_ += dt;
@@ -218,7 +281,7 @@ void FlightUnitGuard::Update(float dt, bool canAct) {
 		} else {
 			// バリアに入った敵弾を消して耐久力を減らす（被弾と同じ難易度の倍率を掛ける）
 			const int raw = host_->AbsorbEnemyBulletsInSphere(host_->GetFlightUnitAnchor(), barrierRadius_);
-			if (raw > 0) Drain(DifficultyProfile::ScaleInt(raw, DifficultyProfile::GetInstance()->GetDamageScale()));
+			if (raw > 0) Drain(DifficultyProfile::ScaleInt(raw, host_->GetGameSession()->GetDifficultyProfile()->GetDamageScale()));
 		}
 	}
 
@@ -229,11 +292,11 @@ void FlightUnitGuard::Update(float dt, bool canAct) {
 		float a = barrierAlpha_ * (1.0f + hitFlash_);
 		if (active_) {
 			// 耐久力が減るほど薄く、残りが少ないと点滅する
-			const float hp = durabilityMax_ > 1e-4f ? durability_ / durabilityMax_ : 0.0f;
-			a *= 0.4f + 0.6f * hp;
-			if (hp < 0.25f) a *= 0.6f + 0.4f * std::sin(timer_ * 30.0f);
+			const float hp = durabilityMax_ > kMinSpan ? durability_ / durabilityMax_ : 0.0f;
+			a *= kMinBarrierAlpha + kBarrierAlphaRange * hp;
+			if (hp < kLowDurabilityRatio) a *= kLowBlinkBase + kLowBlinkAmplitude * std::sin(timer_ * kLowBlinkSpeed);
 		} else {
-			a *= flashDuration_ > 1e-4f ? flashTimer_ / flashDuration_ : 0.0f;
+			a *= flashDuration_ > kMinSpan ? flashTimer_ / flashDuration_ : 0.0f;
 		}
 		vis_->SetColor({ color_.x, color_.y, color_.z, a });
 		vis_->Update(camera_, dt);

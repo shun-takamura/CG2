@@ -10,10 +10,13 @@ class ImGuiManager;
 /// </summary>
 class InspectorWindow : public IImGuiWindow {
 public:
+    /// <summary>"Inspector" ウィンドウとして作る</summary>
+    /// <param name="manager">選択状態とグループの名前を持つ ImGuiManager</param>
     InspectorWindow(ImGuiManager* manager) 
         : IImGuiWindow("Inspector"), manager_(manager) {}
 
 protected:
+    /// <summary>選択中のオブジェクトの名前・グループ・表示・コライダーと、オブジェクト自身の編集項目・ホストが登録したセクションを出す</summary>
     void OnDraw() override;
 
 private:

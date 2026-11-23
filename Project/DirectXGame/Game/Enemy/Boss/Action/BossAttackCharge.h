@@ -1,5 +1,5 @@
 #pragma once
-#include "Enemy/Boss/IBossAction.h"
+#include "Enemy/Boss/IBossState.h"
 #include "Scene/GameScene.h"
 #include "Enemy/Boss/BossRig.h"
 
@@ -8,26 +8,33 @@
 /// ダッシュ中は "BossMeleeHit"（EnemyAttack の判定プレハブ）を体の前に追従させて接触ダメージにする。
 /// 目標は予兆の終わりに一度だけ確定するので、溜めを見てから横に避ければかわせる。
 /// </summary>
-class BossAttackCharge : public IBossAction {
+class BossAttackCharge : public BossActionState {
 	enum class Phase { Telegraph, Dash, Recover, Done };
 
 public:
+	/// <summary>突進を作る</summary>
+	/// <param name="telegraphTime">予兆（溜め）の長さ [秒]</param>
 	explicit BossAttackCharge(float telegraphTime = 0.9f)
 		: telegraphTime_(telegraphTime) {}
 
-	void OnEnter(BossActionContext& ctx) override {
+	/// <summary>予兆から始める（タイマーを 0 に、自機の方を向く）</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void OnEnter(BossStateContext& ctx) override {
 		phase_ = Phase::Telegraph;
 		timer_ = 0.0f;
 		ctx.billboardToPlayer = true;
 	}
 
-	void Update(float dt, BossActionContext& ctx) override {
+	/// <summary>予兆（溜め・点滅）→ダッシュ（判定を体の前に追従）→硬直を 1 フレーム進める</summary>
+	/// <param name="dt">World の経過時間 [秒]</param>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void Tick(float dt, BossStateContext& ctx) override {
 		timer_ += dt;
 
 		if (phase_ == Phase::Telegraph) {
 			SetBossTelegraphTint(ctx, { 1.0f, 1.0f, 1.0f }, timer_, telegraphTime_); // 弾幕系=黄 / 近接系=白
 			ctx.billboardToPlayer = true;
-			SetArms(ctx, -0.5f, -0.4f, 0.2f); // 両腕を後ろへ引いて溜める
+			SetArms(ctx, kWindRaise, kWindSwing, kWindSmoothTime); // 両腕を後ろへ引いて溜める
 			if (timer_ >= telegraphTime_) {
 				if (!BeginDash(ctx)) { phase_ = Phase::Done; return; }
 				phase_ = Phase::Dash;
@@ -36,8 +43,8 @@ public:
 		} else if (phase_ == Phase::Dash) {
 			// 突進中は向きを固定（振り向かない）。両腕を前へ突き出す
 			ctx.billboardToPlayer = false;
-			SetArms(ctx, 1.45f, 0.25f, 0.05f);
-			float t = (dashDuration_ > 1e-4f) ? (timer_ / dashDuration_) : 1.0f;
+			SetArms(ctx, kDashRaise, kDashSwing, kDashSmoothTime);
+			float t = (dashDuration_ > kMinDuration) ? (timer_ / dashDuration_) : 1.0f;
 			if (t > 1.0f) t = 1.0f;
 			const float e = t * t * (3.0f - 2.0f * t);
 			if (Vector3* bp = ctx.boss ? ctx.boss->GetEditableTranslate() : nullptr) {
@@ -60,14 +67,21 @@ public:
 		}
 	}
 
-	void OnExit(BossActionContext& ctx) override {
+	/// <summary>途中で打ち切られても接触判定を残さないよう消す</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void OnExit(BossStateContext& ctx) override {
 		DestroyHitVolume(ctx);
 	}
 
+	/// <summary>突進が終わったか</summary>
+	/// <returns>硬直まで終わったら true（ダッシュを始められなかった時も true）</returns>
 	bool IsFinished() const override { return phase_ == Phase::Done; }
 
 private:
-	bool BeginDash(BossActionContext& ctx) {
+	/// <summary>ダッシュの始点・終点（自機を突き抜けた先、アリーナ内）を確定し、接触判定を出す</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	/// <returns>始められたら true。照準が取れない・シーンが無ければ false</returns>
+	bool BeginDash(BossStateContext& ctx) {
 		const BossAimInfo aim = ComputeBossAim(ctx);
 		if (!aim.valid || !ctx.scene) return false;
 		startPos_ = aim.origin;
@@ -84,17 +98,39 @@ private:
 		return true;
 	}
 
-	static void SetArms(BossActionContext& ctx, float raise, float swing, float smoothTime) {
+	/// <summary>両腕に同じ構えを指示する。手足が無ければ何もしない</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	/// <param name="raise">構え [ラジアン]</param>
+	/// <param name="swing">振り [ラジアン]</param>
+	/// <param name="smoothTime">目標の構えへ寄る時間 [秒]</param>
+	static void SetArms(BossStateContext& ctx, float raise, float swing, float smoothTime) {
 		if (!ctx.rig) return;
 		ctx.rig->SetArmTarget(BossRig::Side::Left, raise, swing, smoothTime);
 		ctx.rig->SetArmTarget(BossRig::Side::Right, raise, swing, smoothTime);
 	}
 
-	void DestroyHitVolume(BossActionContext& ctx) {
+	/// <summary>接触判定の実体を消す。無ければ何もしない</summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	void DestroyHitVolume(BossStateContext& ctx) {
 		if (!hitVolume_) return;
 		if (ctx.scene) ctx.scene->DestroyDynamicEntity(hitVolume_);
 		hitVolume_ = nullptr;
 	}
+
+	// 溜め：両腕を後ろへ引く構え [rad]
+	static constexpr float kWindRaise = -0.5f;
+	// 溜め：両腕の振り [rad]
+	static constexpr float kWindSwing = -0.4f;
+	// 溜め：構えへ寄る時間 [秒]
+	static constexpr float kWindSmoothTime = 0.2f;
+	// 突進：両腕を前へ突き出す構え [rad]
+	static constexpr float kDashRaise = 1.45f;
+	// 突進：両腕の振り [rad]
+	static constexpr float kDashSwing = 0.25f;
+	// 突進：構えへ寄る時間 [秒]
+	static constexpr float kDashSmoothTime = 0.05f;
+	// これより短い突進の時間は最初から終わりとみなす [秒]
+	static constexpr float kMinDuration = 1e-4f;
 
 	Phase phase_ = Phase::Telegraph;
 	float timer_ = 0.0f;

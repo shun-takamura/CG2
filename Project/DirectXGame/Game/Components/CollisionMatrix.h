@@ -13,6 +13,8 @@ namespace CollisionMatrix {
 	/// そのタグが「コライダーを持つ可能性があるか」。Inspector の表示出し分け、
 	/// CollisionManager のフィルタに使う。
 	/// </summary>
+	/// <param name="t">タグ</param>
+	/// <returns>コライダーを持ちうるタグなら true</returns>
 	inline bool IsCollidableTag(EntityTag t) {
 		switch (t) {
 		case EntityTag::Player:
@@ -31,6 +33,9 @@ namespace CollisionMatrix {
 	/// <summary>
 	/// タグペアで衝突判定を行うべきか。順序非依存。
 	/// </summary>
+	/// <param name="a">片方のタグ</param>
+	/// <param name="b">もう片方のタグ</param>
+	/// <returns>判定するなら true。どちらかがコライダーを持たないタグ・明示的にスキップするペアなら false</returns>
 	inline bool ShouldCollide(EntityTag a, EntityTag b) {
 		// 両方コライダーを持つ可能性が必要
 		if (!IsCollidableTag(a) || !IsCollidableTag(b)) return false;

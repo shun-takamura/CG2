@@ -27,14 +27,17 @@
 class MoviePlayer {
 public:
 	MoviePlayer() = default;
+	/// <summary>再生を止めてスレッドを片付ける</summary>
 	~MoviePlayer();
 	MoviePlayer(const MoviePlayer&) = delete;
 	MoviePlayer& operator=(const MoviePlayer&) = delete;
 
 	/// <summary>
-	/// 先頭から再生を始める（再生中なら一度止めてから）。ファイルが無ければ false。
-	/// textureBaseName はテクスチャ名の元（実際の名前は "_幅x高さ" が付く。GetTextureName で取る）
+	/// 先頭から再生を始める（再生中なら一度止めてから）。ファイルを開く処理は別スレッドで行う
 	/// </summary>
+	/// <param name="filePath">動画ファイルのパス</param>
+	/// <param name="textureBaseName">テクスチャ名の元（実際の名前は "_幅x高さ" が付く。GetTextureName で取る）</param>
+	/// <returns>再生を始めたら true（ファイルが無ければ false で、HasFailed が true になる）</returns>
 	bool Start(const std::string& filePath, const std::string& textureBaseName);
 
 	/// <summary>再生を止めてスレッドを片付ける（テクスチャは TextureManager に残り、次の Start で使い回す）</summary>
@@ -46,22 +49,40 @@ public:
 	/// </summary>
 	void UpdateTexture();
 
+	/// <summary>再生のスレッドが動いているか</summary>
+	/// <returns>動いていれば true</returns>
 	bool IsPlaying() const { return threadRunning_; }
-	/// <summary>開けなかった・読めなくなった（Start し直すまで true）</summary>
+	/// <summary>開けなかった・読めなくなったか（Start し直すまで true）</summary>
+	/// <returns>失敗していれば true</returns>
 	bool HasFailed() const { return failed_; }
-	/// <summary>テクスチャに 1 フレーム以上送ってある（描いてよい）</summary>
+	/// <summary>テクスチャに 1 フレーム以上送ってあるか（描いてよいか）</summary>
+	/// <returns>送ってあれば true</returns>
 	bool HasFrame() const { return hasFrame_; }
 
+	/// <summary>動画を送るテクスチャの名前</summary>
+	/// <returns>名前（最初のフレームを送るまでは空）</returns>
 	const std::string& GetTextureName() const { return textureName_; }
+	/// <summary>テクスチャの幅</summary>
+	/// <returns>幅 [px]</returns>
 	uint32_t GetWidth() const { return textureWidth_; }
+	/// <summary>テクスチャの高さ</summary>
+	/// <returns>高さ [px]</returns>
 	uint32_t GetHeight() const { return textureHeight_; }
 
 private:
+	/// <summary>
+	/// 再生のスレッド本体。ファイルを開き、表示時刻（実時間）に合わせてフレームを読み、最後まで来たら先頭に戻る。
+	/// 読めなくなったら失敗にして終わる
+	/// </summary>
 	void ThreadFunc(std::wstring path);
-	/// <summary>読み取り器を作って出力を BGRA にする。成功したら frameWidth_ などを入れる</summary>
+	/// <summary>読み取り器を作って出力を BGRA にする</summary>
+	/// <param name="path">動画ファイルのパス</param>
+	/// <returns>成功したら true（frameWidth_ などを入れる）</returns>
 	bool OpenReader(const std::wstring& path);
+	/// <summary>今の出力形式から幅・高さ・1 行のバイト数を読み直す（取れなければ何もしない）</summary>
 	void ReadCurrentMediaType();
 	/// <summary>サンプルの画素を詰めて（行の幅のずれを吸収して）スレッド側のバッファへ写す</summary>
+	/// <param name="sample">読んだフレーム</param>
 	void CopySample(IMFSample* sample);
 
 	Microsoft::WRL::ComPtr<IMFSourceReader> reader_;  // スレッドの中だけで触る

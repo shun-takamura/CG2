@@ -14,5 +14,7 @@ public:
     /// <summary>
     /// 指定 TimeGroup のスケール済みデルタタイムを返す。
     /// </summary>
+    /// <param name="g">グループ</param>
+    /// <returns>スケール済みの経過時間 [秒]</returns>
     virtual float GetScaledDeltaTime(TimeGroup g) const = 0;
 };

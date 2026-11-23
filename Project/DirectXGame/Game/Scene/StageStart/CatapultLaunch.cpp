@@ -9,6 +9,22 @@
 #endif
 
 namespace {
+	// 時間の長さの下限 [秒]（0 で割らないように）
+	constexpr float kMinSeconds = 1e-3f;
+	// 回転数の伸びの鈍り方の下限
+	constexpr float kMinThrustRiseCurve = 0.1f;
+	// 回転数の揺れの 1 つ目の波の速さ [rad/秒]
+	constexpr float kRpmJitterFrequencyA = 37.0f;
+	// 回転数の揺れの 1 つ目の波の重み
+	constexpr float kRpmJitterWeightA = 0.6f;
+	// 回転数の揺れの 2 つ目の波の速さ [rad/秒]
+	constexpr float kRpmJitterFrequencyB = 91.0f;
+	// 回転数の揺れの 2 つ目の波の重み
+	constexpr float kRpmJitterWeightB = 0.4f;
+
+	/// <summary>段階の名前を返す（ImGui の表示用）</summary>
+	/// <param name="phase">段階</param>
+	/// <returns>名前。知らない値なら空文字</returns>
 	const char* PhaseName(CatapultLaunch::Phase phase) {
 		switch (phase) {
 		case CatapultLaunch::Phase::Idle:      return "Idle";
@@ -55,10 +71,10 @@ void CatapultLaunch::Update(float deltaTime, bool thrustHeld) {
 	case Phase::Charged:
 		// 押している間は上がり、離すと下がる
 		if (thrustHeld) {
-			thrust_ += deltaTime / (std::max)(thrustRiseSeconds_, 1e-3f);
+			thrust_ += deltaTime / (std::max)(thrustRiseSeconds_, kMinSeconds);
 			thrustStarted_ = true;
 		} else {
-			thrust_ -= deltaTime / (std::max)(thrustFallSeconds_, 1e-3f);
+			thrust_ -= deltaTime / (std::max)(thrustFallSeconds_, kMinSeconds);
 		}
 		thrust_ = std::clamp(thrust_, 0.0f, 1.0f);
 		break;
@@ -70,15 +86,15 @@ void CatapultLaunch::Update(float deltaTime, bool thrustHeld) {
 
 float CatapultLaunch::GetRpm() const {
 	// 上の方で伸びが鈍る（回転数らしい）。回っている間は少し揺らす
-	const float eased = 1.0f - std::pow(1.0f - std::clamp(thrust_, 0.0f, 1.0f), (std::max)(thrustRiseCurve_, 0.1f));
+	const float eased = 1.0f - std::pow(1.0f - std::clamp(thrust_, 0.0f, 1.0f), (std::max)(thrustRiseCurve_, kMinThrustRiseCurve));
 	float rpm = idleRpm_ + (maxRpm_ - idleRpm_) * eased;
-	if (thrust_ > 0.0f) rpm += rpmJitter_ * (std::sin(time_ * 37.0f) * 0.6f + std::sin(time_ * 91.0f) * 0.4f) * thrust_;
+	if (thrust_ > 0.0f) rpm += rpmJitter_ * (std::sin(time_ * kRpmJitterFrequencyA) * kRpmJitterWeightA + std::sin(time_ * kRpmJitterFrequencyB) * kRpmJitterWeightB) * thrust_;
 	return (std::max)(rpm, 0.0f);
 }
 
 float CatapultLaunch::GetTravel() const {
 	if (phase_ != Phase::Launching) return 0.0f;
-	const float T = (std::max)(launchSeconds_, 1e-3f);
+	const float T = (std::max)(launchSeconds_, kMinSeconds);
 	const float p = (std::max)(launchExponent_, 1.0f);
 	if (phaseTime_ <= T) return exitTravel_ * std::pow(phaseTime_ / T, p);
 	// 射出口を過ぎたら最後の速さのまま
@@ -87,14 +103,14 @@ float CatapultLaunch::GetTravel() const {
 
 float CatapultLaunch::GetSpeed() const {
 	if (phase_ != Phase::Launching) return 0.0f;
-	const float T = (std::max)(launchSeconds_, 1e-3f);
+	const float T = (std::max)(launchSeconds_, kMinSeconds);
 	const float p = (std::max)(launchExponent_, 1.0f);
 	const float t = (std::min)(phaseTime_, T);
 	return exitTravel_ * p * std::pow(t / T, p - 1.0f) / T;
 }
 
 float CatapultLaunch::GetMaxSpeed() const {
-	const float T = (std::max)(launchSeconds_, 1e-3f);
+	const float T = (std::max)(launchSeconds_, kMinSeconds);
 	return exitTravel_ * (std::max)(launchExponent_, 1.0f) / T;
 }
 

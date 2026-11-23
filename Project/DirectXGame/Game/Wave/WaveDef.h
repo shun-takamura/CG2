@@ -40,6 +40,14 @@ struct WaveDef {
 };
 
 namespace WaveDefIO {
+	/// <summary>Wave の JSON を読む（旧フォーマットの進行度 *_t は秒へ換算する）</summary>
+	/// <param name="filePath">読むファイルパス</param>
+	/// <param name="out">読んだ結果の書き込み先</param>
+	/// <returns>読めたら true。パースに失敗した・ルートがオブジェクトでなければ false</returns>
 	bool LoadFromFile(const std::string& filePath, WaveDef& out);
+	/// <summary>Wave を JSON に書く（時間は秒で書く）</summary>
+	/// <param name="filePath">書くファイルパス</param>
+	/// <param name="def">書く Wave</param>
+	/// <returns>書けたら true</returns>
 	bool SaveToFile(const std::string& filePath, const WaveDef& def);
 }

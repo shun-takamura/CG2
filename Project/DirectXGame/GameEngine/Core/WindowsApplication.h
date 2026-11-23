@@ -23,13 +23,24 @@ public:
         float width = static_cast<float>(kUIWidth);
         float height = static_cast<float>(kUIHeight);
     };
+    /// <summary>クライアント領域の中に UI の 16:9 を最大に収めた枠を求める（端はピクセル境界にそろえる）</summary>
+    /// <param name="clientWidth">クライアント領域の幅 [px]</param>
+    /// <param name="clientHeight">クライアント領域の高さ [px]</param>
+    /// <returns>枠（大きさが 0 以下なら既定の 1600×900 の枠）</returns>
     static OutputRect ComputeOutputRect(int32_t clientWidth, int32_t clientHeight);
 
+    /// <summary>
+    /// ウィンドウプロシージャ。ImGui に先に渡し、Alt+Enter / F11 でフルスクリーンを切り替え、
+    /// WM_SIZE は新しい大きさを控えるだけにする（作り直しはメインループで ConsumePendingResize から）
+    /// </summary>
+    /// <param name="hwnd">ウィンドウ</param>
+    /// <param name="msg">メッセージ</param>
+    /// <param name="wparam">メッセージの引数</param>
+    /// <param name="lparam">メッセージの引数</param>
+    /// <returns>メッセージの処理結果</returns>
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-    /// <summary>
-    /// 初期化
-    /// </summary>
+    /// <summary>ウィンドウクラスを登録してクライアント領域 1600×900 のウィンドウを作り、表示する</summary>
     /// <param name="title">タイトルバーに出す文字列</param>
     /// <param name="iconResourceId">
     /// exe に埋め込んだ ICON リソースの ID。0 なら Windows の既定アイコンを使う。
@@ -40,31 +51,48 @@ public:
     /// </param>
     void Initialize(const wchar_t* title, int iconResourceId = 0);
 
-    // メッセージ処理
+    /// <summary>溜まったウィンドウメッセージをすべて処理する</summary>
+    /// <returns>WM_QUIT を受け取ったら false（＝終了）、それ以外は true</returns>
     bool ProcessMessage();
 
-    // 終了処理
+    /// <summary>ウィンドウを閉じる（COM の終了は Framework::Finalize の最後で行う）</summary>
     void Finalize();
 
-    // ゲッターロボ
+    /// <summary>ウィンドウハンドル</summary>
+    /// <returns>ウィンドウハンドル（Initialize 前は nullptr）</returns>
     HWND GetHwnd() const { return hwnd_; }
+    /// <summary>exe のインスタンスハンドル</summary>
+    /// <returns>インスタンスハンドル</returns>
     HINSTANCE GetInstanceHandle() const { return wc_.hInstance; }
 
-    // 現在のクライアント領域サイズ（リサイズ後の実サイズ）
+    /// <summary>現在のクライアント領域の幅（リサイズ後の実サイズ）</summary>
+    /// <returns>幅 [px]</returns>
     int32_t GetClientWidth() const { return clientWidth_; }
+    /// <summary>現在のクライアント領域の高さ（リサイズ後の実サイズ）</summary>
+    /// <returns>高さ [px]</returns>
     int32_t GetClientHeight() const { return clientHeight_; }
 
-    // 直近の WM_SIZE で受け取った新サイズを取り出す。
-    // 戻り値 true のとき width/height に新サイズが書かれ、内部フラグがクリアされる。
-    // 主にメインループで dxCore_->Resize() を呼ぶトリガに使う。
+    /// <summary>
+    /// 直近の WM_SIZE で受け取った新サイズを取り出し、内部フラグをクリアする。
+    /// 主にメインループで dxCore_->Resize() を呼ぶトリガに使う
+    /// </summary>
+    /// <param name="width">新しい幅 [px] を書く先（true の時だけ書く）</param>
+    /// <param name="height">新しい高さ [px] を書く先（true の時だけ書く）</param>
+    /// <returns>新サイズがあれば true</returns>
     bool ConsumePendingResize(int32_t& width, int32_t& height);
 
-    // 枠なしフルスクリーン（WS_POPUP でモニターいっぱい）とウィンドウの切り替え。
-    // DXGI の排他フルスクリーンは使わない（Alt+Enter は DirectXCore で DXGI から外してある）。
-    // 大きさが変わると WM_SIZE → ConsumePendingResize の流れでスワップチェーンが作り直される。
-    // Alt+Enter と F11 でも切り替わる（WindowProc）。
+    /// <summary>
+    /// 枠なしフルスクリーン（WS_POPUP でモニターいっぱい）とウィンドウを切り替える。
+    /// DXGI の排他フルスクリーンは使わない（Alt+Enter は DirectXCore で DXGI から外してある）。
+    /// 大きさが変わると WM_SIZE → ConsumePendingResize の流れでスワップチェーンが作り直される。
+    /// Alt+Enter と F11 でも切り替わる（WindowProc）。ウィンドウに戻す時は元のスタイルと位置（最大化も）に戻す
+    /// </summary>
+    /// <param name="fullscreen">フルスクリーンにするなら true</param>
     void SetFullscreen(bool fullscreen);
+    /// <summary>フルスクリーンとウィンドウを入れ替える</summary>
     void ToggleFullscreen() { SetFullscreen(!fullscreen_); }
+    /// <summary>枠なしフルスクリーン中か</summary>
+    /// <returns>フルスクリーンなら true</returns>
     bool IsFullscreen() const { return fullscreen_; }
 
 private:

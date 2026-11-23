@@ -19,26 +19,39 @@ class Camera;
 /// </summary>
 class BeamBladeRenderer {
 public:
+	/// <summary>ルートシグネチャ・通常/発光の 2 本の PSO・刃のメッシュ・定数バッファ（変換×2、色×2）を作る</summary>
+	/// <param name="dxCore">デバイスとコマンドリストの取得元</param>
 	void Initialize(DirectXCore* dxCore);
 
 	/// <summary>伸び縮みを進める（実時間でよい）</summary>
+	/// <param name="deltaTime">経過時間 [秒]</param>
 	void Update(float deltaTime);
 	/// <summary>刃のワールド行列（原点＝根元、+Z へ伸びる、幅は Y・厚みは X）</summary>
+	/// <param name="world">刃のワールド行列</param>
 	void SetWorld(const Matrix4x4& world) { world_ = world; }
+	/// <summary>形・色・伸び縮みの時間を設定する</summary>
+	/// <param name="appearance">刃の見た目</param>
 	void SetAppearance(const BeamBladeAppearance& appearance) { appearance_ = appearance; }
 	/// <summary>true で伸びる、false で縮んで消える</summary>
+	/// <param name="active">出すなら true</param>
 	void SetActive(bool active) { active_ = active; }
 	/// <summary>すぐに出す／消す（場面の切り替え用）</summary>
+	/// <param name="extend">伸び具合（0〜1 に切り詰める）</param>
 	void SnapExtend(float extend);
-	/// <summary>少しでも出ていれば true</summary>
+	/// <summary>少しでも出ているか</summary>
+	/// <returns>伸び具合が 0 より大きければ true</returns>
 	bool IsVisible() const { return extend_ > 0.0f; }
 
 	/// <summary>シーン RT（本体 DSV）がバインド済みで、不透明物を描いた後に呼ぶ。ルートシグネチャを替える</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void Draw(const Camera& camera);
 	/// <summary>発光 RT に光る分だけを加算で描く（シーンの DrawBloomSources から）</summary>
+	/// <param name="camera">描画に使うカメラ</param>
 	void DrawBloomPass(const Camera& camera);
 
-	/// <summary>調整用の ImGui（Debug だけ）。変えたら true</summary>
+	/// <summary>調整用の ImGui（Debug だけ）</summary>
+	/// <param name="appearance">編集する見た目</param>
+	/// <returns>値を変えたら true（Debug 以外は常に false）</returns>
 	static bool EditAppearance(BeamBladeAppearance& appearance);
 
 private:
@@ -66,9 +79,17 @@ private:
 		float padding0[3];
 	};
 
+	/// <summary>ルートシグネチャを作る（[0]=VS b0 の TransformForGPU、[1]=PS b0 の ParamsForGPU、どちらもルート CBV）</summary>
 	void CreateRootSignature();
+	/// <summary>刃の PSO を作る（両面描画・深度は読むだけ）</summary>
+	/// <param name="bloomPass">true で発光 RT（R16G16B16A16_FLOAT・加算）用、false でシーン RT（sRGB・乗算済み α）用</param>
+	/// <returns>作った PSO</returns>
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipelineState(bool bloomPass);
+	/// <summary>菱形の断面を根元・肩・先でつないだ側面と根元のふたの頂点バッファを作る</summary>
 	void CreateMesh();
+	/// <summary>CB を書いて刃を 1 回描く。出ていなければ何もしない</summary>
+	/// <param name="camera">描画に使うカメラ</param>
+	/// <param name="bloomPass">true で発光パス用の PSO と CB を使う</param>
 	void DrawImpl(const Camera& camera, bool bloomPass);
 
 	DirectXCore* dxCore_ = nullptr;

@@ -3,8 +3,16 @@
 #include "Vector4.h"
 #include "Matrix4x4.h"
 #include "AssetLocator.h"
+#include <cstdint>
 #include <cstring>
 #include <string>
+
+// Material::shadingModel の値（.mat に保存される数字なので、値を変えない）
+namespace ShadingModel {
+	inline constexpr int32_t kBlinnPhong = 0;  // Blinn-Phong（既定）
+	inline constexpr int32_t kPBR = 1;         // PBR（Cook-Torrance）
+	inline constexpr int32_t kTerrain = 2;     // 地形（スプラット＋3 層）。静的なモデルだけ
+}
 
 typedef struct Material {
 	Vector4 color;
@@ -16,7 +24,7 @@ typedef struct Material {
 	int32_t useEnvironmentMap;  // 環境マップの使用ON/OFF
 	float metallic;             // PBR: 金属度 0..1
 	float roughness;            // PBR: 粗さ 0..1
-	int32_t shadingModel;       // 0=BlinnPhong, 1=PBR（PSO 選択に使用）
+	int32_t shadingModel;       // ShadingModel::k…（PSO 選択に使用。Object3DManager::SelectShaderType）
 	int32_t useNormalMap;       // 1=法線マップ(t2)を適用, 0=ジオメトリ法線
 	float cloudReflection;      // PBR: 鏡面反射に映す遠景の雲の強さ（0=映さない。CloudSky.hlsli）
 
@@ -71,6 +79,9 @@ struct DissolveSphere {
 	float cellJitter = 0.3f;                 // マスごとのばらつき [m]
 };
 
+/// <summary>点からの距離のディゾルブの設定を、Material の空いている欄に読み替えて書き込む（中心は heightMin/Max/padding へ）</summary>
+/// <param name="m">書き込む先のマテリアル</param>
+/// <param name="d">ディゾルブの設定（六角形のときは noise の代わりに cellSize / cellJitter を使う）</param>
 inline void SetDissolveSphere(Material& m, const DissolveSphere& d)
 {
 	m.dissolveEnable = d.mode;
@@ -94,6 +105,9 @@ struct DissolveNoise {
 	float noiseScale = 4.0f;                 // ノイズの細かさ [1/m]
 };
 
+/// <summary>ワールド座標のノイズだけのディゾルブ（kDissolveWorld を高さ 0〜1・ノイズの重み 1 で）をマテリアルに書き込む</summary>
+/// <param name="m">書き込む先のマテリアル</param>
+/// <param name="d">ディゾルブの設定</param>
 inline void SetDissolveNoise(Material& m, const DissolveNoise& d)
 {
 	m.dissolveEnable = kDissolveWorld;
@@ -115,6 +129,9 @@ struct DissolvePlane {
 	float noiseAmplitude = 0.05f;            // 縁のゆらぎの振れ幅 [m]
 };
 
+/// <summary>高さの面のディゾルブ（kDissolveRise）をマテリアルに書き込む（面の高さは dissolveProgress へ）</summary>
+/// <param name="m">書き込む先のマテリアル</param>
+/// <param name="d">ディゾルブの設定</param>
 inline void SetDissolvePlane(Material& m, const DissolvePlane& d)
 {
 	m.dissolveEnable = kDissolveRise;
@@ -138,10 +155,38 @@ struct MaterialData
 	std::string terrainNormalArrayPath;  // 地形の層の法線の配列 DDS（.mat v5）
 	uint32_t textureIndex = 0;
 };
+// .mat ファイルの形式（LoadMatFile が読む）
+inline constexpr int kMatFileMagicSize = 4;              // 先頭のマジック "MATL" の文字数 [byte]
+inline constexpr int kMatFileFieldSize = 4;              // 版・数値 1 個の大きさ [byte]
+inline constexpr int kMatFilePathLength = 256;           // テクスチャのパス 1 本の固定長 [byte]
+inline constexpr uint32_t kMatFileLatestVersion = 5;     // 読める一番新しい版
+inline constexpr uint32_t kMatFileVersionPBR = 2;        // 金属度・粗さ・シェーディングモデルが入った版
+inline constexpr uint32_t kMatFileVersionNormalMap = 3;  // 法線マップのパスが入った版
+inline constexpr uint32_t kMatFileVersionParallax = 4;   // ハイトマップと視差の深さが入った版
+inline constexpr uint32_t kMatFileVersionTerrain = 5;    // 地形の層が入った版
+// .mat の古い版に無い値の既定値
+inline constexpr float kMatFileDefaultRoughness = 0.5f;
+inline constexpr int kMatFileTerrainLayerCount = 3;      // 地形の層の数（草 / 土 / 岩）
+inline constexpr int kMatFileTerrainExtraCount = 4;      // 地形の追加の値の数（高さブレンド / 三平面の鋭さ / 色ムラ / 濡れ）
+inline constexpr float kMatFileDefaultTileGrass = 4.0f;  // 層ごとのタイル長 [m]
+inline constexpr float kMatFileDefaultTileSoil = 4.0f;
+inline constexpr float kMatFileDefaultTileRock = 8.0f;
+inline constexpr float kMatFileDefaultRoughnessGrass = 0.95f;  // 層ごとの粗さ
+inline constexpr float kMatFileDefaultRoughnessSoil = 0.9f;
+inline constexpr float kMatFileDefaultRoughnessRock = 0.8f;
+inline constexpr float kMatFileDefaultHeightBlend = 0.2f;          // 高さブレンドの幅
+inline constexpr float kMatFileDefaultTriplanarSharpness = 4.0f;   // 岩の三平面投影の鋭さ
+inline constexpr float kMatFileDefaultMacroVariation = 0.25f;      // 低い周波数の色ムラの強さ
+inline constexpr float kMatFileDefaultWetness = 0.45f;             // 濡れた所を暗くする強さ
 
-// .mat v1〜v5 を読み出して MaterialData と Material 構造体（GPU 定数バッファ）に流し込む。
-// Material* out_gpu_material が nullptr でなければ GPU 用パラメータも上書きする。
-// 成功時 true。
+/// <summary>
+/// .mat v1〜v5 を読み出して MaterialData と Material 構造体（GPU 定数バッファ）に流し込む。
+/// 古い版に無い値は既定値で補う
+/// </summary>
+/// <param name="matPath">.mat ファイルのパス（AssetLocator で開く）</param>
+/// <param name="out_data">テクスチャ類のパスを書き込む先</param>
+/// <param name="out_gpu_material">nullptr でなければ GPU 用パラメータも上書きする</param>
+/// <returns>成功時 true。開けない・マジックが違う・版が 1〜5 でなければ false</returns>
 inline bool LoadMatFile(const std::string& matPath,
                         MaterialData& out_data,
                         Material* out_gpu_material = nullptr)
@@ -149,16 +194,16 @@ inline bool LoadMatFile(const std::string& matPath,
 	auto h = AssetLocator::GetInstance()->Open(matPath);
 	if (!h.IsValid()) return false;
 
-	char magic[4]{};
-	h.Read(magic, 4);
-	if (std::memcmp(magic, "MATL", 4) != 0) return false;
+	char magic[kMatFileMagicSize]{};
+	h.Read(magic, kMatFileMagicSize);
+	if (std::memcmp(magic, "MATL", kMatFileMagicSize) != 0) return false;
 
 	uint32_t version = 0;
-	h.Read(&version, 4);
-	if (version < 1 || version > 5) return false;
+	h.Read(&version, kMatFileFieldSize);
+	if (version < 1 || version > kMatFileLatestVersion) return false;
 
-	char baseColorPath[256]{};
-	h.Read(baseColorPath, 256);
+	char baseColorPath[kMatFilePathLength]{};
+	h.Read(baseColorPath, kMatFilePathLength);
 	out_data.textureFilePath = std::string(baseColorPath);
 
 	float color[4]{};
@@ -167,46 +212,46 @@ inline bool LoadMatFile(const std::string& matPath,
 	float envCoeff = 0.0f;
 	int32_t useEnvMap = 0;
 	h.Read(color, sizeof(color));
-	h.Read(&enableLighting, 4);
-	h.Read(&shininess, 4);
-	h.Read(&envCoeff, 4);
-	h.Read(&useEnvMap, 4);
+	h.Read(&enableLighting, kMatFileFieldSize);
+	h.Read(&shininess, kMatFileFieldSize);
+	h.Read(&envCoeff, kMatFileFieldSize);
+	h.Read(&useEnvMap, kMatFileFieldSize);
 
 	// v2 で追加された PBR パラメータ（v1 はデフォルト補完）
 	float metallic = 0.0f;
-	float roughness = 0.5f;
+	float roughness = kMatFileDefaultRoughness;
 	int32_t shadingModel = 0;
-	if (version >= 2) {
-		h.Read(&metallic, 4);
-		h.Read(&roughness, 4);
-		h.Read(&shadingModel, 4);
+	if (version >= kMatFileVersionPBR) {
+		h.Read(&metallic, kMatFileFieldSize);
+		h.Read(&roughness, kMatFileFieldSize);
+		h.Read(&shadingModel, kMatFileFieldSize);
 	}
 
 	// v3 で追加された法線マップパス
-	if (version >= 3) {
-		char normalMapPath[256]{};
-		h.Read(normalMapPath, 256);
+	if (version >= kMatFileVersionNormalMap) {
+		char normalMapPath[kMatFilePathLength]{};
+		h.Read(normalMapPath, kMatFilePathLength);
 		out_data.normalMapFilePath = std::string(normalMapPath);
 	}
 
 	// v4 で追加された視差（ハイトマップと深さ）
 	float parallaxDepth = 0.0f;
-	if (version >= 4) {
-		char heightMapPath[256]{};
-		h.Read(heightMapPath, 256);
+	if (version >= kMatFileVersionParallax) {
+		char heightMapPath[kMatFilePathLength]{};
+		h.Read(heightMapPath, kMatFilePathLength);
 		out_data.heightMapFilePath = std::string(heightMapPath);
-		h.Read(&parallaxDepth, 4);
+		h.Read(&parallaxDepth, kMatFileFieldSize);
 	}
 
 	// v5 で追加された地形の層（配列テクスチャ 2 本と層ごとのパラメータ）
-	float terrainTile[3]{ 4.0f, 4.0f, 8.0f };
-	float terrainRoughness[3]{ 0.95f, 0.9f, 0.8f };
-	float terrainExtra[4]{ 0.2f, 4.0f, 0.25f, 0.45f };  // heightBlend / triplanarSharpness / macroVariation / wetness
-	if (version >= 5) {
-		char colorArrayPath[256]{};
-		char normalArrayPath[256]{};
-		h.Read(colorArrayPath, 256);
-		h.Read(normalArrayPath, 256);
+	float terrainTile[kMatFileTerrainLayerCount]{ kMatFileDefaultTileGrass, kMatFileDefaultTileSoil, kMatFileDefaultTileRock };
+	float terrainRoughness[kMatFileTerrainLayerCount]{ kMatFileDefaultRoughnessGrass, kMatFileDefaultRoughnessSoil, kMatFileDefaultRoughnessRock };
+	float terrainExtra[kMatFileTerrainExtraCount]{ kMatFileDefaultHeightBlend, kMatFileDefaultTriplanarSharpness, kMatFileDefaultMacroVariation, kMatFileDefaultWetness };  // heightBlend / triplanarSharpness / macroVariation / wetness
+	if (version >= kMatFileVersionTerrain) {
+		char colorArrayPath[kMatFilePathLength]{};
+		char normalArrayPath[kMatFilePathLength]{};
+		h.Read(colorArrayPath, kMatFilePathLength);
+		h.Read(normalArrayPath, kMatFilePathLength);
 		out_data.terrainColorArrayPath = std::string(colorArrayPath);
 		out_data.terrainNormalArrayPath = std::string(normalArrayPath);
 		h.Read(terrainTile, sizeof(terrainTile));

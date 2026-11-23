@@ -17,6 +17,17 @@ namespace {
 	constexpr auto kResyncThreshold = std::chrono::milliseconds(250);
 	// 表示時刻まで待つときの 1 回の最大の眠り（Stop の効きを早くする）
 	constexpr auto kMaxSleep = std::chrono::milliseconds(5);
+
+	// 読み取り器に設定する属性の数（最初に確保する数）
+	constexpr UINT32 kReaderAttributeCount = 2;
+	// RGB32 の 1 画素の大きさ [byte]
+	constexpr uint32_t kBytesPerPixel = 4;
+	// RGB32 の 1 画素のうち、アルファ（4 バイト目）の位置 [byte]
+	constexpr uint32_t kAlphaByteOffset = 3;
+	// 不透明のアルファ値（0〜255）
+	constexpr int kOpaqueAlpha = 255;
+	// Media Foundation の時刻の 1 単位（100ns）のナノ秒数
+	constexpr int kNanosecondsPerSampleTick = 100;
 }
 
 MoviePlayer::~MoviePlayer() {
@@ -49,7 +60,7 @@ void MoviePlayer::Stop() {
 
 bool MoviePlayer::OpenReader(const std::wstring& path) {
 	Microsoft::WRL::ComPtr<IMFAttributes> attributes;
-	if (FAILED(MFCreateAttributes(&attributes, 2))) return false;
+	if (FAILED(MFCreateAttributes(&attributes, kReaderAttributeCount))) return false;
 	// 色の変換（NV12 → RGB32）を読み取り器に任せる。ハードウェアのデコーダーも使ってよい（HEVC の録画でも読めるように）
 	attributes->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
 	attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
@@ -83,12 +94,12 @@ void MoviePlayer::ReadCurrentMediaType() {
 	if (SUCCEEDED(current->GetUINT32(MF_MT_DEFAULT_STRIDE, &stride))) {
 		defaultStride_ = static_cast<LONG>(stride);
 	} else {
-		defaultStride_ = static_cast<LONG>(width * 4);
+		defaultStride_ = static_cast<LONG>(width * kBytesPerPixel);
 	}
 }
 
 void MoviePlayer::CopySample(IMFSample* sample) {
-	const uint32_t rowBytes = frameWidth_ * 4;
+	const uint32_t rowBytes = frameWidth_ * kBytesPerPixel;
 	workBuffer_.resize(static_cast<size_t>(rowBytes) * frameHeight_);
 
 	// 2D のバッファなら Lock2D で本当の行の幅（1080p のデコードで出る 1088 行の余りなど）を取る
@@ -117,7 +128,7 @@ void MoviePlayer::CopySample(IMFSample* sample) {
 		uint8_t* dst = workBuffer_.data() + static_cast<size_t>(rowBytes) * y;
 		std::memcpy(dst, src, rowBytes);
 		// RGB32 の 4 バイト目は 0 のことがあるので不透明にする
-		for (uint32_t x = 3; x < rowBytes; x += 4) dst[x] = 255;
+		for (uint32_t x = kAlphaByteOffset; x < rowBytes; x += kBytesPerPixel) dst[x] = kOpaqueAlpha;
 	}
 
 	if (locked2D) {
@@ -170,7 +181,7 @@ void MoviePlayer::ThreadFunc(std::wstring path) {
 		if (!sample) continue;
 
 		// 表示時刻まで待つ（実時間）。大きく遅れていたら時計を合わせ直す
-		const auto showAt = origin + std::chrono::duration_cast<Clock::duration>(std::chrono::nanoseconds(timestamp * 100));
+		const auto showAt = origin + std::chrono::duration_cast<Clock::duration>(std::chrono::nanoseconds(timestamp * kNanosecondsPerSampleTick));
 		auto now = Clock::now();
 		if (now - showAt > kResyncThreshold) {
 			origin += (now - showAt);

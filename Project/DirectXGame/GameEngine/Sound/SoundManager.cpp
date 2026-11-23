@@ -2,6 +2,15 @@
 #include "Camera.h"
 #include <cassert>
 
+namespace {
+    // ステレオのチャンネル数
+    constexpr UINT32 kStereoChannelCount = 2;
+    // ステレオの左チャンネルの配置角度 [rad]（270°）
+    constexpr float kLeftChannelAzimuth = 3.0f * X3DAUDIO_PI / 2.0f;
+    // ステレオの右チャンネルの配置角度 [rad]（90°）
+    constexpr float kRightChannelAzimuth = X3DAUDIO_PI / 2.0f;
+}
+
 SoundManager* SoundManager::GetInstance()
 {
     static SoundManager instance;
@@ -274,9 +283,9 @@ uint32_t SoundManager::Play3DSound(
     emitter3d.emitter.DopplerScaler = 1.0f;
 
     // ステレオファイルの場合は左右チャンネルの配置角度が必要
-    if (srcChannels == 2)
+    if (srcChannels == kStereoChannelCount)
     {
-        emitter3d.channelAzimuths = { 3.0f * X3DAUDIO_PI / 2.0f, X3DAUDIO_PI / 2.0f };
+        emitter3d.channelAzimuths = { kLeftChannelAzimuth, kRightChannelAzimuth };
         emitter3d.emitter.pChannelAzimuths = emitter3d.channelAzimuths.data();
     }
 

@@ -2,6 +2,13 @@
 #include "IImGuiEditable.h"
 #include <cmath>
 
+namespace {
+    // Y 軸のハンドルの番号（0=中心, 1=X の次）
+    constexpr int kHandleAxisY = 2;
+    // 軸の先端の丸の半径 [px]
+    constexpr float kAxisTipRadius = 4.0f;
+}
+
 ImVec2 SpriteGizmo::SpriteToScreen(const Vector2& spritePos,
                                    ImVec2 imagePos, ImVec2 imageSize,
                                    float clientW, float clientH) {
@@ -22,13 +29,13 @@ Vector2 SpriteGizmo::ScreenToSprite(ImVec2 screenPos,
 
 void SpriteGizmo::Draw(IImGuiEditable* selected,
                        ImVec2 imagePos, ImVec2 imageSize,
-                       float clientW, float clientH) {
+                       float clientWidth, float clientHeight) {
     if (!selected) return;
     Vector2* posPtr = selected->GetEditable2DPosition();
     if (!posPtr) return;
 
     Vector2 origin = *posPtr;
-    ImVec2 originScreen = SpriteToScreen(origin, imagePos, imageSize, clientW, clientH);
+    ImVec2 originScreen = SpriteToScreen(origin, imagePos, imageSize, clientWidth, clientHeight);
 
     // 軸の先端スクリーン座標
     ImVec2 xEnd = ImVec2(originScreen.x + kAxisLength, originScreen.y);
@@ -62,20 +69,20 @@ void SpriteGizmo::Draw(IImGuiEditable* selected,
             // Y軸
             else if (mouse.y >= originScreen.y && mouse.y <= yEnd.y &&
                      std::abs(mouse.x - originScreen.x) < kHitThreshold) {
-                hover = 2;
+                hover = kHandleAxisY;
             }
         }
     }
 
     // 描画
     ImU32 cx = (hover == 1 || activeHandle_ == 1) ? colHover : colX;
-    ImU32 cy = (hover == 2 || activeHandle_ == 2) ? colHover : colY;
+    ImU32 cy = (hover == kHandleAxisY || activeHandle_ == kHandleAxisY) ? colHover : colY;
     ImU32 cc = (hover == 0 || activeHandle_ == 0) ? colHover : colCenter;
 
     drawList->AddLine(originScreen, xEnd, cx, kHandleThickness);
-    drawList->AddCircleFilled(xEnd, 4.0f, cx);
+    drawList->AddCircleFilled(xEnd, kAxisTipRadius, cx);
     drawList->AddLine(originScreen, yEnd, cy, kHandleThickness);
-    drawList->AddCircleFilled(yEnd, 4.0f, cy);
+    drawList->AddCircleFilled(yEnd, kAxisTipRadius, cy);
     drawList->AddCircleFilled(originScreen, kCenterRadius, cc);
 
     // ドラッグ開始
@@ -91,8 +98,8 @@ void SpriteGizmo::Draw(IImGuiEditable* selected,
             // マウスのスクリーン上のデルタを Sprite 座標系に変換
             float deltaScreenX = mouse.x - dragStartMousePos_.x;
             float deltaScreenY = mouse.y - dragStartMousePos_.y;
-            float deltaSpriteX = deltaScreenX / imageSize.x * clientW;
-            float deltaSpriteY = deltaScreenY / imageSize.y * clientH;
+            float deltaSpriteX = deltaScreenX / imageSize.x * clientWidth;
+            float deltaSpriteY = deltaScreenY / imageSize.y * clientHeight;
 
             Vector2 newPos = dragStartPosition_;
             if (activeHandle_ == 0) {
@@ -100,7 +107,7 @@ void SpriteGizmo::Draw(IImGuiEditable* selected,
                 newPos.y += deltaSpriteY;
             } else if (activeHandle_ == 1) {
                 newPos.x += deltaSpriteX;
-            } else if (activeHandle_ == 2) {
+            } else if (activeHandle_ == kHandleAxisY) {
                 newPos.y += deltaSpriteY;
             }
             *posPtr = newPos;

@@ -1,10 +1,17 @@
 #pragma once
 #include "MeshData.h"
+#include "MathUtility.h"
 #include <vector>
 
 namespace PrimitiveGenerator {
 
-    // XY平面のPlaneを生成（中心が原点、法線はZ+方向）
+    /// <summary>XY平面のPlaneを生成（中心が原点、法線はZ+方向）</summary>
+    /// <param name="width">幅（X）</param>
+    /// <param name="height">高さ（Y）</param>
+    /// <param name="divisionsX">X 方向の分割数</param>
+    /// <param name="divisionsY">Y 方向の分割数</param>
+    /// <param name="color">頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreatePlane(
         float width = 1.0f,
         float height = 1.0f,
@@ -13,7 +20,10 @@ namespace PrimitiveGenerator {
         const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
-    // Boxを生成（中心が原点）
+    /// <summary>Boxを生成（中心が原点）</summary>
+    /// <param name="size">各軸の大きさ</param>
+    /// <param name="color">頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateBox(
         const Vector3& size = { 1.0f, 1.0f, 1.0f },
         const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
@@ -32,7 +42,7 @@ namespace PrimitiveGenerator {
 
         // 拡張①：角度範囲（ラジアン指定、デフォルトは円全体）
         float startAngle = 0.0f;
-        float endAngle = 2.0f * 3.14159265358979323846f;
+        float endAngle = kTwoPi;
 
         bool uvHorizon = true;
         float fadeStart = 0.0f;  // デフォルト：内径からグラデーションを開始
@@ -40,7 +50,13 @@ namespace PrimitiveGenerator {
         std::vector<float> outerRadiusPerDivision;
     };
 
-    // Ringを生成（XY平面、Z+方向法線、中心が原点）
+    /// <summary>Ringを生成（XY平面、Z+方向法線、中心が原点）</summary>
+    /// <param name="outerRadius">外径</param>
+    /// <param name="innerRadius">内径</param>
+    /// <param name="divisions">円周の分割数</param>
+    /// <param name="innerColor">内側の頂点色</param>
+    /// <param name="outerColor">外側の頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateRing(
         float outerRadius = 1.0f,
         float innerRadius = 0.5f,
@@ -49,7 +65,9 @@ namespace PrimitiveGenerator {
         const Vector4& outerColor = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
-    // RingParams版（拡張機能を利用可能）
+    /// <summary>RingParams版（角度範囲・UV の向き・グラデーション範囲・分割ごとの外径を利用可能）</summary>
+    /// <param name="params">リングの生成パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateRing(const RingParams& params);
 
     // Cylinderの生成パラメータ
@@ -65,10 +83,17 @@ namespace PrimitiveGenerator {
 
         // 角度範囲（ラジアン。デフォルトは円全周）
         float startAngle = 0.0f;
-        float endAngle   = 2.0f * 3.14159265358979323846f;
+        float endAngle   = kTwoPi;
     };
 
-    // Cylinderを生成（Y軸方向の筒、上下面なし、中心が原点）
+    /// <summary>Cylinderを生成（Y軸方向の筒、上下面なし、中心が原点）</summary>
+    /// <param name="topRadius">上端の半径</param>
+    /// <param name="bottomRadius">下端の半径</param>
+    /// <param name="height">高さ</param>
+    /// <param name="divisions">円周の分割数</param>
+    /// <param name="topColor">上端の頂点色</param>
+    /// <param name="bottomColor">下端の頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateCylinder(
         float topRadius = 1.0f,
         float bottomRadius = 1.0f,
@@ -78,18 +103,30 @@ namespace PrimitiveGenerator {
         const Vector4& bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
-    // CylinderParams版（角度範囲・上下カラー）
+    /// <summary>CylinderParams版（角度範囲・上下カラー）</summary>
+    /// <param name="params">円柱の生成パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateCylinder(const CylinderParams& params);
 
-    // Sphere（UV球）を生成（中心が原点）
+    /// <summary>Sphere（UV球）を生成（中心が原点）</summary>
+    /// <param name="radius">半径</param>
+    /// <param name="divisions">経度・緯度の分割数</param>
+    /// <param name="color">頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateSphere(
         float radius = 0.5f,
         uint32_t divisions = 16,
         const Vector4& color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
-    // Hemisphere（半球＝ドーム）を生成。蓋なしの中空シェル（おわん型の片割れ）。
-    // 上半球：頂点が +Y、開口（リム）が Y=0 平面。中が空なので両面描画推奨。
+    /// <summary>
+    /// Hemisphere（半球＝ドーム）を生成。蓋なしの中空シェル（おわん型の片割れ）。
+    /// 上半球：頂点が +Y、開口（リム）が Y=0 平面。中が空なので両面描画推奨。
+    /// </summary>
+    /// <param name="radius">半径</param>
+    /// <param name="divisions">経度・緯度の分割数</param>
+    /// <param name="color">頂点色</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateHemisphere(
         float radius = 0.5f,
         uint32_t divisions = 16,
@@ -105,7 +142,9 @@ namespace PrimitiveGenerator {
         Vector4 color       = { 1.0f, 1.0f, 1.0f, 1.0f };
     };
 
-    // Frame（額縁状の枠）を生成。外周と内側穴の差分を4つの台形でタイル化する。
+    /// <summary>Frame（額縁状の枠）を生成。外周と内側穴の差分を4つの台形でタイル化する</summary>
+    /// <param name="params">枠の生成パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateFrame(const FrameParams& params);
 
     // Helix（螺旋チューブ）の生成パラメータ
@@ -132,7 +171,9 @@ namespace PrimitiveGenerator {
         Vector4 endColor   = { 1.0f, 0.3f, 0.0f, 0.2f };
     };
 
-    // Helix（螺旋チューブ）を生成
+    /// <summary>Helix（螺旋チューブ）を生成</summary>
+    /// <param name="params">螺旋の生成パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateHelix(const HelixParams& params);
 
     // Beam / Lightning 共通の見た目パラメータ
@@ -157,10 +198,15 @@ namespace PrimitiveGenerator {
         uint32_t lengthSegments = 16;
     };
 
-    // 折れ線→交差Plane帯メッシュ（雷の内部実装でも使う共通関数）
+    /// <summary>折れ線→交差Plane帯メッシュ（雷の内部実装でも使う共通関数）。両端のフェードは頂点αに焼き込む</summary>
+    /// <param name="polyline">通る点の列</param>
+    /// <param name="app">幅・板の枚数・フェード・色・UV</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateBeamFromPolyline(const std::vector<Vector3>& polyline, const BeamAppearance& app);
 
-    // 直線ビームを生成（CreateBeamFromPolyline に2点を渡す薄ラッパー）
+    /// <summary>直線ビームを生成（始点→終点を lengthSegments 等分した折れ線で CreateBeamFromPolyline を呼ぶ薄ラッパー）</summary>
+    /// <param name="params">ビームの生成パラメータ</param>
+    /// <returns>生成したメッシュ</returns>
     MeshData CreateBeam(const BeamParams& params);
 
     // 雷（ジグザグ折れ線）の生成パラメータ
@@ -183,7 +229,9 @@ namespace PrimitiveGenerator {
         float branchColorScale  = 0.5f;   // 枝の明るさ倍率（α含む）
     };
 
-    // 雷メッシュを生成（本線＋枝を合成した1つの MeshData を返す）
+    /// <summary>雷メッシュを生成（本線＋枝を合成した1つの MeshData を返す）</summary>
+    /// <param name="params">雷の生成パラメータ</param>
+    /// <returns>生成したメッシュ。始終点がほぼ同じなら空</returns>
     MeshData CreateLightningBolt(const LightningBoltParams& params);
 
 }

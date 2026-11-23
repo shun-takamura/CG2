@@ -6,6 +6,11 @@
 #include "SoundManager.h"
 #include "UIPointer.h"
 
+namespace {
+	// 当たりの帯を行の上へずらす量（行の高さに対する割合。文字の上端に合わせる）
+	constexpr float kHitBandRaiseRate = 0.1f;
+}
+
 void VerticalMenu::SetItems(std::vector<std::string> items, int initialIndex) {
 	items_ = std::move(items);
 	enabled_.assign(items_.size(), true);
@@ -98,7 +103,7 @@ int VerticalMenu::HitTest(const Vector2& position) const {
 	constexpr float kPaddingX = 16.0f;
 	for (size_t i = 0; i < items_.size(); ++i) {
 		const float halfWidth = tr->MeasureWidth(MakeLabel(i, true), scale_) * 0.5f + kPaddingX;
-		const float y0 = top + lineHeight_ * static_cast<float>(i) - lineHeight_ * 0.1f;
+		const float y0 = top + lineHeight_ * static_cast<float>(i) - lineHeight_ * kHitBandRaiseRate;
 		if (position.y < y0 || position.y >= y0 + lineHeight_) continue;
 		if (position.x < center_.x - halfWidth || position.x > center_.x + halfWidth) continue;
 		return static_cast<int>(i);

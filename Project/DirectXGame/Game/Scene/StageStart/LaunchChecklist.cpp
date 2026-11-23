@@ -14,6 +14,17 @@
 #include "imgui.h"
 #endif
 
+namespace {
+	// 長さ・間隔の下限（0 で割らないように）
+	constexpr float kMinLength = 1e-3f;
+	// 自動の進みで、その方向を押している表示にし始める手前の幅（進み 0〜1）
+	constexpr float kThrusterHeldLead = 0.25f;
+	// 自動の進みで、その方向を押している表示を続ける後ろの幅（進み 0〜1）
+	constexpr float kThrusterHeldTail = 0.1f;
+	// 射撃の項目の順番（照準 0・スラスター 1 の次）
+	constexpr int kWeaponItemOrder = 2;
+}
+
 void LaunchChecklist::Reset() {
 	time_ = 0.0f;
 	clearedTime_.fill(-1.0f);
@@ -38,7 +49,7 @@ int LaunchChecklist::ClearedCount() const {
 }
 
 float LaunchChecklist::GetAimProgress() const {
-	return aimDistancePx_ > 1e-3f ? std::clamp(aimDistance_ / aimDistancePx_, 0.0f, 1.0f) : 1.0f;
+	return aimDistancePx_ > kMinLength ? std::clamp(aimDistance_ / aimDistancePx_, 0.0f, 1.0f) : 1.0f;
 }
 
 void LaunchChecklist::Update(InputManager* input, float deltaTime, bool autoClear) {
@@ -92,7 +103,7 @@ void LaunchChecklist::UpdateAuto(float deltaTime) {
 	(void)deltaTime;
 	// 項目 i は autoStartDelay + interval·i で CLEAR。その間の進み具合も見せる（照準のゲージ・4 方向・射撃の数）
 	auto progress = [this](int item) {
-		const float interval = (std::max)(autoInterval_, 1e-3f);
+		const float interval = (std::max)(autoInterval_, kMinLength);
 		return std::clamp((time_ - autoStartDelay_ - interval * static_cast<float>(item)) / interval + 1.0f, 0.0f, 1.0f);
 	};
 	aimDistance_ = aimDistancePx_ * progress(0);
@@ -102,11 +113,11 @@ void LaunchChecklist::UpdateAuto(float deltaTime) {
 	for (int i = 0; i < kThrusterDirCount; ++i) {
 		const float on = static_cast<float>(i + 1) / static_cast<float>(kThrusterDirCount);
 		thrusterDone_[i] = thruster >= on;
-		thrusterHeld_[i] = thruster >= on - 0.25f && thruster < on + 0.1f;
+		thrusterHeld_[i] = thruster >= on - kThrusterHeldLead && thruster < on + kThrusterHeldTail;
 	}
 	if (thruster >= 1.0f) Clear(Item::Thruster);
 
-	weaponCount_ = static_cast<int>(std::floor(progress(2) * static_cast<float>(weaponShots_)));
+	weaponCount_ = static_cast<int>(std::floor(progress(kWeaponItemOrder) * static_cast<float>(weaponShots_)));
 	if (weaponCount_ >= weaponShots_) Clear(Item::Weapon);
 }
 

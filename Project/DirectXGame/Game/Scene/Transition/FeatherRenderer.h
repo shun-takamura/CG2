@@ -56,23 +56,37 @@ public:
 		}
 	};
 
+	/// <summary>羽根のテクスチャ・格子のメッシュ・インスタンスとカメラのバッファ・PSO を作る</summary>
+	/// <param name="dxCore">GPU リソースの作成に使う</param>
+	/// <param name="srvManager">インスタンスの SRV を取る</param>
 	void Initialize(DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>SRV とバッファを解放する</summary>
 	void Finalize();
 
 	/// <summary>
 	/// 羽根を奥から順に並べ替えてまとめて描く（α ブレンド・深度なし）。
 	/// 描き先とビューポートは呼んだ側が貼っておくこと
 	/// </summary>
+	/// <param name="cmd">描画のコマンドリスト</param>
+	/// <param name="feathers">描く羽根（kMaxFeathers を超えた分は描かない）</param>
+	/// <param name="time">ディゾルブのノイズを流す時間 [秒]</param>
 	void Draw(ID3D12GraphicsCommandList* cmd, const std::vector<Feather>& feathers, float time);
 
-	/// <summary>仮想カメラ（位置・向き・画角を変えてから Draw 前に Update する）</summary>
+	/// <summary>仮想カメラを返す（位置・向き・画角を変えてから Draw 前に Update する）</summary>
+	/// <returns>仮想カメラ</returns>
 	Camera& GetCamera() { return camera_; }
+	/// <summary>仮想カメラを返す（読み取り用）</summary>
+	/// <returns>仮想カメラ</returns>
 	const Camera& GetCamera() const { return camera_; }
 
-	Settings& GetSettings() { return settings_; }
+	/// <summary>羽根の見た目の調整値を返す（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
 	const Settings& GetSettings() const { return settings_; }
+	/// <summary>羽根の見た目の調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
-	/// <summary>ImGui で調整（呼んだ側の窓の中に並べる）</summary>
+	/// <summary>羽根の見た目の調整値を ImGui で調整する（呼んだ側の窓の中に並べる）</summary>
 	void OnImGui();
 
 private:
@@ -102,8 +116,11 @@ private:
 		float padding[2];
 	};
 
+	/// <summary>全インスタンスで使い回す UV の格子の頂点・インデックスバッファを作る</summary>
 	void CreateMesh();
+	/// <summary>羽根の描画のルートシグネチャを作る</summary>
 	void CreateRootSignature();
+	/// <summary>羽根の描画の PSO を作る（α ブレンド・深度なし）</summary>
 	void CreatePipelineState();
 
 	DirectXCore* dxCore_ = nullptr;

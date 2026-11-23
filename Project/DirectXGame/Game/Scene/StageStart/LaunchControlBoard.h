@@ -36,42 +36,79 @@ public:
 		Launch,     // 発進（F5）
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	LaunchControlBoard();
 	~LaunchControlBoard();
+	/// <summary>調整値（色・板の置き場所・大きさ・発光）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>中身を描く RenderTexture を作って外部テクスチャとして登録し、一人称と三人称の板のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="srvManager">SRV の管理</param>
 	void Initialize(Object3DManager* object3DManager, DirectXCore* dxCore, SRVManager* srvManager);
+	/// <summary>板の発光を戻し（モデルはタイトルのロゴ・HatchSign と共有）、外部テクスチャの登録と RenderTexture・板を解放する</summary>
 	void Finalize();
 
-	/// <summary>表示の状態。statusTime は今の状態に入ってからの秒、appearTime は表示板が出始めてからの秒（負で出さない）</summary>
+	/// <summary>表示の状態を設定する</summary>
+	/// <param name="checklist">機体確認の判定（項目の表示に使う）</param>
+	/// <param name="status">下の段の状態</param>
+	/// <param name="statusTime">今の状態に入ってからの秒 [秒]</param>
+	/// <param name="appearTime">表示板が出始めてからの秒 [秒]（負で出さない）</param>
+	/// <param name="cablePurged">給電ケーブルを切り離したか（POWER CABLE を PURGE にする）</param>
 	void SetState(const LaunchChecklist* checklist, Status status, float statusTime, float appearTime, bool cablePurged);
-	/// <summary>
-	/// 板を置く。mechOrigin＝機体の原点（一人称の板は座ったパイロットの目からの相対）、
-	/// thirdPersonEye / thirdPersonTarget＝三人称のカメラの目と注視点（前進 0 のとき、ワールド）、fovY [rad]・aspect はその画角
-	/// </summary>
+	/// <summary>一人称の板（座ったパイロットの目からの相対）と三人称のパネル（カメラの画面の位置から）を置く</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
+	/// <param name="mechOrigin">機体の原点（ワールド）</param>
+	/// <param name="thirdPersonEye">三人称のカメラの目（前進 0 のとき、ワールド）</param>
+	/// <param name="thirdPersonTarget">三人称のカメラの注視点（前進 0 のとき、ワールド）</param>
+	/// <param name="fovY">三人称のカメラの縦の画角 [ラジアン]</param>
+	/// <param name="aspect">三人称のカメラの縦横比（幅 / 高さ）</param>
 	void Update(float deltaTime, const Vector3& mechOrigin, const Vector3& thirdPersonEye, const Vector3& thirdPersonTarget,
 		float fovY, float aspect);
 
 	/// <summary>中身を RenderTexture に描く。シーンの RT を描き始める前に呼ぶ（RTV とビューポートを切り替える）</summary>
+	/// <param name="commandList">描画のコマンドリスト</param>
 	void RenderBoardTexture(ID3D12GraphicsCommandList* commandList);
-	/// <summary>一人称なら宙に浮く板、三人称なら立てたパネル（Object3DManager::DrawSetting の後。半透明なので最後に）</summary>
+	/// <summary>一人称なら宙に浮く板、三人称なら立てたパネルを描く（Object3DManager::DrawSetting の後。半透明なので最後に）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="firstPerson">一人称なら true</param>
 	void Draw(DirectXCore* dxCore, bool firstPerson);
+	/// <summary>発光パスで板の文字の所を描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="firstPerson">一人称なら true</param>
 	void DrawBloom(DirectXCore* dxCore, bool firstPerson);
 
+	/// <summary>表示板を出しているかを返す</summary>
+	/// <returns>出していれば true</returns>
 	bool IsShown() const { return checklist_ && appearTime_ >= 0.0f; }
 
 	/// <summary>
-	/// 三人称のパネルを置く：カメラ（eye → target、画角 fovY・aspect）の画面の anchor（端が ±1、上が +）に見える向きへ
-	/// distance 進んだ所。幅は画面の幅の screenWidth 倍、高さは幅 × heightPerWidth。
-	/// faceEye で目の位置へ向ける（false で画面と平行）、そこから angleOffsetDegrees（ピッチ・ヨー・ロール）ずらす。
+	/// 三人称のパネルを、カメラの画面の anchor に見える向きへ distance 進んだ所に置く。
 	/// 板は logo_plane.mesh（2 × 1、表が −Z）。タコメーター（LaunchTachometer）も使う
 	/// </summary>
+	/// <param name="panel">置く板</param>
+	/// <param name="anchor">画面の位置（端が ±1、上が +）</param>
+	/// <param name="distance">カメラからの距離 [m]</param>
+	/// <param name="faceEye">true で目の位置へ向ける（false で画面と平行）</param>
+	/// <param name="angleOffsetDegrees">そこからずらす角度 [度]（ピッチ・ヨー・ロール）</param>
+	/// <param name="screenWidth">幅（画面の幅の何倍か）</param>
+	/// <param name="heightPerWidth">高さ ÷ 幅</param>
+	/// <param name="eye">カメラの目（ワールド）</param>
+	/// <param name="target">カメラの注視点（ワールド）</param>
+	/// <param name="fovY">カメラの縦の画角 [ラジアン]</param>
+	/// <param name="aspect">カメラの縦横比（幅 / 高さ）</param>
 	static void PlaceOnScreen(Object3DInstance& panel, const Vector2& anchor, float distance, bool faceEye,
 		const Vector3& angleOffsetDegrees, float screenWidth, float heightPerWidth,
 		const Vector3& eye, const Vector3& target, float fovY, float aspect);
 
+	/// <summary>調整値（StagePlay.json の "stageStart" → "board"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 	static constexpr float kWidth = 940.0f;    // 2026-10-19 項目名とゲージの列のあいだの空きを詰めた（1024 → 940）
@@ -79,12 +116,46 @@ public:
 
 private:
 	// RenderTexture のピクセルで積む
+	/// <summary>表示板の中身（見出し・各行・下の段の状態）を積む</summary>
 	void DrawContents();
+	/// <summary>文字を積む</summary>
+	/// <param name="text">文字列</param>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="size">文字の高さ [px]</param>
+	/// <param name="color">色</param>
 	void Text(std::string_view text, float x, float y, float size, const Vector4& color);
+	/// <summary>文字を横の中央にそろえて積む</summary>
+	/// <param name="text">文字列</param>
+	/// <param name="cx">中央の x [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="size">文字の高さ [px]</param>
+	/// <param name="color">色</param>
 	void TextCentered(std::string_view text, float cx, float y, float size, const Vector4& color);
+	/// <summary>塗りつぶしの四角を積む</summary>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="w">幅 [px]</param>
+	/// <param name="h">高さ [px]</param>
+	/// <param name="color">色</param>
 	void Rect(float x, float y, float w, float h, const Vector4& color);
+	/// <summary>四角の枠線（4 辺）を積む</summary>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="w">幅 [px]</param>
+	/// <param name="h">高さ [px]</param>
+	/// <param name="thickness">線の太さ [px]</param>
+	/// <param name="color">色</param>
 	void Frame(float x, float y, float w, float h, float thickness, const Vector4& color);
+	/// <summary>行の右の状態の枠を積む（CLEAR になった瞬間は蛍光灯のようにチラついて白地に変わる）</summary>
+	/// <param name="x">左端 [px]</param>
+	/// <param name="y">上端 [px]</param>
+	/// <param name="w">幅 [px]</param>
+	/// <param name="h">高さ [px]</param>
+	/// <param name="cleared">CLEAR になったか</param>
+	/// <param name="sinceCleared">CLEAR になってからの秒 [秒]</param>
 	void DrawStatusBox(float x, float y, float w, float h, bool cleared, float sinceCleared);
+	/// <summary>板のマテリアルを表示のテクスチャ・ライティングなし・文字の所だけ発光にする（GPU の準備ができてから）</summary>
 	void ApplyMaterial();
 
 	float alpha_ = 1.0f;   // 出るときのチラつき（全部の色の不透明度に掛ける）

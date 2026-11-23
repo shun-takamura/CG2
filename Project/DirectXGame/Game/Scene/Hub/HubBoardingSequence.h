@@ -24,41 +24,77 @@ public:
 		HubMechModel::Pose mech;      // 機体の腕（手を差し出す）と胸の入口
 	};
 
+	/// <summary>調整値を既定にする</summary>
 	HubBoardingSequence();
 
+	/// <summary>調整値（カメラのキー・各動作の時刻・揺れ）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>時刻 0 から乗り込みを再生する</summary>
 	void Start();
-	void Stop();          // 待機（時刻 0）に戻す
+	/// <summary>再生をやめて待機（時刻 0）に戻す</summary>
+	void Stop();
+	/// <summary>時刻を進め、座った・閉じ切った瞬間を記録する</summary>
+	/// <param name="deltaTime">経過 [秒]</param>
 	void Update(float deltaTime);
 
+	/// <summary>再生中かを返す</summary>
+	/// <returns>再生中なら true</returns>
 	bool IsPlaying() const { return playing_; }
-	/// <summary>閉じ切って少し待ち終えた（持ち主はこのフレームでコクピットの状態へ移る）</summary>
+	/// <summary>閉じ切って少し待ち終えたかを返す（持ち主はこのフレームでコクピットの状態へ移る）</summary>
+	/// <returns>終わったら true</returns>
 	bool IsFinished() const { return playing_ && time_ >= endTime_; }
-	/// <summary>乗り込みの最後の時刻（コクピットの視点＝この時刻の姿勢）</summary>
+	/// <summary>乗り込みの最後の時刻を返す（コクピットの視点＝この時刻の姿勢）</summary>
+	/// <returns>時刻 [秒]</returns>
 	float GetEndTime() const { return endTime_; }
-	/// <summary>閉じ切ったときの外の光の倍率（コクピットで外が透けると 1 へ戻す）</summary>
+	/// <summary>閉じ切ったときの外の光の倍率を返す（コクピットで外が透けると 1 へ戻す）</summary>
+	/// <returns>倍率</returns>
 	float GetMinLightScale() const { return minLightScale_; }
-	/// <summary>待機の視点（キー 0）。降りる最後はここへ戻る</summary>
+	/// <summary>待機の視点（キー 0）を返す。降りる最後はここへ戻る</summary>
+	/// <returns>カメラのキー</returns>
 	HubCameraTrack::Key GetHomeKey() const;
 
-	/// <summary>座った・閉じ切った瞬間を一度だけ返す（カメラを揺らす）。返したら下ろす</summary>
+	/// <summary>座った瞬間を一度だけ返す（カメラを揺らす）。返したら下ろす</summary>
+	/// <returns>座った瞬間が来ていれば true</returns>
 	bool ConsumeSitImpact();
+	/// <summary>ハッチが閉じ切った瞬間を一度だけ返す（カメラを揺らす）。返したら下ろす</summary>
+	/// <returns>閉じ切った瞬間が来ていれば true</returns>
 	bool ConsumeCloseImpact();
+	/// <summary>座ったときの揺れの強さを返す</summary>
+	/// <returns>揺れの強さ</returns>
 	float GetSitShakeIntensity() const { return sitShakeIntensity_; }
+	/// <summary>座ったときの揺れの長さを返す</summary>
+	/// <returns>長さ [秒]</returns>
 	float GetSitShakeSeconds() const { return sitShakeSeconds_; }
+	/// <summary>閉じ切ったときの揺れの強さを返す</summary>
+	/// <returns>揺れの強さ</returns>
 	float GetCloseShakeIntensity() const { return closeShakeIntensity_; }
+	/// <summary>閉じ切ったときの揺れの長さを返す</summary>
+	/// <returns>長さ [秒]</returns>
 	float GetCloseShakeSeconds() const { return closeShakeSeconds_; }
 
-	/// <summary>今の見え方。ImGui でシーク中はシークした時刻の見え方</summary>
+	/// <summary>今の見え方を返す。ImGui でシーク中はシークした時刻の見え方</summary>
+	/// <returns>見え方</returns>
 	Pose GetCurrentPose() const { return Evaluate(previewing_ ? previewTime_ : time_); }
+	/// <summary>ある時刻の見え方（カメラ・腕と胸の入口・ハッチの開き具合・外の光）を求める</summary>
+	/// <param name="time">乗り込みの時刻 [秒]</param>
+	/// <returns>見え方</returns>
 	Pose Evaluate(float time) const;
 
+	/// <summary>再生の時刻を返す</summary>
+	/// <returns>時刻 [秒]</returns>
 	float GetTime() const { return time_; }
+	/// <summary>ImGui でシーク中かを返す</summary>
+	/// <returns>シーク中なら true</returns>
 	bool IsPreviewing() const { return previewing_; }
 
+	/// <summary>調整値（Hub.json の "boarding"）を読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値とシークの ImGui を表示する</summary>
 	void OnImGui();
 
 private:

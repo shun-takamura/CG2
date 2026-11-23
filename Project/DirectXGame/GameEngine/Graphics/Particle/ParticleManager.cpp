@@ -10,6 +10,24 @@
 #include <cassert>
 #include <cmath>
 #include "imgui.h"
+    // 発生させた粒子の寿命 [秒]
+    constexpr float kDefaultLifeTime = 2.0f;
+
+namespace {
+    // ルートパラメータの番号
+    enum RootParam : UINT {
+        kRootInstancing = 0,  // VS t0：インスタンスの StructuredBuffer（テーブル）
+        kRootMaterial = 1,    // PS b0：マテリアル
+        kRootTexture = 2,     // PS t0：テクスチャ（テーブル）
+        kRootCount = 3,
+    };
+    // 粒子 1 枚の板の頂点の数（2 三角形）
+    constexpr int kQuadVertexCount = 6;
+    // 粒子の寿命の下限 [秒]（負の値を防ぐ）
+    constexpr float kMinLifeTime = 0.01f;
+    // カメラとの水平距離がこれ未満なら Z+ を向ける
+    constexpr float kMinHorizontalLength = 1e-5f;
+}
 
 ParticleManager* ParticleManager::GetInstance()
 {
@@ -177,7 +195,7 @@ void ParticleManager::Emit(const std::string& name, const Vector3& position, uin
             particle.color = emitterSettings_.baseColor;
         }
 
-        particle.lifeTime = 2.0f;
+        particle.lifeTime = kDefaultLifeTime;
         particle.currentTime = 0.0f;
 
         group.particles.push_back(particle);
@@ -244,7 +262,7 @@ void ParticleManager::Emit(const std::string& name, const EmitParam& param)
         // 寿命
         float lifeRandom = randomInRange(-param.lifeTimeRandomRange, param.lifeTimeRandomRange);
         particle.lifeTime = param.lifeTime + lifeRandom;
-        if (particle.lifeTime < 0.01f) particle.lifeTime = 0.01f; // 負の値防止
+        if (particle.lifeTime < kMinLifeTime) particle.lifeTime = kMinLifeTime; // 負の値防止
         particle.currentTime = 0.0f;
 
         // ビルボードモード
@@ -284,7 +302,7 @@ void ParticleManager::Update(float deltaTime)
         float fx = cameraPos.x - objPos.x;
         float fz = cameraPos.z - objPos.z;
         float len = std::sqrt(fx * fx + fz * fz);
-        if (len < 1e-5f) {
+        if (len < kMinHorizontalLength) {
             // カメラが真上/真下にいる退避ケース：Z+方向を向ける
             fx = 0.0f; fz = 1.0f;
         } else {
@@ -398,7 +416,7 @@ void ParticleManager::Draw()
     commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
     // マテリアルCBVをセット（RootParameter[1]）
-    commandList->SetGraphicsRootConstantBufferView(1, materialResource_->GetGPUVirtualAddress());
+    commandList->SetGraphicsRootConstantBufferView(kRootMaterial, materialResource_->GetGPUVirtualAddress());
 
     // 全てのパーティクルグループについて処理する
     for (auto& pair : particleGroups_) {
@@ -409,14 +427,14 @@ void ParticleManager::Draw()
         }
 
         // テクスチャのSRVのDescriptorTableを設定
-        srvManager_->SetGraphicsRootDescriptorTable(2, group.textureSrvIndex);
+        srvManager_->SetGraphicsRootDescriptorTable(kRootTexture, group.textureSrvIndex);
 
         // インスタンシングデータのSRVのDescriptorTableを設定
-        srvManager_->SetGraphicsRootDescriptorTable(0, group.instancingSrvIndex);
+        srvManager_->SetGraphicsRootDescriptorTable(kRootInstancing, group.instancingSrvIndex);
 
         // DrawCall（インスタンシング描画）
         PEPPER_COUNT("DrawCall");
-        commandList->DrawInstanced(6, group.instanceCount, 0, 0);
+        commandList->DrawInstanced(kQuadVertexCount, group.instanceCount, 0, 0);
     }
 }
 
@@ -445,49 +463,6 @@ void ParticleManager::OnImGui()
             }
         }
     }
-
-    //if (ImGui::Begin("Particle Settings")) {
-    //    // エミッター設定
-    //    ImGui::Text("Emitter Settings");
-    //    ImGui::SliderFloat("Emit Rate (per sec)", &emitterSettings_.emitRate, 0.0f, 100.0f);
-    //    ImGui::SliderFloat("Velocity Scale", &emitterSettings_.velocityScale, 0.0f, 5.0f);
-    //    ImGui::Checkbox("Use Random Color", &emitterSettings_.useRandomColor);
-
-    //    if (!emitterSettings_.useRandomColor) {
-    //        ImGui::ColorEdit4("Base Color", &emitterSettings_.baseColor.x);
-    //    }
-
-    //    ImGui::Separator();
-
-    //    // 加速度フィールド設定
-    //    ImGui::Text("Acceleration Field");
-    //    ImGui::Checkbox("Enable Field", &isAccelerationFieldEnabled_);
-
-    //    if (isAccelerationFieldEnabled_) {
-    //        ImGui::DragFloat3("Acceleration", &accelerationField_.acceleration.x, 0.1f);
-    //        ImGui::DragFloat3("Area Min", &accelerationField_.area.min.x, 0.1f);
-    //        ImGui::DragFloat3("Area Max", &accelerationField_.area.max.x, 0.1f);
-    //    }
-
-    //    ImGui::Separator();
-
-    //    // ブレンドモード
-    //    const char* blendModes[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
-    //    int currentMode = static_cast<int>(blendMode_);
-    //    if (ImGui::Combo("Blend Mode", &currentMode, blendModes, IM_ARRAYSIZE(blendModes))) {
-    //        blendMode_ = static_cast<BlendMode>(currentMode);
-    //    }
-
-    //    // パーティクル情報
-    //    ImGui::Separator();
-    //    ImGui::Text("Particle Info");
-    //    uint32_t totalCount = 0;
-    //    for (const auto& pair : particleGroups_) {
-    //        totalCount += static_cast<uint32_t>(pair.second.particles.size());
-    //    }
-    //    ImGui::Text("Total Particles: %u", totalCount);
-    //}
-    //ImGui::End();
 
 #endif // DEBUG
 }
@@ -520,29 +495,24 @@ void ParticleManager::CreateRootSignature()
     descriptorRangeTexture[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     descriptorRangeTexture[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParameters[4] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootCount] = {};
 
     // [0] VS: DescriptorTable - インスタンシングデータ(t0)
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRangeInstancing;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[kRootInstancing].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootInstancing].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    rootParameters[kRootInstancing].DescriptorTable.pDescriptorRanges = descriptorRangeInstancing;
+    rootParameters[kRootInstancing].DescriptorTable.NumDescriptorRanges = 1;
 
     // [1] PS: CBV(b0) - マテリアル
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].Descriptor.ShaderRegister = 0;
+    rootParameters[kRootMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootMaterial].Descriptor.ShaderRegister = 0;
 
     // [2] PS: DescriptorTable - テクスチャ(t0)
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-
-    // [3] PS: CBV(b1) - ライト
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[3].Descriptor.ShaderRegister = 1;
+    rootParameters[kRootTexture].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[kRootTexture].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParameters[kRootTexture].DescriptorTable.pDescriptorRanges = descriptorRangeTexture;
+    rootParameters[kRootTexture].DescriptorTable.NumDescriptorRanges = 1;
 
     // Sampler
     D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
@@ -699,7 +669,7 @@ void ParticleManager::CreateGraphicsPipelineState(BlendMode blendMode)
 void ParticleManager::CreateVertexData()
 {
     // 板ポリ（6頂点）
-    vertexResource_ = dxCore_->CreateBufferResource(sizeof(VertexData) * 6);
+    vertexResource_ = dxCore_->CreateBufferResource(sizeof(VertexData) * kQuadVertexCount);
 
     VertexData* vertexData = nullptr;
     vertexResource_->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
@@ -738,7 +708,7 @@ void ParticleManager::CreateVertexData()
 
     // VertexBufferView作成
     vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
-    vertexBufferView_.SizeInBytes = sizeof(VertexData) * 6;
+    vertexBufferView_.SizeInBytes = sizeof(VertexData) * kQuadVertexCount;
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
 }
 

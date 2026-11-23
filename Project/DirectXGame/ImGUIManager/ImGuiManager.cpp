@@ -42,11 +42,30 @@
 
 #include <algorithm>
 
+
+namespace {
+    // ホストがグループの色を決めないときの色（灰色）
+    constexpr float kDefaultGroupColorR = 0.55f;
+    constexpr float kDefaultGroupColorG = 0.55f;
+    constexpr float kDefaultGroupColorB = 0.60f;
+    // 日本語フォントの大きさ [px]
+    constexpr float kFontSizePx = 18.0f;
+    // 今のシーン名の文字の色（緑）
+    constexpr ImVec4 kSceneNameColor = ImVec4(0.4f, 0.9f, 0.4f, 1.0f);
+    // シーク（-0.1s / +0.1s）のボタンで動かす時間 [秒]
+    constexpr float kSeekFineStepSeconds = 0.1f;
+    // グローバル TimeScale のボタンの値（0.25x / 0.5x / 2x）
+    constexpr float kTimeScalePresetSlowest = 0.25f;
+    constexpr float kTimeScalePresetSlow = 0.5f;
+    constexpr float kTimeScalePresetFast = 2.0f;
+    // TimeGroup のスライダーのラベルのバッファの大きさ [byte]
+    constexpr int kTimeGroupLabelBufferSize = 32;
+}
 EditorHostHooks ImGuiManager::hostHooks_{};
 
-ImGuiManager& ImGuiManager::Instance() {
+ImGuiManager* ImGuiManager::GetInstance() {
     static ImGuiManager instance;
-    return instance;
+    return &instance;
 }
 
 void ImGuiManager::SetHostHooks(const EditorHostHooks& hooks) {
@@ -92,7 +111,7 @@ void ImGuiManager::GetEntityGroupColor(int group, float& r, float& g, float& b, 
         hostHooks_.getEntityGroupColor(group, r, g, b, a);
         return;
     }
-    r = 0.55f; g = 0.55f; b = 0.60f; a = 1.0f;
+    r = kDefaultGroupColorR; g = kDefaultGroupColorG; b = kDefaultGroupColorB; a = 1.0f;
 }
 
 void ImGuiManager::SetEntityGroup(IImGuiEditable* e, int group) {
@@ -187,7 +206,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
     // 同梱の M PLUS 1p を使うことで配布先PCでもフォント依存なく日本語表示できる。
     const char* kFontPath = "Resources/Fonts/MPLUS1p-Regular.ttf";
     ImFont* jpFont = io.Fonts->AddFontFromFileTTF(
-        kFontPath, 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+        kFontPath, kFontSizePx, nullptr, io.Fonts->GetGlyphRangesJapanese());
     if (jpFont == nullptr) {
         io.Fonts->AddFontDefault();
     }
@@ -330,7 +349,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
             // ===== シーン情報 =====
             ImGui::Text("Current Scene:");
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s",
+            ImGui::TextColored(kSceneNameColor, "%s",
                 (name && *name) ? name : "(none)");
 
             ImGui::Separator();
@@ -369,11 +388,11 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
 
                     if (ImGui::Button("-1s")) { scene->Seek(elapsed - 1.0f); }
                     ImGui::SameLine();
-                    if (ImGui::Button("-0.1s")) { scene->Seek(elapsed - 0.1f); }
+                    if (ImGui::Button("-0.1s")) { scene->Seek(elapsed - kSeekFineStepSeconds); }
                     ImGui::SameLine();
                     if (ImGui::Button("Reset")) { scene->Seek(0.0f); }
                     ImGui::SameLine();
-                    if (ImGui::Button("+0.1s")) { scene->Seek(elapsed + 0.1f); }
+                    if (ImGui::Button("+0.1s")) { scene->Seek(elapsed + kSeekFineStepSeconds); }
                     ImGui::SameLine();
                     if (ImGui::Button("+1s")) { scene->Seek(elapsed + 1.0f); }
                 }
@@ -389,13 +408,13 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                 }
                 if (ImGui::Button("Pause##g"))  { if (dxCore_) dxCore_->SetTimeScale(0.0f); }
                 ImGui::SameLine();
-                if (ImGui::Button("0.25x##g")) { if (dxCore_) dxCore_->SetTimeScale(0.25f); }
+                if (ImGui::Button("0.25x##g")) { if (dxCore_) dxCore_->SetTimeScale(kTimeScalePresetSlowest); }
                 ImGui::SameLine();
-                if (ImGui::Button("0.5x##g"))  { if (dxCore_) dxCore_->SetTimeScale(0.5f); }
+                if (ImGui::Button("0.5x##g"))  { if (dxCore_) dxCore_->SetTimeScale(kTimeScalePresetSlow); }
                 ImGui::SameLine();
                 if (ImGui::Button("1x##g"))    { if (dxCore_) dxCore_->SetTimeScale(1.0f); }
                 ImGui::SameLine();
-                if (ImGui::Button("2x##g"))    { if (dxCore_) dxCore_->SetTimeScale(2.0f); }
+                if (ImGui::Button("2x##g"))    { if (dxCore_) dxCore_->SetTimeScale(kTimeScalePresetFast); }
             }
 
             ImGui::Spacing();
@@ -406,7 +425,7 @@ void ImGuiManager::Initialize(HWND hwnd, DirectXCore* dxCore, SRVManager* srvMan
                     for (int i = 0; i < static_cast<int>(TimeGroup::Count); ++i) {
                         TimeGroup g = static_cast<TimeGroup>(i);
                         float s = scene->GetTimeScale(g);
-                        char label[32];
+                        char label[kTimeGroupLabelBufferSize];
                         std::snprintf(label, sizeof(label), "%s##ts", GetTimeGroupName(g));
                         if (ImGui::SliderFloat(label, &s, 0.0f, 4.0f, "%.2f")) {
                             scene->SetTimeScale(g, s);

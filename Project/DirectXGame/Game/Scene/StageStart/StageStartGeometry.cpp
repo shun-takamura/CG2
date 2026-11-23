@@ -2,22 +2,26 @@
 
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <filesystem>
 #include <optional>
 
 namespace {
+	// 2 つの数の JSON 配列に要る要素の数
+	constexpr int kVector2ComponentCount = 2;
+
+	/// <summary>JSON の値を float として読む（数でなければ今の値のまま）</summary>
+	/// <param name="node">読み込み元の値</param>
+	/// <param name="value">読み込み先</param>
 	void ReadFloat(const JsonValue& node, float& value) {
 		value = static_cast<float>(node.AsDouble(value));
 	}
 
-	void ReadVector3(const JsonValue& node, Vector3& value) {
-		if (!node.IsArray() || node.Size() < 3) return;
-		value = { static_cast<float>(node[0].AsDouble(value.x)), static_cast<float>(node[1].AsDouble(value.y)),
-			static_cast<float>(node[2].AsDouble(value.z)) };
-	}
-
+	/// <summary>要素 2 つの JSON 配列を float 2 つとして読む（配列でない・要素が足りないときは今の値のまま）</summary>
+	/// <param name="node">読み込み元の配列</param>
+	/// <param name="value">読み込み先</param>
 	void ReadFloatPair(const JsonValue& node, float (&value)[2]) {
-		if (!node.IsArray() || node.Size() < 2) return;
+		if (!node.IsArray() || node.Size() < kVector2ComponentCount) return;
 		value[0] = static_cast<float>(node[0].AsDouble(value[0]));
 		value[1] = static_cast<float>(node[1].AsDouble(value[1]));
 	}
@@ -52,7 +56,7 @@ bool StageStartGeometry::Load(const std::string& path) {
 	ReadFloat(catapult["exitLightZ"], catapultExitLightZ);
 	const JsonValue& clampNode = catapult["clamps"];
 	for (size_t i = 0; i < clamps.size() && clampNode.IsArray() && i < clampNode.Size(); ++i) {
-		ReadVector3(clampNode[i], clamps[i]);
+		clamps[i] = ReadVector3(clampNode[i], clamps[i]);
 	}
 	ReadFloatPair(catapult["railX"], railX);
 	ReadFloat(catapult["grooveHalfWidth"], grooveHalfWidth);
@@ -60,7 +64,7 @@ bool StageStartGeometry::Load(const std::string& path) {
 	ReadFloat(catapult["liftGrooveStartZ"], liftGrooveStartZ);
 	const JsonValue& anchorNode = catapult["cableAnchors"];
 	for (size_t i = 0; i < cableAnchors.size() && anchorNode.IsArray() && i < anchorNode.Size(); ++i) {
-		ReadVector3(anchorNode[i], cableAnchors[i]);
+		cableAnchors[i] = ReadVector3(anchorNode[i], cableAnchors[i]);
 	}
 	neonMaterial = catapult["neonMaterial"].AsString(neonMaterial);
 	const JsonValue& neonRows = catapult["neonRows"];

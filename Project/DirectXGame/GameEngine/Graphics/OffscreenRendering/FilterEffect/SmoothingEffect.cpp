@@ -10,6 +10,10 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻すカーネルの一辺の既定値 [px]
+	constexpr int kDefaultKernelSize = 3;
+}
 
 void SmoothingEffect::Initialize(
 	DirectXCore* dxCore,
@@ -61,7 +65,7 @@ void SmoothingEffect::ShowImGui()
 
 void SmoothingEffect::ResetParams()
 {
-	kernelSize_ = 3;
+	kernelSize_ = kDefaultKernelSize;
 }
 
 void SmoothingEffect::SetKernelSize(int size)

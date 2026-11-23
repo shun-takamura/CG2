@@ -5,11 +5,13 @@
 #include "Vector2.h"
 #include "Vector3.h"
 #include "Vector4.h"
+#include "MathUtility.h"
 #include <array>
 #include <memory>
 #include <string>
 #include <vector>
 
+class GameSession;
 class AnimatedObject3DInstance;
 class Camera;
 class DirectXCore;
@@ -27,20 +29,46 @@ class SpriteManager;
 class IFlightUnitHost {
 public:
 	virtual ~IFlightUnitHost() = default;
+	/// <summary>シーンをまたいで残るプレイの状態を取得する（スコア・難易度・手に入れた物など）</summary>
+	/// <returns>プレイの状態</returns>
+	virtual GameSession* GetGameSession() const = 0;
+	/// <summary>自機を取得する</summary>
+	/// <returns>自機。いなければ nullptr</returns>
 	virtual IImGuiEditable* GetPlayer() const = 0;
+	/// <summary>時間グループの進む速さの倍率を返す</summary>
+	/// <param name="g">対象の時間グループ</param>
+	/// <returns>倍率（1 で通常）</returns>
 	virtual float GetTimeScale(TimeGroup g) const = 0;
+	/// <summary>時間グループの進む速さの倍率を設定する</summary>
+	/// <param name="g">対象の時間グループ</param>
+	/// <param name="scale">倍率（0 で停止、1 で通常）</param>
 	virtual void SetTimeScale(TimeGroup g, float scale) = 0;
-	// 自機の体の中心（ファンネル・バリアの基準）
+	/// <summary>自機の体の中心（ファンネル・バリアの基準）を返す</summary>
+	/// <returns>ワールド座標</returns>
 	virtual Vector3 GetFlightUnitAnchor() const = 0;
-	// レティクルが重なっている敵（無ければ null）と、レティクルの狙いの点
+	/// <summary>レティクルが重なっている敵を返す</summary>
+	/// <returns>敵。無ければ nullptr</returns>
 	virtual IImGuiEditable* GetReticleTarget() const = 0;
+	/// <summary>レティクルの狙いの点を返す</summary>
+	/// <returns>ワールド座標</returns>
 	virtual Vector3 GetReticleAimPoint() const = 0;
-	// 画面に映っている敵（Enemy / Boss。敵弾は含めない）
+	/// <summary>画面に映っている敵（Enemy / Boss。敵弾は含めない）を集める</summary>
+	/// <param name="out">敵を追加する先</param>
 	virtual void CollectOnScreenEnemies(std::vector<IImGuiEditable*>& out) = 0;
+	/// <summary>敵がまだ生きているかを返す</summary>
+	/// <param name="e">調べる敵</param>
+	/// <returns>生きていれば true</returns>
 	virtual bool IsEnemyAlive(IImGuiEditable* e) const = 0;
-	// 自機の通常弾と同じ弾を撃つ。damageScale は自機の攻撃力に掛ける。homingTarget があれば強ホーミング
+	/// <summary>自機の通常弾と同じ弾を撃つ</summary>
+	/// <param name="from">撃ち出す位置（ワールド）</param>
+	/// <param name="dir">撃つ向き（ワールド）</param>
+	/// <param name="homingTarget">強ホーミングで追う敵。nullptr ならまっすぐ飛ぶ</param>
+	/// <param name="damageScale">自機の攻撃力に掛ける倍率</param>
 	virtual void FireSupportBullet(const Vector3& from, const Vector3& dir, IImGuiEditable* homingTarget, float damageScale) = 0;
-	// 球の中の敵弾を消し、そのダメージ（難易度の倍率の前）の合計を返す
+	/// <summary>球の中の敵弾を消し、そのダメージの合計を返す</summary>
+	/// <param name="center">球の中心（ワールド）</param>
+	/// <param name="radius">球の半径 [m]</param>
+	/// <returns>消した敵弾のダメージの合計（難易度の倍率の前）</returns>
 	virtual int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) = 0;
 };
 
@@ -52,81 +80,178 @@ class FlightUnitSkill {
 public:
 	virtual ~FlightUnitSkill() = default;
 
+	/// <summary>シーンへの窓口とカメラを受け取る</summary>
+	/// <param name="host">シーンへの窓口</param>
+	/// <param name="camera">カメラ（右・上・前の向きに使う）</param>
 	virtual void Initialize(IFlightUnitHost* host, Camera* camera) { host_ = host; camera_ = camera; }
+	/// <summary>段階を設定する</summary>
+	/// <param name="level">段階 1〜3</param>
 	void SetLevel(int level) { level_ = level; }
-	// 技を動かさずにモデルだけ見せる（HUB の機体設定）。狙いを追う物は付ける所の向きのまま
+	/// <summary>技を動かさずにモデルだけ見せるかを設定する（HUB の機体設定）。狙いを追う物は付ける所の向きのまま</summary>
+	/// <param name="preview">true でモデルだけ見せる</param>
 	void SetModelPreview(bool preview) { modelPreview_ = preview; }
 
-	// RB の技を出す。出せたら true（クールタイムは技が終わってから数える）
+	/// <summary>RB の技を出す（クールタイムは技が終わってから数える）</summary>
+	/// <returns>出せたら true</returns>
 	virtual bool Activate() = 0;
-	// 技を途中で終える。restoreTime=false のときは時間の倍率に触らない（ジャスト回避・必殺技が握っている）
+	/// <summary>技を途中で終える</summary>
+	/// <param name="restoreTime">false のときは時間の倍率に触らない（ジャスト回避・必殺技が握っている）</param>
 	virtual void Cancel(bool restoreTime) = 0;
+	/// <summary>技を出している途中かを返す</summary>
+	/// <returns>途中なら true</returns>
 	virtual bool IsActive() const = 0;
-	// 技が時間の倍率を使う（ジャスト回避・必殺技が起きたら終わらせる）
+	/// <summary>技が時間の倍率を使うかを返す（ジャスト回避・必殺技が起きたら終わらせる）</summary>
+	/// <returns>使うなら true</returns>
 	virtual bool UsesTimeScale() const { return false; }
-	// 技の残り（1→0）。表示用
+	/// <summary>技の残りを返す（表示用）</summary>
+	/// <returns>1→0</returns>
 	virtual float GetActiveRatio() const = 0;
+	/// <summary>今の段階のクールタイムを返す</summary>
+	/// <returns>クールタイム [秒]</returns>
 	virtual float GetCooldown() const = 0;
-	// canAct＝操作できる（必殺技・ジャスト回避・死亡演出・着地の間は false）
+	/// <summary>常時の効果と技を進める</summary>
+	/// <param name="dt">実時間の経過 [秒]</param>
+	/// <param name="canAct">操作できるか（必殺技・ジャスト回避・死亡演出・着地の間は false）</param>
 	virtual void Update(float dt, bool canAct) = 0;
+	/// <summary>技の 3D の見た目を描く</summary>
 	virtual void Draw() {}
 
 	// ----- 背中のモデル（バックパックと、それに付ける物。20 番 §3.1）-----
-	// バックパックを背負う系統（付けている間は羽根を隠す）
+	/// <summary>バックパックを背負う系統かを返す（付けている間は羽根を隠す）</summary>
+	/// <returns>背負うなら true</returns>
 	virtual bool UsesBackpack() const { return false; }
-	// バックパック本体を描く（防御系は位置の基準にだけ使い、本体は描かない）
+	/// <summary>バックパック本体を描くかを返す（防御系・機動系は位置の基準にだけ使い、本体は描かない）</summary>
+	/// <returns>描くなら true</returns>
 	virtual bool DrawsBackpack() const { return true; }
+	/// <summary>背中に付ける物のモデルを読み込む</summary>
+	/// <param name="object3DManager">3D オブジェクトの管理</param>
+	/// <param name="dxCore">DirectX の中核</param>
 	virtual void InitializeModels(Object3DManager* object3DManager, DirectXCore* dxCore) { (void)object3DManager; (void)dxCore; }
-	// バックパックの行列が決まった後（体のスケルトンの更新の後）に、付けている物の行列を作る
+	/// <summary>バックパックの行列が決まった後（体のスケルトンの更新の後）に、付けている物の行列を作る</summary>
+	/// <param name="backpackWorld">バックパックのワールド行列</param>
 	virtual void UpdateModels(const Matrix4x4& backpackWorld) { (void)backpackWorld; }
-	// 不透明のパスで描く。idPass なら ID マスクへ（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）
+	/// <summary>付けている物を不透明のパスで描く</summary>
+	/// <param name="dxCore">DirectX の中核</param>
+	/// <param name="idPass">true なら ID マスクへ描く（HUB の機体設定のノイズを機体だけ・機体以外にかけるため）</param>
 	virtual void DrawModels(DirectXCore* dxCore, bool idPass) { (void)dxCore; (void)idPass; }
 
 	// ----- 常時の効果 -----
-	// ステータスの補正（攻撃系＝攻撃力・防御系＝HP の上限・機動系＝移動速度。20 番 §3.4）
+	/// <summary>攻撃力の補正を返す（攻撃系。20 番 §3.4）</summary>
+	/// <returns>攻撃力に掛ける倍率</returns>
 	virtual float GetAttackScale() const { return 1.0f; }
+	/// <summary>HP の上限の補正を返す（防御系）</summary>
+	/// <returns>HP の上限に掛ける倍率</returns>
 	virtual float GetMaxHpScale() const { return 1.0f; }
+	/// <summary>移動速度の補正を返す（機動系）</summary>
+	/// <returns>移動速度に掛ける倍率</returns>
 	virtual float GetMoveSpeedScale() const { return 1.0f; }
+	/// <summary>ジャスト回避のときに足す必殺技ゲージを返す</summary>
+	/// <returns>足すゲージの量</returns>
 	virtual float GetJustDodgeGaugeBonus() const { return 0.0f; }
-	// ジャスト回避の受付を延ばす秒（StagePlay.json の dodge.justWindow に足す）
+	/// <summary>ジャスト回避の受付を延ばす秒を返す（StagePlay.json の dodge.justWindow に足す）</summary>
+	/// <returns>延ばす秒 [秒]</returns>
 	virtual float GetJustDodgeWindowBonus() const { return 0.0f; }
-	// 被弾のダメージ（難易度の倍率の後）を補正する
+	/// <summary>被弾のダメージを補正する</summary>
+	/// <param name="damage">難易度の倍率の後のダメージ</param>
+	/// <returns>補正後のダメージ</returns>
 	virtual int ModifyIncomingDamage(int damage) { return damage; }
-	// 被弾を吸う（true＝吸った。ジャスト回避もダメージも起きない）
+	/// <summary>被弾を吸う</summary>
+	/// <param name="damage">被弾のダメージ</param>
+	/// <returns>吸ったら true（ジャスト回避もダメージも起きない）</returns>
 	virtual bool AbsorbHit(int damage) { (void)damage; return false; }
 
-	// クールタイムのバーの色
+	/// <summary>クールタイムのバーの色を返す</summary>
+	/// <returns>色（RGBA 0〜1）</returns>
 	virtual Vector4 GetColor() const = 0;
+	/// <summary>調整値を JSON から読む</summary>
+	/// <param name="node">この系統の欄</param>
 	virtual void LoadTuning(const JsonValue& node) = 0;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先（この系統の欄）</param>
 	virtual void SaveTuning(JsonValue& node) const = 0;
+	/// <summary>調整値の ImGui を表示する</summary>
 	virtual void OnImGui() {}
 
-	// 段階 1..3 の値の JSON・ImGui（[段階1, 段階2, 段階3] の配列）。色は FlightUnitPart の表示でも使う
+	/// <summary>段階 1〜3 の値を JSON の配列（[段階1, 段階2, 段階3]）から読む（無い要素は今の値のまま）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">読み込み先</param>
 	static void ReadLevels(const JsonValue& node, const char* key, float (&v)[3]);
+	/// <summary>段階 1〜3 の値を JSON の配列（[段階1, 段階2, 段階3]）にして書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">書く値</param>
 	static void WriteLevels(JsonValue& node, const char* key, const float (&v)[3]);
+	/// <summary>段階 1〜3 の値を ImGui の DragFloat3 で調整する（Debug のみ）</summary>
+	/// <param name="label">ラベル</param>
+	/// <param name="v">調整する値</param>
+	/// <param name="speed">ドラッグの速さ</param>
+	/// <param name="minV">下限</param>
+	/// <param name="maxV">上限</param>
 	static void DragLevels(const char* label, float (&v)[3], float speed, float minV, float maxV);
+	/// <summary>キーの値（要素 4 つの配列）を Vector4 として読む（配列でなければ今の値のまま）。色は FlightUnitPart の表示でも使う</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">読み込み先</param>
 	static void ReadVec4(const JsonValue& node, const char* key, Vector4& v);
+	/// <summary>Vector4 を要素 4 つの配列にしてキーへ書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">書く値</param>
 	static void WriteVec4(JsonValue& node, const char* key, const Vector4& v);
+	/// <summary>キーの値（要素 3 つの配列）を Vector3 として読む（配列でなければ今の値のまま）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">読み込み先</param>
 	static void ReadVec3(const JsonValue& node, const char* key, Vector3& v);
+	/// <summary>Vector3 を要素 3 つの配列にしてキーへ書く</summary>
+	/// <param name="node">書き込み先の JSON オブジェクト</param>
+	/// <param name="key">キー</param>
+	/// <param name="v">書く値</param>
 	static void WriteVec3(JsonValue& node, const char* key, const Vector3& v);
-	// { translate, rotate（ラジアン）, scale }
+	/// <summary>{ translate, rotate（ラジアン）, scale } の JSON オブジェクトを Transform として読む（無いキーは今の値のまま）</summary>
+	/// <param name="node">読み込み元の JSON オブジェクト</param>
+	/// <param name="t">読み込み先</param>
 	static void ReadTransform(const JsonValue& node, Transform& t);
+	/// <summary>Transform を { translate, rotate（ラジアン）, scale } の JSON オブジェクトにする</summary>
+	/// <param name="t">書き出す値</param>
+	/// <returns>JSON オブジェクト</returns>
 	static JsonValue WriteTransform(const Transform& t);
-	// 付ける位置・角度（度で見せる）・大きさの ImGui
+	/// <summary>付ける位置・角度（度で見せる。自分の軸まわりにも回せる）・大きさを ImGui で調整する（Debug のみ）</summary>
+	/// <param name="id">ImGui の ID</param>
+	/// <param name="t">調整する値</param>
 	static void DragTransform(const char* id, Transform& t);
-	// X の面で鏡に映した置き方（左右のパーツ・ユニット用）
+	/// <summary>X の面で鏡に映した置き方を作る（左右のパーツ・ユニット用。Rx·Ry·Rz の順なので Y・Z の回転を反転する）</summary>
+	/// <param name="t">元の置き方</param>
+	/// <returns>鏡に映した置き方</returns>
 	static Transform MirroredX(const Transform& t);
+	/// <summary>2 つの置き方を成分ごとに線形補間する</summary>
+	/// <param name="a">k = 0 の置き方</param>
+	/// <param name="b">k = 1 の置き方</param>
+	/// <param name="k">補間の割合</param>
+	/// <returns>補間した置き方</returns>
 	static Transform LerpTransform(const Transform& a, const Transform& b, float k);
 
 protected:
-	int LevelIndex() const { return level_ < 1 ? 0 : (level_ > 3 ? 2 : level_ - 1); }
-	// カメラの右・上・前（ワールド）
+	/// <summary>段階を配列の添字にする</summary>
+	/// <returns>0〜2（段階が範囲外なら端に寄せる）</returns>
+	int LevelIndex() const { return level_ < 1 ? 0 : (level_ > kMaxLevel ? kMaxLevelIndex : level_ - 1); }
+	/// <summary>カメラの右・上・前（ワールド）を返す（カメラが無ければワールドの軸）</summary>
+	/// <param name="right">右の受け取り先</param>
+	/// <param name="up">上の受け取り先</param>
+	/// <param name="forward">前の受け取り先</param>
 	void GetCameraBasis(Vector3& right, Vector3& up, Vector3& forward) const;
 
 	IFlightUnitHost* host_ = nullptr;
 	Camera* camera_ = nullptr;
 	int level_ = 1;
 	bool modelPreview_ = false;
+
+private:
+	// 段階の最大（段階ごとの値の配列の長さ）
+	static constexpr int kMaxLevel = 3;
+	// 最大の段階の配列の添字
+	static constexpr int kMaxLevelIndex = 2;
 };
 
 /// <summary>
@@ -137,57 +262,102 @@ protected:
 /// </summary>
 class FlightUnitPart {
 public:
+	/// <summary>3 系統の中身を作り、調整値を読む</summary>
 	FlightUnitPart();
 	~FlightUnitPart();
 
+	/// <summary>系統ごとの中身・バックパック・クールタイムのバーを用意し、LoadoutState の系統・段階に付ける</summary>
+	/// <param name="host">シーンへの窓口</param>
+	/// <param name="camera">カメラ</param>
+	/// <param name="spriteManager">クールタイムのバーに使う（nullptr ならバーを出さない）</param>
+	/// <param name="object3DManager">背中のモデルに使う（nullptr ならモデルを出さない）</param>
+	/// <param name="dxCore">背中のモデルに使う（nullptr ならモデルを出さない）</param>
 	void Initialize(IFlightUnitHost* host, Camera* camera, SpriteManager* spriteManager,
 		Object3DManager* object3DManager, DirectXCore* dxCore);
+	/// <summary>Initialize 済みかを返す</summary>
+	/// <returns>済みなら true</returns>
 	bool IsInitialized() const { return host_ != nullptr; }
-	// LoadoutState の系統・段階に付け直す（技は止める）
+	/// <summary>LoadoutState の系統・段階に付け直す（技は止め、クールタイムは 0 にする）</summary>
 	void SyncLoadout();
 
-	/// <summary>
-	/// 毎フレーム。dt は実時間（UI）。triggered＝RB が押されたフレーム。
-	/// canAct＝操作できる。timeTaken＝ジャスト回避・必殺技が時間を握っている（スローの技はそこで終わる。20 番 §6）
-	/// </summary>
+	/// <summary>毎フレーム。技を進め、終わったらクールタイムを数え、RB で技を出す</summary>
+	/// <param name="dt">実時間（UI）の経過 [秒]</param>
+	/// <param name="triggered">RB が押されたフレームなら true</param>
+	/// <param name="canAct">操作できるか</param>
+	/// <param name="timeTaken">ジャスト回避・必殺技が時間を握っているか（スローの技はそこで終わる。20 番 §6）</param>
 	void Update(float dt, bool triggered, bool canAct, bool timeTaken);
+	/// <summary>付けている系統の技の 3D の見た目を描く</summary>
 	void Draw3D();
+	/// <summary>クールタイムのバー（必殺技ゲージの下）を描く</summary>
 	void DrawUI();
-	// 背中のモデル（バックパックを body の Spine2 に付ける）。体のスケルトンの更新の後に呼ぶ
+	/// <summary>背中のモデル（バックパックを body の Spine2 に付ける）の行列を作る。体のスケルトンの更新の後に呼ぶ</summary>
+	/// <param name="body">自機の体（nullptr なら描かない）</param>
 	void UpdateModels(AnimatedObject3DInstance* body);
-	// 不透明のパスで描く（自機が見えている間だけ呼ぶ）
+	/// <summary>背中のモデルを不透明のパスで描く（自機が見えている間だけ呼ぶ）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawModels(DirectXCore* dxCore);
-	// 同じ物を ID マスクへ（HUB の機体設定）
+	/// <summary>背中のモデルを ID マスクへ描く（HUB の機体設定）</summary>
+	/// <param name="dxCore">DirectX の中核</param>
 	void DrawModelsIdPass(DirectXCore* dxCore);
-	// 付けている系統がバックパックを背負う（羽根を隠す）
+	/// <summary>付けている系統がバックパックを背負うかを返す（羽根を隠す）</summary>
+	/// <returns>背負うなら true</returns>
 	bool UsesBackpack() const;
-	// 背中のモデルの大きさ（付ける所のずらしはメートルなので、拡大した体に付けるときに掛ける。HUB の機体設定の 18m の機体）
+	/// <summary>背中のモデルの大きさを設定する（付ける所のずらしはメートルなので、拡大した体に付けるときに掛ける。HUB の機体設定の 18m の機体）</summary>
+	/// <param name="scale">倍率</param>
 	void SetModelScale(float scale) { modelScale_ = scale; }
-	// 技を動かさずにモデルだけ見せる（全系統へ。FlightUnitSkill::SetModelPreview）
+	/// <summary>技を動かさずにモデルだけ見せるかを全系統へ設定する（FlightUnitSkill::SetModelPreview）</summary>
+	/// <param name="preview">true でモデルだけ見せる</param>
 	void SetModelPreview(bool preview);
-	// 系統ごとの中身（装備画面が付けていない系統の値も出すため。段階は LoadoutState の値＝SyncLoadout で入る）。Wings は null
+	/// <summary>系統ごとの中身を返す（装備画面が付けていない系統の値も出すため。段階は LoadoutState の値＝SyncLoadout で入る）</summary>
+	/// <param name="kind">系統</param>
+	/// <returns>中身。Wings・範囲外は nullptr</returns>
 	const FlightUnitSkill* GetSkill(FlightUnitKind kind) const;
-	// 技を止め、クールタイムを 0 にする（フェーズの切り替え）
+	/// <summary>技を止め、クールタイムを 0 にする（フェーズの切り替え）</summary>
 	void Reset();
 
 	// ----- 常時の効果（付けていなければ素の値）-----
+	/// <summary>付けている系統の攻撃力の補正を返す</summary>
+	/// <returns>倍率（付けていなければ 1）</returns>
 	float GetAttackScale() const;
+	/// <summary>付けている系統の HP の上限の補正を返す</summary>
+	/// <returns>倍率（付けていなければ 1）</returns>
 	float GetMaxHpScale() const;
+	/// <summary>付けている系統の移動速度の補正を返す</summary>
+	/// <returns>倍率（付けていなければ 1）</returns>
 	float GetMoveSpeedScale() const;
+	/// <summary>付けている系統のジャスト回避で足す必殺技ゲージを返す</summary>
+	/// <returns>足す量（付けていなければ 0）</returns>
 	float GetJustDodgeGaugeBonus() const;
+	/// <summary>付けている系統のジャスト回避の受付の延長を返す</summary>
+	/// <returns>延ばす秒 [秒]（付けていなければ 0）</returns>
 	float GetJustDodgeWindowBonus() const;
+	/// <summary>付けている系統で被弾のダメージを補正する</summary>
+	/// <param name="damage">難易度の倍率の後のダメージ</param>
+	/// <returns>補正後のダメージ（付けていなければそのまま）</returns>
 	int ModifyIncomingDamage(int damage);
+	/// <summary>付けている系統で被弾を吸う</summary>
+	/// <param name="damage">被弾のダメージ</param>
+	/// <returns>吸ったら true（ジャスト回避もダメージも起きない）</returns>
 	bool TryAbsorbHit(int damage);
 
+	/// <summary>付けている系統を返す</summary>
+	/// <returns>系統</returns>
 	FlightUnitKind GetKind() const { return kind_; }
-	// 機動系の RB のスロー中（自機の弾は World でなく Player の時間で進める）
+	/// <summary>機動系の RB のスロー中かを返す（自機の弾は World でなく Player の時間で進める）</summary>
+	/// <returns>スロー中なら true</returns>
 	bool IsTimeSlowActive() const;
 
+	/// <summary>調整値を Resources/Json/Tuning/FlightUnit.json から読む（系統ごと・バーの表示・バックパック）</summary>
+	/// <returns>読めたら true。ファイルが無い・読めなければ false</returns>
 	bool LoadTuning();
+	/// <summary>調整値を Resources/Json/Tuning/FlightUnit.json へ書く</summary>
 	void SaveTuning() const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:
+	/// <summary>付けている系統の中身を返す</summary>
+	/// <returns>中身。Wings なら nullptr</returns>
 	FlightUnitSkill* Current() const;
 
 	IFlightUnitHost* host_ = nullptr;
@@ -202,7 +372,7 @@ private:
 	BoneSocket backpackSocket_;
 	std::string backpackBone_ = "mixamorig:Spine2";
 	// 骨から見たずらし（骨のスケールは除いてある＝メートル）。装甲の面（モデルの +Z）を後ろへ向ける
-	Transform backpackMount_{ { 0.5f, 0.5f, 0.5f }, { 0.0f, 3.14159265f, 0.0f }, { 0.0f, 0.0f, -0.2f } };
+	Transform backpackMount_{ { 0.5f, 0.5f, 0.5f }, { 0.0f, kPi, 0.0f }, { 0.0f, 0.0f, -0.2f } };
 	bool backpackPlaced_ = false;   // 行列を作った（作る前は描かない）
 	float modelScale_ = 1.0f;       // SetModelScale
 

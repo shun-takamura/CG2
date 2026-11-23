@@ -16,14 +16,20 @@
 
 namespace {
 
-// 文字配列ペイロードへの安全コピー（D&D ペイロードは固定長 char 配列のため）
+// 削除の確認ダイアログのボタンの幅 [px]
+constexpr int kConfirmButtonWidth = 120;
+
+/// <summary>文字配列ペイロードへ安全にコピーする（D&amp;D ペイロードは固定長 char 配列のため。入りきらない分は切り捨て、必ず終端する）</summary>
+/// <param name="dst">コピー先</param>
+/// <param name="cap">コピー先の大きさ（終端を含む文字数）</param>
+/// <param name="src">コピーする文字列</param>
 inline void SafeCopy(char* dst, size_t cap, const std::string& src) {
     size_t n = src.size() < cap - 1 ? src.size() : cap - 1;
     std::memcpy(dst, src.data(), n);
     dst[n] = '\0';
 }
 
-/// プレハブ一覧（ボタンをドラッグ元として使う）
+/// <summary>プレハブ一覧を描く（ボタンをドラッグ元として使う）。Debug ビルドのみ</summary>
 void DrawPrefabs() {
 #ifdef _DEBUG
     // ============================================
@@ -69,7 +75,7 @@ void DrawPrefabs() {
                     ImGui::Text("Delete prefab \"%s\" ?", prefabToDelete.c_str());
                     ImGui::TextDisabled("This deletes the .json file and cannot be undone.");
                     ImGui::Separator();
-                    if (ImGui::Button("Delete", ImVec2(120, 0))) {
+                    if (ImGui::Button("Delete", ImVec2(kConfirmButtonWidth, 0))) {
                         if (PrefabManager::Delete(prefabToDelete)) {
                             PrefabManager::GetInstance()->Rescan();
                         }
@@ -80,7 +86,7 @@ void DrawPrefabs() {
                         break; // prefabs 参照が無効化されたのでループを抜ける
                     }
                     ImGui::SameLine();
-                    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+                    if (ImGui::Button("Cancel", ImVec2(kConfirmButtonWidth, 0))) {
                         prefabToDelete.clear();
                         ImGui::CloseCurrentPopup();
                     }
@@ -93,7 +99,7 @@ void DrawPrefabs() {
 #endif
 }
 
-/// スプライン追加（役割タグごとに4ボタン）
+/// <summary>スプライン追加のボタンを描く（役割タグごとに 4 ボタン）。Debug ビルドのみ</summary>
 void DrawSplines() {
 #ifdef _DEBUG
     // ============================================
@@ -114,7 +120,7 @@ void DrawSplines() {
         for (size_t i = 0; i < std::size(kinds); ++i) {
             if (i > 0) ImGui::SameLine();
             if (ImGui::Button(kinds[i].label)) {
-                if (auto* scene = ImGuiManager::Instance().GetActiveScene()) {
+                if (auto* scene = ImGuiManager::GetInstance()->GetActiveScene()) {
                     scene->AddDynamicSpline(static_cast<int>(kinds[i].tag));
                 }
             }
@@ -128,7 +134,7 @@ void DrawSplines() {
 namespace GameAssetBrowserSections {
 
 void Register() {
-    auto& imgui = ImGuiManager::Instance();
+    auto& imgui = *ImGuiManager::GetInstance();
     imgui.AddAssetBrowserSection("Prefabs", &DrawPrefabs);
     imgui.AddAssetBrowserSection("Splines", &DrawSplines);
 }

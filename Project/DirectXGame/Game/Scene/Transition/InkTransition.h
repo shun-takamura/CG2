@@ -79,30 +79,51 @@ public:
 	InkTransition() = default;
 	~InkTransition() override = default;
 
-	void Initialize(SpriteManager* spriteManager, DirectXCore* dxCore,
-		float screenWidth, float screenHeight) override;
+	/// <summary>水面の部品と定数バッファを解放する</summary>
 	void Finalize() override;
+	/// <summary>シーン RT を写して、墨の広がりを全画面パスでシーン RT へ描き戻す（トランジション中だけ）</summary>
 	void Draw() override;
 
+	/// <summary>トランジションの種類を返す</summary>
+	/// <returns>TransitionType::Ink</returns>
 	TransitionType GetType() const override { return TransitionType::Ink; }
+	/// <summary>トランジション名を返す</summary>
+	/// <returns>"Ink"</returns>
 	std::string GetName() const override { return "Ink"; }
 
-	Settings& GetSettings() { return settings_; }
+	/// <summary>調整値を返す（書き換える時はコピーして SetSettings で戻す）</summary>
+	/// <returns>今の値</returns>
+	const Settings& GetSettings() const { return settings_; }
+	/// <summary>調整値をまとめて差し替える</summary>
+	/// <param name="value">新しい値</param>
+	void SetSettings(const Settings& value) { settings_ = value; }
 
-	/// <summary>
-	/// ImGui で調整
-	/// </summary>
+	/// <summary>調整値を ImGui で調整する</summary>
 	void OnImGui();
 
-	// 調整値（Resources/Json/Tuning/Transition.json の GetName() の欄）
+	/// <summary>調整値を JSON から読む（Resources/Json/Tuning/Transition.json の GetName() の欄）</summary>
+	/// <param name="json">このトランジションの欄</param>
 	void LoadTuning(const JsonValue& json) override;
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="json">書き込み先（このトランジションの欄）</param>
 	void SaveTuning(JsonValue& json) const override;
 
 protected:
+	/// <summary>墨の進みと開く側の濃さを戻し、水面を平らにする</summary>
 	void OnStartCover() override;
+	/// <summary>水面の部品・全画面パス・ノイズのテクスチャ・定数バッファを作る</summary>
+	void OnInitialize() override;
+	/// <summary>着水からの経過で墨の広がり（coverage_）を 0→1 に進める</summary>
+	/// <param name="dt">経過 [秒]（使わない。経過は GetPhaseTime で見る）</param>
+	/// <returns>真っ黒になったら true</returns>
 	bool UpdateCover(float dt) override;
+	/// <summary>開く側（簡易版）で黒の濃さを 1→0 に薄める</summary>
+	/// <param name="dt">経過 [秒]（使わない。経過は GetPhaseTime で見る）</param>
+	/// <returns>黒が消え切ったら true</returns>
 	bool UpdateReveal(float dt) override;
+	/// <summary>真っ黒の見た目にする</summary>
 	void SetFullyCovered() override;
+	/// <summary>着水の瞬間に一度だけ水面をへこませ、Hold 以外の間は波を進める</summary>
 	void UpdateVisual() override;
 
 private:
@@ -136,10 +157,15 @@ private:
 		float toneDarkStart;
 	};
 
+	/// <summary>ルートシグネチャを作る（宣言のみ。今は ScreenWaterSurface::CreateRootSignature を使う）</summary>
 	void CreateRootSignature();
+	/// <summary>PSO を作る（宣言のみ。今は ScreenWaterSurface::CreatePipelineState を使う）</summary>
 	void CreatePipelineState();
-	// 定数バッファへ書き、書いた値を返す（書き込み専用のメモリを読み返さないため）
+	/// <summary>今の状態から墨の定数を作って定数バッファへ書く</summary>
+	/// <returns>書いた値（書き込み専用のメモリを読み返さないため）</returns>
 	ParamsForGPU WriteParams();
+	/// <summary>覆う進みから墨の半径を求める（最初に速く広がって後で粘る）</summary>
+	/// <returns>墨の半径（画面の幅を 1 とした長さ）。着水前は負</returns>
 	float CalcInkRadius() const;
 
 	ScreenWaterSurface water_;

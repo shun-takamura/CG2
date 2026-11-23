@@ -19,26 +19,45 @@ class JsonValue;
 /// </summary>
 class CockpitLighting {
 public:
+	/// <summary>ポイントライトの枠を空にし、調整値を既定にする</summary>
 	CockpitLighting();
+	/// <summary>調整値（光る部位・外を映す部位・ポイントライト・六角形）を既定に戻す</summary>
 	void ResetToDefaults();
 
+	/// <summary>緑のポイントライトを LightManager から借り、灯りと外の透け具合を 0 に戻す</summary>
 	void Initialize();
+	/// <summary>借りたポイントライトを返し、共有のマテリアルの発光とディゾルブを 0 に戻す（他のシーンへ持ち越さない）</summary>
+	/// <param name="cockpit">戻すコクピット。nullptr ならライトだけ返す</param>
 	void Finalize(CockpitModel* cockpit);
 
 	/// <summary>
-	/// 灯りの強さと外が透ける割合をマテリアル・ライトへ反映する（screenSize は六角形の中心と大きさに使う）。
-	/// signColor はハッチの表示板の色。followSign の部位と緑のポイントライトはこの色になる（LOCKED＝緑 / UNLOCK＝赤とピンク）
+	/// 灯りの強さと外が透ける割合をマテリアル・ライトへ反映する。
+	/// followSign の部位と緑のポイントライトは signColor になる（LOCKED＝緑 / UNLOCK＝赤とピンク）
 	/// </summary>
+	/// <param name="cockpit">反映するコクピット</param>
+	/// <param name="level">灯りの強さ 0〜1</param>
+	/// <param name="reveal">外が透ける割合 0〜1（六角形のディゾルブで中心から晴れる）</param>
+	/// <param name="screenSize">画面の大きさ [px]（六角形の中心と大きさに使う）</param>
+	/// <param name="signColor">ハッチの表示板の色（RGB 0〜1）</param>
 	void Apply(CockpitModel& cockpit, float level, float reveal, const Vector2& screenSize, const Vector3& signColor);
 
-	/// <summary>発光 RT に描く物があるか（灯りが点いている・六角形が光っている）</summary>
+	/// <summary>発光 RT に描く物があるかを返す</summary>
+	/// <returns>灯りが点いているか、六角形が光っていれば true</returns>
 	bool HasBloom() const { return level_ > 0.0f || IsRevealing(); }
-	/// <summary>六角形の発光帯が出ている（発光パスで発光していない部位も描く）</summary>
+	/// <summary>六角形の発光帯が出ているかを返す（発光パスで発光していない部位も描く）</summary>
+	/// <returns>外が透ける途中（0 と 1 の間）なら true</returns>
 	bool IsRevealing() const { return reveal_ > 0.0f && reveal_ < 1.0f; }
+	/// <summary>発光 RT に書くときの倍率を返す</summary>
+	/// <returns>倍率</returns>
 	float GetBloomScale() const { return bloomScale_; }
 
+	/// <summary>調整値を JSON（Hub.json の "cockpitLighting"）から読む</summary>
+	/// <param name="node">読み込み元の JSON ノード</param>
 	void LoadTuning(const JsonValue& node);
+	/// <summary>調整値を JSON へ書く</summary>
+	/// <param name="node">書き込み先の JSON ノード</param>
 	void SaveTuning(JsonValue& node) const;
+	/// <summary>調整値の ImGui を表示する</summary>
 	void OnImGui();
 
 private:

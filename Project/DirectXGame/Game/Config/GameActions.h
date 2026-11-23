@@ -34,6 +34,8 @@ enum class Action : int {
 /// <summary>
 /// アクションの名前（JSON保存/復元・UI表示に使用）
 /// </summary>
+/// <param name="a">アクション</param>
+/// <returns>アクション名。範囲外なら空文字列</returns>
 inline std::string_view GetActionName(Action a) {
 	switch (a) {
 	case Action::Fire:           return "Fire";
@@ -62,6 +64,8 @@ inline std::string_view GetActionName(Action a) {
 /// <summary>
 /// 名前から Action を逆引き。失敗時は Action::Count を返す。
 /// </summary>
+/// <param name="name">アクション名</param>
+/// <returns>アクション。当たらなければ Action::Count</returns>
 inline Action ActionFromName(std::string_view name) {
 	for (int i = 0; i < static_cast<int>(Action::Count); ++i) {
 		Action a = static_cast<Action>(i);

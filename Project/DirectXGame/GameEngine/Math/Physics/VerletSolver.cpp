@@ -4,9 +4,25 @@
 namespace {
 // エンジンに Vector3 演算子が無いため、このモジュール内専用のヘルパーを用意する。
 // （Dot / Length / Normalize / Lerp は MathUtility 側を利用）
+/// <summary>ベクトルの和</summary>
+/// <param name="a">左辺</param>
+/// <param name="b">右辺</param>
+/// <returns>a + b</returns>
 inline Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+/// <summary>ベクトルの差</summary>
+/// <param name="a">左辺</param>
+/// <param name="b">右辺</param>
+/// <returns>a - b</returns>
 inline Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+/// <summary>ベクトルのスカラー倍</summary>
+/// <param name="v">ベクトル</param>
+/// <param name="s">倍率</param>
+/// <returns>v * s</returns>
 inline Vector3 Scale(const Vector3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+/// <summary>外積</summary>
+/// <param name="a">左辺</param>
+/// <param name="b">右辺</param>
+/// <returns>a × b</returns>
 inline Vector3 Cross(const Vector3& a, const Vector3& b) {
     return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
 }

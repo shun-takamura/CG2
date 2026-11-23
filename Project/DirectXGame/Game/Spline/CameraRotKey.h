@@ -15,6 +15,7 @@
 /// </summary>
 class CameraRotKey : public IImGuiEditable {
 public:
+    /// <summary>Hierarchy・自動登録に載せない軽量なキーとして作る</summary>
     CameraRotKey() : IImGuiEditable(NoAutoRegister{}) {}
     ~CameraRotKey() override = default;
 
@@ -28,9 +29,16 @@ public:
     //====================
     // IImGuiEditable
     //====================
+    /// <summary>表示名を取得する</summary>
+    /// <returns>名前。未設定なら "RotKey t=0.00" の形</returns>
     std::string GetName() const override;
+    /// <summary>表示名を設定する</summary>
+    /// <param name="n">名前</param>
     void        SetName(const std::string& n) override { name_ = n; }
+    /// <summary>型名を取得する</summary>
+    /// <returns>"CameraRotKey"</returns>
     std::string GetTypeName() const override { return "CameraRotKey"; }
+    /// <summary>t・向き（度で編集）・緩急カーブを Inspector に出す</summary>
     void        OnImGuiInspector() override;
 
 private:

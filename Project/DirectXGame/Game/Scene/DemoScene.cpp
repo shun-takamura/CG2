@@ -62,8 +62,88 @@ DemoScene::~DemoScene() {
 }
 
 namespace {
-	// JSONライブラリの動作確認用セルフテスト
-	// 結果はOutputDebugStringに出力される（VS出力ウィンドウで確認）
+	// JSON の自己テスト：書いて読み戻す "version" の値
+	constexpr int kJsonTestVersion = 2;
+	// JSON の自己テスト：書き出す "scale" の値
+	constexpr double kJsonTestScale = 1.5;
+	// JSON の自己テスト：配列の 2 番目に入れて読み戻す値
+	constexpr int kJsonTestListSecond = 2;
+	// JSON の自己テスト：配列の 3 番目に入れる値
+	constexpr int kJsonTestListThird = 3;
+	// JSON の自己テスト：整形出力の字下げ [スペースの数]
+	constexpr int kJsonPrettyIndentWidth = 2;
+	// デモのカメラの初めの高さ [m]
+	constexpr float kDemoCameraPosY = 15.0f;
+	// デモのカメラを原点から手前（−Z）へ離す距離 [m]
+	constexpr float kDemoCameraBackZ = 20.0f;
+	// デモのカメラの俯角 [rad]
+	constexpr float kDemoCameraPitch = 0.5f;
+	// SneakWalk の環境マップの映り込みの強さ
+	constexpr float kSneakWalkEnvCoefficient = 0.5f;
+	// DebugDraw 確認：グリッドの大きさ [m]
+	constexpr float kDebugGridSize = 20.0f;
+	// DebugDraw 確認：グリッドの灰色の明るさ
+	constexpr float kDebugGridGray = 0.3f;
+	// DebugDraw 確認：原点の十字の大きさ [m]
+	constexpr float kOriginCrossSize = 0.5f;
+	// DebugDraw 確認：球の中心 X [m]
+	constexpr int kDebugSpherePosX = 3;
+	// DebugDraw 確認：球の色 G（黄色）
+	constexpr float kDebugSphereColorG = 0.9f;
+	// DebugDraw 確認：球の色 B（黄色）
+	constexpr float kDebugSphereColorB = 0.2f;
+	// DebugDraw 確認：AABB の最小 X の大きさ（−4） [m]
+	constexpr int kDebugAabbMinX = 4;
+	// DebugDraw 確認：AABB の最大 X の大きさ（−2） [m]
+	constexpr int kDebugAabbMaxX = 2;
+	// DebugDraw 確認：AABB の最大 Y [m]
+	constexpr int kDebugAabbMaxY = 2;
+	// DebugDraw 確認：AABB の色の R と B（緑）
+	constexpr float kDebugAabbColorRB = 0.4f;
+	// DebugDraw 確認：OBB の中心 Z の大きさ（−4） [m]
+	constexpr int kDebugObbPosZ = 4;
+	// DebugDraw 確認：OBB の Y の半分の大きさ [m]
+	constexpr float kDebugObbHalfSizeY = 0.5f;
+	// DebugDraw 確認：OBB の色 R（水色）
+	constexpr float kDebugObbColorR = 0.4f;
+	// DebugDraw 確認：OBB の色 G（水色）
+	constexpr float kDebugObbColorG = 0.8f;
+	// DebugDraw 確認：スプラインの色 B（薄い黄色）
+	constexpr float kDebugSplineColorB = 0.4f;
+	// DebugDraw 確認：スプラインを分ける数
+	constexpr int kDebugSplineSegments = 24;
+	// DebugDraw 確認：制御点の十字の大きさ [m]
+	constexpr float kControlPointCrossSize = 0.25f;
+	// DebugDraw 確認：制御点の十字の色の G と B（薄い赤）
+	constexpr float kControlPointCrossColorGB = 0.6f;
+	// DebugDraw 確認：レイの始点 Y [m]
+	constexpr int kDebugRayOriginY = 5;
+	// DebugDraw 確認：レイの始点 Z の大きさ（−8） [m]
+	constexpr int kDebugRayOriginZ = 8;
+	// DebugDraw 確認：レイの長さ [m]
+	constexpr float kDebugRayLength = 5.0f;
+	// Y ボタンで試すコントローラーの振動の強さ（0〜65535）
+	constexpr int kVibrationStrength = 32000;
+	// 3 キーの 3D サウンドを鳴らす位置 X の大きさ（−5） [m]
+	constexpr float kSound3DPosX = 5.0f;
+	// 3 キーの 3D サウンドを鳴らす位置 Y [m]
+	constexpr float kSound3DPosY = 5.0f;
+	// 3 キーの 3D サウンドを鳴らす位置 Z [m]
+	constexpr float kSound3DPosZ = 5.0f;
+	// 円周上を回る音源の高さ [m]
+	constexpr float kOrbitSoundHeight = 3.0f;
+	// 円周上を回る音源の聴こえる距離のスケール
+	constexpr float kOrbitSoundDistanceScale = 30.0f;
+	// HitEffect の板の初めの横幅の倍率（縦長にする）
+	constexpr float kHitPlaneInitialWidth = 0.05f;
+	// HitEffect の板の寿命 [秒]
+	constexpr float kHitPlaneLifeTime = 0.6f;
+	// HitEffect の板が寿命の間に大きくなる量（1＋この値＝3 倍）
+	constexpr float kHitPlaneScaleGrowth = 2.0f;
+	/// <summary>
+	/// JSONライブラリの動作確認用セルフテスト（パース・書き出し・往復・エラー位置）。
+	/// 結果はOutputDebugStringに出力される（VS出力ウィンドウで確認）
+	/// </summary>
 	void RunJsonSelfTest() {
 		Log("===== Json Self Test =====\n");
 
@@ -115,19 +195,19 @@ namespace {
 		// 3) 書き込み（コメントは出力されない=純JSON準拠）
 		JsonValue out = JsonValue::MakeObject();
 		out["title"] = "CG2_0_1";
-		out["version"] = 2;
-		out["scale"] = 1.5;
+		out["version"] = kJsonTestVersion;
+		out["scale"] = kJsonTestScale;
 		out["enabled"] = false;
 
 		JsonValue list = JsonValue::MakeArray();
 		list.Push(JsonValue(1));
-		list.Push(JsonValue(2));
-		list.Push(JsonValue(3));
+		list.Push(JsonValue(kJsonTestListSecond));
+		list.Push(JsonValue(kJsonTestListThird));
 		out["list"] = std::move(list);
 
 		out["nested"]["inner"]["deep"] = "via operator[] chain";
 
-		std::string pretty = JsonWriter::Write(out, { true, 2 });
+		std::string pretty = JsonWriter::Write(out, { true, kJsonPrettyIndentWidth });
 		Log("[OK] Pretty output:\n");
 		Log(pretty);
 		Log("\n");
@@ -143,8 +223,8 @@ namespace {
 			Log("[FAIL] Roundtrip parse failed\n");
 		} else {
 			bool ok = reparsed.value["title"].AsString() == "CG2_0_1"
-				&& reparsed.value["version"].AsInt() == 2
-				&& reparsed.value["list"][1].AsInt() == 2
+				&& reparsed.value["version"].AsInt() == kJsonTestVersion
+				&& reparsed.value["list"][1].AsInt() == kJsonTestListSecond
 				&& reparsed.value["nested"]["inner"]["deep"].AsString() == "via operator[] chain";
 			Log(ok ? "[OK] Roundtrip values match\n" : "[FAIL] Roundtrip mismatch\n");
 		}
@@ -171,142 +251,38 @@ void DemoScene::Initialize() {
 
 	// デバッグカメラは GameScene 側で必要時に生成（GetDebugCamera で生成）
 
-	//// スプライトの初期化
-	//sprite_ = std::make_unique<SpriteInstance>();
-	//sprite_->Initialize(spriteManager_, "DistributionAssets/Textures/uvChecker.png");
-
 	// カメラの生成
 	camera_ = std::make_unique<Camera>();
-	camera_->SetTranslate({ 0.0f, 15.0f, -20.0f });
-	camera_->SetRotate({ 0.5f, 0.0f, 0.0f });
-	object3DManager_->SetDefaultCamera(camera_.get());
-	skyboxManager_->SetDefaultCamera(camera_.get());
+	camera_->SetTranslate({ 0.0f, kDemoCameraPosY, -kDemoCameraBackZ });
+	camera_->SetRotate({ kDemoCameraPitch, 0.0f, 0.0f });
+	GetObject3DManager()->SetDefaultCamera(camera_.get());
+	GetSkyboxManager()->SetDefaultCamera(camera_.get());
 
 	// Skybox生成 DirectStrageのステージングバッファがデフォルトの32MBから
 	// 256MBに増やしたけどもっとでかいやつはまたバッファを増やす必要あり
 	skybox_ = std::make_unique<Skybox>();
-	skybox_->Initialize(skyboxManager_, dxCore_, "Resources/Cubemaps/passendorf_snow_8k.dds");
+	skybox_->Initialize(GetSkyboxManager(), GetDxCore(), "Resources/Cubemaps/passendorf_snow_8k.dds");
 
 	// ここで環境マップをモデルにセット
-	object3DManager_->SetEnvironmentTexture("Resources/Cubemaps/passendorf_snow_8k.dds");
-
-
-	//// パーティクルの設定
-	//ParticleManager::GetInstance()->SetCamera(camera_.get());
-	//ParticleManager::GetInstance()->CreateParticleGroup("circle", "DistributionAssets/Textures/circle2.png");
+	GetObject3DManager()->SetEnvironmentTexture("Resources/Cubemaps/passendorf_snow_8k.dds");
 
 	// GPU Particle + EffectManager は Game が共通管理する（GameScene::UpdateGlobalEffects 経由で使用）
-
-	//// 加速度フィールドの設定
-	//AccelerationField field;
-	//field.acceleration = { 15.0f, 0.0f, 0.0f };
-	//field.area.min = { -1.0f, -1.0f, -1.0f };
-	//field.area.max = { 10.0f, 10.0f, 10.0f };
-	//ParticleManager::GetInstance()->SetAccelerationField(field);
-	//ParticleManager::GetInstance()->SetAccelerationFieldEnabled(true);
-
-	//// 交互に使うスプライト
-	//const std::string textures[2] = {
-	//	"DistributionAssets/Textures/uvChecker.png",
-	//	"DistributionAssets/Models/MonsterBall/monsterBall.png"
-	//};
-
-	//// 5枚生成
-	//for (uint32_t i = 0; i < 5; ++i) {
-	//	auto newSprite = std::make_unique<SpriteInstance>();
-	//	const std::string& texturePath = textures[i % 2];
-
-	//	std::string spriteName = "Sprite_" + std::to_string(i);
-	//	newSprite->Initialize(spriteManager_, texturePath, spriteName);
-
-	//	newSprite->SetSize({ 100.0f, 100.0f });
-	//	newSprite->SetPosition({ i * 2.0f, 0.0f });
-	//	sprites_.push_back(std::move(newSprite));
-	//}
-
-	// 3Dオブジェクトを配列で管理
-	/*const std::string modelFiles[] = { 
-		"Models/MonsterBall/monsterBall.obj", 
-		"Models/Terrain/terrain.obj", 
-		"Models/Plane/plane.gltf"
-	};
-
-	const std::string objectNames[] = { 
-		"MonsterBall", 
-		"terrain", 
-		"plane"
-	};
-
-	for (int i = 0; i < 3; ++i) {
-		auto obj = std::make_unique<Object3DInstance>();
-		obj->Initialize(
-			object3DManager_,
-			dxCore_,
-			"DistributionAssets/",
-			modelFiles[i],
-			objectNames[i]
-		);
-		obj->SetTranslate({ 0.0f, 0.0f, 0.0f });
-		object3DInstances_.push_back(std::move(obj));
-	}*/
 
 	// サウンドのロード
 	SoundManager::GetInstance()->LoadFile("fanfare", "Resources/Sounds/fanfare.wav");
 
-	//// Ringのテスト（角度範囲指定版）
-	//testRing_ = std::make_unique<PrimitiveMesh>();
-
-	//PrimitiveGenerator::RingParams ringParams;
-	//ringParams.outerRadius = 1.0f;
-	//ringParams.innerRadius = 0.0f;    // 内径0にすると円盤っぽくなる
-	//// 波打つ輪っか
-	//ringParams.divisions = 64;
-	//ringParams.outerRadiusPerDivision.clear();
-	//for (int i = 0; i < 64; ++i) {
-	//	float angle = i / 64.0f * 2.0f * std::numbers::pi_v<float>;
-	//	float wave = 1.0f + 0.2f * std::sin(angle * 5.0f);  // 5波
-	//	ringParams.outerRadiusPerDivision.push_back(wave);
-	//}
-	//ringParams.innerColor = { 1.0f, 1.0f, 1.0f, 1.0f };  // 中央：白不透明
-	//ringParams.outerColor = { 1.0f, 1.0f, 1.0f, 0.0f };  // 外側：白透明
-	//ringParams.startAngle = 0.0f;
-	//ringParams.endAngle = 2.0f * std::numbers::pi_v<float>;
-	//ringParams.uvHorizon = true;
-
-	//testRing_->Initialize(PrimitiveGenerator::CreateRing(ringParams));
-	//testRing_->SetTexture("Resources/Textures/white1x1.dds");
-	//testRing_->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
-	//testRing_->GetTransform().translate = { 0.0f, 8.0f, 0.0f };
-	////testRing_->SetUVScroll({ 0.0f, 1.0f });
-
-	//// Cylinderのテスト
-	//testCylinder_ = std::make_unique<PrimitiveMesh>();
-	//testCylinder_->Initialize(PrimitiveGenerator::CreateCylinder(
-	//	1.0f, 1.0f, 3.0f, 32,
-	//	{ 1.0f, 1.0f, 1.0f, 1.0f },
-	//	{ 1.0f, 1.0f, 1.0f, 1.0f }
-	//));
-	//testCylinder_->SetTexture("DistributionAssets/Textures/gradationLine.png");
-	//testCylinder_->SetBlendMode(PrimitivePipeline::kBlendModeNone);
-	//testCylinder_->GetTransform().translate = { 0.0f, 2.0f, 0.0f };
-	////testCylinder_->SetDepthWrite(true);
-	//testCylinder_->SetUVFlipV(true);
-	//testCylinder_->SetUVScroll({ 0.1f, 0.0f });
-	//testCylinder_->SetAlphaReference(0.5f);
-
 	auto sneakWalkModel = std::make_unique<Object3DInstance>();
 	sneakWalkModel->Initialize(
-		object3DManager_,
-		dxCore_,
+		GetObject3DManager(),
+		GetDxCore(),
 		"Resources/Models/Animated/SneakWalk",
 		"sneakWalk.mesh",
 		"sneakWalk"
 	);
 	sneakWalkModel->SetScale({ 1.0f, 1.0f, 1.0f });
 	sneakWalkModel->SetUseEnvironmentMap(true);
-	sneakWalkModel->SetEnvironmentCoefficient(0.5f);
-	object3DInstances_.push_back(std::move(sneakWalkModel));
-
+	sneakWalkModel->SetEnvironmentCoefficient(kSneakWalkEnvCoefficient);
+	AdoptDynamicObject(std::move(sneakWalkModel));
 
 	// sneakWalkのモデルとアニメーションの読み込み
 	sneakWalk = std::make_unique<AnimatedModelInstance>();
@@ -319,39 +295,16 @@ void DemoScene::Initialize() {
 	// sneakWalkのインスタンスを作成
 	sneakWalkInstance_= std::make_unique<AnimatedObject3DInstance>();
 	sneakWalkInstance_->Initialize(
-		object3DManager_,
-		skinningComputeManager_,
-		dxCore_,
-		srvManager_,
+		GetObject3DManager(),
+		GetSkinningComputeManager(),
+		GetDxCore(),
+		GetSRVManager(),
 		sneakWalk.get(),
 		"sneakWalk"
 	);
 	sneakWalkInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
 	sneakWalkInstance_->SetUseEnvironmentMap(true);
-	sneakWalkInstance_->SetEnvironmentCoefficient(0.5f);
-
-	//// AnimatedCubeのモデル＆アニメーション読み込み
-	//animatedCubeModel_ = std::make_unique<AnimatedModelInstance>();
-	//animatedCubeModel_->Initialize(
-	//	ModelManager::GetInstance()->GetModelCore(),
-	//	"DistributionAssets/Models/AnimatedCube",
-	//	"AnimatedCube.gltf"
-	//);
-
-	//// AnimatedCubeのインスタンスを作成
-	//animatedCubeInstance_ = std::make_unique<AnimatedObject3DInstance>();
-	//animatedCubeInstance_->Initialize(
-	//	object3DManager_,
-	//	skinningComputeManager_,
-	//	dxCore_,
-	//	srvManager_,
-	//	animatedCubeModel_.get(),
-	//	"AnimatedCube"
-	//);
-	//animatedCubeInstance_->SetTranslate({ 5.0f, 2.0f, 0.0f });
-	//animatedCubeInstance_->SetScale({ 1.0f, 1.0f, 1.0f });
-
-	//dxCore_->SetUseFixedFrameRate(false);
+	sneakWalkInstance_->SetEnvironmentCoefficient(kSneakWalkEnvCoefficient);
 
 	// Camera/RenderTextureはGameScene::GetCamera経由とGame::Initialize側で中央化済み
 	// ImGui への GPUParticleManager 通知も Game::Initialize で行う
@@ -365,14 +318,7 @@ void DemoScene::Initialize() {
 
 void DemoScene::Finalize() {
 	// EffectManager / GPUParticle の終了は Game::Finalize 側で実施
-
-	animatedCubeInstance_.reset();
-	animatedCubeModel_.reset();
-
-	testCylinder_.reset();
-	testRing_.reset();
-	sprites_.clear();
-	object3DInstances_.clear();
+	ClearAllDynamicEntities();
 	hitEffectPlanes_.clear();
 }
 
@@ -381,16 +327,16 @@ void DemoScene::Update() {
 	// DebugDraw 動作確認: グリッド + 球 + AABB + OBB + Cross + Spline
 	{
 		// Y=0 グリッド
-		DebugDraw::Grid({ 0,0,0 }, 20.0f, 1.0f, { 0.3f, 0.3f, 0.3f, 1.0f });
+		DebugDraw::Grid({ 0,0,0 }, kDebugGridSize, 1.0f, { kDebugGridGray, kDebugGridGray, kDebugGridGray, 1.0f });
 
 		// 原点の十字（X=赤, Y=緑, Z=青 はやらず単色の小さい目印）
-		DebugDraw::Cross({ 0,0,0 }, 0.5f, { 1.0f, 1.0f, 1.0f, 1.0f });
+		DebugDraw::Cross({ 0,0,0 }, kOriginCrossSize, { 1.0f, 1.0f, 1.0f, 1.0f });
 
 		// 黄色い球（半径1、segments=16）
-		DebugDraw::Sphere({ 3, 1, 0 }, 1.0f, { 1.0f, 0.9f, 0.2f, 1.0f });
+		DebugDraw::Sphere({ kDebugSpherePosX, 1, 0 }, 1.0f, { 1.0f, kDebugSphereColorG, kDebugSphereColorB, 1.0f });
 
 		// AABB
-		DebugDraw::AABB({ -4, 0, -1 }, { -2, 2, 1 }, { 0.4f, 1.0f, 0.4f, 1.0f });
+		DebugDraw::AABB({ -kDebugAabbMinX, 0, -1 }, { -kDebugAabbMaxX, kDebugAabbMaxY, 1 }, { kDebugAabbColorRB, 1.0f, kDebugAabbColorRB, 1.0f });
 
 		// OBB（XY平面で45度回転、Z軸はそのまま）
 		const float c45 = 0.70710678f;
@@ -399,7 +345,7 @@ void DemoScene::Update() {
 			{-c45, c45, 0.0f },
 			{ 0.0f, 0.0f, 1.0f },
 		};
-		DebugDraw::OBB({ 0, 1, -4 }, axes, { 1.0f, 0.5f, 1.0f }, { 0.4f, 0.8f, 1.0f, 1.0f });
+		DebugDraw::OBB({ 0, 1, -kDebugObbPosZ }, axes, { 1.0f, kDebugObbHalfSizeY, 1.0f }, { kDebugObbColorR, kDebugObbColorG, 1.0f, 1.0f });
 
 		// Catmull-Rom スプライン（PlayerRailを想定したサンプル制御点）
 		static const std::vector<Vector3> kRailCps = {
@@ -409,31 +355,31 @@ void DemoScene::Update() {
 			{ 5, 3, -4},
 			{ 7, 0, -8},
 		};
-		DebugDraw::CatmullRomSpline(kRailCps, { 1.0f, 1.0f, 0.4f, 1.0f }, 24);
+		DebugDraw::CatmullRomSpline(kRailCps, { 1.0f, 1.0f, kDebugSplineColorB, 1.0f }, kDebugSplineSegments);
 		// 制御点を小さなクロスで可視化
 		for (const auto& p : kRailCps) {
-			DebugDraw::Cross(p, 0.25f, { 1.0f, 0.6f, 0.6f, 1.0f });
+			DebugDraw::Cross(p, kControlPointCrossSize, { 1.0f, kControlPointCrossColorGB, kControlPointCrossColorGB, 1.0f });
 		}
 
 		// Ray（カメラから前方）
-		DebugDraw::Ray({ 0, 5, -8 }, { 0, 0, 1 }, 5.0f, { 1.0f, 1.0f, 0.0f, 1.0f });
+		DebugDraw::Ray({ 0, kDebugRayOriginY, -kDebugRayOriginZ }, { 0, 0, 1 }, kDebugRayLength, { 1.0f, 1.0f, 0.0f, 1.0f });
 	}
 
 	// すべての動的スプラインを DebugDraw キューに積む（Visible(Debug) が ON のもののみ描画される）
-	for (const auto& sp : dynamicSplines_) {
+	for (const auto& sp : GetDynamicSplineList()) {
 		if (sp) sp->DrawDebug();
 	}
 
 	// アクション入力のログ出力（ImGuiのLogウィンドウで確認）
-	if (auto* actionMap = input_->GetActionMap()) {
+	if (auto* actionMap = GetInput()->GetActionMap()) {
 		for (int i = 0; i < static_cast<int>(Action::Count); ++i) {
 			if (actionMap->IsTriggered(i)) {
-				LogBuffer::Instance().Add(
+				LogBuffer::GetInstance()->Add(
 					std::string("Action TRIGGER: ") + std::string(GetActionName(static_cast<Action>(i))),
 					LogBuffer::Level::Info);
 			}
 			if (actionMap->IsReleased(i)) {
-				LogBuffer::Instance().Add(
+				LogBuffer::GetInstance()->Add(
 					std::string("Action RELEASE: ") + std::string(GetActionName(static_cast<Action>(i))),
 					LogBuffer::Level::Info);
 			}
@@ -445,23 +391,23 @@ void DemoScene::Update() {
 	UseQRCodeReader(true);
 
 	// --- キーボード入力 ---
-	if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_SPACE)) {
 		// スペースキーを押した瞬間
 	}
 
-	if (input_->GetKeyboard()->PushKey(DIK_W)) {
+	if (GetInput()->GetKeyboard()->PushKey(DIK_W)) {
 		// Wキーを押している間
 	}
 
 	// マウス入力
-	MouseInput* mouse = input_->GetMouse();
+	MouseInput* mouse = GetInput()->GetMouse();
 
 	if (mouse->IsButtonTriggered(MouseInput::Button::Left)) {
 		// 左クリックした瞬間
 	}
 
 	// --- コントローラー入力 ---
-	ControllerInput* controller = input_->GetController();
+	ControllerInput* controller = GetInput()->GetController();
 
 	if (controller->IsConnected()) {
 		if (controller->IsButtonTriggered(XINPUT_GAMEPAD_A)) {
@@ -473,38 +419,38 @@ void DemoScene::Update() {
 		float moveY = leftStick.y * leftStick.magnitude;
 
 		if (controller->IsButtonTriggered(XINPUT_GAMEPAD_Y)) {
-			controller->SetVibration(32000, 32000);
+			controller->SetVibration(kVibrationStrength, kVibrationStrength);
 		}
 	}
 
 	// キーボードの入力処理
-	if (input_->GetKeyboard()->TriggerKey(DIK_0)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_0)) {
 		Debug::Log("trigger [0]");
 	}
 
-	if (input_->GetKeyboard()->TriggerKey(DIK_1)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_1)) {
 		SoundManager::GetInstance()->Play2DSound("fanfare");
 		Debug::Log("trigger [1] - 2D Sound Play");
 	}
 
-	if (input_->GetKeyboard()->TriggerKey(DIK_2)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_2)) {
 		SoundManager::GetInstance()->Stop2DSound("fanfare");
 		Debug::Log("trigger [2] - 2D Sound Stop");
 	}
 
 	// 3キー: AnimatedCubeの右側(5, 2, 0)で3Dサウンドを再生
     // → 右スピーカーからより大きく聴こえるはず
-	if (input_->GetKeyboard()->TriggerKey(DIK_3)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_3)) {
 		if (sound3DHandle_ != 0) {
 			SoundManager::GetInstance()->Stop3DSound(sound3DHandle_);
 		}
 		sound3DHandle_ = SoundManager::GetInstance()->Play3DSound(
-			"fanfare", { -5.0f, 5.0f, 5.0f });
+			"fanfare", { -kSound3DPosX, kSound3DPosY, kSound3DPosZ });
 		Debug::Log("trigger [3] - 3D Sound Play at (5, 2, 0)");
 	}
 
 	// 4キー: 3Dサウンドを停止
-	if (input_->GetKeyboard()->TriggerKey(DIK_4)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_4)) {
 		SoundManager::GetInstance()->Stop3DSound(sound3DHandle_);
 		sound3DHandle_ = 0;
 		Debug::Log("trigger [4] - 3D Sound Stop");
@@ -512,7 +458,7 @@ void DemoScene::Update() {
 
 	// 5キー: 音源が円周上を回り続けるサウンドをON/OFF
 	// → 左右の定位変化 + ドップラー効果による音程変化が聴こえるはず
-	if (input_->GetKeyboard()->TriggerKey(DIK_5)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_5)) {
 		sound3DOrbitActive_ = !sound3DOrbitActive_;
 		if (!sound3DOrbitActive_ && sound3DOrbitHandle_ != 0) {
 			SoundManager::GetInstance()->Stop3DSound(sound3DOrbitHandle_);
@@ -530,7 +476,7 @@ void DemoScene::Update() {
 
 		Vector3 orbitPos = {
 			orbitRadius * std::cosf(angle),
-			3.0f,
+			kOrbitSoundHeight,
 			orbitRadius * std::sinf(angle)
 		};
 		// 接線方向の速度（ドップラー計算に使う）
@@ -543,7 +489,7 @@ void DemoScene::Update() {
 		if (sound3DOrbitHandle_ == 0) {
 			// まだ再生していなければ開始
 			sound3DOrbitHandle_ = SoundManager::GetInstance()->Play3DSound(
-				"fanfare", orbitPos, orbitVel, 30.0f);
+				"fanfare", orbitPos, orbitVel, kOrbitSoundDistanceScale);
 		} else {
 			// 毎フレーム位置を更新
 			SoundManager::GetInstance()->UpdateEmitter(sound3DOrbitHandle_, orbitPos, orbitVel);
@@ -551,7 +497,7 @@ void DemoScene::Update() {
 	}
 
 	// HキーでHitEffect発生
-	if (input_->GetKeyboard()->TriggerKey(DIK_H)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_H)) {
 		// --- Plane版 HitEffect（8枚の星型） ---
 		const int planeCount = 8;
 		const Vector3 hitPos = { 0.0f, 5.0f, 0.0f };
@@ -566,7 +512,7 @@ void DemoScene::Update() {
 			p.mesh->SetBlendMode(PrimitivePipeline::kBlendModeAdd);
 
 			// 縦長スケール（初期値）
-			p.initialScale = { 0.05f, 1.0f, 1.0f };
+			p.initialScale = { kHitPlaneInitialWidth, 1.0f, 1.0f };
 			p.mesh->GetTransform().scale = p.initialScale;
 
 			// 位置
@@ -580,7 +526,7 @@ void DemoScene::Update() {
 			p.mesh->GetTransform().rotate = { 0.0f, 0.0f, angle };
 
 			// 寿命
-			p.lifeTime = 0.6f;
+			p.lifeTime = kHitPlaneLifeTime;
 			p.currentTime = 0.0f;
 
 			hitEffectPlanes_.push_back(std::move(p));
@@ -603,7 +549,7 @@ void DemoScene::Update() {
 		float t = it->currentTime / it->lifeTime;
 
 		// スケール：初期サイズ → 3倍に拡大（EaseOutCubic）
-		float scaleFactor = 1.0f + 2.0f * Easing::Apply(Easing::Type::EaseOutCubic, t);
+		float scaleFactor = 1.0f + kHitPlaneScaleGrowth * Easing::Apply(Easing::Type::EaseOutCubic, t);
 		it->mesh->GetTransform().scale = {
 			it->initialScale.x * scaleFactor,
 			it->initialScale.y * scaleFactor,
@@ -620,35 +566,15 @@ void DemoScene::Update() {
 		++it;
 	}
 
-	// Update内
-	if (testRing_) testRing_->Update(camera_.get());
-
-	// Update内
-	if (testCylinder_) testCylinder_->Update(camera_.get());
-
-	if (input_->GetKeyboard()->TriggerKey(DIK_P)) {
-		dxCore_->SetUseFixedFrameRate(false);
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_P)) {
+		GetDxCore()->SetUseFixedFrameRate(false);
 	}
 
 	// Fキーで場のON/OFF切り替え
-	if (input_->GetKeyboard()->TriggerKey(DIK_F)) {
+	if (GetInput()->GetKeyboard()->TriggerKey(DIK_F)) {
 		bool current = ParticleManager::GetInstance()->IsAccelerationFieldEnabled();
 		ParticleManager::GetInstance()->SetAccelerationFieldEnabled(!current);
 	}
-
-	//if (sprite_) {
-	//	sprite_->SetAnchorPoint({ 0.f, 0.0f });
-	//	sprite_->SetPosition({ 0.0f,0.0f });
-	//	sprite_->SetSize({ 200.0f,200.0f });
-	//	sprite_->Update();
-	//	//sprite_->SetIsFlipX(true);
-
-	//	// 回転テスト
-	//	float rotation = sprite_->GetRotation();
-	//	rotation += 0.01f;
-	//	sprite_->SetRotation(rotation);
-	//	sprite_->Update();
-	//}
 
 	// SoundManager の UpdateListener / Update は Framework が毎フレーム呼ぶ（ここでは呼ばない）
 
@@ -658,16 +584,16 @@ void DemoScene::Update() {
 	UpdateDebugCameraIfActive();
 
 	// 3Dオブジェクトの更新
-	for (const auto& obj : object3DInstances_) {
+	for (const auto& obj : GetDynamicObjects()) {
 		obj->Update();
 	}
 
 	// SceneEditorWindow からドロップで追加された動的エンティティ
 	UpdateDynamicPrimitives();
-	for (auto& a : dynamicAnimated_) {
+	for (auto& a : GetDynamicAnimated()) {
 		a->Update(GetScaledDeltaTime());
 	}
-	for (auto& s : dynamicSprites_) {
+	for (auto& s : GetDynamicSprites()) {
 		s->Update();
 	}
 
@@ -675,11 +601,6 @@ void DemoScene::Update() {
 	if (sneakWalkInstance_) {
 		sneakWalkInstance_->Update(GetScaledDeltaTime());
 	}
-
-	//// アニメーション付きオブジェクトの更新
-	//if (animatedCubeInstance_) {
-	//	animatedCubeInstance_->Update(GetScaledDeltaTime());
-	//}
 
 	// Skybox更新を追加
 	skybox_->Update();
@@ -690,29 +611,6 @@ void DemoScene::Update() {
 	// 全シーン共通の EffectManager + GPUParticle を更新
 	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
 
-	//// 1秒間に発生させる量を自動制御
-	//emitTimer_ += GetScaledDeltaTime();
-	//float emitRate = ParticleManager::GetInstance()->GetEmitterSettings().emitRate;
-	//if (emitRate > 0.0f) {
-	//	float emitInterval = 1.0f / emitRate;
-	//	while (emitTimer_ >= emitInterval) {
-	//		ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
-	//		emitTimer_ -= emitInterval;
-	//	}
-	//}
-
-	//// circleのパーティクルを常に発生させる
-	//ParticleManager::GetInstance()->Emit("circle", { 0.0f, 0.0f, 0.0f }, 1);
-
-	//// キー入力でパーティクル発生
-	//if (input_->GetKeyboard()->TriggerKey(DIK_SPACE)) {
-	//	ParticleManager::GetInstance()->Emit("uvChecker", { 0.0f, 0.0f, 0.0f }, 10);
-	//}
-
-	for (const auto& s : sprites_) {
-		s->Update();
-	}
-
 	// debug camera の更新は GameScene::UpdateDebugCameraIfActive() で行う
 }
 
@@ -720,31 +618,31 @@ void DemoScene::Draw() {
 
 	// DSVを切り替えてSkybox描画
 	// 必ず最初に背景から描画していくこと
-	auto commandList = dxCore_->GetCommandList();
+	auto commandList = GetDxCore()->GetCommandList();
 	auto rtvHandle = Game::GetPostEffect()->GetSceneRenderTarget()->GetRTVHandle();
 
 	// Skybox描画は深度を書き込まないのでRead-Only DSVで問題なし
-	auto readOnlyDsv = dxCore_->GetReadOnlyDsvHandle();
+	auto readOnlyDsv = GetDxCore()->GetReadOnlyDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &readOnlyDsv);
 
-	skyboxManager_->DrawSetting();
-	skybox_->Draw(dxCore_);
+	GetSkyboxManager()->DrawSetting();
+	skybox_->Draw(GetDxCore());
 
 	// Object3D以降は通常DSVに切り替え（深度書き込みを有効化）
-	auto normalDsv = dxCore_->GetDsvHeap()->GetCPUDescriptorHandleForHeapStart();
+	auto normalDsv = GetDxCore()->GetDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 
 	// 3Dオブジェクトの共通描画設定
-	object3DManager_->DrawSetting();
-	LightManager::GetInstance()->BindLights(dxCore_->GetCommandList());
+	GetObject3DManager()->DrawSetting();
+	LightManager::GetInstance()->BindLights(GetDxCore()->GetCommandList());
 
 	// 3Dオブジェクト描画
-	for (const auto& obj : object3DInstances_) {
-		obj->Draw(dxCore_);
+	for (const auto& obj : GetDynamicObjects()) {
+		obj->Draw(GetDxCore());
 	}
 	// 動的アニメーションモデル
-	for (auto& a : dynamicAnimated_) {
-		a->Draw(dxCore_);
+	for (auto& a : GetDynamicAnimated()) {
+		a->Draw(GetDxCore());
 	}
 
 	// 動的プリミティブ
@@ -752,24 +650,12 @@ void DemoScene::Draw() {
 
 	// アニメーション付きオブジェクトの描画
 	if (sneakWalkInstance_) {
-		sneakWalkInstance_->Draw(dxCore_);
-	}
-
-	if (animatedCubeInstance_) {
-		animatedCubeInstance_->Draw(dxCore_);
-	}
-
-	if (testCylinder_) {
-		testCylinder_->Draw();
+		sneakWalkInstance_->Draw(GetDxCore());
 	}
 
 	// HitEffectPlanes の描画
 	for (auto& p : hitEffectPlanes_) {
 		p.mesh->Draw();
-	}
-
-	if (testRing_) { 
-		testRing_->Draw(); 
 	}
 
 	// パーティクル描画
@@ -781,16 +667,12 @@ void DemoScene::Draw() {
 #ifdef USE_IMGUI
 	// Skeletonのデバッグ描画（全モデル描画完了後にまとめて行う）
 	if (sneakWalkInstance_) {
-		sneakWalkInstance_->DrawSkeletonDebug(dxCore_);
-	}
-
-	if (animatedCubeInstance_) {
-		animatedCubeInstance_->DrawSkeletonDebug(dxCore_);
+		sneakWalkInstance_->DrawSkeletonDebug(GetDxCore());
 	}
 
 	// SceneEditorWindow からドロップで追加された動的アニメーションモデルも対象
-	for (auto& a : dynamicAnimated_) {
-		a->DrawSkeletonDebug(dxCore_);
+	for (auto& a : GetDynamicAnimated()) {
+		a->DrawSkeletonDebug(GetDxCore());
 	}
 #endif
 
@@ -802,13 +684,9 @@ void DemoScene::Draw() {
 	LineRenderer::GetInstance()->Draw();
 
 	// スプライト描画
-	spriteManager_->DrawSetting();
-	if (sprite_) sprite_->Draw();
-	for (const auto& s : sprites_) {
-		s->Draw();
-	}
+	GetSpriteManager()->DrawSetting();
 	// 動的スプライト
-	for (auto& s : dynamicSprites_) {
+	for (auto& s : GetDynamicSprites()) {
 		s->Draw();
 	}
 
@@ -819,18 +697,13 @@ void DemoScene::Draw() {
 // 動的オブジェクトの追加・削除（SceneEditorWindow 経由）
 // =============================================================
 // 動的エンティティの Add/Remove/Instantiate は GameScene に集約済み。
-// ここでは DemoScene 固有の名前付きメンバ（sprite_ / sprites_ / sneakWalkInstance_ 等）も
+// ここでは DemoScene 固有の名前付きメンバ（sneakWalkInstance_）も
 // IsDynamicObject の対象に含めるための薄い override のみ残す。
 
 #ifdef USE_IMGUI
 bool DemoScene::IsDynamicObject(IImGuiEditable* editable) const {
 	if (GameScene::IsDynamicObject(editable)) return true;
-	for (const auto& s : sprites_) {
-		if (static_cast<IImGuiEditable*>(s.get()) == editable) return true;
-	}
-	if (sprite_ && static_cast<IImGuiEditable*>(sprite_.get()) == editable) return true;
 	if (sneakWalkInstance_ && static_cast<IImGuiEditable*>(sneakWalkInstance_.get()) == editable) return true;
-	if (animatedCubeInstance_ && static_cast<IImGuiEditable*>(animatedCubeInstance_.get()) == editable) return true;
 	return false;
 }
 #endif

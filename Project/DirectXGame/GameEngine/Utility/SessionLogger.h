@@ -10,6 +10,7 @@
 /// カテゴリ別ファイル（input/state/event/gfx/error/session）を出力する。
 /// 1行1レコード形式: "HH:MM:SS.mmm CAT LEVEL message"
 /// S.U.N.D.A.Y. が追尾・解析することを前提にした設計。
+/// シングルトンにする理由：1 回の起動のログを 1 つのフォルダ・ファイルにまとめるため。
 /// </summary>
 class SessionLogger {
 public:
@@ -40,9 +41,10 @@ public:
     };
 
     /// <summary>
-    /// シングルトンインスタンスの取得
+    /// 唯一のインスタンス
     /// </summary>
-    static SessionLogger& Instance();
+    /// <returns>インスタンス</returns>
+    static SessionLogger* GetInstance();
 
     /// <summary>
     /// セッションフォルダを作成し各カテゴリのファイルを開く。
@@ -51,14 +53,20 @@ public:
     void Initialize();
 
     /// <summary>
-    /// 1レコード出力。カテゴリ別の最低レベルで間引かれる。
+    /// 1 レコード出力して flush する（スレッド安全）。カテゴリ別の最低レベルより軽いもの・Initialize 前は捨てる。
+    /// 末尾の改行は取り除く
     /// </summary>
+    /// <param name="category">カテゴリ（出力するファイル）</param>
+    /// <param name="level">レベル</param>
+    /// <param name="message">本文</param>
     void Write(Category category, Level level, const std::string& message);
 
     /// <summary>
     /// カテゴリごとの「出力する最低レベル」を設定する。
     /// 例: Info を指定すると Debug/Trace は捨てられる。
     /// </summary>
+    /// <param name="category">カテゴリ</param>
+    /// <param name="minLevel">出力する最低レベル</param>
     void SetCategoryLevel(Category category, Level minLevel);
 
     /// <summary>
@@ -70,10 +78,12 @@ public:
     /// 今回のセッションフォルダパス（例: "Logs/2026-06-11_212430"）。
     /// 未初期化なら空文字。
     /// </summary>
+    /// <returns>セッションフォルダのパス</returns>
     const std::string& GetSessionDir() const { return sessionDir_; }
 
 private:
     SessionLogger() = default;
+    /// <summary>Finalize を呼んでファイルを閉じる</summary>
     ~SessionLogger();
     SessionLogger(const SessionLogger&) = delete;
     SessionLogger& operator=(const SessionLogger&) = delete;

@@ -8,9 +8,28 @@
 #include <cmath>
 
 namespace {
+	// 線分の長さの 2 乗がこれ未満なら点とみなす
+	constexpr float kDegenerateSegmentLengthSq = 1e-6f;
+
+	/// <summary>内積</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a・b</returns>
 	inline float Dot3(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+	/// <summary>ベクトルの差</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a - b</returns>
 	inline Vector3 SubV(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+	/// <summary>ベクトルの和</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a + b</returns>
 	inline Vector3 AddV(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+	/// <summary>ベクトルのスカラー倍</summary>
+	/// <param name="a">ベクトル</param>
+	/// <param name="s">倍率</param>
+	/// <returns>a * s</returns>
 	inline Vector3 MulS(const Vector3& a, float s) { return { a.x * s, a.y * s, a.z * s }; }
 }
 
@@ -51,7 +70,7 @@ Vector3 ClosestPointOnOBB(const Vector3& p, const Vector3& obbCenter,
 Vector3 ClosestPointOnSegment(const Vector3& a, const Vector3& b, const Vector3& p) {
 	Vector3 ab = SubV(b, a);
 	float denom = Dot3(ab, ab);
-	if (denom < 1e-6f) return a;
+	if (denom < kDegenerateSegmentLengthSq) return a;
 	float t = std::clamp(Dot3(SubV(p, a), ab) / denom, 0.0f, 1.0f);
 	return AddV(a, MulS(ab, t));
 }

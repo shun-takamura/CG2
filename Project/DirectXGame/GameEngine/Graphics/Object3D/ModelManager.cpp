@@ -1,8 +1,6 @@
 #include "ModelManager.h"
 #include <thread>
 
-//ModelManager* ModelManager::instance = nullptr;
-
 void ModelManager::Initialize(DirectXCore* dxCore)
 {
 	modelCore_ = std::make_unique<ModelCore>();

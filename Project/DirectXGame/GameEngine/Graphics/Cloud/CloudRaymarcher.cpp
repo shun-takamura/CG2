@@ -3,6 +3,7 @@
 #include "Camera.h"
 #include "DirectXCore.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Log.h"
 #include "MathUtility.h"
 #include "RenderTexture.h"
@@ -40,6 +41,54 @@ namespace {
 	// 時間方向の積み重ねを捨てる、1 フレームのカメラの移動量 [m]（ワープ・シーンの切り替え）
 	constexpr float kHistoryResetDistance = 60.0f;
 	constexpr DXGI_FORMAT kSceneFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	constexpr size_t kVec4ComponentCount = 4;
+	// 定数バッファを 256 バイト境界へ切り上げるためのマスク
+	constexpr int kConstantBufferAlignMask = 255;
+	// 静的サンプラーの数（s0〜s2）と、s0 の異方性の最大値
+	constexpr UINT kStaticSamplerCount = 3;
+	constexpr UINT kNoiseMaxAnisotropy = 16;
+	// 2 枚目の RT を使う時の RT の数（色＋深度）
+	constexpr UINT kDualRenderTargetCount = 2;
+	// 雲の RT の解像度の倍率の下限
+	constexpr float kMinResolutionScale = 0.125f;
+	// 縦穴の中心線として扱うのに要る点の数の下限
+	constexpr size_t kMinShaftPoints = 2;
+	// 3D ノイズを上へ流す速さ [m/s]
+	constexpr float kVolumeRiseSpeed = 0.4f;
+	// 3D ノイズのずらしを 0 へ戻す大きさ [m]（精度を保つため）
+	constexpr float kVolumeOffsetWrap = 1.0e5f;
+	// 経過時間を巻き戻す周期 [秒]（1 時間）
+	constexpr float kTimeWrapSeconds = 3600.0f;
+	// smoothstep（3t² − 2t³）の係数
+	constexpr float kSmoothstepSquareCoef = 3.0f;
+	constexpr float kSmoothstepCubeCoef = 2.0f;
+	// 最も近い距離を探す時の最初の値 [m]（十分に遠い）
+	constexpr float kFarDistance = 1e9f;
+	// 縦穴の区間の長さの 2 乗の下限（0 割りを防ぐ）
+	constexpr float kMinSegmentLengthSq = 1e-3f;
+	// ノイズの床（雲にならない下限）の上限
+	constexpr float kMaxNoiseFloor = 0.99f;
+	// 光の散乱の偏り g の上限
+	constexpr float kMaxPhaseG = 0.95f;
+	// 浅い角度の補正の下限と、そのべき指数の範囲
+	constexpr float kMinGrazing = 0.001f;
+	constexpr float kMinGrazingPower = 0.5f;
+	constexpr float kMaxGrazingPower = 4.0f;
+	// レイマーチの歩数の下限・上限（ボリュームだけは上限を広く取る）と、高さの区切りの数の上限
+	constexpr int kMinMarchSteps = 4;
+	constexpr int kMaxMarchSteps = 128;
+	constexpr int kMaxVolSteps = 256;
+	constexpr int kMaxHvSegments = 4;
+	// 小さな係数（べき指数・傾き・混ぜる割合など）の下限（0 割り・0 乗を防ぐ）
+	constexpr float kMinFineParam = 0.01f;
+	// 長さ [m]・倍率の下限（0 割りを防ぐ）
+	constexpr float kMinCoarseParam = 0.1f;
+	// レイマーチで進む距離の上限の下限 [m]
+	constexpr float kMinMaxDistance = 10.0f;
+	// 縦穴の範囲の余白（壁の厚みに対する倍率）
+	constexpr float kShaftPadWallDepthRatio = 1.5f;
+	// 画面いっぱいの三角形の頂点の数
+	constexpr UINT kFullscreenTriangleVertexCount = 3;
 
 	// ルートパラメータ番号
 	enum RootParam : UINT {
@@ -55,13 +104,28 @@ namespace {
 		kRootCount
 	};
 
+	/// <summary>小数部だけを取り 0〜1 に折り返す</summary>
+	/// <param name="v">値</param>
+	/// <returns>0 以上 1 未満の値</returns>
 	float Wrap01(float v) { return v - std::floor(v); }
 
+	/// <summary>ベクトルの差</summary>
+	/// <param name="a">左辺</param>
+	/// <param name="b">右辺</param>
+	/// <returns>a - b</returns>
 	Vector3 Sub(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
 
+	/// <summary>2 点の距離</summary>
+	/// <param name="a">点</param>
+	/// <param name="b">点</param>
+	/// <returns>距離</returns>
 	float Distance(const Vector3& a, const Vector3& b) { return Length(Sub(a, b)); }
 
-	// 折れ線が高さ y を最初に横切る点
+	/// <summary>折れ線が高さ y を最初に横切る点を求める</summary>
+	/// <param name="points">折れ線の点</param>
+	/// <param name="y">高さ [m]</param>
+	/// <param name="out">交点の書き込み先</param>
+	/// <returns>横切れば true</returns>
 	bool CrossHeight(const std::vector<Vector3>& points, float y, Vector3& out) {
 		for (size_t i = 0; i + 1 < points.size(); ++i) {
 			const Vector3& a = points[i];
@@ -72,29 +136,6 @@ namespace {
 			return true;
 		}
 		return false;
-	}
-
-	Vector2 ReadVec2(const JsonValue& j, const Vector2& fallback) {
-		if (!j.IsArray() || j.Size() < 2) return fallback;
-		return { static_cast<float>(j[0].AsDouble(fallback.x)), static_cast<float>(j[1].AsDouble(fallback.y)) };
-	}
-	Vector3 ReadVec3(const JsonValue& j, const Vector3& fallback) {
-		if (!j.IsArray() || j.Size() < 3) return fallback;
-		return { static_cast<float>(j[0].AsDouble(fallback.x)), static_cast<float>(j[1].AsDouble(fallback.y)),
-			static_cast<float>(j[2].AsDouble(fallback.z)) };
-	}
-	JsonValue WriteVec2(const Vector2& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		return a;
-	}
-	JsonValue WriteVec3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
 	}
 }
 
@@ -135,7 +176,7 @@ void CloudRaymarcher::Initialize(DirectXCore* dxCore, SRVManager* srvManager, ui
 	compositePipeline_ = CreatePipelineState(L"Resources/Shaders/Cloud/CloudComposite.PS.hlsl", kSceneFormat, true);
 	CreateTarget();
 
-	constantsResource_ = dxCore_->CreateBufferResource((sizeof(ConstantsForGPU) + 255) & ~255);
+	constantsResource_ = dxCore_->CreateBufferResource((sizeof(ConstantsForGPU) + kConstantBufferAlignMask) & ~kConstantBufferAlignMask);
 	constantsResource_->Map(0, nullptr, reinterpret_cast<void**>(&constantsData_));
 	*constantsData_ = ConstantsForGPU{};
 }
@@ -216,8 +257,8 @@ void CloudRaymarcher::CreateRootSignature()
 	}
 
 	// s0 = ラップ・線形（ノイズ）, s1 = クランプ・点（深度）, s2 = クランプ・線形（cubemap / 雲の RT の拡大）
-	D3D12_STATIC_SAMPLER_DESC samplers[3] = {};
-	for (UINT i = 0; i < 3; ++i) {
+	D3D12_STATIC_SAMPLER_DESC samplers[kStaticSamplerCount] = {};
+	for (UINT i = 0; i < kStaticSamplerCount; ++i) {
 		samplers[i].ShaderRegister = i;
 		samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		samplers[i].MaxLOD = D3D12_FLOAT32_MAX;
@@ -229,7 +270,7 @@ void CloudRaymarcher::CreateRootSignature()
 	}
 	// s0 は異方性 16（雲海の上面を SampleGrad で読む時に、浅い角度の奥行き方向だけをぼかす）。SampleLevel でも使える
 	samplers[0].Filter = D3D12_FILTER_ANISOTROPIC;
-	samplers[0].MaxAnisotropy = 16;
+	samplers[0].MaxAnisotropy = kNoiseMaxAnisotropy;
 	samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -293,7 +334,7 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> CloudRaymarcher::CreatePipelineState
 	desc.RasterizerState = rasterizer;
 	desc.DepthStencilState = depth;
 	desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-	desc.NumRenderTargets = (rtvFormat2 == DXGI_FORMAT_UNKNOWN) ? 1 : 2;
+	desc.NumRenderTargets = (rtvFormat2 == DXGI_FORMAT_UNKNOWN) ? 1 : kDualRenderTargetCount;
 	desc.RTVFormats[0] = rtvFormat;
 	desc.RTVFormats[1] = rtvFormat2;
 	desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -309,7 +350,7 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> CloudRaymarcher::CreatePipelineState
 void CloudRaymarcher::CreateTarget()
 {
 	if (target_) target_->Finalize();
-	targetScale_ = std::clamp(params_.resolutionScale, 0.125f, 1.0f);
+	targetScale_ = std::clamp(params_.resolutionScale, kMinResolutionScale, 1.0f);
 	const uint32_t width = (std::max)(1u, static_cast<uint32_t>(screenWidth_ * targetScale_));
 	const uint32_t height = (std::max)(1u, static_cast<uint32_t>(screenHeight_ * targetScale_));
 	const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -329,7 +370,7 @@ void CloudRaymarcher::CreateTarget()
 void CloudRaymarcher::SetShaftPath(const std::vector<Vector3>& points)
 {
 	shaftPoints_.clear();
-	if (points.size() >= 2) {
+	if (points.size() >= kMinShaftPoints) {
 		// 16 点に収まるよう等間隔に間引く（端は必ず残す）
 		const size_t n = (std::min)(points.size(), static_cast<size_t>(kShaftPointMax));
 		for (size_t i = 0; i < n; ++i) {
@@ -363,12 +404,12 @@ void CloudRaymarcher::Update(float deltaTime)
 	// 3D ノイズは m 単位でずらす（周期がそろわないので UV で折り返さない。1e5m で戻す＝6m/s で 4 時間以上）
 	volOffset_.x -= shapeWind.x * deltaTime;
 	volOffset_.z -= shapeWind.y * deltaTime;
-	volOffset_.y -= 0.4f * deltaTime;
+	volOffset_.y -= kVolumeRiseSpeed * deltaTime;
 	for (float* v : { &volOffset_.x, &volOffset_.y, &volOffset_.z }) {
-		if (std::fabs(*v) > 1.0e5f) *v = 0.0f;
+		if (std::fabs(*v) > kVolumeOffsetWrap) *v = 0.0f;
 	}
 	// 3D ノイズは時間×風で直接ずらす（周期が無いので折り返せない）。長時間で精度が落ちないよう 1 時間で戻す
-	if (time_ > 3600.0f) time_ -= 3600.0f;
+	if (time_ > kTimeWrapSeconds) time_ -= kTimeWrapSeconds;
 }
 
 float CloudRaymarcher::ComputeVolumeWeight(const Vector3& eye) const
@@ -376,24 +417,24 @@ float CloudRaymarcher::ComputeVolumeWeight(const Vector3& eye) const
 	const auto weightAt = [&](const Vector3& center, float inner, float outer) {
 		outer = (std::max)(outer, inner + 1.0f);
 		const float t = std::clamp((Distance(eye, center) - inner) / (outer - inner), 0.0f, 1.0f);
-		return 1.0f - t * t * (3.0f - 2.0f * t);
+		return 1.0f - t * t * (kSmoothstepSquareCoef - kSmoothstepCubeCoef * t);
 	};
 	float w = 0.0f;
 	if (hasEntry_) w = (std::max)(w, weightAt(shaftEntry_, params_.volumeZoneInner, params_.volumeZoneOuter));
 	if (hasExit_) w = (std::max)(w, weightAt(shaftExit_, params_.exitZoneInner, params_.exitZoneOuter));
 
 	// 縦穴の中（層の高さの中で、中心線から半径以内）にいる間は volumeShaftWeight。壁の手前がちぎれたもやになり、筒の見通しは残る
-	if (shaftPoints_.size() >= 2 && eye.y <= params_.top && eye.y >= params_.bottom) {
-		float best = 1e9f;
+	if (shaftPoints_.size() >= kMinShaftPoints && eye.y <= params_.top && eye.y >= params_.bottom) {
+		float best = kFarDistance;
 		for (size_t i = 0; i + 1 < shaftPoints_.size(); ++i) {
 			const Vector3 a = shaftPoints_[i];
 			const Vector3 ab = Sub(shaftPoints_[i + 1], a);
-			const float len2 = (std::max)(Dot(ab, ab), 1e-3f);
+			const float len2 = (std::max)(Dot(ab, ab), kMinSegmentLengthSq);
 			const float t = std::clamp(Dot(Sub(eye, a), ab) / len2, 0.0f, 1.0f);
 			best = (std::min)(best, Distance(eye, { a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t }));
 		}
 		const float x = std::clamp((best - params_.shaftRadius) / (std::max)(params_.volumeShaftBlend, 1.0f), 0.0f, 1.0f);
-		w = (std::max)(w, (1.0f - x * x * (3.0f - 2.0f * x)) * params_.volumeShaftWeight);
+		w = (std::max)(w, (1.0f - x * x * (kSmoothstepSquareCoef - kSmoothstepCubeCoef * x)) * params_.volumeShaftWeight);
 	}
 	return w;
 }
@@ -415,20 +456,20 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.bottom = (std::min)(p.bottom, p.top - 1.0f);
 	c.seaDepth = (std::max)(p.seaDepth, 1.0f);
 	c.bottomFade = (std::max)(p.bottomFade, 1.0f);
-	c.noiseFloor = std::clamp(p.noiseFloor, 0.0f, 0.99f);
+	c.noiseFloor = std::clamp(p.noiseFloor, 0.0f, kMaxNoiseFloor);
 	c.jitter = std::clamp(p.jitter, 0.0f, 1.0f);
 	c.wrap = std::clamp(p.wrap, 0.0f, 1.0f);
 	c.valley = std::clamp(p.valley, 0.0f, 1.0f);
-	c.valleyPow = (std::max)(p.valleyPow, 0.01f);
-	c.traceSlope = (std::max)(p.traceSlope, 0.01f);
-	c.traceEpsilon = (std::max)(p.traceEpsilon, 0.01f);
-	c.shaftWallBlend = (std::max)(p.shaftWallBlend, 0.1f);
+	c.valleyPow = (std::max)(p.valleyPow, kMinFineParam);
+	c.traceSlope = (std::max)(p.traceSlope, kMinFineParam);
+	c.traceEpsilon = (std::max)(p.traceEpsilon, kMinFineParam);
+	c.shaftWallBlend = (std::max)(p.shaftWallBlend, kMinCoarseParam);
 	c.shaftDarkness = std::clamp(p.shaftDarkness, 0.0f, 1.0f);
 	c.undersideBright = std::clamp(p.undersideBright, 0.0f, 1.0f);
 	c.capTop = (std::max)(p.capTop, 0.0f);
 	c.floorDepth = (std::max)(p.floorDepth, 1.0f);
 	c.capBottom = (std::max)(p.capBottom, 0.0f);
-	c.erosionSharp = (std::max)(p.erosionSharp, 0.01f);
+	c.erosionSharp = (std::max)(p.erosionSharp, kMinFineParam);
 	c.lightExtinction = (std::max)(p.lightExtinction, 0.0f);
 	c.shapeOffset = shapeOffset_;
 	c.mokoOffset = mokoOffset_;
@@ -438,13 +479,13 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.maskTiling = 1.0f / (std::max)(p.maskScale, 1.0f);
 	c.mokoWeight = std::clamp(p.mokoWeight, 0.0f, 1.0f);
 	c.mokoLodBias = (std::max)(p.mokoLodBias, 0.0f);
-	c.grazingMin = std::clamp(p.grazingMin, 0.001f, 1.0f);
-	c.grazingPower = std::clamp(p.grazingPower, 0.5f, 4.0f);
+	c.grazingMin = std::clamp(p.grazingMin, kMinGrazing, 1.0f);
+	c.grazingPower = std::clamp(p.grazingPower, kMinGrazingPower, kMaxGrazingPower);
 	c.detailFadeStart = (std::max)(p.detailFadeStart, 0.0f);
 	c.detailFadeEnd = (std::max)(p.detailFadeEnd, c.detailFadeStart + 1.0f);
 	c.detailFadeLod = (std::max)(p.detailFadeLod, 0.0f);
 	c.anisoEnabled = p.anisoEnabled ? 1 : 0;
-	c.slopeClampNoise = std::clamp(p.slopeClampNoise, 0.01f, 1.0f);
+	c.slopeClampNoise = std::clamp(p.slopeClampNoise, kMinFineParam, 1.0f);
 	c.shapeGradLodBias = (std::max)(p.shapeGradLodBias, 0.0f);
 	c.shapeLodBias = (std::max)(p.shapeLodBias, 0.0f);
 	c.mokoInHeight = std::clamp(p.mokoInHeight, 0.0f, 1.0f);
@@ -452,28 +493,28 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.prevViewProj = prevViewProj_;
 	c.frameIndex = static_cast<int>(frameIndex_);
 	c.historyValid = historyValid_ ? 1 : 0;
-	c.temporalBlend = std::clamp(p.temporalBlend, 0.01f, 1.0f);
+	c.temporalBlend = std::clamp(p.temporalBlend, kMinFineParam, 1.0f);
 	c.volumeSea = p.volumeSea ? 1 : 0;
 	c.volShapeTiling = 1.0f / (std::max)(p.volShapeScale, 1.0f);
 	c.volDetailTiling = 1.0f / (std::max)(p.volDetailScale, 1.0f);
 	c.volFluff = (std::max)(p.volFluff, 1.0f);
 	c.volErosion = (std::max)(p.volErosion, 0.0f);
 	c.volExtinction = (std::max)(p.volExtinction, 0.0f);
-	c.volSteps = std::clamp(p.volSteps, 4, 256);
-	c.volStepMin = (std::max)(p.volStepMin, 0.1f);
+	c.volSteps = std::clamp(p.volSteps, kMinMarchSteps, kMaxVolSteps);
+	c.volStepMin = (std::max)(p.volStepMin, kMinCoarseParam);
 	c.volStepGrowth = (std::max)(p.volStepGrowth, 0.0f);
 	c.volLightSigma = (std::max)(p.volLightSigma, 0.0f);
 	c.volSunScale = (std::max)(p.volSunScale, 0.0f);
 	c.volAmbientScale = (std::max)(p.volAmbientScale, 0.0f);
-	c.volPhaseG = std::clamp(p.volPhaseG, 0.0f, 0.95f);
+	c.volPhaseG = std::clamp(p.volPhaseG, 0.0f, kMaxPhaseG);
 	c.volPowder = std::clamp(p.volPowder, 0.0f, 1.0f);
 	c.volSkyAmbient = p.volSkyAmbient;
 	c.volMacroShadow = (std::max)(p.volMacroShadow, 0.0f);
 	c.volWind = volOffset_;
-	c.volDensityGain = (std::max)(p.volDensityGain, 0.1f);
+	c.volDensityGain = (std::max)(p.volDensityGain, kMinCoarseParam);
 	c.volMultiScatter = std::clamp(p.volMultiScatter, 0.0f, 1.0f);
-	c.volVerticalStretch = (std::max)(p.volVerticalStretch, 0.1f);
-	c.occlusionSoft = (std::max)(p.occlusionSoft, 0.1f);
+	c.volVerticalStretch = (std::max)(p.volVerticalStretch, kMinCoarseParam);
+	c.occlusionSoft = (std::max)(p.occlusionSoft, kMinCoarseParam);
 
 	c.hvEnabled = p.hvEnabled ? 1 : 0;
 	// ハイトマップの UV のずれ（shapeOffset_ = −風/大きさ×時間）と同じだけ、3D ノイズも流す [m]
@@ -486,19 +527,19 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 		c.hvDetailContrast = 1.0f / std::sqrt((1.0f - dw) * (1.0f - dw) + dw * dw);
 	}
 	c.hvRelief = (std::max)(p.hvRelief, 0.0f);
-	c.hvFloorLow = (std::min)(p.coverage - p.hvFloorSpread, 0.99f);
-	c.hvBumpPower = (std::max)(p.hvBumpPower, 0.01f);
-	c.hvFluff = (std::max)(p.hvFluff, 0.1f);
-	c.hvMarchDepth = (std::max)(p.hvMarchDepth, 0.1f);
+	c.hvFloorLow = (std::min)(p.coverage - p.hvFloorSpread, kMaxNoiseFloor);
+	c.hvBumpPower = (std::max)(p.hvBumpPower, kMinFineParam);
+	c.hvFluff = (std::max)(p.hvFluff, kMinCoarseParam);
+	c.hvMarchDepth = (std::max)(p.hvMarchDepth, kMinCoarseParam);
 	c.hvMaxMarch = (std::max)(p.hvMaxMarch, 1.0f);
-	c.hvSteps = std::clamp(p.hvSteps, 1, 128);
-	c.hvSegments = std::clamp(p.hvSegments, 1, 4);
+	c.hvSteps = std::clamp(p.hvSteps, 1, kMaxMarchSteps);
+	c.hvSegments = std::clamp(p.hvSegments, 1, kMaxHvSegments);
 	c.hvExtinction = (std::max)(p.hvExtinction, 0.0f);
 	c.hvErosion = p.hvErosion;
-	c.hvErosionTiling = 1.0f / (std::max)(p.hvErosionScale, 0.1f);
+	c.hvErosionTiling = 1.0f / (std::max)(p.hvErosionScale, kMinCoarseParam);
 	c.hvWarp = (std::max)(p.hvWarp, 0.0f);
-	c.hvWarpTiling = 1.0f / (std::max)(p.hvWarpScale, 0.1f);
-	c.hvWarpRamp = (std::max)(p.hvWarpRamp, 0.1f);
+	c.hvWarpTiling = 1.0f / (std::max)(p.hvWarpScale, kMinCoarseParam);
+	c.hvWarpRamp = (std::max)(p.hvWarpRamp, kMinCoarseParam);
 	c.hvLightSteps[0] = p.hvLightSteps.x;
 	c.hvLightSteps[1] = p.hvLightSteps.y;
 	c.hvLightSteps[2] = p.hvLightSteps.z;
@@ -506,14 +547,14 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.hvLightSigma = (std::max)(p.hvLightSigma, 0.0f);
 	c.hvPowderMix = std::clamp(p.hvPowderMix, 0.0f, 1.0f);
 	c.hvAoBias = (std::max)(p.hvAoBias, 0.0f);
-	c.hvAoRange = (std::max)(p.hvAoRange, 0.1f);
-	c.hvAoDepth = (std::max)(p.hvAoDepth, 0.1f);
+	c.hvAoRange = (std::max)(p.hvAoRange, kMinCoarseParam);
+	c.hvAoDepth = (std::max)(p.hvAoDepth, kMinCoarseParam);
 	c.hvLitColor = p.hvLitColor;
 	c.hvShadowColor = p.hvShadowColor;
 	c.hvSkyAmbient = p.hvSkyAmbient;
 	c.hvSunScale = (std::max)(p.hvSunScale, 0.0f);
 	c.hvAmbientScale = (std::max)(p.hvAmbientScale, 0.0f);
-	c.normalEps = (std::max)(p.normalEps, 0.1f);
+	c.normalEps = (std::max)(p.normalEps, kMinCoarseParam);
 	c.maskStrength = p.maskStrength;
 	c.coverage = p.coverage;
 	c.sharpness = p.sharpness;
@@ -522,9 +563,9 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.lodScale = pixelAngle * static_cast<float>(kNoiseSize);
 	c.pixelAngle = pixelAngle;
 	c.time = time_;
-	c.steps = std::clamp(p.steps, 4, 128);
-	c.firstStep = (std::max)(p.firstStep, 0.1f);
-	c.maxDistance = (std::max)(p.maxDistance, 10.0f);
+	c.steps = std::clamp(p.steps, kMinMarchSteps, kMaxMarchSteps);
+	c.firstStep = (std::max)(p.firstStep, kMinCoarseParam);
+	c.maxDistance = (std::max)(p.maxDistance, kMinMaxDistance);
 	c.lightStep = p.lightStep;
 	c.density = p.density;
 	c.fadeStart = p.fadeStart;
@@ -534,7 +575,7 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.hazeMax = p.hazeMax;
 	c.rimIntensity = p.rimIntensity;
 	c.litColor = p.litColor;
-	c.rimG = std::clamp(p.rimG, 0.0f, 0.95f);
+	c.rimG = std::clamp(p.rimG, 0.0f, kMaxPhaseG);
 	c.shadowColor = p.shadowColor;
 	c.ambient = std::clamp(p.ambient, 0.0f, 1.0f);
 	c.rimColor = p.rimColor;
@@ -545,9 +586,9 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	c.shaftRadius = p.shaftRadius;
 	c.shaftWallDepth = (std::max)(p.shaftWallDepth, 1.0f);
 	c.capDepth = (std::max)(p.capDepth, 1.0f);
-	c.shaftNoiseTiling = 1.0f / (std::max)(p.shaftNoiseScale, 0.01f);
+	c.shaftNoiseTiling = 1.0f / (std::max)(p.shaftNoiseScale, kMinFineParam);
 	if (!shaftPoints_.empty()) {
-		const float pad = p.shaftRadius + p.shaftWallDepth * 1.5f;
+		const float pad = p.shaftRadius + p.shaftWallDepth * kShaftPadWallDepthRatio;
 		Vector3 mn = shaftPoints_[0];
 		Vector3 mx = shaftPoints_[0];
 		for (size_t i = 0; i < shaftPoints_.size(); ++i) {
@@ -563,14 +604,14 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 	}
 
 	c.volumeWeight = lastVolumeWeight_;
-	c.volumeSteps = std::clamp(p.volumeSteps, 4, 128);
+	c.volumeSteps = std::clamp(p.volumeSteps, kMinMarchSteps, kMaxMarchSteps);
 	c.volumeRange = (std::max)(p.volumeRange, 1.0f);
 	c.extinction = (std::max)(p.extinction, 0.0f);
 	c.erosion = p.erosion;
-	c.erosionScale = 1.0f / (std::max)(p.erosionScale, 0.1f);
+	c.erosionScale = 1.0f / (std::max)(p.erosionScale, kMinCoarseParam);
 	c.powder = p.powder;
 	c.ambientStrength = p.ambientStrength;
-	c.volumeLightStep = (std::max)(p.volumeLightStep, 0.1f);
+	c.volumeLightStep = (std::max)(p.volumeLightStep, kMinCoarseParam);
 	c.erosionWind = { p.erosionWind.x * c.erosionScale, p.erosionWind.y * c.erosionScale, p.erosionWind.z * c.erosionScale };
 	c.invTargetSize = { 1.0f / static_cast<float>(target_->GetWidth()), 1.0f / static_cast<float>(target_->GetHeight()) };
 	*constantsData_ = c;
@@ -579,7 +620,7 @@ void CloudRaymarcher::WriteConstants(const Camera& camera)
 void CloudRaymarcher::Draw(const Camera& camera, RenderTexture* sceneTarget, const std::string& skyCubemapPath)
 {
 	if (!params_.enabled || params_.opacity <= 0.0f || !sceneTarget) return;
-	if (std::clamp(params_.resolutionScale, 0.125f, 1.0f) != targetScale_) CreateTarget();
+	if (std::clamp(params_.resolutionScale, kMinResolutionScale, 1.0f) != targetScale_) CreateTarget();
 
 	PEPPER_SCOPE("CloudRaymarcher::Draw");
 	auto* cmd = dxCore_->GetCommandList();
@@ -610,7 +651,7 @@ void CloudRaymarcher::Draw(const Camera& camera, RenderTexture* sceneTarget, con
 		cmd->SetGraphicsRootDescriptorTable(kRootMokoGrad, TextureManager::GetInstance()->GetSrvHandleGPU(kMokoGradPath));
 		srvManager_->SetGraphicsRootDescriptorTable(kRootShape3D, shape3DSrv_);
 		srvManager_->SetGraphicsRootDescriptorTable(kRootDetail3D, detail3DSrv_);
-		cmd->DrawInstanced(3, 1, 0, 0);
+		cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 		target_->EndRender(cmd);
 		depthTarget_->EndRender(cmd);
 	}
@@ -634,7 +675,7 @@ void CloudRaymarcher::Draw(const Camera& camera, RenderTexture* sceneTarget, con
 		srvManager_->SetGraphicsRootDescriptorTable(kRootTexture0, target_->GetSRVIndex());
 		srvManager_->SetGraphicsRootDescriptorTable(kRootNoise, depthTarget_->GetSRVIndex());
 		srvManager_->SetGraphicsRootDescriptorTable(kRootSkyCube, prev->GetSRVIndex());
-		cmd->DrawInstanced(3, 1, 0, 0);
+		cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 		next->EndRender(cmd);
 		historyIndex_ ^= 1;
 		historyValid_ = true;
@@ -657,7 +698,7 @@ void CloudRaymarcher::Draw(const Camera& camera, RenderTexture* sceneTarget, con
 		cmd->SetPipelineState(compositePipeline_.Get());
 		cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		srvManager_->SetGraphicsRootDescriptorTable(kRootTexture0, result->GetSRVIndex());
-		cmd->DrawInstanced(3, 1, 0, 0);
+		cmd->DrawInstanced(kFullscreenTriangleVertexCount, 1, 0, 0);
 	}
 
 	// 後に続く半透明の描画のために、深度を書き込みに戻してシーン RT と DSV を貼り直す
@@ -677,13 +718,13 @@ void CloudRaymarcher::LoadFromJson(const JsonValue& j)
 	f("opacity", p.opacity);
 	f("top", p.top); f("bottom", p.bottom); f("seaDepth", p.seaDepth); f("bottomFade", p.bottomFade);
 	f("noiseFloor", p.noiseFloor);
-	f("shapeScale", p.shapeScale); p.shapeWind = ReadVec2(j["shapeWind"], p.shapeWind);
+	f("shapeScale", p.shapeScale); p.shapeWind = ReadVector2(j["shapeWind"], p.shapeWind);
 	f("mokoScale", p.mokoScale); f("mokoWeight", p.mokoWeight);
 	f("mokoLodBias", p.mokoLodBias); f("grazingMin", p.grazingMin); f("grazingPower", p.grazingPower);
 	f("detailFadeStart", p.detailFadeStart); f("detailFadeEnd", p.detailFadeEnd); f("detailFadeLod", p.detailFadeLod);
 	p.anisoEnabled = j["anisoEnabled"].AsBool(p.anisoEnabled); f("occlusionSoft", p.occlusionSoft); f("slopeClampNoise", p.slopeClampNoise); f("shapeGradLodBias", p.shapeGradLodBias);
 	f("shapeLodBias", p.shapeLodBias); f("mokoInHeight", p.mokoInHeight);
-	f("maskScale", p.maskScale); p.maskWind = ReadVec2(j["maskWind"], p.maskWind);
+	f("maskScale", p.maskScale); p.maskWind = ReadVector2(j["maskWind"], p.maskWind);
 	f("maskStrength", p.maskStrength);
 	f("coverage", p.coverage); f("sharpness", p.sharpness);
 	i("steps", p.steps); f("firstStep", p.firstStep); f("maxDistance", p.maxDistance); f("jitter", p.jitter);
@@ -691,9 +732,9 @@ void CloudRaymarcher::LoadFromJson(const JsonValue& j)
 	f("normalEps", p.normalEps); f("wrap", p.wrap);
 	f("lightStep", p.lightStep); f("density", p.density);
 	f("valley", p.valley); f("valleyPow", p.valleyPow); f("ambient", p.ambient);
-	p.litColor = ReadVec3(j["litColor"], p.litColor);
-	p.shadowColor = ReadVec3(j["shadowColor"], p.shadowColor);
-	p.rimColor = ReadVec3(j["rimColor"], p.rimColor);
+	p.litColor = ReadVector3(j["litColor"], p.litColor);
+	p.shadowColor = ReadVector3(j["shadowColor"], p.shadowColor);
+	p.rimColor = ReadVector3(j["rimColor"], p.rimColor);
 	f("rimIntensity", p.rimIntensity); f("rimG", p.rimG); f("sunGlow", p.sunGlow);
 	f("hazeStart", p.hazeStart); f("hazeEnd", p.hazeEnd); f("hazeMax", p.hazeMax);
 	f("fadeStart", p.fadeStart); f("fadeEnd", p.fadeEnd);
@@ -706,7 +747,7 @@ void CloudRaymarcher::LoadFromJson(const JsonValue& j)
 	i("volumeSteps", p.volumeSteps); f("volumeRange", p.volumeRange);
 	f("extinction", p.extinction); f("erosion", p.erosion); f("erosionScale", p.erosionScale);
 	f("erosionSharp", p.erosionSharp); f("lightExtinction", p.lightExtinction);
-	p.erosionWind = ReadVec3(j["erosionWind"], p.erosionWind);
+	p.erosionWind = ReadVector3(j["erosionWind"], p.erosionWind);
 	f("powder", p.powder); f("ambientStrength", p.ambientStrength); f("volumeLightStep", p.volumeLightStep);
 	f("resolutionScale", p.resolutionScale);
 	const JsonValue& vs = j["volumeSea"];
@@ -722,7 +763,7 @@ void CloudRaymarcher::LoadFromJson(const JsonValue& j)
 		g("lightSigma", p.volLightSigma); g("sunScale", p.volSunScale); g("ambientScale", p.volAmbientScale);
 		g("phaseG", p.volPhaseG); g("powder", p.volPowder); g("macroShadow", p.volMacroShadow);
 		g("densityGain", p.volDensityGain); g("multiScatter", p.volMultiScatter); g("verticalStretch", p.volVerticalStretch);
-		p.volSkyAmbient = ReadVec3(vs["skyAmbient"], p.volSkyAmbient);
+		p.volSkyAmbient = ReadVector3(vs["skyAmbient"], p.volSkyAmbient);
 	}
 	const JsonValue& hv = j["heightVolume"];
 	if (hv.IsObject()) {
@@ -736,15 +777,15 @@ void CloudRaymarcher::LoadFromJson(const JsonValue& j)
 		g("extinction", p.hvExtinction); g("erosion", p.hvErosion); g("erosionScale", p.hvErosionScale);
 		g("warp", p.hvWarp); g("warpScale", p.hvWarpScale); g("warpRamp", p.hvWarpRamp);
 		const JsonValue& ls = hv["lightSteps"];
-		if (ls.IsArray() && ls.Size() >= 4) {
+		if (ls.IsArray() && ls.Size() >= kVec4ComponentCount) {
 			p.hvLightSteps = { static_cast<float>(ls[0].AsDouble(p.hvLightSteps.x)), static_cast<float>(ls[1].AsDouble(p.hvLightSteps.y)),
 				static_cast<float>(ls[2].AsDouble(p.hvLightSteps.z)), static_cast<float>(ls[3].AsDouble(p.hvLightSteps.w)) };
 		}
 		g("lightSigma", p.hvLightSigma); g("powderMix", p.hvPowderMix);
 		g("aoBias", p.hvAoBias); g("aoRange", p.hvAoRange); g("aoDepth", p.hvAoDepth);
-		p.hvLitColor = ReadVec3(hv["litColor"], p.hvLitColor);
-		p.hvShadowColor = ReadVec3(hv["shadowColor"], p.hvShadowColor);
-		p.hvSkyAmbient = ReadVec3(hv["skyAmbient"], p.hvSkyAmbient);
+		p.hvLitColor = ReadVector3(hv["litColor"], p.hvLitColor);
+		p.hvShadowColor = ReadVector3(hv["shadowColor"], p.hvShadowColor);
+		p.hvSkyAmbient = ReadVector3(hv["skyAmbient"], p.hvSkyAmbient);
 		g("sunScale", p.hvSunScale); g("ambientScale", p.hvAmbientScale);
 	}
 	// 上面・下面が変わったら入口・出口も取り直す
@@ -761,13 +802,13 @@ void CloudRaymarcher::SaveToJson(JsonValue& j) const
 	f("opacity", p.opacity);
 	f("top", p.top); f("bottom", p.bottom); f("seaDepth", p.seaDepth); f("bottomFade", p.bottomFade);
 	f("noiseFloor", p.noiseFloor);
-	f("shapeScale", p.shapeScale); j["shapeWind"] = WriteVec2(p.shapeWind);
+	f("shapeScale", p.shapeScale); j["shapeWind"] = MakeVector2(p.shapeWind);
 	f("mokoScale", p.mokoScale); f("mokoWeight", p.mokoWeight);
 	f("mokoLodBias", p.mokoLodBias); f("grazingMin", p.grazingMin); f("grazingPower", p.grazingPower);
 	f("detailFadeStart", p.detailFadeStart); f("detailFadeEnd", p.detailFadeEnd); f("detailFadeLod", p.detailFadeLod);
 	j["anisoEnabled"] = JsonValue(p.anisoEnabled); f("occlusionSoft", p.occlusionSoft); f("slopeClampNoise", p.slopeClampNoise); f("shapeGradLodBias", p.shapeGradLodBias);
 	f("shapeLodBias", p.shapeLodBias); f("mokoInHeight", p.mokoInHeight);
-	f("maskScale", p.maskScale); j["maskWind"] = WriteVec2(p.maskWind);
+	f("maskScale", p.maskScale); j["maskWind"] = MakeVector2(p.maskWind);
 	f("maskStrength", p.maskStrength);
 	f("coverage", p.coverage); f("sharpness", p.sharpness);
 	i("steps", p.steps); f("firstStep", p.firstStep); f("maxDistance", p.maxDistance); f("jitter", p.jitter);
@@ -775,9 +816,9 @@ void CloudRaymarcher::SaveToJson(JsonValue& j) const
 	f("normalEps", p.normalEps); f("wrap", p.wrap);
 	f("lightStep", p.lightStep); f("density", p.density);
 	f("valley", p.valley); f("valleyPow", p.valleyPow); f("ambient", p.ambient);
-	j["litColor"] = WriteVec3(p.litColor);
-	j["shadowColor"] = WriteVec3(p.shadowColor);
-	j["rimColor"] = WriteVec3(p.rimColor);
+	j["litColor"] = MakeVector3(p.litColor);
+	j["shadowColor"] = MakeVector3(p.shadowColor);
+	j["rimColor"] = MakeVector3(p.rimColor);
 	f("rimIntensity", p.rimIntensity); f("rimG", p.rimG); f("sunGlow", p.sunGlow);
 	f("hazeStart", p.hazeStart); f("hazeEnd", p.hazeEnd); f("hazeMax", p.hazeMax);
 	f("fadeStart", p.fadeStart); f("fadeEnd", p.fadeEnd);
@@ -790,7 +831,7 @@ void CloudRaymarcher::SaveToJson(JsonValue& j) const
 	i("volumeSteps", p.volumeSteps); f("volumeRange", p.volumeRange);
 	f("extinction", p.extinction); f("erosion", p.erosion); f("erosionScale", p.erosionScale);
 	f("erosionSharp", p.erosionSharp); f("lightExtinction", p.lightExtinction);
-	j["erosionWind"] = WriteVec3(p.erosionWind);
+	j["erosionWind"] = MakeVector3(p.erosionWind);
 	f("powder", p.powder); f("ambientStrength", p.ambientStrength); f("volumeLightStep", p.volumeLightStep);
 	f("resolutionScale", p.resolutionScale);
 
@@ -806,7 +847,7 @@ void CloudRaymarcher::SaveToJson(JsonValue& j) const
 	g("lightSigma", p.volLightSigma); g("sunScale", p.volSunScale); g("ambientScale", p.volAmbientScale);
 	g("phaseG", p.volPhaseG); g("powder", p.volPowder); g("macroShadow", p.volMacroShadow);
 	g("densityGain", p.volDensityGain); g("multiScatter", p.volMultiScatter); g("verticalStretch", p.volVerticalStretch);
-	vs["skyAmbient"] = WriteVec3(p.volSkyAmbient);
+	vs["skyAmbient"] = MakeVector3(p.volSkyAmbient);
 	j["volumeSea"] = std::move(vs);
 
 	JsonValue hv = JsonValue::MakeObject();
@@ -827,9 +868,9 @@ void CloudRaymarcher::SaveToJson(JsonValue& j) const
 	hv["lightSteps"] = std::move(ls);
 	h("lightSigma", p.hvLightSigma); h("powderMix", p.hvPowderMix);
 	h("aoBias", p.hvAoBias); h("aoRange", p.hvAoRange); h("aoDepth", p.hvAoDepth);
-	hv["litColor"] = WriteVec3(p.hvLitColor);
-	hv["shadowColor"] = WriteVec3(p.hvShadowColor);
-	hv["skyAmbient"] = WriteVec3(p.hvSkyAmbient);
+	hv["litColor"] = MakeVector3(p.hvLitColor);
+	hv["shadowColor"] = MakeVector3(p.hvShadowColor);
+	hv["skyAmbient"] = MakeVector3(p.hvSkyAmbient);
 	h("sunScale", p.hvSunScale); h("ambientScale", p.hvAmbientScale);
 	j["heightVolume"] = std::move(hv);
 }

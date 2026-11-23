@@ -7,6 +7,11 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+    // ResetParams で戻すセピアの色の G と B の既定値（R は 1）
+    constexpr float kDefaultSepiaColorG = 0.691f;
+    constexpr float kDefaultSepiaColorB = 0.402f;
+}
 
 void SepiaEffect::Initialize(DirectXCore* dxCore, ID3D12RootSignature* copyRootSignature, ID3D12RootSignature* effectRootSignature, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& basePsoDesc)
 {
@@ -57,8 +62,8 @@ void SepiaEffect::ResetParams()
 {
     intensity_ = 1.0f;
     sepiaColorR_ = 1.0f;
-    sepiaColorG_ = 0.691f;
-    sepiaColorB_ = 0.402f;
+    sepiaColorG_ = kDefaultSepiaColorG;
+    sepiaColorB_ = kDefaultSepiaColorB;
 }
 
 void  SepiaEffect::SetSepiaColor(float r, float g, float b) {

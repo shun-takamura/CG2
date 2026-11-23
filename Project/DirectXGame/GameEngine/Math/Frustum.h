@@ -30,17 +30,28 @@ public:
 	/// このプロジェクトの規約（行ベクトル v*M・LH・深度[0,1]）前提。
 	/// 規約が変わると静かに壊れるので、変更時は必ず既知の点で検証すること。
 	/// </summary>
+	/// <param name="viewProjection">ビュー × プロジェクション行列</param>
+	/// <returns>視錐台</returns>
 	static Frustum FromViewProjection(const Matrix4x4& viewProjection);
 
 	/// <summary>境界球が視錐台と交差するか（カリング・画面内判定の本体）。</summary>
+	/// <param name="center">球の中心（ワールド座標）</param>
+	/// <param name="radius">球の半径</param>
+	/// <returns>交差するか中にあれば true（6 平面のどれかの外側に半径以上離れていれば false）</returns>
 	bool IntersectsSphere(const Vector3& center, float radius) const;
 
 	/// <summary>点が視錐台の中か。margin を足すと画面外へ少しはみ出しても内側扱いになる。</summary>
+	/// <param name="point">点（ワールド座標）</param>
+	/// <param name="margin">内側扱いにするはみ出し量（距離）</param>
+	/// <returns>中なら true</returns>
 	bool ContainsPoint(const Vector3& point, float margin = 0.0f) const {
 		return IntersectsSphere(point, margin);
 	}
 
 	/// <summary>指定平面からの符号付き距離（負＝外側）。デバッグ・調整用。</summary>
+	/// <param name="index">平面</param>
+	/// <param name="point">点（ワールド座標）</param>
+	/// <returns>符号付き距離（正＝内側）</returns>
 	float SignedDistance(PlaneIndex index, const Vector3& point) const;
 
 private:

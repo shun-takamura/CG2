@@ -2,6 +2,7 @@
 
 #include "MathUtility.h"
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -12,15 +13,40 @@
 #endif
 
 namespace {
+	// smoothstep（3t² − 2t³）の 2 乗の項の係数
+	constexpr float kSmoothStepSquareCoef = 3.0f;
+	// smoothstep（3t² − 2t³）の 3 乗の項の係数
+	constexpr float kSmoothStepCubeCoef = 2.0f;
+	// 区間の始まりと終わりの値の差がこれより小さければ補間せず始まりの値を返す
+	constexpr float kMinSegmentDelta = 1e-4f;
+	// キーどうしの時間の差の下限 [秒]（0 で割らないように）
+	constexpr float kMinKeySpanSeconds = 1e-4f;
+	// 歩き出しと止まる所で頭の上下を弱める長さ [秒]
+	constexpr float kWalkBobFadeSeconds = 0.3f;
+	// キーの見出しに出す時刻の文字数
+	constexpr int kKeyLabelTimeChars = 4;
+	// 複製したキーを元のキーからずらす時間 [秒]
+	constexpr float kDuplicateKeyTimeOffset = 0.5f;
+
+	/// <summary>0〜1 に切る</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 の値</returns>
 	float Clamp01(float t) {
 		return std::clamp(t, 0.0f, 1.0f);
 	}
 
+	/// <summary>0〜1 に切ってから smoothstep をかける</summary>
+	/// <param name="t">入力</param>
+	/// <returns>0〜1 のなめらかな値</returns>
 	float SmoothStep01(float t) {
 		t = Clamp01(t);
-		return t * t * (3.0f - 2.0f * t);
+		return t * t * (kSmoothStepSquareCoef - kSmoothStepCubeCoef * t);
 	}
 
+	/// <summary>区間の緩急をかける</summary>
+	/// <param name="ease">緩急の種類</param>
+	/// <param name="t">区間の進み 0〜1</param>
+	/// <returns>緩急をかけた進み 0〜1</returns>
 	float ApplyEase(HubCameraTrack::Ease ease, float t) {
 		switch (ease) {
 		case HubCameraTrack::Ease::InOut: return SmoothStep01(t);
@@ -30,28 +56,19 @@ namespace {
 		}
 	}
 
-	// Catmull-Rom。p1 と p2 が同じ（その場に留まる区間）ならそのまま返す
-	// （前後のキーから付く接線で、座ったままの間に目がふらつくのを防ぐ）
+	/// <summary>Catmull-Rom で p1〜p2 の間を補間する。p1 と p2 が同じ（その場に留まる区間）ならそのまま返す（前後のキーから付く接線で、座ったままの間に目がふらつくのを防ぐ）</summary>
+	/// <param name="p0">1 つ前のキーの値</param>
+	/// <param name="p1">区間の始まりの値</param>
+	/// <param name="p2">区間の終わりの値</param>
+	/// <param name="p3">1 つ後のキーの値</param>
+	/// <param name="t">区間の進み 0〜1</param>
+	/// <returns>補間した値</returns>
 	float CatmullRom(float p0, float p1, float p2, float p3, float t) {
-		if (std::fabs(p2 - p1) < 1e-4f) return p1;
+		if (std::fabs(p2 - p1) < kMinSegmentDelta) return p1;
 		const float t2 = t * t;
 		const float t3 = t2 * t;
 		return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2
 			+ (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
-	}
-
-	JsonValue MakeVector3(const Vector3& v) {
-		JsonValue a = JsonValue::MakeArray();
-		a.Push(JsonValue(static_cast<double>(v.x)));
-		a.Push(JsonValue(static_cast<double>(v.y)));
-		a.Push(JsonValue(static_cast<double>(v.z)));
-		return a;
-	}
-
-	Vector3 ReadVector3(const JsonValue& a, const Vector3& fallback) {
-		if (!a.IsArray() || a.Size() < 3) return fallback;
-		return { static_cast<float>(a[0].AsDouble(fallback.x)), static_cast<float>(a[1].AsDouble(fallback.y)),
-			static_cast<float>(a[2].AsDouble(fallback.z)) };
 	}
 }
 
@@ -92,7 +109,7 @@ HubCameraTrack::Sample HubCameraTrack::Evaluate(float time) const {
 	const Key& k1 = keys_[seg];
 	const Key& k2 = keys_[seg + 1];
 	const Key& k3 = keys_[(std::min)(seg + 2, n - 1)];
-	const float span = (std::max)(k2.time - k1.time, 1e-4f);
+	const float span = (std::max)(k2.time - k1.time, kMinKeySpanSeconds);
 	const float u = ApplyEase(k2.ease, Clamp01((time - k1.time) / span));
 	s.eye = {
 		CatmullRom(k0.eye.x, k1.eye.x, k2.eye.x, k3.eye.x, u),
@@ -110,7 +127,7 @@ HubCameraTrack::Sample HubCameraTrack::Evaluate(float time) const {
 		while (last + 1 < n && keys_[last + 1].walk) ++last;
 		const float runStart = keys_[first - 1].time;
 		const float runEnd = keys_[last].time;
-		const float fade = 0.3f;
+		const float fade = kWalkBobFadeSeconds;
 		const float envelope = SmoothStep01((time - runStart) / fade) * SmoothStep01((runEnd - time) / fade);
 		const float phase = (time - runStart) * stepsPerSecond_ * 2.0f * kPi;
 		s.eye.y -= bobAmplitude_ * 0.5f * (1.0f - std::cos(phase)) * envelope;
@@ -172,7 +189,7 @@ bool HubCameraTrack::OnImGui(float& previewTime) {
 	for (int i = 0; i < static_cast<int>(keys_.size()); ++i) {
 		Key& key = keys_[i];
 		ImGui::PushID(i);
-		const std::string label = "Key " + std::to_string(i) + "  t=" + std::to_string(key.time).substr(0, 4);
+		const std::string label = "Key " + std::to_string(i) + "  t=" + std::to_string(key.time).substr(0, kKeyLabelTimeChars);
 		if (ImGui::TreeNode(label.c_str())) {
 			timeEdited |= ImGui::DragFloat("Time", &key.time, 0.01f, 0.0f, 30.0f);
 			ImGui::DragFloat3("Eye", &key.eye.x, 0.01f);
@@ -195,7 +212,7 @@ bool HubCameraTrack::OnImGui(float& previewTime) {
 	}
 	if (duplicateIndex >= 0) {
 		Key copy = keys_[duplicateIndex];
-		copy.time += 0.5f;
+		copy.time += kDuplicateKeyTimeOffset;
 		keys_.insert(keys_.begin() + duplicateIndex + 1, copy);
 		timeEdited = true;
 	}

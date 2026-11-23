@@ -19,16 +19,19 @@ public:
 	TitleDemoMovie();
 	~TitleDemoMovie();
 
+	/// <summary>TitleDemo.json を読み、動画の再生と黒い幕のスプライトを用意する</summary>
+	/// <param name="spriteManager">スプライトの管理</param>
+	/// <param name="input">入力（触ったかを見る）</param>
 	void Initialize(SpriteManager* spriteManager, InputManager* input);
+	/// <summary>動画を止め、スプライトを解放する</summary>
 	void Finalize();
 
-	/// <summary>
-	/// 毎フレーム、タイトルの入力処理より前に呼ぶ。
-	/// canIdle が false の間（扉に入る途中・トランジション中など）は放置の時間を数えない
-	/// </summary>
+	/// <summary>放置の時間を数えてデモを流し、触ったらタイトルへ戻す。毎フレーム、タイトルの入力処理より前に呼ぶ</summary>
+	/// <param name="canIdle">false の間（扉に入る途中・トランジション中など）は放置の時間を数えない</param>
 	void Update(bool canIdle);
 
-	/// <summary>デモ映像を出している間と、戻った直後の少しの間は true（タイトルは入力を読まない）</summary>
+	/// <summary>タイトルの入力を止めるかを返す</summary>
+	/// <returns>デモ映像を出している間と、戻った直後の少しの間は true</returns>
 	bool BlocksTitleInput() const;
 
 	/// <summary>シーンの描画先に、黒い幕とデモ映像を全画面で重ねる（Draw の最後で呼ぶ）</summary>
@@ -53,9 +56,15 @@ private:
 		FadeOut,    // 触ったのでタイトルへ戻る途中
 	};
 
+	/// <summary>TitleDemo.json を読む（無ければ既定値のまま）</summary>
 	void LoadTuning();
+	/// <summary>何か触ったかを返す（アクションの入力・マウスの移動とホイール・スティック）</summary>
+	/// <returns>触ったら true</returns>
 	bool AnyActivity() const;
+	/// <summary>状態を移し、状態の経過時間を 0 に戻す</summary>
+	/// <param name="next">次の状態</param>
 	void ChangeState(State next);
+	/// <summary>動画のフレームが出たら全画面のスプライトを作る・合わせる</summary>
 	void UpdateMovieSprite();
 
 	SpriteManager* spriteManager_ = nullptr;

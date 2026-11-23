@@ -9,6 +9,13 @@
 #include <unordered_map>
 
 namespace {
+	// このフレームに当たっているコライダーのデバッグ表示の色（赤）
+	constexpr Vector4 kCollidingColor = { 1.0f, 0.15f, 0.15f, 1.0f };
+	// レイヤーの色が無いときのコライダーのデバッグ表示の色（緑）
+	constexpr Vector4 kDefaultColliderColor = { 0.2f, 0.9f, 0.3f, 1.0f };
+	// デバッグ表示の球・カプセルの分割数
+	constexpr int kDebugShapeSegments = 16;
+
 	// エンティティポインタ → コライダー。
 	// 破棄時に Unregister で除去するため dangling/ポインタ再利用のエイリアスは起きない。
 	std::unordered_map<const IImGuiEditable*, Collider> g_colliders;
@@ -113,25 +120,25 @@ void CollisionSystem::DrawDebug() {
 
 		Vector4 color;
 		if (c.isCollidingThisFrame) {
-			color = { 1.0f, 0.15f, 0.15f, 1.0f };
+			color = kCollidingColor;
 		} else if (hostHooks_.getLayerColor) {
 			const int layer = hostHooks_.getLayer ? hostHooks_.getLayer(e) : 0;
 			float r, g, b, a;
 			hostHooks_.getLayerColor(layer, r, g, b, a);
 			color = { r, g, b, 1.0f };
 		} else {
-			color = { 0.2f, 0.9f, 0.3f, 1.0f };
+			color = kDefaultColliderColor;
 		}
 
 		switch (c.shape) {
 		case ColliderShape::Sphere:
-			DebugDraw::Sphere(w.center, c.radius, color, 16);
+			DebugDraw::Sphere(w.center, c.radius, color, kDebugShapeSegments);
 			break;
 		case ColliderShape::OBB:
 			DebugDraw::OBB(w.center, w.axes, c.halfExtents, color);
 			break;
 		case ColliderShape::Capsule:
-			DebugDraw::Capsule(w.center, w.axes, c.capsuleHeight, c.capsuleRadius, color, 16);
+			DebugDraw::Capsule(w.center, w.axes, c.capsuleHeight, c.capsuleRadius, color, kDebugShapeSegments);
 			break;
 		}
 	}

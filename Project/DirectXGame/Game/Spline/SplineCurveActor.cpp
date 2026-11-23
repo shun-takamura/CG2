@@ -11,7 +11,25 @@
 #include <cmath>
 
 namespace {
-	// 制御点インデックスを clamp 風にアクセス（端は重複させる）
+	// 新しいスプラインの既定の制御点の左右の広がり [m]
+	constexpr float kDefaultPointSideOffset = 3.0f;
+	// 新しいスプラインの既定の中央の制御点の前への張り出し [m]
+	constexpr float kDefaultPointForwardOffset = 3.0f;
+	// 制御点の色を曲線の色より明るくする倍率
+	constexpr float kPointColorBrighten = 1.2f;
+	// デバッグ表示の曲線の 1 区間あたりの分割数
+	constexpr int kDebugCurveSegments = 24;
+	// 制御点のクロスの大きさ [m]
+	constexpr float kPointCrossSize = 0.3f;
+	// 制御点のラベルの文字バッファの大きさ [文字]
+	constexpr int kLabelBufferSize = 32;
+	// 制御点のラベルの選択欄の幅 [px]
+	constexpr int kPointLabelWidth = 40;
+
+	/// <summary>制御点を番号で clamp 風に取得する（範囲外は端を重複させる）</summary>
+	/// <param name="pts">制御点の列（空でないこと）</param>
+	/// <param name="i">番号</param>
+	/// <returns>制御点</returns>
 	const Vector3& Clamped(const std::vector<Vector3>& pts, int i) {
 		if (i < 0) return pts.front();
 		if (i >= static_cast<int>(pts.size())) return pts.back();
@@ -22,9 +40,9 @@ namespace {
 SplineCurveActor::SplineCurveActor() {
 	// デフォルトで3点だけ用意（ユーザがすぐに編集できるように）
 	points_ = {
-		{ -3.0f, 0.0f, 0.0f },
-		{  0.0f, 1.0f, 3.0f },
-		{  3.0f, 0.0f, 0.0f },
+		{ -kDefaultPointSideOffset, 0.0f, 0.0f },
+		{  0.0f, 1.0f, kDefaultPointForwardOffset },
+		{  kDefaultPointSideOffset, 0.0f, 0.0f },
 	};
 }
 
@@ -87,16 +105,16 @@ void SplineCurveActor::DrawDebug() const {
 	float r, g, b, a;
 	GetTagColor(Gameplay::Of(this).GetTag(), r, g, b, a);
 	const Vector4 curveColor{ r, g, b, 1.0f };
-	const Vector4 pointColor{ r * 1.2f, g * 1.2f, b * 1.2f, 1.0f };
+	const Vector4 pointColor{ r * kPointColorBrighten, g * kPointColorBrighten, b * kPointColorBrighten, 1.0f };
 	const Vector4 selColor{ 1.0f, 1.0f, 0.0f, 1.0f }; // 選択中は黄
 
 	// 曲線本体
-	DebugDraw::CatmullRomSpline(points_, curveColor, 24);
+	DebugDraw::CatmullRomSpline(points_, curveColor, kDebugCurveSegments);
 
 	// 各制御点を小さなクロスで可視化
 	for (size_t i = 0; i < points_.size(); ++i) {
 		const Vector4& c = (static_cast<int>(i) == selectedIndex_) ? selColor : pointColor;
-		DebugDraw::Cross(points_[i], 0.3f, c);
+		DebugDraw::Cross(points_[i], kPointCrossSize, c);
 	}
 }
 
@@ -130,9 +148,9 @@ void SplineCurveActor::OnImGuiInspector() {
 		ImGui::PushID(i);
 
 		bool isSel = (i == selectedIndex_);
-		char label[32];
+		char label[kLabelBufferSize];
 		std::snprintf(label, sizeof(label), "P%d##sel", i);
-		if (ImGui::Selectable(label, isSel, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
+		if (ImGui::Selectable(label, isSel, ImGuiSelectableFlags_None, ImVec2(kPointLabelWidth, 0))) {
 			selectedIndex_ = i;
 		}
 		ImGui::SameLine();

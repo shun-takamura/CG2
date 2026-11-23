@@ -1,6 +1,7 @@
 #include "PrefabManager.h"
 
 #include "Json/JsonValue.h"
+#include "Json/JsonVector.h"
 #include "Json/JsonParser.h"
 #include "Json/JsonWriter.h"
 #include "Log.h"
@@ -9,54 +10,18 @@
 
 namespace {
 	constexpr const char* kPrefabDir = "Resources/Json/Prefabs";
+	// JSON に無いときのコライダー（OBB）の半分の大きさ
+	constexpr float kDefaultColliderHalfExtent = 0.5f;
+	// JSON に無いときのカプセルの半径
+	constexpr double kDefaultCapsuleRadius = 0.5;
+	// 撃破スコアの既定値（これと違うときだけ書き出す。PrefabDef::scoreValue の初期値と同じ）
+	constexpr int kDefaultScoreValue = 10;
+	// 書き出す JSON の字下げの幅 [文字]
+	constexpr int kJsonIndentWidth = 2;
 
-	JsonValue Vec2ToJson(const Vector2& v) {
-		JsonValue arr = JsonValue::MakeArray();
-		arr.Push(JsonValue(static_cast<double>(v.x)));
-		arr.Push(JsonValue(static_cast<double>(v.y)));
-		return arr;
-	}
-	JsonValue Vec3ToJson(const Vector3& v) {
-		JsonValue arr = JsonValue::MakeArray();
-		arr.Push(JsonValue(static_cast<double>(v.x)));
-		arr.Push(JsonValue(static_cast<double>(v.y)));
-		arr.Push(JsonValue(static_cast<double>(v.z)));
-		return arr;
-	}
-	JsonValue Vec4ToJson(const Vector4& v) {
-		JsonValue arr = JsonValue::MakeArray();
-		arr.Push(JsonValue(static_cast<double>(v.x)));
-		arr.Push(JsonValue(static_cast<double>(v.y)));
-		arr.Push(JsonValue(static_cast<double>(v.z)));
-		arr.Push(JsonValue(static_cast<double>(v.w)));
-		return arr;
-	}
-
-	Vector2 JsonToVec2(const JsonValue& v, const Vector2& fallback = {}) {
-		if (!v.IsArray() || v.Size() < 2) return fallback;
-		return {
-			static_cast<float>(v[0].AsDouble(fallback.x)),
-			static_cast<float>(v[1].AsDouble(fallback.y))
-		};
-	}
-	Vector3 JsonToVec3(const JsonValue& v, const Vector3& fallback = {}) {
-		if (!v.IsArray() || v.Size() < 3) return fallback;
-		return {
-			static_cast<float>(v[0].AsDouble(fallback.x)),
-			static_cast<float>(v[1].AsDouble(fallback.y)),
-			static_cast<float>(v[2].AsDouble(fallback.z))
-		};
-	}
-	Vector4 JsonToVec4(const JsonValue& v, const Vector4& fallback = {}) {
-		if (!v.IsArray() || v.Size() < 4) return fallback;
-		return {
-			static_cast<float>(v[0].AsDouble(fallback.x)),
-			static_cast<float>(v[1].AsDouble(fallback.y)),
-			static_cast<float>(v[2].AsDouble(fallback.z)),
-			static_cast<float>(v[3].AsDouble(fallback.w))
-		};
-	}
-
+	/// <summary>プリファブの種別を保存用の文字列にする</summary>
+	/// <param name="k">種別</param>
+	/// <returns>"Animated" / "Primitive" / "Object3D"（不明なら "Object3D"）</returns>
 	const char* PrefabKindToStr(PrefabKind k) {
 		switch (k) {
 		case PrefabKind::Animated:  return "Animated";
@@ -65,6 +30,10 @@ namespace {
 		default:                    return "Object3D";
 		}
 	}
+	/// <summary>文字列からプリファブの種別を読む</summary>
+	/// <param name="s">種別の文字列</param>
+	/// <param name="fallback">どれにも当たらない時の値</param>
+	/// <returns>種別。読めなければ fallback</returns>
 	PrefabKind PrefabKindFromStr(const std::string& s, PrefabKind fallback) {
 		if (s == "Animated")  return PrefabKind::Animated;
 		if (s == "Primitive") return PrefabKind::Primitive;
@@ -72,6 +41,9 @@ namespace {
 		return fallback;
 	}
 
+	/// <summary>ビルボードの種類を保存用の文字列にする</summary>
+	/// <param name="m">ビルボードの種類</param>
+	/// <returns>"Full" / "YAxis" / "None"（不明なら "None"）</returns>
 	const char* BillboardModeToStr(BillboardMode m) {
 		switch (m) {
 		case BillboardMode::Full:  return "Full";
@@ -80,6 +52,10 @@ namespace {
 		default:                   return "None";
 		}
 	}
+	/// <summary>文字列からビルボードの種類を読む</summary>
+	/// <param name="s">種類の文字列</param>
+	/// <param name="fallback">どれにも当たらない時の値</param>
+	/// <returns>種類。読めなければ fallback</returns>
 	BillboardMode BillboardModeFromStr(const std::string& s, BillboardMode fallback) {
 		if (s == "Full")  return BillboardMode::Full;
 		if (s == "YAxis") return BillboardMode::YAxis;
@@ -87,6 +63,9 @@ namespace {
 		return fallback;
 	}
 
+	/// <summary>時間グループを保存用の文字列にする</summary>
+	/// <param name="g">時間グループ</param>
+	/// <returns>"Player" / "UI" / "World"（不明なら "World"）</returns>
 	const char* TimeGroupToStr(TimeGroup g) {
 		switch (g) {
 		case TimeGroup::Player: return "Player";
@@ -95,6 +74,10 @@ namespace {
 		default:                return "World";
 		}
 	}
+	/// <summary>文字列から時間グループを読む</summary>
+	/// <param name="s">時間グループの文字列</param>
+	/// <param name="fallback">どれにも当たらない時の値</param>
+	/// <returns>時間グループ。読めなければ fallback</returns>
 	TimeGroup TimeGroupFromStr(const std::string& s, TimeGroup fallback) {
 		if (s == "Player") return TimeGroup::Player;
 		if (s == "UI")     return TimeGroup::UI;
@@ -104,50 +87,65 @@ namespace {
 
 	// ===== Primitive 形状パラメータの JSON IO =====
 
+	/// <summary>リングの形状パラメータを JSON にする</summary>
+	/// <param name="p">書き出すパラメータ</param>
+	/// <returns>JSON オブジェクト</returns>
 	JsonValue RingParamsToJson(const PrimitiveGenerator::RingParams& p) {
 		JsonValue o = JsonValue::MakeObject();
 		o["outerRadius"] = static_cast<double>(p.outerRadius);
 		o["innerRadius"] = static_cast<double>(p.innerRadius);
 		o["divisions"]   = static_cast<int64_t>(p.divisions);
-		o["innerColor"]  = Vec4ToJson(p.innerColor);
-		o["outerColor"]  = Vec4ToJson(p.outerColor);
+		o["innerColor"]  = MakeVector4(p.innerColor);
+		o["outerColor"]  = MakeVector4(p.outerColor);
 		o["startAngle"]  = static_cast<double>(p.startAngle);
 		o["endAngle"]    = static_cast<double>(p.endAngle);
 		return o;
 	}
+	/// <summary>リングの形状パラメータを読む</summary>
+	/// <param name="o">読む JSON オブジェクト</param>
+	/// <param name="p">書き込み先（無いキーは元の値のまま）</param>
 	void RingParamsFromJson(const JsonValue& o, PrimitiveGenerator::RingParams& p) {
 		p.outerRadius = static_cast<float>(o["outerRadius"].AsDouble(p.outerRadius));
 		p.innerRadius = static_cast<float>(o["innerRadius"].AsDouble(p.innerRadius));
 		p.divisions   = static_cast<uint32_t>(o["divisions"].AsInt(static_cast<int64_t>(p.divisions)));
-		p.innerColor  = JsonToVec4(o["innerColor"], p.innerColor);
-		p.outerColor  = JsonToVec4(o["outerColor"], p.outerColor);
+		p.innerColor  = ReadVector4(o["innerColor"], p.innerColor);
+		p.outerColor  = ReadVector4(o["outerColor"], p.outerColor);
 		p.startAngle  = static_cast<float>(o["startAngle"].AsDouble(p.startAngle));
 		p.endAngle    = static_cast<float>(o["endAngle"].AsDouble(p.endAngle));
 	}
 
+	/// <summary>円柱の形状パラメータを JSON にする</summary>
+	/// <param name="p">書き出すパラメータ</param>
+	/// <returns>JSON オブジェクト</returns>
 	JsonValue CylinderParamsToJson(const PrimitiveGenerator::CylinderParams& p) {
 		JsonValue o = JsonValue::MakeObject();
 		o["topRadius"]    = static_cast<double>(p.topRadius);
 		o["bottomRadius"] = static_cast<double>(p.bottomRadius);
 		o["height"]       = static_cast<double>(p.height);
 		o["divisions"]    = static_cast<int64_t>(p.divisions);
-		o["topColor"]     = Vec4ToJson(p.topColor);
-		o["bottomColor"]  = Vec4ToJson(p.bottomColor);
+		o["topColor"]     = MakeVector4(p.topColor);
+		o["bottomColor"]  = MakeVector4(p.bottomColor);
 		o["startAngle"]   = static_cast<double>(p.startAngle);
 		o["endAngle"]     = static_cast<double>(p.endAngle);
 		return o;
 	}
+	/// <summary>円柱の形状パラメータを読む</summary>
+	/// <param name="o">読む JSON オブジェクト</param>
+	/// <param name="p">書き込み先（無いキーは元の値のまま）</param>
 	void CylinderParamsFromJson(const JsonValue& o, PrimitiveGenerator::CylinderParams& p) {
 		p.topRadius    = static_cast<float>(o["topRadius"].AsDouble(p.topRadius));
 		p.bottomRadius = static_cast<float>(o["bottomRadius"].AsDouble(p.bottomRadius));
 		p.height       = static_cast<float>(o["height"].AsDouble(p.height));
 		p.divisions    = static_cast<uint32_t>(o["divisions"].AsInt(static_cast<int64_t>(p.divisions)));
-		p.topColor     = JsonToVec4(o["topColor"], p.topColor);
-		p.bottomColor  = JsonToVec4(o["bottomColor"], p.bottomColor);
+		p.topColor     = ReadVector4(o["topColor"], p.topColor);
+		p.bottomColor  = ReadVector4(o["bottomColor"], p.bottomColor);
 		p.startAngle   = static_cast<float>(o["startAngle"].AsDouble(p.startAngle));
 		p.endAngle     = static_cast<float>(o["endAngle"].AsDouble(p.endAngle));
 	}
 
+	/// <summary>らせんの形状パラメータを JSON にする</summary>
+	/// <param name="p">書き出すパラメータ</param>
+	/// <returns>JSON オブジェクト</returns>
 	JsonValue HelixParamsToJson(const PrimitiveGenerator::HelixParams& p) {
 		JsonValue o = JsonValue::MakeObject();
 		o["startHelixRadius"] = static_cast<double>(p.startHelixRadius);
@@ -158,10 +156,13 @@ namespace {
 		o["turns"]            = static_cast<double>(p.turns);
 		o["circleSegments"]   = static_cast<int64_t>(p.circleSegments);
 		o["lengthSegments"]   = static_cast<int64_t>(p.lengthSegments);
-		o["startColor"]       = Vec4ToJson(p.startColor);
-		o["endColor"]         = Vec4ToJson(p.endColor);
+		o["startColor"]       = MakeVector4(p.startColor);
+		o["endColor"]         = MakeVector4(p.endColor);
 		return o;
 	}
+	/// <summary>らせんの形状パラメータを読む</summary>
+	/// <param name="o">読む JSON オブジェクト</param>
+	/// <param name="p">書き込み先（無いキーは元の値のまま）</param>
 	void HelixParamsFromJson(const JsonValue& o, PrimitiveGenerator::HelixParams& p) {
 		p.startHelixRadius = static_cast<float>(o["startHelixRadius"].AsDouble(p.startHelixRadius));
 		p.endHelixRadius   = static_cast<float>(o["endHelixRadius"].AsDouble(p.endHelixRadius));
@@ -171,8 +172,8 @@ namespace {
 		p.turns            = static_cast<float>(o["turns"].AsDouble(p.turns));
 		p.circleSegments   = static_cast<uint32_t>(o["circleSegments"].AsInt(static_cast<int64_t>(p.circleSegments)));
 		p.lengthSegments   = static_cast<uint32_t>(o["lengthSegments"].AsInt(static_cast<int64_t>(p.lengthSegments)));
-		p.startColor       = JsonToVec4(o["startColor"], p.startColor);
-		p.endColor         = JsonToVec4(o["endColor"], p.endColor);
+		p.startColor       = ReadVector4(o["startColor"], p.startColor);
+		p.endColor         = ReadVector4(o["endColor"], p.endColor);
 	}
 }
 
@@ -252,8 +253,8 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 	out.modelFile = root["model"]["file"].AsString();
 	out.tag = TagFromName(root["tag"].AsString());
 
-	out.defaultScale = JsonToVec3(root["defaults"]["scale"], { 1,1,1 });
-	out.defaultRotate = JsonToVec3(root["defaults"]["rotate"], { 0,0,0 });
+	out.defaultScale = ReadVector3(root["defaults"]["scale"], { 1,1,1 });
+	out.defaultRotate = ReadVector3(root["defaults"]["rotate"], { 0,0,0 });
 
 	// Primitive 用パラメータ
 	if (out.kind == PrefabKind::Primitive) {
@@ -261,16 +262,16 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		auto& pr = out.primitiveParams;
 		pr.primitiveType = static_cast<int>(pp["primitiveType"].AsInt(static_cast<int64_t>(pr.primitiveType)));
 		if (pp["texturePath"].IsString()) pr.texturePath = pp["texturePath"].AsString();
-		pr.color          = JsonToVec4(pp["color"], pr.color);
+		pr.color          = ReadVector4(pp["color"], pr.color);
 		pr.blendMode      = static_cast<int>(pp["blendMode"].AsInt(static_cast<int64_t>(pr.blendMode)));
 		pr.depthWrite     = pp["depthWrite"].AsBool(pr.depthWrite);
 		pr.alphaReference = static_cast<float>(pp["alphaReference"].AsDouble(pr.alphaReference));
 		pr.cullBackface   = pp["cullBackface"].AsBool(pr.cullBackface);
 		pr.samplerMode    = static_cast<int>(pp["samplerMode"].AsInt(static_cast<int64_t>(pr.samplerMode)));
 		pr.uvAutoScroll   = pp["uvAutoScroll"].AsBool(pr.uvAutoScroll);
-		pr.uvScrollSpeed  = JsonToVec2(pp["uvScrollSpeed"], pr.uvScrollSpeed);
-		pr.uvOffset       = JsonToVec2(pp["uvOffset"], pr.uvOffset);
-		pr.uvScale        = JsonToVec2(pp["uvScale"], pr.uvScale);
+		pr.uvScrollSpeed  = ReadVector2(pp["uvScrollSpeed"], pr.uvScrollSpeed);
+		pr.uvOffset       = ReadVector2(pp["uvOffset"], pr.uvOffset);
+		pr.uvScale        = ReadVector2(pp["uvScale"], pr.uvScale);
 		pr.uvFlipU        = pp["uvFlipU"].AsBool(pr.uvFlipU);
 		pr.uvFlipV        = pp["uvFlipV"].AsBool(pr.uvFlipV);
 		pr.billboardMode  = BillboardModeFromStr(pp["billboardMode"].AsString(BillboardModeToStr(pr.billboardMode)), pr.billboardMode);
@@ -289,10 +290,10 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		else if (shapeStr == "Capsule") out.colliderShape = ColliderShape::Capsule;
 		else                            out.colliderShape = ColliderShape::Sphere;
 
-		out.colliderOffset = JsonToVec3(col["offset"], { 0,0,0 });
+		out.colliderOffset = ReadVector3(col["offset"], { 0,0,0 });
 		out.colliderRadius = static_cast<float>(col["radius"].AsDouble(1.0));
-		out.colliderHalfExtents = JsonToVec3(col["halfExtents"], { 0.5f, 0.5f, 0.5f });
-		out.colliderCapsuleRadius = static_cast<float>(col["capsuleRadius"].AsDouble(0.5));
+		out.colliderHalfExtents = ReadVector3(col["halfExtents"], { kDefaultColliderHalfExtent, kDefaultColliderHalfExtent, kDefaultColliderHalfExtent });
+		out.colliderCapsuleRadius = static_cast<float>(col["capsuleRadius"].AsDouble(kDefaultCapsuleRadius));
 		out.colliderCapsuleHeight = static_cast<float>(col["capsuleHeight"].AsDouble(1.0));
 	}
 
@@ -349,7 +350,7 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		out.hasMelee             = true;
 		out.meleeStartup         = static_cast<float>(meJ["startup"].AsDouble(out.meleeStartup));
 		out.meleeActiveDuration  = static_cast<float>(meJ["activeDuration"].AsDouble(out.meleeActiveDuration));
-		out.meleeOffset          = JsonToVec3(meJ["offset"], out.meleeOffset);
+		out.meleeOffset          = ReadVector3(meJ["offset"], out.meleeOffset);
 		out.meleeComboWindow     = static_cast<float>(meJ["comboWindow"].AsDouble(out.meleeComboWindow));
 		out.meleeRecovery        = static_cast<float>(meJ["recovery"].AsDouble(out.meleeRecovery));
 		out.meleeCleanWindow     = static_cast<float>(meJ["cleanWindow"].AsDouble(out.meleeCleanWindow));
@@ -401,9 +402,9 @@ bool PrefabManager::LoadFile(const std::string& filePath, PrefabDef& out) const 
 		if (weJ["modelDir"].IsString())  out.weaponModelDir  = weJ["modelDir"].AsString();
 		if (weJ["modelFile"].IsString()) out.weaponModelFile = weJ["modelFile"].AsString();
 		if (weJ["bone"].IsString())      out.weaponBone      = weJ["bone"].AsString();
-		out.weaponOffsetTranslate = JsonToVec3(weJ["translate"], out.weaponOffsetTranslate);
-		out.weaponOffsetRotate    = JsonToVec3(weJ["rotate"],    out.weaponOffsetRotate);
-		out.weaponOffsetScale     = JsonToVec3(weJ["scale"],     out.weaponOffsetScale);
+		out.weaponOffsetTranslate = ReadVector3(weJ["translate"], out.weaponOffsetTranslate);
+		out.weaponOffsetRotate    = ReadVector3(weJ["rotate"],    out.weaponOffsetRotate);
+		out.weaponOffsetScale     = ReadVector3(weJ["scale"],     out.weaponOffsetScale);
 	}
 
 	// エフェクトスロット（スロット名 → エフェクト名）
@@ -443,8 +444,8 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 	root["tag"] = std::string(GetTagName(def.tag));
 
 	JsonValue defaultsObj = JsonValue::MakeObject();
-	defaultsObj["scale"] = Vec3ToJson(def.defaultScale);
-	defaultsObj["rotate"] = Vec3ToJson(def.defaultRotate);
+	defaultsObj["scale"] = MakeVector3(def.defaultScale);
+	defaultsObj["rotate"] = MakeVector3(def.defaultRotate);
 	root["defaults"] = std::move(defaultsObj);
 
 	if (def.kind == PrefabKind::Primitive) {
@@ -452,16 +453,16 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		JsonValue pp = JsonValue::MakeObject();
 		pp["primitiveType"] = static_cast<int64_t>(pr.primitiveType);
 		pp["texturePath"]   = pr.texturePath;
-		pp["color"]         = Vec4ToJson(pr.color);
+		pp["color"]         = MakeVector4(pr.color);
 		pp["blendMode"]     = static_cast<int64_t>(pr.blendMode);
 		pp["depthWrite"]    = pr.depthWrite;
 		pp["alphaReference"] = static_cast<double>(pr.alphaReference);
 		pp["cullBackface"]  = pr.cullBackface;
 		pp["samplerMode"]   = static_cast<int64_t>(pr.samplerMode);
 		pp["uvAutoScroll"]  = pr.uvAutoScroll;
-		pp["uvScrollSpeed"] = Vec2ToJson(pr.uvScrollSpeed);
-		pp["uvOffset"]      = Vec2ToJson(pr.uvOffset);
-		pp["uvScale"]       = Vec2ToJson(pr.uvScale);
+		pp["uvScrollSpeed"] = MakeVector2(pr.uvScrollSpeed);
+		pp["uvOffset"]      = MakeVector2(pr.uvOffset);
+		pp["uvScale"]       = MakeVector2(pr.uvScale);
 		pp["uvFlipU"]       = pr.uvFlipU;
 		pp["uvFlipV"]       = pr.uvFlipV;
 		pp["billboardMode"] = std::string(BillboardModeToStr(pr.billboardMode));
@@ -481,9 +482,9 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		case ColliderShape::Sphere:  shapeStr = "Sphere"; break;
 		}
 		colObj["shape"] = std::string(shapeStr);
-		colObj["offset"] = Vec3ToJson(def.colliderOffset);
+		colObj["offset"] = MakeVector3(def.colliderOffset);
 		colObj["radius"] = static_cast<double>(def.colliderRadius);
-		colObj["halfExtents"] = Vec3ToJson(def.colliderHalfExtents);
+		colObj["halfExtents"] = MakeVector3(def.colliderHalfExtents);
 		colObj["capsuleRadius"] = static_cast<double>(def.colliderCapsuleRadius);
 		colObj["capsuleHeight"] = static_cast<double>(def.colliderCapsuleHeight);
 		root["collider"] = std::move(colObj);
@@ -522,7 +523,7 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 	}
 
 	// Enemy/Boss のスコア（デフォルト 10 から外れていれば書き出す）
-	if (def.scoreValue != 10) {
+	if (def.scoreValue != kDefaultScoreValue) {
 		root["scoreValue"] = static_cast<int64_t>(def.scoreValue);
 	}
 
@@ -530,7 +531,7 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		JsonValue meObj = JsonValue::MakeObject();
 		meObj["startup"]         = static_cast<double>(def.meleeStartup);
 		meObj["activeDuration"]  = static_cast<double>(def.meleeActiveDuration);
-		meObj["offset"]          = Vec3ToJson(def.meleeOffset);
+		meObj["offset"]          = MakeVector3(def.meleeOffset);
 		meObj["comboWindow"]     = static_cast<double>(def.meleeComboWindow);
 		meObj["recovery"]        = static_cast<double>(def.meleeRecovery);
 		meObj["cleanWindow"]     = static_cast<double>(def.meleeCleanWindow);
@@ -577,9 +578,9 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		weObj["modelDir"]  = def.weaponModelDir;
 		weObj["modelFile"] = def.weaponModelFile;
 		weObj["bone"]      = def.weaponBone;
-		weObj["translate"] = Vec3ToJson(def.weaponOffsetTranslate);
-		weObj["rotate"]    = Vec3ToJson(def.weaponOffsetRotate);
-		weObj["scale"]     = Vec3ToJson(def.weaponOffsetScale);
+		weObj["translate"] = MakeVector3(def.weaponOffsetTranslate);
+		weObj["rotate"]    = MakeVector3(def.weaponOffsetRotate);
+		weObj["scale"]     = MakeVector3(def.weaponOffsetScale);
 		root["weapon"] = std::move(weObj);
 	}
 
@@ -607,5 +608,5 @@ bool PrefabManager::Save(const PrefabDef& def, const std::string& filePath) {
 		std::error_code ec;
 		std::filesystem::create_directories(path.parent_path(), ec);
 	}
-	return JsonWriter::WriteFile(filePath, root, { true, 2 });
+	return JsonWriter::WriteFile(filePath, root, { true, kJsonIndentWidth });
 }

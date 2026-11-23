@@ -8,6 +8,10 @@
 #ifdef USE_IMGUI
 #include "imgui.h"
 #endif
+namespace {
+	// ResetParams で戻す縁の強さの既定値
+	constexpr float kDefaultEdgeStrength = 6.0f;
+}
 
 void OutlineDepthEffect::InitializeOutline(
 	DirectXCore* dxCore,
@@ -52,7 +56,7 @@ void OutlineDepthEffect::ShowImGui()
 
 void OutlineDepthEffect::ResetParams()
 {
-	edgeStrength_ = 6.0f;
+	edgeStrength_ = kDefaultEdgeStrength;
 }
 
 void OutlineDepthEffect::SetProjectionMatrix(const Matrix4x4& projection)

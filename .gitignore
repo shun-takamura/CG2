@@ -361,3 +361,6 @@ Project/Assets/Models/PlayerMech/PlayerMech_rig.blend
 
 # 動画（タイトルの放置デモなど。大きいので git で管理しない。配布 ZIP へは package_release.py が FS から入れる）
 *.mp4
+
+# 講評会・課題用の資料（UML クラス図・発表メモ・該当ファイル一覧）。手元だけで使い、Git では管理しない
+Project/Documents/CodeReview/

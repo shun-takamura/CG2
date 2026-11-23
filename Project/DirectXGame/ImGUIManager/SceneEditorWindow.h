@@ -18,10 +18,17 @@ class ImGuiManager;
 /// </summary>
 class SceneEditorWindow : public IImGuiWindow {
 public:
+    /// <summary>"Scene Editor" ウィンドウとして作り、Debug ではアセットを走査するスレッドを始める</summary>
+    /// <param name="manager">アクティブシーンとアセットブラウザの追加セクションを持つ ImGuiManager</param>
     explicit SceneEditorWindow(ImGuiManager* manager);
+    /// <summary>走査スレッドに止まるよう伝えて終わるまで待つ</summary>
     ~SceneEditorWindow() override;
 
 protected:
+    /// <summary>
+    /// アセットブラウザ（モデル・スプライト・マテリアル・プリミティブ・アニメーション・エフェクト）をフォルダのツリーで出し、
+    /// 各項目をビューポートへのドラッグ元にする。シーン JSON の保存・読込と、アセット・シーンの変更の監視もここで回す
+    /// </summary>
     void OnDraw() override;
 
 private:
@@ -87,10 +94,7 @@ private:
     char searchBuf_[256] = {};
 
     /// <summary>
-    /// バックグラウンドスレッドの処理
-    /// 1. Resources/Models / Resources/Textures / Resources/Models/Animated をスキャン
-    /// 2. .obj は ModelManager::PreloadCPU を呼んで先読み
-    ///    （.png / .gltf は表示のみ。実体はドロップ時にロード）
+    /// 走査スレッドの本体。アセットを列挙してから、モデルを CPU で先読みする（初回だけ。失敗は無視する）
     /// </summary>
     void WorkerFunc();
 
@@ -128,6 +132,7 @@ private:
     /// Blender の自動同期と対になって双方向リアルタイム編集を成立させる。
     /// 保存後は MarkSceneFileSynced で自分の書き込みを再読込しない（反響ループ防止）。
     /// </summary>
+    /// <param name="dt">経過時間 [秒]（デバウンス 0.3 秒を数える）</param>
     void AutoSaveSceneIfDirty(float dt);
 
     /// <summary>現在のシーンファイルの更新時刻を「既知」として記録する（自己トリガ抑止）。</summary>
