@@ -208,6 +208,24 @@ void EffectManager::SetRotation(EffectHandle handle, const Vector3& rotate) {
     if (it->second) it->second->SetWorldRotation(rotate);
 }
 
+void EffectManager::Release(EffectHandle handle) {
+    auto it = handleToInstance_.find(handle);
+    if (it == handleToInstance_.end()) return;
+    if (it->second) it->second->RequestRelease();
+}
+
+void EffectManager::SetBeamLength(EffectHandle handle, float length) {
+    auto it = handleToInstance_.find(handle);
+    if (it == handleToInstance_.end()) return;
+    if (it->second) it->second->SetBeamLength(length);
+}
+
+void EffectManager::SetPreviewBeamLength(float length) {
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->SetBeamLength(length);
+    }
+}
+
 bool EffectManager::IsAlive(EffectHandle handle) const {
     return handleToInstance_.find(handle) != handleToInstance_.end();
 }
@@ -309,6 +327,12 @@ void EffectManager::SyncPreview(const EffectDef& def, const Vector3& worldPos) {
         if (!inst) continue;
         inst->SyncFromDef(def);
         inst->SetWorldPosition(worldPos);
+    }
+}
+
+void EffectManager::SetPreviewRotation(const Vector3& rotate) {
+    for (auto& inst : previewInstances_) {
+        if (inst) inst->SetWorldRotation(rotate);
     }
 }
 

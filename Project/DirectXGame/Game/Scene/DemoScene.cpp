@@ -52,6 +52,154 @@
 #include "ModelManager.h"
 #include "IImGuiEditable.h"
 #include "LineRenderer.h"
+#include "MathUtility.h"
+#include "Fracture/FracturedMeshRenderer.h"
+#include "Fracture/VoronoiFracture.h"
+
+// =============================================================
+// 岩のボロノイ分割の確認（ボス必殺技で割る岩）
+// 左＝割る前 / 中＝割れて広がる / 右＝割れてディゾルブ。ImGui「岩のボロノイ分割」で割り方と見た目を変える
+// =============================================================
+struct DemoScene::FracturePreview {
+	static constexpr const char* kModels[] = {
+		"Resources/Models/Rocks/BossRock_A.glb",
+		"Resources/Models/Rocks/BossRock_B.glb",
+		"Resources/Models/Rocks/BossRock_C.glb",
+	};
+	static constexpr int kRockCount = 3;
+	// 岩どうしの間隔 [m]
+	static constexpr float kRockSpacing = 6.0f;
+	// 岩を置く高さ [m]
+	static constexpr float kRockHeight = 2.5f;
+	// 自動で回す速さ [rad/s]
+	static constexpr float kAutoRotateSpeed = 0.3f;
+
+	FracturedMeshRenderer renderer;
+	VoronoiFracture::Settings settings;
+	int modelIndex = 0;
+	bool built = false;
+	size_t fragmentCount = 0;
+	size_t vertexCount = 0;
+	uint32_t capFailures = 0;
+	float buildMs = 0.0f;
+	std::vector<Vector3> spinAxes;
+	std::vector<FracturedMeshRenderer::FragmentPose> explodedPoses;
+	std::vector<FracturedMeshRenderer::FragmentPose> dissolvePoses;
+	float rockScale = 2.0f;
+	float explode = 0.4f;
+	float spin = 0.5f;
+	float dissolve = 0.6f;
+	float yaw = 0.0f;
+	bool autoRotate = true;
+
+	/// <summary>選んだモデルを今の設定で割り直す</summary>
+	void Rebuild() {
+		built = false;
+		VoronoiFracture::SourceMesh mesh;
+		if (!VoronoiFracture::LoadSourceMesh(kModels[modelIndex], mesh)) {
+			Log(std::string("[FracturePreview] モデルを読めない: ") + kModels[modelIndex] + "\n");
+			renderer.SetMesh(VoronoiFracture::Result{});
+			return;
+		}
+		const VoronoiFracture::Result result = VoronoiFracture::Build(mesh, settings);
+		renderer.SetMesh(result);
+		built = result.IsValid();
+		fragmentCount = result.fragments.size();
+		vertexCount = result.vertices.size();
+		capFailures = result.capFailures;
+		buildMs = result.buildMilliseconds;
+		Log("[FracturePreview] fragments=" + std::to_string(fragmentCount) + " verts=" + std::to_string(vertexCount) +
+			" capFailures=" + std::to_string(capFailures) + " ms=" + std::to_string(buildMs) + "\n");
+
+		std::mt19937 rng(settings.randomSeed);
+		std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+		spinAxes.resize(fragmentCount);
+		for (Vector3& axis : spinAxes) {
+			const Vector3 v{ dist(rng), dist(rng), dist(rng) };
+			axis = Length(v) > 1e-3f ? Normalize(v) : Vector3{ 0.0f, 1.0f, 0.0f };
+		}
+	}
+
+	/// <summary>広がり・回転・ディゾルブの量から破片の姿勢を作る</summary>
+	void UpdatePoses() {
+		const auto& fragments = renderer.GetFragments();
+		explodedPoses.resize(fragments.size());
+		dissolvePoses.resize(fragments.size());
+		for (size_t i = 0; i < fragments.size(); ++i) {
+			const Vector3& c = fragments[i].center;
+			const float len = Length(c);
+			const Vector3 dir = len > 1e-4f ? Vector3{ c.x / len, c.y / len, c.z / len } : Vector3{ 0.0f, 1.0f, 0.0f };
+			const float distance = explode * (0.5f + len);
+			FracturedMeshRenderer::FragmentPose pose;
+			pose.offset = { dir.x * distance, dir.y * distance, dir.z * distance };
+			pose.rotation = MakeRotateAxisAngleQuaternion(spinAxes[i], spin * explode * kPi);
+			explodedPoses[i] = pose;
+			pose.visibility = dissolve;
+			dissolvePoses[i] = pose;
+		}
+	}
+
+	/// <summary>3 個の岩を描く（3D の描画の途中で呼ぶ）</summary>
+	void Draw(const Camera& camera) {
+		if (!built) return;
+		UpdatePoses();
+		std::vector<FracturedMeshRenderer::RockDraw> rocks(kRockCount);
+		for (int k = 0; k < kRockCount; ++k) {
+			Transform t{ { rockScale, rockScale, rockScale }, { 0.0f, yaw, 0.0f },
+				{ (static_cast<float>(k) - 1.0f) * kRockSpacing, kRockHeight, 0.0f } };
+			rocks[k].world = MakeAffineMatrix(t);
+			rocks[k].textureScale = rockScale;
+		}
+		rocks[1].broken = true;
+		rocks[1].fragments = &explodedPoses;
+		rocks[2].broken = true;
+		rocks[2].fragments = &dissolvePoses;
+		renderer.Draw(camera, rocks);
+	}
+
+#ifdef USE_IMGUI
+	/// <summary>割り方と見た目の ImGui</summary>
+	void OnImGui() {
+		if (!ImGui::Begin("岩のボロノイ分割")) {
+			ImGui::End();
+			return;
+		}
+		bool rebuild = false;
+		rebuild |= ImGui::Combo("モデル", &modelIndex, "BossRock_A\0BossRock_B\0BossRock_C\0");
+		int seedCount = static_cast<int>(settings.seedCount);
+		if (ImGui::SliderInt("種点の数", &seedCount, 2, 64)) {
+			settings.seedCount = static_cast<uint32_t>(seedCount);
+			rebuild = true;
+		}
+		int randomSeed = static_cast<int>(settings.randomSeed);
+		if (ImGui::InputInt("乱数の種", &randomSeed)) {
+			settings.randomSeed = static_cast<uint32_t>((std::max)(randomSeed, 0));
+			rebuild = true;
+		}
+		rebuild |= ImGui::SliderFloat("種点の最小間隔", &settings.minSeedSpacing, 0.0f, 1.0f);
+		if (ImGui::Button("割り直す")) rebuild = true;
+		if (rebuild) Rebuild();
+
+		ImGui::Text("破片 %zu 個 / 頂点 %zu / %.1f ms", fragmentCount, vertexCount, buildMs);
+		if (capFailures > 0) {
+			ImGui::TextColored({ 1.0f, 0.4f, 0.3f, 1.0f }, "閉じなかった切り口: %u", capFailures);
+		} else {
+			ImGui::Text("閉じなかった切り口: 0");
+		}
+
+		ImGui::SeparatorText("動き（確認用）");
+		ImGui::SliderFloat("広がり", &explode, 0.0f, 2.0f);
+		ImGui::SliderFloat("回転", &spin, 0.0f, 2.0f);
+		ImGui::SliderFloat("ディゾルブ（右）", &dissolve, 0.0f, 1.0f);
+		ImGui::SliderFloat("大きさ", &rockScale, 0.5f, 5.0f);
+		ImGui::Checkbox("自動で回す", &autoRotate);
+
+		ImGui::SeparatorText("見た目");
+		renderer.OnImGui();
+		ImGui::End();
+	}
+#endif
+};
 
 DemoScene::DemoScene() {
 	std::random_device rd;
@@ -266,6 +414,11 @@ void DemoScene::Initialize() {
 	// ここで環境マップをモデルにセット
 	GetObject3DManager()->SetEnvironmentTexture("Resources/Cubemaps/passendorf_snow_8k.dds");
 
+	// 岩のボロノイ分割の確認
+	fracturePreview_ = std::make_unique<FracturePreview>();
+	fracturePreview_->renderer.Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), FracturePreview::kRockCount);
+	fracturePreview_->Rebuild();
+
 	// GPU Particle + EffectManager は Game が共通管理する（GameScene::UpdateGlobalEffects 経由で使用）
 
 	// サウンドのロード
@@ -320,6 +473,10 @@ void DemoScene::Finalize() {
 	// EffectManager / GPUParticle の終了は Game::Finalize 側で実施
 	ClearAllDynamicEntities();
 	hitEffectPlanes_.clear();
+	if (fracturePreview_) {
+		fracturePreview_->renderer.Finalize();
+		fracturePreview_.reset();
+	}
 }
 
 void DemoScene::Update() {
@@ -611,6 +768,16 @@ void DemoScene::Update() {
 	// 全シーン共通の EffectManager + GPUParticle を更新
 	UpdateGlobalEffects(camera_.get(), GetScaledDeltaTime());
 
+	// 岩のボロノイ分割の確認
+	if (fracturePreview_) {
+		if (fracturePreview_->autoRotate) {
+			fracturePreview_->yaw += FracturePreview::kAutoRotateSpeed * GetScaledDeltaTime();
+		}
+#ifdef USE_IMGUI
+		fracturePreview_->OnImGui();
+#endif
+	}
+
 	// debug camera の更新は GameScene::UpdateDebugCameraIfActive() で行う
 }
 
@@ -656,6 +823,11 @@ void DemoScene::Draw() {
 	// HitEffectPlanes の描画
 	for (auto& p : hitEffectPlanes_) {
 		p.mesh->Draw();
+	}
+
+	// 岩のボロノイ分割の確認（Object3D の描画が全部終わってから。ルートシグネチャを張り替えるため）
+	if (fracturePreview_) {
+		fracturePreview_->Draw(*camera_);
 	}
 
 	// パーティクル描画

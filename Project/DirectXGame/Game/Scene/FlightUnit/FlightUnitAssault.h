@@ -4,10 +4,11 @@
 
 /// <summary>
 /// 攻撃系（20_Loadout.md §3.1）。背中のバックパックに、上へファンネル大 2 基・下の左右へファンネル小 2 基を付ける。
-/// 常時：ファンネル大 2 基の砲口から左右交互に、レティクルの位置へ支援射撃（レティクルが敵に重なっていればその敵へ強ホーミング）。
-///       ファンネル大の砲身は付いたままレティクルの方へ向く。
+/// 常時：自機が撃ったとき、クールタイムが明けているファンネル大の砲口から（左右交互に）レティクルへビームを撃つ。
+///       ビームは撃っている間レティクルへ付いていく。ファンネル大の砲身は付いたままレティクルの方へ向く。
 /// RB：4 基がバックパックから離れて自機のまわりの輪を回り、数秒撃つ。レティクルが重なっている敵を優先し、
-///     重なっていなければ画面上の敵を撃つ。終わるとバックパックへ戻り、戻るまで常時の支援射撃は止まる。
+///     重なっていなければ画面上の敵を撃つ。大はビーム（長いクールタイム・狙った敵へ付いていく）、
+///     小は自機の通常弾と同じ単発（短い間隔）。終わるとバックパックへ戻り、戻るまで常時の支援射撃は止まる。
 /// ロックはしない（必殺技の Storm Lock と役割を分ける）。
 /// </summary>
 class FlightUnitAssault : public FlightUnitSkill {
@@ -42,6 +43,9 @@ public:
 	/// <param name="dt">実時間の経過 [秒]</param>
 	/// <param name="canAct">操作できるか</param>
 	void Update(float dt, bool canAct) override;
+	/// <summary>自機が撃った：展開していなければ、クールタイムが明けたファンネル大からビームを撃つ</summary>
+	/// <param name="canAct">操作できるか</param>
+	void OnPlayerShot(bool canAct) override;
 
 	/// <summary>バックパックを背負うかを返す</summary>
 	/// <returns>常に true</returns>
@@ -83,13 +87,19 @@ private:
 		Vector3 mountForward{ 0.0f, 0.0f, 1.0f };// 付けた所の前（ワールド。最後の UpdateModels）
 		Matrix4x4 world{};                       // 最後に作った行列
 		bool hasWorld = false;
-		float fireTimer = 0.0f;
+		float fireTimer = 0.0f;                  // 小：次に撃つまで / 大：ビームのクールタイム
+		uint32_t beamId = 0;                     // 大：撃っているビーム（0 なら撃っていない）
 	};
 
-	/// <summary>ファンネル大の砲身をレティクルへ向け、付いている間は砲口から左右交互にレティクルへ支援射撃する</summary>
+	/// <summary>ファンネル大の砲身をレティクルへ向け、撃っているビームの根元と向きを付け直す</summary>
 	/// <param name="dt">実時間の経過 [秒]</param>
-	/// <param name="canAct">操作できるか（false なら撃たない）</param>
+	/// <param name="canAct">操作できるか（false ならレティクルを追わない）</param>
 	void UpdatePassive(float dt, bool canAct);
+	/// <summary>ファンネル大 i からビームを撃つ（クールタイムを入れる）</summary>
+	/// <param name="i">ファンネルの番号 0〜1</param>
+	/// <param name="dir">向き（ワールド）</param>
+	/// <param name="damageScale">自機の攻撃力に掛ける倍率</param>
+	void FireLargeBeam(int i, const Vector3& dir, float damageScale);
 	/// <summary>離れたファンネルを輪の上で回して狙った敵を撃たせ、時間が来たら戻す</summary>
 	/// <param name="dt">実時間の経過 [秒]</param>
 	/// <param name="canAct">操作できるか</param>
@@ -110,8 +120,8 @@ private:
 	/// <returns>ワールド座標</returns>
 	Vector3 MuzzlePosition(const Funnel& f) const;
 
-	// ----- 常時：支援射撃 -----
-	float passiveInterval_[3]    = { 0.80f, 0.65f, 0.50f };
+	// ----- 常時：支援射撃（自機の射撃に合わせてファンネル大がビーム） -----
+	float largeBeamCooldown_[3]  = { 4.0f, 3.5f, 3.0f };   // ファンネル大 1 基のビームのクールタイム [秒]（常時・RB 共通）
 	float passiveDamageScale_[3] = { 0.30f, 0.40f, 0.50f };
 	float turretTurnSpeed_ = 8.0f;   // 砲身がレティクルへ向く速さ（大きいほど速い）
 	float muzzleZ_ = 0.5f;           // 砲口（モデルのローカル Z。モデルは長い辺が約 1）
@@ -121,7 +131,7 @@ private:
 	float funnelDamageScale_[3] = { 0.50f, 0.65f, 0.80f };
 	float cooldown_[3]          = { 25.0f, 23.0f, 20.0f };
 	float attackScale_[3]       = { 1.05f, 1.10f, 1.15f };   // 常時：自機の攻撃力（射撃・近接・支援射撃）
-	float funnelFireInterval_ = 0.35f;
+	float funnelFireInterval_ = 0.35f;   // ファンネル小の単発の間隔 [秒]
 	float funnelRadius_ = 2.2f;       // 自機のまわりの輪の半径
 	float funnelSpin_ = 1.2f;         // 輪の回る速さ（rad/s）
 	float funnelDeploy_ = 0.25f;      // バックパックから輪へ出ていく時間
@@ -133,7 +143,6 @@ private:
 	float timer_ = 0.0f;
 	float returnTimer_ = 0.0f;
 	float spinAngle_ = 0.0f;
-	float passiveTimer_ = 0.0f;
 	int passiveNext_ = 0;             // 次に撃つファンネル大
 	std::array<Funnel, kFunnelCount> funnels_;
 	std::vector<IImGuiEditable*> screenEnemies_;

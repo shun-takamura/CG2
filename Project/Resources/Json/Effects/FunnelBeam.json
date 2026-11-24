@@ -1,0 +1,138 @@
+{
+  "name": "FunnelBeam",
+  "totalDuration": 1.0,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Muzzle Glow",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        1.4,
+        1.4,
+        1.0
+      ],
+      "endScale": [
+        1.4,
+        1.4,
+        1.0
+      ],
+      "startColor": [
+        1.0,
+        0.6,
+        0.3,
+        1.0
+      ],
+      "endColor": [
+        1.0,
+        0.6,
+        0.3,
+        1.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": [
+    {
+      "displayName": "Outer",
+      "mode": 1,
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.08,
+      "wobbleFrequency": 45.0,
+      "wobbleWaveLength": 5.0,
+      "startWidth": 0.9,
+      "endWidth": 0.9,
+      "startColor": [
+        1.0,
+        0.5,
+        0.2,
+        0.7
+      ],
+      "endColor": [
+        1.0,
+        0.4,
+        0.15,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.85,
+          "color": [
+            1.0,
+            0.5,
+            0.2,
+            0.5
+          ]
+        }
+      ],
+      "coreWhiteness": 0.2,
+      "edgeAlpha": 0.0,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 1.0,
+      "flareLength": 2.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Core",
+      "mode": 1,
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.12,
+      "wobbleFrequency": 60.0,
+      "wobbleWaveLength": 3.0,
+      "startWidth": 0.3,
+      "endWidth": 0.3,
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        1.0,
+        0.85,
+        0.6,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.9,
+          "color": [
+            1.0,
+            0.9,
+            0.7,
+            0.8
+          ]
+        }
+      ],
+      "coreWhiteness": 1.0,
+      "edgeAlpha": 0.25,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 2.0,
+      "flareLength": 2.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    }
+  ]
+}

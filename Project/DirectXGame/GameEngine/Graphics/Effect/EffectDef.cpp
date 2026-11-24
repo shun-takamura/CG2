@@ -233,6 +233,7 @@ namespace {
         ParseLightningParams(o["lightningParams"], c.lightningParams);
         ParseFrameParams(o["frameParams"], c.frameParams);
         c.offset     = ReadVector3(o["offset"], c.offset);
+        c.beamAnchor = AsInt(o["beamAnchor"], c.beamAnchor);
         c.rotate     = ReadVector3(o["rotate"], c.rotate);
         // 回転アニメーション
         if (o["randomRotateOnSpawn"].IsBool()) c.randomRotateOnSpawn = o["randomRotateOnSpawn"].AsBool(c.randomRotateOnSpawn);
@@ -323,6 +324,7 @@ namespace {
             c.texturePath = o["texturePath"].AsString();
         }
         c.offset     = ReadVector3(o["offset"], c.offset);
+        c.beamAnchor = AsInt(o["beamAnchor"], c.beamAnchor);
         c.startTime  = AsFloat(o["startTime"], c.startTime);
         c.duration   = AsFloat(o["duration"], c.duration);
         c.burstCount = AsUInt(o["burstCount"], c.burstCount);
@@ -423,6 +425,58 @@ namespace {
         c.spotCosAngle        = AsFloat(o["spotCosAngle"], c.spotCosAngle);
         c.spotCosFalloffStart = AsFloat(o["spotCosFalloffStart"], c.spotCosFalloffStart);
     }
+
+    /// <summary>Ribbon コンポーネント 1 個を読む</summary>
+    /// <param name="o">読む JSON オブジェクト</param>
+    /// <param name="c">書き込み先（無いキーは既定値のまま）</param>
+    void ParseRibbon(const JsonValue& o, EffectRibbonComponent& c) {
+        if (o["displayName"].IsString()) c.displayName = o["displayName"].AsString();
+        c.mode      = AsInt(o["mode"], c.mode);
+        c.offset    = ReadVector3(o["offset"], c.offset);
+        c.startTime = AsFloat(o["startTime"], c.startTime);
+        c.lifetime  = AsFloat(o["lifetime"], c.lifetime);
+        // Trail
+        c.pointLifetime    = AsFloat(o["pointLifetime"], c.pointLifetime);
+        c.minPointDistance = AsFloat(o["minPointDistance"], c.minPointDistance);
+        c.maxPoints        = AsUInt(o["maxPoints"], c.maxPoints);
+        // Beam
+        c.lengthScale      = AsFloat(o["lengthScale"], c.lengthScale);
+        c.defaultLength    = AsFloat(o["defaultLength"], c.defaultLength);
+        c.beamSegments     = AsUInt(o["beamSegments"], c.beamSegments);
+        c.extendTime       = AsFloat(o["extendTime"], c.extendTime);
+        c.wobbleAmplitude  = AsFloat(o["wobbleAmplitude"], c.wobbleAmplitude);
+        c.wobbleFrequency  = AsFloat(o["wobbleFrequency"], c.wobbleFrequency);
+        c.wobbleWaveLength = AsFloat(o["wobbleWaveLength"], c.wobbleWaveLength);
+        c.flareLength      = AsFloat(o["flareLength"], c.flareLength);
+        c.flareStartScale  = AsFloat(o["flareStartScale"], c.flareStartScale);
+        c.segmentPower     = AsFloat(o["segmentPower"], c.segmentPower);
+        c.releaseTime      = AsFloat(o["releaseTime"], c.releaseTime);
+        // 見た目
+        c.startWidth = AsFloat(o["startWidth"], c.startWidth);
+        c.endWidth   = AsFloat(o["endWidth"], c.endWidth);
+        c.widthCurve = AsCurve(o["widthCurve"], c.widthCurve);
+        c.startColor = ReadVector4(o["startColor"], c.startColor);
+        c.endColor   = ReadVector4(o["endColor"], c.endColor);
+        const JsonValue& ck = o["colorKeys"];
+        if (ck.IsArray()) {
+            c.colorKeys.clear();
+            for (size_t i = 0; i < ck.Size(); ++i) {
+                EffectColorKey key;
+                key.location = AsFloat(ck[i]["location"], key.location);
+                key.color    = ReadVector4(ck[i]["color"], key.color);
+                c.colorKeys.push_back(key);
+            }
+        }
+        c.coreWhiteness  = AsFloat(o["coreWhiteness"], c.coreWhiteness);
+        c.edgeAlpha      = AsFloat(o["edgeAlpha"], c.edgeAlpha);
+        if (o["texturePath"].IsString()) c.texturePath = o["texturePath"].AsString();
+        c.blendMode      = AsInt(o["blendMode"], c.blendMode);
+        c.timeGroup      = AsInt(o["timeGroup"], c.timeGroup);
+        c.uvTilesPerUnit = AsFloat(o["uvTilesPerUnit"], c.uvTilesPerUnit);
+        c.uvScrollSpeed  = ReadVector2(o["uvScrollSpeed"], c.uvScrollSpeed);
+        if (o["useBloom"].IsBool()) c.useBloom = o["useBloom"].AsBool(c.useBloom);
+        c.bloomIntensity = AsFloat(o["bloomIntensity"], c.bloomIntensity);
+    }
 }
 
 namespace EffectDefIO {
@@ -487,6 +541,18 @@ namespace EffectDefIO {
                 EffectSoundComponent c{};
                 ParseSound(sounds[i], c);
                 out.sounds.push_back(c);
+            }
+        }
+
+        // ribbons
+        const JsonValue& ribbons = root["ribbons"];
+        if (ribbons.IsArray()) {
+            out.ribbons.clear();
+            out.ribbons.reserve(ribbons.Size());
+            for (size_t i = 0; i < ribbons.Size(); ++i) {
+                EffectRibbonComponent c{};
+                ParseRibbon(ribbons[i], c);
+                out.ribbons.push_back(c);
             }
         }
 
@@ -657,6 +723,7 @@ namespace EffectDefIO {
             o["lightningParams"] = LightningParamsToJson(c.lightningParams);
             o["frameParams"]    = FrameParamsToJson(c.frameParams);
             o["offset"]     = MakeVector3(c.offset);
+            o["beamAnchor"] = static_cast<int64_t>(c.beamAnchor);
             o["rotate"]     = MakeVector3(c.rotate);
             o["randomRotateOnSpawn"] = c.randomRotateOnSpawn;
             o["randomRotateRange"]   = MakeVector3(c.randomRotateRange);
@@ -731,6 +798,7 @@ namespace EffectDefIO {
             o["gpuParticleGroupName"] = c.gpuParticleGroupName;
             o["texturePath"] = c.texturePath;
             o["offset"]     = MakeVector3(c.offset);
+            o["beamAnchor"] = static_cast<int64_t>(c.beamAnchor);
             o["startTime"]  = static_cast<double>(c.startTime);
             o["duration"]   = static_cast<double>(c.duration);
             o["burstCount"] = static_cast<int64_t>(c.burstCount);
@@ -827,6 +895,59 @@ namespace EffectDefIO {
             soundArr.Push(std::move(o));
         }
         root["sounds"] = std::move(soundArr);
+
+        JsonValue ribbonArr = JsonValue::MakeArray();
+        for (const auto& c : def.ribbons) {
+            JsonValue o = JsonValue::MakeObject();
+            o["displayName"] = c.displayName;
+            o["mode"]      = static_cast<int64_t>(c.mode);
+            o["offset"]    = MakeVector3(c.offset);
+            o["startTime"] = static_cast<double>(c.startTime);
+            o["lifetime"]  = static_cast<double>(c.lifetime);
+            // Trail
+            o["pointLifetime"]    = static_cast<double>(c.pointLifetime);
+            o["minPointDistance"] = static_cast<double>(c.minPointDistance);
+            o["maxPoints"]        = static_cast<int64_t>(c.maxPoints);
+            // Beam
+            o["lengthScale"]      = static_cast<double>(c.lengthScale);
+            o["defaultLength"]    = static_cast<double>(c.defaultLength);
+            o["beamSegments"]     = static_cast<int64_t>(c.beamSegments);
+            o["extendTime"]       = static_cast<double>(c.extendTime);
+            o["wobbleAmplitude"]  = static_cast<double>(c.wobbleAmplitude);
+            o["wobbleFrequency"]  = static_cast<double>(c.wobbleFrequency);
+            o["wobbleWaveLength"] = static_cast<double>(c.wobbleWaveLength);
+            o["flareLength"]      = static_cast<double>(c.flareLength);
+            o["flareStartScale"]  = static_cast<double>(c.flareStartScale);
+            o["segmentPower"]     = static_cast<double>(c.segmentPower);
+            o["releaseTime"]      = static_cast<double>(c.releaseTime);
+            // 見た目
+            o["startWidth"] = static_cast<double>(c.startWidth);
+            o["endWidth"]   = static_cast<double>(c.endWidth);
+            o["widthCurve"] = CurveToJson(c.widthCurve);
+            o["startColor"] = MakeVector4(c.startColor);
+            o["endColor"]   = MakeVector4(c.endColor);
+            {
+                JsonValue ckArr = JsonValue::MakeArray();
+                for (const auto& k : c.colorKeys) {
+                    JsonValue ko = JsonValue::MakeObject();
+                    ko["location"] = static_cast<double>(k.location);
+                    ko["color"]    = MakeVector4(k.color);
+                    ckArr.Push(std::move(ko));
+                }
+                o["colorKeys"] = std::move(ckArr);
+            }
+            o["coreWhiteness"]  = static_cast<double>(c.coreWhiteness);
+            o["edgeAlpha"]      = static_cast<double>(c.edgeAlpha);
+            o["texturePath"]    = c.texturePath;
+            o["blendMode"]      = static_cast<int64_t>(c.blendMode);
+            o["timeGroup"]      = static_cast<int64_t>(c.timeGroup);
+            o["uvTilesPerUnit"] = static_cast<double>(c.uvTilesPerUnit);
+            o["uvScrollSpeed"]  = MakeVector2(c.uvScrollSpeed);
+            o["useBloom"]       = c.useBloom;
+            o["bloomIntensity"] = static_cast<double>(c.bloomIntensity);
+            ribbonArr.Push(std::move(o));
+        }
+        root["ribbons"] = std::move(ribbonArr);
 
         return JsonWriter::WriteFile(filePath, root, { true, kJsonIndentWidth });
     }

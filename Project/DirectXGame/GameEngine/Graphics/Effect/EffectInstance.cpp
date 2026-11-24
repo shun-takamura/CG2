@@ -8,6 +8,7 @@
 #include "EngineTime.h"
 #include "TimeGroup.h"
 #include "PepperMacros.h"
+#include "Camera.h"
 #include <algorithm>
 #include <random>
 #define NOMINMAX
@@ -32,6 +33,31 @@ namespace {
     constexpr float kMinVelocityDirLength = 1e-5f;
     // 色のグラデーションの両端のキー（Start / End）の数
     constexpr size_t kEndpointColorKeyCount = 2;
+    // Ribbon の断面の頂点の数（縁・中央・縁）
+    constexpr uint32_t kRibbonVertsPerPoint = 3;
+    // Ribbon の 1 区間のインデックスの数（断面 3 頂点の間の四角 2 枚 × 三角 2 枚 × 3）
+    constexpr uint32_t kRibbonIndicesPerSegment = 12;
+    // Ribbon の点の最小数（帯にするには 2 点要る）
+    constexpr uint32_t kRibbonMinPoints = 2;
+    // Ribbon の点・分割の最大数（頂点バッファを大きくしすぎない）
+    constexpr uint32_t kRibbonMaxPoints = 512;
+    // 帯を横へ広げる向きが作れないほど短いベクトルの長さ²
+    constexpr float kRibbonTinyLengthSq = 1e-10f;
+    // 断面の V（縁・中央・縁）
+    constexpr float kRibbonEdgeV0 = 0.0f;
+    constexpr float kRibbonCenterV = 0.5f;
+    constexpr float kRibbonEdgeV1 = 1.0f;
+    // 帯の向きが決まらないときに横へ広げる基準の上方向
+    const Vector3 kRibbonFallbackUp = { 0.0f, 1.0f, 0.0f };
+    const Vector3 kRibbonFallbackSide = { 1.0f, 0.0f, 0.0f };
+    // ビームの前（エフェクトのローカル +Z）
+    const Vector3 kBeamForward = { 0.0f, 0.0f, 1.0f };
+    // smoothstep（3t² − 2t³）の係数
+    constexpr float kSmoothstepSquareCoef = 3.0f;
+    constexpr float kSmoothstepCubeCoef = 2.0f;
+    // ビームの区切りの寄せ方の下限（0 以下だと全部の点が先に寄る）
+    constexpr float kMinSegmentPower = 0.1f;
+
     /// <summary>0〜1 に切り詰める</summary>
     /// <param name="v">値</param>
     /// <returns>切り詰めた値</returns>
@@ -279,6 +305,111 @@ namespace {
         // アウトライン（時間非依存なのでここで静的に反映）
         r.SetDissolveEdge(pc.dissolveEdgeEnable, pc.dissolveEdgeColor, pc.dissolveEdgeWidth);
     }
+
+    /// <summary>Vector3 の長さ²</summary>
+    /// <param name="v">ベクトル</param>
+    /// <returns>長さ²</returns>
+    float LengthSq3(const Vector3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
+    /// <summary>Vector3 の外積</summary>
+    /// <param name="a">左</param>
+    /// <param name="b">右</param>
+    /// <returns>a × b</returns>
+    Vector3 Cross3(const Vector3& a, const Vector3& b) {
+        return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+    }
+    /// <summary>Vector3 を正規化する（短すぎれば fallback）</summary>
+    /// <param name="v">ベクトル</param>
+    /// <param name="fallback">短すぎたときの値</param>
+    /// <returns>正規化したベクトル</returns>
+    Vector3 Normalized3(const Vector3& v, const Vector3& fallback) {
+        const float l2 = LengthSq3(v);
+        if (l2 < kRibbonTinyLengthSq) return fallback;
+        const float inv = 1.0f / std::sqrt(l2);
+        return { v.x * inv, v.y * inv, v.z * inv };
+    }
+    /// <summary>smoothstep（3t² − 2t³）</summary>
+    /// <param name="t">0〜1</param>
+    /// <returns>なめらかにした値</returns>
+    float Smooth01(float t) {
+        t = Saturate(t);
+        return t * t * (kSmoothstepSquareCoef - kSmoothstepCubeCoef * t);
+    }
+
+    /// <summary>Ribbon の位置 t（0＝先頭〜1＝末尾）の色。Start(0)・中間キー・End(1) を区分線形で補間する</summary>
+    /// <param name="rc">Ribbon の定義</param>
+    /// <param name="t">帯の上の位置</param>
+    /// <returns>色</returns>
+    Vector4 EvaluateRibbonColor(const EffectRibbonComponent& rc, float t) {
+        t = Saturate(t);
+        if (rc.colorKeys.empty()) return LerpV4(rc.startColor, rc.endColor, t);
+        float prevLoc = 0.0f;
+        Vector4 prevColor = rc.startColor;
+        // 中間キーは位置の順に並んでいる前提（エディタは並べ替えて保存しないので、ここで順に探す）
+        std::vector<EffectColorKey> keys = rc.colorKeys;
+        std::sort(keys.begin(), keys.end(), [](const EffectColorKey& a, const EffectColorKey& b) { return a.location < b.location; });
+        for (const auto& k : keys) {
+            if (t <= k.location) {
+                const float span = k.location - prevLoc;
+                const float u = span > kMinLifetime ? (t - prevLoc) / span : 1.0f;
+                return LerpV4(prevColor, k.color, u);
+            }
+            prevLoc = k.location;
+            prevColor = k.color;
+        }
+        const float span = 1.0f - prevLoc;
+        const float u = span > kMinLifetime ? (t - prevLoc) / span : 1.0f;
+        return LerpV4(prevColor, rc.endColor, u);
+    }
+
+    /// <summary>Ribbon のメッシュ（点 capacity 個 × 断面 3 頂点、区間ごとに四角 2 枚）を作る。頂点はすべて透明</summary>
+    /// <param name="capacity">点の数</param>
+    /// <returns>メッシュ</returns>
+    MeshData CreateRibbonMesh(uint32_t capacity) {
+        MeshData m;
+        m.vertices.resize(static_cast<size_t>(capacity) * kRibbonVertsPerPoint);
+        for (auto& v : m.vertices) {
+            v.position = { 0.0f, 0.0f, 0.0f };
+            v.texcoord = { 0.0f, 0.0f };
+            v.normal = { 0.0f, 0.0f, -1.0f };
+            v.color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        }
+        m.indices.reserve(static_cast<size_t>(capacity - 1) * kRibbonIndicesPerSegment);
+        for (uint32_t k = 0; k + 1 < capacity; ++k) {
+            const uint32_t a = k * kRibbonVertsPerPoint;
+            const uint32_t b = a + kRibbonVertsPerPoint;
+            // 縁0-中央 の四角
+            m.indices.insert(m.indices.end(), { a, b, a + 1, a + 1, b, b + 1 });
+            // 中央-縁1 の四角
+            m.indices.insert(m.indices.end(), { a + 1, b + 1, a + 2, a + 2, b + 1, b + 2 });
+        }
+        return m;
+    }
+
+    /// <summary>Ribbon の点の数（メッシュの大きさ）を def から決める</summary>
+    /// <param name="rc">Ribbon の定義</param>
+    /// <returns>点の数</returns>
+    uint32_t RibbonCapacity(const EffectRibbonComponent& rc) {
+        const uint32_t n = (rc.mode == EffectRibbonMode::Beam) ? rc.beamSegments + 1 : rc.maxPoints;
+        return (std::clamp)(n, kRibbonMinPoints, kRibbonMaxPoints);
+    }
+
+    /// <summary>メッシュを作り直す必要がある Ribbon の変更か（mode / 点の数 / 分割数 / テクスチャ）</summary>
+    /// <param name="a">変更前</param>
+    /// <param name="b">変更後</param>
+    /// <returns>作り直しが要れば true</returns>
+    bool RibbonMeshNeedsRebuild(const EffectRibbonComponent& a, const EffectRibbonComponent& b) {
+        return a.mode != b.mode || RibbonCapacity(a) != RibbonCapacity(b) || a.texturePath != b.texturePath;
+    }
+
+    /// <summary>時間に関係ない Ribbon の材質（ブレンド・UV の流れ）をレンダラへ設定する</summary>
+    /// <param name="r">レンダラ</param>
+    /// <param name="rc">Ribbon の定義</param>
+    void ApplyRibbonStaticParams(EffectPrimitiveRenderer& r, const EffectRibbonComponent& rc) {
+        r.SetBlendMode(static_cast<PrimitivePipeline::BlendMode>(rc.blendMode));
+        r.SetUVScroll(rc.uvScrollSpeed);
+        r.SetDepthWrite(false);
+        r.SetCullBackface(false);
+    }
 }
 
 void EffectInstance::Initialize(const EffectDef& def, const Vector3& worldPos, GPUParticleManager* gpu) {
@@ -292,8 +423,221 @@ void EffectInstance::Initialize(const EffectDef& def, const Vector3& worldPos, G
     particles_.resize(def_.particles.size());
     lights_.resize(def_.lights.size());
     sounds_.resize(def_.sounds.size());
+    ribbons_.resize(def_.ribbons.size());
     for (auto& l : lights_) {
         l.slot = kInvalidLightSlot;
+    }
+    releasing_ = false;
+}
+
+void EffectInstance::RequestRelease() {
+    releasing_ = true;
+}
+
+Vector3 EffectInstance::RotateByWorld(const Vector3& v) const {
+    const bool hasWorldRot = (worldRotation_.x != 0.0f || worldRotation_.y != 0.0f || worldRotation_.z != 0.0f);
+    if (!hasWorldRot) return v;
+    // ビームの向きは Rx·Ry·Rz（Object3D と同じ。弾の向きを作る DirectionToEuler＝ピッチ→ヨーと合う）。
+    // MakeRotateMatrix(Vector3) は Rz·Ry·Rx なので、ピッチとヨーが両方ある向きでずれる（回転順の罠）
+    const Matrix4x4 m = Multiply(MakeRotateXMatrix(worldRotation_),
+        Multiply(MakeRotateYMatrix(worldRotation_), MakeRotateZMatrix(worldRotation_)));
+    return TransformMatrix(v, m);
+}
+
+Vector3 EffectInstance::AnchoredOffset(const Vector3& offset, int beamAnchor) const {
+    if (beamAnchor != EffectBeamAnchor::BeamEnd) return offset;
+    // ビームの先：Ribbon の Beam が 1 本でもあればその長さ（倍率込み）、無ければ渡された長さ
+    // （伸びている途中なら今の伸び具合。Ribbon は Primitive の後に進むので 1 フレーム前の値）
+    float length = ResolveBeamLength(0.0f);
+    for (size_t i = 0; i < def_.ribbons.size(); ++i) {
+        const EffectRibbonComponent& rc = def_.ribbons[i];
+        if (rc.mode != EffectRibbonMode::Beam) continue;
+        const float extend = (i < ribbons_.size()) ? Smooth01(ribbons_[i].extend) : 1.0f;
+        length = ResolveBeamLength(rc.defaultLength) * rc.lengthScale * extend;
+        break;
+    }
+    return { offset.x, offset.y, offset.z + length };
+}
+
+void EffectInstance::ResetRibbons() {
+    for (auto& rt : ribbons_) {
+        rt.points.clear();
+        rt.clock = 0.0f;
+        rt.extend = 0.0f;
+        rt.releaseTimer = 0.0f;
+        rt.started = false;
+        rt.releasing = false;
+        rt.finished = false;
+        rt.visible = false;
+    }
+}
+
+template <class GroupDt>
+void EffectInstance::UpdateRibbons(Camera* camera, const GroupDt& groupDt) {
+    lastCamera_ = camera;
+    const Vector3 cameraPos = camera ? camera->GetTranslate() : Vector3{ 0.0f, 0.0f, 0.0f };
+    const bool effectEnded = !def_.loop && elapsedTime_ >= def_.totalDuration;
+
+    // 描く点（先頭→末尾）。毎フレーム使い回すので static にしない（インスタンスが複数あるため関数内に置く）
+    struct DrawPoint { Vector3 pos; float t; float widthScale; };
+    std::vector<DrawPoint> drawPoints;
+
+    for (size_t i = 0; i < def_.ribbons.size() && i < ribbons_.size(); ++i) {
+        const EffectRibbonComponent& rc = def_.ribbons[i];
+        RibbonRuntime& rt = ribbons_[i];
+        rt.visible = false;
+        if (rt.finished) continue;
+
+        const float dt = groupDt(rc.timeGroup);
+        rt.clock += dt;
+        if (!rt.started) {
+            // 出る前にエフェクトが終わった／出し終わりになった
+            if (effectEnded || releasing_) { rt.finished = true; continue; }
+            if (rt.clock < rc.startTime) continue;
+            rt.started = true;
+        }
+        const float local = rt.clock - rc.startTime;
+
+        // メッシュ（mode・点の数・テクスチャが変わったら作り直す）
+        const uint32_t capacity = RibbonCapacity(rc);
+        if (!rt.renderer || rt.capacity != capacity || rt.meshMode != rc.mode) {
+            PEPPER_SCOPE("EffectInstance::CreateRibbon");
+            rt.renderer = std::make_unique<EffectPrimitiveRenderer>();
+            rt.renderer->InitializeDynamic(CreateRibbonMesh(capacity), rc.texturePath);
+            rt.capacity = capacity;
+            rt.meshMode = rc.mode;
+            rt.vertices.assign(static_cast<size_t>(capacity) * kRibbonVertsPerPoint, MeshVertex{});
+            if (rc.mode != EffectRibbonMode::Trail) rt.points.clear();
+        }
+        ApplyRibbonStaticParams(*rt.renderer, rc);
+
+        // 消え始め：Release・寿命切れ・ループしないエフェクトの終わり
+        const bool lifeOver = rc.lifetime > 0.0f && local >= rc.lifetime;
+        if (!rt.releasing && (releasing_ || lifeOver || effectEnded)) {
+            rt.releasing = true;
+            rt.releaseTimer = 0.0f;
+        }
+        if (rt.releasing) rt.releaseTimer += dt;
+
+        const Vector3 rotatedOffset = RotateByWorld(rc.offset);
+        const Vector3 head = { worldPos_.x + rotatedOffset.x, worldPos_.y + rotatedOffset.y, worldPos_.z + rotatedOffset.z };
+        const Vector3 forward = Normalized3(RotateByWorld(kBeamForward), kBeamForward);
+
+        drawPoints.clear();
+        if (rc.mode == EffectRibbonMode::Beam) {
+            // 伸びる → 出し終わりで細くなって消える
+            if (!rt.releasing) {
+                rt.extend = rc.extendTime > kMinLifetime ? Saturate(rt.extend + dt / rc.extendTime) : 1.0f;
+            }
+            const float widthScale = rt.releasing
+                ? (rc.releaseTime > kMinLifetime ? 1.0f - Saturate(rt.releaseTimer / rc.releaseTime) : 0.0f)
+                : 1.0f;
+            if (rt.releasing && widthScale <= 0.0f) {
+                rt.finished = true;
+                continue;
+            }
+            const float length = ResolveBeamLength(rc.defaultLength) * rc.lengthScale * Smooth01(rt.extend);
+            const uint32_t segments = capacity - 1;
+            const float segmentPower = (std::max)(kMinSegmentPower, rc.segmentPower);
+            for (uint32_t k = 0; k <= segments; ++k) {
+                // 区切りは根元ほど細かく（segmentPower 乗）。t は根元からの距離の割合のまま
+                const float s = static_cast<float>(k) / static_cast<float>(segments);
+                const float t = (segmentPower == 1.0f) ? s : std::pow(s, segmentPower);
+                const float d = length * t;
+                float w = widthScale;
+                // 付け根：flareLength [m] をかけて flareStartScale 倍から広がる
+                if (rc.flareLength > 0.0f) {
+                    w *= LerpF(rc.flareStartScale, 1.0f, Smooth01(d / rc.flareLength));
+                }
+                if (rc.wobbleAmplitude != 0.0f) {
+                    const float wave = rc.wobbleWaveLength > kMinLifetime ? d / rc.wobbleWaveLength * kTwoPi : 0.0f;
+                    w *= 1.0f + rc.wobbleAmplitude * std::sin(rc.wobbleFrequency * rt.clock - wave);
+                }
+                drawPoints.push_back({ { head.x + forward.x * d, head.y + forward.y * d, head.z + forward.z * d }, t, w });
+            }
+        } else {
+            // Trail：点を古くし、古すぎる点を捨てる
+            const float pointLife = rc.pointLifetime > kMinLifetime ? rc.pointLifetime : kMinLifetime;
+            for (auto& p : rt.points) p.age += dt;
+            while (!rt.points.empty() && rt.points.front().age >= pointLife) rt.points.erase(rt.points.begin());
+
+            if (!rt.releasing) {
+                // 最後に置いた点から minPointDistance 以上動いたら点を足す（先頭の今の位置は毎フレーム別に描く）
+                const bool needPoint = rt.points.empty() || LengthSq3({
+                    head.x - rt.points.back().position.x,
+                    head.y - rt.points.back().position.y,
+                    head.z - rt.points.back().position.z }) >= rc.minPointDistance * rc.minPointDistance;
+                if (needPoint) {
+                    rt.points.push_back({ head, 0.0f });
+                    // 先頭の分を 1 つ残す
+                    while (rt.points.size() + 1 > capacity) rt.points.erase(rt.points.begin());
+                }
+                drawPoints.push_back({ head, 0.0f, 1.0f });
+            } else if (rt.points.empty()) {
+                rt.finished = true;
+                continue;
+            }
+            for (auto it = rt.points.rbegin(); it != rt.points.rend(); ++it) {
+                // 今の位置と同じ点（置いた直後）は二重に描かない
+                if (!drawPoints.empty() && LengthSq3({
+                        it->position.x - drawPoints.back().pos.x,
+                        it->position.y - drawPoints.back().pos.y,
+                        it->position.z - drawPoints.back().pos.z }) < kRibbonTinyLengthSq) continue;
+                drawPoints.push_back({ it->position, Saturate(it->age / pointLife), 1.0f });
+            }
+        }
+
+        // ----- 頂点を作る（カメラの方を向く帯。断面は 縁0・中央・縁1） -----
+        const size_t count = (std::min)(drawPoints.size(), static_cast<size_t>(capacity));
+        if (count < kRibbonMinPoints) {
+            rt.renderer->Update(camera, dt);
+            continue;
+        }
+        float traveled = 0.0f;
+        for (size_t k = 0; k < count; ++k) {
+            const Vector3& p = drawPoints[k].pos;
+            const Vector3& prev = drawPoints[k > 0 ? k - 1 : k].pos;
+            const Vector3& next = drawPoints[k + 1 < count ? k + 1 : k].pos;
+            if (k > 0) traveled += std::sqrt(LengthSq3({ p.x - prev.x, p.y - prev.y, p.z - prev.z }));
+            const Vector3 tangent = Normalized3({ next.x - prev.x, next.y - prev.y, next.z - prev.z }, forward);
+            const Vector3 toCamera = Normalized3({ cameraPos.x - p.x, cameraPos.y - p.y, cameraPos.z - p.z }, kRibbonFallbackUp);
+            Vector3 side = Cross3(tangent, toCamera);
+            if (LengthSq3(side) < kRibbonTinyLengthSq) side = Cross3(tangent, kRibbonFallbackUp);
+            side = Normalized3(side, kRibbonFallbackSide);
+
+            const float t = drawPoints[k].t;
+            const float width = LerpF(rc.startWidth, rc.endWidth, rc.widthCurve.Evaluate(t)) * drawPoints[k].widthScale;
+            const float half = (std::max)(0.0f, width) * 0.5f;
+            const Vector4 color = EvaluateRibbonColor(rc, t);
+            const Vector4 edgeColor = { color.x, color.y, color.z, color.w * rc.edgeAlpha };
+            const Vector4 coreColor = {
+                LerpF(color.x, 1.0f, rc.coreWhiteness),
+                LerpF(color.y, 1.0f, rc.coreWhiteness),
+                LerpF(color.z, 1.0f, rc.coreWhiteness),
+                color.w };
+            const float u = rc.uvTilesPerUnit > 0.0f ? traveled * rc.uvTilesPerUnit : t;
+
+            MeshVertex* v = &rt.vertices[k * kRibbonVertsPerPoint];
+            v[0].position = { p.x + side.x * half, p.y + side.y * half, p.z + side.z * half };
+            v[1].position = p;
+            v[2].position = { p.x - side.x * half, p.y - side.y * half, p.z - side.z * half };
+            v[0].texcoord = { u, kRibbonEdgeV0 };
+            v[1].texcoord = { u, kRibbonCenterV };
+            v[2].texcoord = { u, kRibbonEdgeV1 };
+            v[0].color = edgeColor;
+            v[1].color = coreColor;
+            v[2].color = edgeColor;
+            v[0].normal = v[1].normal = v[2].normal = { -toCamera.x, -toCamera.y, -toCamera.z };
+        }
+        // 使わない点は最後の点に重ねて透明にする（面積 0 の三角形になる）
+        const MeshVertex& last = rt.vertices[(count - 1) * kRibbonVertsPerPoint + 1];
+        for (size_t k = count * kRibbonVertsPerPoint; k < rt.vertices.size(); ++k) {
+            rt.vertices[k] = last;
+            rt.vertices[k].color.w = 0.0f;
+        }
+        rt.renderer->UpdateVertices(rt.vertices.data(), static_cast<uint32_t>(rt.vertices.size()));
+        rt.renderer->Update(camera, dt);
+        rt.visible = true;
     }
 }
 
@@ -327,6 +671,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         const EffectPrimitiveComponent& pc = def_.primitives[i];
         PrimitiveRuntime& rt = primitives_[i];
         if (rt.finished) continue;
+        // 出し終わり：弾の頭の光などはすぐ消す
+        if (releasing_) {
+            rt.renderer.reset();
+            rt.finished = true;
+            continue;
+        }
 
         // この成分の TimeGroup でスケールした専用クロックで進める（World 以外なら独立して止まる/進む）。
         const float compDt = groupDt(pc.timeGroup);
@@ -400,6 +750,11 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
             finalQ = Multiply(QuaternionFromEuler(worldRotation_), rt.orientation);
         }
         rt.renderer->SetRotateQuaternion(finalQ);
+        // ビームの先に付ける分（ビームと同じ向きで前へ進める）
+        if (pc.beamAnchor == EffectBeamAnchor::BeamEnd) {
+            const Vector3 shift = RotateByWorld(AnchoredOffset({ 0.0f, 0.0f, 0.0f }, pc.beamAnchor));
+            offset = { offset.x + shift.x, offset.y + shift.y, offset.z + shift.z };
+        }
         Vector3 pos = { worldPos_.x + offset.x, worldPos_.y + offset.y, worldPos_.z + offset.z };
 
         rt.renderer->SetTranslate(pos);
@@ -450,6 +805,12 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         const EffectParticleComponent& pc = def_.particles[i];
         ParticleRuntime& rt = particles_[i];
         if (!gpu_) { rt.burstFired = true; continue; }
+        // 出し終わり：新しく出さない（出ている粒子はそのまま寿命で消える）
+        if (releasing_) { rt.burstFired = true; continue; }
+        // ビームの先に付ける分（offset は従来どおり回さず、ビームの先へ進む分だけエフェクトの向きで回す）
+        const Vector3 anchorShift = (pc.beamAnchor == EffectBeamAnchor::BeamEnd)
+            ? RotateByWorld(AnchoredOffset({ 0.0f, 0.0f, 0.0f }, pc.beamAnchor))
+            : Vector3{ 0.0f, 0.0f, 0.0f };
 
         // burst スケジュールも成分の TimeGroup でスケールしたクロックで判定する
         // （Effect グループなら必殺技の World 停止中でも startTime に達して発射できる）。
@@ -467,7 +828,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 
         // 周回（orbit）は burst 後も毎フレーム更新（中心はエフェクト位置＋offset に追従）。
         if (gpu_->HasGroup(groupName)) {
-            const Vector3 center = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+            const Vector3 center = {
+                worldPos_.x + pc.offset.x + anchorShift.x,
+                worldPos_.y + pc.offset.y + anchorShift.y,
+                worldPos_.z + pc.offset.z + anchorShift.z };
             // 半径変化は「生成時の円＝emitRadius」に対する比で渡す（シェーダは前フレームとの比をかける）。
             const float radiusEndRatio = (pc.emitRadius > kMinEmitRadius) ? pc.orbitRadiusEnd / pc.emitRadius : 1.0f;
             gpu_->SetGroupOrbit(groupName, pc.orbitEnabled, center,
@@ -513,7 +877,10 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         // 1回だけバースト発射（duration は将来の拡張用、現状未使用）
         if (gpu_->HasGroup(groupName)) {
             gpu_->SetGroupBillboardMode(groupName, pc.billboardMode);
-            Vector3 pos = { worldPos_.x + pc.offset.x, worldPos_.y + pc.offset.y, worldPos_.z + pc.offset.z };
+            Vector3 pos = {
+                worldPos_.x + pc.offset.x + anchorShift.x,
+                worldPos_.y + pc.offset.y + anchorShift.y,
+                worldPos_.z + pc.offset.z + anchorShift.z };
 
             // 収束モードは初速を持たず、kVelocityConverge で emit 時に spawn 位置を velocity フィールドへ保持させる。
             // この発射フレームでも converge CB を確実に設定しておく（次の Emit+Update CS が同フレームで走るため）。
@@ -588,6 +955,17 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         const EffectLightComponent& lc = def_.lights[i];
         LightRuntime& rt = lights_[i];
         if (rt.finished) continue;
+        // 出し終わり：すぐ消す
+        if (releasing_) {
+            if (rt.slot != kInvalidLightSlot) {
+                if (rt.isSpot) lm->ReleaseSpotLight(rt.slot);
+                else           lm->ReleasePointLight(rt.slot);
+                rt.slot = kInvalidLightSlot;
+            }
+            rt.started = true;
+            rt.finished = true;
+            continue;
+        }
 
         float local = elapsedTime_ - lc.startTime;
         if (local < 0.0f) continue;
@@ -679,10 +1057,24 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
         }
     }
 
+    // ===== Ribbon =====
+    UpdateRibbons(camera, groupDt);
+
     // 外部からの停止要求：即終了させる
     if (stopRequested_) {
         Cleanup();
         finished_ = true;
+        return;
+    }
+
+    // 出し終わり：Ribbon が全部消えたら終わり（ループしない）
+    if (releasing_) {
+        bool ribbonsDone = true;
+        for (const auto& rt : ribbons_) { if (rt.started && !rt.finished) { ribbonsDone = false; break; } }
+        if (ribbonsDone) {
+            Cleanup();
+            finished_ = true;
+        }
         return;
     }
 
@@ -694,6 +1086,7 @@ void EffectInstance::Update(Camera* camera, float deltaTime) {
 
     // 全コンポーネント完了判定
     bool allDone = true;
+    for (auto& rt : ribbons_) { if (!rt.finished) { allDone = false; break; } }
     for (auto& rt : primitives_) { if (!rt.finished) { allDone = false; break; } }
     if (allDone) {
         for (auto& rt : particles_) { if (!rt.burstFired) { allDone = false; break; } }
@@ -736,6 +1129,19 @@ void EffectInstance::ResetForLoop() {
     for (auto& rt : particles_) {
         rt.burstFired = false;
         rt.clock = 0.0f;
+    }
+    // Ribbon は寿命があるものだけ出し直す（寿命 0＝ずっと出す物は、ループの境目で尾が途切れないよう続ける）
+    for (size_t i = 0; i < ribbons_.size() && i < def_.ribbons.size(); ++i) {
+        if (def_.ribbons[i].lifetime <= 0.0f) continue;
+        RibbonRuntime& rt = ribbons_[i];
+        rt.points.clear();
+        rt.clock = 0.0f;
+        rt.extend = 0.0f;
+        rt.releaseTimer = 0.0f;
+        rt.started = false;
+        rt.releasing = false;
+        rt.finished = false;
+        rt.visible = false;
     }
     elapsedTime_ = 0.0f;
 }
@@ -792,15 +1198,29 @@ void EffectInstance::SyncFromDef(const EffectDef& newDef) {
         sounds_.resize(newDef.sounds.size());
     }
 
+    // ----- Ribbon（数が変われば作り直す。同じならメッシュが要る変更だけ作り直す。点は残す）-----
+    if (newDef.ribbons.size() != def_.ribbons.size()) {
+        ribbons_.clear();
+        ribbons_.resize(newDef.ribbons.size());
+    } else {
+        for (size_t i = 0; i < newDef.ribbons.size(); ++i) {
+            if (RibbonMeshNeedsRebuild(def_.ribbons[i], newDef.ribbons[i])) {
+                ribbons_[i].renderer.reset(); // 次の Update で作り直す
+            }
+        }
+    }
+
     // 新 def を採用。毎フレーム読みの値（scale/color/timing/offset 等）はこれで即ライブ反映される。
     def_ = newDef;
 }
 
 void EffectInstance::Rewind() {
     ResetForLoop();          // ライト/サウンド解放・runtime 片付け・elapsedTime_=0
+    ResetRibbons();
     orbitClock_ = 0.0f;
     finished_ = false;
     stopRequested_ = false;
+    releasing_ = false;
 }
 
 void EffectInstance::Draw() {
@@ -808,6 +1228,9 @@ void EffectInstance::Draw() {
         if (rt.renderer && rt.started && !rt.finished) {
             rt.renderer->Draw();
         }
+    }
+    for (auto& rt : ribbons_) {
+        if (rt.renderer && rt.visible) rt.renderer->Draw();
     }
 }
 
@@ -817,6 +1240,9 @@ void EffectInstance::DrawReflection(const Matrix4x4& mirroredView, const Matrix4
         if (rt.renderer && rt.started && !rt.finished) {
             rt.renderer->DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
         }
+    }
+    for (auto& rt : ribbons_) {
+        if (rt.renderer && rt.visible) rt.renderer->DrawReflection(mirroredView, mirroredViewProjection, mirroredCameraPos);
     }
 }
 
@@ -853,6 +1279,10 @@ void EffectInstance::DrawBloomPass() {
             rt.renderer->DrawBloomPass(pc.bloomIntensity);
         }
     }
+    for (size_t i = 0; i < ribbons_.size() && i < def_.ribbons.size(); ++i) {
+        const auto& rt = ribbons_[i];
+        if (def_.ribbons[i].useBloom && rt.renderer && rt.visible) rt.renderer->DrawBloomPass(def_.ribbons[i].bloomIntensity);
+    }
 }
 
 void EffectInstance::DrawBloomPassPreview() {
@@ -863,12 +1293,19 @@ void EffectInstance::DrawBloomPassPreview() {
             rt.renderer->DrawBloomPassPreview(pc.bloomIntensity);
         }
     }
+    for (size_t i = 0; i < ribbons_.size() && i < def_.ribbons.size(); ++i) {
+        const auto& rt = ribbons_[i];
+        if (def_.ribbons[i].useBloom && rt.renderer && rt.visible) rt.renderer->DrawBloomPassPreview(def_.ribbons[i].bloomIntensity);
+    }
 }
 
 bool EffectInstance::HasActiveBloomSource() const {
     for (size_t i = 0; i < primitives_.size() && i < def_.primitives.size(); ++i) {
         const auto& rt = primitives_[i];
         if (def_.primitives[i].useBloom && rt.renderer && rt.started && !rt.finished) return true;
+    }
+    for (size_t i = 0; i < ribbons_.size() && i < def_.ribbons.size(); ++i) {
+        if (def_.ribbons[i].useBloom && ribbons_[i].renderer && ribbons_[i].visible) return true;
     }
     return false;
 }
@@ -879,6 +1316,9 @@ void EffectInstance::UpdatePreviewWVP(const Matrix4x4& viewMatrix, const Matrix4
             rt.renderer->UpdatePreviewWVP(viewMatrix, viewProjectionMatrix, cameraPos);
         }
     }
+    for (auto& rt : ribbons_) {
+        if (rt.renderer && rt.visible) rt.renderer->UpdatePreviewWVP(viewMatrix, viewProjectionMatrix, cameraPos);
+    }
 }
 
 void EffectInstance::DrawPreview() {
@@ -886,6 +1326,9 @@ void EffectInstance::DrawPreview() {
         if (rt.renderer && rt.started && !rt.finished) {
             rt.renderer->DrawPreview();
         }
+    }
+    for (auto& rt : ribbons_) {
+        if (rt.renderer && rt.visible) rt.renderer->DrawPreview();
     }
 }
 

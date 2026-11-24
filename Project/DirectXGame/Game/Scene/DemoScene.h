@@ -109,6 +109,10 @@ private:
 	// ランダム生成用
 	std::mt19937 randomEngine_;
 
+	// 岩のボロノイ分割の確認（ボス必殺技で割る岩。中身は DemoScene.cpp）
+	struct FracturePreview;
+	std::unique_ptr<FracturePreview> fracturePreview_;
+
 	// --- 3Dサウンド確認用 ---
 	uint32_t sound3DHandle_ = 0;     // 静的3Dサウンドのハンドル
 	uint32_t sound3DOrbitHandle_ = 0;     // 周回する3Dサウンドのハンドル

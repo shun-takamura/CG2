@@ -1,7 +1,16 @@
 {
   "scene": "DEMO",
   "note": "Debug でこのシーンを読んだときに自動で書き出す（ScenePreloader）。手で直さない",
-  "shaders": [],
+  "shaders": [
+    {
+      "path": "Resources/Shaders/Fracture/FracturedMesh.VS.hlsl",
+      "profile": "vs_6_0"
+    },
+    {
+      "path": "Resources/Shaders/Fracture/FracturedMesh.PS.hlsl",
+      "profile": "ps_6_0"
+    }
+  ],
   "textures": [
     {
       "path": "Resources/Cubemaps/passendorf_snow_8k.dds",
@@ -30,6 +39,22 @@
     {
       "path": "Resources/Models/Player/player2.dds",
       "linear": false
+    },
+    {
+      "path": "Resources/Textures/Rocks/RockExterior_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Rocks/RockExterior_NormalMap.dds",
+      "linear": true
+    },
+    {
+      "path": "Resources/Textures/Rocks/RockInterior_BaseColor.dds",
+      "linear": false
+    },
+    {
+      "path": "Resources/Textures/Rocks/RockInterior_NormalMap.dds",
+      "linear": true
     }
   ],
   "models": [

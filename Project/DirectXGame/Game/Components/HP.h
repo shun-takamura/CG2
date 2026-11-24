@@ -8,11 +8,12 @@ struct HP {
 	bool enabled = false;
 	int  maxHP = 100;
 	int  currentHP = 100;
+	bool invincible = false; // true の間はダメージを受けない（ボスの必殺技の最中など。保存はしない）
 
-	/// <summary>ダメージを受けて HP を減らす（0 で止める）。無効・0 以下のダメージなら何もしない</summary>
+	/// <summary>ダメージを受けて HP を減らす（0 で止める）。無効・無敵・0 以下のダメージなら何もしない</summary>
 	/// <param name="damage">受けるダメージ</param>
 	void TakeDamage(int damage) {
-		if (!enabled) return;
+		if (!enabled || invincible) return;
 		if (damage <= 0) return;
 		currentHP -= damage;
 		if (currentHP < 0) currentHP = 0;

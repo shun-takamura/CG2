@@ -114,6 +114,9 @@ bool MainWeaponCatalog::Load() {
 			d.gripRotate = ReadVector3(g["rotate"], d.gripRotate);
 			d.gripScale = ReadVector3(g["scale"], d.gripScale);
 		}
+		if (const JsonValue& mz = w["muzzle"]; mz.IsObject()) {
+			d.muzzleOffset = ReadVector3(mz["offset"], d.muzzleOffset);
+		}
 		if (const JsonValue& b = w["blade"]; b.IsObject()) {
 			d.blade = true;
 			d.bladeOffset = ReadVector3(b["offset"], d.bladeOffset);
@@ -160,6 +163,9 @@ bool MainWeaponCatalog::Save() const {
 		g["rotate"] = MakeVector3(d.gripRotate);
 		g["scale"] = MakeVector3(d.gripScale);
 		w["grip"] = std::move(g);
+		JsonValue mz = JsonValue::MakeObject();
+		mz["offset"] = MakeVector3(d.muzzleOffset);
+		w["muzzle"] = std::move(mz);
 		if (d.blade) {
 			JsonValue b = JsonValue::MakeObject();
 			b["offset"] = MakeVector3(d.bladeOffset);

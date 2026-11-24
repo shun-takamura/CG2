@@ -1,7 +1,8 @@
 #pragma once
 
 /// <summary>
-/// デモモード（展示用の自動進行）。F8 で開始・終了する（Game::Update）。Release の exe でも起動時は無効（2026-11-10。展示はタイトルの放置デモ TitleDemoMovie）。
+/// デモモード（展示用の自動進行）。Debug の ImGui（Title Tuning）で開始・終了する。Release の exe でも起動時は無効（2026-11-10。展示はタイトルの放置デモ TitleDemoMovie）。
+/// 2026-11-24 から F8 は展示ロック、F9 は全能モードに使う（どちらもこのクラスが持つ。下の「展示ロック」「全能モード」）。
 /// 有効な間、タイトルは一定間隔で Press → スタートと自動で進んで HUB に入り、「搭乗」→ 乗り込み → ステージ選択から下の一周を繰り返す
 /// （18_HubTransitions.md「デモモード」）：
 ///   ステージ選択「ステージ1」→ 器の間で純度を 9.0 まで上げて決定（19 番 §4.7）→ 降下 → 機体確認 → 射出 → 雲の上 → 2 秒後に死ぬ
@@ -24,7 +25,7 @@ public:
 	/// <summary>デモモードの有効・無効を切り替える（無効から有効にした時は一人称の周・死亡回数 0 から始める）</summary>
 	/// <param name="enabled">有効にするなら true</param>
 	void SetEnabled(bool enabled);
-	/// <summary>デモモードの有効・無効を反転する（F8）</summary>
+	/// <summary>デモモードの有効・無効を反転する（2026-11-24 から F8 は展示ロックに使うので、Debug の ImGui から）</summary>
 	void Toggle() { SetEnabled(!enabled_); }
 
 	/// <summary>
@@ -32,6 +33,31 @@ public:
 	/// Game::Draw がシーンとトランジションを描いた後に、シーンの RT へ描く（どのシーンでも出す）
 	/// </summary>
 	void DrawLabel() const;
+
+	//====================
+	// 展示ロック（F8。展示会で来場者がタイトルを進めないように）
+	//====================
+	/// <summary>展示ロック中か（タイトルは入力を受け付けず、放置デモの映像は触っても止まらない）</summary>
+	/// <returns>ロック中なら true（Release の exe はロック中で起動する）</returns>
+	bool IsExhibitionLocked() const { return exhibitionLocked_; }
+	/// <summary>展示ロックの有効・無効を反転する（F8。どのシーンからでも。Game::Update）</summary>
+	void ToggleExhibitionLock() { exhibitionLocked_ = !exhibitionLocked_; }
+
+	//====================
+	// 全能モード（F9。動画撮影・プレイ会で見せたい所をすぐ見せる）
+	//====================
+	/// <summary>全能モードか（必殺技のゲージは常に満タン・クールタイム無し・F で Storm Lock / G で Shatterline）</summary>
+	/// <returns>全能モードなら true</returns>
+	bool IsShowcase() const { return showcase_; }
+	/// <summary>全能モードの有効・無効を反転する（F9。タイトルの間だけ受け付ける。TitleScene）</summary>
+	void ToggleShowcase() { showcase_ = !showcase_; }
+
+	/// <summary>
+	/// 展示ロック・全能モードの案内を右上に描く（どちらかが有効な間だけ。Flush まで行う）。
+	/// タイトルの放置デモの映像より上に出すので、TitleScene の描画の最後で呼ぶ
+	/// </summary>
+	/// <param name="screenWidth">UI の画面の幅 [px]（右寄せに使う）</param>
+	void DrawExhibitionLabels(float screenWidth) const;
 
 	/// <summary>自動で進める時の待ち時間など（Debug では Title Tuning → Attract で調整）</summary>
 	struct Settings {
@@ -81,6 +107,10 @@ private:
 	AttractMode(const AttractMode&) = delete;
 	AttractMode& operator=(const AttractMode&) = delete;
 	bool enabled_ = false;
+	// 展示ロック中か（Release の exe はロック中で起動する。コンストラクタで決める）
+	bool exhibitionLocked_ = false;
+	// 全能モードか
+	bool showcase_ = false;
 	Settings settings_;
 	// この周で死んだ回数
 	int lapDeaths_ = 0;

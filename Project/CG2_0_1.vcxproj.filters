@@ -25,6 +25,9 @@
     <Filter Include="DirectXGame\Game\Enemy\Boss\Action">
       <UniqueIdentifier>{7b0ed388-1ed9-5032-8fca-241f65bfb0e7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Enemy\Boss\Special">
+      <UniqueIdentifier>{a3e9c5d1-6b2f-4f87-9d0e-5c1b7a2e8f43}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Enemy\Commands">
       <UniqueIdentifier>{5ac50f6e-672a-5c6a-9a4d-c32456107e00}</UniqueIdentifier>
     </Filter>
@@ -45,6 +48,9 @@
     </Filter>
     <Filter Include="DirectXGame\Game\Scene\Special">
       <UniqueIdentifier>{9d661c28-a2df-4000-a88b-860a244bd7b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DirectXGame\Game\Scene\Beam">
+      <UniqueIdentifier>{7c2e4a91-5b3d-4f8a-9e61-2d0b8c7f4a13}</UniqueIdentifier>
     </Filter>
     <Filter Include="DirectXGame\Game\Scene\FlightUnit">
       <UniqueIdentifier>{3f6b2d8e-91a4-4c57-b0e3-6d2a8f4c1e95}</UniqueIdentifier>
@@ -210,6 +216,9 @@
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.cpp">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
     </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\Beam\PlayerBeamPart.cpp">
+      <Filter>DirectXGame\Game\Scene\Beam</Filter>
+    </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.cpp">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
     </ClCompile>
@@ -341,6 +350,15 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossIdleState.cpp">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityOrb.cpp">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityRocks.cpp">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityOrbFx.cpp">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Enemy\Boss\BossStateMachine.cpp">
       <Filter>DirectXGame\Game\Enemy\Boss</Filter>
@@ -538,6 +556,12 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.h">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Beam\IPlayerBeamHost.h">
+      <Filter>DirectXGame\Game\Scene\Beam</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\Beam\PlayerBeamPart.h">
+      <Filter>DirectXGame\Game\Scene\Beam</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.h">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
@@ -778,6 +802,18 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackRadialBurst.h">
       <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackGravityOrb.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityOrb.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityRocks.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Enemy\Boss\Special\BossGravityOrbFx.h">
+      <Filter>DirectXGame\Game\Enemy\Boss\Special</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Enemy\Boss\Action\BossAttackCharge.h">
       <Filter>DirectXGame\Game\Enemy\Boss\Action</Filter>

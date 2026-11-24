@@ -27,6 +27,7 @@
 #include "PrecisionBlurEffect.h"
 #include "DistortionEffect.h"
 #include "BloomEffect.h"
+#include "MonochromeEffect.h"
 #include "Matrix4x4.h"
 
 // 前方宣言
@@ -60,6 +61,12 @@ public:
 	/// <param name="width">新しい幅 [px]（0 や同じ大きさなら何もしない）</param>
 	/// <param name="height">新しい高さ [px]（0 や同じ大きさなら何もしない）</param>
 	void Resize(uint32_t width, uint32_t height);
+
+	/// <summary>
+	/// 時間で動くエフェクトを進める（今は白黒の演出 Monochrome の再生だけ）。毎フレーム 1 回、実時間で呼ぶ
+	/// </summary>
+	/// <param name="deltaTime">経過時間 [s]</param>
+	void Update(float deltaTime);
 
 	/// <summary>描画解像度の幅を返す</summary>
 	/// <returns>幅 [px]</returns>
@@ -236,6 +243,7 @@ public:
 	PrecisionBlurEffect* precisionBlur = nullptr;
 	DistortionEffect* distortion = nullptr;
 	BloomEffect* bloom = nullptr;
+	MonochromeEffect* monochrome = nullptr; // 墨絵のような白黒の演出（ボスの必殺技など。Play で自動 ON）
 
 private:
 	/// <summary>

@@ -1,0 +1,301 @@
+{
+  "name": "PlayerChargeBeam2",
+  "totalDuration": 1.0,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Muzzle Glow",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        5.0,
+        5.0,
+        1.0
+      ],
+      "endScale": [
+        5.0,
+        5.0,
+        1.0
+      ],
+      "startColor": [
+        0.55,
+        0.85,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        0.55,
+        0.85,
+        1.0,
+        1.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.8,
+      "offset": [
+        0.0,
+        0.0,
+        1.2
+      ]
+    },
+    {
+      "displayName": "Tip Glow",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 1,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        8.0,
+        8.0,
+        1.0
+      ],
+      "endScale": [
+        8.0,
+        8.0,
+        1.0
+      ],
+      "startColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.8
+      ],
+      "endColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.8
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.2
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": [
+    {
+      "displayName": "Outer",
+      "mode": 1,
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.1,
+      "wobbleFrequency": 35.0,
+      "wobbleWaveLength": 8.0,
+      "startWidth": 5.760000000000001,
+      "endWidth": 5.760000000000001,
+      "startColor": [
+        0.45,
+        0.8,
+        1.0,
+        0.25
+      ],
+      "endColor": [
+        1.0,
+        0.45,
+        0.1,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.85,
+          "color": [
+            0.45,
+            0.8,
+            1.0,
+            0.2
+          ]
+        }
+      ],
+      "coreWhiteness": 0.15,
+      "edgeAlpha": 0.0,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 1.2,
+      "offset": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "flareLength": 6.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Flow A",
+      "mode": 1,
+      "offset": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.04,
+      "wobbleFrequency": 30.0,
+      "wobbleWaveLength": 8.0,
+      "startWidth": 3.9600000000000004,
+      "endWidth": 3.9600000000000004,
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.85
+      ],
+      "endColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.85,
+          "color": [
+            1.0,
+            1.0,
+            1.0,
+            0.68
+          ]
+        }
+      ],
+      "coreWhiteness": 0.0,
+      "edgeAlpha": 1.0,
+      "texturePath": "Resources/Textures/Effect/beam_flow_00.dds",
+      "blendMode": 1,
+      "uvTilesPerUnit": 0.08,
+      "uvScrollSpeed": [
+        -2.5,
+        0.0
+      ],
+      "useBloom": false,
+      "bloomIntensity": 0.8,
+      "flareLength": 6.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Flow B",
+      "mode": 1,
+      "offset": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.04,
+      "wobbleFrequency": 30.0,
+      "wobbleWaveLength": 8.0,
+      "startWidth": 3.24,
+      "endWidth": 3.24,
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.4
+      ],
+      "endColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.85,
+          "color": [
+            1.0,
+            1.0,
+            1.0,
+            0.32000000000000006
+          ]
+        }
+      ],
+      "coreWhiteness": 0.0,
+      "edgeAlpha": 1.0,
+      "texturePath": "Resources/Textures/Effect/beam_flow_01.dds",
+      "blendMode": 2,
+      "uvTilesPerUnit": 0.15,
+      "uvScrollSpeed": [
+        -6.0,
+        0.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 0.4,
+      "flareLength": 6.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Core",
+      "mode": 1,
+      "lifetime": 0.0,
+      "lengthScale": 1.0,
+      "defaultLength": 60.0,
+      "beamSegments": 32,
+      "extendTime": 0.06,
+      "releaseTime": 0.15,
+      "wobbleAmplitude": 0.18,
+      "wobbleFrequency": 55.0,
+      "wobbleWaveLength": 4.0,
+      "startWidth": 0.63,
+      "endWidth": 0.63,
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.3
+      ],
+      "endColor": [
+        1.0,
+        0.9,
+        0.6,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.9,
+          "color": [
+            0.9,
+            0.97,
+            1.0,
+            0.24
+          ]
+        }
+      ],
+      "coreWhiteness": 1.0,
+      "edgeAlpha": 0.25,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 2.4,
+      "offset": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "flareLength": 6.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    }
+  ]
+}

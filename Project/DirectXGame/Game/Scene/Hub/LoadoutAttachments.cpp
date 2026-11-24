@@ -74,6 +74,14 @@ public:
 	/// <summary>敵弾を消す（装備画面に敵弾はない）</summary>
 	/// <returns>常に 0</returns>
 	int AbsorbEnemyBulletsInSphere(const Vector3&, float) override { return 0; }
+	/// <summary>何もしない（撃たない）</summary>
+	/// <returns>常に 0（撃てなかった）</returns>
+	uint32_t FireSupportBeam(const Vector3&, const Vector3&, float) override { return 0; }
+	/// <summary>何もしない（撃たない）</summary>
+	void SetSupportBeamPose(uint32_t, const Vector3&, const Vector3&) override {}
+	/// <summary>ビームは無い</summary>
+	/// <returns>常に false</returns>
+	bool IsSupportBeamActive(uint32_t) const override { return false; }
 };
 
 LoadoutAttachments::LoadoutAttachments() = default;

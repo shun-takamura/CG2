@@ -62,6 +62,18 @@ public:
                     const PrimitiveGenerator::LightningBoltParams& lightningParams = {},
                     const PrimitiveGenerator::FrameParams& frameParams = {});
 
+    /// <summary>
+    /// 毎フレーム頂点を書き換える形（Ribbon の帯など）で初期化する。共有バッファは使わない。
+    /// 頂点数・インデックスはここで決まり、以後は UpdateVertices で頂点の中身だけ替える
+    /// </summary>
+    /// <param name="meshData">最初の頂点とインデックス（頂点数の上限を決める）</param>
+    /// <param name="texturePath">テクスチャのパス（空なら white1x1）</param>
+    void InitializeDynamic(const MeshData& meshData, const std::string& texturePath);
+    /// <summary>頂点の中身だけ書き換える（InitializeDynamic で作ったときだけ効く）</summary>
+    /// <param name="vertices">新しい頂点の配列</param>
+    /// <param name="count">頂点数（Initialize の数を超えた分は捨てる）</param>
+    void UpdateVertices(const MeshVertex* vertices, uint32_t count) { mesh_.UpdateVertices(vertices, count); }
+
     /// <summary>メッシュの行列・UV スクロールを進める</summary>
     /// <param name="camera">ビルボードと WVP に使うカメラ</param>
     /// <param name="deltaTime">経過時間 [秒]</param>

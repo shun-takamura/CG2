@@ -104,6 +104,39 @@ Game::GetPostEffect()->ResetEffects();
 
 すべてのエフェクトをOFFにし、パラメータをデフォルト値に戻します。
 
+### 白黒の演出（Monochrome）
+
+ボスの必殺技などで、画面を墨絵のような白黒にする。見た目は `MonochromeParams` の 12 個の値で決まり、
+段階（`MonochromeStage`：Color / Ink / StrongGray / WhiteInk / InvertInk）ごとに初期値がある。
+「段階・前から移る時間・とどまる時間」を並べた `MonochromeKey` の列を `Play` すると、時間に沿って補間しながら切り替わる。
+
+- 再生中は自動で ON。最後のコマが通常の色（白黒の量 0）なら、終わったときに自動で OFF に戻る
+- 時間は `PostEffect::Update`（`Game::Update` から実時間）で進む。ゲームのスロー・ヒットストップの影響は受けない
+- HUD もシーン RT に描かれているので、一緒に白黒になる
+
+```cpp
+auto* mono = Game::GetPostEffect()->monochrome;
+
+// 1. ImGui で作って Resources/Json/Tuning/Monochrome.json に保存した並びを、名前で呼ぶ
+mono->Play("BossUltimate");
+
+// 2. コードで並びを組む（段階・前から移る時間[s]・とどまる時間[s]）
+mono->Play({
+    MonochromeEffect::MakeKey(MonochromeStage::Color, 0.0f, 0.8f),       // 溜め
+    MonochromeEffect::MakeKey(MonochromeStage::Ink, 0.0f, 0.4f),         // 2 値に切り替え
+    MonochromeEffect::MakeKey(MonochromeStage::StrongGray, 0.15f, 0.4f), // グレーへ移る
+    MonochromeEffect::MakeKey(MonochromeStage::WhiteInk, 0.0f, 0.4f),
+    MonochromeEffect::MakeKey(MonochromeStage::InvertInk, 0.0f, 0.4f),
+    MonochromeEffect::MakeKey(MonochromeStage::Color, 0.3f, 0.0f),       // 色に戻る（終わると自動で OFF）
+});
+
+mono->IsPlaying();  // 再生中か（攻撃のエフェクトを出すタイミング合わせなどに）
+mono->Stop();       // すぐに通常の色に戻して OFF
+```
+
+ImGui（Debug）：エフェクト一覧で Monochrome を ON にすると、段階のボタン・値のスライダー・並びの編集（コマの追加・並び替え・
+「今の見た目を入れる」「このコマを見る」）・再生・保存が出る。JSON が無いときは見本の並び `Sample` が 1 つ入る。
+
 ### ダメージ演出（ヘルパー関数）
 
 ```cpp
@@ -128,6 +161,7 @@ Game::GetPostEffect()->ApplyDamageEffect(0.5f);
 | Dissolve | DissolveEffect | マスクテクスチャ閾値による溶解（discard） | `threshold` `edgeWidth` `edgeColor` `edgeIntensity` `maskTexture` |
 | OutlineDepth | OutlineDepthEffect | Depthベースのアウトライン（資料準拠） | `edgeStrength`(float) |
 | OutlineNormal | OutlineNormalEffect | Depth + 深度から再構築した法線によるアウトライン | `depthWeight` `normalWeight` `depthThreshold` `normalThreshold`(float) |
+| Monochrome | MonochromeEffect | 墨絵のような白黒の演出（輝度＋ノイズで揺らすしきい値＋深度の輪郭、反転）。並びを時間で再生 | `MonochromeParams`（12 個）、並び `MonochromeKey` |
 
 ---
 

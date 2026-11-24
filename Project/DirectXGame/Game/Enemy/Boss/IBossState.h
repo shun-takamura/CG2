@@ -21,6 +21,7 @@ struct BossBrain {
 	float jumpCooldown   = 0.0f;     // ジャンプ飛び越え後、次に選べるまでの残り秒
 	bool  rageEntered    = false;    // 発狂の咆哮を出したか（1 回だけ）
 	bool  standDown      = false;    // true の間は次の行動を選ばない（自機の死亡演出の間。19 番 G3）
+	int   gravityOrbUses = 0;        // 必殺技 GravityOrb の HP のしきい値をいくつ使ったか
 	std::mt19937 rng{ std::random_device{}() };
 
 	// ----- 選び方の調整値 -----
@@ -33,6 +34,8 @@ struct BossBrain {
 	float meleeRange         = 9.0f; // このXZ距離以内なら近接攻撃を選択肢に入れる
 	float jumpCooldownBase   = 4.0f; // ジャンプの連発防止（飛び道具ほど頻発させない）
 	float jumpChance         = 0.3f; // 攻撃しないとき、移動系の中でジャンプを選ぶ確率（残りは接近）
+	// 必殺技 GravityOrb を使う HP の比率（上から順に、切るたびに 1 回。ランダムな攻撃とは別枠）
+	float gravityOrbHpRatios[2] = { 0.7f, 0.35f };
 };
 
 /// <summary>

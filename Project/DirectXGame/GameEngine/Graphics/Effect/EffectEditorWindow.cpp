@@ -10,8 +10,10 @@
 #include "FilterEffect/DistortionEffect.h"
 #include "Vector3.h"
 #include "Vector4.h"
+#include "MathUtility.h"
 #include "imgui.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 namespace {
@@ -214,13 +216,17 @@ void EffectEditorWindow::Render() {
     // unscaled な実 delta を使い、シーンが停止していても等速で動かす。
     EffectManager* emPrev = EffectManager::GetInstance();
     emPrev->SetPreviewCamera(&camera_);
-    // 編集中 def をライブ反映してから更新（Restart 不要でスライダー操作が即反映される）。
-    if (previewHandle_ != 0) {
-        emPrev->SyncPreview(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
-    }
     // 専用タイムライン：一時停止中は dt=0（カメラ追従や編集反映は効く）、それ以外は実 delta×速度。
     const float realDt = dxCore_->GetDeltaTime();
     const float previewDt = (previewHandle_ != 0 && !previewPaused_) ? realDt * previewSpeed_ : 0.0f;
+    // 動き方から位置・向きを決める（止まる設定なら Play Pos のまま）
+    UpdatePreviewMotion(previewDt);
+    // 編集中 def をライブ反映してから更新（Restart 不要でスライダー操作が即反映される）。
+    if (previewHandle_ != 0) {
+        emPrev->SyncPreview(editBuffer_, previewPos_);
+        emPrev->SetPreviewRotation(previewRotate_);
+        emPrev->SetPreviewBeamLength(previewBeamLength_);
+    }
     emPrev->UpdatePreview(previewDt);
 
     auto* commandList = dxCore_->GetCommandList();
@@ -357,6 +363,10 @@ void EffectEditorWindow::OnDraw() {
                 if (inRange(r.index, editBuffer_.sounds.size()))
                     editBuffer_.sounds.erase(editBuffer_.sounds.begin() + r.index);
                 break;
+            case EffectComponentEditable::Kind::Ribbon:
+                if (inRange(r.index, editBuffer_.ribbons.size()))
+                    editBuffer_.ribbons.erase(editBuffer_.ribbons.begin() + r.index);
+                break;
             }
         }
         pendingRemovals_.clear();
@@ -402,6 +412,10 @@ void EffectEditorWindow::OnDraw() {
             case EffectComponentEditable::Kind::Sound:
                 if (inRange(r.index, editBuffer_.sounds.size()))
                     editBuffer_.sounds.push_back(editBuffer_.sounds[r.index]);
+                break;
+            case EffectComponentEditable::Kind::Ribbon:
+                if (inRange(r.index, editBuffer_.ribbons.size()))
+                    editBuffer_.ribbons.push_back(editBuffer_.ribbons[r.index]);
                 break;
             }
         }
@@ -455,6 +469,7 @@ void EffectEditorWindow::OnDraw() {
                 for (const auto& c : src->particles)  editBuffer_.particles.push_back(c);
                 for (const auto& c : src->lights)     editBuffer_.lights.push_back(c);
                 for (const auto& c : src->sounds)     editBuffer_.sounds.push_back(c);
+                for (const auto& c : src->ribbons)    editBuffer_.ribbons.push_back(c);
                 editBufferDirty_ = true;
             }
         }
@@ -484,14 +499,18 @@ void EffectEditorWindow::OnDraw() {
         // プレビューが無ければ生成、あれば頭から。以後は毎フレーム SyncPreview でライブ反映されるので
         // 編集のたびに押し直す必要はない（Restart 不要）。
         if (previewHandle_ == 0 || !em->GetInstanceByHandle(previewHandle_)) {
-            previewHandle_ = em->PlayPreview(editBuffer_, Vector3{ playPos_[0], playPos_[1], playPos_[2] });
+            previewMotionTravel_ = 0.0f;
+            UpdatePreviewMotion(0.0f);
+            previewHandle_ = em->PlayPreview(editBuffer_, previewPos_);
         } else {
+            previewMotionTravel_ = 0.0f;
             em->RewindPreview();
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Restart")) {
         // t=0 へ巻き戻し（破棄せず同じインスタンスを再生し直す）
+        previewMotionTravel_ = 0.0f;
         em->RewindPreview();
     }
     ImGui::SameLine();
@@ -512,6 +531,9 @@ void EffectEditorWindow::OnDraw() {
     ImGui::SetNextItemWidth(kComboWidth);
     ImGui::DragFloat("Speed", &previewSpeed_, 0.01f, 0.0f, 4.0f, "%.2fx");
     if (previewSpeed_ < 0.0f) previewSpeed_ = 0.0f;
+
+    // 動かす（弾の尾・ビームの確認）
+    DrawPreviewMotionUI();
 
     // 歪みプレビュー（自前 PostEffect を使うので Game の設定とは独立）
     ImGui::Checkbox("Distortion", &previewDistortion_);
@@ -665,6 +687,21 @@ void EffectEditorWindow::AddComponent(EffectComponentEditable::Kind kind, int me
     case EffectComponentEditable::Kind::Particle:  editBuffer_.particles.push_back({});  break;
     case EffectComponentEditable::Kind::Light:     editBuffer_.lights.push_back({});     break;
     case EffectComponentEditable::Kind::Sound:     editBuffer_.sounds.push_back({});     break;
+    case EffectComponentEditable::Kind::Ribbon: {
+        // パレットは meshType に動き方（EffectRibbonMode）を載せる
+        EffectRibbonComponent c{};
+        c.mode = (meshType == EffectRibbonMode::Beam) ? EffectRibbonMode::Beam : EffectRibbonMode::Trail;
+        if (c.mode == EffectRibbonMode::Beam) {
+            // ビームの既定：根元から先まで同じ太さ、白い芯
+            c.startWidth = 0.5f;
+            c.endWidth = 0.5f;
+            c.coreWhiteness = 0.6f;
+            c.startColor = { 0.4f, 0.8f, 1.0f, 1.0f };
+            c.endColor = { 0.4f, 0.8f, 1.0f, 1.0f };
+        }
+        editBuffer_.ribbons.push_back(c);
+        break;
+    }
     }
     editBufferDirty_ = true;
     RebuildEditables();
@@ -712,6 +749,9 @@ void EffectEditorWindow::RebuildEditables() {
     for (int i = 0; i < static_cast<int>(editBuffer_.sounds.size()); ++i) {
         editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Sound, i));
     }
+    for (int i = 0; i < static_cast<int>(editBuffer_.ribbons.size()); ++i) {
+        editables_.push_back(std::make_unique<EffectComponentEditable>(this, EffectComponentEditable::Kind::Ribbon, i));
+    }
 
     // 選択復元
     if (selection_) {
@@ -725,4 +765,100 @@ void EffectEditorWindow::RebuildEditables() {
             }
         }
     }
+}
+
+//==========================================================
+// プレビューで動かす（弾の尾・ビームの確認）
+//==========================================================
+
+namespace {
+    // プレビューの動き方（previewMotion_ の値）
+    enum PreviewMotion : int {
+        kPreviewMotionNone,
+        kPreviewMotionLine,
+        kPreviewMotionCircle,
+    };
+    const char* kPreviewMotionNames[] = { "None (止まる)", "Line (直線・撃ち直し)", "Circle (円)" };
+    // 円の半径・直線の距離の下限 [m]（0 割りを防ぐ）
+    constexpr float kMinPreviewMotionRange = 0.01f;
+    // 速さの上限 [m/s]（入力の目安。弾速 650 も入る）
+    constexpr float kMaxPreviewMotionSpeed = 2000.0f;
+}
+
+void EffectEditorWindow::UpdatePreviewMotion(float dt) {
+    const Vector3 base{ playPos_[0], playPos_[1], playPos_[2] };
+    const float yaw = DegToRad(previewMotionYawDeg_);
+    const float pitch = DegToRad(previewMotionPitchDeg_);
+    // 向き（DirectionToEuler と同じ：ピッチ→ヨー。+Z が前）
+    const Vector3 forward{ std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch) };
+    const float range = (std::max)(kMinPreviewMotionRange, previewMotionRange_);
+
+    switch (previewMotion_) {
+    case kPreviewMotionLine: {
+        previewMotionTravel_ += previewMotionSpeed_ * dt;
+        if (previewMotionTravel_ >= range) {
+            // 範囲まで進んだら、始めの所から撃ち直す（新しい弾として尾を作り直す）
+            previewMotionTravel_ = 0.0f;
+            if (previewHandle_ != 0) EffectManager::GetInstance()->RewindPreview();
+        }
+        previewPos_ = { base.x + forward.x * previewMotionTravel_,
+                        base.y + forward.y * previewMotionTravel_,
+                        base.z + forward.z * previewMotionTravel_ };
+        previewRotate_ = { pitch, yaw, 0.0f };
+        break;
+    }
+    case kPreviewMotionCircle: {
+        // previewMotionTravel_ は角度。速さ [m/s] ÷ 半径 で角速度
+        previewMotionTravel_ += previewMotionSpeed_ / range * dt;
+        if (previewMotionTravel_ > kTwoPi) previewMotionTravel_ -= kTwoPi;
+        const float a = previewMotionTravel_;
+        previewPos_ = { base.x + std::cos(a) * range, base.y, base.z + std::sin(a) * range };
+        // 進む向き（円の接線）へ向ける
+        previewRotate_ = { 0.0f, std::atan2(-std::sin(a), std::cos(a)), 0.0f };
+        break;
+    }
+    default:
+        previewPos_ = base;
+        previewRotate_ = { pitch, yaw, 0.0f };
+        break;
+    }
+}
+
+void EffectEditorWindow::DrawPreviewMotionUI() {
+#ifdef _DEBUG
+    if (!ImGui::CollapsingHeader("Preview Motion / Beam")) return;
+    ImGui::SetNextItemWidth(kComboWidth);
+    if (ImGui::Combo("Motion", &previewMotion_, kPreviewMotionNames, IM_ARRAYSIZE(kPreviewMotionNames))) {
+        previewMotionTravel_ = 0.0f;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("プレビューのエフェクトを動かす（Ribbon の Trail＝弾の尾の確認用）。\n"
+                          "Line: 向きへ Range まで進んだら Play Pos から撃ち直す / Circle: Play Pos のまわりを回る");
+    }
+    if (previewMotion_ != kPreviewMotionNone) {
+        ImGui::SetNextItemWidth(kComboWidth);
+        ImGui::DragFloat("Motion Speed", &previewMotionSpeed_, 0.5f, 0.0f, kMaxPreviewMotionSpeed, "%.1f m/s");
+        ImGui::SetNextItemWidth(kComboWidth);
+        ImGui::DragFloat(previewMotion_ == kPreviewMotionLine ? "Range" : "Radius", &previewMotionRange_, 0.1f,
+                         kMinPreviewMotionRange, 2000.0f, "%.1f m");
+    }
+    if (previewMotion_ != kPreviewMotionCircle) {
+        ImGui::SetNextItemWidth(kComboWidth);
+        ImGui::DragFloat("Yaw (deg)", &previewMotionYawDeg_, 1.0f, -180.0f, 180.0f);
+        ImGui::SetNextItemWidth(kComboWidth);
+        ImGui::DragFloat("Pitch (deg)", &previewMotionPitchDeg_, 1.0f, -89.0f, 89.0f);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("エフェクトの向き（直線の進む向き・ビームの向き。0/0 で +Z）");
+    }
+    bool useBeamLength = previewBeamLength_ >= 0.0f;
+    if (ImGui::Checkbox("Override Beam Length", &useBeamLength)) {
+        previewBeamLength_ = useBeamLength ? 30.0f : -1.0f;
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("ゲームから渡すビームの長さの代わり（OFF なら Ribbon の Default Length）");
+    if (useBeamLength) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(kComboWidth);
+        ImGui::DragFloat("Beam Length", &previewBeamLength_, 0.1f, 0.0f, 2000.0f, "%.1f m");
+        if (previewBeamLength_ < 0.0f) previewBeamLength_ = 0.0f;
+    }
+#endif
 }

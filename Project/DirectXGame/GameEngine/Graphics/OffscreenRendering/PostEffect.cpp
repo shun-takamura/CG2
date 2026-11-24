@@ -623,6 +623,16 @@ void PostEffect::InitializeEffects()
 		effectOwners_.push_back(std::move(de));
 	}
 
+	// ----- Monochrome（scene depth を t1 に参照、outline 用 RootSignature を共用）-----
+	// 歪みと光（Bloom）も白黒にするため、その後ろに置く
+	{
+		auto mono = std::make_unique<MonochromeEffect>();
+		mono->InitializeDepth(dxCore_, outlineRootSignature_.Get(), basePsoDesc_);
+		monochrome = mono.get();
+		effectOrder_.push_back(monochrome);
+		effectOwners_.push_back(std::move(mono));
+	}
+
 	// ----- Bloom（bloomRT_ を縮小＋ぼかししてシーンに加算。専用 RS）-----
 	// 有効/無効は毎フレーム Game.cpp / EffectEditor から EffectManager の状態で自動切替する。
 	// 光をグレースケール等の色調整にも通すため、チェーンの先頭に置く。
@@ -1023,6 +1033,13 @@ void PostEffect::ResetEffects()
 // ===================================================================
 // 射影行列を全Outline系エフェクトに伝播
 // ===================================================================
+
+void PostEffect::Update(float deltaTime)
+{
+	if (monochrome) {
+		monochrome->Update(deltaTime);
+	}
+}
 
 void PostEffect::SetProjectionMatrix(const Matrix4x4& projection)
 {

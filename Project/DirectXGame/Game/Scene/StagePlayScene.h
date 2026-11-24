@@ -14,6 +14,7 @@
 #include "StageStart/MechThrusters.h"
 #include "PlayerDeath/PlayerDeathPart.h"
 #include "FlightUnit/FlightUnitPart.h"
+#include "Beam/PlayerBeamPart.h"
 #include "Special/ISpecialMoveHost.h"
 #include "Special/ShatterlinePart.h"
 #include "Special/StormLockPart.h"
@@ -23,6 +24,7 @@
 #include "VerticalMenu.h"
 #include "ControlGuide.h"
 #include "AttractMode.h"
+#include "Enemy/Boss/Special/BossGravityOrb.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -55,7 +57,8 @@ class BeamBladeRenderer;
 /// StagePlayScene は IRailStageHost 経由でのみそれを操作する（公開APIは増やさない）。
 /// </summary>
 class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
-	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost, private ISpecialMoveHost {
+	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost, private ISpecialMoveHost,
+	private IPlayerBeamHost, private IBossGravityOrbHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -113,6 +116,10 @@ public:
 	/// <param name="relY">ビューポート内の縦の位置（0〜1）</param>
 	/// <returns>true でドロップを消費（通常の InstantiatePrefab を抑止）</returns>
 	bool OnViewportPrefabDrop(const std::string& prefabName, float relX, float relY) override;
+
+	/// <summary>ボスの必殺技 GravityOrb の段取りを返す（ボス戦の間だけ）</summary>
+	/// <returns>段取り。ボス戦でなければ nullptr</returns>
+	BossGravityOrb* GetBossGravityOrb() override;
 
 protected:
 	// シーン配置（プレハブ・スプライン等）の保存/復元。
@@ -474,6 +481,48 @@ private:
 	/// <param name="radius">球の半径 [m]</param>
 	/// <returns>消した敵弾のダメージの合計（難易度の倍率の前）</returns>
 	int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) override;
+	/// <summary>ファンネル大のビームを撃ち始める</summary>
+	/// <param name="from">根元（ワールド）</param>
+	/// <param name="dir">向き（ワールド）</param>
+	/// <param name="damageScale">自機の攻撃力に掛ける倍率（ビームの 1 回のダメージは更に damageScale を掛ける）</param>
+	/// <returns>ビームの番号（0 なら撃てなかった）</returns>
+	uint32_t FireSupportBeam(const Vector3& from, const Vector3& dir, float damageScale) override;
+	/// <summary>ファンネル大のビームの根元と向きを付け直す</summary>
+	/// <param name="id">FireSupportBeam が返した番号</param>
+	/// <param name="from">根元（ワールド）</param>
+	/// <param name="dir">向き（ワールド）</param>
+	void SetSupportBeamPose(uint32_t id, const Vector3& from, const Vector3& dir) override;
+	/// <summary>ファンネル大のビームが撃っている途中かを返す</summary>
+	/// <param name="id">FireSupportBeam が返した番号</param>
+	/// <returns>途中なら true</returns>
+	bool IsSupportBeamActive(uint32_t id) const override;
+
+	// ----- IPlayerBeamHost 実装（private override。PlayerBeamPart 経由のみ）-----
+	/// <summary>太さのある線分に重なっている敵を集める（GameScene::CollectEnemiesOnSegment）</summary>
+	/// <param name="from">線分の始点（ワールド）</param>
+	/// <param name="to">線分の終点（ワールド）</param>
+	/// <param name="radius">線分の太さ（半径）[m]</param>
+	/// <param name="out">当たった敵を追加する先</param>
+	void CollectBeamHits(const Vector3& from, const Vector3& to, float radius, std::vector<PlayerBeamHit>& out) override {
+		CollectEnemiesOnSegment(from, to, radius, out);
+	}
+	/// <summary>ビームが敵に当たった（GameScene::ApplyPlayerBeamHit）</summary>
+	/// <param name="hit">当たった敵</param>
+	/// <param name="damage">入れるダメージ</param>
+	/// <param name="hitEffect">当たった所に出すエフェクト名</param>
+	/// <param name="firstHit">このビームがこの敵に初めて当たったか</param>
+	void ApplyBeamHit(const PlayerBeamHit& hit, int damage, const std::string& hitEffect, bool firstHit) override {
+		ApplyPlayerBeamHit(hit, damage, hitEffect, firstHit);
+	}
+	// 自機のビーム（チャージ射撃・ファンネル大）。撃っている間はレティクルへ付いていき、線分の上の敵へ間隔ごとにダメージ
+	std::unique_ptr<PlayerBeamPart> playerBeam_;
+	// 撃っているチャージビーム（0 なら撃っていない）
+	PlayerBeamPart::BeamId chargeBeamId_ = PlayerBeamPart::kInvalidBeam;
+	/// <summary>自機のビームを進める（チャージビームの根元と向きをレティクルへ付け直してから）</summary>
+	/// <param name="dt">自機の弾と同じ時間 [秒]</param>
+	void UpdatePlayerBeams(float dt);
+	/// <summary>自機のビームを全部止める（フェーズの切り替え・死亡演出・シーンの終わり）</summary>
+	void StopAllPlayerBeams();
 	// 飛行ユニット（サブ武器。20_Loadout.md §3）。付けている系統は LoadoutState。シューティングとボス戦の両方で RB の技を使う
 	std::unique_ptr<FlightUnitPart> flightUnit_;
 	// 拾ったアイテムとエーテルを右下に出す（22_ItemDrop.md。落とす・拾うのは RailStagePart の LootDrops）
@@ -515,6 +564,16 @@ private:
 	void UpdateStageClearCapture();
 	// ボス戦の床（石畳＋薄い水）。Boss フェーズ中だけ更新・描画する
 	std::unique_ptr<BossArenaWater> bossWater_;
+	// ボスの必殺技 GravityOrb の岩と演出（攻撃のステートが GetBossGravityOrb で受け取って始める）
+	std::unique_ptr<BossGravityOrb> gravityOrb_;
+	// GravityOrb で空を暗くしているか（Skybox の着色の切り替えを 1 回だけ出す）
+	bool gravityOrbSkyDark_ = false;
+	// IBossGravityOrbHost
+	IImGuiEditable* GetGravityOrbPlayer() const override;
+	float GetGravityOrbGroundY() const override;
+	void OnGravityOrbPlayerHit(float damageRatio) override;
+	void ShakeGravityOrbCamera(float intensity, float duration) override;
+	void SetGravityOrbSkyDark(bool dark) override;
 	// 低空飛行の大河の水面。PSO はシーン初期化で作り、川のデータは雲の中で読む（13_RiverWater.md）
 	std::unique_ptr<RiverWater> riverWater_;
 
@@ -529,6 +588,12 @@ private:
 	// player の WeaponParams コンポーネント（Inspector 編集・プレハブ保存）から同期する。
 	// メイン武器（MainWeapon.json）がモデルを持つときは、オフセットはその武器の grip を使う。
 	BoneSocket weaponSocket_;
+	// 銃口のワールド座標（UpdatePlayerAttachments で武器の行列から求める。武器のモデルが無ければ hasWeaponMuzzle_ = false）
+	Vector3 weaponMuzzle_{ 0.0f, 0.0f, 0.0f };
+	bool hasWeaponMuzzle_ = false;
+	/// <summary>弾・チャージビームを撃ち出す所（銃口。武器のモデルが無ければ自機の位置）</summary>
+	/// <returns>ワールド座標</returns>
+	Vector3 PlayerShotOrigin() const;
 	// 盾（左手のソケット追従、20 番 §2）。構成は付けている盾（Shield.json）の model / grip
 	std::unique_ptr<Object3DInstance> shield_;
 	BoneSocket shieldSocket_;

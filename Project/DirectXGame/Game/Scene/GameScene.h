@@ -1,6 +1,7 @@
 #pragma once
 #include "Scene.h"
 #include "SceneSerializer.h"   // SceneData / SceneEntityDesc（保存・読込のフックで使う）
+#include "Beam/IPlayerBeamHost.h" // PlayerBeamHit（ビームの判定の結果）
 
 #include <memory>
 #include <string>
@@ -14,6 +15,7 @@ class IImGuiEditable;
 class SplineCurveActor;
 class EnemyController;
 class GameSession;
+class BossGravityOrb;
 
 /// <summary>
 /// ゲーム用シーン基底。エンジン足場 Scene に、本作のゲームロジック
@@ -24,6 +26,10 @@ class GameScene : public Scene {
 public:
 	GameScene();
 	~GameScene() override;
+
+	/// <summary>ボスの必殺技 GravityOrb の段取り（岩・演出）を返す。ボス戦のあるシーンだけが持つ</summary>
+	/// <returns>段取り。このシーンに無ければ nullptr</returns>
+	virtual BossGravityOrb* GetBossGravityOrb() { return nullptr; }
 
 	//====================
 	// 1 回のプレイの状態（SceneManager がシーンを作るたびに渡す）
@@ -323,6 +329,18 @@ protected:
 	/// <param name="bulletRadius">弾の判定の半径 [m]</param>
 	/// <returns>止める位置の割合 0..1。当たらなければ -1</returns>
 	float FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& to, float bulletRadius) const;
+	/// <summary>太さのある線分（カプセル）に重なっている Enemy/Boss の球・カプセルのコライダーをすべて集める（ビームの判定）</summary>
+	/// <param name="from">線分の始点</param>
+	/// <param name="to">線分の終点</param>
+	/// <param name="radius">線分の太さ（半径）[m]</param>
+	/// <param name="out">当たった敵を追加する先（持ち主は Gameplay::DamageRootOf）</param>
+	void CollectEnemiesOnSegment(const Vector3& from, const Vector3& to, float radius, std::vector<PlayerBeamHit>& out) const;
+	/// <summary>自機のビームが敵に当たった：HP を減らし、ヒットエフェクト（と初めて当たった時だけ被弾エフェクト・音）を出す</summary>
+	/// <param name="hit">当たった敵</param>
+	/// <param name="damage">入れるダメージ</param>
+	/// <param name="hitEffect">当たった所に出すエフェクト名（空なら出さない）</param>
+	/// <param name="firstHit">このビームがこの敵に初めて当たったか</param>
+	void ApplyPlayerBeamHit(const PlayerBeamHit& hit, int damage, const std::string& hitEffect, bool firstHit);
 	/// <summary>HP が尽きた動的エンティティ（Player 以外）を死亡エフェクト・爆発音付きで破棄する</summary>
 	void SweepDeadEntities();
 	/// <summary>近接の判定を持ち主に追従させ、持続切れを消す（振りエフェクトも止める）</summary>

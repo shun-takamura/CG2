@@ -1,0 +1,936 @@
+{
+  "name": "PlayerChargeBeam1",
+  "totalDuration": 1,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Muzzle Glow",
+      "meshType": 0,
+      "ringParams": {
+        "outerRadius": 1,
+        "innerRadius": 0.5,
+        "divisions": 32,
+        "innerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "outerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "cylinderParams": {
+        "topRadius": 1,
+        "bottomRadius": 1,
+        "height": 3,
+        "divisions": 32,
+        "topColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "bottomColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "helixParams": {
+        "startHelixRadius": 0.30000001192092896,
+        "endHelixRadius": 0.30000001192092896,
+        "startTubeRadius": 0.05000000074505806,
+        "endTubeRadius": 0.05000000074505806,
+        "pitch": 1,
+        "turns": 5,
+        "circleSegments": 8,
+        "lengthSegments": 64,
+        "startColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "endColor": [
+          1,
+          0.30000001192092896,
+          0,
+          0.20000000298023224
+        ]
+      },
+      "beamParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "lengthSegments": 16,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "lightningParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "generations": 5,
+        "maxOffsetRatio": 0.15000000596046448,
+        "randomSeed": 0,
+        "branchProbability": 0.15000000596046448,
+        "branchLengthScale": 0.25,
+        "branchMaxAngle": 0.6000000238418579,
+        "branchWidthScale": 0.5,
+        "branchColorScale": 0.5,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "frameParams": {
+        "outerWidth": 1,
+        "outerHeight": 1,
+        "innerWidth": 0.5,
+        "innerHeight": 0.5,
+        "color": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "offset": [
+        0,
+        0,
+        1.2000000476837158
+      ],
+      "beamAnchor": 0,
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 1,
+      "startScale": [
+        3,
+        3,
+        1
+      ],
+      "endScale": [
+        3,
+        3,
+        1
+      ],
+      "startColor": [
+        0.5,
+        0.8500000238418579,
+        1,
+        1
+      ],
+      "endColor": [
+        0.5,
+        0.8500000238418579,
+        1,
+        1
+      ],
+      "scaleCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "usePositionAnim": false,
+      "startPos": [
+        0,
+        0,
+        0
+      ],
+      "endPos": [
+        0,
+        0,
+        0
+      ],
+      "posCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "texturePath": "Resources/Textures/circle.dds",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "viewAngleFadePower": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false,
+      "useBloom": true,
+      "bloomIntensity": 1.5,
+      "useDistortion": false,
+      "distortionTexturePath": "",
+      "distortionStrength": 0.5,
+      "distortionStrengthAnim": false,
+      "distortionEndStrength": 0,
+      "distortionUvAutoScroll": false,
+      "distortionUvScrollSpeed": [
+        0,
+        0
+      ],
+      "distortionUvOffset": [
+        0,
+        0
+      ],
+      "distortionUvScale": [
+        1,
+        1
+      ],
+      "distortionUvFlipU": false,
+      "distortionUvFlipV": false,
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInStartTime": 0,
+      "dissolveInDuration": 0.5,
+      "dissolveOutEnable": false,
+      "dissolveOutStartTime": 0,
+      "dissolveOutDuration": 0.5,
+      "dissolveCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.4000000059604645,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806
+    },
+    {
+      "displayName": "Tip Glow",
+      "meshType": 0,
+      "ringParams": {
+        "outerRadius": 1,
+        "innerRadius": 0.5,
+        "divisions": 32,
+        "innerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "outerColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "cylinderParams": {
+        "topRadius": 1,
+        "bottomRadius": 1,
+        "height": 3,
+        "divisions": 32,
+        "topColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "bottomColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "startAngle": 0,
+        "endAngle": 6.2831854820251465
+      },
+      "helixParams": {
+        "startHelixRadius": 0.30000001192092896,
+        "endHelixRadius": 0.30000001192092896,
+        "startTubeRadius": 0.05000000074505806,
+        "endTubeRadius": 0.05000000074505806,
+        "pitch": 1,
+        "turns": 5,
+        "circleSegments": 8,
+        "lengthSegments": 64,
+        "startColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "endColor": [
+          1,
+          0.30000001192092896,
+          0,
+          0.20000000298023224
+        ]
+      },
+      "beamParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "lengthSegments": 16,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "lightningParams": {
+        "startPos": [
+          0,
+          0,
+          0
+        ],
+        "endPos": [
+          0,
+          0,
+          1
+        ],
+        "generations": 5,
+        "maxOffsetRatio": 0.15000000596046448,
+        "randomSeed": 0,
+        "branchProbability": 0.15000000596046448,
+        "branchLengthScale": 0.25,
+        "branchMaxAngle": 0.6000000238418579,
+        "branchWidthScale": 0.5,
+        "branchColorScale": 0.5,
+        "appearance": {
+          "startWidth": 0.30000001192092896,
+          "endWidth": 0.30000001192092896,
+          "planeCount": 3,
+          "fadeStartLength": 0.20000000298023224,
+          "fadeEndLength": 0.20000000298023224,
+          "startColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "endColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "uvWrapByLength": true,
+          "uvTilesPerUnit": 1
+        }
+      },
+      "frameParams": {
+        "outerWidth": 1,
+        "outerHeight": 1,
+        "innerWidth": 0.5,
+        "innerHeight": 0.5,
+        "color": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "beamAnchor": 1,
+      "rotate": [
+        0,
+        0,
+        0
+      ],
+      "randomRotateOnSpawn": false,
+      "randomRotateRange": [
+        0,
+        0,
+        0
+      ],
+      "rotateSpeed": [
+        0,
+        0,
+        0
+      ],
+      "startTime": 0,
+      "lifetime": 1,
+      "startScale": [
+        5,
+        5,
+        1
+      ],
+      "endScale": [
+        5,
+        5,
+        1
+      ],
+      "startColor": [
+        0.5,
+        0.8500000238418579,
+        1,
+        0.800000011920929
+      ],
+      "endColor": [
+        0.5,
+        0.8500000238418579,
+        1,
+        0.800000011920929
+      ],
+      "scaleCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "hueShiftEnable": false,
+      "hueShiftSpeed": 0.20000000298023224,
+      "usePositionAnim": false,
+      "startPos": [
+        0,
+        0,
+        0
+      ],
+      "endPos": [
+        0,
+        0,
+        0
+      ],
+      "posCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "texturePath": "Resources/Textures/circle.dds",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "billboardMode": "Full",
+      "depthWrite": false,
+      "alphaReference": 0,
+      "cullBackface": false,
+      "samplerMode": 0,
+      "viewAngleFadePower": 0,
+      "uvAutoScroll": false,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "uvOffset": [
+        0,
+        0
+      ],
+      "uvScale": [
+        1,
+        1
+      ],
+      "uvFlipU": false,
+      "uvFlipV": false,
+      "useBloom": true,
+      "bloomIntensity": 1,
+      "useDistortion": false,
+      "distortionTexturePath": "",
+      "distortionStrength": 0.5,
+      "distortionStrengthAnim": false,
+      "distortionEndStrength": 0,
+      "distortionUvAutoScroll": false,
+      "distortionUvScrollSpeed": [
+        0,
+        0
+      ],
+      "distortionUvOffset": [
+        0,
+        0
+      ],
+      "distortionUvScale": [
+        1,
+        1
+      ],
+      "distortionUvFlipU": false,
+      "distortionUvFlipV": false,
+      "useDissolve": false,
+      "dissolveMaskPath": "",
+      "dissolveInEnable": false,
+      "dissolveInStartTime": 0,
+      "dissolveInDuration": 0.5,
+      "dissolveOutEnable": false,
+      "dissolveOutStartTime": 0,
+      "dissolveOutDuration": 0.5,
+      "dissolveCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "dissolveEdgeEnable": false,
+      "dissolveEdgeColor": [
+        1,
+        0.4000000059604645,
+        0.10000000149011612,
+        1
+      ],
+      "dissolveEdgeWidth": 0.05000000074505806
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": [
+    {
+      "displayName": "Outer",
+      "mode": 1,
+      "offset": [
+        0,
+        0,
+        1
+      ],
+      "startTime": 0,
+      "lifetime": 0,
+      "pointLifetime": 0.10000000149011612,
+      "minPointDistance": 0.10000000149011612,
+      "maxPoints": 32,
+      "lengthScale": 1,
+      "defaultLength": 60,
+      "beamSegments": 32,
+      "extendTime": 0.05999999865889549,
+      "wobbleAmplitude": 0.07999999821186066,
+      "wobbleFrequency": 40,
+      "wobbleWaveLength": 6,
+      "releaseTime": 0.15000000596046448,
+      "startWidth": 3.200000047683716,
+      "endWidth": 3.200000047683716,
+      "widthCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "startColor": [
+        0.3499999940395355,
+        0.75,
+        1,
+        0
+      ],
+      "endColor": [
+        0.30000001192092896,
+        0.6000000238418579,
+        1,
+        0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.8500000238418579,
+          "color": [
+            0.3499999940395355,
+            0.75,
+            1,
+            0.20000000298023224
+          ]
+        }
+      ],
+      "coreWhiteness": 0.15000000596046448,
+      "edgeAlpha": 0,
+      "texturePath": "",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "uvTilesPerUnit": 0,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1,
+      "flareLength": 4.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Flow A",
+      "mode": 1,
+      "offset": [
+        0,
+        0,
+        1
+      ],
+      "startTime": 0,
+      "lifetime": 0,
+      "pointLifetime": 0.10000000149011612,
+      "minPointDistance": 0.10000000149011612,
+      "maxPoints": 32,
+      "lengthScale": 1,
+      "defaultLength": 60,
+      "beamSegments": 32,
+      "extendTime": 0.05999999865889549,
+      "wobbleAmplitude": 0.03999999910593033,
+      "wobbleFrequency": 30,
+      "wobbleWaveLength": 8,
+      "releaseTime": 0.15000000596046448,
+      "startWidth": 2.200000047683716,
+      "endWidth": 2.200000047683716,
+      "widthCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "startColor": [
+        1,
+        1,
+        1,
+        0.8500000238418579
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.8500000238418579,
+          "color": [
+            1,
+            1,
+            1,
+            0.6800000071525574
+          ]
+        }
+      ],
+      "coreWhiteness": 0,
+      "edgeAlpha": 1,
+      "texturePath": "Resources/Textures/Effect/beam_flow_00.dds",
+      "blendMode": 1,
+      "timeGroup": 0,
+      "uvTilesPerUnit": 0.07999999821186066,
+      "uvScrollSpeed": [
+        -2.5,
+        0
+      ],
+      "useBloom": false,
+      "bloomIntensity": 0.800000011920929,
+      "flareLength": 4.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Flow B",
+      "mode": 1,
+      "offset": [
+        0,
+        0,
+        1
+      ],
+      "startTime": 0,
+      "lifetime": 0,
+      "pointLifetime": 0.10000000149011612,
+      "minPointDistance": 0.10000000149011612,
+      "maxPoints": 32,
+      "lengthScale": 1,
+      "defaultLength": 60,
+      "beamSegments": 32,
+      "extendTime": 0.05999999865889549,
+      "wobbleAmplitude": 0.03999999910593033,
+      "wobbleFrequency": 30,
+      "wobbleWaveLength": 8,
+      "releaseTime": 0.15000000596046448,
+      "startWidth": 1.7999999523162842,
+      "endWidth": 1.7999999523162842,
+      "widthCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "startColor": [
+        1,
+        1,
+        1,
+        0.4000000059604645
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.8500000238418579,
+          "color": [
+            1,
+            1,
+            1,
+            0.3199999928474426
+          ]
+        }
+      ],
+      "coreWhiteness": 0,
+      "edgeAlpha": 1,
+      "texturePath": "Resources/Textures/Effect/beam_flow_01.dds",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "uvTilesPerUnit": 0.15000000596046448,
+      "uvScrollSpeed": [
+        -6,
+        0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 0.4000000059604645,
+      "flareLength": 4.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    },
+    {
+      "displayName": "Core",
+      "mode": 1,
+      "offset": [
+        0,
+        0,
+        1
+      ],
+      "startTime": 0,
+      "lifetime": 0,
+      "pointLifetime": 0.10000000149011612,
+      "minPointDistance": 0.10000000149011612,
+      "maxPoints": 32,
+      "lengthScale": 1,
+      "defaultLength": 60,
+      "beamSegments": 32,
+      "extendTime": 0.05999999865889549,
+      "wobbleAmplitude": 0.15000000596046448,
+      "wobbleFrequency": 60,
+      "wobbleWaveLength": 3,
+      "releaseTime": 0.15000000596046448,
+      "startWidth": 0.3499999940395355,
+      "endWidth": 0.3499999940395355,
+      "widthCurve": {
+        "enabled": false,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      },
+      "startColor": [
+        1,
+        1,
+        1,
+        0.30000001192092896
+      ],
+      "endColor": [
+        0.800000011920929,
+        0.949999988079071,
+        1,
+        0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.8999999761581421,
+          "color": [
+            0.8999999761581421,
+            0.9700000286102295,
+            1,
+            0.23999999463558197
+          ]
+        }
+      ],
+      "coreWhiteness": 1,
+      "edgeAlpha": 0.25,
+      "texturePath": "",
+      "blendMode": 2,
+      "timeGroup": 0,
+      "uvTilesPerUnit": 0,
+      "uvScrollSpeed": [
+        0,
+        0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 2,
+      "flareLength": 4.0,
+      "flareStartScale": 0.05,
+      "segmentPower": 2.0
+    }
+  ]
+}

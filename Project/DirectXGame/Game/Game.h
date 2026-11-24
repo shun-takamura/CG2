@@ -39,7 +39,7 @@ public:
 	/// <summary>EffectManager・GPU パーティクル・ポストエフェクト（Debug はビューポート用 RT も）を GPU 停止前に片付けてからエンジンを終了する</summary>
 	void Finalize() override;
 
-	/// <summary>描画解像度の変更を反映し、エンジンとシーンを 1 フレーム進める（F8 でデモモードの切り替え）</summary>
+	/// <summary>描画解像度の変更を反映し、エンジンとシーンを 1 フレーム進める（F8 で展示ロックの切り替え）</summary>
 	void Update() override;
 
 	/// <summary>1 フレームの描画パス（影 → シーン → マスク → 歪み → 発光 → 合成と重ね描き → ImGui）を順に実行して画面に出す</summary>

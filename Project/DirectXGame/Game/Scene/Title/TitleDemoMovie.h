@@ -28,7 +28,8 @@ public:
 
 	/// <summary>放置の時間を数えてデモを流し、触ったらタイトルへ戻す。毎フレーム、タイトルの入力処理より前に呼ぶ</summary>
 	/// <param name="canIdle">false の間（扉に入る途中・トランジション中など）は放置の時間を数えない</param>
-	void Update(bool canIdle);
+	/// <param name="ignoreActivity">true の間は触っても数えない（展示ロック中。放置の時間は戻らず、映像も止まらない）</param>
+	void Update(bool canIdle, bool ignoreActivity);
 
 	/// <summary>タイトルの入力を止めるかを返す</summary>
 	/// <returns>デモ映像を出している間と、戻った直後の少しの間は true</returns>

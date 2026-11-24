@@ -25,7 +25,7 @@
       1,
       1,
       1,
-      1
+      0
     ],
     "blendMode": 1,
     "depthWrite": true,
@@ -118,7 +118,7 @@
       0,
       0
     ],
-    "radius": 0.60000002384185791,
+    "radius": 0.6000000238418579,
     "halfExtents": [
       0.5,
       0.5,
@@ -142,7 +142,7 @@
     "penetrateEffect": ""
   },
   "effects": {
-    "trail": "NormalBullet",
+    "trail": "PlayerBulletComet",
     "hit": "HitPlayerNormalBullet"
   }
 }

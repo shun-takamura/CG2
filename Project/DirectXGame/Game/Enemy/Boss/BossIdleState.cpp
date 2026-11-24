@@ -8,6 +8,7 @@
 #include "Enemy/Boss/Action/BossAttackCharge.h"
 #include "Enemy/Boss/Action/BossAttackSlam.h"
 #include "Enemy/Boss/Action/BossRageRoar.h"
+#include "Enemy/Boss/Action/BossAttackGravityOrb.h"
 #include "Enemy/Boss/BossRig.h"
 #include "Components/Gameplay.h"
 #include "IImGuiEditable.h"
@@ -37,6 +38,29 @@ namespace {
 
 	// 咆哮の直後はすぐ攻撃に移れるよう、クールタイムを短くする [秒]
 	constexpr float kAfterRoarAttackCooldown = 0.3f;
+
+	/// <summary>
+	/// 必殺技 GravityOrb を使うか。HP がしきい値を切ったら 1 回（一撃で複数のしきい値を越えたら 1 回にまとめる）。
+	/// ImGui の「今すぐ使う」も受ける
+	/// </summary>
+	/// <param name="ctx">ボス・自機・シーンと共有データ</param>
+	/// <returns>使うなら true</returns>
+	bool ShouldUseGravityOrb(BossStateContext& ctx) {
+		BossGravityOrb* orb = ctx.scene ? ctx.scene->GetBossGravityOrb() : nullptr;
+		if (!orb || orb->IsRunning()) return false;
+		if (orb->ConsumeDebugTrigger()) return true;
+		if (!ctx.boss) return false;
+		const HP& hp = Gameplay::Of(ctx.boss).GetHP();
+		if (!hp.enabled || hp.maxHP <= 0) return false;
+		BossBrain& brain = *ctx.brain;
+		constexpr int kThresholdCount = static_cast<int>(sizeof(BossBrain::gravityOrbHpRatios) / sizeof(float));
+		const float ratio = static_cast<float>(hp.currentHP) / static_cast<float>(hp.maxHP);
+		if (brain.gravityOrbUses >= kThresholdCount || ratio > brain.gravityOrbHpRatios[brain.gravityOrbUses]) return false;
+		while (brain.gravityOrbUses < kThresholdCount && ratio <= brain.gravityOrbHpRatios[brain.gravityOrbUses]) {
+			++brain.gravityOrbUses;
+		}
+		return true;
+	}
 }
 
 std::unique_ptr<IBossState> BossIdleState::Update(float dt, BossStateContext& ctx) {
@@ -47,6 +71,11 @@ std::unique_ptr<IBossState> BossIdleState::Update(float dt, BossStateContext& ct
 	std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 	const bool rage = IsRage(ctx);
 
+	// 必殺技 GravityOrb（HP のしきい値で。終わった後はいつもの間隔を空ける）
+	if (ShouldUseGravityOrb(ctx)) {
+		brain.attackCooldown = brain.attackCooldownBase;
+		return std::make_unique<BossAttackGravityOrb>();
+	}
 	// 発狂した最初の 1 回は咆哮
 	if (rage && !brain.rageEntered) {
 		brain.rageEntered = true;

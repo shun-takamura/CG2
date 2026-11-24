@@ -1,0 +1,45 @@
+{
+  "name": "HitPlayerBeam",
+  "totalDuration": 0.15,
+  "loop": false,
+  "primitives": [
+    {
+      "displayName": "Flash",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 0.15,
+      "startScale": [
+        3.0,
+        3.0,
+        1.0
+      ],
+      "endScale": [
+        0.5,
+        0.5,
+        1.0
+      ],
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        0.6,
+        0.85,
+        1.0,
+        0.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": []
+}

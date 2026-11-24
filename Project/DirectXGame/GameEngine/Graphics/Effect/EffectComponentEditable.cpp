@@ -19,6 +19,10 @@ namespace {
     // TimeGroup（World/Player/UI/Effect）。Effect は必殺技の全停止中でも動く（既定 1.0）。
     const char* TimeGroupNames[] = { "World", "Player", "UI", "Effect" };
     const char* LightKindNames[] = { "Point", "Spot" };
+    const char* BeamAnchorNames[] = { "Origin", "Beam End" };
+    const char* RibbonModeNames[] = { "Trail (尾)", "Beam (ビーム)" };
+    // Ribbon の色キーの中間キーの最大数
+    constexpr size_t kMaxRibbonMidKeys = 6;
 
     // カーブ編集UIは EffectUI::DrawCurveEditor（CurveEditorWidget）へ切り出した。
     // レールカメラの緩急カーブ編集でも共用するため共有ウィジェット化している。
@@ -52,6 +56,7 @@ std::string EffectComponentEditable::GetName() const {
     case Kind::Particle:  if (inRange(index_, buf.particles.size()))  dn = &buf.particles[index_].displayName;  break;
     case Kind::Light:     if (inRange(index_, buf.lights.size()))     dn = &buf.lights[index_].displayName;     break;
     case Kind::Sound:     if (inRange(index_, buf.sounds.size()))     dn = &buf.sounds[index_].displayName;     break;
+    case Kind::Ribbon:    if (inRange(index_, buf.ribbons.size()))    dn = &buf.ribbons[index_].displayName;    break;
     }
     if (dn && !dn->empty()) return *dn;
 
@@ -61,6 +66,7 @@ std::string EffectComponentEditable::GetName() const {
     case Kind::Particle:  std::snprintf(def, sizeof(def), "Particle #%d",  index_); break;
     case Kind::Light:     std::snprintf(def, sizeof(def), "Light #%d",     index_); break;
     case Kind::Sound:     std::snprintf(def, sizeof(def), "Sound #%d",     index_); break;
+    case Kind::Ribbon:    std::snprintf(def, sizeof(def), "Ribbon #%d",    index_); break;
     }
     return def;
 }
@@ -74,6 +80,7 @@ void EffectComponentEditable::SetName(const std::string& name) {
     case Kind::Particle:  if (inRange(index_, buf.particles.size()))  buf.particles[index_].displayName  = name; break;
     case Kind::Light:     if (inRange(index_, buf.lights.size()))     buf.lights[index_].displayName     = name; break;
     case Kind::Sound:     if (inRange(index_, buf.sounds.size()))     buf.sounds[index_].displayName     = name; break;
+    case Kind::Ribbon:    if (inRange(index_, buf.ribbons.size()))    buf.ribbons[index_].displayName    = name; break;
     }
     owner_->MarkEditBufferDirty();
 }
@@ -84,6 +91,7 @@ std::string EffectComponentEditable::GetTypeName() const {
     case Kind::Particle:  return "EffectParticle";
     case Kind::Light:     return "EffectLight";
     case Kind::Sound:     return "EffectSound";
+    case Kind::Ribbon:    return "EffectRibbon";
     }
     return "EffectComponent";
 }
@@ -107,6 +115,8 @@ void EffectComponentEditable::OnImGuiInspector() {
         if (ImGui::CollapsingHeader("Effect Timeline", ImGuiTreeNodeFlags_DefaultOpen)) {
             dirty |= ImGui::Combo("Mesh", &c.meshType, MeshTypeNames, IM_ARRAYSIZE(MeshTypeNames));
             dirty |= ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
+            dirty |= ImGui::Combo("Beam Anchor", &c.beamAnchor, BeamAnchorNames, IM_ARRAYSIZE(BeamAnchorNames));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Beam End: Ribbon の Beam の先（ビームの長さだけ前）に付ける。着弾点の光など");
             // 回転をDegreeで表示（内部・保存はラジアンのまま）
             Vector3 rotateDegree = RadToDeg(c.rotate);
             if (ImGui::DragFloat3("Rotate (deg)", &rotateDegree.x, 1.0f)) {
@@ -537,6 +547,8 @@ void EffectComponentEditable::OnImGuiInspector() {
             ImGui::TextDisabled("drop a Sprite from SceneEditor here (live反映)");
         }
         dirty |= ImGui::DragFloat3("Offset", &c.offset.x, 0.05f);
+        dirty |= ImGui::Combo("Beam Anchor", &c.beamAnchor, BeamAnchorNames, IM_ARRAYSIZE(BeamAnchorNames));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Beam End: Ribbon の Beam の先（ビームの長さだけ前）に付ける。着弾点の光など");
         dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
         dirty |= ImGui::DragFloat("Duration",   &c.duration,  0.01f, 0.0f, 60.0f);
         int burst = static_cast<int>(c.burstCount);
@@ -812,6 +824,123 @@ void EffectComponentEditable::OnImGuiInspector() {
         dirty |= ImGui::DragFloat("Start Time", &c.startTime, 0.01f, 0.0f, 60.0f);
         dirty |= ImGui::DragFloat("Distance Scale", &c.distanceScale, 0.1f, 0.1f, 200.0f);
         dirty |= ImGui::DragFloat("Volume", &c.volume, 0.01f, 0.0f, 4.0f);
+    }
+    else if (kind_ == Kind::Ribbon) {
+        if (index_ < 0 || index_ >= static_cast<int>(buf.ribbons.size())) { ImGui::Text("(removed)"); return; }
+        auto& c = buf.ribbons[index_];
+
+        // ===== 動き方・時間 =====
+        if (ImGui::CollapsingHeader("Ribbon", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Combo("Mode", &c.mode, RibbonModeNames, IM_ARRAYSIZE(RibbonModeNames));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Trail: 中心が通った所をつなぐ（弾の尾）\nBeam: 中心から前(+Z)へまっすぐ伸びる");
+            dirty |= ImGui::DragFloat3("Offset##Ribbon", &c.offset.x, 0.05f);
+            dirty |= ImGui::DragFloat("Start Time##Ribbon", &c.startTime, 0.01f, 0.0f, 60.0f);
+            dirty |= ImGui::DragFloat("Lifetime##Ribbon", &c.lifetime, 0.01f, 0.0f, 60.0f, "%.2f (0=止められるまで)");
+            dirty |= ImGui::Combo("Time Group##Ribbon", &c.timeGroup, TimeGroupNames, IM_ARRAYSIZE(TimeGroupNames));
+        }
+
+        if (c.mode == EffectRibbonMode::Trail) {
+            if (ImGui::CollapsingHeader("Trail", ImGuiTreeNodeFlags_DefaultOpen)) {
+                dirty |= ImGui::DragFloat("Point Lifetime", &c.pointLifetime, 0.005f, 0.001f, 10.0f, "%.3f s");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("点が残る時間。尾の長さ＝速さ × これ（650m/s で 0.1s なら 65m）");
+                dirty |= ImGui::DragFloat("Min Point Distance", &c.minPointDistance, 0.01f, 0.0f, 100.0f, "%.2f m");
+                int maxPoints = static_cast<int>(c.maxPoints);
+                if (ImGui::DragInt("Max Points", &maxPoints, 0.2f, 2, 512)) {
+                    c.maxPoints = static_cast<uint32_t>((std::max)(2, maxPoints));
+                    dirty = true;
+                }
+                ImGui::TextDisabled("(点が足りないと尾が途中で切れる：60fps なら Point Lifetime × 60 以上)");
+            }
+        } else {
+            if (ImGui::CollapsingHeader("Beam", ImGuiTreeNodeFlags_DefaultOpen)) {
+                dirty |= ImGui::DragFloat("Length Scale", &c.lengthScale, 0.01f, 0.0f, 10.0f);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("ゲームから渡す長さに掛ける倍率（芯と外側の光で長さを変える時など）");
+                dirty |= ImGui::DragFloat("Default Length", &c.defaultLength, 0.1f, 0.0f, 1000.0f, "%.1f m");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("長さを渡されていない時の長さ（エディタの Beam Length で上書きできる）");
+                int segments = static_cast<int>(c.beamSegments);
+                if (ImGui::DragInt("Segments", &segments, 0.2f, 1, 256)) {
+                    c.beamSegments = static_cast<uint32_t>((std::max)(1, segments));
+                    dirty = true;
+                }
+                dirty |= ImGui::DragFloat("Extend Time", &c.extendTime, 0.005f, 0.0f, 5.0f, "%.3f s");
+                dirty |= ImGui::DragFloat("Release Time", &c.releaseTime, 0.005f, 0.0f, 5.0f, "%.3f s");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("撃ち終わり（Release / Lifetime 切れ）から細くなって消えるまで");
+                ImGui::SeparatorText("Wobble");
+                dirty |= ImGui::DragFloat("Amplitude", &c.wobbleAmplitude, 0.005f, 0.0f, 2.0f);
+                dirty |= ImGui::DragFloat("Frequency", &c.wobbleFrequency, 0.1f, 0.0f, 200.0f, "%.1f rad/s");
+                dirty |= ImGui::DragFloat("Wave Length", &c.wobbleWaveLength, 0.05f, 0.0f, 200.0f, "%.2f m");
+                ImGui::SeparatorText("Flare (付け根の広がり)");
+                dirty |= ImGui::DragFloat("Flare Length", &c.flareLength, 0.05f, 0.0f, 200.0f, "%.2f m (0=広げない)");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("根元からこの長さをかけて太さを広げる（付け根の四角い角を消す）");
+                dirty |= ImGui::SliderFloat("Flare Start Scale", &c.flareStartScale, 0.0f, 1.0f);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("根元の太さの倍率（0 なら点から広がる）");
+                dirty |= ImGui::DragFloat("Segment Power", &c.segmentPower, 0.01f, 0.1f, 6.0f, "%.2f");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("区切りの寄せ方。1=等間隔 / 2 以上で根元ほど細かい（付け根の広がりがなめらかになる）");
+            }
+        }
+
+        // ===== 太さ・色 =====
+        if (ImGui::CollapsingHeader("Shape / Color", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextDisabled(c.mode == EffectRibbonMode::Trail ? "(Start＝今の位置 / End＝いちばん古い点)" : "(Start＝根元 / End＝先)");
+            dirty |= ImGui::DragFloat("Start Width", &c.startWidth, 0.01f, 0.0f, 100.0f);
+            dirty |= ImGui::DragFloat("End Width", &c.endWidth, 0.01f, 0.0f, 100.0f);
+            if (ImGui::TreeNode("Width Curve (位置→t)")) {
+                dirty |= DrawCurveEditor("RibbonWidthCurve", c.widthCurve);
+                ImGui::TreePop();
+            }
+            dirty |= ImGui::ColorEdit4("Start Color", &c.startColor.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+            dirty |= ImGui::ColorEdit4("End Color", &c.endColor.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+            ImGui::SeparatorText("Color Keys (中間)");
+            int removeIdx = -1;
+            for (size_t k = 0; k < c.colorKeys.size(); ++k) {
+                ImGui::PushID(static_cast<int>(k));
+                ImGui::SetNextItemWidth(kColorKeyLocationWidth);
+                dirty |= ImGui::DragFloat("##loc", &c.colorKeys[k].location, 0.005f, 0.0f, 1.0f, "Loc %.2f");
+                ImGui::SameLine();
+                dirty |= ImGui::ColorEdit4("##col", &c.colorKeys[k].color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreviewHalf | ImGuiColorEditFlags_HDR);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("x")) removeIdx = static_cast<int>(k);
+                ImGui::PopID();
+            }
+            if (removeIdx >= 0) { c.colorKeys.erase(c.colorKeys.begin() + removeIdx); dirty = true; }
+            if (c.colorKeys.size() < kMaxRibbonMidKeys && ImGui::SmallButton("+ Key##Ribbon")) {
+                EffectColorKey nk;
+                nk.location = 0.5f;
+                nk.color = { (c.startColor.x + c.endColor.x) * 0.5f, (c.startColor.y + c.endColor.y) * 0.5f,
+                             (c.startColor.z + c.endColor.z) * 0.5f, (c.startColor.w + c.endColor.w) * 0.5f };
+                c.colorKeys.push_back(nk);
+                dirty = true;
+            }
+            ImGui::SeparatorText("Cross Section");
+            dirty |= ImGui::SliderFloat("Core Whiteness", &c.coreWhiteness, 0.0f, 1.0f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("帯の中央を白へ寄せる（芯が白く光る）");
+            dirty |= ImGui::SliderFloat("Edge Alpha", &c.edgeAlpha, 0.0f, 1.0f);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("縁の不透明さ。0 で縁へ向かって柔らかく消える");
+        }
+
+        // ===== 材質 =====
+        if (ImGui::CollapsingHeader("Material##Ribbon", ImGuiTreeNodeFlags_DefaultOpen)) {
+            dirty |= ImGui::Combo("BlendMode##Ribbon", &c.blendMode, BlendModeNames, IM_ARRAYSIZE(BlendModeNames));
+            ImGui::Text("Texture:");
+            ImGui::SameLine();
+            const std::string curr = c.texturePath.empty() ? "(default white)" : c.texturePath;
+            ImGui::Button(curr.c_str(), ImVec2(-FLT_MIN, 0));
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(SPRITE_DROP_PAYLOAD_TYPE)) {
+                    const SpriteDropPayload* p = static_cast<const SpriteDropPayload*>(payload->Data);
+                    c.texturePath = p->texturePath;
+                    dirty = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            if (ImGui::SmallButton("Reset Texture##Ribbon")) { c.texturePath.clear(); dirty = true; }
+            dirty |= ImGui::DragFloat("UV Tiles / m", &c.uvTilesPerUnit, 0.005f, 0.0f, 100.0f, "%.3f (0=全長で 0..1)");
+            dirty |= ImGui::DragFloat2("UV Scroll Speed", &c.uvScrollSpeed.x, 0.01f);
+            dirty |= ImGui::Checkbox("Use Bloom##Ribbon", &c.useBloom);
+            if (c.useBloom) {
+                dirty |= ImGui::DragFloat("Bloom Intensity##Ribbon", &c.bloomIntensity, 0.02f, 0.0f, 20.0f);
+            }
+        }
     }
 
     if (dirty) {

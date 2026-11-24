@@ -151,6 +151,9 @@ public:
     /// <param name="def">編集中の定義</param>
     /// <param name="worldPos">エフェクト中心のワールド座標</param>
     void SyncPreview(const EffectDef& def, const Vector3& worldPos);
+    /// <summary>プレビューのエフェクト全体の向きを設定する（エディタで動かす・ビームの向き）</summary>
+    /// <param name="rotate">オイラー角 [ラジアン]</param>
+    void SetPreviewRotation(const Vector3& rotate);
 
     /// <summary>
     /// 全プレビューインスタンスを t=0 へ巻き戻す（「Restart」の実体）。
@@ -196,6 +199,25 @@ public:
     /// <param name="handle">Play / PlayWithDef が返したハンドル（プレビューのハンドルは対象外）</param>
     /// <param name="rotate">オイラー角 [ラジアン]</param>
     void SetRotation(EffectHandle handle, const Vector3& rotate);
+
+    /// <summary>
+    /// 出し終わりを要求する（弾が消えた・ビームを撃ち終えた）。Primitive / Light はすぐ消え、
+    /// Ribbon の尾は古くなって、ビームは細くなって消えてから終わる（Stop と違って尾が残る）。
+    /// </summary>
+    /// <param name="handle">Play / PlayWithDef が返したハンドル（プレビューのハンドルは対象外）</param>
+    void Release(EffectHandle handle);
+
+    /// <summary>
+    /// ビームの長さを設定する（Ribbon の Beam と、ビームの先に付けた Primitive / Particle が使う）。
+    /// 向きは SetRotation（エフェクトのローカル +Z がビームの前）。
+    /// </summary>
+    /// <param name="handle">Play / PlayWithDef が返したハンドル（プレビューのハンドルは対象外）</param>
+    /// <param name="length">長さ [m]（負で Ribbon の defaultLength に戻す）</param>
+    void SetBeamLength(EffectHandle handle, float length);
+
+    /// <summary>プレビューのエフェクトのビームの長さを設定する（エディタ用）</summary>
+    /// <param name="length">長さ [m]（負で Ribbon の defaultLength に戻す）</param>
+    void SetPreviewBeamLength(float length);
 
     /// <summary>
     /// 指定ハンドルが現在もアクティブなインスタンスを指しているか

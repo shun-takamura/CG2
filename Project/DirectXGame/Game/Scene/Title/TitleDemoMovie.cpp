@@ -120,7 +120,7 @@ void TitleDemoMovie::StartNow() {
 	ChangeState(State::FadeIn);
 }
 
-void TitleDemoMovie::Update(bool canIdle) {
+void TitleDemoMovie::Update(bool canIdle, bool ignoreActivity) {
 	// 実時間で数える（タイトルの時間の倍率・ヒットストップの影響を受けない）
 	const auto now = std::chrono::steady_clock::now();
 	float dt = 0.0f;
@@ -130,7 +130,7 @@ void TitleDemoMovie::Update(bool canIdle) {
 	lastTime_ = now;
 	hasLastTime_ = true;
 
-	const bool activity = AnyActivity();
+	const bool activity = !ignoreActivity && AnyActivity();
 	stateTime_ += dt;
 	graceTime_ = (std::max)(0.0f, graceTime_ - dt);
 
