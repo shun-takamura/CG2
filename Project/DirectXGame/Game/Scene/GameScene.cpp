@@ -570,6 +570,11 @@ void GameScene::SpawnEnemyBullet(const Vector3& pos, const Vector3& direction,
 	br.homingTarget      = homingTarget;
 	br.homingStrength    = homingStrength;
 	br.baseColliderRadius = Gameplay::Of(spawned).GetCollider().radius;
+	// 敵弾の尾（プレハブの trail スロット、ループ前提）。弾が消えたら Release で尾だけ残して消える
+	if (const std::string trailEff = Gameplay::Of(spawned).FindEffect("trail"); !trailEff.empty()) {
+		br.trailEffectHandle = EffectManager::GetInstance()->Play(trailEff, pos);
+		if (speed > kTinyEpsilon) EffectManager::GetInstance()->SetRotation(br.trailEffectHandle, DirectionToEuler(direction));
+	}
 	bullets_.emplace(spawned, std::move(br));
 }
 
@@ -1168,6 +1173,67 @@ float GameScene::FindFirstEnemyHitOnSegment(const Vector3& from, const Vector3& 
 	return bestStop;
 }
 
+void GameScene::CollectEnemiesOnSegment(const Vector3& from, const Vector3& to, float radius, std::vector<PlayerBeamHit>& out) const {
+	const Vector3 d{ to.x - from.x, to.y - from.y, to.z - from.z };
+	const float lenSq = d.x * d.x + d.y * d.y + d.z * d.z;
+	if (lenSq < kSegmentLengthSqEpsilon) return;
+
+	auto test = [&](IImGuiEditable* e, const Vector3& pos) {
+		if (!e) return;
+		const EntityTag tag = Gameplay::Of(e).GetTag();
+		if (tag != EntityTag::Enemy && tag != EntityTag::Boss) return;
+		const Collider& col = Gameplay::Of(e).GetCollider();
+		if (!col.enabled) return;
+		if (Gameplay::Of(e).GetHP().IsDead()) return;
+
+		float s = 0.0f;
+		if (col.shape == ColliderShape::Capsule) {
+			// カプセル：線分と芯の線分が最も近づく所
+			CollisionGeometry::WorldData w;
+			if (!CollisionGeometry::TryGetWorldData(e, col, w)) return;
+			const float half = col.capsuleHeight * 0.5f;
+			const Vector3 a0{ w.center.x + w.axes[1].x * half, w.center.y + w.axes[1].y * half, w.center.z + w.axes[1].z * half };
+			const Vector3 a1{ w.center.x - w.axes[1].x * half, w.center.y - w.axes[1].y * half, w.center.z - w.axes[1].z * half };
+			const float r = col.capsuleRadius + radius;
+			if (ClosestSegmentSegment(from, to, a0, a1, s) > r * r) return;
+		} else if (col.shape == ColliderShape::Sphere) {
+			// 球：中心から線分までの距離
+			const Vector3 c{ pos.x + col.offset.x, pos.y + col.offset.y, pos.z + col.offset.z };
+			s = (std::clamp)(((c.x - from.x) * d.x + (c.y - from.y) * d.y + (c.z - from.z) * d.z) / lenSq, 0.0f, 1.0f);
+			const Vector3 p{ from.x + d.x * s - c.x, from.y + d.y * s - c.y, from.z + d.z * s - c.z };
+			const float r = col.radius + radius;
+			if (p.x * p.x + p.y * p.y + p.z * p.z > r * r) return;
+		} else {
+			return;
+		}
+		PlayerBeamHit hit;
+		hit.target = e;
+		hit.damageRoot = Gameplay::DamageRootOf(e);
+		hit.point = { from.x + d.x * s, from.y + d.y * s, from.z + d.z * s };
+		out.push_back(hit);
+	};
+
+	for (const auto& p : GetDynamicPrimitives()) {
+		if (p) if (const Vector3* pos = p->GetEditableTranslate()) test(p.get(), *pos);
+	}
+	for (const auto& o : GetDynamicObjects()) {
+		if (o) if (const Vector3* pos = o->GetEditableTranslate()) test(o.get(), *pos);
+	}
+	for (const auto& an : GetDynamicAnimated()) {
+		if (an) test(an.get(), an->GetTranslate());
+	}
+}
+
+void GameScene::ApplyPlayerBeamHit(const PlayerBeamHit& hit, int damage, const std::string& hitEffect, bool firstHit) {
+	if (!hit.target) return;
+	HP& hp = Gameplay::Of(hit.target).GetHP();
+	if (hp.enabled) hp.TakeDamage(damage);
+	auto* em = EffectManager::GetInstance();
+	if (em && !hitEffect.empty()) em->Play(hitEffect, hit.point);
+	// 被弾エフェクトと音は当たり始めだけ（毎回出すと何十回も重なる）
+	if (firstHit) PlayHitEffects(nullptr, hit.target, hit.point);
+}
+
 void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime) {
 	PEPPER_SCOPE("GameScene::UpdateBullets");
 	if (bullets_.empty()) return;
@@ -1294,7 +1360,8 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 		}
 		// 弾消滅と同時に trail エフェクトを停止
 		if (b.trailEffectHandle != 0) {
-			EffectManager::GetInstance()->Stop(b.trailEffectHandle);
+			// 尾（Ribbon の Trail）は残して、古くなって消えてから終わる。頭の光はすぐ消える
+			EffectManager::GetInstance()->Release(b.trailEffectHandle);
 			b.trailEffectHandle = 0;
 		}
 		ReleaseDynamicEntity(it->first);

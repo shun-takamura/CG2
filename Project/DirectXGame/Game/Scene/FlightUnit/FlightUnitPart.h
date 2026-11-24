@@ -7,6 +7,7 @@
 #include "Vector4.h"
 #include "MathUtility.h"
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,6 +71,21 @@ public:
 	/// <param name="radius">球の半径 [m]</param>
 	/// <returns>消した敵弾のダメージの合計（難易度の倍率の前）</returns>
 	virtual int AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) = 0;
+	/// <summary>ファンネル大のビームを撃ち始める（撃っている間は SetSupportBeamPose で根元と向きを付け直す）</summary>
+	/// <param name="from">根元（ワールド）</param>
+	/// <param name="dir">向き（ワールド）</param>
+	/// <param name="damageScale">自機の攻撃力に掛ける倍率</param>
+	/// <returns>ビームの番号（0 なら撃てなかった）</returns>
+	virtual uint32_t FireSupportBeam(const Vector3& from, const Vector3& dir, float damageScale) = 0;
+	/// <summary>ファンネル大のビームの根元と向きを付け直す</summary>
+	/// <param name="id">FireSupportBeam が返した番号</param>
+	/// <param name="from">根元（ワールド）</param>
+	/// <param name="dir">向き（ワールド）</param>
+	virtual void SetSupportBeamPose(uint32_t id, const Vector3& from, const Vector3& dir) = 0;
+	/// <summary>ファンネル大のビームが撃っている途中かを返す</summary>
+	/// <param name="id">FireSupportBeam が返した番号</param>
+	/// <returns>途中なら true</returns>
+	virtual bool IsSupportBeamActive(uint32_t id) const = 0;
 };
 
 /// <summary>
@@ -113,6 +129,9 @@ public:
 	/// <param name="dt">実時間の経過 [秒]</param>
 	/// <param name="canAct">操作できるか（必殺技・ジャスト回避・死亡演出・着地の間は false）</param>
 	virtual void Update(float dt, bool canAct) = 0;
+	/// <summary>自機が撃った（攻撃系の常時の支援射撃が自機の射撃に合わせて撃つ）</summary>
+	/// <param name="canAct">操作できるか</param>
+	virtual void OnPlayerShot(bool canAct) { (void)canAct; }
 	/// <summary>技の 3D の見た目を描く</summary>
 	virtual void Draw() {}
 
@@ -286,6 +305,9 @@ public:
 	/// <param name="canAct">操作できるか</param>
 	/// <param name="timeTaken">ジャスト回避・必殺技が時間を握っているか（スローの技はそこで終わる。20 番 §6）</param>
 	void Update(float dt, bool triggered, bool canAct, bool timeTaken);
+	/// <summary>自機が撃ったことを今の系統へ伝える（攻撃系の支援射撃を自機の射撃に合わせる）</summary>
+	/// <param name="canAct">操作できるか</param>
+	void NotifyPlayerShot(bool canAct);
 	/// <summary>付けている系統の技の 3D の見た目を描く</summary>
 	void Draw3D();
 	/// <summary>クールタイムのバー（必殺技ゲージの下）を描く</summary>

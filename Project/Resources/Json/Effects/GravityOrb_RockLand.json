@@ -1,0 +1,136 @@
+{
+  "name": "GravityOrb_RockLand",
+  "totalDuration": 2.0,
+  "loop": false,
+  "primitives": [
+    {
+      "displayName": "dustRing",
+      "meshType": 3,
+      "rotate": [
+        1.5707963,
+        0,
+        0
+      ],
+      "billboardMode": "None",
+      "blendMode": 1,
+      "ringParams": {
+        "outerRadius": 1.0,
+        "innerRadius": 0.55,
+        "divisions": 64,
+        "innerColor": [
+          0.5,
+          0.43,
+          0.32,
+          0
+        ],
+        "outerColor": [
+          0.5,
+          0.43,
+          0.32,
+          0.6
+        ]
+      },
+      "offset": [
+        0,
+        0.2,
+        0
+      ],
+      "startTime": 0.0,
+      "lifetime": 0.9,
+      "startScale": [
+        2,
+        2,
+        1
+      ],
+      "endScale": [
+        9,
+        9,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "displayName": "dust",
+      "gpuParticleGroupName": "GravityOrb_RockDust",
+      "texturePath": "Resources/Textures/Effect/smoke_00.dds",
+      "burstCount": 14,
+      "blendMode": 1,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.5,
+        0.43,
+        0.32,
+        0.7
+      ],
+      "endColor": [
+        0.45,
+        0.4,
+        0.3,
+        0
+      ],
+      "scaleMin": [
+        1.5,
+        1.5
+      ],
+      "scaleMax": [
+        3.0,
+        3.0
+      ],
+      "startScale": 0.7,
+      "endScale": 1.8,
+      "emitRadius": 2.5,
+      "particleLifeTime": 1.8,
+      "velocityMode": 2,
+      "velocitySpeed": 3,
+      "velocityJitter": 1
+    },
+    {
+      "displayName": "chips",
+      "gpuParticleGroupName": "GravityOrb_Pebble",
+      "texturePath": "Resources/Textures/Effect/circle.dds",
+      "burstCount": 20,
+      "blendMode": 1,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        0.17,
+        0.15,
+        0.12,
+        1
+      ],
+      "endColor": [
+        0.17,
+        0.15,
+        0.12,
+        0
+      ],
+      "scaleMin": [
+        0.08,
+        0.08
+      ],
+      "scaleMax": [
+        0.2,
+        0.2
+      ],
+      "emitRadius": 2.0,
+      "particleLifeTime": 1.0,
+      "velocityMode": 2,
+      "velocitySpeed": 6,
+      "velocityJitter": 2
+    }
+  ]
+}

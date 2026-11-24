@@ -1,6 +1,7 @@
 #include "EffectPaletteWindow.h"
 #include "Effect/EffectComponentEditable.h"  // EffectComponentEditable::Kind
 #include "EditorDropPayload.h"               // EFFECT_COMP_DROP / EffectComponentDropPayload
+#include "Effect/EffectDef.h"                // EffectRibbonMode
 #include "imgui.h"
 
 namespace {
@@ -10,6 +11,7 @@ namespace {
     // ImGui の ID がほかの項目とぶつからないように足す値（Primitive の D&D 元 / 種別の D&D 元）
     constexpr int kPrimitiveSourceIdOffset = 700000;
     constexpr int kKindSourceIdOffset = 710000;
+    constexpr int kRibbonSourceIdOffset = 720000;
 }
 
 EffectPaletteWindow::EffectPaletteWindow()
@@ -62,5 +64,23 @@ void EffectPaletteWindow::OnDraw() {
     kindSource("Particle", EffectComponentEditable::Kind::Particle);
     kindSource("Light",    EffectComponentEditable::Kind::Light);
     kindSource("Sound",    EffectComponentEditable::Kind::Sound);
+
+    // Ribbon は動き方（Trail / Beam）を meshType に載せる
+    ImGui::SeparatorText("Ribbon");
+    auto ribbonSource = [](const char* label, int mode) {
+        ImGui::PushID(mode + kRibbonSourceIdOffset);
+        ImGui::Selectable(label, false);
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+            EffectComponentDropPayload payload{};
+            payload.kind = static_cast<int>(EffectComponentEditable::Kind::Ribbon);
+            payload.meshType = mode;
+            ImGui::SetDragDropPayload(EFFECT_COMP_DROP_PAYLOAD_TYPE, &payload, sizeof(payload));
+            ImGui::TextUnformatted(label);
+            ImGui::EndDragDropSource();
+        }
+        ImGui::PopID();
+        };
+    ribbonSource("Trail (弾の尾)", EffectRibbonMode::Trail);
+    ribbonSource("Beam (ビーム)",  EffectRibbonMode::Beam);
 #endif
 }

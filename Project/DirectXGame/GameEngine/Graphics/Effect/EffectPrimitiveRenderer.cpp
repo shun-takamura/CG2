@@ -76,6 +76,28 @@ void EffectPrimitiveRenderer::Initialize(int primitiveType, const std::string& t
     mesh_.SetTexture(path);
 }
 
+void EffectPrimitiveRenderer::InitializeDynamic(const MeshData& meshData, const std::string& texturePath) {
+    primitiveType_ = EffectMeshType::Count; // どの形でもない（毎フレーム書き換える帯）
+    mesh_.Initialize(meshData);
+
+    // エフェクト用既定：加算ブレンド・深度書き込みなし・背面カリング無効
+    mesh_.SetBlendMode(PrimitivePipeline::kBlendModeAdd);
+    mesh_.SetDepthWrite(false);
+    mesh_.SetCullBackface(false);
+    // 頂点はワールド座標で作るので、変換は単位行列のまま・カメラを向かせない
+    mesh_.SetBillboardMode(BillboardMode::None);
+    mesh_.GetTransform().translate = { 0.0f, 0.0f, 0.0f };
+    mesh_.GetTransform().scale     = { 1.0f, 1.0f, 1.0f };
+    mesh_.GetTransform().rotate    = { 0.0f, 0.0f, 0.0f };
+    mesh_.SetRotateQuaternion({ 0.0f, 0.0f, 0.0f, 1.0f });
+    mesh_.SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+
+    const std::string path = texturePath.empty()
+        ? std::string("Resources/Textures/white1x1.dds")
+        : texturePath;
+    mesh_.SetTexture(path);
+}
+
 void EffectPrimitiveRenderer::Update(Camera* camera, float deltaTime) {
     mesh_.Update(camera, deltaTime);
 }

@@ -154,6 +154,24 @@ private:
     bool  previewPaused_ = false; // 一時停止（ON で dt=0、編集や姿勢確認はできる）
     float previewSpeed_  = 1.0f;  // 再生速度倍率（unscaled 実 delta に乗算）
 
+    // ===== プレビューで動かす（弾の尾・ビームの確認用） =====
+    // 動き方（0=止まる / 1=直線（範囲まで進んだら撃ち直す） / 2=円を回る）
+    int   previewMotion_ = 0;
+    float previewMotionSpeed_ = 30.0f;    // 速さ [m/s]（650 のような実際の弾速も入れられる）
+    float previewMotionRange_ = 20.0f;    // 直線：進む距離 / 円：半径 [m]
+    float previewMotionYawDeg_ = 0.0f;    // 向き（直線の進む向き・ビームの向き）[度]
+    float previewMotionPitchDeg_ = 0.0f;
+    float previewMotionTravel_ = 0.0f;    // 直線：進んだ距離 / 円：回った角度
+    float previewBeamLength_ = -1.0f;     // ビームの長さ [m]（負なら Ribbon の Default Length）
+
+    /// <summary>プレビューの今の位置と向きを動き方から決め、EffectManager に渡す</summary>
+    /// <param name="dt">プレビューの経過時間 [秒]</param>
+    void UpdatePreviewMotion(float dt);
+    /// <summary>プレビューで動かす欄の ImGui</summary>
+    void DrawPreviewMotionUI();
+    Vector3 previewPos_{ 0.0f, 0.0f, 0.0f };     // 動かした後の位置
+    Vector3 previewRotate_{ 0.0f, 0.0f, 0.0f };  // 動かした後の向き（オイラー角）
+
     // ===== 編集状態 =====
     EffectDef editBuffer_;
     bool editBufferDirty_ = false;

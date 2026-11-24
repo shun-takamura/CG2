@@ -401,6 +401,8 @@ void Game::Initialize() {
 	postEffect_->Initialize(GetDxCore(), GetSRVManager(),
 		GetDxCore()->GetRenderWidth(),
 		GetDxCore()->GetRenderHeight());
+	// 白黒の演出（Monochrome）の名前付きの並び。ゲームからは monochrome->Play("名前") で呼ぶ
+	postEffect_->monochrome->LoadSequences("Resources/Json/Tuning/Monochrome.json");
 
 	// バッチ終了 - DStorage の全リクエストをここで 1 回だけ Submit + Wait
 	DStorageManager::GetInstance()->EndBatchAndWait();
@@ -443,9 +445,15 @@ void Game::Update() {
 		return;
 	}
 
-	// F8：デモモード（展示用の自動進行）の開始・終了。どのシーンからでも切り替えられる
+	// 時間で動くポストエフェクト（白黒の演出の再生）。ゲームのスローに左右されないよう実時間で進める
+	if (postEffect_) {
+		postEffect_->Update(GetDxCore()->GetDeltaTime());
+	}
+
+	// F8：展示ロック（タイトルの操作を止めて放置デモの映像を流し続ける）の開始・解除。どのシーンからでも切り替えられる。
+	// シーンの更新の後で切り替えるので、押したフレームのタイトルはまだロック中として F8 を「解除の入力」と見られる（TitleScene::Update）
 	if (GetInput() && GetInput()->GetKeyboard() && GetInput()->GetKeyboard()->TriggerKey(DIK_F8)) {
-		AttractMode::GetInstance()->Toggle();
+		AttractMode::GetInstance()->ToggleExhibitionLock();
 	}
 }
 

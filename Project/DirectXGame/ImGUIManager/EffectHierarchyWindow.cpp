@@ -74,5 +74,6 @@ void EffectHierarchyWindow::OnDraw() {
     drawGroup("Particles",  EffectComponentEditable::Kind::Particle);
     drawGroup("Lights",     EffectComponentEditable::Kind::Light);
     drawGroup("Sounds",     EffectComponentEditable::Kind::Sound);
+    drawGroup("Ribbons",    EffectComponentEditable::Kind::Ribbon);
 #endif
 }

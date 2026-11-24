@@ -1,0 +1,217 @@
+{
+  "name": "GravityOrb_Explosion",
+  "totalDuration": 2.0,
+  "loop": false,
+  "primitives": [
+    {
+      "displayName": "core",
+      "meshType": 0,
+      "billboardMode": "Full",
+      "texturePath": "Resources/Textures/Effect/circle.dds",
+      "blendMode": 2,
+      "lifetime": 0.8,
+      "startScale": [
+        10,
+        10,
+        1
+      ],
+      "endScale": [
+        70,
+        70,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        0.7,
+        0.85,
+        1,
+        0
+      ]
+    },
+    {
+      "displayName": "burst",
+      "meshType": 0,
+      "billboardMode": "Full",
+      "texturePath": "Resources/Textures/Effect/gizagiza_00.dds",
+      "blendMode": 2,
+      "randomRotateOnSpawn": true,
+      "randomRotateRange": [
+        0,
+        0,
+        3.1415926
+      ],
+      "lifetime": 0.6,
+      "startScale": [
+        8,
+        8,
+        1
+      ],
+      "endScale": [
+        45,
+        45,
+        1
+      ],
+      "startColor": [
+        0.75,
+        0.88,
+        1,
+        1
+      ],
+      "endColor": [
+        0.4,
+        0.6,
+        1,
+        0
+      ]
+    },
+    {
+      "displayName": "darkRim",
+      "meshType": 0,
+      "billboardMode": "Full",
+      "texturePath": "Resources/Textures/Effect/gizagiza_00.dds",
+      "blendMode": 1,
+      "lifetime": 0.5,
+      "startScale": [
+        6,
+        6,
+        1
+      ],
+      "endScale": [
+        30,
+        30,
+        1
+      ],
+      "startColor": [
+        0.04,
+        0.06,
+        0.15,
+        0.5
+      ],
+      "endColor": [
+        0.04,
+        0.06,
+        0.15,
+        0
+      ]
+    },
+    {
+      "displayName": "shockwave",
+      "meshType": 3,
+      "rotate": [
+        1.5707963,
+        0,
+        0
+      ],
+      "billboardMode": "None",
+      "blendMode": 2,
+      "ringParams": {
+        "outerRadius": 1.0,
+        "innerRadius": 0.75,
+        "divisions": 64,
+        "innerColor": [
+          0.6,
+          0.8,
+          1,
+          0
+        ],
+        "outerColor": [
+          0.9,
+          0.95,
+          1,
+          1
+        ]
+      },
+      "offset": [
+        0,
+        0.3,
+        0
+      ],
+      "startTime": 0.0,
+      "lifetime": 1.2,
+      "startScale": [
+        2,
+        2,
+        1
+      ],
+      "endScale": [
+        70,
+        70,
+        1
+      ],
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "texturePath": "Resources/Textures/Effect/gradationLine.dds"
+    }
+  ],
+  "particles": [
+    {
+      "displayName": "blast",
+      "gpuParticleGroupName": "GravityOrb_Blast",
+      "texturePath": "Resources/Textures/Effect/circle.dds",
+      "burstCount": 200,
+      "billboardMode": "Full",
+      "colorMode": 1,
+      "startColor": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "endColor": [
+        0.5,
+        0.7,
+        1,
+        0
+      ],
+      "scaleMin": [
+        0.2,
+        0.2
+      ],
+      "scaleMax": [
+        0.6,
+        0.6
+      ],
+      "endScale": 0.2,
+      "emitRadius": 2.0,
+      "particleLifeTime": 1.6,
+      "velocityMode": 2,
+      "velocitySpeed": 30,
+      "velocityJitter": 12
+    }
+  ],
+  "lights": [
+    {
+      "displayName": "blastLight",
+      "offset": [
+        0,
+        2,
+        0
+      ],
+      "lifetime": 1.5,
+      "color": [
+        0.85,
+        0.92,
+        1,
+        1
+      ],
+      "startIntensity": 80,
+      "endIntensity": 0,
+      "range": 80
+    }
+  ]
+}

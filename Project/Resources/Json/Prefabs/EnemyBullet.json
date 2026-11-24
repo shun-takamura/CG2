@@ -23,9 +23,9 @@
     "texturePath": "Resources/Textures/white1x1.dds",
     "color": [
       1,
-      0.40000000596046448,
+      0.4000000059604645,
       0.10000000149011612,
-      1
+      0
     ],
     "blendMode": 1,
     "depthWrite": true,
@@ -134,11 +134,14 @@
   "bullet": {
     "speed": 40,
     "lifetime": 8,
-    "homingStrength": 0.40000000596046448,
+    "homingStrength": 0.4000000059604645,
     "strongHomingStrength": 0,
     "colliderGrowth": 0.019999999552965164,
     "penetrate": false,
     "penetrateDamageRate": 0.20000000298023224,
     "penetrateEffect": ""
+  },
+  "effects": {
+    "trail": "EnemyBulletTrail"
   }
 }

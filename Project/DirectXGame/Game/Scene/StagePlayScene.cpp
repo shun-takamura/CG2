@@ -90,6 +90,7 @@
 #include "imgui.h"
 #include "ImGuiManager.h"
 #include "IImGuiEditable.h"
+#include "Primitive/DebugDraw.h"
 #endif
 
 namespace {
@@ -262,6 +263,8 @@ namespace {
 	constexpr float kExplodeSeVolume = 0.6f;
 	// 長さ（の 2 乗）がこれ以下なら向きを求めない
 	constexpr float kSquaredEpsilon = 1e-6f;
+	// Debug：銃口の印（十字）の大きさ [m]
+	constexpr float kMuzzleDebugCrossSize = 0.15f;
 	// 近接派生中のクリップのマージン（実質制限なし）
 	constexpr float kMeleeClipMarginFree = 10.0f;
 	// 今の位置を含むマージンに足す余裕・押し戻す先をマージンより内側にする量（NDC）
@@ -2160,6 +2163,7 @@ void StagePlayScene::OnImGuiTuning() {
 	if (bossStage_) bossStage_->OnImGuiTuning(changed); // ボス戦（アリーナ/移動/カメラ）調整
 	if (ImGui::CollapsingHeader("Stage Clear (23 B)")) clearSeq_.OnImGui();   // 撃破の段取り・STAGE CLEAR
 	if (bossWater_ && ImGui::CollapsingHeader("Boss Water")) bossWater_->OnImGui();
+	if (gravityOrb_ && ImGui::CollapsingHeader("Boss GravityOrb（必殺技）")) gravityOrb_->OnImGui();
 
 	if (ImGui::CollapsingHeader("Skybox")) {
 		// 候補 Cubemap（手持ちの3枚）。新しい dds を足したらここに追記する。
@@ -2579,6 +2583,7 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Ether State (19 G6)")) GetGameSession()->GetEtherState()->OnImGui();
 	if (ImGui::CollapsingHeader("Difficulty Profile (19 5)")) GetGameSession()->GetDifficultyProfile()->OnImGui();
 	if (ImGui::CollapsingHeader("Flight Unit (20 3)") && flightUnit_) flightUnit_->OnImGui();
+	if (ImGui::CollapsingHeader("Player Beam") && playerBeam_) playerBeam_->OnImGui();
 	if (ImGui::CollapsingHeader("Main Weapon (20 1)")) {
 		ImGui::Checkbox("Preview Blade (show without melee)##MainWeapon", &weaponBladePreview_);
 		if (GetGameSession()->GetLoadoutState()->OnImGuiMainWeapon()) RebuildMainWeaponModel();
@@ -2626,6 +2631,9 @@ void StagePlayScene::Initialize() {
 	playerWings_ = std::make_unique<PlayerWingUnit>();
 	playerDeath_ = std::make_unique<PlayerDeathPart>();
 	flightUnit_ = std::make_unique<FlightUnitPart>();
+	// 自機のビーム（チャージ射撃・ファンネル大）。調整値は Resources/Json/Tuning/PlayerBeam.json
+	playerBeam_ = std::make_unique<PlayerBeamPart>();
+	playerBeam_->Initialize(this);
 	// ストリーミングの時刻表（LoadTuningFromJson で root["streaming"] を読む。配置を読む前に要る＝どれを後回しにするか）
 	streaming_ = std::make_unique<StageStreaming>();
 	streaming_->Initialize(this, "STAGEPLAY");
@@ -2741,6 +2749,12 @@ void StagePlayScene::Initialize() {
 	deferredInit_.push_back({ "StagePlay/BossWater", [this]() {
 		bossWater_ = std::make_unique<BossArenaWater>();
 		bossWater_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager());
+		return true;
+	} });
+	// ボスの必殺技 GravityOrb：岩を読んでボロノイで割り、描画を用意する（ボス戦の途中で割らない）
+	deferredInit_.push_back({ "StagePlay/BossGravityOrb", [this]() {
+		gravityOrb_ = std::make_unique<BossGravityOrb>();
+		gravityOrb_->Initialize(GetDxCore(), GetSRVManager(), GetObject3DManager(), this);
 		return true;
 	} });
 	// 大河の水面。PSO 等はここで作り、川のデータは雲の中（loadStartSec）で別スレッドから読む
@@ -2977,6 +2991,7 @@ void StagePlayScene::CompleteDeferredInit() {
 }
 
 void StagePlayScene::Finalize() {
+	StopAllPlayerBeams();
 	// 画面の水滴は PostEffect（シーンをまたいで残る）にあるので消しておく
 	if (auto* pe = Game::GetPostEffect(); pe && pe->screenDroplet) pe->screenDroplet->Clear();
 	// 必殺技関連の GPU リソースを破棄する前に GPU 完了を待つ。
@@ -3000,6 +3015,10 @@ void StagePlayScene::Finalize() {
 	SoundManager::GetInstance()->Stop2DSound("bgm_boss");
 	stormLock_.Finalize();
 	shatterline_.Finalize();
+	if (gravityOrb_) {
+		gravityOrb_->Finalize();
+		gravityOrb_.reset();
+	}
 }
 
 bool StagePlayScene::IsPlayerAttacking(InputActionMap* actions) const {
@@ -3513,6 +3532,7 @@ void StagePlayScene::UpdateStagePhase(InputActionMap* actions) {
 void StagePlayScene::OnStagePhaseChanged() {
 	// 飛行ユニットの技はフェーズをまたがない（スローは戻し、ファンネル・バリアは消す。クールタイムも 0）
 	if (flightUnit_) flightUnit_->Reset();
+	StopAllPlayerBeams();
 	// レールを抜けたら、まだ飛んでいる落とし物は拾ったことにする（以降は動かさないため）
 	if (prevPhase_ == Phase::Rail && railStage_) railStage_->CollectAllLoot();
 	// 着陸の始まり：谷に残った敵を片付ける（降りている間に撃たれない・敵の参照を残さない。Boss 突入と同じ）
@@ -3536,6 +3556,7 @@ void StagePlayScene::OnStagePhaseChanged() {
 		nearestEnemy_    = nullptr;
 		lockedEnemy_     = nullptr;
 		jdCounterTarget_ = nullptr;
+		if (gravityOrb_) gravityOrb_->Abort(); // リトライで入り直したとき、前の必殺技の岩・暗さを残さない
 		if (bossStage_) bossStage_->Enter(); // 地面・ボス・AI をスポーン（1回）
 		// 地上のボス戦は直立・羽根は収納（先から消える）
 		ApplyPlayerPose();
@@ -3552,6 +3573,7 @@ void StagePlayScene::OnStagePhaseChanged() {
 		}
 	} else if (prevPhase_ == Phase::Boss) {
 		bossBattleActive_ = false;           // 空を平常時へ戻す
+		if (gravityOrb_) gravityOrb_->Abort(); // 必殺技の岩・暗さ・閃光を消す（ボスと一緒にステートも消える）
 		if (bossStage_) bossStage_->Reset(); // ボス・地面・コントローラを破棄
 		if (clearSeq_.IsActive()) SetTimeScale(TimeGroup::World, 1.0f);
 		clearSeq_.Reset();
@@ -3567,6 +3589,8 @@ void StagePlayScene::UpdateBossBattle() {
 	// 自機の死亡演出の間、ボスは今の攻撃を終えたら次の行動を選ばない（19 番 G3。プレビューが終われば戻る）
 	bossStage_->SetBossStandDown(IsPlayerDying());
 	bossStage_->Update(GetScaledDeltaTime(TimeGroup::World));
+	// 必殺技 GravityOrb（段取りはボスの攻撃ステートが始める。終わった後も消えていく破片と閃光のために回す）
+	if (gravityOrb_) gravityOrb_->Update(GetScaledDeltaTime(TimeGroup::World));
 	UpdateBossHpBarUI(GetScaledDeltaTime(TimeGroup::UI));
 
 	// 撃破の後の段取り（23 番 §4 B）。時間は実時間。撃破のフレームの Begin より前に進める（撮るフレームは時刻 0 のまま）
@@ -3597,6 +3621,7 @@ void StagePlayScene::UpdateBossBattle() {
 		KillAllEnemyBullets();
 		// 飛行ユニットのスロー・揺れは持ち越さない（世界の時間はこの段取りが持つ）
 		if (flightUnit_) flightUnit_->Reset();
+		StopAllPlayerBeams();
 		if (camera_) camera_->StopShake();
 		Vector3 bossCenter = bossStage_->GetBossStartPos();
 		bossStage_->GetDefeatedBossCenter(bossCenter);
@@ -3685,6 +3710,12 @@ void StagePlayScene::UpdateBossPlayerMovement(InputActionMap* actions, const Vec
 	// 分身カウンター派生の進行（近接のワープ/攻撃発生、地上文脈向け）。ワープで player_ の
 	// ワールド座標を直接書き換えるので、以降のカメラ・向き計算より前に呼ぶ。
 	UpdateJustDodgeCounterAction(GetScaledDeltaTime(TimeGroup::UI));
+	// 必殺技 GravityOrb の岩（浮き上がり・落下中も含む）に重ならないよう横へ押し出す。移動・ワープの後に 1 回
+	if (gravityOrb_) {
+		Vector3 pushed = player_->GetTranslate();
+		gravityOrb_->ResolvePlayerCollision(pushed);
+		player_->SetTranslate(pushed);
+	}
 	const Vector3 bWorldPos = player_->GetTranslate();
 
 	UpdateBossPlayerFacing(moveDelta, bWorldPos, dt);
@@ -4138,6 +4169,7 @@ void StagePlayScene::UpdateSkyboxAfterCamera() {
 
 // 自機のスケルトンが更新された後に、骨に付ける物（武器・盾・飛行ユニット・羽根・スラスター）と死亡演出を進める
 void StagePlayScene::UpdatePlayerAttachments() {
+	hasWeaponMuzzle_ = false;
 	// 武器をプレイヤーの手ボーンへ追従させる。
 	// UpdateDynamicAnimated でプレイヤーのスケルトンが更新済みなのでここで行列を引く。
 	// grip（握りの微調整）× hand（ボーンのワールド）が武器の最終ワールド行列。
@@ -4157,6 +4189,14 @@ void StagePlayScene::UpdatePlayerAttachments() {
 		// （描画は override 側を使うので見た目には影響しない。デバッグ可視化用）
 		weapon_->SetTranslate(weaponSocket_.Position());
 		weapon_->Update();
+		// 銃口（武器のモデルのローカル → ワールド）。撃つ処理はこの後のフレームで使う
+		if (gripFromWeapon) {
+			weaponMuzzle_ = TransformMatrix(mw->muzzleOffset, world);
+			hasWeaponMuzzle_ = true;
+#ifdef _DEBUG
+			DebugDraw::Cross(weaponMuzzle_, kMuzzleDebugCrossSize, { 0.2f, 1.0f, 0.3f, 1.0f });
+#endif
+		}
 		// ビームの刃：近接の発生〜後隙とコンボの受付の間だけ伸びる（刃の位置・向きは武器のモデルのローカル）
 		if (weaponBlade_ && mw && mw->blade && gripFromWeapon) {
 			const Matrix4x4 local = MakeAffineMatrix(Transform{ mw->bladeScale, mw->bladeRotate, mw->bladeOffset });
@@ -4636,7 +4676,7 @@ void StagePlayScene::UpdateChargeLevel(float dtP) {
 
 // 1 発撃つ（チャージ段階で弾を選び、メイン武器・精密射撃の補正を掛ける）。撃ったらチャージを戻す
 void StagePlayScene::FirePlayerShot() {
-	const Vector3 origin = player_->GetTranslate();
+	const Vector3 origin = PlayerShotOrigin();
 	// 発射方向は Lerp 前の即時 target を使う（ロックオン直後の弾が遅れて飛ぶのを防ぐ）
 	Vector3 dir{ firingTarget_.x - origin.x, firingTarget_.y - origin.y, firingTarget_.z - origin.z };
 	const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
@@ -4686,12 +4726,23 @@ void StagePlayScene::FirePlayerShot() {
 		}
 
 		const float homeStrength = homeTarget ? homing : 0.0f;
-		// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
 		const int atk = ScaledPlayerAttack();
-		SpawnPlayerBullet(origin, dir, speed, lifetime,
-			colliderGrowth, homeTarget, homeStrength,
-			aimPlaneDistance_, bulletPrefab, atk, sizeScale);
+		if (playerChargeLevel_ >= 1.0f && playerBeam_) {
+			// チャージ射撃はビーム：撃っている間はレティクルへ付いていき、通る所の敵すべてに当たり続ける。
+			// 判定の太さはメイン武器の弾の大きさに合わせる（見た目の太さはエフェクト側）
+			const PlayerBeamPart::Kind kind = (playerChargeLevel_ >= kChargeLevel2)
+				? PlayerBeamPart::Kind::Charge2 : PlayerBeamPart::Kind::Charge1;
+			if (chargeBeamId_ != PlayerBeamPart::kInvalidBeam) playerBeam_->Stop(chargeBeamId_);
+			chargeBeamId_ = playerBeam_->Fire(kind, origin, dir, atk, sizeScale);
+		} else {
+			// 弾は aim plane に到達した時点で消滅させ、面より奥への乱射を防ぐ
+			SpawnPlayerBullet(origin, dir, speed, lifetime,
+				colliderGrowth, homeTarget, homeStrength,
+				aimPlaneDistance_, bulletPrefab, atk, sizeScale);
+		}
 		SoundManager::GetInstance()->Play2DSound(playerChargeLevel_ >= 1.0f ? "se_charge_shot" : "se_shot");
+		// 攻撃系の飛行ユニットは、展開していない間は自機の射撃に合わせて支援射撃する
+		if (flightUnit_) flightUnit_->NotifyPlayerShot(true);
 
 		// 連射間隔はメイン武器 → 無ければプレイヤープレハブの ChargeParams.fireRate
 		const float fr = mainWeapon ? mainWeapon->fireRate : Gameplay::Of(player_).GetChargeParams().fireRate;
@@ -4732,6 +4783,8 @@ void StagePlayScene::UpdateCombatAndSpecial(InputActionMap* actions, float world
 		// 機動系の RB のスロー中は、自機の弾だけ Player の時間で進める（ジャスト回避のスローは今までどおり World）
 		const bool flightSlow = flightUnit_ && flightUnit_->IsTimeSlowActive();
 		UpdateBullets(worldDt, flightSlow ? GetScaledDeltaTime(TimeGroup::Player) : -1.0f);
+		// 自機のビームも自機の弾と同じ時間で進める
+		UpdatePlayerBeams(flightSlow ? GetScaledDeltaTime(TimeGroup::Player) : worldDt);
 	}
 	// 近接判定の追従・寿命処理。
 	// 近接派生中はワールド完全停止だが、判定の寿命と当たり処理は進める必要があるので Player dt で動かす。
@@ -4843,6 +4896,10 @@ void StagePlayScene::Draw() {
 	if (drawBossWater && skybox_) {
 		bossWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
 	}
+	// ボスの必殺技 GravityOrb の岩と破片（不透明。地面の下から浮き上がる所は床の深度で隠れる）
+	if (gravityOrb_ && phase_ == Phase::Boss && camera_) {
+		gravityOrb_->Draw(*camera_);
+	}
 	// 大河の水面。下の地形（川底）を乗算済み α で透かすので、地形を含む不透明物の後に描く
 	if (riverWater_ && phase_ == Phase::Rail && skybox_) {
 		riverWater_->Draw(*camera_, skybox_->GetCubemapFilePath());
@@ -4900,6 +4957,10 @@ void StagePlayScene::Draw() {
 	// 撃破の段取りの白いフラッシュと STAGE CLEAR（文字は下のスコア表示と同じ Flush でまとめて描く）
 	if (clearSeq_.IsActive()) {
 		clearSeq_.DrawOverlay(static_cast<float>(GetDxCore()->GetUIWidth()), static_cast<float>(GetDxCore()->GetUIHeight()));
+	}
+	// ボスの必殺技 GravityOrb の閃光（放つ瞬間・着地・爆発で画面を白く覆う）
+	if (gravityOrb_ && phase_ == Phase::Boss) {
+		gravityOrb_->DrawOverlay(static_cast<float>(GetDxCore()->GetUIWidth()), static_cast<float>(GetDxCore()->GetUIHeight()));
 	}
 
 	// ポーズメニュー（文字は下のスコア表示と同じ Flush でまとめて描く）
@@ -5076,6 +5137,7 @@ void StagePlayScene::RestorePlayerPose() {
 
 void StagePlayScene::BeginPlayerDeath(bool preview) {
 	if (!player_ || !playerDeath_) return;
+	StopAllPlayerBeams();
 	// 被弾・回避の点滅を止めて素の見た目から光らせる
 	playerInvincibilityTimer_ = 0.0f;
 	playerBlinkGlow_ = { 0.0f, 0.0f, 0.0f };
@@ -5247,8 +5309,10 @@ void StagePlayScene::ClearWaveRuntimeState() {
 // 敵/弾/敵コントローラ掃除は Wave 用と共通。加えてボス戦専用の Terrain（地面）Primitive も掃除する。
 void StagePlayScene::ClearBossRuntimeState() {
 	ClearWaveRuntimeState();
+	// プリミティブに限る。シーン JSON の地形（CanyonTerrain など Object3D の Terrain）まで消すと、
+	// Debug の自動保存で配置から消えてしまう（2026-11-24 に谷の地形が消えた）
 	DestroyDynamicEntitiesIf([](IImGuiEditable* e) {
-		return Gameplay::Of(e).GetTag() == EntityTag::Terrain;
+		return dynamic_cast<PrimitiveInstance*>(e) != nullptr && Gameplay::Of(e).GetTag() == EntityTag::Terrain;
 	});
 }
 
@@ -5611,6 +5675,45 @@ void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 	}
 }
 
+// ----- ボスの必殺技 GravityOrb（IBossGravityOrbHost）-----
+
+BossGravityOrb* StagePlayScene::GetBossGravityOrb() {
+	return (phase_ == Phase::Boss) ? gravityOrb_.get() : nullptr;
+}
+
+IImGuiEditable* StagePlayScene::GetGravityOrbPlayer() const {
+	return player_;
+}
+
+float StagePlayScene::GetGravityOrbGroundY() const {
+	return bossStage_ ? bossStage_->GetGroundY() : 0.0f;
+}
+
+void StagePlayScene::OnGravityOrbPlayerHit(float damageRatio) {
+	// 死亡演出の間は追い打ちしない。回避の無敵では避けられない（盾の岩に隠れる技なので）
+	if (!player_ || IsPlayerDying()) return;
+	const HP& hp = Gameplay::Of(player_).GetHP();
+	if (!hp.enabled || hp.maxHP <= 0) return;
+	const int damage = (std::max)(1, static_cast<int>(std::ceil(static_cast<float>(hp.maxHP) * damageRatio)));
+	OnPlayerTakeDamage(damage);
+}
+
+void StagePlayScene::ShakeGravityOrbCamera(float intensity, float duration) {
+	if (camera_) camera_->Shake(intensity, duration);
+}
+
+void StagePlayScene::SetGravityOrbSkyDark(bool dark) {
+	if (dark == gravityOrbSkyDark_) return;
+	gravityOrbSkyDark_ = dark;
+	if (!skybox_) return;
+	if (dark) {
+		skybox_->FadeColor(specialSkyboxDarkColor_, specialSkyboxFadeIn_);
+	} else {
+		const Vector4& restore = (stageEnv_ && stageEnv_->HasSections()) ? stageEnv_->GetCurrentTint() : skyboxTint_;
+		skybox_->FadeColor(restore, specialSkyboxFadeOut_);
+	}
+}
+
 void StagePlayScene::UpdateHPBarUI() {
 	if (!player_ || !hpBarForeground_ || !hpBarBackground_) return;
 
@@ -5726,14 +5829,25 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 		specialCooldownTimer_ = (std::max)(0.0f, specialCooldownTimer_ - dt);
 	}
 
+	// 全能モード（タイトルで F9）：ゲージは常に満タン・クールタイム無し
+	const bool showcase = AttractMode::GetInstance()->IsShowcase();
+	if (showcase) {
+		specialGauge_ = specialGaugeMax_;
+		specialCooldownTimer_ = 0.0f;
+	}
+
 	// 発動待ち：行動可能チェック（ゲージ・クールタイムは TryTriggerSpecial 側で種別ごとに判定）
 	if (IsActionLocked()) return;
 	if (justDodgeActive_) return;
 
-#ifdef _DEBUG
-	// デバッグ用：種別ごとの専用キーで両方を別々に試せるよう分離（本来は装備制で共通ボタン）。
+	// 種別ごとの専用キーで両方を別々に出せるよう分離する（本来は装備制で共通ボタン）。Debug と全能モードだけ。
 	// Shatterline = G キー / 左スティック押し込み(L3)。Storm Lock = 既存 Ultimate(F/R3)。
-	{
+#ifdef _DEBUG
+	const bool separateKeys = true;
+#else
+	const bool separateKeys = showcase;
+#endif
+	if (separateKeys) {
 		auto* kb  = GetInput()->GetKeyboard();
 		auto* pad = GetInput()->GetController();
 		const bool shatterlineKey =
@@ -5744,11 +5858,10 @@ void StagePlayScene::UpdateSpecialMove(InputActionMap* actions, float dt) {
 			return;
 		}
 	}
-#endif
 
-	// 通常：Ultimate(F/R3) で装備中の必殺技を発動
+	// 通常：Ultimate(F/R3) で装備中の必殺技を発動。全能モードは G で Shatterline を撃つと装備が替わるので、F は Storm Lock に固定する
 	if (actions->IsTriggered(static_cast<int>(Action::Ultimate))) {
-		TryTriggerSpecial(equippedSpecial_);
+		TryTriggerSpecial(showcase ? SpecialKind::StormLock : equippedSpecial_);
 	}
 }
 
@@ -5760,8 +5873,11 @@ void StagePlayScene::SetEquippedSpecial(SpecialKind k) {
 }
 
 void StagePlayScene::TryTriggerSpecial(SpecialKind k) {
-	if (specialCooldownTimer_ > 0.0f) return;               // クールタイム中は発動不可
-	if (specialGauge_ < SpecialGaugeMaxFor(k)) return;      // 種別ごとの上限に満たない
+	// 全能モードはゲージ・クールタイムを見ない（装備中と違う種別は上限が違うので、満タンでも足りないことがある）
+	if (!AttractMode::GetInstance()->IsShowcase()) {
+		if (specialCooldownTimer_ > 0.0f) return;               // クールタイム中は発動不可
+		if (specialGauge_ < SpecialGaugeMaxFor(k)) return;      // 種別ごとの上限に満たない
+	}
 	TriggerSpecialMove(k);
 }
 
@@ -6064,6 +6180,50 @@ void StagePlayScene::FireSupportBullet(const Vector3& from, const Vector3& dir, 
 	// 狙う敵がいれば狙いの面で消さない（ファンネルは面より奥の敵も撃つ）
 	SpawnPlayerBullet(from, dir, speed, lifetime, colliderGrowth, homingTarget, homing,
 		homingTarget ? 0.0f : aimPlaneDistance_, bulletPrefab, scaledAtk);
+}
+
+uint32_t StagePlayScene::FireSupportBeam(const Vector3& from, const Vector3& dir, float damageScale) {
+	if (!player_ || !playerBeam_) return PlayerBeamPart::kInvalidBeam;
+	const int atk = ScaledPlayerAttack();
+	const int scaledAtk = atk > 0 ? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(atk) * damageScale))) : 0;
+	return playerBeam_->Fire(PlayerBeamPart::Kind::FunnelLarge, from, dir, scaledAtk);
+}
+
+void StagePlayScene::SetSupportBeamPose(uint32_t id, const Vector3& from, const Vector3& dir) {
+	if (playerBeam_) playerBeam_->SetPose(id, from, dir);
+}
+
+bool StagePlayScene::IsSupportBeamActive(uint32_t id) const {
+	return playerBeam_ && playerBeam_->IsActive(id);
+}
+
+void StagePlayScene::UpdatePlayerBeams(float dt) {
+	if (!playerBeam_) return;
+	// チャージビームは自機からレティクルへ付いていく
+	if (chargeBeamId_ != PlayerBeamPart::kInvalidBeam) {
+		if (!player_ || !playerBeam_->IsActive(chargeBeamId_)) {
+			chargeBeamId_ = PlayerBeamPart::kInvalidBeam;
+		} else {
+			const Vector3 origin = PlayerShotOrigin();
+			Vector3 dir{ firingTarget_.x - origin.x, firingTarget_.y - origin.y, firingTarget_.z - origin.z };
+			const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+			if (len > kSquaredEpsilon) {
+				dir = { dir.x / len, dir.y / len, dir.z / len };
+				playerBeam_->SetPose(chargeBeamId_, origin, dir);
+			}
+		}
+	}
+	playerBeam_->Update(dt);
+}
+
+Vector3 StagePlayScene::PlayerShotOrigin() const {
+	if (hasWeaponMuzzle_) return weaponMuzzle_;
+	return player_ ? player_->GetTranslate() : Vector3{ 0.0f, 0.0f, 0.0f };
+}
+
+void StagePlayScene::StopAllPlayerBeams() {
+	if (playerBeam_) playerBeam_->StopAll();
+	chargeBeamId_ = PlayerBeamPart::kInvalidBeam;
 }
 
 int StagePlayScene::AbsorbEnemyBulletsInSphere(const Vector3& center, float radius) {

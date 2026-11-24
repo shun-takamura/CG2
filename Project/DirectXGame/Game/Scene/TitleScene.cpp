@@ -469,18 +469,31 @@ void TitleScene::Update() {
 	OnImGuiTuning();
 #endif
 
+	auto* attract = AttractMode::GetInstance();
+	auto* keyboard = GetInput()->GetKeyboard();
+	// F9：全能モード（必殺技のゲージ常に満タン・クールタイム無し）の切り替え。タイトルの間だけ受け付ける
+	if (keyboard && keyboard->TriggerKey(DIK_F9)) attract->ToggleShowcase();
+
+	// 展示ロック中は触っても放置デモを止めない。ただし F8 を押したフレームは解除の入力として数え、映像からタイトルへ戻す
+	// （ロックの切り替えは Game::Update がシーンの更新の後で行うので、このフレームはまだロック中）
+	const bool unlockPressed = keyboard && keyboard->TriggerKey(DIK_F8);
+	const bool locked = attract->IsExhibitionLocked();
+
 	const bool transitioning = SceneManager::GetInstance()->IsTransitioning();
-	// 放置デモ：扉に入る所・トランジション中・F8 のデモモード中は数えない。入力処理より先に見て、
+	// 放置デモ：扉に入る所・トランジション中・デモモード中は数えない。入力処理より先に見て、
 	// 映像中と戻った直後はタイトルに入力を渡さない（戻るきっかけの入力が決定などに化けないように）
 	if (demoMovie_) {
-		const bool canIdle = !transitioning && phase_ != Phase::Enter && !AttractMode::GetInstance()->IsEnabled();
-		demoMovie_->Update(canIdle);
+		const bool canIdle = !transitioning && phase_ != Phase::Enter && !attract->IsEnabled();
+		demoMovie_->Update(canIdle, locked && !unlockPressed);
 		if (demoMovie_->BlocksTitleInput()) return;
 	}
 
 	if (transitioning) {
 		return;
 	}
+
+	// 展示ロック中はタイトルを進めない（Press・扉に入る・ゲーム終了のどれも受け付けない）
+	if (locked) return;
 
 	UpdateInput();
 }
@@ -582,14 +595,14 @@ bool TitleScene::IsOverQuit(const Vector2& position) const {
 }
 
 bool TitleScene::IsPressExcludedInput() const {
-	// マウスは水面に波を立てる操作、F8 はデモモードの切り替えなので「PRESS ANY BUTTON」には数えない
+	// マウスは水面に波を立てる操作、F8 は展示ロック・F9 は全能モードの切り替えなので「PRESS ANY BUTTON」には数えない
 	if (auto* mouse = GetInput()->GetMouse()) {
 		using B = MouseInput::Button;
 		for (B b : { B::Left, B::Right, B::Middle, B::Button4 }) {
 			if (mouse->IsButtonTriggered(b)) return true;
 		}
 	}
-	if (auto* keyboard = GetInput()->GetKeyboard(); keyboard && keyboard->TriggerKey(DIK_F8)) return true;
+	if (auto* keyboard = GetInput()->GetKeyboard(); keyboard && (keyboard->TriggerKey(DIK_F8) || keyboard->TriggerKey(DIK_F9))) return true;
 	return false;
 }
 
@@ -1044,6 +1057,12 @@ void TitleScene::Draw() {
 		commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
 		demoMovie_->Draw();
 	}
+
+	// 展示ロック・全能モードの案内（右上）。放置デモの映像より上に出す
+	if (tr->IsInitialized()) {
+		commandList->OMSetRenderTargets(1, &rtvHandle, false, &normalDsv);
+		AttractMode::GetInstance()->DrawExhibitionLabels(static_cast<float>(GetDxCore()->GetUIWidth()));
+	}
 }
 
 void TitleScene::DrawTexts() {
@@ -1134,7 +1153,7 @@ void TitleScene::OnImGuiTuning() {
 			if (demoMovie_) ImGui::DragFloat("Demo Movie Idle (s)", &demoMovie_->idleSeconds, 0.5f, 1.0f, 300.0f);
 			auto* attract = AttractMode::GetInstance();
 			bool attractOn = attract->IsEnabled();
-			if (ImGui::Checkbox("Attract Mode (F8)", &attractOn)) attract->SetEnabled(attractOn);
+			if (ImGui::Checkbox("Attract Mode", &attractOn)) attract->SetEnabled(attractOn);
 			// 設定はコピーに書いて最後に戻す
 			AttractMode::Settings settings = attract->GetSettings();
 			ImGui::DragFloat("Title Idle Wait (s)", &settings.titleIdleWait, 0.1f, 0.0f, 30.0f);

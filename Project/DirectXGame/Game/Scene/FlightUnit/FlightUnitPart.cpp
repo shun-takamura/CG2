@@ -231,6 +231,11 @@ void FlightUnitPart::SyncLoadout() {
 	readyPulse_ = 0.0f;
 }
 
+void FlightUnitPart::NotifyPlayerShot(bool canAct) {
+	if (!host_) return;
+	if (FlightUnitSkill* s = Current()) s->OnPlayerShot(canAct);
+}
+
 void FlightUnitPart::Update(float dt, bool triggered, bool canAct, bool timeTaken) {
 	if (!host_) return;
 	FlightUnitSkill* s = Current();

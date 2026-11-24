@@ -109,6 +109,9 @@ bool LoadoutState::OnImGuiMainWeapon() {
 		ImGui::DragFloat3("Grip Translate##MainWeapon", &d->gripTranslate.x, 0.01f);
 		ImGui::DragFloat3("Grip Rotate##MainWeapon", &d->gripRotate.x, 0.01f);
 		ImGui::DragFloat3("Grip Scale##MainWeapon", &d->gripScale.x, 0.01f, 0.0f, 10.0f);
+		// 銃口（弾・チャージビームを撃ち出す所。武器のモデルのローカル。ステージでは Debug で緑の印が出る）
+		ImGui::SeparatorText("Muzzle");
+		ImGui::DragFloat3("Muzzle Offset##MainWeapon", &d->muzzleOffset.x, 0.005f);
 		// ビームの刃（位置・向き・大きさは武器のモデルのローカル。銃口が +Z、刃は +Z へ伸び、幅は Y）
 		ImGui::SeparatorText("Blade");
 		ImGui::Checkbox("Has Blade##MainWeapon", &d->blade);

@@ -62,6 +62,8 @@ struct EffectPrimitiveComponent {
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
     Vector3 rotate = { 0.0f, 0.0f, 0.0f }; // ローカル基準回転（degreeではなくradian）
+    // 付ける所（EffectBeamAnchor の値。0=エフェクトの中心 / 1=ビームの先。ビームの先は着弾点の光などに使う）
+    int beamAnchor = 0;
 
     // ----- 回転アニメーション（内部はクオータニオンで合成。ジンバルロック回避） -----
     // 出現時ランダム回転：spawn 時に各軸 ±randomRotateRange の範囲で1回サンプルし、基準 rotate に加える。
@@ -193,6 +195,8 @@ struct EffectParticleComponent {
 
     // エフェクト中心からのオフセット
     Vector3 offset = { 0.0f, 0.0f, 0.0f };
+    // 付ける所（EffectBeamAnchor の値。0=エフェクトの中心 / 1=ビームの先）
+    int beamAnchor = 0;
 
     // 時間制御
     float startTime = 0.0f;
@@ -351,6 +355,91 @@ struct EffectSoundComponent {
 };
 
 /// <summary>
+/// 付ける所（Primitive / Particle の beamAnchor に入る値。JSON に数字で保存するので並びを変えない）
+/// </summary>
+namespace EffectBeamAnchor {
+    enum : int {
+        Origin,  // エフェクトの中心
+        BeamEnd, // ビームの先（中心から前 +Z へビームの長さだけ進んだ所）
+        Count,
+    };
+}
+
+/// <summary>
+/// Ribbon の動き方（EffectRibbonComponent::mode に入る値。JSON に数字で保存するので並びを変えない）
+/// </summary>
+namespace EffectRibbonMode {
+    enum : int {
+        Trail, // エフェクトの中心が通った所をつなぐ（彗星の尾）
+        Beam,  // 中心から前 +Z へまっすぐ伸びる（ビーム）
+        Count,
+    };
+}
+
+/// <summary>
+/// Ribbon コンポーネント（カメラの方を向く帯）。
+/// Trail は中心が通った点を残して帯にし、点は pointLifetime で古くなって消える（太さ・色は古さで決まる）。
+/// Beam は中心から前へ「ビームの長さ × lengthScale」だけ伸びる（太さ・色は根元→先の位置で決まる）。
+/// 帯の位置 t は 0＝先頭（Trail は今の位置 / Beam は根元）〜 1＝末尾。
+/// </summary>
+struct EffectRibbonComponent {
+    // Inspector / Hierarchy で表示する名前（空ならデフォルト "Ribbon"）
+    std::string displayName;
+
+    int mode = EffectRibbonMode::Trail;
+
+    // エフェクト中心からのオフセット（エフェクトの向きで回す）
+    Vector3 offset = { 0.0f, 0.0f, 0.0f };
+
+    // 時間制御。lifetime が 0 以下ならエフェクトが止められるまでずっと出す（ループしても途切れない）
+    float startTime = 0.0f;
+    float lifetime  = 0.0f;
+
+    // ----- Trail -----
+    float    pointLifetime    = 0.1f;  // 点が残る時間 [秒]（尾の長さ＝速さ × これ）
+    float    minPointDistance = 0.1f;  // これ以上動いたら点を足す [m]
+    uint32_t maxPoints        = 32;    // 点の最大数（メッシュの大きさ。変えるとメッシュを作り直す）
+
+    // ----- Beam -----
+    float    lengthScale   = 1.0f;   // ゲームから渡すビームの長さに掛ける倍率
+    float    defaultLength = 10.0f;  // 長さを渡されていないとき（エディタ）の長さ [m]
+    uint32_t beamSegments  = 24;     // 根元→先の分割数（変えるとメッシュを作り直す）
+    float    extendTime    = 0.05f;  // 根元から先まで伸びる時間 [秒]
+    float    wobbleAmplitude = 0.0f; // 太さの揺れの幅（1 に対する比）
+    float    wobbleFrequency = 30.0f;// 太さの揺れの速さ [rad/s]
+    float    wobbleWaveLength = 4.0f;// 揺れが先へ流れていく波の長さ [m]
+    float    flareLength     = 0.0f; // 根元からこの長さをかけて太さを広げる [m]（0 で広げない）
+    float    flareStartScale = 0.05f;// 根元の太さの倍率（0 なら点から広がる）
+    float    segmentPower    = 1.0f; // 区切りの寄せ方（1 で等間隔、2 なら根元ほど細かい。付け根の広がりをなめらかにする）
+
+    // ----- 消え方（Release / lifetime 切れ） -----
+    float releaseTime = 0.12f;  // Beam：細くなって消える時間 [秒]（Trail は残った点が古くなって消える）
+
+    // ----- 見た目 -----
+    float       startWidth = 0.6f;  // 先頭の太さ [m]
+    float       endWidth   = 0.0f;  // 末尾の太さ [m]
+    EffectCurve widthCurve;         // 太さの補間（t→0..1）。既定は直線
+    Vector4     startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4     endColor   = { 0.3f, 0.6f, 1.0f, 0.0f };
+    // 中間の色キー（Start(0)/End(1) の間に入る）
+    std::vector<EffectColorKey> colorKeys;
+    // 帯の断面は「縁・中央・縁」の 3 頂点。中央の色を白へ寄せる量（0 で無効。芯が白く光るビーム向け）
+    float coreWhiteness = 0.0f;
+    // 縁の頂点の不透明さ（中央に対する比。0 で縁へ向かって柔らかく消える）
+    float edgeAlpha = 0.0f;
+
+    std::string texturePath;            // 空なら white1x1
+    int     blendMode = 2;              // Add（PrimitivePipeline::BlendMode と互換）
+    int     timeGroup = 0;              // World（TimeGroup と互換）
+    float   uvTilesPerUnit = 0.0f;      // 0 なら帯の全長で U=0..1、正なら 1m あたりのタイル数
+    Vector2 uvScrollSpeed = { 0.0f, 0.0f };
+
+    // ----- Bloom（発光） -----
+    bool  useBloom       = true;
+    float bloomIntensity = 1.0f;
+};
+
+/// <summary>
 /// エフェクト定義（1ファイル=1 EffectDef）
 /// </summary>
 struct EffectDef {
@@ -368,6 +457,7 @@ struct EffectDef {
     std::vector<EffectParticleComponent>  particles;
     std::vector<EffectLightComponent>     lights;
     std::vector<EffectSoundComponent>     sounds;
+    std::vector<EffectRibbonComponent>    ribbons;
 };
 
 namespace EffectDefIO {

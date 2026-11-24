@@ -16,6 +16,7 @@ public:
         Particle,
         Light,
         Sound,
+        Ribbon,
     };
 
     /// <summary>自動登録なしで、編集ウィンドウの editBuffer 内の 1 要素を指すラッパーを作る</summary>
@@ -33,7 +34,7 @@ public:
     /// <param name="name">新しい表示名</param>
     void SetName(const std::string& name) override;
     /// <summary>種類ごとの型名を返す</summary>
-    /// <returns>"EffectPrimitive" / "EffectParticle" / "EffectLight" / "EffectSound"</returns>
+    /// <returns>"EffectPrimitive" / "EffectParticle" / "EffectLight" / "EffectSound" / "EffectRibbon"</returns>
     std::string GetTypeName() const override;
     /// <summary>種類に応じた編集 UI を描き、変えたら editBuffer を変更ありにする</summary>
     void OnImGuiInspector() override;

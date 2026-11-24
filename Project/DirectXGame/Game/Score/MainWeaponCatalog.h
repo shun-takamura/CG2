@@ -30,6 +30,8 @@ struct MainWeaponDef {
 	Vector3 gripRotate{ 0.0f, 0.0f, 0.0f };
 	Vector3 gripScale{ 1.0f, 1.0f, 1.0f };
 	// 近接のときだけ出すビームの刃（BeamBladeRenderer）。位置・向きは武器のモデルのローカル（銃口が +Z）
+	// 銃口（弾・チャージビームを撃ち出す所）。武器のモデルのローカル。モデルがある武器だけ使う
+	Vector3 muzzleOffset{ 0.0f, 0.0f, 0.0f };
 	bool blade = false;
 	Vector3 bladeOffset{ 0.0f, 0.0f, 0.0f };
 	Vector3 bladeRotate{ 0.0f, 0.0f, 0.0f };

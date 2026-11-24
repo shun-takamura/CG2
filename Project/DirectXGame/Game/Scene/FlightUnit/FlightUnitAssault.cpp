@@ -191,18 +191,46 @@ void FlightUnitAssault::UpdatePassive(float dt, bool canAct) {
 		f.turretDir = Normalized(Lerp(f.turretDir, desired, turn), f.mountForward);
 	}
 
-	// ファンネルが離れている間（戻るまで）は撃たない
-	if (!canAct || active_ || returning_) return;
-	passiveTimer_ -= dt;
-	if (passiveTimer_ > 0.0f) return;
-	passiveTimer_ = passiveInterval_[LevelIndex()];
+	// 撃っているファンネル大のビームを付け直す（付いている間はレティクルへ、離れている間は狙った敵へ）
+	const bool released = ReleaseRatio() > 0.0f;
+	for (int i = 0; i < kLargeCount; ++i) {
+		Funnel& f = funnels_[i];
+		if (f.beamId == 0) continue;
+		if (!host_->IsSupportBeamActive(f.beamId)) { f.beamId = 0; continue; }
+		const Vector3 from = f.hasWorld ? MuzzlePosition(f) : host_->GetFlightUnitAnchor();
+		const Vector3 dir = released ? f.aimDir : Normalized({ aim.x - from.x, aim.y - from.y, aim.z - from.z }, forward);
+		host_->SetSupportBeamPose(f.beamId, from, dir);
+	}
 
-	const Funnel& f = funnels_[passiveNext_];
-	passiveNext_ = (passiveNext_ + 1) % kLargeCount;
+	// 付いている間のビームのクールタイム（離れている間は UpdateFunnels が数える）
+	if (active_) return;
+	for (int i = 0; i < kLargeCount; ++i) {
+		if (funnels_[i].fireTimer > 0.0f) funnels_[i].fireTimer -= dt;
+	}
+}
+
+void FlightUnitAssault::FireLargeBeam(int i, const Vector3& dir, float damageScale) {
+	Funnel& f = funnels_[i];
 	const Vector3 from = f.hasWorld ? MuzzlePosition(f) : host_->GetFlightUnitAnchor();
-	IImGuiEditable* target = host_->GetReticleTarget();
-	const Vector3 dir = Normalized({ aim.x - from.x, aim.y - from.y, aim.z - from.z }, forward);
-	host_->FireSupportBullet(from, dir, target, passiveDamageScale_[LevelIndex()]);
+	f.beamId = host_->FireSupportBeam(from, dir, damageScale);
+	f.fireTimer = largeBeamCooldown_[LevelIndex()];
+}
+
+void FlightUnitAssault::OnPlayerShot(bool canAct) {
+	// ファンネルが離れている間（戻るまで）は撃たない
+	if (!host_ || !canAct || active_ || returning_) return;
+	const Vector3 aim = host_->GetReticleAimPoint();
+	// クールタイムが明けているファンネル大を、左右交互に 1 基だけ撃たせる
+	for (int k = 0; k < kLargeCount; ++k) {
+		const int i = (passiveNext_ + k) % kLargeCount;
+		const Funnel& f = funnels_[i];
+		if (f.fireTimer > 0.0f || f.beamId != 0) continue;
+		const Vector3 from = f.hasWorld ? MuzzlePosition(f) : host_->GetFlightUnitAnchor();
+		FireLargeBeam(i, Normalized({ aim.x - from.x, aim.y - from.y, aim.z - from.z }, f.mountForward),
+			passiveDamageScale_[LevelIndex()]);
+		passiveNext_ = (i + 1) % kLargeCount;
+		return;
+	}
 }
 
 Vector3 FlightUnitAssault::FunnelHome(int i) const {
@@ -266,8 +294,15 @@ void FlightUnitAssault::UpdateFunnels(float dt, bool canAct) {
 
 		f.fireTimer -= dt;
 		if (f.fireTimer <= 0.0f) {
-			f.fireTimer = funnelFireInterval_;
-			if (target) host_->FireSupportBullet(f.hasWorld ? MuzzlePosition(f) : pos, desired, target, funnelDamageScale_[LevelIndex()]);
+			if (i < kLargeCount) {
+				// 大：狙う敵がいて前のビームが終わっていればビーム（長いクールタイム）。いなければ明けたまま待つ
+				if (target && f.beamId == 0) FireLargeBeam(i, desired, funnelDamageScale_[LevelIndex()]);
+				else f.fireTimer = 0.0f;
+			} else {
+				// 小：自機の通常弾と同じ単発（短い間隔）
+				f.fireTimer = funnelFireInterval_;
+				if (target) host_->FireSupportBullet(f.hasWorld ? MuzzlePosition(f) : pos, desired, target, funnelDamageScale_[LevelIndex()]);
+			}
 		}
 	}
 }
@@ -316,7 +351,7 @@ void FlightUnitAssault::DrawModels(DirectXCore* dxCore, bool idPass) {
 }
 
 void FlightUnitAssault::LoadTuning(const JsonValue& node) {
-	ReadLevels(node, "passiveInterval", passiveInterval_);
+	ReadLevels(node, "largeBeamCooldown", largeBeamCooldown_);
 	ReadLevels(node, "passiveDamageScale", passiveDamageScale_);
 	ReadLevels(node, "funnelDuration", funnelDuration_);
 	ReadLevels(node, "funnelDamageScale", funnelDamageScale_);
@@ -337,7 +372,7 @@ void FlightUnitAssault::LoadTuning(const JsonValue& node) {
 }
 
 void FlightUnitAssault::SaveTuning(JsonValue& node) const {
-	WriteLevels(node, "passiveInterval", passiveInterval_);
+	WriteLevels(node, "largeBeamCooldown", largeBeamCooldown_);
 	WriteLevels(node, "passiveDamageScale", passiveDamageScale_);
 	WriteLevels(node, "funnelDuration", funnelDuration_);
 	WriteLevels(node, "funnelDamageScale", funnelDamageScale_);
@@ -358,8 +393,8 @@ void FlightUnitAssault::SaveTuning(JsonValue& node) const {
 
 void FlightUnitAssault::OnImGui() {
 #ifdef _DEBUG
-	ImGui::SeparatorText("Passive (support fire)");
-	DragLevels("Interval##Assault", passiveInterval_, 0.01f, 0.05f, 10.0f);
+	ImGui::SeparatorText("Passive (自機の射撃に合わせてファンネル大がビーム)");
+	DragLevels("Large Beam Cooldown##Assault", largeBeamCooldown_, 0.05f, 0.0f, 60.0f);
 	DragLevels("Damage Scale##AssaultPassive", passiveDamageScale_, 0.01f, 0.0f, 5.0f);
 	ImGui::DragFloat("Turret Turn##Assault", &turretTurnSpeed_, 0.1f, 0.0f, 50.0f, "%.1f");
 	ImGui::DragFloat("Muzzle Z##Assault", &muzzleZ_, 0.01f, -2.0f, 2.0f, "%.2f");
@@ -368,7 +403,7 @@ void FlightUnitAssault::OnImGui() {
 	DragLevels("Damage Scale##AssaultFunnel", funnelDamageScale_, 0.01f, 0.0f, 5.0f);
 	DragLevels("Cooldown##Assault", cooldown_, 0.1f, 0.0f, 120.0f);
 	DragLevels("Attack Scale##Assault", attackScale_, 0.01f, 0.5f, 3.0f);
-	ImGui::DragFloat("Fire Interval##Assault", &funnelFireInterval_, 0.01f, 0.05f, 5.0f, "%.2f");
+	ImGui::DragFloat("Small Fire Interval##Assault", &funnelFireInterval_, 0.01f, 0.05f, 5.0f, "%.2f");
 	ImGui::DragFloat("Radius##Assault", &funnelRadius_, 0.05f, 0.1f, 10.0f, "%.2f");
 	ImGui::DragFloat("Spin##Assault", &funnelSpin_, 0.05f, -10.0f, 10.0f, "%.2f");
 	ImGui::DragFloat("Deploy##Assault", &funnelDeploy_, 0.01f, 0.0f, 2.0f, "%.2f");

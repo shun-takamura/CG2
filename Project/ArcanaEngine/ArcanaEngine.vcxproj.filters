@@ -28,6 +28,9 @@
     <Filter Include="DirectXGame\GameEngine\Graphics\Effect">
       <UniqueIdentifier>{8ccea93f-fcd9-5c19-9c66-c32f4b360983}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\GameEngine\Graphics\Fracture">
+      <UniqueIdentifier>{4f1c2a7e-9b3d-4e5a-8c61-2d7f0b9e3a15}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\GameEngine\Graphics\Light">
       <UniqueIdentifier>{8f6cb5b0-e3cd-570a-b018-34e76cf8e460}</UniqueIdentifier>
     </Filter>
@@ -138,6 +141,9 @@
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MonochromeEffect.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClCompile>
@@ -161,6 +167,12 @@
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Fracture\VoronoiFracture.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Fracture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Fracture\FracturedMeshRenderer.cpp">
+      <Filter>DirectXGame\GameEngine\Graphics\Fracture</Filter>
     </ClCompile>
     <ClCompile Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeRenderer.cpp">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
@@ -554,6 +566,9 @@
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\GrayscaleEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MonochromeEffect.h">
+      <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
+    </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect\MaskedGrayscaleEffect.h">
       <Filter>DirectXGame\GameEngine\Graphics\OffscreenRendering\FilterEffect</Filter>
     </ClInclude>
@@ -577,6 +592,12 @@
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\ScreenShardRenderer.h">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Fracture\VoronoiFracture.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Fracture</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Fracture\FracturedMeshRenderer.h">
+      <Filter>DirectXGame\GameEngine\Graphics\Fracture</Filter>
     </ClInclude>
     <ClInclude Include="..\DirectXGame\GameEngine\Graphics\Effect\BeamBladeAppearance.h">
       <Filter>DirectXGame\GameEngine\Graphics\Effect</Filter>

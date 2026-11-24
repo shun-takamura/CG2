@@ -1,0 +1,118 @@
+{
+  "name": "EnemyBulletTrail",
+  "totalDuration": 1.0,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Head Glow",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        1.6,
+        1.6,
+        1.0
+      ],
+      "endScale": [
+        1.6,
+        1.6,
+        1.0
+      ],
+      "startColor": [
+        1.0,
+        0.3,
+        0.8,
+        0.9
+      ],
+      "endColor": [
+        1.0,
+        0.3,
+        0.8,
+        0.9
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    },
+    {
+      "displayName": "Head Core",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        0.6,
+        0.6,
+        1.0
+      ],
+      "endScale": [
+        0.6,
+        0.6,
+        1.0
+      ],
+      "startColor": [
+        1.0,
+        0.9,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        1.0,
+        0.9,
+        1.0,
+        1.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 2.0
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": [
+    {
+      "displayName": "Tail",
+      "mode": 0,
+      "lifetime": 0.0,
+      "pointLifetime": 0.25,
+      "minPointDistance": 0.1,
+      "maxPoints": 40,
+      "startWidth": 0.6,
+      "endWidth": 0.0,
+      "startColor": [
+        1.0,
+        0.8,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        0.5,
+        0.1,
+        1.0,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.2,
+          "color": [
+            1.0,
+            0.3,
+            0.8,
+            0.9
+          ]
+        }
+      ],
+      "coreWhiteness": 0.4,
+      "edgeAlpha": 0.0,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 1.2
+    }
+  ]
+}

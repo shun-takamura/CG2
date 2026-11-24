@@ -1,0 +1,118 @@
+{
+  "name": "PlayerBulletComet",
+  "totalDuration": 1.0,
+  "loop": true,
+  "primitives": [
+    {
+      "displayName": "Head Glow",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        2.2,
+        2.2,
+        1.0
+      ],
+      "endScale": [
+        2.2,
+        2.2,
+        1.0
+      ],
+      "startColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.9
+      ],
+      "endColor": [
+        0.55,
+        0.85,
+        1.0,
+        0.9
+      ],
+      "useBloom": true,
+      "bloomIntensity": 1.5
+    },
+    {
+      "displayName": "Head Core",
+      "meshType": 0,
+      "texturePath": "Resources/Textures/circle.dds",
+      "billboardMode": "Full",
+      "blendMode": 2,
+      "beamAnchor": 0,
+      "startTime": 0.0,
+      "lifetime": 1.0,
+      "startScale": [
+        0.9,
+        0.9,
+        1.0
+      ],
+      "endScale": [
+        0.9,
+        0.9,
+        1.0
+      ],
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "useBloom": true,
+      "bloomIntensity": 2.0
+    }
+  ],
+  "particles": [],
+  "lights": [],
+  "sounds": [],
+  "ribbons": [
+    {
+      "displayName": "Comet Tail",
+      "mode": 0,
+      "lifetime": 0.0,
+      "pointLifetime": 0.09,
+      "minPointDistance": 0.5,
+      "maxPoints": 24,
+      "startWidth": 1.0,
+      "endWidth": 0.0,
+      "startColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "endColor": [
+        0.15,
+        0.35,
+        1.0,
+        0.0
+      ],
+      "colorKeys": [
+        {
+          "location": 0.15,
+          "color": [
+            0.55,
+            0.85,
+            1.0,
+            0.9
+          ]
+        }
+      ],
+      "coreWhiteness": 0.6,
+      "edgeAlpha": 0.0,
+      "blendMode": 2,
+      "useBloom": true,
+      "bloomIntensity": 1.3
+    }
+  ]
+}

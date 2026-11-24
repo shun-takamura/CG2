@@ -130,6 +130,26 @@ public:
     void RequestStop() { stopRequested_ = true; }
 
     /// <summary>
+    /// 外部から「出し終わり」を要求する（弾が消えた・ビームを撃ち終えた）。
+    /// Primitive / Light はすぐ消し、Particle は新しく出さない。Ribbon は Trail なら残った点が古くなって、
+    /// Beam なら releaseTime をかけて細くなって消え、全部消えたら finished になる。ループもしない
+    /// </summary>
+    void RequestRelease();
+    /// <summary>出し終わりの途中か</summary>
+    /// <returns>RequestRelease 済みなら true</returns>
+    bool IsReleasing() const { return releasing_; }
+
+    /// <summary>
+    /// ビームの長さ（Ribbon の Beam と、beamAnchor＝ビームの先の Primitive / Particle が使う）。
+    /// 負なら Ribbon の defaultLength を使う
+    /// </summary>
+    /// <param name="length">長さ [m]</param>
+    void SetBeamLength(float length) { beamLength_ = length; }
+    /// <summary>ビームの長さを返す</summary>
+    /// <returns>長さ [m]。未設定なら負</returns>
+    float GetBeamLength() const { return beamLength_; }
+
+    /// <summary>
     /// プレビュー（エディタ）インスタンスとして扱うか。true の場合、GPUパーティクルの
     /// グループ名にプレフィックスを付けてシーンと物理バッファを分離する。
     /// </summary>
@@ -161,6 +181,27 @@ private:
     /// <returns>実際に使うグループ名。空名はそのまま返す</returns>
     std::string EffGroupName(const std::string& name) const;
 
+    /// <summary>Ribbon を進める（点を足す・古い点を消す・頂点を作り直す）</summary>
+    /// <param name="camera">帯をカメラへ向けるのに使うカメラ</param>
+    /// <param name="groupDt">時間グループ番号 → その経過時間 を返す関数</param>
+    template <class GroupDt>
+    void UpdateRibbons(Camera* camera, const GroupDt& groupDt);
+    /// <summary>ビームの長さ（未設定なら def の defaultLength を使う）</summary>
+    /// <param name="fallback">未設定のときの長さ</param>
+    /// <returns>長さ [m]</returns>
+    float ResolveBeamLength(float fallback) const { return beamLength_ >= 0.0f ? beamLength_ : fallback; }
+    /// <summary>beamAnchor の分だけ前へずらしたオフセット（エフェクトの向きで回す前）</summary>
+    /// <param name="offset">元のオフセット</param>
+    /// <param name="beamAnchor">付ける所（EffectBeamAnchor）</param>
+    /// <returns>ずらしたオフセット</returns>
+    Vector3 AnchoredOffset(const Vector3& offset, int beamAnchor) const;
+    /// <summary>エフェクトの向き（worldRotation_）でベクトルを回す</summary>
+    /// <param name="v">回すベクトル</param>
+    /// <returns>回したベクトル</returns>
+    Vector3 RotateByWorld(const Vector3& v) const;
+    /// <summary>Ribbon を全部まだ出していない状態に戻す（点を捨てる）</summary>
+    void ResetRibbons();
+
     EffectDef def_{};
     Vector3 worldPos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 worldRotation_ = { 0.0f, 0.0f, 0.0f }; // エフェクト全体の向き（オイラー角・ラジアン）
@@ -171,6 +212,9 @@ private:
     uint64_t handle_ = 0;
     GPUParticleManager* gpu_ = nullptr;
     bool isPreview_ = false; // プレビュー（エディタ）インスタンスなら true
+    bool releasing_ = false; // RequestRelease 済み
+    float beamLength_ = -1.0f; // ビームの長さ（負＝未設定）
+    Camera* lastCamera_ = nullptr; // Ribbon の向きに使ったカメラ
 
     struct PrimitiveRuntime {
         std::unique_ptr<EffectPrimitiveRenderer> renderer;
@@ -202,4 +246,24 @@ private:
         uint32_t handle = 0;  // SoundManager::Play3DSound のハンドル（0=無効）
     };
     std::vector<SoundRuntime> sounds_;
+
+    struct RibbonPoint {
+        Vector3 position{ 0.0f, 0.0f, 0.0f };
+        float age = 0.0f; // 置いてからの経過 [秒]
+    };
+    struct RibbonRuntime {
+        std::unique_ptr<EffectPrimitiveRenderer> renderer;
+        std::vector<RibbonPoint> points;   // Trail：古い順（先頭が最も古い）
+        std::vector<MeshVertex> vertices;  // 書き換え用（毎フレーム作り直す）
+        uint32_t capacity = 0;             // メッシュの点の数（Trail＝maxPoints / Beam＝beamSegments+1）
+        int meshMode = -1;                 // メッシュを作ったときの mode
+        float clock = 0.0f;                // この成分の時間グループで進めた経過 [秒]
+        float extend = 0.0f;               // Beam：伸び具合 0..1
+        float releaseTimer = 0.0f;         // 消え始めてからの経過 [秒]
+        bool started = false;
+        bool releasing = false;            // 消えている途中（Release / lifetime 切れ）
+        bool finished = false;
+        bool visible = false;              // このフレームに描く物があるか
+    };
+    std::vector<RibbonRuntime> ribbons_;
 };
