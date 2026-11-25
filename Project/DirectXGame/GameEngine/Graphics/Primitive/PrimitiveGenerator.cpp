@@ -1,8 +1,8 @@
 #include "PrimitiveGenerator.h"
 #include "MathUtility.h"
+#include "RandomGenerator.h"
 #include <cmath>
 #include <random>
-#include <chrono>
     // 折れ線として扱うのに要る点の数の下限
     constexpr size_t kMinPolylinePoints = 2;
 
@@ -787,11 +787,10 @@ namespace PrimitiveGenerator {
     MeshData CreateLightningBolt(const LightningBoltParams& params) {
         MeshData mesh;
 
-        // RNG（seed=0 なら現在時刻、それ以外は固定）
+        // RNG（seed=0 なら見た目用の乱数から毎回違う種をもらう。時刻は使わない＝同じシードなら同じ形の並び。それ以外は固定）
         uint32_t seed = params.randomSeed;
         if (seed == 0) {
-            seed = static_cast<uint32_t>(
-                std::chrono::high_resolution_clock::now().time_since_epoch().count());
+            seed = RandomGenerator::GetInstance()->NextVisualSeed();
         }
         std::mt19937 rng(seed);
 

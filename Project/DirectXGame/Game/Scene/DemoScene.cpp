@@ -26,6 +26,7 @@
 #include "LightManager.h"
 #include "KeyboardInput.h"
 #include "TextureManager.h"
+#include "RandomGenerator.h"
 #include"Game.h"
 #include "ImGuiManager.h"
 #include "Skybox.h"
@@ -202,8 +203,8 @@ struct DemoScene::FracturePreview {
 };
 
 DemoScene::DemoScene() {
-	std::random_device rd;
-	randomEngine_.seed(rd());
+	// ヒットの板の向きにだけ使う見た目の乱数なので、種は見た目用の乱数からもらう
+	randomEngine_.seed(RandomGenerator::GetInstance()->NextVisualSeed());
 }
 
 DemoScene::~DemoScene() {

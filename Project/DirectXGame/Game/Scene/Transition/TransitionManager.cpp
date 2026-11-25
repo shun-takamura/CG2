@@ -9,8 +9,8 @@
 #include "Json/JsonParser.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
+#include "RandomGenerator.h"
 #include <filesystem>
-#include <random>
 #include <cassert>
 #include <Windows.h>
 
@@ -266,12 +266,10 @@ void TransitionManager::StartRandomTransition(const std::string& fromScene,
 		return;
 	}
 
-	// ランダムに選択
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dist(0, static_cast<int>(available.size()) - 1);
+	// ランダムに選択（トランジションの長さでシーンが切り替わるフレームが変わるので、ゲーム用の乱数で引く）
+	const int index = RandomGenerator::GetInstance()->NextInt(0, static_cast<int>(available.size()) - 1);
 
-	TransitionType selectedType = available[dist(gen)];
+	TransitionType selectedType = available[index];
 	StartTransition(selectedType, fromScene, toScene, onSceneChange);
 }
 

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <memory>
 #include <random>
+#include "RandomGenerator.h"
 #include "Vector3.h"
 #include "Vector4.h"
 #include "IImGuiEditable.h"
@@ -22,7 +23,8 @@ struct BossBrain {
 	bool  rageEntered    = false;    // 発狂の咆哮を出したか（1 回だけ）
 	bool  standDown      = false;    // true の間は次の行動を選ばない（自機の死亡演出の間。19 番 G3）
 	int   gravityOrbUses = 0;        // 必殺技 GravityOrb の HP のしきい値をいくつ使ったか
-	std::mt19937 rng{ std::random_device{}() };
+	// 行動の抽選用。種はゲーム用の乱数からもらう（同じシードなら同じ行動の並びになり、リプレイで再現できる）
+	std::mt19937 rng{ RandomGenerator::GetInstance()->NextSeed() };
 
 	// ----- 選び方の調整値 -----
 	float attackCooldownBase = 1.5f; // 攻撃を選ぶたびにクールタイムをこの値へ

@@ -2,7 +2,7 @@
 
 #include "LootCatalog.h"
 #include "DifficultyProfile.h"
-#include <cstdlib>
+#include "RandomGenerator.h"
 
 #ifdef _DEBUG
 #include "imgui.h"
@@ -69,8 +69,8 @@ void LootLedger::AddBossReward() {
 		Add(kEtherId, DifficultyProfile::ScaleInt(boss.ether, difficultyProfile_->GetRewardScale()));
 	}
 	for (const LootRoll& roll : boss.rolls) {
-		// ボスは確率 1 の想定。1 未満の行も一応ふる（毎回同じでよいので乱数の種は持たない）
-		if (roll.chance >= 1.0f || (static_cast<float>(std::rand()) / RAND_MAX) < roll.chance) Add(roll.itemId, roll.count);
+		// ボスは確率 1 の想定。1 未満の行もふる（報酬はゲームの結果なので、ゲーム用の乱数で引く）
+		if (roll.chance >= 1.0f || RandomGenerator::GetInstance()->NextFloat01() < roll.chance) Add(roll.itemId, roll.count);
 	}
 }
 

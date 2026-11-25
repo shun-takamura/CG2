@@ -9,6 +9,7 @@
 #include "TimeGroup.h"
 #include "PepperMacros.h"
 #include "Camera.h"
+#include "RandomGenerator.h"
 #include <algorithm>
 #include <random>
 #define NOMINMAX
@@ -130,14 +131,12 @@ namespace {
         };
     }
 
-    /// <summary>[-r, r] の一様乱数</summary>
+    /// <summary>[-r, r) の一様乱数（見た目用の乱数から引く。同じシードなら同じばらつきになる）</summary>
     /// <param name="r">範囲の半分</param>
     /// <returns>乱数。r が 0 以下なら 0</returns>
     float RandSym(float r) {
         if (r <= 0.0f) return 0.0f;
-        static std::mt19937 rng{ std::random_device{}() };
-        std::uniform_real_distribution<float> dist(-r, r);
-        return dist(rng);
+        return RandomGenerator::GetInstance()->NextVisualFloat(-r, r);
     }
 
     // オイラー角→クオータニオンは engine math の QuaternionFromEuler を使う（重複解消）。

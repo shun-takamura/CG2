@@ -224,9 +224,8 @@ private:
     // エミット用の蓄積時間
     float emitAccumulator_ = 0.0f;
 
-    // 乱数生成器（メンバとして保持）
-    std::random_device seedGenerator_;
-    std::mt19937 randomEngine_{ seedGenerator_() };
+    // 乱数生成器（メンバとして保持。種は Initialize で見た目用の乱数からもらう）
+    std::mt19937 randomEngine_;
 
     /// <summary>AABBと点の当たり判定</summary>
     /// <param name="aabb">箱</param>
