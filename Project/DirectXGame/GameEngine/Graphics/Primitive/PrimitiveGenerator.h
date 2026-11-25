@@ -219,7 +219,7 @@ namespace PrimitiveGenerator {
         // フラクタル分割
         uint32_t generations    = 5;      // 分割回数（多いほど細かい）
         float    maxOffsetRatio = 0.15f;  // 始終点距離に対するオフセット比率
-        uint32_t randomSeed     = 0;      // 0=毎回ランダム、固定値で再現可
+        uint32_t randomSeed     = 0;      // 0=毎回違う形（見た目用の乱数から種をもらう）、固定値で同じ形
 
         // 枝分かれ
         float branchProbability = 0.15f;  // 各セグメントで枝を生やす確率（分割後の全セグメントに適用）

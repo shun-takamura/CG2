@@ -2,6 +2,7 @@
 #include "Enemy/Boss/Special/BossGravityOrbFx.h"
 #include "Enemy/Boss/Special/BossGravityRocks.h"
 #include "Vector3.h"
+#include "RandomGenerator.h"
 #include <random>
 #include <string>
 
@@ -151,7 +152,8 @@ private:
 	Tuning tuning_;
 	BossGravityRocks rocks_;
 	BossGravityOrbFx fx_;
-	std::mt19937 rng_{ std::random_device{}() };
+	// 岩の置き場所は当たり判定に効くので、種はゲーム用の乱数からもらう（同じシードなら同じ置き方）
+	std::mt19937 rng_{ RandomGenerator::GetInstance()->NextSeed() };
 
 	Phase phase_ = Phase::Idle;
 	float phaseTimer_ = 0.0f;

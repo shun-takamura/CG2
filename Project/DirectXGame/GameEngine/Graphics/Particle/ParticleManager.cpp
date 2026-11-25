@@ -7,6 +7,7 @@
 #include "Log.h"
 #include "EngineTime.h"
 #include "PepperMacros.h"
+#include "RandomGenerator.h"
 #include <cassert>
 #include <cmath>
 #include "imgui.h"
@@ -51,9 +52,8 @@ void ParticleManager::Initialize(DirectXCore* dxCore, SRVManager* srvManager)
     CreateVertexData();
     CreateMaterialResource();
 
-    // 乱数生成器の初期化
-    std::random_device rd;
-    randomEngine_.seed(rd());
+    // 乱数生成器の初期化（見た目だけの乱数なので、種は見た目用の乱数からもらう）
+    randomEngine_.seed(RandomGenerator::GetInstance()->NextVisualSeed());
 }
 
 void ParticleManager::Finalize()

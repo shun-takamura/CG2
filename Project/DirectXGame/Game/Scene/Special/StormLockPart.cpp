@@ -16,8 +16,8 @@
 #include "Primitive/LineRenderer.h"
 #include "Primitive/PrimitiveGenerator.h"
 #include "Primitive/PrimitivePipeline.h"
+#include "RandomGenerator.h"
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <random>
 
@@ -988,9 +988,8 @@ void StormLockPart::UpdateLockonPhase(float realDt) {
 		const Vector3 camRight = { camRot.m[0][0], camRot.m[0][1], camRot.m[0][2] };
 		const Vector3 camUp    = { camRot.m[1][0], camRot.m[1][1], camRot.m[1][2] };
 
-		// 乱数源
-		static thread_local std::mt19937 rng(
-			static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+		// 乱数源（稲妻の角度は見た目だけなので見た目用の乱数から引く。時刻は使わない＝同じシードなら同じ並び）
+		std::mt19937& rng = RandomGenerator::GetInstance()->VisualEngine();
 		std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * kPi);
 
 		for (auto& b : chargeBolts_) {

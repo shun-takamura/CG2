@@ -17,9 +17,9 @@
 #include "Primitive/LineRenderer.h"
 #include "Primitive/PrimitiveGenerator.h"
 #include "Primitive/PrimitivePipeline.h"
+#include "RandomGenerator.h"
 #include "WindowsApplication.h"
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <random>
 #include <unordered_set>
@@ -409,7 +409,7 @@ void ShatterlinePart::OnImGui(bool& changed) {
 		if (ImGui::InputInt("Seed", &seedI)) { if (seedI < 0) seedI = 0; fractureSeed_ = static_cast<uint32_t>(seedI); }
 		if (ImGui::IsItemDeactivatedAfterEdit()) { BuildCells(); changed = true; }
 	}
-	if (ImGui::Button("Randomize")) { fractureSeed_ = std::random_device{}(); BuildCells(); changed = true; }
+	if (ImGui::Button("Randomize")) { fractureSeed_ = RandomGenerator::GetInstance()->NextVisualSeed(); BuildCells(); changed = true; }
 	ImGui::SameLine();
 	if (ImGui::Button("Regenerate (same seed)")) { BuildCells(); }
 	ImGui::DragInt("Cell Count", &cellCount_, 1.0f, 1, 1000);
@@ -533,7 +533,8 @@ void ShatterlinePart::EnterPhase(Phase p) {
 		}
 		BuildRift();
 		// F1: 事前分割セルを構築（種点はスクリーン空間固定＝seed で割れ方が決まる）。
-		if (!fractureSeedLock_) fractureSeed_ = std::random_device{}();
+		// 割れ方は見た目だけなので、種は見た目用の乱数からもらう（同じシードなら同じ割れ方）
+		if (!fractureSeedLock_) fractureSeed_ = RandomGenerator::GetInstance()->NextVisualSeed();
 		BuildCells();
 		cellMeshUploaded_ = false; // この崩壊でセルのワールド形状を1回アップロードし直す
 		captureDone_ = false;   // この崩壊のシーンキャプチャは Draw で1回だけ
@@ -1079,8 +1080,8 @@ void ShatterlinePart::UpdateCells(float realDt) {
 	const float revealT = CollapseRevealT();
 	const float halfW = revealT * cellMaxBreakDist_;
 
-	static thread_local std::mt19937 rng(
-		static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+	// 破片の飛び方は見た目だけなので見た目用の乱数から引く（時刻は使わない＝同じシードなら同じ飛び方）
+	std::mt19937& rng = RandomGenerator::GetInstance()->VisualEngine();
 	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
 	auto randRange = [&](float a, float b) { return a + dist01(rng) * (std::max)(b - a, 0.0f); };
 	auto randSym   = [&]() { return dist01(rng) * 2.0f - 1.0f; };
