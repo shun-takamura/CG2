@@ -15,6 +15,7 @@
 #include "PlayerDeath/PlayerDeathPart.h"
 #include "FlightUnit/FlightUnitPart.h"
 #include "Beam/PlayerBeamPart.h"
+#include "Melee/MeleeComboPart.h"
 #include "Special/ISpecialMoveHost.h"
 #include "Special/ShatterlinePart.h"
 #include "Special/StormLockPart.h"
@@ -58,7 +59,7 @@ class BeamBladeRenderer;
 /// </summary>
 class StagePlayScene : public GameScene, private IRailStageHost, private IBossStageHost, private IStageStartHost,
 	private IPlayerDeathHost, private IStageStreamingHost, private IFlightUnitHost, private ISpecialMoveHost,
-	private IPlayerBeamHost, private IBossGravityOrbHost {
+	private IPlayerBeamHost, private IBossGravityOrbHost, private IMeleeComboHost {
 public:
 	enum class Phase {
 		Rail,       // レールシューティング道中
@@ -728,29 +729,31 @@ private:
 	float outerRotationSpeed_ = 360.0f;
 
 	// ----- 近接攻撃（コンボ）-----
-	// 弱攻撃は4段コンボ（連打で段送り）、強攻撃は単発（弱コンボをリセット）。
-	// 各段の発生/持続/後隙・倍率・受付猶予は段プレハブの MeleeParams から読む。
-	// 攻撃の流れ：入力 →(startup)→ 判定発生(activeDuration) →(recovery 後隙)→ 行動可。
-	int   meleeComboIndex_       = 0;     // 0=コンボ無し, 1..4=現在の弱攻撃段
-	float meleeComboTimer_       = 0.0f;  // コンボ継続の残り [sec]（0で段リセット）
-	float meleeStartupTimer_     = 0.0f;  // 発生までの残り [sec]（0で判定 spawn）
-	float meleeActionLockTimer_  = 0.0f;  // >0 の間、射撃/回避/近接を全てロック（発生＋持続＋後隙）
-	bool  meleePending_          = false; // 発生待ちの攻撃があるか
-	std::string meleePendingPrefab_;      // 発生時に spawn する近接プレハブ
-	static constexpr int kMeleeWeakComboMax_ = 4;
+	// B/Y どちらでも段が進む 4 段コンボと Y+B の溜め攻撃（24 番）。技の表は Resources/Json/Tuning/MeleeCombo.json。
+	// 各技の発生/持続/後隙・受付猶予は技のプレハブの MeleeParams から読む。
+	MeleeComboPart meleeCombo_;
 	// 近接判定の生成をプレイヤー原点（足元）から world-up にこの高さ持ち上げる（体の中心へ）。
 	// 足元原点のままだと地上戦で攻撃が地面にめり込むため。StagePlay.json "melee" に保存。
 	float meleeOriginHeight_ = 1.0f;
 	// 近接判定＋見た目のサイズ倍率。STG は当てづらいのでプレハブ基準(=1.0)、ボス戦は当てやすすぎるので縮小。
-	// SpawnPendingMelee が phase_ で使い分ける。StagePlay.json "melee" に保存。
+	// SpawnComboMelee が phase_ で使い分ける。StagePlay.json "melee" に保存。
 	float meleeBossSizeScale_ = 0.5f;
 
-	/// <summary>近接の入力（弱は 4 段コンボ・強は単発）を受け、発生・コンボ受付・行動ロックのタイマーを進める</summary>
-	/// <param name="actions">アクションの入力</param>
-	/// <param name="dt">経過時間 [秒]</param>
-	void UpdateMeleeCombo(class InputActionMap* actions, float dt);
-	/// <summary>発生待ちの近接判定を実際に spawn する（足元から meleeOriginHeight_ 持ち上げ、ボス戦は小さく）</summary>
-	void SpawnPendingMelee();
+	// ----- IMeleeComboHost 実装（private override。MeleeComboPart 経由のみ）-----
+	/// <summary>近接の判定を出す（足元から meleeOriginHeight_ 持ち上げ、ボス戦は小さく）</summary>
+	/// <param name="prefab">判定のプレハブ名</param>
+	/// <param name="damageScale">攻撃力に掛ける倍率</param>
+	void SpawnComboMelee(const std::string& prefab, float damageScale) override;
+	/// <summary>自機のクリップを再生する</summary>
+	/// <param name="clip">.anim のパス</param>
+	/// <param name="speed">再生速度</param>
+	/// <param name="fade">フェードの時間 [秒]</param>
+	/// <param name="loop">繰り返すか</param>
+	void PlayComboClip(const std::string& clip, float speed, float fade, bool loop) override;
+	/// <summary>攻撃・溜めが終わったので、自機の姿勢をいつもの姿勢へ戻す（ApplyPlayerPose）</summary>
+	void RestoreComboPose() override;
+	/// <summary>攻撃を出した（MarkPlayerAttack）</summary>
+	void OnComboAttackStarted() override { MarkPlayerAttack(); }
 	/// <summary>aim 基底（前=自機→firingTarget、右=worldUp×前、上=前×右）を求める。近接派生中は対象敵を直接向く</summary>
 	/// <param name="right">右の向き</param>
 	/// <param name="up">上の向き</param>
@@ -763,7 +766,7 @@ public:
 	/// 他の行動（射撃/回避/近接）が禁止されているか。
 	/// </summary>
 	/// <returns>禁止されていれば true</returns>
-	bool IsActionLocked() const { return meleeActionLockTimer_ > 0.0f || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_ || IsCloudTopIntroActive(); }
+	bool IsActionLocked() const { return meleeCombo_.IsLocked() || dodgeActionLockTimer_ > 0.0f || jdSelecting_ || specialActive_ || IsCloudTopIntroActive(); }
 private:
 
 	// ----- ジャスト回避演出 -----
@@ -816,13 +819,11 @@ private:
 	float specialGaugeMaxStormLock_   = 100.0f; // Storm Lock のゲージ上限
 	float specialGaugeMaxShatterline_ = 120.0f; // Shatterline のゲージ上限
 	float dodgeSpecialGaugeGain_ = 8.0f;  // 追加回避1回ぶんの加算量
-	// 近接ヒットでの加算。弱コンボ（4段）の方が総量で貯まりやすいよう、1ヒットは弱>強
-	float meleeWeakGaugeGain_   = 3.0f;
-	float meleeStrongGaugeGain_ = 2.0f;
-	float meleeLateGaugeRate_   = 0.5f;  // 持続あて（出だし以外）の倍率
-	/// <summary>プレイヤー近接が敵/ボスに当たった直後に、弱・強と本あて・持続あてに応じて必殺技ゲージを足す</summary>
+	// 近接ヒットでの加算は技ごと（MeleeCombo.json の gaugeGain）。持続あて（出だし以外）はこの倍率を掛ける
+	float meleeLateGaugeRate_   = 0.5f;
+	/// <summary>プレイヤー近接が敵/ボスに当たった直後に、技のゲージ量と本あて・持続あてに応じて必殺技ゲージを足す</summary>
 	/// <param name="target">当たった相手</param>
-	/// <param name="prefabName">近接のプレハブ名（弱/強の見分けに使う）</param>
+	/// <param name="prefabName">近接のプレハブ名（使わない）</param>
 	/// <param name="clean">本あて（出てから cleanWindow 以内）なら true</param>
 	void OnPlayerMeleeHit(IImGuiEditable* target, const std::string& prefabName, bool clean) override;
 
@@ -892,7 +893,7 @@ private:
 	Vector3 jdApproachWorldGoal_{ 0.0f, 0.0f, 0.0f };
 	Vector3 jdReturnWorldPos_{ 0.0f, 0.0f, 0.0f };
 
-	// 弱近接派生（Right）の自動連撃ステージ（1..kMeleeWeakComboMax_）。強（Up）は常に1。
+	// 弱近接派生（Right）の自動連撃ステージ（1..MeleeComboPart::kMaxStage）。強（Up）は常に1。
 	int jdAutoComboStage_ = 0;
 
 	// 近接派生中のカメラオフセット（プレイヤーローカル基底：right/up/forward）

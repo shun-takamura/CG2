@@ -1,0 +1,158 @@
+{
+  "_comment": "近接コンボ（24 番）。技は routes（押した順番）→ base（ボタン × 段）の順に探す。判定の形と時間はプレハブの melee、威力は攻撃力 × damageScale。charge は Y+B の溜め攻撃（段階 1〜3）",
+  "inputBuffer": 0.2,
+  "chordWindow": 0.06,
+  "clipFade": 0.08,
+  "base": {
+    "B": [
+      {
+        "prefab": "PlayerMeleeB1",
+        "damageScale": 1.0,
+        "gaugeGain": 3.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeB2",
+        "damageScale": 1.0,
+        "gaugeGain": 3.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeB3",
+        "damageScale": 1.0,
+        "gaugeGain": 3.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeB4",
+        "damageScale": 1.0,
+        "gaugeGain": 3.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      }
+    ],
+    "Y": [
+      {
+        "prefab": "PlayerMeleeY1",
+        "damageScale": 1.0,
+        "gaugeGain": 2.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeY2",
+        "damageScale": 1.0,
+        "gaugeGain": 2.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeY3",
+        "damageScale": 1.0,
+        "gaugeGain": 2.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      },
+      {
+        "prefab": "PlayerMeleeY4",
+        "damageScale": 1.0,
+        "gaugeGain": 2.0,
+        "clip": "",
+        "clipSpeed": 1.0
+      }
+    ]
+  },
+  "routes": {},
+  "charge": {
+    "solo": {
+      "holdClip": "",
+      "levels": [
+        {
+          "holdTime": 0.0,
+          "prefab": "PlayerMeleeChargeSolo",
+          "damageScale": 1.5,
+          "gaugeGain": 4.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 0.6,
+          "prefab": "PlayerMeleeChargeSolo",
+          "damageScale": 2.0,
+          "gaugeGain": 6.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 1.2,
+          "prefab": "PlayerMeleeChargeSolo",
+          "damageScale": 3.0,
+          "gaugeGain": 8.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        }
+      ]
+    },
+    "afterB4": {
+      "holdClip": "",
+      "levels": [
+        {
+          "holdTime": 0.0,
+          "prefab": "PlayerMeleeChargeAfterB4",
+          "damageScale": 2.0,
+          "gaugeGain": 4.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 0.6,
+          "prefab": "PlayerMeleeChargeAfterB4",
+          "damageScale": 2.8,
+          "gaugeGain": 6.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 1.2,
+          "prefab": "PlayerMeleeChargeAfterB4",
+          "damageScale": 4.0,
+          "gaugeGain": 8.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        }
+      ]
+    },
+    "afterY4": {
+      "holdClip": "",
+      "levels": [
+        {
+          "holdTime": 0.0,
+          "prefab": "PlayerMeleeChargeAfterY4",
+          "damageScale": 2.5,
+          "gaugeGain": 4.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 0.6,
+          "prefab": "PlayerMeleeChargeAfterY4",
+          "damageScale": 3.5,
+          "gaugeGain": 6.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        },
+        {
+          "holdTime": 1.2,
+          "prefab": "PlayerMeleeChargeAfterY4",
+          "damageScale": 5.0,
+          "gaugeGain": 8.0,
+          "clip": "",
+          "clipSpeed": 1.0
+        }
+      ]
+    }
+  }
+}
