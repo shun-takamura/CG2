@@ -1269,6 +1269,8 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		player_->SetVisible(true);
 		AddHighlight(player_); // ジャスト回避演出のグレースケール除外対象に戻す
 	}
+	// 派生を選んだら、ジャスト回避になった元の回避のアニメの続きは出さない（選ばなければ続きをそのまま鳴らす）
+	StopDodgeAnim();
 
 	// ボス戦（地上文脈）の派生。
 	if (phase_ == Phase::Boss) {
@@ -1283,6 +1285,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 			case CounterDir::Left: {
 				// 回復（小回復・無制限）。HP 操作は座標系に依存しないので STG と同一。即終了。
 				if (player_) Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
+				playerAnim_.Trigger(PlayerAnimState::Heal);
 				LogBuffer::GetInstance()->Add("JustDodge derive (Boss): Left(回復)", LogBuffer::Level::Info);
 				justDodgeCounterActive_ = false;
 				EndJustDodgeCounterAction();
@@ -1296,6 +1299,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 				dodgeCooldownTimer_   = dodgeCooldown_;
 				dodgeActionLockTimer_ = dodgeActionLock_;
 				if (bossStage_) bossStage_->ApplyDashImpulse(moveDelta);
+				TriggerDodgeAnim(moveDelta);   // 新しい回避として最初から
 				shootLockoutTimer_ = (std::max)(shootLockoutTimer_, dodgeIFrameDuration_);
 				specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + dodgeSpecialGaugeGain_);
 				LogBuffer::GetInstance()->Add("JustDodge derive (Boss): Down(追加回避)", LogBuffer::Level::Info);
@@ -1372,7 +1376,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 	switch (dir) {
 		case CounterDir::Up:
 		case CounterDir::Right: {
-			// 近接（強=Up / 弱1段目=Right）。
+			// 近接（強=Up は Y1〜Y4 / 弱=Right は B1〜B4 の自動連撃）。
 			// フロー：ワールド空間で詰め寄り(Approach) → 攻撃発生(Active=既存meleeパイプ) → 元位置へ復帰(Return)。
 			// camera-local 平面（z 固定）では z 差で melee 判定が届かないので、ワールド座標で直接補間する。
 			if (player_) {
@@ -1420,6 +1424,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 		case CounterDir::Down: {
 			// 追加回避：moveDelta(WASD/スティック)方向へダッシュ＋無敵窓開始＋許容枠拡張＋射撃禁止
 			SoundManager::GetInstance()->Play2DSound("se_dodge");
+			TriggerDodgeAnim(moveDelta);   // 新しい回避として最初から
 			dodgeActive_          = true;
 			dodgeTimer_           = 0.0f;
 			dodgeCooldownTimer_   = dodgeCooldown_;
@@ -1447,6 +1452,7 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 			if (player_) {
 				Gameplay::Of(player_).GetHP().Heal(healSmallAmount_);
 			}
+			playerAnim_.Trigger(PlayerAnimState::Heal);
 			// 即座に派生終了（演出はジャスト回避のフェードアウトに任せる）
 			EndJustDodgeCounterAction();
 		} break;
@@ -1486,10 +1492,10 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 	switch (jdChosen_) {
 		case CounterDir::Up:
 		case CounterDir::Right: {
-			// Approach → Active（meleeパイプ＋melee発生待ち） → (弱は自動連撃で w1→w4) → Return → 終了
+			// Approach → Active（meleeパイプ＋melee発生待ち） → (強は Y1→Y4・弱は B1→B4 の自動連撃) → Return → 終了
 			// ワールド位置の補間は描画直前の SetTranslate 上書きで行う（ここではフェーズ管理だけ）。
 
-			// 段の発生予約は MeleeComboPart に任せる（上＝Y の 1 段目の単発 / 右＝B の 1..kMaxStage 段）。
+			// 段の発生予約は MeleeComboPart に任せる（上＝Y / 右＝B の 1..kMaxStage 段を自動で連撃）。
 			auto spawnMeleeStage = [&](int stage) {
 				meleeCombo_.StartStep(jdChosen_ == CounterDir::Up ? MeleeButton::Y : MeleeButton::B, stage);
 			};
@@ -1520,9 +1526,8 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 				}
 			} else if (jdActionPhase_ == JdActionPhase::Active) {
 				if (!meleeCombo_.IsLocked()) {
-					// 弱（Right）は MeleeComboPart::kMaxStage 段まで自動連撃
-					const bool isWeak = (jdChosen_ == CounterDir::Right);
-					if (isWeak && jdAutoComboStage_ < MeleeComboPart::kMaxStage) {
+					// 強（Up）・弱（Right）とも MeleeComboPart::kMaxStage 段まで自動連撃（強は Y1〜Y4、弱は B1〜B4）
+					if (jdAutoComboStage_ < MeleeComboPart::kMaxStage) {
 						++jdAutoComboStage_;
 						spawnMeleeStage(jdAutoComboStage_);
 						jdActionPhaseTimer_ = 0.0f; // Active 継続
@@ -1656,6 +1661,7 @@ void StagePlayScene::UpdateDodge(InputActionMap* actions, const Vector2& moveDel
 	if (actions && actions->IsTriggered(static_cast<int>(Action::Dodge))
 		&& !IsActionLocked() && dodgeCooldownTimer_ <= 0.0f && !justDodgeActive_) {
 		SoundManager::GetInstance()->Play2DSound("se_dodge");
+		TriggerDodgeAnim(moveDelta);
 		dodgeActive_          = true;
 		dodgeTimer_           = 0.0f;
 		dodgeCooldownTimer_   = dodgeCooldown_;
@@ -1735,6 +1741,7 @@ void StagePlayScene::UpdateHeal(InputActionMap* actions)
 
 	Gameplay::Of(player_).GetHP().Heal(healAmount_);
 	++used;
+	playerAnim_.Trigger(PlayerAnimState::Heal);
 }
 
 void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forward) const
@@ -1795,17 +1802,13 @@ void StagePlayScene::SpawnComboMelee(const std::string& prefab, float damageScal
 
 void StagePlayScene::PlayComboClip(const std::string& clip, float speed, float fade, bool loop)
 {
-	if (!player_) return;
-	player_->PlayAnimation(clip, fade);
-	player_->SetLoop(loop);
-	player_->SetPlaybackSpeed(speed);
+	// 近接の優先度は PlayerAnim の common.json（被弾・必殺技は近接より上）
+	playerAnim_.PlayMelee(clip, speed, fade, loop);
 }
 
 void StagePlayScene::RestoreComboPose()
 {
-	if (!player_) return;
-	player_->SetPlaybackSpeed(1.0f);
-	ApplyPlayerPose();
+	playerAnim_.EndMelee();
 }
 
 void StagePlayScene::UpdateJustDodgeEffect(float dt)
@@ -1892,6 +1895,7 @@ void StagePlayScene::UpdatePrecisionAim(InputActionMap* actions, float dt)
 	}
 #endif
 	const float target = held ? 1.0f : 0.0f;
+	precisionHeld_ = held;
 
 	// blend を target へ線形フェード
 	if (precisionFadeSpeed_ <= 0.0f) {
@@ -1974,7 +1978,7 @@ void StagePlayScene::OnImGuiTuning() {
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::DragFloat("Move State Delay (s)", &moveStateDelay_, 0.05f, 0.0f, 5.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Move State Hit Lean (deg)", &moveStateLeanDeg_, 0.5f, 0.0f, 90.0f, "%.1f");
+		ImGui::DragFloat("Glide Hit Lean (deg)", &moveStateLeanDeg_, 0.5f, 0.0f, 90.0f, "%.1f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::Text("Move State: %s", (timeSinceAttack_ >= moveStateDelay_) ? "Move" : "Attack");
 		ImGui::SeparatorText("Look (material)");
@@ -2489,6 +2493,10 @@ void StagePlayScene::OnImGuiTuning() {
 	if (ImGui::CollapsingHeader("Shield (20 2)") && GetGameSession()->GetLoadoutState()->OnImGuiShield()) {
 		RebuildShieldModel();
 	}
+	// 自機のアニメ（25 番）：今の状態・JSON の読み直し・試し鳴らし
+	if (ImGui::CollapsingHeader("Player Anim (25)")) {
+		playerAnim_.OnImGui();
+	}
 
 	if (changed) SaveTuningToJson();
 #endif
@@ -2534,6 +2542,7 @@ void StagePlayScene::Initialize() {
 	playerBeam_->Initialize(this);
 	// 近接コンボ（24 番）。技の表は Resources/Json/Tuning/MeleeCombo.json
 	meleeCombo_.Initialize(this);
+	playerAnim_.Initialize(player_);
 	// ストリーミングの時刻表（LoadTuningFromJson で root["streaming"] を読む。配置を読む前に要る＝どれを後回しにするか）
 	streaming_ = std::make_unique<StageStreaming>();
 	streaming_->Initialize(this, "STAGEPLAY");
@@ -3310,6 +3319,10 @@ void StagePlayScene::Update() {
 
 	UpdateCombatAndSpecial(actions, worldDt, gameFrozen);
 
+	// 自機のアニメ：このフレームの行動（射撃・回避・被弾・必殺技…）を受けて鳴らすクリップを決める。
+	// アニメの時間は自機のアニメと同じ自機の時間（Player）で進める（1 回きりの長さを合わせる）
+	SyncPlayerAnim(GetScaledDeltaTime(TimeGroup::Player));
+
 	// Wave発火・敵コントローラ/移動更新・キル記録（STG専用。Landing/Boss突入後は発火しない）。
 	if (phase_ == Phase::Rail && railStage_) {
 		// 雲の上の回り込みの間も、敵の出現位置はレールのカメラで決める
@@ -3417,6 +3430,7 @@ void StagePlayScene::UpdateStagePhase(InputActionMap* actions) {
 				// 足場に着いた：羽根をしまって立つ・足元の水に波
 				if (playerWings_) playerWings_->Stow();
 				ApplyPlayerPose();
+				playerAnim_.Trigger(PlayerAnimState::LandingTouchdown);
 				if (bossWater_) bossWater_->EmitSplash(bossStage_->GetPlayerStartPos());
 			}
 		}
@@ -3526,6 +3540,7 @@ void StagePlayScene::UpdateBossBattle() {
 		Vector3 bossCenter = bossStage_->GetBossStartPos();
 		bossStage_->GetDefeatedBossCenter(bossCenter);
 		clearSeq_.Begin(bossCenter, bossStage_->GetGroundY(), *camera_, GetGameSession()->GetStageClearRecord()->GetClearTime());
+		playerAnim_.Trigger(PlayerAnimState::Victory);
 		SetTimeScale(TimeGroup::World, clearSeq_.GetWorldTimeScale());   // ヒットストップ
 		// このフレームは HUD を描かないので、ポストエフェクトの後の絵をそのまま撮る（リザルトの背景）
 		if (clearSeq_.ConsumeCaptureRequest()) {
@@ -3607,6 +3622,8 @@ void StagePlayScene::UpdateBossPlayerMovement(InputActionMap* actions, const Vec
 	if (!jdMeleeCameraActive_) {
 		bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
 	}
+	// 自機のアニメの走りの向き（PlayerAnimPart が待機・走り 4 方向を選ぶ）
+	playerAnimGroundMove_ = jdMeleeCameraActive_ ? Vector2{ 0.0f, 0.0f } : GroundMoveToPlayerLocal(groundMove);
 	// 分身カウンター派生の進行（近接のワープ/攻撃発生、地上文脈向け）。ワープで player_ の
 	// ワールド座標を直接書き換えるので、以降のカメラ・向き計算より前に呼ぶ。
 	UpdateJustDodgeCounterAction(GetScaledDeltaTime(TimeGroup::UI));
@@ -4640,6 +4657,7 @@ void StagePlayScene::FirePlayerShot() {
 				aimPlaneDistance_, bulletPrefab, atk, sizeScale);
 		}
 		SoundManager::GetInstance()->Play2DSound(playerChargeLevel_ >= 1.0f ? "se_charge_shot" : "se_shot");
+		playerAnim_.Trigger(playerChargeLevel_ >= 1.0f ? PlayerAnimState::ChargeRelease : PlayerAnimState::Shoot);
 		// 攻撃系の飛行ユニットは、展開していない間は自機の射撃に合わせて支援射撃する
 		if (flightUnit_) flightUnit_->NotifyPlayerShot(true);
 
@@ -5032,6 +5050,7 @@ void StagePlayScene::FinishPlayerDeath() {
 }
 
 void StagePlayScene::RestorePlayerPose() {
+	playerAnim_.SetSuspended(false);
 	ApplyPlayerPose();
 }
 
@@ -5044,6 +5063,9 @@ void StagePlayScene::BeginPlayerDeath(bool preview) {
 	player_->SetMaterialColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	// 羽根があるのはレールの間だけ（着地の遷移で収納する）
 	const PlayerDeathPart::Kind kind = phase_ == Phase::Rail ? PlayerDeathPart::Kind::Rail : PlayerDeathPart::Kind::Boss;
+	// 死亡演出の間は自機のアニメを PlayerDeathPart に任せる（ボス戦は Kneel を向こうが鳴らす。STG は railDeath を鳴らしてから）
+	if (kind == PlayerDeathPart::Kind::Rail) playerAnim_.PlayAndSuspend(PlayerAnimState::RailDeath);
+	else playerAnim_.SetSuspended(true);
 	playerDeath_->Begin(kind, player_, preview);
 }
 
@@ -5101,18 +5123,75 @@ bool StagePlayScene::IsBossArenaVisible() const {
 
 void StagePlayScene::ApplyPlayerPose() {
 	if (!player_) return;
-	// 自機の新モデルのクリップ（rig_player_mech.py --body-clips）。player.json のモデルを替えたらここも合わせる
-	constexpr const char* kStandClip = "Resources/Models/Player/PlayerModel/PlayerModel_Stand.anim";
-	constexpr const char* kLaunchClip = "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim";
-	// 着陸で足場に着いた後もボス戦と同じ立ち姿勢
-	if (phase_ == Phase::Boss || (phase_ == Phase::Landing && bossStage_ && bossStage_->HasLandingTouchedDown())) {
-		player_->PlayAnimation(kStandClip, 0.0f);
-		player_->SetLoop(true);
-	} else {
-		// 射出口のけり出しの最後のコマ＝飛ぶ姿勢で止める（スタート演出の機体と同じ姿勢のまま渡す。Fly は使わない＝2026-10-19 ユーザー決定）
-		player_->PlayAnimation(kLaunchClip, 0.0f);
-		player_->SetLoop(false);
-		player_->SetAnimationTime(kAnimLastFrameTime);
+	// どのクリップを鳴らすかは PlayerAnimPart（Resources/Json/Tuning/PlayerAnim/*.json、25 番）。
+	// STG は railStand（Launch の最後のコマで止める＝スタート演出の機体と同じ姿勢のまま渡す）、
+	// ボス戦と着陸で足場に着いた後は bossIdle。フェーズが替わったので 1 回きり・押している間はやめる
+	// 自機のアニメは自機の時間（Player）で進める：近接の派生でワールドを止めても技のアニメは動く
+	player_->SetTimeGroup(TimeGroup::Player);
+	playerAnim_.SetPlayer(player_);
+	playerAnim_.SetMode(CurrentPlayerAnimMode());
+	playerAnim_.ClearActions();
+	playerAnim_.Replay();
+}
+
+PlayerAnimMode StagePlayScene::CurrentPlayerAnimMode() const {
+	const bool ground = phase_ == Phase::Boss
+		|| (phase_ == Phase::Landing && bossStage_ && bossStage_->HasLandingTouchedDown());
+	return ground ? PlayerAnimMode::Ground : PlayerAnimMode::Rail;
+}
+
+void StagePlayScene::SyncPlayerAnim(float dt) {
+	if (!player_) return;
+	const PlayerAnimMode mode = CurrentPlayerAnimMode();
+	playerAnim_.SetMode(mode);
+	// チャージ 1 段目が溜まった後：STG は滑空（8 番 §2.2.1）、地上はチャージの構え
+	const bool charged = chargeStage1Triggered_;
+	playerAnim_.SetRailGlide(mode == PlayerAnimMode::Rail && charged);
+	playerAnim_.SetHeld(PlayerAnimState::ChargeHold, mode == PlayerAnimMode::Ground && charged);
+	playerAnim_.SetGroundMove(mode == PlayerAnimMode::Ground ? playerAnimGroundMove_ : Vector2{ 0.0f, 0.0f });
+	playerAnim_.SetHeld(PlayerAnimState::PrecisionAim, precisionHeld_);
+	// 必殺技：Storm Lock は発動中ずっと、Shatterline は段（構え → 振り抜き → 硬直）ごと
+	playerAnim_.SetHeld(PlayerAnimState::StormLock, specialActive_ && equippedSpecial_ == SpecialKind::StormLock);
+	const ShatterlinePart::PoseStage stage = (specialActive_ && equippedSpecial_ == SpecialKind::Shatterline)
+		? shatterline_.GetPoseStage() : ShatterlinePart::PoseStage::None;
+	playerAnim_.SetHeld(PlayerAnimState::ShatterlineCharge, stage == ShatterlinePart::PoseStage::Charge);
+	playerAnim_.SetHeld(PlayerAnimState::ShatterlineSlash, stage == ShatterlinePart::PoseStage::Slash);
+	playerAnim_.SetHeld(PlayerAnimState::ShatterlineRecover, stage == ShatterlinePart::PoseStage::Recover);
+	playerAnim_.Update(dt);
+}
+
+Vector2 StagePlayScene::GroundMoveToPlayerLocal(const Vector2& moveDelta) const {
+	if (!bossStage_) return { 0.0f, 0.0f };
+	Vector3 gfwd, gright;
+	bossStage_->ComputeGroundBasis(gfwd, gright);
+	const float wx = gright.x * moveDelta.x + gfwd.x * moveDelta.y;
+	const float wz = gright.z * moveDelta.x + gfwd.z * moveDelta.y;
+	// 自機の向き（yaw = atan2(x, z)）の前 (sin, cos) と右 (cos, -sin) へ写す
+	const float s = std::sin(bossFacingYaw_);
+	const float c = std::cos(bossFacingYaw_);
+	return { wx * c - wz * s, wx * s + wz * c };
+}
+
+void StagePlayScene::TriggerDodgeAnim(const Vector2& moveDelta) {
+	const bool ground = CurrentPlayerAnimMode() == PlayerAnimMode::Ground;
+	const Vector2 dir = ground ? GroundMoveToPlayerLocal(moveDelta) : moveDelta;
+	PlayerAnimState state = ground ? PlayerAnimState::GroundDodgeNeutral : PlayerAnimState::RailDodgeNeutral;
+	if (std::sqrt(dir.x * dir.x + dir.y * dir.y) > kNearZero) {
+		if (std::fabs(dir.x) >= std::fabs(dir.y)) {
+			if (ground) state = dir.x < 0.0f ? PlayerAnimState::GroundDodgeLeft : PlayerAnimState::GroundDodgeRight;
+			else        state = dir.x < 0.0f ? PlayerAnimState::RailDodgeLeft : PlayerAnimState::RailDodgeRight;
+		} else {
+			if (ground) state = dir.y < 0.0f ? PlayerAnimState::GroundDodgeBack : PlayerAnimState::GroundDodgeForward;
+			else        state = dir.y < 0.0f ? PlayerAnimState::RailDodgeDown : PlayerAnimState::RailDodgeUp;
+		}
+	}
+	playerAnim_.Trigger(state);
+}
+
+void StagePlayScene::StopDodgeAnim() {
+	// 回避の状態は RailDodgeNeutral〜GroundDodgeRight に並んでいる
+	for (int s = static_cast<int>(PlayerAnimState::RailDodgeNeutral); s <= static_cast<int>(PlayerAnimState::GroundDodgeRight); ++s) {
+		playerAnim_.Stop(static_cast<PlayerAnimState>(s));
 	}
 }
 
@@ -5562,6 +5641,7 @@ void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 
 	Gameplay::Of(player_).GetHP().TakeDamage(damageAmount);
 	SoundManager::GetInstance()->Play2DSound("se_player_damage");
+	playerAnim_.Trigger(CurrentPlayerAnimMode() == PlayerAnimMode::Ground ? PlayerAnimState::GroundHit : PlayerAnimState::RailHit);
 
 	playerInvincibilityTimer_ = playerInvincibilityDuration_;
 	shootLockoutTimer_ = shootLockoutDuration_;
@@ -5940,8 +6020,10 @@ void StagePlayScene::UpdatePlayerColliderPose() {
 		t.y + off.x * right.y + off.y * up.y + off.z * fwd.y,
 		t.z + off.x * right.z + off.y * up.z + off.z * fwd.z };
 
-	// STG の移動状態は、カプセルの軸（上）を前へ moveStateLeanDeg_ だけ倒す（頭が前・足が後ろ。飛ぶ姿勢のモデルと同じ角度）
-	const bool leaning = (phase_ == Phase::Rail) && !IsPlayerAttacking(nullptr);
+	// STG の滑空中（チャージ 1 段目が溜まった後。8 番 §2.2.1）は、カプセルの軸（上）を前へ moveStateLeanDeg_ だけ倒す
+	// （頭が前・足が後ろ。滑空のクリップ RailGlide の体の角度と同じ）。立ち姿勢（RailStand）は起こしたまま。
+	// 条件は SyncPlayerAnim の railGlide と同じ
+	const bool leaning = (phase_ == Phase::Rail) && chargeStage1Triggered_;
 	const float a = leaning ? DegToRad(moveStateLeanDeg_) : 0.0f;
 	const float c = std::cos(a), s = std::sin(a);
 	const Vector3 axes[3] = {

@@ -9,28 +9,28 @@
         "prefab": "PlayerMeleeB1",
         "damageScale": 1.0,
         "gaugeGain": 3.0,
-        "clip": "",
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeB1.anim",
         "clipSpeed": 1.0
       },
       {
         "prefab": "PlayerMeleeB2",
         "damageScale": 1.0,
         "gaugeGain": 3.0,
-        "clip": "",
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeB2.anim",
         "clipSpeed": 1.0
       },
       {
         "prefab": "PlayerMeleeB3",
         "damageScale": 1.0,
         "gaugeGain": 3.0,
-        "clip": "",
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeB3.anim",
         "clipSpeed": 1.0
       },
       {
         "prefab": "PlayerMeleeB4",
         "damageScale": 1.0,
         "gaugeGain": 3.0,
-        "clip": "",
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeB4.anim",
         "clipSpeed": 1.0
       }
     ],

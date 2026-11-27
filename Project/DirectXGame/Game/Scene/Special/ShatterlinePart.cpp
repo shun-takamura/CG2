@@ -159,6 +159,16 @@ void ShatterlinePart::Reset() {
 	killsDone_ = false;
 }
 
+ShatterlinePart::PoseStage ShatterlinePart::GetPoseStage() const {
+	switch (phase_) {
+	case Phase::Charge:   return PoseStage::Charge;
+	case Phase::Slash:
+	case Phase::Collapse: return PoseStage::Slash;
+	case Phase::Recover:  return PoseStage::Recover;
+	default:              return PoseStage::None;
+	}
+}
+
 void ShatterlinePart::UpdateTrash() {
 	for (auto& e : trash_) {
 		if (e.framesLeft > 0) --e.framesLeft;

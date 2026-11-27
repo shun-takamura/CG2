@@ -609,6 +609,27 @@
     "Resources/Models/Player/PlayerModel/PlayerModel.anim",
     "Resources/Models/Player/PlayerModel/PlayerModel_Stand.anim",
     "Resources/Models/Player/PlayerWings/PlayerWings.anim",
-    "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim"
+    "Resources/Models/Player/PlayerModel/PlayerModel_Launch.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_BossIdle.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailStand.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailGlide.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_BossRunForward.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_BossRunLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_BossRunRight.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeHold.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAim.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAimRail.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_Shoot.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ShootRail.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeRelease.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeReleaseRail.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailDodgeLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailDodgeRight.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailDodgeUp.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_RailDodgeDown.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeForward.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeBack.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeRight.anim"
   ]
 }

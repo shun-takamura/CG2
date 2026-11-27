@@ -21,6 +21,7 @@
 #include "Animation.h"
 #include <memory>
 #include "SkinCluster.h"
+#include "TimeGroup.h"
 #include <vector>
 
 // ImGui対応
@@ -74,6 +75,7 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     float animationTime_ = 0.0f;       // 現在の再生時刻（秒）
     bool isPlaying_ = true;            // 再生中フラグ
     bool visible_   = true;            // 描画フラグ（false で Draw をスキップ。全構成で有効）
+    TimeGroup timeGroup_ = TimeGroup::World;  // Scene::UpdateDynamicAnimated で進める時間（既定はシーンのワールド）
     bool isLoop_ = true;               // ループ再生フラグ
     float playbackSpeed_ = 1.0f;       // 再生速度（1.0が等倍）
 
@@ -82,6 +84,10 @@ class AnimatedObject3DInstance : public IImGuiEditable {
     Animation prevAnimation_{};
     float prevAnimationTime_ = 0.0f;
     bool  hasPrevAnimation_ = false;
+    // 旧クリップを切り替えた時のループ・再生速度。ループしないクリップはフェードの間も最後のコマで止めておく
+    // （頭へ戻すと、終わった回避・攻撃の出だしが一瞬混ざって見える）
+    bool  prevLoop_ = true;
+    float prevPlaybackSpeed_ = 1.0f;
     float fadeTimer_ = 0.0f;           // フェード経過秒
     float fadeDuration_ = 0.0f;        // 0 ならフェード未進行
     float defaultFadeTime_ = 0.25f;    // .anim ドロップ時のデフォルト
@@ -271,6 +277,12 @@ public:
     /// <summary>再生速度を設定する</summary>
     /// <param name="speed">倍率（1.0 が等倍）</param>
     void SetPlaybackSpeed(float speed) { playbackSpeed_ = speed; }
+    /// <summary>Scene::UpdateDynamicAnimated でどの時間で進めるかを設定する（自機は Player など）</summary>
+    /// <param name="group">時間のグループ（既定 World）</param>
+    void SetTimeGroup(TimeGroup group) { timeGroup_ = group; }
+    /// <summary>Scene::UpdateDynamicAnimated で進める時間のグループ</summary>
+    /// <returns>グループ</returns>
+    TimeGroup GetTimeGroup() const { return timeGroup_; }
     /// <summary>再生速度を返す</summary>
     /// <returns>倍率</returns>
     float GetPlaybackSpeed() const { return playbackSpeed_; }

@@ -16,7 +16,7 @@
     "smoothTime": 0.25,
     "attackMoveSpeedScale": 0.60000002384185791,
     "moveStateDelay": 1,
-    "moveStateLeanDeg": 55,
+    "moveStateLeanDeg": 70,
     "look": {
       "environmentCoefficient": 0.5,
       "overrideMaterial": false,

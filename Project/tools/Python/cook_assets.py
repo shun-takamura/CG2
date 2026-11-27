@@ -5,11 +5,15 @@
     python tools/Python/cook_assets.py            # 差分のみ変換
     python tools/Python/cook_assets.py --force    # 全再変換
     python tools/Python/cook_assets.py --dry-run  # 何も書き換えず予定だけ出力
+    python tools/Python/cook_assets.py --only Models/Player/PlayerModel/PlayerModel@melee   # Assets/ からの相対パスが
+                                                  # この文字列で始まるファイルだけ（, 区切りで複数）
 
 ファイル拡張子別の処理:
     .png         → Resources/同パス/*.dds (BC7, texconv)         [Step 1 で実装]
     .obj + .mtl  → Resources/同パス/*.mesh (バイナリ, pyassimp)  [Step 3 で実装]
     .gltf + .bin → Resources/同パス/*.glb (バイナリ統合)         [Step 5 で実装]
+    <モデル>@<まとまり>.gltf → Resources/同フォルダ/<モデル>_<クリップ>.anim だけ（メッシュの無い、クリップだけの glTF。
+                   .mesh/.skel/.mat は作らず、ほかの .anim も消さない。自機のまとまり別のクリップ＝25_PlayerAnimClips.md）
     .wav         → Resources/同パス/*.wav (コピー)               [Step 1 で実装]
     .mtl .bin    → スキップ（.obj/.gltf 変換に吸収）
     .hdr         → スキップ（convert_hdr_to_dds.py が処理）
@@ -37,6 +41,8 @@ ASSETS_DIR = Path("Assets")
 RESOURCES_DIR = Path("Resources")
 CACHE_FILE = Path("tools/Python/sync_cache.json")
 TEXCONV = Path("externals/texconv/Texconv.exe")
+# ファイル名にこれを含む glTF はクリップだけ（<モデル>@<まとまり>.gltf → <モデル>_<クリップ>.anim）
+ANIM_ONLY_MARK = "@"
 
 # パスにこの部分文字列が含まれる PNG は線形値として圧縮する（マスク・ノーマル等）。
 # 法線マップは sRGB だと法線がずれるので、ファイル名/フォルダ名に "NormalMap" を含めること。
@@ -98,6 +104,7 @@ class Action(Enum):
     CONVERT_PNG_TO_DDS = auto()
     CONVERT_OBJ_TO_MESH = auto()
     CONVERT_GLTF_TO_MESH = auto()  # 旧 GLTF_TO_GLB。.mesh + .skel + .mat + .anim を出力
+    CONVERT_GLTF_TO_ANIM = auto()  # <モデル>@<まとまり>.gltf。<モデル>_<クリップ>.anim だけを出力
     COPY = auto()
     SKIP = auto()
     UNKNOWN = auto()
@@ -123,6 +130,9 @@ def classify(src: Path) -> FileTask:
         return FileTask(src, Action.CONVERT_PNG_TO_DDS, RESOURCES_DIR / rel.with_suffix(".dds"))
     if suffix == ".obj":
         return FileTask(src, Action.CONVERT_OBJ_TO_MESH, RESOURCES_DIR / rel.with_suffix(".mesh"))
+    if suffix == ".gltf" and ANIM_ONLY_MARK in src.stem:
+        # クリップだけの glTF。出力代表は出力先のフォルダ（クリップの数だけ .anim を吐く）
+        return FileTask(src, Action.CONVERT_GLTF_TO_ANIM, RESOURCES_DIR / rel.parent)
     if suffix == ".gltf":
         # 出力代表は .mesh。実際には .mesh + .skel + .mat + .anim をまとめて吐く。
         return FileTask(src, Action.CONVERT_GLTF_TO_MESH, RESOURCES_DIR / rel.with_suffix(".mesh"))
@@ -1288,6 +1298,27 @@ def convert_gltf_to_mesh(task: FileTask) -> bool:
     return True
 
 
+def convert_gltf_to_anims(task: FileTask) -> bool:
+    """クリップだけの glTF（<モデル>@<まとまり>.gltf）から <モデル>_<クリップ>.anim だけを書く。
+    .anim はジョイントの名前でキーを持つので、メッシュの glTF（<モデル>.gltf）と同じアーマチュアなら同じ .skel で鳴る"""
+    assert task.dst is not None
+    try:
+        gltf, buffers = _gltf_load(task.src)
+    except Exception as e:
+        print(f"  [ERROR] gltf load failed: {e}")
+        return False
+    if gltf.get("meshes"):
+        print(f"  [ERROR] {task.src.name} にメッシュがある（{ANIM_ONLY_MARK} の付く glTF はクリップだけにする）")
+        return False
+    model = task.src.stem.split(ANIM_ONLY_MARK)[0]
+    animations = _gltf_extract_animations(gltf, buffers)
+    for anim in animations:
+        safe_name = anim["name"].replace("/", "_").replace(" ", "_")
+        _write_anim_v1(task.dst / f"{model}_{safe_name}.anim", anim)
+    print(f"  anims={len(animations)} ({', '.join(a['name'] for a in animations)})")
+    return True
+
+
 # ============================================================
 # 個別の変換ロジック
 # ============================================================
@@ -1420,6 +1451,8 @@ def perform(task: FileTask, dry_run: bool) -> bool:
         return convert_obj_to_mesh(task)
     if task.action == Action.CONVERT_GLTF_TO_MESH:
         return convert_gltf_to_mesh(task)
+    if task.action == Action.CONVERT_GLTF_TO_ANIM:
+        return convert_gltf_to_anims(task)
     if task.action == Action.COPY:
         return copy_file(task)
 
@@ -1437,8 +1470,11 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="実際の変換は行わず予定のみ表示")
     parser.add_argument("--meshes-only", action="store_true",
                         help="今ある .mesh だけを差分を無視して再変換（.mesh の形式を上げた時用）")
+    parser.add_argument("--only", default="",
+                        help="Assets/ からの相対パスがこれで始まるファイルだけ（, 区切りで複数。例 Models/Player/PlayerModel/PlayerModel@melee）")
     args = parser.parse_args()
     mesh_actions = (Action.CONVERT_OBJ_TO_MESH, Action.CONVERT_GLTF_TO_MESH)
+    only_prefixes = [p.strip().replace("\\", "/") for p in args.only.split(",") if p.strip()]
 
     if not ASSETS_DIR.exists():
         print(
@@ -1455,6 +1491,8 @@ def main() -> int:
 
     for src in sorted(ASSETS_DIR.rglob("*")):
         if not src.is_file():
+            continue
+        if only_prefixes and not any(src.relative_to(ASSETS_DIR).as_posix().startswith(p) for p in only_prefixes):
             continue
         task = classify(src)
         stats[task.action] += 1

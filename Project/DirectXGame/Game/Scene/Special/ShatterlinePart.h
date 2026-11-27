@@ -55,6 +55,12 @@ public:
 	/// <summary>遅延削除の待ち行列を進める（技が終わった後も毎フレーム呼ぶ）</summary>
 	void UpdateTrash();
 
+	/// <summary>自機のアニメの段（PlayerAnimPart の shatterlineCharge / Slash / Recover へ渡す）</summary>
+	enum class PoseStage { None, Charge, Slash, Recover };
+	/// <summary>今の段を返す（崩壊の間は振り抜いたまま＝Slash）</summary>
+	/// <returns>段（発動していなければ None）</returns>
+	PoseStage GetPoseStage() const;
+
 	/// <summary>シーンの描画パスの中で、崩壊の元絵のキャプチャと断裂線を描く</summary>
 	/// <param name="commandList">描画先のコマンドリスト</param>
 	void DrawScene(ID3D12GraphicsCommandList* commandList);

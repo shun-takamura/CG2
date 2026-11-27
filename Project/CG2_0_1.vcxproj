@@ -177,6 +177,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitMobility.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Beam\PlayerBeamPart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\Melee\MeleeComboPart.cpp" />
+    <ClCompile Include="DirectXGame\Game\Scene\PlayerAnim\PlayerAnimPart.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.cpp" />
     <ClCompile Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.cpp" />
@@ -297,6 +298,7 @@ copy "$(ProjectDir)externals\DirectStorage\bin\x64\dstoragecore.dll" "$(TargetDi
     <ClInclude Include="DirectXGame\Game\Scene\Beam\PlayerBeamPart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Melee\IMeleeComboHost.h" />
     <ClInclude Include="DirectXGame\Game\Scene\Melee\MeleeComboPart.h" />
+    <ClInclude Include="DirectXGame\Game\Scene\PlayerAnim\PlayerAnimPart.h" />
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.h" />
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitGuard.h" />
     <ClInclude Include="DirectXGame\Game\Scene\PlayerDeath\EtherStrands.h" />
