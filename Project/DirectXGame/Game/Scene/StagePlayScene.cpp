@@ -129,12 +129,6 @@ namespace {
 	constexpr float kAnimLastFrameTime = 1.0e3f;
 	// 長さ・距離がこれより大きければ向きを求める
 	constexpr float kNearZero = 1e-3f;
-	// 弱近接の 2 段目
-	constexpr int kMeleeWeakStage2 = 2;
-	// 弱近接の 3 段目
-	constexpr int kMeleeWeakStage3 = 3;
-	// 弱近接の 4 段目
-	constexpr int kMeleeWeakStage4 = 4;
 	// 追加回避の間、射撃禁止を延ばし続ける秒数 [秒]
 	constexpr float kDodgeShootLockoutSeconds = 0.05f;
 	// 被弾無敵の残り時間を無敵でない状態（0 以下）に戻すときの値の大きさ（−2）
@@ -581,8 +575,6 @@ void StagePlayScene::LoadTuningFromJson() {
 		specialGaugeMax_       = SpecialGaugeMaxFor(equippedSpecial_);
 		shatterline_.LoadTuning(sg);
 		dodgeSpecialGaugeGain_ = static_cast<float>(sg["dodgeGain"].AsDouble(dodgeSpecialGaugeGain_));
-		meleeWeakGaugeGain_    = static_cast<float>(sg["meleeWeakGain"].AsDouble(meleeWeakGaugeGain_));
-		meleeStrongGaugeGain_  = static_cast<float>(sg["meleeStrongGain"].AsDouble(meleeStrongGaugeGain_));
 		meleeLateGaugeRate_    = static_cast<float>(sg["meleeLateRate"].AsDouble(meleeLateGaugeRate_));
 		stormLock_.LoadTuning(sg);
 		// 両方の必殺技で使う自機の体の中心と、体を囲む楕円
@@ -905,8 +897,6 @@ void StagePlayScene::SaveTuningToJson() const {
 	sgObj["equipped"]          = static_cast<int64_t>(equippedSpecial_);
 	shatterline_.SaveTuning(sgObj);
 	sgObj["dodgeGain"] = static_cast<double>(dodgeSpecialGaugeGain_);
-	sgObj["meleeWeakGain"]   = static_cast<double>(meleeWeakGaugeGain_);
-	sgObj["meleeStrongGain"] = static_cast<double>(meleeStrongGaugeGain_);
 	sgObj["meleeLateRate"]   = static_cast<double>(meleeLateGaugeRate_);
 	stormLock_.SaveTuning(sgObj);
 	sgObj["centerOffset"] = static_cast<double>(specialPlayerCenterOffset_);
@@ -1345,7 +1335,6 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 				jdMeleeCameraActive_ = true;
 				if (bossStage_) bossStage_->StopGroundVelocity(); // 残留速度が派生後に持ち越されないように
 				SetTimeScale(TimeGroup::World, 0.0f);
-				meleeComboIndex_ = (dir == CounterDir::Up) ? 0 : 1;
 				justDodgeCounterActive_ = true; // UpdateJustDodgeCounterAction に進行を委ねる
 				LogBuffer::GetInstance()->Add(
 					std::string("JustDodge derive (Boss): ") + ((dir == CounterDir::Up) ? "Up(近接強)" : "Right(近接弱)"),
@@ -1426,8 +1415,6 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 			// 近接派生中はワールド時間を完全停止（敵がずれて当たらない事故を防ぐ）。
 			// Player グループは等倍のままなので、プレイヤーの詰め寄り/攻撃は動く。
 			SetTimeScale(TimeGroup::World, 0.0f);
-
-			meleeComboIndex_ = (dir == CounterDir::Up) ? 0 : 1;
 		} break;
 
 		case CounterDir::Down: {
@@ -1502,40 +1489,9 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 			// Approach → Active（meleeパイプ＋melee発生待ち） → (弱は自動連撃で w1→w4) → Return → 終了
 			// ワールド位置の補間は描画直前の SetTranslate 上書きで行う（ここではフェーズ管理だけ）。
 
-			// 近接スロット名から発生予約をまとめる lambda。stage は弱の場合 1..4、強の場合は無視。
+			// 段の発生予約は MeleeComboPart に任せる（上＝Y の 1 段目の単発 / 右＝B の 1..kMaxStage 段）。
 			auto spawnMeleeStage = [&](int stage) {
-				std::string slot;
-				if (jdChosen_ == CounterDir::Up) {
-					slot = "melee_strong";
-				} else {
-					switch (stage) {
-						case 1: slot = "melee_w1"; break;
-						case kMeleeWeakStage2: slot = "melee_w2"; break;
-						case kMeleeWeakStage3: slot = "melee_w3"; break;
-						case kMeleeWeakStage4: slot = "melee_w4"; break;
-						default: slot = "melee_w1"; break;
-					}
-				}
-				std::string prefab = player_ ? Gameplay::Of(player_).FindBulletPrefab(slot) : std::string();
-				if (prefab.empty()) prefab = "TemporaryPlayerMelee";
-				const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab);
-				const PrefabDef& melee = (mdef && mdef->hasMelee) ? *mdef : PrefabDef::Defaults();
-				const float startup     = melee.meleeStartup;
-				const float active      = melee.meleeActiveDuration;
-				const float recovery    = melee.meleeRecovery;
-				const float comboWindow = melee.meleeComboWindow;
-				meleePendingPrefab_   = prefab;
-				meleeStartupTimer_    = startup;
-				meleePending_         = true;
-				meleeActionLockTimer_ = startup + active + recovery;
-				meleeComboTimer_      = startup + active + recovery + comboWindow;
-				MarkPlayerAttack();
-				meleeComboIndex_      = (jdChosen_ == CounterDir::Up) ? 0 : stage;
-				if (meleeStartupTimer_ <= 0.0f) {
-					meleeStartupTimer_ = 0.0f;
-					meleePending_      = false;
-					SpawnPendingMelee();
-				}
+				meleeCombo_.StartStep(jdChosen_ == CounterDir::Up ? MeleeButton::Y : MeleeButton::B, stage);
 			};
 
 			if (jdActionPhase_ == JdActionPhase::Approach) {
@@ -1563,10 +1519,10 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 					jdActionPhaseTimer_ = 0.0f;
 				}
 			} else if (jdActionPhase_ == JdActionPhase::Active) {
-				if (meleeActionLockTimer_ <= 0.0f) {
-					// 弱（Right）は kMeleeWeakComboMax_ 段まで自動連撃
+				if (!meleeCombo_.IsLocked()) {
+					// 弱（Right）は MeleeComboPart::kMaxStage 段まで自動連撃
 					const bool isWeak = (jdChosen_ == CounterDir::Right);
-					if (isWeak && jdAutoComboStage_ < kMeleeWeakComboMax_) {
+					if (isWeak && jdAutoComboStage_ < MeleeComboPart::kMaxStage) {
 						++jdAutoComboStage_;
 						spawnMeleeStage(jdAutoComboStage_);
 						jdActionPhaseTimer_ = 0.0f; // Active 継続
@@ -1574,7 +1530,7 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 						// 戻らない：攻撃した場所（ボス背後）にそのまま留まる。
 						// 通常カメラ（BossStagePart::UpdateCamera）へ制御を戻す前に、乗っ取っていた
 						// 近接カメラの最終角度を camYaw_/camPitch_ へ同期しておく（古い角度への瞬間戻り防止）。
-						meleeComboIndex_ = 0;
+						meleeCombo_.ResetCombo();
 						if (bossStage_) bossStage_->SyncYawPitchFromCamera();
 						EndJustDodgeCounterAction();
 					} else {
@@ -1587,7 +1543,7 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 				if (jdActionPhaseTimer_ >= jdMeleeReturnDuration_) {
 					playerInputOffset_ = jdReturnOffset_;
 					playerVelocity_    = { 0.0f, 0.0f };
-					meleeComboIndex_   = 0; // 連撃終了でコンボ状態リセット
+					meleeCombo_.ResetCombo(); // 連撃終了でコンボ状態リセット
 					EndJustDodgeCounterAction();
 				}
 			}
@@ -1819,97 +1775,37 @@ void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forwa
 	right = rgt;
 }
 
-void StagePlayScene::SpawnPendingMelee()
+void StagePlayScene::SpawnComboMelee(const std::string& prefab, float damageScale)
 {
 	if (!player_) return;
 	SoundManager::GetInstance()->Play2DSound("se_melee");
 	Vector3 right, up, forward;
 	ComputeAimBasis(right, up, forward);
-	const int atk = ScaledPlayerAttack();
+	// 技の威力＝攻撃力 × damageScale（当たった時の本あて/持続あての倍率はプレハブ側で掛かる）
+	const int baseAtk = ScaledPlayerAttack();
+	const int atk = baseAtk > 0
+		? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(baseAtk) * damageScale)))
+		: 0;
 	// プレイヤー原点は足元なので、判定を world-up に meleeOriginHeight_ 持ち上げて体の中心から出す。
 	// サイズは STG=プレハブ基準(1.0)、ボス戦は当てやすすぎるので meleeBossSizeScale_ で縮小。
 	const float meleeSize = (phase_ == Phase::Boss) ? meleeBossSizeScale_ : 1.0f;
-	SpawnPlayerMelee(player_, right, up, forward, meleePendingPrefab_, atk,
+	SpawnPlayerMelee(player_, right, up, forward, prefab, atk,
 		{ 0.0f, meleeOriginHeight_, 0.0f }, meleeSize);
 }
 
-void StagePlayScene::UpdateMeleeCombo(InputActionMap* actions, float dt)
+void StagePlayScene::PlayComboClip(const std::string& clip, float speed, float fade, bool loop)
 {
-	PEPPER_SCOPE("StagePlayScene::UpdateMeleeCombo");
 	if (!player_) return;
+	player_->PlayAnimation(clip, fade);
+	player_->SetLoop(loop);
+	player_->SetPlaybackSpeed(speed);
+}
 
-	// タイマー進行
-	if (meleeActionLockTimer_ > 0.0f) {
-		meleeActionLockTimer_ -= dt;
-		if (meleeActionLockTimer_ < 0.0f) meleeActionLockTimer_ = 0.0f;
-	}
-	if (meleeComboIndex_ > 0) {
-		meleeComboTimer_ -= dt;
-		if (meleeComboTimer_ <= 0.0f) {
-			meleeComboTimer_ = 0.0f;
-			meleeComboIndex_ = 0; // 受付猶予超過でコンボリセット
-		}
-	}
-
-	// 発生待ち：startup 経過で判定を spawn
-	if (meleePending_) {
-		meleeStartupTimer_ -= dt;
-		if (meleeStartupTimer_ <= 0.0f) {
-			meleeStartupTimer_ = 0.0f;
-			meleePending_ = false;
-			SpawnPendingMelee();
-		}
-	}
-
-	if (!actions) return;
-
-	// 行動ロック中（発生〜後隙）は新規入力を一切受け付けない
-	if (meleeActionLockTimer_ > 0.0f) return;
-	// 分身カウンター派生中は通常の近接入力を受け付けない
-	// （MeleeStrong/MeleeWeak で派生が確定したフレームに通常近接が二重発動するのを防止）。
-	if (justDodgeCounterActive_ || jdSelecting_) return;
-
-	const bool strongTrig = actions->IsTriggered(static_cast<int>(Action::MeleeStrong));
-	const bool weakTrig   = actions->IsTriggered(static_cast<int>(Action::MeleeWeak));
-	if (!strongTrig && !weakTrig) return;
-
-	// 攻撃スロットを決定（強=単発でコンボリセット / 弱=1→2→3→4→1 と段送り）
-	std::string slot;
-	if (strongTrig) {
-		slot = "melee_strong";
-		meleeComboIndex_ = 0;
-	} else {
-		const int next = (meleeComboIndex_ % kMeleeWeakComboMax_) + 1;
-		slot = "melee_w" + std::to_string(next);
-		meleeComboIndex_ = next;
-	}
-
-	std::string prefab = Gameplay::Of(player_).FindBulletPrefab(slot);
-	if (prefab.empty()) prefab = "TemporaryPlayerMelee"; // フォールバック
-
-	// 発生/持続/後隙/受付猶予をプレハブの MeleeParams から
-	const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefab);
-	const PrefabDef& melee = (mdef && mdef->hasMelee) ? *mdef : PrefabDef::Defaults();
-	const float startup     = melee.meleeStartup;
-	const float active      = melee.meleeActiveDuration;
-	const float recovery    = melee.meleeRecovery;
-	const float comboWindow = melee.meleeComboWindow;
-
-	// 攻撃を予約：startup 後に判定発生。発生〜後隙まで全行動ロック。
-	meleePendingPrefab_ = prefab;
-	meleeStartupTimer_  = startup;
-	meleePending_       = true;
-	meleeActionLockTimer_ = startup + active + recovery;
-	MarkPlayerAttack();
-	// 後隙終了後 comboWindow 秒だけ次段を受け付ける（その間に入力が無ければコンボリセット）
-	meleeComboTimer_      = startup + active + recovery + comboWindow;
-
-	// startup が 0 なら同フレームで発生させる（1フレーム遅延を避ける）
-	if (meleeStartupTimer_ <= 0.0f) {
-		meleeStartupTimer_ = 0.0f;
-		meleePending_ = false;
-		SpawnPendingMelee();
-	}
+void StagePlayScene::RestoreComboPose()
+{
+	if (!player_) return;
+	player_->SetPlaybackSpeed(1.0f);
+	ApplyPlayerPose();
 }
 
 void StagePlayScene::UpdateJustDodgeEffect(float dt)
@@ -2120,6 +2016,11 @@ void StagePlayScene::OnImGuiTuning() {
 		ImGui::DragFloat("Boss Size Scale", &meleeBossSizeScale_, 0.01f, 0.05f, 2.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::TextDisabled("STG=1.0 固定 / Boss=この倍率（判定と見た目の両方）");
+		// 技の表・溜め攻撃（Resources/Json/Tuning/MeleeCombo.json。Save は Part 側のボタン）
+		if (ImGui::TreeNode("Combo")) {
+			meleeCombo_.OnImGui();
+			ImGui::TreePop();
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Stage Phase", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -2349,10 +2250,7 @@ void StagePlayScene::OnImGuiTuning() {
 		}
 		ImGui::DragFloat("Dodge Gauge Gain",    &dodgeSpecialGaugeGain_,0.1f, 0.0f, 100.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Melee Weak Gain",     &meleeWeakGaugeGain_,   0.1f, 0.0f, 100.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
-		ImGui::DragFloat("Melee Strong Gain",   &meleeStrongGaugeGain_, 0.1f, 0.0f, 100.0f, "%.2f");
-		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+		ImGui::TextDisabled("近接の 1 ヒットのゲージ量は技ごと（Melee > Combo の Gauge Gain）");
 		ImGui::DragFloat("Melee Late Rate",     &meleeLateGaugeRate_,   0.05f, 0.0f, 1.0f, "%.2f");
 		if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
 		ImGui::ProgressBar(specialGauge_ / (std::max)(1.0f, specialGaugeMax_), ImVec2(-1.0f, 0.0f));
@@ -2634,6 +2532,8 @@ void StagePlayScene::Initialize() {
 	// 自機のビーム（チャージ射撃・ファンネル大）。調整値は Resources/Json/Tuning/PlayerBeam.json
 	playerBeam_ = std::make_unique<PlayerBeamPart>();
 	playerBeam_->Initialize(this);
+	// 近接コンボ（24 番）。技の表は Resources/Json/Tuning/MeleeCombo.json
+	meleeCombo_.Initialize(this);
 	// ストリーミングの時刻表（LoadTuningFromJson で root["streaming"] を読む。配置を読む前に要る＝どれを後回しにするか）
 	streaming_ = std::make_unique<StageStreaming>();
 	streaming_->Initialize(this, "STAGEPLAY");
@@ -3025,7 +2925,7 @@ bool StagePlayScene::IsPlayerAttacking(InputActionMap* actions) const {
 	// 最後に撃つ／近接を出してから moveStateDelay_ 秒以内と、近接の発生〜後隙中を「攻撃中」とみなす。
 	// チャージは射撃ボタンを離している間に進むので数えない（チャージしながら移動状態で動ける）
 	(void)actions;
-	return timeSinceAttack_ < moveStateDelay_ || meleeActionLockTimer_ > 0.0f;
+	return timeSinceAttack_ < moveStateDelay_ || meleeCombo_.IsLocked();
 }
 
 void StagePlayScene::ApplyCameraIdleSway(float dt) {
@@ -4202,7 +4102,7 @@ void StagePlayScene::UpdatePlayerAttachments() {
 			const Matrix4x4 local = MakeAffineMatrix(Transform{ mw->bladeScale, mw->bladeRotate, mw->bladeOffset });
 			weaponBlade_->SetAppearance(mw->bladeLook);
 			weaponBlade_->SetWorld(Multiply(local, world));
-			weaponBlade_->SetActive(weaponBladePreview_ || meleeActionLockTimer_ > 0.0f || meleeComboTimer_ > 0.0f);
+			weaponBlade_->SetActive(weaponBladePreview_ || meleeCombo_.IsEngaged());
 			weaponBlade_->Update(GetScaledDeltaTime(TimeGroup::Player));
 		}
 	}
@@ -4539,8 +4439,7 @@ void StagePlayScene::UpdateReticleLockDisplay(bool hitEnemy, float distToEnemy, 
 	// レティクルが敵に重なっている時(hitEnemy)だけ判定。届くなら近接用テクスチャに切替。
 	bool meleeInRange = false;
 	if (hitEnemy) {
-		std::string mprefab = Gameplay::Of(player_).FindBulletPrefab("melee_w1");
-		if (mprefab.empty()) mprefab = "TemporaryPlayerMelee";
+		const std::string mprefab = meleeCombo_.GetReachPrefab();
 		float meleeRadius = 0.0f;
 		Vector3 meleeOff{ 0.0f, 0.0f, 0.0f };
 		if (const PrefabDef* md = PrefabManager::GetInstance()->Find(mprefab)) {
@@ -4620,7 +4519,7 @@ void StagePlayScene::UpdateShooting(InputActionMap* actions, bool gameFrozen) {
 #endif
 	// Fire 押下で発射（チャージ状態でも即発射、または連射）
 	if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f
-		&& meleeActionLockTimer_ <= 0.0f && player_) {
+		&& !meleeCombo_.IsLocked() && player_) {
 		FirePlayerShot();
 	}
 }
@@ -4769,13 +4668,14 @@ void StagePlayScene::FirePlayerShot() {
 
 // 近接・弾・飛行ユニット・被弾・必殺技（射撃より後。弾はこのフレームに撃った物も進める）
 void StagePlayScene::UpdateCombatAndSpecial(InputActionMap* actions, float worldDt, bool gameFrozen) {
-	// ----- 近接攻撃（弱4段コンボ / 強単発）-----
+	// ----- 近接攻撃（B/Y の 4 段コンボ / Y+B の溜め。MeleeComboPart）-----
 	// 分身カウンターの近接派生中は World=0 のため上の gameFrozen ブロックに入れない。
-	// MeleeCombo は startup/recovery タイマーや SpawnPendingMelee を駆動するので、
+	// MeleeComboPart は発生・スキ・溜めのタイマーと判定の出待ちを進めるので、
 	// 派生中も Player dt で必ず呼ぶ必要がある。
 	if (!gameFrozen || jdMeleeCameraActive_) {
 		const float dtP = GetScaledDeltaTime(TimeGroup::Player);
-		UpdateMeleeCombo(actions, dtP);
+		// 分身カウンターの選択中・派生中は通常の近接入力を受け付けない（派生が確定したフレームの二重発動を防ぐ）
+		meleeCombo_.Update(actions, dtP, !(justDodgeCounterActive_ || jdSelecting_));
 	}
 
 	// 弾の進行と寿命処理（World 時間軸で動かす）
@@ -5289,11 +5189,7 @@ SplineCurveActor* StagePlayScene::EnsureCameraPathSpline(const std::vector<Vecto
 // （enemyControllers_ は持っている敵のポインタがダングリングになるので必ずクリアする）。
 void StagePlayScene::ClearWaveRuntimeState() {
 	ClearCombatRuntime();
-	meleeComboIndex_ = 0;
-	meleeComboTimer_ = 0.0f;
-	meleeStartupTimer_ = 0.0f;
-	meleeActionLockTimer_ = 0.0f;
-	meleePending_ = false;
+	meleeCombo_.Reset();
 	// 敵・ボスと、自機/敵の弾・近接判定を遅延破棄する。
 	// 非アニメ Object3D の敵（ScreenHover/Static 型プレハブ例: HoverEnemy=kind:Object3D）も含める。
 	// これを漏らすと Seek のたびに固定敵が消えず、再スポーンで分身する。
@@ -5772,8 +5668,8 @@ void StagePlayScene::InitializeSpecialGaugeUI() {
 
 void StagePlayScene::OnPlayerMeleeHit([[maybe_unused]] IImGuiEditable* target, const std::string& prefabName, bool clean) {
 	if (!player_ || specialActive_) return;
-	const bool strong = (prefabName == Gameplay::Of(player_).FindBulletPrefab("melee_strong"));
-	float gain = strong ? meleeStrongGaugeGain_ : meleeWeakGaugeGain_;
+	(void)prefabName;
+	float gain = meleeCombo_.GetCurrentGaugeGain();
 	if (!clean) gain *= meleeLateGaugeRate_;
 	specialGauge_ = (std::min)(specialGaugeMax_, specialGauge_ + gain);
 }
