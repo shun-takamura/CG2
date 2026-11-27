@@ -1,0 +1,12 @@
+{
+  "_comment": "自機のアニメ（25 番）の共通の設定と、まだ持ち主のいない状態（後で）。clip は名前だけなら clipPrefix + 名前 + .anim。優先度の目安：土台 0 / 押している間 20〜25 / 1 回きり 30〜45 / 近接 50 / 被弾 60 / 必殺技 70 / 勝利 80 / 死亡 90",
+  "meleePriority": 50,
+  "runThreshold": 0.2,
+  "defaultFade": 0.15,
+  "clipPrefix": "Resources/Models/Player/PlayerModel/PlayerModel_",
+  "states": {
+    "landingTouchdown": { "clip": "", "loop": false, "fade": 0.1, "priority": 45 },
+    "victory": { "clip": "", "loop": false, "fade": 0.2, "priority": 80 },
+    "railDeath": { "clip": "", "loop": false, "fade": 0.1, "priority": 90 }
+  }
+}

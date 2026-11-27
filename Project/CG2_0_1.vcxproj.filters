@@ -52,6 +52,9 @@
     <Filter Include="DirectXGame\Game\Scene\Melee">
       <UniqueIdentifier>{c6501e82-3007-4ade-a4f9-bc967685ac9b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DirectXGame\Game\Scene\PlayerAnim">
+      <UniqueIdentifier>{748d7e67-527b-401c-92d5-eff97ef04f38}</UniqueIdentifier>
+    </Filter>
     <Filter Include="DirectXGame\Game\Scene\Beam">
       <UniqueIdentifier>{7c2e4a91-5b3d-4f8a-9e61-2d0b8c7f4a13}</UniqueIdentifier>
     </Filter>
@@ -224,6 +227,9 @@
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\Melee\MeleeComboPart.cpp">
       <Filter>DirectXGame\Game\Scene\Melee</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXGame\Game\Scene\PlayerAnim\PlayerAnimPart.cpp">
+      <Filter>DirectXGame\Game\Scene\PlayerAnim</Filter>
     </ClCompile>
     <ClCompile Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.cpp">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>
@@ -574,6 +580,9 @@
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\Melee\MeleeComboPart.h">
       <Filter>DirectXGame\Game\Scene\Melee</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXGame\Game\Scene\PlayerAnim\PlayerAnimPart.h">
+      <Filter>DirectXGame\Game\Scene\PlayerAnim</Filter>
     </ClInclude>
     <ClInclude Include="DirectXGame\Game\Scene\FlightUnit\FlightUnitAssault.h">
       <Filter>DirectXGame\Game\Scene\FlightUnit</Filter>

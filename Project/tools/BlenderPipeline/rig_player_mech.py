@@ -16,8 +16,13 @@
         --finish <編集用.blend> 手で直した編集用の .blend を PlayerBody にまとめ直して --save（既定 PlayerMech_rig.blend）へ
         --mirror-left-arm <編集用.blend>  その .blend の右腕（Body_RightArm）を左腕の鏡写しに置き換えて上書き保存。
                                右腕のボーンも左腕の鏡写しの位置にする。ほかの手の修正は残る
-        --body-clips <体の .blend>  体（PlayerModel_rig.blend）にスタート演出の姿勢のクリップ（BODY_CLIPS）を付け、
-                               --preview で確認画像、--export <フォルダ> で PlayerModel.gltf を書き出す（.blend は上書きしない）
+        --body-clips <体の .blend>  体（PlayerModel_rig.blend）に姿勢のクリップ（表は player_clips/<まとまり>.py、
+                               25_PlayerAnimClips.md）を付ける（.blend は上書きしない）
+                               --group melee[,move]  まとまりを選ぶ（既定・all は全部）。--export <フォルダ> で
+                                         まとまりごとに PlayerModel@<まとまり>.gltf（アーマチュアだけ・クリップだけ）を書き出す
+                               --mesh    --export で PlayerModel.gltf（メッシュとスケルトンだけ）も書き出す。モデルを変えた時だけ
+                               --clips B1,B2  確認用にクリップを絞る（--export とは一緒に使えない）
+                               --preview <フォルダ> で確認画像、--video <フォルダ> でクリップごとの mp4（正面・横・斜め前）
                                --preview-only KneelBoth,Kneel で確認画像を姿勢・クリップの名前で絞る
         --export-wings <羽根の .blend>  羽根（PlayerWings_rig.blend）を Deploy / Stow のクリップごと --export <フォルダ> へ
                                PlayerWings.gltf で書き出す
@@ -1755,128 +1760,82 @@ BODY_HEIGHT = [1.694]                 # 体の全高 [m]（--body-clips で測�
 #   ankle_lean … 足首を支点に、上体の形はそのまま体全体を前へ倒す [度]（2026-10-18 ユーザー）
 #   tilt  … 最後に腰のまわりで脚ごと前へ倒す [度]   sway … ループの小さな動き
 #   ground … 最後に、変形した体のいちばん低い所が床に来るよう腰ごと上下させる
+#   arms は {"Right": {...}, "Left": {...}} で左右別にも書ける（どちらも右側の書き方。左は x を反転する）
+#   base  … ほかの姿勢の名前。その姿勢の値を元にして、書いた項目だけ置き換える
+#   rotate … [(ボーン, 軸, 度), …]。bend の後・腕の前に、ボーンを頭のまわりにアーマチュアの空間の軸で回す（子も回る。
+#            ボーンは mixamorig: を除いた名前。腕は後で向きを付け直すので、ひねりは背骨・腰に使う）
+#   rotate_after … rotate と同じ書き方で、いちばん最後（arm_ik の後）に回す（手首のひねり・腕ごと振る など）
+#   call  … 関数 f(arm, rig, phase)。いちばん最後に呼ぶ（rig はこのスクリプト。上の書き方で足りない動きを
+#            まとまりのファイルの中で書く。共通の pose_body は直さない）
 PREVIEW_ONLY = []        # --preview-only <名前,…>：確認画像をこの姿勢・クリップだけにする
 FLOOR_Z = [0.0]          # 床の高さ（基本の姿勢の体のいちばん低い所。--body-clips で測る）
 BODY_OBJECT = [None]     # 変形後のメッシュを測るための体（--body-clips で入れる）
-# 両ひざをついた脚（右側で書く）：太ももは前へ傾けて腰をかかとの側へ引き、すねは後ろへ床に沿わせ・足の甲を床へ
-KNEEL_LEG_DIRS = {"UpLeg": (0.0, -0.3, -1.0), "Leg": (0.0, 1.0, 0.04), "Foot": (0.0, 1.0, -0.35)}
-BODY_POSES = {
-    # 射出前（カタパルトで機体確認をしている間）：直立・動かない（2026-10-18 ユーザー）。足は固定台の上なので
-    # 肩幅より広く、腰を少し下げて脚をわずかにハの字に。腕は体の横へ下ろす
-    "Stand": {
-        # 足首は足の中心を固定台に合わせて前へ 6.7cm ずれ、基本の姿勢の背骨も上ほど後ろへ傾いているので、そのままだと
-        # 後ろへ反って見えた（2026-10-18 ユーザー）。足首から前へ倒し、腰の背骨を少し曲げて頭を足の真上へ
-        "hips": {"offset": (0.0, 0.0, -0.04), "lean": 0.0},
-        "bend": {"Spine": 3.0, "Spine1": 3.0},
-        "arms": {"Arm": (-0.12, 0.0, -1.0), "ForeArm": (-0.08, -0.12, -1.0)},
-        "legs": {"ik": True, "knee": (-0.1, -1.0, 0.0), "toe_out": 0.0},
-        "ankle_lean": 4.0,
-    },
-    # 射出が始まってから（エンジンを吹かす）の前傾。ロボットなので呼吸の動きは付けない（2026-10-18 ユーザー）
-    "Catapult": {
-        "hips": {"offset": (0.0, 0.06, -0.22), "lean": 12.0},
-        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 8.0, "Neck": -10.0, "Head": -18.0},
-        "arms": {"Arm": (-0.35, 0.35, -1.0), "ForeArm": (-0.1, -0.5, -1.0)},
-        # つま先はレールに平行（開くと固定台の爪からはみ出す。2026-10-18）
-        "legs": {"ik": True, "knee": (-0.35, -1.0, 0.0), "toe_out": 0.0},
-        "ankle_lean": 8.0,
-    },
-    # 切り離しの溜め：もう少し沈み、腕を後ろへ引く
-    "LaunchDip": {
-        "hips": {"offset": (0.0, 0.08, -0.29), "lean": 16.0},
-        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 8.0, "Neck": -14.0, "Head": -20.0},
-        "arms": {"Arm": (-0.3, 0.6, -1.0), "ForeArm": (-0.1, 0.0, -1.0)},
-        "legs": {"ik": True, "knee": (-0.35, -1.0, 0.0), "toe_out": 0.0},
-        "ankle_lean": 10.0,
-    },
-    # けり出し：かかとを上げてつま先で床をけり、脚を伸ばして体全体が前へ倒れる。腕は後ろへ振る
-    "LaunchPush": {
-        "hips": {"offset": (0.0, 0.0, 0.05), "lean": 10.0},
-        "bend": {"Spine": 4.0, "Spine1": 4.0, "Spine2": 4.0, "Neck": -18.0, "Head": -22.0},
-        "arms": {"Arm": (-0.25, 0.9, -0.5), "ForeArm": (-0.2, 0.8, -0.6)},
-        "legs": {"ik": True, "knee": (-0.2, -1.0, 0.0), "toe_out": 0.0, "heel_lift": 35.0},
-        "ankle_lean": 30.0,
-    },
-    "Fly": {
-        # 体全体を前へ傾ける（2026-10-18 ユーザー：上から吊られているように見える）
-        "tilt": 40.0,
-        "hips": {"offset": (0.0, 0.0, 0.0), "lean": 10.0},
-        "bend": {"Spine": 3.0, "Spine1": 3.0, "Spine2": 3.0, "Neck": -20.0, "Head": -25.0},
-        "arms": {"Arm": (-0.45, 0.3, -1.0), "ForeArm": (-0.25, -0.1, -1.0)},
-        "legs": {"ik": False,
-                 "Right": {"UpLeg": (-0.03, 0.15, -1.0), "Leg": (0.0, 0.35, -1.0), "Foot": (0.0, 0.25, -1.0)},
-                 "Left": {"UpLeg": (0.03, 0.30, -1.0), "Leg": (0.0, 0.95, -0.8), "Foot": (0.0, 0.8, -1.0)}},
-        "sway": {"spine": 1.0, "hips_z": 0.012, "arm": 3.0, "leg": 3.0},
-    },
-    # ボス戦の死亡演出（19_GameOverAndDifficulty.md §1.2、G3。2026-10-23 ユーザー決定：倒れ込まずに
-    # 両ひざをついてうなだれる）。よろめき：足は直立の位置のまま、腰が落ちて両ひざが曲がり、上体が前へ崩れる。
-    # 首はまだ力が入っていて、上体の傾きを打ち消して顔は前を向いたまま（2026-10-23 ユーザー：序盤で首が傾いて見えた）
-    "KneelBuckle": {
-        "hips": {"offset": (0.0, 0.03, -0.14), "lean": 10.0},
-        "bend": {"Spine": 8.0, "Spine1": 8.0, "Spine2": 6.0, "Neck": -18.0, "Head": -14.0},
-        "arms": {"Arm": (-0.15, -0.15, -1.0), "ForeArm": (-0.08, -0.25, -1.0)},
-        "legs": {"ik": True, "knee": (-0.15, -1.0, 0.0), "toe_out": 0.0},
-        "ankle_lean": 4.0,
-    },
-    # 両ひざをつく：腰はかかとの側へ引き（太ももは前へ傾く）、上体は起こしたまま。首はまだ前を向く
-    # （2026-10-23 ユーザー：前傾すぎ。腰を引く。首は最初から下げない）
-    "KneelBoth": {
-        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
-        "bend": {"Spine": 0.0, "Spine1": 2.0, "Spine2": 4.0, "Neck": 0.0, "Head": 0.0},
-        "arms": {"Arm": (-0.12, -0.05, -1.0), "ForeArm": (-0.05, -0.1, -1.0)},
-        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
-        "ground": True,
-    },
-    # 胸が前へ傾く：腹ではなく胸（Spine2）から折れる。首はまだ力が入っていて、胸の傾きを打ち消して顔は前を向いたまま
-    # （2026-10-23 ユーザー：胸が傾く途中で首が傾いて見えた）
-    "KneelChest": {
-        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
-        "bend": {"Spine": 0.0, "Spine1": 6.0, "Spine2": 20.0, "Neck": -14.0, "Head": -10.0},
-        "arms": {"Arm": (-0.1, 0.0, -1.0), "ForeArm": (-0.03, 0.0, -1.0)},
-        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
-        "ground": True,
-    },
-    # うなだれる：胸が傾いた後、首の力が抜けて頭が落ちる。腕はまっすぐ垂れ下がる
-    "KneelHang": {
-        "hips": {"offset": (0.0, 0.0, 0.0), "lean": -4.0},
-        "bend": {"Spine": 0.0, "Spine1": 6.0, "Spine2": 20.0, "Neck": 28.0, "Head": 22.0},
-        "arms": {"Arm": (-0.1, 0.0, -1.0), "ForeArm": (-0.03, 0.0, -1.0)},
-        "legs": {"ik": False, "Right": KNEEL_LEG_DIRS, "Left": KNEEL_LEG_DIRS},
-        "ground": True,
-    },
-}
-# クリップ（エンジンでは PlayerModel_<名前>.anim）。pose＝その姿勢で sway のループ。
-# keys＝[(秒, 姿勢)] のあいだをつなぐ 1 回きりのクリップ（ボーンごとに位置を線形・回転を球面線形、キーのあいだは smoothstep）。
-# (秒, 姿勢, つなぎ方) で前のキーからのつなぎ方を変えられる：in＝加速していく（力が抜けて落ちる）、linear＝等速
-BODY_CLIPS = {
-    "Stand": {"duration": 1.0, "pose": "Stand"},                  # 機体確認の間の直立（ループ・動かない）
-    "Ignite": {"duration": 0.5, "keys": [(0.0, "Stand"), (0.5, "Catapult")]},   # 直立 → 前傾（1 回）
-    "Catapult": {"duration": 1.0, "pose": "Catapult"},            # 前傾の保持（ループ・動かない）
-    "Launch": {"duration": 0.9, "keys": [(0.0, "Catapult"), (0.15, "LaunchDip"),
-                                        (0.45, "LaunchPush"), (0.9, "Fly")]},   # 切り離しのジャンプ（1 回）
-    "Fly": {"duration": 2.0, "pose": "Fly"},                      # 雲の上（ループ）
-    # HUB の乗り込み（2026-10-18 ユーザー）：「搭乗」で直立から右手を胸の前へ差し出し、パイロットが手のひらを伝って胸へ入る
-    "Offer": {"duration": 1.6, "keys": [(0.0, "Stand"), (1.6, "Offer")]},       # 直立 → 手を差し出す（1 回）
-    "OfferHold": {"duration": 1.0, "pose": "Offer"},              # 差し出したまま（ループ・動かない。降りるの始まり）
-    "Retract": {"duration": 1.4, "keys": [(0.0, "Offer"), (1.4, "Stand")]},     # 手を戻して直立へ（1 回）
-    # ボス戦の死亡演出（G3）：よろめいて両ひざをつき、一拍おいて胸が前へ傾き、それから首の力が抜けて頭が落ちる（うなだれる）。
-    # 1 回きり・エンジンは最後のコマで止める。力が抜けるところは加速して（in）、止まる所で速さを殺さない
-    "Kneel": {"duration": 2.0, "keys": [(0.0, "Stand"), (0.35, "KneelBuckle"), (0.8, "KneelBoth"), (1.1, "KneelBoth"),
-                                       (1.55, "KneelChest", "in"), (2.0, "KneelHang", "in")]},
-}
+# 姿勢・クリップの表は player_clips/<まとまり>.py（25_PlayerAnimClips.md）。load_clip_tables で全部のまとまりを読んで
+# ここへまとめる。BODY_GROUP_OF＝クリップの名前 → まとまり、CLIP_GROUPS＝まとまり → モジュール
+BODY_POSES = {}
+BODY_CLIPS = {}
+BODY_GROUP_OF = {}
+CLIP_GROUPS = {}
+# 姿勢の項目が無いときの値（直立の脚＝start の Stand と同じ）
+DEFAULT_POSE_HIPS = {"offset": (0.0, 0.0, 0.0), "lean": 0.0}
+DEFAULT_POSE_LEGS = {"ik": True, "knee": (-0.1, -1.0, 0.0), "toe_out": 0.0}
+BODY_GLTF_NAME = "PlayerModel"   # 書き出す glTF の名前（まとまりは PlayerModel@<まとまり>.gltf）
+VIDEO_SIZE = (960, 600)          # 確認の動画の大きさ
+VIDEO_HOLD_FRAMES = 10           # 1 回きりのクリップの動画の最後に止めるコマ数
 
-# HUB で右手を差し出す姿勢（18_HubTransitions.md ①）。値はエンジンの座標 [m]（機体の原点から、正面 +Z。
-# HUB の機体の大きさはカタパルトと同じ 18m）。Blender のアーマチュアの空間へは (x, y, z) → (−x, −z, y) / 拡大率
-HUB_OFFER = {
-    "palm": (0.0, 11.0, 3.0),        # 手のひらの上面の中心。足場（上面 10.6・先 z 3.85、gen_hub_temple.py）の先で 0.4m 上（ユーザー：もう少し上）
-    "fingers": (-1.0, 0.0, 0.3),     # 指先の向き。体の内側（右手は +X 側なので −X）へ、少し前へ
-    "elbow": (1.0, -0.6, 0.2),       # ひじを出す側（外・下）
-    "clavicle": 0.0,                 # 鎖骨（Shoulder）を前へ回す [度]。届かないときに足す
-}
+
+def load_clip_tables():
+    """player_clips の全部のまとまりを読み、BODY_POSES / BODY_CLIPS にまとめる（名前が重なったら止める）。
+    "base" はここで元の姿勢の値と合わせておく"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import player_clips
+    CLIP_GROUPS.update(player_clips.load_groups())
+    pose_group = {}
+    for group, module in CLIP_GROUPS.items():
+        for name, spec in module.POSES.items():
+            if name in pose_group:
+                raise SystemExit(f"[rig_player_mech] 姿勢 {name} が {pose_group[name]}.py と {group}.py の両方にある")
+            pose_group[name] = group
+            BODY_POSES[name] = spec
+        for name, spec in module.CLIPS.items():
+            if name in BODY_GROUP_OF:
+                raise SystemExit(f"[rig_player_mech] クリップ {name} が {BODY_GROUP_OF[name]}.py と {group}.py の両方にある")
+            BODY_GROUP_OF[name] = group
+            BODY_CLIPS[name] = spec
+
+    def resolve(name, seen):
+        spec = BODY_POSES[name]
+        base = spec.get("base")
+        if not base:
+            return spec
+        if base not in BODY_POSES or base in seen:
+            raise SystemExit(f"[rig_player_mech] 姿勢 {name} の base {base} が無い（か、ぐるりと戻っている）")
+        merged = {**resolve(base, seen | {name}), **spec}
+        merged.pop("base", None)
+        return merged
+    for name in list(BODY_POSES):
+        BODY_POSES[name] = resolve(name, set())
+    for clip, spec in BODY_CLIPS.items():
+        used = [spec["pose"]] if "pose" in spec else [k[1] for k in spec["keys"]]
+        for pose in used:
+            if pose not in BODY_POSES:
+                raise SystemExit(f"[rig_player_mech] クリップ {clip}（{BODY_GROUP_OF[clip]}.py）の姿勢 {pose} が無い")
+    log(f"まとまり {len(CLIP_GROUPS)} 個（{', '.join(f'{g} {sum(1 for c in BODY_GROUP_OF.values() if c == g)} 本' for g in CLIP_GROUPS)}）")
+
+
+def clip_poses(clips):
+    """クリップ clips が使う姿勢の名前（重なりなし・出てきた順）"""
+    names = []
+    for clip in clips:
+        spec = BODY_CLIPS[clip]
+        for pose in ([spec["pose"]] if "pose" in spec else [k[1] for k in spec["keys"]]):
+            if pose not in names:
+                names.append(pose)
+    return names
+
 # 基本の姿勢（T ポーズ）の手のひらの向き（アーマチュアの空間）。手のひらは下（下から撮って確かめた。頂点の薄い向きは
 # 親指に引かれて 27° 傾くので使わない）
 HAND_REST_PALM_NORMAL = (0.0, 0.0, -1.0)
-BODY_POSES["Offer"] = {**BODY_POSES["Stand"], "arm_ik": HUB_OFFER}
 
 
 def side_vec(v, side):
@@ -1983,17 +1942,21 @@ def pose_body(arm, name, phase=0.0):
     x_axis = Vector((1.0, 0.0, 0.0))
 
     hips = arm.pose.bones[MX + "Hips"]
-    offset = Vector(spec["hips"]["offset"]) + Vector((0.0, 0.0, sway.get("hips_z", 0.0) * wave))
+    hips_spec = {**DEFAULT_POSE_HIPS, **spec.get("hips", {})}
+    offset = Vector(hips_spec["offset"]) + Vector((0.0, 0.0, sway.get("hips_z", 0.0) * wave))
     hips.matrix = Matrix.Translation(offset) @ hips.matrix
     bpy.context.view_layer.update()
-    rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(spec["hips"]["lean"])))
-    for bone, deg in spec["bend"].items():
+    rotate_pose_bone(arm, hips.name, Quaternion(x_axis, np.radians(hips_spec["lean"])))
+    for bone, deg in spec.get("bend", {}).items():
         if bone in ("Spine1", "Spine2"):
             deg += sway.get("spine", 0.0) * wave * 0.5
         rotate_pose_bone(arm, MX + bone, Quaternion(x_axis, np.radians(deg)))
+    rotate_pose_list(arm, spec.get("rotate", []))
+    arms = spec.get("arms", {})
     for side in ("Right", "Left"):
+        side_arms = arms.get(side, arms)
         for link in ("Arm", "ForeArm", "Hand"):
-            d = spec["arms"].get(link)
+            d = side_arms.get(link)
             if d:
                 pose_bone_toward(arm, MX + side + link, side_vec(d, side))
         if sway.get("arm"):
@@ -2001,7 +1964,7 @@ def pose_body(arm, name, phase=0.0):
             rotate_pose_bone(arm, MX + side + "Arm",
                              Quaternion(x_axis, np.radians(sway["arm"] * wave * phase_sign)))
 
-    legs = spec["legs"]
+    legs = spec.get("legs", DEFAULT_POSE_LEGS)
     if spec.get("ankle_lean"):
         # 足首（両足の真ん中）を支点に、上体の形はそのまま体全体を前へ倒す。脚は下の IK で足首に戻す
         pivot = (body_ankle_target(arm, "Right") + body_ankle_target(arm, "Left")) * 0.5
@@ -2028,6 +1991,15 @@ def pose_body(arm, name, phase=0.0):
         bpy.context.view_layer.update()
     if spec.get("arm_ik"):
         arm_ik(arm, "Right", spec["arm_ik"])
+    rotate_pose_list(arm, spec.get("rotate_after", []))
+    if spec.get("call"):
+        spec["call"](arm, sys.modules[__name__], phase)
+
+
+def rotate_pose_list(arm, items):
+    """[(ボーン, 軸, 度), …] の順にボーンを頭のまわりに回す（軸はアーマチュアの空間、ボーンは mixamorig: を除いた名前）"""
+    for bone, axis, deg in items:
+        rotate_pose_bone(arm, MX + bone, Quaternion(Vector(axis).normalized(), np.radians(deg)))
 
 
 def posed_min_z(body):
@@ -2159,9 +2131,36 @@ def pose_clip(arm, clip, t, captured):
             return
 
 
-def add_body_clips(arm):
-    """BODY_CLIPS を毎コマのキーで焼き、NLA に並べる。肩の装甲のボーンは回転コピーの拘束のまま
-    （glTF の書き出しはコマごとに拘束込みの姿勢を取るので、キーは打たない）"""
+def capture_body_poses(arm, poses):
+    """姿勢 poses を 1 つずつ付けて取っておく（keys のクリップはこれを補間する）"""
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="POSE")
+    for pb in arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    captured = {}
+    for name in poses:
+        pose_body(arm, name)
+        captured[name] = capture_pose(arm)
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return captured
+
+
+def clear_body_clips(arm):
+    """焼いたクリップ（NLA のトラックとアクション）を消す。まとまりごとに書き出す前に呼ぶ"""
+    if arm.animation_data:
+        arm.animation_data.action = None
+        for track in list(arm.animation_data.nla_tracks):
+            arm.animation_data.nla_tracks.remove(track)
+    for action in [a for a in bpy.data.actions if a.name in BODY_CLIPS or a.name.split(".")[0] in BODY_CLIPS]:
+        bpy.data.actions.remove(action)
+
+
+def add_body_clips(arm, clips, captured):
+    """クリップ clips を毎コマのキーで焼き、NLA に並べる（トラックの名前＝クリップの名前＝glTF のアニメの名前）。
+    肩の装甲のボーンは回転コピーの拘束のまま（glTF の書き出しはコマごとに拘束込みの姿勢を取るので、キーは打たない）"""
     bpy.ops.object.select_all(action="DESELECT")
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="POSE")
@@ -2169,11 +2168,8 @@ def add_body_clips(arm):
     keyed = [pb for pb in arm.pose.bones if pb.name.startswith(MX)]
     for pb in arm.pose.bones:
         pb.rotation_mode = "QUATERNION"
-    captured = {}
-    for name in BODY_POSES:
-        pose_body(arm, name)
-        captured[name] = capture_pose(arm)
-    for clip, spec in BODY_CLIPS.items():
+    for clip in clips:
+        spec = BODY_CLIPS[clip]
         action = bpy.data.actions.new(clip)
         action.use_fake_user = True
         arm.animation_data.action = action
@@ -2188,12 +2184,43 @@ def add_body_clips(arm):
         track.strips.new(clip, 0, action)
         track.mute = True
         arm.animation_data.action = None
-        log(f"体のクリップ {clip}: {spec['duration']} 秒・{frames + 1} コマ")
+        log(f"体のクリップ {clip}（{BODY_GROUP_OF[clip]}）: {spec['duration']} 秒・{frames + 1} コマ")
     for pb in arm.pose.bones:
         pb.matrix_basis = Matrix()
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.context.scene.render.fps = BODY_ANIM_FPS
-    return captured
+
+
+def render_body_clip_videos(arm, body, clips, out_dir):
+    """クリップごとに、そのトラックだけを効かせて動画（mp4）を撮る（正面・横・斜め前）。add_body_clips の後に呼ぶ"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cam = setup_render(*VIDEO_SIZE)
+    sc = bpy.context.scene
+    sc.display.shading.color_type = "TEXTURE"
+    sc.render.image_settings.file_format = "FFMPEG"
+    sc.render.ffmpeg.format = "MPEG4"
+    sc.render.ffmpeg.codec = "H264"
+    sc.render.fps = BODY_ANIM_FPS
+    floor = add_box("VideoFloor", (0.0, 0.0, FLOOR_Z[0] - 0.006), (2.0, 2.0, 0.01), (0.35, 0.35, 0.37, 1.0))
+    views = [("front", (0.0, -4.0, 0.85)), ("side", (4.0, 0.0, 0.85)), ("front_diag", (2.4, -3.0, 1.2))]
+    tracks = arm.animation_data.nla_tracks
+    for clip in clips:
+        spec = BODY_CLIPS[clip]
+        for track in tracks:
+            track.mute = track.name != clip
+        hold = 0 if "pose" in spec else VIDEO_HOLD_FRAMES
+        sc.frame_start, sc.frame_end = 0, int(round(spec["duration"] * BODY_ANIM_FPS)) + hold
+        for view, loc in views:
+            look(cam, Vector(loc), Vector((0.0, 0.0, 0.8)), 2.8)
+            sc.render.filepath = str((out_dir / f"clip_{clip}_{view}.mp4").resolve())
+            bpy.ops.render.render(animation=True)
+            log(f"wrote {sc.render.filepath}")
+    for track in tracks:
+        track.mute = True
+    sc.render.image_settings.file_format = "PNG"
+    bpy.data.objects.remove(floor, do_unlink=True)
+    bpy.data.objects.remove(cam, do_unlink=True)
+    sc.frame_set(0)
 
 
 def add_box(name, center, size, color):
@@ -2265,9 +2292,9 @@ def preview_hub_marks(scale):
     return objs
 
 
-def preview_body_clips(arm, body, wings_blend, captured, out_dir):
-    """姿勢ごとに正面・横・斜め後ろ・斜め前から（床の上の姿勢は床と固定台の目印、Fly は開いた羽根を付けて）と、
-    Launch のコマを横から並べた 1 枚"""
+def preview_body_clips(arm, body, wings_blend, captured, out_dir, clips):
+    """クリップ clips の姿勢ごとに正面・横・斜め後ろ・斜め前から（床の上の姿勢は床と固定台の目印、Fly は開いた羽根を付けて）と、
+    1 回きりのクリップのコマを横から並べた 1 枚"""
     out_dir.mkdir(parents=True, exist_ok=True)
     cam = setup_render(1600, 1000)
     sc = bpy.context.scene
@@ -2277,7 +2304,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
     views = [("front", (0.0, -4.0, 0.85)), ("side", (4.0, 0.0, 0.85)),
              ("back_diag", (-2.6, 3.0, 2.0)), ("front_diag", (2.4, -3.0, 1.2))]
     hub = preview_hub_marks(catapult_scale())
-    for name in BODY_POSES:
+    for name in clip_poses(clips):
         if PREVIEW_ONLY and name not in PREVIEW_ONLY:
             continue
         pose_body(arm, name)
@@ -2295,7 +2322,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
         if name == "Offer":
             # 手のまわりを近くから（斜め前・横・足場の上の待機の視点＝エンジンの (0, 12.2, 6.6) から）
             s = catapult_scale()
-            palm = engine_to_arm(HUB_OFFER["palm"], s)
+            palm = engine_to_arm(CLIP_GROUPS["start"].HUB_OFFER["palm"], s)
             for view, loc in [("hand_diag", palm + Vector((-0.35, -0.45, 0.25))), ("hand_side", palm + Vector((-0.6, 0.05, 0.05)))]:
                 look(cam, loc, palm + Vector((0.0, 0.05, 0.05)), 0.9)
                 render(out_dir / f"body_{name}_{view}.png")
@@ -2312,7 +2339,7 @@ def preview_body_clips(arm, body, wings_blend, captured, out_dir):
         o.hide_render = True
     for o in ground:
         o.hide_render = False
-    for clip in [c for c, spec in BODY_CLIPS.items() if "keys" in spec and (not PREVIEW_ONLY or c in PREVIEW_ONLY)]:
+    for clip in [c for c in clips if "keys" in BODY_CLIPS[c] and (not PREVIEW_ONLY or c in PREVIEW_ONLY)]:
         duration = BODY_CLIPS[clip]["duration"]
         paths = []
         for i in range(7):
@@ -2357,9 +2384,10 @@ def flip_texcoord_v(gltf_path):
     log(f"TEXCOORD_0 の V を反転（{gltf_path.name}）")
 
 
-def export_skinned(objs, path):
-    """メッシュとアーマチュアを glTF（Separate）で。NLA のトラックごとにクリップを書き出し、
-    テクスチャは元の PNG（.blend の隣の textures/）をそのまま参照する"""
+def export_skinned(objs, path, animations=True):
+    """メッシュとアーマチュアを glTF（Separate）で。NLA のトラックごとにクリップを書き出し（animations が False なら
+    クリップなし）、テクスチャは元の PNG（.blend の隣の textures/）をそのまま参照する。アーマチュアだけを渡すと
+    メッシュの無い glTF（クリップだけ。cook は PlayerModel@<まとまり>.gltf を .anim だけにする）"""
     for o in bpy.data.objects:
         if o.animation_data:
             for track in o.animation_data.nla_tracks:
@@ -2371,7 +2399,7 @@ def export_skinned(objs, path):
     bpy.context.view_layer.objects.active = objs[0]
     path.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=str(path.resolve()), export_format="GLTF_SEPARATE", use_selection=True,
-                              export_yup=True, export_apply=False, export_animations=True,
+                              export_yup=True, export_apply=False, export_animations=animations,
                               export_animation_mode="NLA_TRACKS", export_force_sampling=True,
                               export_optimize_animation_size=False, export_keep_originals=True,
                               export_image_format="AUTO")
@@ -2379,7 +2407,10 @@ def export_skinned(objs, path):
     log(f"exported {path}")
 
 
-def body_clips(body_blend, wings_blend, preview_dir, export_dir):
+def body_clips(body_blend, wings_blend, preview_dir, export_dir, groups, clip_filter, video_dir, export_mesh):
+    """体のクリップ。groups（まとまりの名前）のクリップを焼き、確認画像（preview_dir）・動画（video_dir）を出し、
+    export_dir へまとまりごとに PlayerModel@<まとまり>.gltf（アーマチュアだけ）を書き出す。export_mesh なら
+    PlayerModel.gltf（メッシュとスケルトンだけ、クリップなし）も。clip_filter は確認用にクリップを絞る"""
     bpy.ops.wm.open_mainfile(filepath=str(body_blend.resolve()))
     arm, body = bpy.data.objects["PlayerBodyRig"], bpy.data.objects["PlayerBody"]
     for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
@@ -2392,20 +2423,38 @@ def body_clips(body_blend, wings_blend, preview_dir, export_dir):
         f"x ±{CATAPULT_CLAMP[0] / scale:.4f}・前 {CATAPULT_CLAMP[1] / scale:.4f}")
     fit_feet(body, arm)
     measure_hand(body, arm, "Right")
-    captured = add_body_clips(arm)
-    if preview_dir:
-        preview_body_clips(arm, body, wings_blend, captured, preview_dir)
-    pose_body(arm, "Catapult")
-    for side in ("Right", "Left"):
-        foot = arm.pose.bones[MX + side + "Foot"]
-        log(f"Catapult の {side} の足首 {tuple(round(c, 4) for c in foot.head)}"
-            f"（エンジンの座標 x {-foot.head.x:+.4f}・前 {-foot.head.y:+.4f}）")
+    group_clips = [c for c in BODY_CLIPS if BODY_GROUP_OF[c] in groups]
+    selected = [c for c in group_clips if not clip_filter or c in clip_filter]
+    captured = capture_body_poses(arm, clip_poses(group_clips))
+    if (preview_dir or video_dir) and selected:
+        add_body_clips(arm, selected, captured)
+        if preview_dir:
+            preview_body_clips(arm, body, wings_blend, captured, preview_dir, selected)
+        if video_dir:
+            render_body_clip_videos(arm, body, selected, video_dir)
+        clear_body_clips(arm)
+    if "Catapult" in captured:
+        pose_body(arm, "Catapult")
+        for side in ("Right", "Left"):
+            foot = arm.pose.bones[MX + side + "Foot"]
+            log(f"Catapult の {side} の足首 {tuple(round(c, 4) for c in foot.head)}"
+                f"（エンジンの座標 x {-foot.head.x:+.4f}・前 {-foot.head.y:+.4f}）")
     for pb in arm.pose.bones:
         pb.matrix_basis = Matrix()
     bpy.context.view_layer.update()
-    if export_dir:
+    if not export_dir:
+        return
+    if export_mesh:
         set_export_material(body_blend.parent)
-        export_skinned([body, arm], export_dir / "PlayerModel.gltf")
+        export_skinned([body, arm], export_dir / f"{BODY_GLTF_NAME}.gltf", animations=False)
+    for group in groups:
+        clips = [c for c in group_clips if BODY_GROUP_OF[c] == group]
+        if not clips:
+            log(f"まとまり {group} にはクリップが無いので書き出さない")
+            continue
+        add_body_clips(arm, clips, captured)
+        export_skinned([arm], export_dir / f"{BODY_GLTF_NAME}@{group}.gltf")
+        clear_body_clips(arm)
 
 
 # 材質の比較（2026-10-18 ユーザー：実機で反射が強すぎて表面がざらざらに見える）。Eevee・アンチエイリアス 1 サンプル
@@ -2554,7 +2603,26 @@ def main():
         PREVIEW_ONLY.extend(argv[argv.index("--preview-only") + 1].split(","))
     if clips_body:
         wings_blend = arg_path(argv, "--wings-blend") or Path("Assets/Models/Player/PlayerWings/PlayerWings_rig.blend")
-        body_clips(clips_body, wings_blend, preview_dir, export_dir)
+        load_clip_tables()
+        group_arg = argv[argv.index("--group") + 1] if "--group" in argv else ""
+        groups = list(CLIP_GROUPS) if group_arg in ("", "all") else group_arg.split(",")
+        for g in groups:
+            if g not in CLIP_GROUPS:
+                raise SystemExit(f"[rig_player_mech] まとまり {g} が無い（player_clips/{g}.py）。あるのは {', '.join(CLIP_GROUPS)}")
+        clip_filter = argv[argv.index("--clips") + 1].split(",") if "--clips" in argv else []
+        for c in clip_filter:
+            if c not in BODY_CLIPS:
+                raise SystemExit(f"[rig_player_mech] クリップ {c} が無い")
+        export_mesh = "--mesh" in argv
+        if export_dir and not (group_arg or export_mesh):
+            raise SystemExit("[rig_player_mech] --export には --group <まとまり>（クリップ）か --mesh（メッシュ）が要る。"
+                             "ほかのまとまりの作りかけを混ぜないため、全部を書き出すときも --group all と書く")
+        if export_dir and clip_filter:
+            raise SystemExit("[rig_player_mech] --clips は確認用（--preview / --video）。書き出しはまとまりごと全部のクリップで行う")
+        if export_mesh and not group_arg:
+            groups = []
+        body_clips(clips_body, wings_blend, preview_dir, export_dir, groups, clip_filter,
+                   arg_path(argv, "--video"), export_mesh)
         return
     material_blend = arg_path(argv, "--material-test")
     if material_blend:

@@ -547,7 +547,9 @@ void Scene::DrawShadowCasters() {
 void Scene::UpdateDynamicAnimated(float deltaTime) {
 	PEPPER_SCOPE("Scene::UpdateDynamicAnimated");
 	for (auto& a : dynamicAnimated_) {
-		a->Update(deltaTime);
+		// World 以外の時間を指定した物（自機＝Player など）はその時間で進める（ワールドが止まっても動く）
+		const TimeGroup g = a->GetTimeGroup();
+		a->Update(g == TimeGroup::World ? deltaTime : GetScaledDeltaTime(g));
 	}
 }
 

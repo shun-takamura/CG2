@@ -119,6 +119,9 @@ void AnimatedObject3DInstance::PlayAnimation(const std::string& animPath, float 
         prevAnimation_ = animatedModelInstance_->GetAnimation();
         prevAnimationTime_ = animationTime_;
         hasPrevAnimation_ = (prevAnimation_.duration > 0.0f);
+        // SetLoop / SetPlaybackSpeed は PlayAnimation の後に呼ばれるので、ここではまだ旧クリップの値
+        prevLoop_ = isLoop_;
+        prevPlaybackSpeed_ = playbackSpeed_;
         fadeTimer_ = 0.0f;
         fadeDuration_ = fadeTime;
     } else {
@@ -157,11 +160,16 @@ void AnimatedObject3DInstance::Update(float deltaTime)
 
     // フェード中は旧アニメーションの時刻も進める（自然に動き続けて見せる）
     if (hasPrevAnimation_) {
-        prevAnimationTime_ += deltaTime * playbackSpeed_;
+        prevAnimationTime_ += deltaTime * prevPlaybackSpeed_;
         if (prevAnimation_.duration > 0.0f) {
-            prevAnimationTime_ = std::fmod(prevAnimationTime_, prevAnimation_.duration);
-            if (prevAnimationTime_ < 0.0f) {
-                prevAnimationTime_ += prevAnimation_.duration;
+            if (prevLoop_) {
+                prevAnimationTime_ = std::fmod(prevAnimationTime_, prevAnimation_.duration);
+                if (prevAnimationTime_ < 0.0f) {
+                    prevAnimationTime_ += prevAnimation_.duration;
+                }
+            } else {
+                // ループしないクリップは最後のコマで止める
+                prevAnimationTime_ = std::clamp(prevAnimationTime_, 0.0f, prevAnimation_.duration);
             }
         }
         fadeTimer_ += deltaTime;

@@ -1,0 +1,9 @@
+{
+  "_comment": "まとまり E（必殺技）。持ち主は E のチャット（25 番 §5）。Shatterline は段ごと（構え → 振り抜き〈崩壊の間も〉 → 硬直）",
+  "states": {
+    "stormLock": { "clip": "", "loop": true, "fade": 0.1, "priority": 70 },
+    "shatterlineCharge": { "clip": "", "loop": true, "fade": 0.1, "priority": 70 },
+    "shatterlineSlash": { "clip": "", "loop": false, "fade": 0.05, "priority": 70 },
+    "shatterlineRecover": { "clip": "", "loop": false, "fade": 0.1, "priority": 70 }
+  }
+}

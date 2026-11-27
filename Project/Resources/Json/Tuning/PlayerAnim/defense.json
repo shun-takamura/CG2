@@ -1,0 +1,9 @@
+{
+  "_comment": "まとまり D（被弾・回復・盾）。持ち主は D のチャット（25 番 §5）。shieldGuard は構える操作がまだ無いので、呼ぶ所も D で決める",
+  "states": {
+    "railHit": { "clip": "", "loop": false, "fade": 0.05, "priority": 60 },
+    "groundHit": { "clip": "", "loop": false, "fade": 0.05, "priority": 60 },
+    "heal": { "clip": "", "loop": false, "fade": 0.1, "priority": 40 },
+    "shieldGuard": { "clip": "", "loop": true, "fade": 0.1, "priority": 25 }
+  }
+}

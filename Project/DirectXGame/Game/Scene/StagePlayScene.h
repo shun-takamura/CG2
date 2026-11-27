@@ -16,6 +16,7 @@
 #include "FlightUnit/FlightUnitPart.h"
 #include "Beam/PlayerBeamPart.h"
 #include "Melee/MeleeComboPart.h"
+#include "PlayerAnim/PlayerAnimPart.h"
 #include "Special/ISpecialMoveHost.h"
 #include "Special/ShatterlinePart.h"
 #include "Special/StormLockPart.h"
@@ -615,7 +616,7 @@ private:
 	// それ以外は「移動状態」＝全速・STG は当たり判定のカプセルをモデルと同じ角度に前へ傾ける。チャージだけなら移動状態のまま
 	float   attackMoveSpeedScale_ = 0.6f;
 	float   moveStateDelay_ = 1.0f;          // 最後の攻撃から移動状態になるまで [sec]
-	float   moveStateLeanDeg_ = 55.0f;       // 移動状態の当たり判定の前傾 [deg]（飛ぶ姿勢のモデルの体の角度に合わせる）
+	float   moveStateLeanDeg_ = 70.0f;       // STG の滑空中の当たり判定の前傾 [deg]（滑空のクリップ RailGlide の体の角度に合わせる）
 	float   timeSinceAttack_ = 1000.0f;      // 最後の攻撃からの経過（Player の時間）
 	/// <summary>攻撃中か（最後に撃つ／近接を出してから moveStateDelay_ 秒以内と、近接の発生〜後隙中。チャージだけなら数えない）</summary>
 	/// <param name="actions">アクションの入力</param>
@@ -732,6 +733,26 @@ private:
 	// B/Y どちらでも段が進む 4 段コンボと Y+B の溜め攻撃（24 番）。技の表は Resources/Json/Tuning/MeleeCombo.json。
 	// 各技の発生/持続/後隙・受付猶予は技のプレハブの MeleeParams から読む。
 	MeleeComboPart meleeCombo_;
+	// ----- 自機のアニメ（25 番）-----
+	// どのクリップをどう鳴らすかは Resources/Json/Tuning/PlayerAnim/*.json。シーンは行動の始まり・終わりを伝えるだけ
+	PlayerAnimPart playerAnim_;
+	Vector2 playerAnimGroundMove_{ 0.0f, 0.0f };   // 地上の移動（自機の向きから見た向き。走りの向きを選ぶ）
+	bool precisionHeld_ = false;                  // 精密射撃のボタンを押しているか
+	/// <summary>自機のアニメのモード（ボス戦・着陸で足場に着いた後は地上、それ以外は STG）</summary>
+	/// <returns>モード</returns>
+	PlayerAnimMode CurrentPlayerAnimMode() const;
+	/// <summary>毎フレーム：押している間の状態（チャージ・精密射撃・必殺技）と移動を自機のアニメへ伝えて進める</summary>
+	/// <param name="dt">経過時間 [秒]（自機のアニメと同じ時間）</param>
+	void SyncPlayerAnim(float dt);
+	/// <summary>地上の移動入力を、自機の向きから見た向き（x=右、y=前）にする</summary>
+	/// <param name="moveDelta">移動入力（カメラから見た向き）</param>
+	/// <returns>自機から見た移動</returns>
+	Vector2 GroundMoveToPlayerLocal(const Vector2& moveDelta) const;
+	/// <summary>回避を始めた：入力の向きから回避のアニメの状態を選んで鳴らす</summary>
+	/// <param name="moveDelta">移動入力</param>
+	void TriggerDodgeAnim(const Vector2& moveDelta);
+	/// <summary>回避のアニメ（STG・地上の全部の向き）をやめる。ジャスト回避の派生を選んだ時、元の回避の続きを出さない</summary>
+	void StopDodgeAnim();
 	// 近接判定の生成をプレイヤー原点（足元）から world-up にこの高さ持ち上げる（体の中心へ）。
 	// 足元原点のままだと地上戦で攻撃が地面にめり込むため。StagePlay.json "melee" に保存。
 	float meleeOriginHeight_ = 1.0f;
@@ -893,7 +914,7 @@ private:
 	Vector3 jdApproachWorldGoal_{ 0.0f, 0.0f, 0.0f };
 	Vector3 jdReturnWorldPos_{ 0.0f, 0.0f, 0.0f };
 
-	// 弱近接派生（Right）の自動連撃ステージ（1..MeleeComboPart::kMaxStage）。強（Up）は常に1。
+	// 近接派生（強=Up / 弱=Right）の自動連撃ステージ（1..MeleeComboPart::kMaxStage）。
 	int jdAutoComboStage_ = 0;
 
 	// 近接派生中のカメラオフセット（プレイヤーローカル基底：right/up/forward）

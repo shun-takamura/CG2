@@ -424,8 +424,8 @@ protected:
 	void UpdateDynamicObjects();
 	/// <summary>動的 Object3D を描く</summary>
 	void DrawDynamicObjects();
-	/// <summary>動的なアニメーションするモデルのアニメーションを進める</summary>
-	/// <param name="deltaTime">経過時間 [秒]</param>
+	/// <summary>動的なアニメーションするモデルのアニメーションを進める（World 以外の TimeGroup を持つ物はその時間で）</summary>
+	/// <param name="deltaTime">World の物の経過時間 [秒]</param>
 	void UpdateDynamicAnimated(float deltaTime);
 	/// <summary>動的なアニメーションするモデルを描く（スキニングは DispatchDynamicAnimatedSkinning で済ませておく）</summary>
 	void DrawDynamicAnimated();
