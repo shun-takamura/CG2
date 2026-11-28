@@ -1,0 +1,8 @@
+# PortfolioPipeline.ps1 が作るフォルダ
+Generated/
+Intermediate/
+Logs/
+
+# Google Drive の認証情報（絶対にコミットしない）
+lib/credentials.json
+lib/token.json
