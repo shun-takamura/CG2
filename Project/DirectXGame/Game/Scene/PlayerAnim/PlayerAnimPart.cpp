@@ -116,7 +116,9 @@ void PlayerAnimPart::LoadTuning() {
 	// クリップが無いものは空として扱う（fallback へ）
 	for (size_t i = 0; i < kStateCount; ++i) {
 		StateDef& d = defs_[i];
-		for (std::string* clip : { &d.clip, &d.railClip, &d.groundClip }) {
+		std::vector<std::string*> clips = { &d.clip, &d.railClip, &d.groundClip };
+		for (auto& baseClip : d.baseClips) clips.push_back(&baseClip.second);
+		for (std::string* clip : clips) {
 			if (clip->empty()) continue;
 			if (ClipDuration(ClipPath(*clip)) <= 0.0f) {
 				loadMessages_.push_back(std::string(kStateKeys[i]) + " のクリップ " + ClipPath(*clip) + " が無い");
@@ -146,6 +148,17 @@ void PlayerAnimPart::ReadFile(const JsonValue& root, const std::string& fileName
 		d.clip = n["clip"].AsString(d.clip);
 		d.railClip = n["railClip"].AsString(d.railClip);
 		d.groundClip = n["groundClip"].AsString(d.groundClip);
+		const JsonValue& baseClips = n["baseClips"];
+		if (baseClips.IsObject()) {
+			for (const auto& baseEntry : baseClips.AsObject()) {
+				const PlayerAnimState base = StateFromKey(baseEntry.first);
+				if (base == PlayerAnimState::Count) {
+					loadMessages_.push_back(entry.first + " の baseClips の " + baseEntry.first + " は知らない状態");
+					continue;
+				}
+				d.baseClips.emplace_back(base, baseEntry.second.AsString(std::string()));
+			}
+		}
 		d.loop = n["loop"].AsBool(d.loop);
 		d.speed = static_cast<float>(n["speed"].AsDouble(d.speed));
 		d.fade = static_cast<float>(n["fade"].AsDouble(d.fade));
@@ -169,6 +182,12 @@ std::string PlayerAnimPart::ClipPath(const std::string& clip) const {
 }
 
 const std::string& PlayerAnimPart::ModeClip(const StateDef& d) const {
+	if (!d.baseClips.empty()) {
+		const PlayerAnimState base = ChooseBase();
+		for (const auto& baseClip : d.baseClips) {
+			if (baseClip.first == base && !baseClip.second.empty()) return baseClip.second;
+		}
+	}
 	const std::string& modeClip = (mode_ == PlayerAnimMode::Rail) ? d.railClip : d.groundClip;
 	return modeClip.empty() ? d.clip : modeClip;
 }

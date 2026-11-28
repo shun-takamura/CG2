@@ -3,10 +3,11 @@
 自機（PlayerModel）のゲーム中のアニメを、**まとまり（A 近接／B 移動・回避／C 射撃／D 被弾・回復・盾／E 必殺技）ごとに別々のチャットで同時に**作るための手順書。**各まとまりのチャットは最初にこれを読む。**
 
 **状態**：2026-11-27 土台を作った。Python の分け方・まとまり単位の書き出し・cook は動作確認済み（既存の 9 本と .mesh/.skel/.mat はバイト単位で同じ）。お試しの `BossIdle` は書き出し・cook 済み。ゲーム側（PlayerAnimPart）は**ビルド・実機未確認**。
+2026-11-28 A（近接）：B1〜B4・Y1〜Y4・溜め（B4 から／Y4 から）の 12 本を書き出し・cook し、MeleeCombo.json に入れた（実機未確認）。単独の溜めは未。振りは melee.py の `melee_pose`（胸の水平の向きから見た手首の位置・刃の向き・振る向き）で書く。
 
 - C 射撃：2026-11-27 7 本（Shoot・ChargeRelease・PrecisionAim とそれぞれの …Rail、ChargeHold）を書き出し・cook。PlayerAnimPart に `railClip` / `groundClip`（§5.1）を足した。**ビルド・実機未確認**。
 
-- **B 移動・回避**：2026-11-27 14 本を書き出し・cook・`move.json` に入れた（動画でユーザー了承、**実機未確認**）。STG＝`RailStand`（起こした立ち、ループ）・`RailGlide`（約 70° 前へ倒す滑空、ループ）・`RailDodgeLeft/Right`（逆へひねる予兆→一回転）・`Up`（縮む→反る）・`Down`（まっすぐ突っ込む）。地上＝`BossIdle`（**クリップは直立に近い `BossStandIdle` に変えた。姿勢の `BossIdle`＝腰を落とした構えは A・C が元に使うので変えていない**）・`BossRunForward`（両足を着けたスライド）・`BossRunLeft/Right`（スキーのターン。自機は入力の向きへ回るので回っている間に鳴る）・`GroundDodgeLeft/Right`（しゃがむ予兆→弧を描く一回転、0.4 秒）・`Forward`（飛び込みきりもみ→前転）・`Back`（しなるバック宙）は 0.6 秒（回避のクールダウン）。後ろのスライドは作らない（`bossRunBack` は前で代用）。すべての動きに大げさな予兆を入れる（ユーザー）。
+- **B 移動・回避**：2026-11-27 14 本を書き出し・cook・`move.json` に入れた（動画でユーザー了承、**実機未確認**）。STG＝`RailStand`（起こした立ち、ループ）・`RailGlide`（約 70° 前へ倒す滑空、ループ）・`RailDodgeLeft/Right`（逆へひねる予兆→一回転）・`Up`（縮む→反る）・`Down`（まっすぐ突っ込む）。地上＝`BossIdle`（**クリップは直立に近い `BossStandIdle` に変えた。姿勢の `BossIdle`＝腰を落とした構えは A・C が元に使うので変えていない**）・`BossRunForward`（2026-11-28 前傾して床から 10cm 浮くダッシュに変更。右手は後ろ・左ひじ約 100°・足の裏は後ろ）・`BossRunLeft/Right`（スキーのターン。自機は入力の向きへ回るので回っている間に鳴る）・`GroundDodgeLeft/Right`（しゃがむ予兆→弧を描く一回転、0.4 秒）・`Forward`（飛び込みきりもみ→前転）・`Back`（しなるバック宙）は 0.6 秒（回避のクールダウン）。後ろのスライドは作らない（`bossRunBack` は待機で代用）。**2026-11-28（ユーザー）**：地上のチャージの構え `chargeHold` は鳴らさない（撃たずにいると 3 秒で溜まり、移動を隠し続けていた。`SyncPlayerAnim` から外した）。ボス戦で撃ってから 1 秒（`moveStateDelay`）と精密射撃の間は、自機がカメラの向きへ回る（`UpdateBossPlayerFacing` の `aimFacing`）。撃ちながら下がると「後ろ」が出るので、`bossRunBack` は待機で代用。すべての動きに大げさな予兆を入れる（ユーザー）。
 
 作るクリップの一覧は 8 番 §2。近接の技の決まりは 24 番。
 
@@ -162,6 +163,7 @@ python tools/Python/cook_assets.py --only Models/Player/PlayerModel/PlayerModel@
 |---|---|
 | `clip` | クリップの名前（`PlayerModel_<名前>.anim`）か `.anim` のパス。**空ならその状態は鳴らない**（`fallback` へ） |
 | `railClip` / `groundClip` | STG / 地上で `clip` の代わりに鳴らすクリップ（空・省くと `clip`）。1 本のクリップは脚まで書くので、STG と地上の両方で鳴る状態（射撃など）は分けて作る。同じ状態のままモードが替わっても、クリップが替われば鳴らし直す（2026-11-27、C のチャットで追加） |
+| `baseClips` | `{ "<土台の状態>": "<クリップ>", … }`。今の土台（モードと移動から選ぶ状態。クリップが空で fallback する `bossRunBack` などもそのままの名前）に合うものを `railClip` / `groundClip` より先に鳴らす。動きながら撃つ時の脚に合わせる（2026-11-28、C のチャットで追加） |
 | `loop` | 繰り返すか |
 | `speed` | 再生速度（既定 1） |
 | `fade` | この状態へ移るときのフェード [秒]（省くと common.json の `defaultFade`） |

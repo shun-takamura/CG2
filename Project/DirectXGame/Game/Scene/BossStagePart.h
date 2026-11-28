@@ -79,6 +79,9 @@ public:
 	/// <param name="outForward">奥の向き（XZ・正規化）</param>
 	/// <param name="outRight">右の向き（XZ・正規化）</param>
 	void ComputeGroundBasis(Vector3& outForward, Vector3& outRight) const;
+	/// <summary>自機の地上の移動の最大の速さ（入力の大きさ 1 の時）</summary>
+	/// <returns>速さ [units/秒]</returns>
+	float GetPlayerMoveSpeed() const { return playerMoveSpeed_; }
 	/// <summary>
 	/// STG の回避ダッシュ相当：移動入力方向へ地上速度の初速（dodgeDashSpeed_）を上乗せする。
 	/// 入力なし（moveDelta≈0）はその場回避。ボス戦の回避は playerVelocity_ ではなくこちらへ入れる。

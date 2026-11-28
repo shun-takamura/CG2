@@ -1,11 +1,11 @@
 {
-  "_comment": "まとまり B（移動・回避）。持ち主は B のチャット（25 番 §5）。クリップは player_clips/move.py。2026-11-27：地上は入力の向きへ自機が回るので、真後ろへ進むのは反転し始めの一瞬だけ → bossRunBack は前のスライドで代用（クリップなし）。回避は無敵 0.4 秒に合わせ、地上の前・後ろ（前転・バック宙）だけクールダウンの 0.6 秒",
+  "_comment": "まとまり B（移動・回避）。持ち主は B のチャット（25 番 §5）。クリップは player_clips/move.py。2026-11-27：地上は入力の向きへ自機が回るので、真後ろへ進むのは反転し始めの一瞬だけ → bossRunBack はクリップなし。2026-11-28 射撃中・精密射撃中はカメラの向きを向くので撃ちながら下がると後ろが出る → 待機で代用（前のダッシュだと下がりながら前へ倒れる）。回避は無敵 0.4 秒に合わせ、地上の前・後ろ（前転・バック宙）だけクールダウンの 0.6 秒",
   "states": {
     "railStand": { "clip": "RailStand", "loop": true, "fade": 0.3, "priority": 0 },
     "railGlide": { "clip": "RailGlide", "loop": true, "fade": 0.3, "priority": 0, "fallback": "railStand" },
     "bossIdle": { "clip": "BossIdle", "loop": true, "fade": 0.25, "priority": 0 },
     "bossRunForward": { "clip": "BossRunForward", "loop": true, "fade": 0.2, "priority": 0, "fallback": "bossIdle" },
-    "bossRunBack": { "clip": "", "loop": true, "fade": 0.2, "priority": 0, "fallback": "bossRunForward" },
+    "bossRunBack": { "clip": "", "loop": true, "fade": 0.2, "priority": 0, "fallback": "bossIdle" },
     "bossRunLeft": { "clip": "BossRunLeft", "loop": true, "fade": 0.15, "priority": 0, "fallback": "bossRunForward" },
     "bossRunRight": { "clip": "BossRunRight", "loop": true, "fade": 0.15, "priority": 0, "fallback": "bossRunForward" },
     "railDodgeNeutral": { "clip": "", "loop": false, "fade": 0.05, "priority": 40, "fallback": "railDodgeRight" },

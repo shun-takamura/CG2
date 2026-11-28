@@ -13,7 +13,8 @@ bossRunForward・Back・Left・Right / railDodgeLeft・Right・Up・Down / groun
   ・待機は直立に近く（BossStandIdle）。ほかの動きへ移るときにひざを曲げるのが予兆になる。すべての動きに
     ゲーム画面でわかる大げさな予兆を入れる（回避は出だしでしゃがむ・逆へひねる・縮む）（同日ユーザー）
   ・後ろのスライドは作らない：地上の自機は入力の向きへ回る（StagePlayScene::UpdateBossPlayerFacing）ので、
-    真後ろへ進むのは反転し始めの一瞬だけ。bossRunBack は前のスライドで代用する（同日ユーザー）
+    真後ろへ進むのは反転し始めの一瞬だけ。bossRunBack は前で代用する（同日ユーザー）
+  ・2026-11-28 前の移動はスライドをやめ、前傾して床から少し浮くダッシュ（BossDashForward、ユーザーのスケッチ）
   ・姿勢の BossIdle（腰を落とした構え）は近接（melee.py）・射撃（shoot.py）が元の姿勢に使うので変えない。
     待機のクリップ BossIdle だけ BossStandIdle にした
   ・地上の前の回避：前へ飛び込んできりもみで一回転→着地して地面で前転。地上の後ろの回避：しなるバック宙
@@ -31,6 +32,10 @@ import math
 DODGE_DURATION = 0.4
 # スライド移動のループの長さ [秒]（小さな揺れの周期）
 SLIDE_LOOP = 1.0
+# 前へ進むダッシュ（2026-11-28 ユーザーのスケッチ）：前傾の角度 [度]、床から浮かせる高さ [m]、上下の揺れ [m]
+DASH_TILT = 20.0
+DASH_GAP = 0.1
+DASH_BOB = 0.015
 # 地上の回避の一回転で腰を持ち上げるいちばん高い所 [m]（弧を描く）
 GROUND_ROLL_LIFT = 0.35
 # 一回転のあいだに脚を抱える角度 [度]（太ももを前へ上げる・すねを後ろへたたむ）
@@ -92,6 +97,22 @@ def _ski_knees(arm, rig, knees):
 def ski_call(knees):
     """姿勢の call に入れる関数（スキーのターンのひざ）"""
     return lambda arm, rig, phase: _ski_knees(arm, rig, knees)
+
+
+def _hover(arm, rig, phase):
+    """浮く：体のいちばん低い所を床から DASH_GAP 浮かせ、phase（ループの位置）で DASH_BOB だけ上下に揺らす"""
+    from mathutils import Matrix
+    import bpy
+    hips = arm.pose.bones[rig.MX + "Hips"]
+    bob = DASH_BOB * math.sin(2.0 * math.pi * phase)
+    low = rig.posed_min_z(rig.BODY_OBJECT[0])
+    hips.matrix = Matrix.Translation((0.0, 0.0, rig.FLOOR_Z[0] + DASH_GAP + bob - low)) @ hips.matrix
+    bpy.context.view_layer.update()
+
+
+def hover_call():
+    """姿勢の call に入れる関数（床から少し浮かせて上下に揺らす）"""
+    return _hover
 
 
 def _ease_out_cubic(u):
@@ -355,15 +376,22 @@ POSES = {
         "sway": {},
     },
 
-    # ---- ボス戦（地上）のスライド移動。両足を床に着けたまま。向きは自機から見た向き ----
-    # 前：ひざを曲げて腰を落とし、前へ傾ける。腕は少し開いて前腕を前へ
-    "BossSlideForward": {
+    # ---- ボス戦（地上）の移動。向きは自機から見た向き ----
+    # 前（2026-11-28 ユーザーのスケッチ）：大きく前傾して床から少し浮くダッシュ。右手は後ろへ振り抜き、左腕は胸の前で
+    # 曲げる。脚は左を後ろへ伸ばし、右はひざを前へ出してすねを後ろへたたむ。どちらも足の裏を後ろへ向ける
+    # （脚・腕の向きは前傾する前＝直立の向きで書く。tilt で体ごと前へ倒れる）
+    "BossDashForward": {
         "base": "BossIdle",
-        "hips": {"offset": (0.0, 0.06, -0.2), "lean": 18.0},
-        "bend": {"Spine": 9.0, "Spine1": 9.0, "Spine2": 5.0, "Neck": -22.0, "Head": -16.0},
-        "arms": {"Arm": (-0.4, 0.05, -1.0), "ForeArm": (-0.2, -0.6, -0.8)},
-        "legs": {"ik": True, "knee": (-0.05, -1.0, 0.0), "toe_out": 0.0},
-        "sway": {"hips_z": 0.006, "arm": 1.0},
+        "tilt": DASH_TILT,
+        "hips": {"offset": (0.0, 0.0, 0.0), "lean": 5.0},
+        "bend": {"Spine": 4.0, "Spine1": 4.0, "Spine2": 2.0, "Neck": -18.0, "Head": -12.0},
+        "arms": {"Right": {"Arm": (-0.2, 0.5, -0.85), "ForeArm": (-0.15, 0.6, -0.8)},
+                 "Left": {"Arm": (-0.15, -0.4, -0.9), "ForeArm": (0.3, -0.9, 0.2)}},
+        "legs": {"ik": False,
+                 "Right": {"UpLeg": (-0.05, -0.3, -1.0), "Leg": (0.0, 0.9, -0.5), "Foot": (0.0, 0.9, -0.2)},
+                 "Left": {"UpLeg": (-0.04, 0.6, -1.0), "Leg": (0.0, 0.65, -1.0), "Foot": (0.0, 0.7, -1.0)}},
+        "sway": {"arm": 2.0, "leg": 2.0},
+        "call": hover_call(),
     },
     # 左へ曲がる（スキーのターン）：腰を曲がる側（+X）へ寄せて落とし、両ひざをそちらへ入れ、上体を傾けて少しひねる。
     # 外側（右）の腕は開いてバランスを取り、内側（左）の腕は体の近くへ
@@ -422,8 +450,8 @@ CLIPS = {
     "RailDodgeDown": {"duration": DODGE_DURATION,
                       "keys": [(0.0, "RailStand"), (DODGE_DURATION * DODGE_KEY_ANTIC, "RailDodgeDownPose"),
                                (DODGE_DURATION * DODGE_KEY_HOLD, "RailDodgeDownPose"), (DODGE_DURATION, "RailStand")]},
-    # ボス戦のスライド移動（ループ）。左右はスキーのターン（自機が回っている間に鳴る）。後ろは作らない（前で代用）
-    "BossRunForward": {"duration": SLIDE_LOOP, "pose": "BossSlideForward"},
+    # ボス戦の移動（ループ）。前は浮いたダッシュ、左右はスキーのターン（自機が回っている間に鳴る）。後ろは作らない（前で代用）
+    "BossRunForward": {"duration": SLIDE_LOOP, "pose": "BossDashForward"},
     "BossRunLeft": {"duration": SLIDE_LOOP, "pose": "BossSkiLeft"},
     "BossRunRight": {"duration": SLIDE_LOOP, "pose": "BossSkiRight"},
     # 地上の回避（1 回きり）：前＝飛び込みきりもみ→前転、後ろ＝バック宙（0.6 秒）。左右は弧を描く一回転（0.4 秒）

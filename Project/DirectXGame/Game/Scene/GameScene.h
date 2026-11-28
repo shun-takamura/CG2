@@ -108,12 +108,14 @@ public:
 	/// <param name="attackPower">攻撃力</param>
 	/// <param name="extraWorldOffset">生成位置へ加算するワールドオフセット（体の中心へ持ち上げ等）</param>
 	/// <param name="sizeScale">判定＋見た目のサイズ倍率（STG=1.0 / ボス戦=小さめ 等）</param>
+	/// <param name="rehitInterval">同じ相手にもう一度当たれるまでの時間 [秒]（0 以下なら 1 回だけ。UpdateMelees の rehitDeltaTime で数える）</param>
 	virtual void SpawnPlayerMelee(IImGuiEditable* owner,
 		const Vector3& right, const Vector3& up, const Vector3& forward,
 		const std::string& prefabName,
 		int attackPower,
 		const Vector3& extraWorldOffset = { 0.0f, 0.0f, 0.0f },
-		float sizeScale = 1.0f);
+		float sizeScale = 1.0f,
+		float rehitInterval = 0.0f);
 
 	//====================
 	// 敵 / 敵弾 / 敵コントローラ
@@ -345,7 +347,8 @@ protected:
 	void SweepDeadEntities();
 	/// <summary>近接の判定を持ち主に追従させ、持続切れを消す（振りエフェクトも止める）</summary>
 	/// <param name="deltaTime">経過時間 [秒]</param>
-	void UpdateMelees(float deltaTime);
+	/// <param name="rehitDeltaTime">もう一度当たれるまでの時間を進める経過時間 [秒]（負なら deltaTime。ヒットストップで止めたくない時に実時間を渡す）</param>
+	void UpdateMelees(float deltaTime, float rehitDeltaTime = -1.0f);
 	/// <summary>スプラインに沿う敵を進め、終端に着いた敵をコントローラへ知らせて外す（removeAtEnd なら破棄）</summary>
 	/// <param name="deltaTime">経過時間 [秒]</param>
 	void UpdateMovingEnemies(float deltaTime);
@@ -470,6 +473,9 @@ private:
 		std::string prefabName;  // どの近接（弱/強）かを派生シーンが見分けるため
 		// この判定で既に当てた相手。キーはダメージの持ち主なので、ボスの腕と本体に同時に触れても 1 回
 		std::unordered_set<IImGuiEditable*> hitTargets;
+		// 同じ相手にもう一度当たれるまでの時間 [秒]（0 以下なら hitTargets で 1 回だけ）と、相手ごとの残り
+		float rehitInterval = 0.0f;
+		std::unordered_map<IImGuiEditable*, float> rehitTimers;
 	};
 	std::vector<MeleeRuntime> melees_;
 

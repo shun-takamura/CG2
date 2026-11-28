@@ -39,43 +39,119 @@
         "prefab": "PlayerMeleeY1",
         "damageScale": 1.0,
         "gaugeGain": 2.0,
-        "clip": "",
-        "clipSpeed": 1.0
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeY1.anim",
+        "clipSpeed": 1.0,
+        "motions": [
+          {
+            "start": 0.05,
+            "end": 0.4,
+            "mode": "forward",
+            "speed": 14.0
+          }
+        ],
+        "guard": {
+          "start": 0.0,
+          "end": 0.45,
+          "angle": 70.0
+        },
+        "hits": [
+          {
+            "time": 0.05,
+            "prefab": "PlayerMeleeY1Rush",
+            "damageScale": 0.4
+          }
+        ]
       },
       {
-        "prefab": "PlayerMeleeY2",
-        "damageScale": 1.0,
+        "prefab": "PlayerMeleeY2Spin1",
+        "damageScale": 0.6,
         "gaugeGain": 2.0,
-        "clip": "",
-        "clipSpeed": 1.0
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeY2.anim",
+        "clipSpeed": 1.0,
+        "hits": [
+          {
+            "time": 0.9,
+            "prefab": "PlayerMeleeY2",
+            "damageScale": 1.5
+          }
+        ],
+        "motions": [
+          {
+            "start": 0.0,
+            "end": 0.7,
+            "mode": "free",
+            "speed": 1.0
+          }
+        ]
       },
       {
         "prefab": "PlayerMeleeY3",
         "damageScale": 1.0,
         "gaugeGain": 2.0,
-        "clip": "",
-        "clipSpeed": 1.0
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeY3.anim",
+        "clipSpeed": 1.0,
+        "hits": [
+          {
+            "time": 0.9,
+            "prefab": "PlayerMeleeY3Slash2",
+            "damageScale": 1.0
+          }
+        ],
+        "motions": [
+          {
+            "start": 0.0,
+            "end": 0.7,
+            "mode": "forward",
+            "speed": 9.0
+          }
+        ]
       },
       {
         "prefab": "PlayerMeleeY4",
         "damageScale": 1.0,
         "gaugeGain": 2.0,
-        "clip": "",
-        "clipSpeed": 1.0
+        "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeY4.anim",
+        "clipSpeed": 1.0,
+        "hits": [
+          {
+            "time": 0.6,
+            "prefab": "PlayerMeleeY4Slash2",
+            "damageScale": 1.0
+          },
+          {
+            "time": 0.8,
+            "prefab": "PlayerMeleeY4Slash3",
+            "damageScale": 1.3
+          }
+        ],
+        "motions": [
+          {
+            "start": 0.0,
+            "end": 0.5,
+            "mode": "free",
+            "speed": 1.0
+          },
+          {
+            "start": 0.5,
+            "end": 0.75,
+            "mode": "back",
+            "speed": 8.0
+          }
+        ]
       }
     ]
   },
   "routes": {},
   "charge": {
     "solo": {
-      "holdClip": "",
+      "holdClip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeHoldSolo.anim",
       "levels": [
         {
           "holdTime": 0.0,
           "prefab": "PlayerMeleeChargeSolo",
           "damageScale": 1.5,
           "gaugeGain": 4.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeSolo.anim",
           "clipSpeed": 1.0
         },
         {
@@ -83,7 +159,7 @@
           "prefab": "PlayerMeleeChargeSolo",
           "damageScale": 2.0,
           "gaugeGain": 6.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeSolo.anim",
           "clipSpeed": 1.0
         },
         {
@@ -91,20 +167,20 @@
           "prefab": "PlayerMeleeChargeSolo",
           "damageScale": 3.0,
           "gaugeGain": 8.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeSolo.anim",
           "clipSpeed": 1.0
         }
       ]
     },
     "afterB4": {
-      "holdClip": "",
+      "holdClip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeHoldAfterB4.anim",
       "levels": [
         {
           "holdTime": 0.0,
           "prefab": "PlayerMeleeChargeAfterB4",
           "damageScale": 2.0,
           "gaugeGain": 4.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterB4.anim",
           "clipSpeed": 1.0
         },
         {
@@ -112,7 +188,7 @@
           "prefab": "PlayerMeleeChargeAfterB4",
           "damageScale": 2.8,
           "gaugeGain": 6.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterB4.anim",
           "clipSpeed": 1.0
         },
         {
@@ -120,20 +196,20 @@
           "prefab": "PlayerMeleeChargeAfterB4",
           "damageScale": 4.0,
           "gaugeGain": 8.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterB4.anim",
           "clipSpeed": 1.0
         }
       ]
     },
     "afterY4": {
-      "holdClip": "",
+      "holdClip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeHoldAfterY4.anim",
       "levels": [
         {
           "holdTime": 0.0,
           "prefab": "PlayerMeleeChargeAfterY4",
           "damageScale": 2.5,
           "gaugeGain": 4.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterY4.anim",
           "clipSpeed": 1.0
         },
         {
@@ -141,7 +217,7 @@
           "prefab": "PlayerMeleeChargeAfterY4",
           "damageScale": 3.5,
           "gaugeGain": 6.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterY4.anim",
           "clipSpeed": 1.0
         },
         {
@@ -149,10 +225,100 @@
           "prefab": "PlayerMeleeChargeAfterY4",
           "damageScale": 5.0,
           "gaugeGain": 8.0,
-          "clip": "",
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeAfterY4.anim",
           "clipSpeed": 1.0
         }
       ]
+    },
+    "burst": {
+      "holdClip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeChargeHoldBurst.anim",
+      "levels": [
+        {
+          "holdTime": 0.0,
+          "prefab": "PlayerMeleeBurstBlast",
+          "damageScale": 1.5,
+          "gaugeGain": 4.0,
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeBurst.anim",
+          "clipSpeed": 1.0,
+          "hits": [
+            {
+              "time": 0.19,
+              "prefab": "PlayerMeleeBurstSpin",
+              "damageScale": 0.8
+            }
+          ]
+        },
+        {
+          "holdTime": 0.6,
+          "prefab": "PlayerMeleeBurstBlast",
+          "damageScale": 2.0,
+          "gaugeGain": 6.0,
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeBurst.anim",
+          "clipSpeed": 1.0,
+          "hits": [
+            {
+              "time": 0.19,
+              "prefab": "PlayerMeleeBurstSpin",
+              "damageScale": 1.0
+            }
+          ]
+        },
+        {
+          "holdTime": 1.2,
+          "prefab": "PlayerMeleeBurstBlast",
+          "damageScale": 2.8,
+          "gaugeGain": 8.0,
+          "clip": "Resources/Models/Player/PlayerModel/PlayerModel_MeleeBurst.anim",
+          "clipSpeed": 1.0,
+          "hits": [
+            {
+              "time": 0.19,
+              "prefab": "PlayerMeleeBurstSpin",
+              "damageScale": 1.3
+            }
+          ]
+        }
+      ]
     }
-  }
+  },
+  "buff": {
+    "lockout": 5.0,
+    "releaseLock": 0.85,
+    "bladeCoreColor": [
+      1.0,
+      0.12,
+      0.06
+    ],
+    "bladeEdgeColor": [
+      1.0,
+      0.55,
+      0.35
+    ],
+    "levels": [
+      {
+        "attackScale": 1.1,
+        "moveScale": 1.075,
+        "justWindowAdd": 0.05,
+        "duration": 15.0
+      },
+      {
+        "attackScale": 1.15,
+        "moveScale": 1.09,
+        "justWindowAdd": 0.05,
+        "duration": 18.0
+      },
+      {
+        "attackScale": 1.175,
+        "moveScale": 1.1,
+        "justWindowAdd": 0.05,
+        "duration": 20.0
+      }
+    ]
+  },
+  "burstRehitIntervals": [
+    0.5,
+    0.18,
+    0.09
+  ],
+  "autoChargeTime": 0.3
 }
