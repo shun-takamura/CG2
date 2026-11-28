@@ -128,15 +128,15 @@
     "capsuleHeight": 3
   },
   "melee": {
-    "startup": 0.35,
-    "activeDuration": 0.3,
+    "startup": 0.75,
+    "activeDuration": 0.12,
     "offset": [
       0,
       0,
       4
     ],
     "comboWindow": 0.5,
-    "recovery": 0.25,
+    "recovery": 0.48,
     "cleanWindow": 0.30000001192092896,
     "cleanMultiplier": 3.0,
     "lateMultiplier": 2.0

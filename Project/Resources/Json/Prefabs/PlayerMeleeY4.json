@@ -8,9 +8,9 @@
   "tag": "PlayerMelee",
   "defaults": {
     "scale": [
-      3.6,
-      3.6,
-      3.6
+      4.5,
+      4.5,
+      4.5
     ],
     "rotate": [
       0,
@@ -118,7 +118,7 @@
       0,
       0
     ],
-    "radius": 3.6,
+    "radius": 4.5,
     "halfExtents": [
       1.5,
       1.5,
@@ -128,15 +128,15 @@
     "capsuleHeight": 3
   },
   "melee": {
-    "startup": 0.5,
-    "activeDuration": 0.4,
+    "startup": 0.4,
+    "activeDuration": 0.2,
     "offset": [
       0,
       0,
-      4
+      0
     ],
     "comboWindow": 0.6,
-    "recovery": 0.4,
+    "recovery": 0.8,
     "cleanWindow": 0.30000001192092896,
     "cleanMultiplier": 3.0,
     "lateMultiplier": 2.0

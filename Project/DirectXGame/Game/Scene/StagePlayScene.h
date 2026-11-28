@@ -183,13 +183,28 @@ private:
 	/// <param name="dt">経過時間 [秒]（Player グループ）</param>
 	void UpdateBossPlayerMovement(class InputActionMap* actions, const Vector2& moveDelta, float dt);
 	/// <summary>
-	/// ボス戦の自機の向き（yaw のみ）を更新する。ジャスト回避スロー中は攻撃元（ボス）方向、通常時は移動入力方向（入力が無ければ保持）。
-	/// 実際の SetRotate は後段の照準（UpdateAimTarget）で適用する
+	/// ボス戦の自機の向き（yaw のみ）を更新する。ジャスト回避スロー中は攻撃元（ボス）方向、射撃中・精密射撃中はカメラの向き、
+	/// 通常時は移動入力方向（入力が無ければ保持）。実際の SetRotate は後段の照準（UpdateAimTarget）で適用する
 	/// </summary>
 	/// <param name="moveDelta">移動入力（-1..1）</param>
 	/// <param name="playerPos">自機の位置</param>
 	/// <param name="dt">経過時間 [秒]</param>
-	void UpdateBossPlayerFacing(const Vector2& moveDelta, const Vector3& playerPos, float dt);
+	/// <param name="aimFacing">true ならカメラの向き（弾の飛ぶ向き）へ回す</param>
+	void UpdateBossPlayerFacing(const Vector2& moveDelta, const Vector3& playerPos, float dt, bool aimFacing);
+	/// <summary>ボス戦の移動の入力（カメラから見た右・奥）を、地上の向き（yaw）にする</summary>
+	/// <param name="moveDelta">移動入力（-1..1）</param>
+	/// <param name="outYaw">向き [rad]（入力がある時だけ書く）</param>
+	/// <returns>入力があれば true</returns>
+	bool MoveInputToBossYaw(const Vector2& moveDelta, float& outYaw) const;
+	/// <summary>自機をボスの体（球の判定）の外へ水平に押し出す（大技のスーパーアーマー中、吹き飛ばずにめり込むのを防ぐ）</summary>
+	void PushPlayerOutOfBoss();
+	/// <summary>ジャスト回避の派生で向く先（ボスの本体、いなければ回避した攻撃の持ち主）への地上の向き</summary>
+	/// <param name="outYaw">向き [rad]（求まった時だけ書く）</param>
+	/// <returns>求まったら true</returns>
+	bool CounterTargetYaw(float& outYaw) const;
+	/// <summary>ジャスト回避の派生で狙う相手（ボス戦はボスの本体、それ以外は回避した攻撃の持ち主）</summary>
+	/// <returns>相手（いなければ nullptr）</returns>
+	IImGuiEditable* CounterFocusEntity() const;
 	/// <summary>ボス戦のカメラ（右スティック・マウスの look、L1 の短押し/長押し）と、その上に重ねる演出カメラ</summary>
 	/// <param name="actions">アクションの入力</param>
 	/// <param name="playerPos">自機の位置</param>
@@ -249,6 +264,8 @@ private:
 	void UpdateChargeLevel(float dtP);
 	/// <summary>1 発撃つ（チャージ段階で弾を選び、メイン武器・精密射撃の補正を掛ける）。撃ったらチャージを戻す</summary>
 	void FirePlayerShot();
+	/// <summary>銃のチャージを無しに戻す（段階・レティクルの外側・溜めのエフェクト）</summary>
+	void ResetGunCharge();
 	/// <summary>近接・弾・飛行ユニット・被弾・必殺技（射撃より後。弾はこのフレームに撃った物も進める）</summary>
 	/// <param name="actions">アクションの入力</param>
 	/// <param name="worldDt">世界の経過時間 [秒]</param>
@@ -618,6 +635,7 @@ private:
 	float   moveStateDelay_ = 1.0f;          // 最後の攻撃から移動状態になるまで [sec]
 	float   moveStateLeanDeg_ = 70.0f;       // STG の滑空中の当たり判定の前傾 [deg]（滑空のクリップ RailGlide の体の角度に合わせる）
 	float   timeSinceAttack_ = 1000.0f;      // 最後の攻撃からの経過（Player の時間）
+	float   timeSinceShot_ = 1000.0f;        // 最後に撃ってからの経過（Player の時間。近接は数えない。ボス戦で moveStateDelay_ 秒以内はカメラの向きを向く）
 	/// <summary>攻撃中か（最後に撃つ／近接を出してから moveStateDelay_ 秒以内と、近接の発生〜後隙中。チャージだけなら数えない）</summary>
 	/// <param name="actions">アクションの入力</param>
 	/// <returns>攻撃中なら true（移動速度を attackMoveSpeedScale_ 倍にする）</returns>
@@ -632,6 +650,7 @@ private:
 	// ----- 射撃チューニング -----
 	// 弾パラメータは弾プレハブの BulletParams、連射間隔はプレイヤープレハブの ChargeParams.fireRate に移行済み。
 	float fireTimer_      = 0.0f;    // 次に撃てるまでの残り秒（ランタイム）
+	float fireChordTimer_ = 0.0f;    // チャージ中に RT を押した後、Y+B を待って射撃を遅らせる残り秒（RT+Y+B の大技の見分け）
 
 	// ----- 照準（aim）チューニング -----
 	// カメラからの「狙いの面」までの距離。弾速・寿命とは独立。
@@ -764,7 +783,8 @@ private:
 	/// <summary>近接の判定を出す（足元から meleeOriginHeight_ 持ち上げ、ボス戦は小さく）</summary>
 	/// <param name="prefab">判定のプレハブ名</param>
 	/// <param name="damageScale">攻撃力に掛ける倍率</param>
-	void SpawnComboMelee(const std::string& prefab, float damageScale) override;
+	/// <param name="rehitInterval">同じ相手にもう一度当たれるまでの実時間 [秒]（0 以下なら 1 回だけ）</param>
+	void SpawnComboMelee(const std::string& prefab, float damageScale, float rehitInterval) override;
 	/// <summary>自機のクリップを再生する</summary>
 	/// <param name="clip">.anim のパス</param>
 	/// <param name="speed">再生速度</param>
@@ -773,8 +793,14 @@ private:
 	void PlayComboClip(const std::string& clip, float speed, float fade, bool loop) override;
 	/// <summary>攻撃・溜めが終わったので、自機の姿勢をいつもの姿勢へ戻す（ApplyPlayerPose）</summary>
 	void RestoreComboPose() override;
-	/// <summary>攻撃を出した（MarkPlayerAttack）</summary>
-	void OnComboAttackStarted() override { MarkPlayerAttack(); }
+	/// <summary>
+	/// 攻撃・溜めを出した（MarkPlayerAttack）。技は始まった時の向きで出すので、ボス戦はスティックが倒れていればその方へすぐ向き直り、
+	/// この技の判定を出す向き（meleeBasis*）をここで決める（ボス戦＝自機の向き / STG・ジャスト回避の派生＝ComputeAimBasis）
+	/// </summary>
+	void OnComboAttackStarted() override;
+	/// <summary>銃のチャージを使い切る（RT+Y+B の大技）</summary>
+	/// <returns>使う前のチャージの段階（0＝無し, 1, 2）</returns>
+	int ConsumeGunCharge() override;
 	/// <summary>aim 基底（前=自機→firingTarget、右=worldUp×前、上=前×右）を求める。近接派生中は対象敵を直接向く</summary>
 	/// <param name="right">右の向き</param>
 	/// <param name="up">上の向き</param>
@@ -914,8 +940,10 @@ private:
 	Vector3 jdApproachWorldGoal_{ 0.0f, 0.0f, 0.0f };
 	Vector3 jdReturnWorldPos_{ 0.0f, 0.0f, 0.0f };
 
-	// 近接派生（強=Up / 弱=Right）の自動連撃ステージ（1..MeleeComboPart::kMaxStage）。
-	int jdAutoComboStage_ = 0;
+	// 近接コンボの技の判定を出す向き（技が始まった時に OnComboAttackStarted で決め、その技の判定はすべてこの向き）
+	Vector3 meleeBasisRight_{ 1.0f, 0.0f, 0.0f };
+	Vector3 meleeBasisUp_{ 0.0f, 1.0f, 0.0f };
+	Vector3 meleeBasisForward_{ 0.0f, 0.0f, 1.0f };
 
 	// 近接派生中のカメラオフセット（プレイヤーローカル基底：right/up/forward）
 	// forward = プレイヤー→対象敵。本値は「プレイヤー位置からのオフセット」。

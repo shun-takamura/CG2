@@ -885,7 +885,8 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	const std::string& prefabName,
 	int attackPower,
 	const Vector3& extraWorldOffset,
-	float sizeScale) {
+	float sizeScale,
+	float rehitInterval) {
 	// 近接パラメータをプレハブから読む（melee の指定が無ければ PrefabDef の既定値で動かす）
 	Vector3 baseScale{ 1.0f, 1.0f, 1.0f };
 	const PrefabDef* mdef = PrefabManager::GetInstance()->Find(prefabName);
@@ -970,8 +971,16 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 
 		for (auto& m : melees_) {
 			if (m.primitive != spawned) continue;
-			// この判定では既に当てた持ち主（ボスの腕と本体に同時に触れても 1 回）
-			if (!m.hitTargets.insert(Gameplay::DamageRootOf(other)).second) return;
+			IImGuiEditable* root = Gameplay::DamageRootOf(other);
+			if (m.rehitInterval > 0.0f) {
+				// 多段：その相手のもう一度当たれるまでの時間が残っていれば当てない（ボスの腕と本体も 1 つの相手）
+				auto found = m.rehitTimers.find(root);
+				if (found != m.rehitTimers.end() && found->second > 0.0f) return;
+				m.rehitTimers[root] = m.rehitInterval;
+			} else if (!m.hitTargets.insert(root).second) {
+				// この判定では既に当てた持ち主（ボスの腕と本体に同時に触れても 1 回）
+				return;
+			}
 
 			const bool clean = (m.elapsed <= m.cleanWindow);
 			if (Gameplay::Of(other).GetHP().enabled) {
@@ -999,6 +1008,7 @@ void GameScene::SpawnPlayerMelee(IImGuiEditable* owner,
 	mr.lateDamage = lateDamage;
 	mr.swingEffectHandle = swingHandle;
 	mr.prefabName = prefabName;
+	mr.rehitInterval = rehitInterval;
 	melees_.push_back(std::move(mr));
 }
 
@@ -1369,13 +1379,15 @@ void GameScene::UpdateBullets(float worldDeltaTime, float playerBulletDeltaTime)
 	}
 }
 
-void GameScene::UpdateMelees(float deltaTime) {
+void GameScene::UpdateMelees(float deltaTime, float rehitDeltaTime) {
 	PEPPER_SCOPE("GameScene::UpdateMelees");
 	if (melees_.empty()) return;
+	const float rehitDt = (rehitDeltaTime < 0.0f) ? deltaTime : rehitDeltaTime;
 
 	for (auto& m : melees_) {
 		m.elapsed += deltaTime;
 		m.remainingLifetime -= deltaTime;
+		for (auto& timer : m.rehitTimers) timer.second -= rehitDt;
 
 		// owner（自機）に追従：毎フレーム owner 位置 + worldOffset へ配置（判定＋振りエフェクト）
 		if (m.owner) {

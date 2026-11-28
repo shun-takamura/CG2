@@ -1,9 +1,9 @@
 {
-  "_comment": "まとまり C（射撃）。持ち主は C のチャット（25 番 §5）。STG と地上で脚の形が違うので railClip / groundClip で分ける。chargeHold は地上だけ（STG は滑空 railGlide がチャージの見た目）。shoot は構えで終わる 0.45 秒（連射 0.3 秒おきで鳴り直しても構えのまま）。precisionAim は shoot より上（精密射撃中は撃ってもぶれない）",
+  "_comment": "まとまり C（射撃）。持ち主は C のチャット（25 番 §5）。STG と地上で脚の形が違うので railClip / groundClip で分ける。地上で動きながら撃つ時は今の土台（bossRun…）ごとに baseClips のクリップ（前＝ダッシュ・後ろ＝浮いて反る・左右＝スキー。2026-11-28 ユーザー）。chargeHold は鳴らさない（2026-11-28 ユーザー決定。SyncPlayerAnim で呼んでいない）。shoot は構えたまま 0.45 秒（連射 0.3 秒おきで鳴り直しても構えのまま）。precisionAim は shoot より上（精密射撃中は撃ってもぶれない）",
   "states": {
-    "shoot": { "clip": "Shoot", "railClip": "ShootRail", "groundClip": "Shoot", "loop": false, "fade": 0.08, "priority": 30 },
-    "chargeRelease": { "clip": "ChargeRelease", "railClip": "ChargeReleaseRail", "groundClip": "ChargeRelease", "loop": false, "fade": 0.05, "priority": 35 },
+    "shoot": { "clip": "Shoot", "railClip": "ShootRail", "groundClip": "Shoot", "baseClips": { "bossRunForward": "ShootDashForward", "bossRunBack": "ShootSlideBack", "bossRunLeft": "ShootSkiLeft", "bossRunRight": "ShootSkiRight" }, "loop": false, "fade": 0.08, "priority": 30 },
+    "chargeRelease": { "clip": "ChargeRelease", "railClip": "ChargeReleaseRail", "groundClip": "ChargeRelease", "baseClips": { "bossRunForward": "ChargeReleaseDashForward", "bossRunBack": "ChargeReleaseSlideBack", "bossRunLeft": "ChargeReleaseSkiLeft", "bossRunRight": "ChargeReleaseSkiRight" }, "loop": false, "fade": 0.05, "priority": 35 },
     "chargeHold": { "clip": "ChargeHold", "loop": true, "fade": 0.25, "priority": 20 },
-    "precisionAim": { "clip": "PrecisionAim", "railClip": "PrecisionAimRail", "groundClip": "PrecisionAim", "loop": true, "fade": 0.15, "priority": 32 }
+    "precisionAim": { "clip": "PrecisionAim", "railClip": "PrecisionAimRail", "groundClip": "PrecisionAim", "baseClips": { "bossRunForward": "PrecisionAimDashForward", "bossRunBack": "PrecisionAimSlideBack", "bossRunLeft": "PrecisionAimSkiLeft", "bossRunRight": "PrecisionAimSkiRight" }, "loop": true, "fade": 0.15, "priority": 32 }
   }
 }

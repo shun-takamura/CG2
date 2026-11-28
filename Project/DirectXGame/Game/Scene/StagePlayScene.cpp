@@ -1105,9 +1105,12 @@ void StagePlayScene::ApplyJustDodgeMeleeCamera(const Vector3& playerWorldPos)
 	// jdMeleeCameraOffset_ ぶんプレイヤーから離れた位置にカメラを置く。
 	// 注視点は (player+target)/2 + jdMeleeCameraLookOffset_。
 	Vector3 target = playerWorldPos;
-	if (jdCounterTarget_) {
-		if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) target = *tp;
+	if (IImGuiEditable* focus = CounterFocusEntity()) {
+		if (Vector3* tp = focus->GetEditableTranslate()) target = *tp;
 	}
+	// ボス戦は自機が地面から攻撃するので、高さをそろえて水平の基底で斜め上から撮る
+	// （ボスの中心の高さへ向けると見上げる基底になり、ほぼ地面しか映らなかった）
+	if (phase_ == Phase::Boss) target.y = playerWorldPos.y;
 
 	Vector3 fwd{ target.x - playerWorldPos.x, target.y - playerWorldPos.y, target.z - playerWorldPos.z };
 	float flen = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
@@ -1314,20 +1317,27 @@ void StagePlayScene::TriggerCloneCounterAction(CounterDir dir, const Vector2& mo
 				if (player_) {
 					jdApproachWorldStart_ = player_->GetTranslate();
 				}
+				// 回避した攻撃の持ち主（腕・拳など）ではなくボスの本体を基準に、水平だけで決める
+				// （手足の後ろや宙に出て、判定がボスに届かないことがあった）。高さは今の地面のまま。
+				// 「背後」はボスの向きの後ろ（自機から見た反対側だと、突進がすれ違った後はボスの進む先になり、
+				// ワープした所へ突っ込んできた）。ボスの向きが取れなければ自機から見た反対側
 				jdApproachWorldGoal_ = jdApproachWorldStart_;
-				if (jdCounterTarget_) {
-					if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) {
-						Vector3 epos = *tp;
-						Vector3 d{ jdApproachWorldStart_.x - epos.x,
-						           jdApproachWorldStart_.y - epos.y,
-						           jdApproachWorldStart_.z - epos.z };
-						float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+				{
+					IImGuiEditable* center = CounterFocusEntity();
+					if (const Vector3* tp = center ? center->GetEditableTranslate() : nullptr) {
+						float dx = jdApproachWorldStart_.x - tp->x;
+						float dz = jdApproachWorldStart_.z - tp->z;
+						if (const Vector3* br = center->GetEditableRotate()) {
+							dx = std::sin(br->y);
+							dz = std::cos(br->y);
+						}
+						const float dl = std::sqrt(dx * dx + dz * dz);
 						if (dl > kNearZero) {
-							d.x /= dl; d.y /= dl; d.z /= dl;
+							dx /= dl; dz /= dl;
 							jdApproachWorldGoal_ = {
-								epos.x - d.x * jdMeleeApproachDist_,
-								epos.y - d.y * jdMeleeApproachDist_,
-								epos.z - d.z * jdMeleeApproachDist_,
+								tp->x - dx * jdMeleeApproachDist_,
+								jdApproachWorldStart_.y,
+								tp->z - dz * jdMeleeApproachDist_,
 							};
 						}
 					}
@@ -1492,13 +1502,9 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 	switch (jdChosen_) {
 		case CounterDir::Up:
 		case CounterDir::Right: {
-			// Approach → Active（meleeパイプ＋melee発生待ち） → (強は Y1→Y4・弱は B1→B4 の自動連撃) → Return → 終了
+			// Approach → Active（溜め攻撃 1 発の発生〜スキ待ち） → Return → 終了
 			// ワールド位置の補間は描画直前の SetTranslate 上書きで行う（ここではフェーズ管理だけ）。
-
-			// 段の発生予約は MeleeComboPart に任せる（上＝Y / 右＝B の 1..kMaxStage 段を自動で連撃）。
-			auto spawnMeleeStage = [&](int stage) {
-				meleeCombo_.StartStep(jdChosen_ == CounterDir::Up ? MeleeButton::Y : MeleeButton::B, stage);
-			};
+			// 4 段の自動連撃はテンポが悪いので、上＝Y4 の後・右＝B4 の後の溜め攻撃の最後の段階を溜めずにすぐ放つ
 
 			if (jdActionPhase_ == JdActionPhase::Approach) {
 				// ボスはここを「ワープ待ち」として使う（詰め寄りダッシュの移動補間はしない）。
@@ -1507,10 +1513,12 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 					if (phase_ == Phase::Boss && player_) {
 						// ワープ実行：位置は瞬間移動、カメラはここから最短経路で寄せ始める
 						// （直前のカメラ実位置をスイング開始状態として採取）。
+						// カメラを寄せる中心は ApplyJustDodgeMeleeCamera と同じ（ボスの本体・自機の高さ）
 						Vector3 targetPos{ 0.0f, 0.0f, 0.0f };
-						if (jdCounterTarget_) {
-							if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) targetPos = *tp;
+						if (IImGuiEditable* focus = CounterFocusEntity()) {
+							if (Vector3* tp = focus->GetEditableTranslate()) targetPos = *tp;
 						}
+						targetPos.y = jdApproachWorldGoal_.y;
 						if (camera_) {
 							ToSphericalAroundPivot(camera_->GetTranslate(), targetPos,
 								jdBossCamSwingStartYaw_, jdBossCamSwingStartPitch_, jdBossCamSwingStartRadius_);
@@ -1519,19 +1527,15 @@ void StagePlayScene::UpdateJustDodgeCounterAction(float dt)
 						jdBossMeleeCamActive_ = true;
 						player_->SetTranslate(jdApproachWorldGoal_);
 					}
-					jdAutoComboStage_   = 1;
-					spawnMeleeStage(jdAutoComboStage_);
+					meleeCombo_.StartChargeAttack(jdChosen_ == CounterDir::Up
+						? MeleeComboPart::ChargeKind::AfterY4 : MeleeComboPart::ChargeKind::AfterB4,
+						MeleeChargeSet::kLevelCount);
 					jdActionPhase_      = JdActionPhase::Active;
 					jdActionPhaseTimer_ = 0.0f;
 				}
 			} else if (jdActionPhase_ == JdActionPhase::Active) {
 				if (!meleeCombo_.IsLocked()) {
-					// 強（Up）・弱（Right）とも MeleeComboPart::kMaxStage 段まで自動連撃（強は Y1〜Y4、弱は B1〜B4）
-					if (jdAutoComboStage_ < MeleeComboPart::kMaxStage) {
-						++jdAutoComboStage_;
-						spawnMeleeStage(jdAutoComboStage_);
-						jdActionPhaseTimer_ = 0.0f; // Active 継続
-					} else if (phase_ == Phase::Boss) {
+					if (phase_ == Phase::Boss) {
 						// 戻らない：攻撃した場所（ボス背後）にそのまま留まる。
 						// 通常カメラ（BossStagePart::UpdateCamera）へ制御を戻す前に、乗っ取っていた
 						// 近接カメラの最終角度を camYaw_/camPitch_ へ同期しておく（古い角度への瞬間戻り防止）。
@@ -1782,12 +1786,14 @@ void StagePlayScene::ComputeAimBasis(Vector3& right, Vector3& up, Vector3& forwa
 	right = rgt;
 }
 
-void StagePlayScene::SpawnComboMelee(const std::string& prefab, float damageScale)
+void StagePlayScene::SpawnComboMelee(const std::string& prefab, float damageScale, float rehitInterval)
 {
 	if (!player_) return;
 	SoundManager::GetInstance()->Play2DSound("se_melee");
-	Vector3 right, up, forward;
-	ComputeAimBasis(right, up, forward);
+	// 向きは技が始まった時に決めた物（OnComboAttackStarted）。2 回目以降の判定も同じ向きに出る
+	const Vector3& right = meleeBasisRight_;
+	const Vector3& up = meleeBasisUp_;
+	const Vector3& forward = meleeBasisForward_;
 	// 技の威力＝攻撃力 × damageScale（当たった時の本あて/持続あての倍率はプレハブ側で掛かる）
 	const int baseAtk = ScaledPlayerAttack();
 	const int atk = baseAtk > 0
@@ -1797,7 +1803,31 @@ void StagePlayScene::SpawnComboMelee(const std::string& prefab, float damageScal
 	// サイズは STG=プレハブ基準(1.0)、ボス戦は当てやすすぎるので meleeBossSizeScale_ で縮小。
 	const float meleeSize = (phase_ == Phase::Boss) ? meleeBossSizeScale_ : 1.0f;
 	SpawnPlayerMelee(player_, right, up, forward, prefab, atk,
-		{ 0.0f, meleeOriginHeight_, 0.0f }, meleeSize);
+		{ 0.0f, meleeOriginHeight_, 0.0f }, meleeSize, rehitInterval);
+}
+
+void StagePlayScene::OnComboAttackStarted()
+{
+	MarkPlayerAttack();
+	// STG は狙い（ジャスト回避の派生中は相手）へ向ける
+	if (phase_ != Phase::Boss || !bossStage_) {
+		ComputeAimBasis(meleeBasisRight_, meleeBasisUp_, meleeBasisForward_);
+		return;
+	}
+	// ボス戦：ジャスト回避の派生中はボスへ、そうでなければスティックが倒れている方へ、すぐ向き直ってから技を出す
+	// （どちらも無ければ今の向き）
+	float yaw = bossFacingYaw_;
+	const bool turn = justDodgeCounterActive_ ? CounterTargetYaw(yaw) : MoveInputToBossYaw(playerMoveInput_, yaw);
+	if (turn) {
+		bossFacingYaw_ = yaw;
+		bossFacingInit_ = true;
+		if (player_) player_->SetRotate({ 0.0f, bossFacingYaw_, 0.0f });
+	}
+	const float s = std::sin(bossFacingYaw_);
+	const float c = std::cos(bossFacingYaw_);
+	meleeBasisForward_ = { s, 0.0f, c };
+	meleeBasisRight_ = { c, 0.0f, -s };
+	meleeBasisUp_ = { 0.0f, 1.0f, 0.0f };
 }
 
 void StagePlayScene::PlayComboClip(const std::string& clip, float speed, float fade, bool loop)
@@ -3615,10 +3645,30 @@ void StagePlayScene::UpdateBossPlayerMovement(InputActionMap* actions, const Vec
 	// ジャスト回避スロー受付中は地上の自由移動を禁止（残存速度は慣性で減速し停止）。
 	// STG と同方針。近接派生中（jdMeleeCameraActive_）はワープ/攻撃で位置を直接管理するため
 	// 地上移動そのものを止める（UpdatePlayerGroundMovement を呼ばない）。
-	const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
+	// 近接の技の攻撃中の移動（24 番 §8）：free＝攻撃中でも遅くしない（倍率は技の speed）／
+	// forward・back＝スティックに関係なく、向いている方へ技の速さで進む・下がる（向きも変えない）。
+	// 近接の発生〜スキ・溜めの間で、技に移動の区間が無い所は止まる（スティックで滑らない）
+	const MeleeMotion meleeMotion = meleeCombo_.GetCurrentMotion();
+	const bool meleeFree = meleeMotion.mode == MeleeMotionMode::Free;
+	const bool meleeForced = meleeMotion.mode == MeleeMotionMode::Forward || meleeMotion.mode == MeleeMotionMode::Back;
+	const bool meleeRooted = meleeCombo_.IsLocked() && !meleeFree && !meleeForced;
+	const float attackScale = meleeFree ? meleeMotion.speed : (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f);
+	const float moveScale = attackScale
 		* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f)
-		* ShieldMoveSpeedScale();
-	const Vector2 groundMove = justDodgeActive_ ? Vector2{ 0.0f, 0.0f } : Vector2{ moveDelta.x * moveScale, moveDelta.y * moveScale };
+		* ShieldMoveSpeedScale()
+		* meleeCombo_.GetBuffMoveScale();
+	Vector2 groundMove = (justDodgeActive_ || meleeRooted) ? Vector2{ 0.0f, 0.0f } : Vector2{ moveDelta.x * moveScale, moveDelta.y * moveScale };
+	if (meleeForced && !justDodgeActive_ && bossStage_->GetPlayerMoveSpeed() > kTinyEpsilon) {
+		// 向いている方（後ろへ下がる時は反対）を、地上の移動の入力（カメラから見た右・奥）に直す。
+		// 入力の大きさ＝技の速さ ÷ いつもの最大の速さ
+		const float sign = (meleeMotion.mode == MeleeMotionMode::Back) ? -1.0f : 1.0f;
+		const float dirX = std::sin(bossFacingYaw_) * sign;
+		const float dirZ = std::cos(bossFacingYaw_) * sign;
+		Vector3 gfwd, gright;
+		bossStage_->ComputeGroundBasis(gfwd, gright);
+		const float amount = meleeMotion.speed / bossStage_->GetPlayerMoveSpeed();
+		groundMove = { (dirX * gright.x + dirZ * gright.z) * amount, (dirX * gfwd.x + dirZ * gfwd.z) * amount };
+	}
 	if (!jdMeleeCameraActive_) {
 		bossStage_->UpdatePlayerGroundMovement(player_, dt, groundMove);
 	}
@@ -3633,9 +3683,17 @@ void StagePlayScene::UpdateBossPlayerMovement(InputActionMap* actions, const Vec
 		gravityOrb_->ResolvePlayerCollision(pushed);
 		player_->SetTranslate(pushed);
 	}
+	// 大技のスーパーアーマー中は吹き飛ばないので、ボスの体にめり込まないよう水平に押し出す
+	if (meleeCombo_.HasSuperArmor()) PushPlayerOutOfBoss();
 	const Vector3 bWorldPos = player_->GetTranslate();
 
-	UpdateBossPlayerFacing(moveDelta, bWorldPos, dt);
+	// 近接の技の間は始まった時の向きのまま（自動で進む・下がる間も、スティックで向きが回ると進む向きがずれる）。
+	// 向きを変えられるのは free の区間（Y2・Y4 の回転）だけ
+	const bool meleeFacingLocked = meleeCombo_.IsLocked() && !meleeFree;
+	// 撃ってから moveStateDelay_ 秒以内と精密射撃の間は、弾の飛ぶ向き（カメラの向き）を向く（2026-11-28 ユーザー：
+	// カメラ側を向いたまま撃つと弾だけ前へ出ていた）。近接の技で向きを固定している間はそちらが先
+	const bool aimFacing = !meleeFacingLocked && (precisionHeld_ || timeSinceShot_ < moveStateDelay_);
+	UpdateBossPlayerFacing(meleeFacingLocked ? Vector2{ 0.0f, 0.0f } : moveDelta, bWorldPos, dt, aimFacing);
 
 	// 分身プレビュー等の本体追従（ジャスト回避演出用）。
 	UpdateJustDodgeClones(actions, moveDelta, GetScaledDeltaTime(TimeGroup::UI));
@@ -3644,26 +3702,30 @@ void StagePlayScene::UpdateBossPlayerMovement(InputActionMap* actions, const Vec
 }
 
 // 自機の向き（yaw のみ）を更新。実際の SetRotate は後段の照準（UpdateAimTarget）で適用する。
-void StagePlayScene::UpdateBossPlayerFacing(const Vector2& moveDelta, const Vector3& playerPos, float dt) {
+void StagePlayScene::UpdateBossPlayerFacing(const Vector2& moveDelta, const Vector3& playerPos, float dt, bool aimFacing) {
 	// ・ジャスト回避スロー中：攻撃元（ボス）方向へ向く。
+	// ・射撃中・精密射撃中（aimFacing）：カメラの向き（地面に沿った前＝弾の飛ぶ向き）を向く。
 	// ・通常時：移動入力方向を向く（入力が無ければ直前の向きを保持）。
 	float targetYaw = bossFacingYaw_;
 	bool  hasTarget  = false;
+	if (justDodgeCounterActive_) {
+		// ジャスト回避の派生中：ボスの方へすぐ向く（技を出す時にも向き直る＝OnComboAttackStarted）
+		if (CounterTargetYaw(targetYaw)) { bossFacingYaw_ = targetYaw; bossFacingInit_ = true; }
+		return;
+	}
 	if (justDodgeActive_ && jdCounterTarget_) {
 		if (Vector3* tp = jdCounterTarget_->GetEditableTranslate()) {
 			const float dx = tp->x - playerPos.x;
 			const float dz = tp->z - playerPos.z;
 			if (dx * dx + dz * dz > kSquaredEpsilon) { targetYaw = std::atan2(dx, dz); hasTarget = true; }
 		}
+	} else if (aimFacing && bossStage_) {
+		Vector3 gfwd, gright;
+		bossStage_->ComputeGroundBasis(gfwd, gright);
+		targetYaw = std::atan2(gfwd.x, gfwd.z);
+		hasTarget = true;
 	} else {
-		const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
-		if (mlen > kNearZero) {
-			Vector3 gfwd, gright;
-			bossStage_->ComputeGroundBasis(gfwd, gright);
-			const float wx = gright.x * moveDelta.x + gfwd.x * moveDelta.y;
-			const float wz = gright.z * moveDelta.x + gfwd.z * moveDelta.y;
-			if (wx * wx + wz * wz > kSquaredEpsilon) { targetYaw = std::atan2(wx, wz); hasTarget = true; }
-		}
+		hasTarget = MoveInputToBossYaw(moveDelta, targetYaw);
 	}
 	if (!bossFacingInit_) { bossFacingYaw_ = targetYaw; bossFacingInit_ = true; }
 	else if (hasTarget) {
@@ -3674,6 +3736,66 @@ void StagePlayScene::UpdateBossPlayerFacing(const Vector2& moveDelta, const Vect
 			? (1.0f - std::exp(-dt / bossFacingTurnSmoothTime_)) : 1.0f;
 		bossFacingYaw_ += d * a;
 	}
+}
+
+void StagePlayScene::PushPlayerOutOfBoss() {
+	if (!player_ || !bossStage_) return;
+	IImGuiEditable* boss = bossStage_->GetBossEntity();
+	const Vector3* bp = boss ? boss->GetEditableTranslate() : nullptr;
+	if (!bp) return;
+	// ボスの体（球の判定）と自機の判定の半径を足した円の外へ、水平だけで押し出す
+	const Collider& bc = Gameplay::Of(boss).GetCollider();
+	const float minDist = bc.radius + Gameplay::Of(player_).GetCollider().radius;
+	Vector3 pos = player_->GetTranslate();
+	const float dx = pos.x - (bp->x + bc.offset.x);
+	const float dz = pos.z - (bp->z + bc.offset.z);
+	const float d2 = dx * dx + dz * dz;
+	if (d2 >= minDist * minDist) return;
+	float nx = 0.0f, nz = 0.0f;
+	if (d2 > kSquaredEpsilon) {
+		const float d = std::sqrt(d2);
+		nx = dx / d;
+		nz = dz / d;
+	} else {
+		// 真ん中に重なった時は自機の後ろへ
+		nx = -std::sin(bossFacingYaw_);
+		nz = -std::cos(bossFacingYaw_);
+	}
+	pos.x = bp->x + bc.offset.x + nx * minDist;
+	pos.z = bp->z + bc.offset.z + nz * minDist;
+	player_->SetTranslate(pos);
+}
+
+IImGuiEditable* StagePlayScene::CounterFocusEntity() const {
+	// ボス戦はボスの本体（回避した攻撃の持ち主は腕・拳・突進の判定などで、本体と位置がずれる）
+	if (phase_ == Phase::Boss && bossStage_ && bossStage_->GetBossEntity()) return bossStage_->GetBossEntity();
+	return jdCounterTarget_;
+}
+
+bool StagePlayScene::CounterTargetYaw(float& outYaw) const {
+	if (!player_) return false;
+	IImGuiEditable* target = CounterFocusEntity();
+	const Vector3* tp = target ? target->GetEditableTranslate() : nullptr;
+	if (!tp) return false;
+	const Vector3 pp = player_->GetTranslate();
+	const float dx = tp->x - pp.x;
+	const float dz = tp->z - pp.z;
+	if (dx * dx + dz * dz <= kSquaredEpsilon) return false;
+	outYaw = std::atan2(dx, dz);
+	return true;
+}
+
+bool StagePlayScene::MoveInputToBossYaw(const Vector2& moveDelta, float& outYaw) const {
+	if (!bossStage_) return false;
+	const float mlen = std::sqrt(moveDelta.x * moveDelta.x + moveDelta.y * moveDelta.y);
+	if (mlen <= kNearZero) return false;
+	Vector3 gfwd, gright;
+	bossStage_->ComputeGroundBasis(gfwd, gright);
+	const float wx = gright.x * moveDelta.x + gfwd.x * moveDelta.y;
+	const float wz = gright.z * moveDelta.x + gfwd.z * moveDelta.y;
+	if (wx * wx + wz * wz <= kSquaredEpsilon) return false;
+	outYaw = std::atan2(wx, wz);
+	return true;
 }
 
 // ボス戦のカメラ（右スティック・マウスの look、L1 の短押し/長押し）と、その上に重ねる演出カメラ
@@ -3747,11 +3869,18 @@ void StagePlayScene::UpdateRailPlayerMovement(InputActionMap* actions, const Vec
 	// 下=追加回避を選んだ瞬間の WASD を回避方向に使うため、ここでは zero 化しない。
 
 	// 目標速度（入力 × 最大速度）に対して指数減衰で接近させる＝慣性
-	// 飛行ユニットの常時の効果（機動系は移動が速くなる）
-	const float moveScale = (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f)
+	// 飛行ユニットの常時の効果（機動系は移動が速くなる）。
+	// 近接の技の自由移動（24 番 §8）の間は攻撃中でも遅くしない。前後の自動移動は STG では使わない（奥へ進めないので振りだけ）。
+	// それ以外の近接の発生〜スキ・溜めの間は止まる（スティックで滑らない）
+	const MeleeMotion meleeMotion = meleeCombo_.GetCurrentMotion();
+	const bool meleeFree = meleeMotion.mode == MeleeMotionMode::Free;
+	const bool meleeRooted = meleeCombo_.IsLocked() && !meleeFree;
+	const float moveScale = (meleeFree ? meleeMotion.speed
+		: (IsPlayerAttacking(actions) ? attackMoveSpeedScale_ : 1.0f))
 		* (flightUnit_ ? flightUnit_->GetMoveSpeedScale() : 1.0f)
-		* ShieldMoveSpeedScale();
-	Vector2 targetVel = {
+		* ShieldMoveSpeedScale()
+		* meleeCombo_.GetBuffMoveScale();
+	Vector2 targetVel = meleeRooted ? Vector2{ 0.0f, 0.0f } : Vector2{
 		moveDelta.x * playerMoveSpeed_.x * moveScale,
 		moveDelta.y * playerMoveSpeed_.y * moveScale,
 	};
@@ -4117,7 +4246,15 @@ void StagePlayScene::UpdatePlayerAttachments() {
 		// ビームの刃：近接の発生〜後隙とコンボの受付の間だけ伸びる（刃の位置・向きは武器のモデルのローカル）
 		if (weaponBlade_ && mw && mw->blade && gripFromWeapon) {
 			const Matrix4x4 local = MakeAffineMatrix(Transform{ mw->bladeScale, mw->bladeRotate, mw->bladeOffset });
-			weaponBlade_->SetAppearance(mw->bladeLook);
+			// Y+B の強化中は刃を赤く（形・透けは武器のまま、色だけ替える）
+			if (meleeCombo_.GetBuffLevel() > 0) {
+				BeamBladeAppearance look = mw->bladeLook;
+				look.coreColor = meleeCombo_.GetBuffBladeCoreColor();
+				look.edgeColor = meleeCombo_.GetBuffBladeEdgeColor();
+				weaponBlade_->SetAppearance(look);
+			} else {
+				weaponBlade_->SetAppearance(mw->bladeLook);
+			}
 			weaponBlade_->SetWorld(Multiply(local, world));
 			weaponBlade_->SetActive(weaponBladePreview_ || meleeCombo_.IsEngaged());
 			weaponBlade_->Update(GetScaledDeltaTime(TimeGroup::Player));
@@ -4406,8 +4543,9 @@ void StagePlayScene::UpdatePlayerFacing(const Vector3& desiredTarget) {
 	}
 	const Vector3 toAim{ aimTgt.x - bodyPos.x, aimTgt.y - bodyPos.y, aimTgt.z - bodyPos.z };
 	const float horiz = std::sqrt(toAim.x * toAim.x + toAim.z * toAim.z);
-	if (GetSceneTimeScale() == 0.0f) {
+	if (GetSceneTimeScale() == 0.0f && !jdMeleeCameraActive_) {
 		// シーン停止中（エディタ Pause）はレティクル追従を止めて固定アングルで構える。
+		// ジャスト回避の近接派生も World を 0 にするので除く（固定の向きになり、ボスに背を向けていた）。
 		// 武器ソケット等の確認・編集をしやすくする。位置（クリップ追従）はそのまま。
 		player_->SetRotate(fixedPlayerFacing_);
 	} else if (specialActive_) {
@@ -4498,6 +4636,7 @@ void StagePlayScene::UpdateShooting(InputActionMap* actions, bool gameFrozen) {
 	fireTimer_ -= dtP;
 	if (fireTimer_ < 0.0f) fireTimer_ = 0.0f;
 	timeSinceAttack_ += dtP;
+	timeSinceShot_ += dtP;
 
 	// チャージ時間：メイン武器（20 番 §1）→ 無ければプレイヤープレハブ（有効時のみ）
 	if (const MainWeaponDef* mw = GetGameSession()->GetLoadoutState()->GetMainWeapon()) {
@@ -4534,6 +4673,24 @@ void StagePlayScene::UpdateShooting(InputActionMap* actions, bool gameFrozen) {
 		}
 	}
 #endif
+	// RT+Y+B の大技の見分け：チャージが 1 段階以上ある時に RT を押したら、同時押しとみなす間だけ射撃を待つ。
+	// その間に近接が大技の溜めに入ったら撃たない（ConsumeGunCharge で待ちを消す）。待ち切ったら、離していても 1 発撃つ
+	bool fireAfterWait = false;
+	if (fireChordTimer_ > 0.0f) {
+		if (meleeCombo_.IsLocked()) {
+			fireChordTimer_ = 0.0f;
+		} else {
+			fireChordTimer_ -= dtP;
+			fireAfterWait = (fireChordTimer_ <= 0.0f);
+		}
+		firePressed = fireAfterWait;
+	} else if (firePressed && actions->IsTriggered(static_cast<int>(Action::Fire)) && playerChargeLevel_ >= 1.0f
+		&& fireTimer_ <= 0.0f && !meleeCombo_.IsLocked()) {
+		fireChordTimer_ = meleeCombo_.GetChordWindow();
+		firePressed = false;
+	}
+	if (fireAfterWait) fireChordTimer_ = 0.0f;
+
 	// Fire 押下で発射（チャージ状態でも即発射、または連射）
 	if (firePressed && fireTimer_ <= 0.0f && shootLockoutTimer_ <= 0.0f
 		&& !meleeCombo_.IsLocked() && player_) {
@@ -4665,23 +4822,35 @@ void StagePlayScene::FirePlayerShot() {
 		const float fr = mainWeapon ? mainWeapon->fireRate : Gameplay::Of(player_).GetChargeParams().fireRate;
 		fireTimer_ = (fr > 0.0f) ? fr : kDefaultFireInterval;
 		MarkPlayerAttack();
+		timeSinceShot_ = 0.0f;
 
 		// チャージ状態だった場合はリセット
-		if (playerChargeLevel_ >= 0.0f) {
-			playerChargeLevel_ = -1.0f;
-			chargeTimer_ = 0.0f;
-			chargeStage1Triggered_ = false;
-			chargeStage2Triggered_ = false;
-			if (reticle_) {
-				reticle_->EndChargeAnimation();
-			}
-			auto* effectMgr = EffectManager::GetInstance();
-			if (effectMgr && chargeHoldEffectHandle_ != kInvalidEffectHandle) {
-				effectMgr->Stop(chargeHoldEffectHandle_);
-				chargeHoldEffectHandle_ = kInvalidEffectHandle;
-			}
-		}
+		ResetGunCharge();
 	}
+}
+
+void StagePlayScene::ResetGunCharge() {
+	if (playerChargeLevel_ < 0.0f) return;
+	playerChargeLevel_ = -1.0f;
+	chargeTimer_ = 0.0f;
+	chargeStage1Triggered_ = false;
+	chargeStage2Triggered_ = false;
+	if (reticle_) {
+		reticle_->EndChargeAnimation();
+	}
+	auto* effectMgr = EffectManager::GetInstance();
+	if (effectMgr && chargeHoldEffectHandle_ != kInvalidEffectHandle) {
+		effectMgr->Stop(chargeHoldEffectHandle_);
+		chargeHoldEffectHandle_ = kInvalidEffectHandle;
+	}
+}
+
+int StagePlayScene::ConsumeGunCharge() {
+	const int level = (playerChargeLevel_ >= kChargeLevel2) ? 2 : (playerChargeLevel_ >= 1.0f ? 1 : 0);
+	ResetGunCharge();
+	// 大技の溜めの間、RT の射撃を待っていた分は撃たない
+	fireChordTimer_ = 0.0f;
+	return level;
 }
 
 // 近接・弾・飛行ユニット・被弾・必殺技（射撃より後。弾はこのフレームに撃った物も進める）
@@ -4710,7 +4879,8 @@ void StagePlayScene::UpdateCombatAndSpecial(InputActionMap* actions, float world
 		const float meleeDt = jdMeleeCameraActive_
 			? GetScaledDeltaTime(TimeGroup::Player) : worldDt;
 		if (!gameFrozen || jdMeleeCameraActive_) {
-			UpdateMelees(meleeDt);
+			// 多段の判定（大技の回転斬り）のもう一度当たれるまでの時間は実時間で数える（ヒットストップでも進む）
+			UpdateMelees(meleeDt, GetScaledDeltaTime(TimeGroup::UI));
 		}
 	}
 	// 飛行ユニット（RB の技・クールタイム。実時間で進む）
@@ -5144,10 +5314,10 @@ void StagePlayScene::SyncPlayerAnim(float dt) {
 	if (!player_) return;
 	const PlayerAnimMode mode = CurrentPlayerAnimMode();
 	playerAnim_.SetMode(mode);
-	// チャージ 1 段目が溜まった後：STG は滑空（8 番 §2.2.1）、地上はチャージの構え
+	// チャージ 1 段目が溜まった後：STG は滑空（8 番 §2.2.1）。地上のチャージの構え（chargeHold）は鳴らさない
+	// （2026-11-28 ユーザー：チャージは撃たずにいると 3 秒で溜まるので、構えが移動のダッシュ・スキーを隠し続けていた）
 	const bool charged = chargeStage1Triggered_;
 	playerAnim_.SetRailGlide(mode == PlayerAnimMode::Rail && charged);
-	playerAnim_.SetHeld(PlayerAnimState::ChargeHold, mode == PlayerAnimMode::Ground && charged);
 	playerAnim_.SetGroundMove(mode == PlayerAnimMode::Ground ? playerAnimGroundMove_ : Vector2{ 0.0f, 0.0f });
 	playerAnim_.SetHeld(PlayerAnimState::PrecisionAim, precisionHeld_);
 	// 必殺技：Storm Lock は発動中ずっと、Shatterline は段（構え → 振り抜き → 硬直）ごと
@@ -5589,8 +5759,35 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 			hitFound = false;
 		}
 
+		// 近接の技の前方ガード（24 番 §8。Y1 の盾を構えた突進）：正面から守る角度の内側で受けた攻撃は通さない（弾は消す）
+		float guardAngleDeg = 0.0f;
+		if (hitFound && meleeCombo_.IsGuarding(guardAngleDeg)) {
+			Vector3 front{};
+			if (phase_ == Phase::Boss) {
+				front = { std::sin(bossFacingYaw_), 0.0f, std::cos(bossFacingYaw_) };
+			} else {
+				Vector3 aimRight, aimUp;
+				ComputeAimBasis(aimRight, aimUp, front);
+			}
+			Vector3 toSource{ hitSourcePos.x - playerPos.x, hitSourcePos.y - playerPos.y, hitSourcePos.z - playerPos.z };
+			// ボス戦は水平だけで見る（地上の攻撃は高さがまちまち）
+			if (phase_ == Phase::Boss) toSource.y = 0.0f;
+			const float srcLen = std::sqrt(toSource.x * toSource.x + toSource.y * toSource.y + toSource.z * toSource.z);
+			const float frontLen = std::sqrt(front.x * front.x + front.y * front.y + front.z * front.z);
+			// 攻撃元が自機と重なっている（向きが出ない）時は正面から来たものとして守る
+			const bool inFront = (srcLen <= kTinyEpsilon || frontLen <= kTinyEpsilon)
+				|| ((toSource.x * front.x + toSource.y * front.y + toSource.z * front.z) / (srcLen * frontLen)
+					>= std::cos(DegToRad(guardAngleDeg)));
+			if (inFront) {
+				if (hitBullet) KillBullet(hitBullet);
+				if (IsShieldBeamVisible()) beamShield_->Flash(1.0f);
+				hitFound = false;
+			}
+		}
+
 		if (hitFound) {
-			const float justWindow = dodgeJustWindow_ + (flightUnit_ ? flightUnit_->GetJustDodgeWindowBonus() : 0.0f);
+			const float justWindow = dodgeJustWindow_ + (flightUnit_ ? flightUnit_->GetJustDodgeWindowBonus() : 0.0f)
+				+ meleeCombo_.GetBuffJustWindowAdd();
 			if (dodgeActive_ && dodgeTimer_ <= justWindow) {
 				// ジャスト回避成立（スロー＋演出＋回復ストック＋スコア）
 				TriggerJustDodge(attacker);
@@ -5606,8 +5803,8 @@ void StagePlayScene::UpdatePlayerDamageAndUI(float deltaTime) {
 				// ビームシールドは受けた瞬間だけ強く光る
 				if (IsShieldBeamVisible()) beamShield_->Flash(1.0f);
 				OnPlayerTakeDamage(damage);
-				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）
-				if (phase_ == Phase::Boss && bossStage_) {
+				// ボス戦：攻撃元から離れる向きへノックバック（弾=小 / 近接=大）。大技のスーパーアーマー中は吹き飛ばない
+				if (phase_ == Phase::Boss && bossStage_ && !meleeCombo_.HasSuperArmor()) {
 					bossStage_->ApplyKnockback(hitSourcePos, heavyHit);
 				}
 				// 被弾エフェクト：攻撃側（敵弾）の "hit" ＋ プレイヤーの "hurt" を再生
@@ -5641,7 +5838,10 @@ void StagePlayScene::OnPlayerTakeDamage(int damageAmount) {
 
 	Gameplay::Of(player_).GetHP().TakeDamage(damageAmount);
 	SoundManager::GetInstance()->Play2DSound("se_player_damage");
-	playerAnim_.Trigger(CurrentPlayerAnimMode() == PlayerAnimMode::Ground ? PlayerAnimState::GroundHit : PlayerAnimState::RailHit);
+	// 大技のスーパーアーマー中はひるまない（被弾のアニメで技のクリップを止めない。ダメージはそのまま）
+	if (!meleeCombo_.HasSuperArmor()) {
+		playerAnim_.Trigger(CurrentPlayerAnimMode() == PlayerAnimMode::Ground ? PlayerAnimState::GroundHit : PlayerAnimState::RailHit);
+	}
 
 	playerInvincibilityTimer_ = playerInvincibilityDuration_;
 	shootLockoutTimer_ = shootLockoutDuration_;
@@ -6068,7 +6268,8 @@ int StagePlayScene::ScaledPlayerAttack() const {
 	if (!player_ || !Gameplay::Of(player_).HasAttackPower()) return 0;
 	const MainWeaponDef* mw = GetGameSession()->GetLoadoutState()->GetMainWeapon();
 	const int atk = Gameplay::Of(player_).GetAttackPower() + (mw ? mw->attackBonus : 0);
-	const float scale = flightUnit_ ? flightUnit_->GetAttackScale() : 1.0f;
+	// 飛行ユニットの倍率と、Y+B の強化の倍率（射撃・近接・支援とも）
+	const float scale = (flightUnit_ ? flightUnit_->GetAttackScale() : 1.0f) * meleeCombo_.GetBuffAttackScale();
 	return (atk > 0) ? (std::max)(1, static_cast<int>(std::lround(static_cast<float>(atk) * scale))) : 0;
 }
 

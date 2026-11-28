@@ -128,7 +128,7 @@
     "capsuleHeight": 3
   },
   "melee": {
-    "startup": 0.1,
+    "startup": 0.25,
     "activeDuration": 0.35,
     "offset": [
       0,

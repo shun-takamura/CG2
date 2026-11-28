@@ -630,6 +630,18 @@
     "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeForward.anim",
     "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeBack.anim",
     "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeLeft.anim",
-    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeRight.anim"
+    "Resources/Models/Player/PlayerModel/PlayerModel_GroundDodgeRight.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAimDashForward.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAimSlideBack.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAimSkiLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_PrecisionAimSkiRight.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ShootDashForward.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ShootSlideBack.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ShootSkiLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ShootSkiRight.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeReleaseDashForward.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeReleaseSlideBack.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeReleaseSkiLeft.anim",
+    "Resources/Models/Player/PlayerModel/PlayerModel_ChargeReleaseSkiRight.anim"
   ]
 }

@@ -10,7 +10,8 @@ public:
 	/// <summary>近接の判定を出す（足元から持ち上げ・ボス戦は小さく・音を鳴らす はシーン側）</summary>
 	/// <param name="prefab">判定のプレハブ名</param>
 	/// <param name="damageScale">攻撃力に掛ける倍率</param>
-	virtual void SpawnComboMelee(const std::string& prefab, float damageScale) = 0;
+	/// <param name="rehitInterval">同じ相手にもう一度当たれるまでの実時間 [秒]（0 以下なら 1 回だけ。ヒットストップでも止まらない）</param>
+	virtual void SpawnComboMelee(const std::string& prefab, float damageScale, float rehitInterval) = 0;
 	/// <summary>自機のクリップを再生する</summary>
 	/// <param name="clip">.anim のパス（空は来ない）</param>
 	/// <param name="speed">再生速度</param>
@@ -21,4 +22,7 @@ public:
 	virtual void RestoreComboPose() = 0;
 	/// <summary>攻撃を出した（射撃の「攻撃中」判定・移動状態の切り替え用）</summary>
 	virtual void OnComboAttackStarted() = 0;
+	/// <summary>銃のチャージを使い切る（RT+Y+B の大技）</summary>
+	/// <returns>使う前のチャージの段階（0＝無し, 1, 2）</returns>
+	virtual int ConsumeGunCharge() = 0;
 };

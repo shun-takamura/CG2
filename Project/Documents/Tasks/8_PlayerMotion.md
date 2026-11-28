@@ -71,12 +71,13 @@
 
 | クリップ | ループ | 状態 | 備考 |
 |---|---|---|---|
-| 通常の射撃 | — | `shoot` | `Shoot` / `ShootRail`（0.45 秒・構えで終わる。連射で鳴り直しても構えのまま） |
-| チャージ中 | ✅ | `chargeHold` | `ChargeHold`。**地上だけ**（STG は滑空がチャージの見た目） |
+| 通常の射撃 | — | `shoot` | `Shoot` / `ShootRail`（0.45 秒・構えたまま動かない。反動の跳ね上がりは 2026-11-28 ユーザー指示で消した） |
+| チャージ中 | ✅ | `chargeHold` | `ChargeHold`。**地上だけ**（STG は滑空がチャージの見た目）。**2026-11-28 ユーザー決定で鳴らさない**（撃たずにいると 3 秒で溜まり、移動のダッシュ・スキーを隠し続けたため。SyncPlayerAnim の SetHeld を B が消した。クリップと JSON は残す） |
 | チャージを放つ | — | `chargeRelease` | `ChargeRelease` / `ChargeReleaseRail`（0.8 秒。腕は上げすぎず上体の反りで大きく） |
 | 精密射撃の構え | ✅ | `precisionAim` | `PrecisionAim` / `PrecisionAimRail`。優先度 32＝射撃より上（撃ってもぶれない） |
 
-2026-11-27 作成・書き出し・cook 済み（動きはユーザー了承：右肩を前に入れ、左腕は肩から力を抜いて垂らす）。STG 用（…Rail）は B の `RailStand`、地上用は `BossIdle` を元にし、`shoot.json` の `railClip` / `groundClip` で分ける。腕の向きは `call` で最後に付ける（STG の傾きの後でも銃が正面を向く）。**ビルド・実機未確認**（弾・ビームと銃口のずれ、盾のめり込みは実機で見る）。
+2026-11-27 作成・書き出し・cook 済み（動きはユーザー了承：右肩を前に入れ、左腕は肩から力を抜いて垂らす）。STG 用（…Rail）は B の `RailStand`、地上用は B の待機 `BossStandIdle`（2026-11-28 に `BossIdle` から替えた）を元にし、`shoot.json` の `railClip` / `groundClip` で分ける。腕の向きは `call` で最後に付ける（STG の傾きの後でも銃が正面を向く）。
+2026-11-28 地上で動きながら撃つ 12 本を追加（ユーザー：直立のまま滑って見える）：射撃・チャージを放つ・精密射撃 × 前（`…DashForward`＝B の前傾ダッシュ＋構え）／後ろ（`…SlideBack`＝床から浮いて体を後ろへ 20° 反らし、右脚は前・左脚はひざを曲げて後ろ。ユーザーのスケッチ）／左右（`…SkiLeft` / `…SkiRight`＝B のスキー＋構え）。`shoot.json` の `baseClips` で今の土台（bossRunForward / Back / Left / Right）ごとに選ぶ。**ビルド・実機未確認**（弾・ビームと銃口のずれ、盾のめり込みは実機で見る）。
 
 ### 2.4 D 被弾・回復・盾（`player_clips/defense.py` → `PlayerAnim/defense.json`）
 

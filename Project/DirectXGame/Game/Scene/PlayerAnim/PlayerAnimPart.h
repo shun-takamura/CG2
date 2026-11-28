@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 class AnimatedObject3DInstance;
@@ -133,6 +134,8 @@ private:
 		std::string clip;                // .anim のパス（"/" を含まなければ clipPrefix + 名前 + ".anim"）。空なら fallback
 		std::string railClip;            // STG で clip の代わりに鳴らす（空なら clip）
 		std::string groundClip;          // 地上で clip の代わりに鳴らす（空なら clip）
+		// 今の土台（ChooseBase の状態）ごとに鳴らすクリップ。railClip / groundClip より先に見る（移動しながら撃つ時の脚に合わせる）
+		std::vector<std::pair<PlayerAnimState, std::string>> baseClips;
 		bool loop = true;                // 繰り返すか
 		float speed = 1.0f;              // 再生速度
 		float fade = -1.0f;              // この状態へ移るフェード [秒]（負なら common.json の defaultFade）
@@ -193,7 +196,7 @@ private:
 	/// <param name="clip">JSON に書いたクリップ</param>
 	/// <returns>.anim のパス</returns>
 	std::string ClipPath(const std::string& clip) const;
-	/// <summary>今のモードで鳴らすクリップ（railClip / groundClip があればそちら、無ければ clip）</summary>
+	/// <summary>今鳴らすクリップ（今の土台の baseClips → 今のモードの railClip / groundClip → clip の順に、空でない最初のもの）</summary>
 	/// <param name="d">状態の設定</param>
 	/// <returns>JSON に書いたクリップ（空なら鳴らせない）</returns>
 	const std::string& ModeClip(const StateDef& d) const;
